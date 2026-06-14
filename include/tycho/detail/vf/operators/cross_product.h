@@ -152,6 +152,17 @@ template <class Derived, class Func1, class Func2> struct FunctionCrossProduct_I
 
 /// @ingroup vf
 /// @brief VectorFunction computing the 3D cross product @f$f_1(x)\times f_2(x)@f$.
+///
+/// @note **Legacy/alternative implementation.** This file is not included in the
+/// standard Tycho include chain (`vector_functions.h` pulls in `vector_products.h`,
+/// which contains the active @ref FunctionCrossProduct backed by the shared
+/// `FunctionVectorProduct_Impl` base). This standalone implementation is retained
+/// for reference but is not the live type used in production code.
+///
+/// Both operand functions must produce 3-vectors from the same input; the output
+/// is the 3-vector @f$f_1(x)\times f_2(x)@f$ with analytic Jacobian and adjoint
+/// Hessian. Produced in C++ via `f1.cross(f2)` or the free function
+/// `cross_product(f1, f2)`; in Python via `f1.cross(f2)` or `vf.cross(f1, f2)`.
 /// @tparam Func1  VectorFunction producing the first (3-vector) operand.
 /// @tparam Func2  VectorFunction producing the second (3-vector) operand.
 template <class Func1, class Func2>

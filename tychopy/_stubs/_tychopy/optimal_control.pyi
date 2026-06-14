@@ -908,10 +908,13 @@ class InterpFunction:
 
     def is_linear(self) -> bool:
         """
-        Whether this VectorFunction is known to be linear at compile time.
+        Whether this VectorFunction is known to be linear.
 
         A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
         this flag to skip second-derivative computations for linear expressions.
+        For type-erased ``GenericFunction`` objects this value is determined at
+        construction time and cached; for concrete (statically-typed) functions
+        it is a compile-time constant propagated through the type system.
 
         Returns
         -------
@@ -942,15 +945,20 @@ class InterpFunction:
         """
 
     @overload
-    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute` overload.
+        """
 
     @overload
     def __call__(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
         """
         Evaluate the function at a point (``f(x)``).
 
-        Equivalent to :meth:`compute`.  Accepts a numeric vector or a VectorFunction
-        argument for functional composition — see :meth:`eval` for that overload.
+        Equivalent to :meth:`compute`.  This overload accepts a numeric vector.
+        To compose with another VectorFunction use :meth:`eval` or pass a
+        VectorFunction argument — those are handled by separate ``__call__``
+        overloads.
 
         Parameters
         ----------
@@ -964,7 +972,8 @@ class InterpFunction:
         """
 
     @overload
-    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """Overload accepting a Python list or tuple; see :meth:`compute`."""
 
     @overload
     def __call__(self, arg: _tychopy.vector_functions.ScalarFunction, /) -> _tychopy.vector_functions.VectorFunction: ...
@@ -995,15 +1004,18 @@ class InterpFunction:
         """
 
     @overload
-    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`jacobian` overload.
+        """
 
     @overload
     def compute_jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
         """
         Evaluate the function and its Jacobian simultaneously.
 
-        Computing both at once is cheaper than two separate calls because internal
-        temporary buffers are shared.
+        For many derivative modes this avoids redundant function evaluations
+        compared to two separate calls to :meth:`compute` and :meth:`jacobian`.
 
         Parameters
         ----------
@@ -1024,7 +1036,10 @@ class InterpFunction:
         """
 
     @overload
-    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute_jacobian` overload.
+        """
 
     @overload
     def adjointgradient(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
@@ -1054,7 +1069,10 @@ class InterpFunction:
         """
 
     @overload
-    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray: ...
+    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointgradient` overload.
+        """
 
     @overload
     def adjointhessian(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -1084,7 +1102,10 @@ class InterpFunction:
         """
 
     @overload
-    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointhessian` overload.
+        """
 
     @overload
     def computeall(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
@@ -1121,7 +1142,10 @@ class InterpFunction:
         """
 
     @overload
-    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`computeall` overload.
+        """
 
     def vf(self) -> _tychopy.vector_functions.VectorFunction:
         """
@@ -1192,10 +1216,13 @@ class InterpFunction_1:
 
     def is_linear(self) -> bool:
         """
-        Whether this VectorFunction is known to be linear at compile time.
+        Whether this VectorFunction is known to be linear.
 
         A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
         this flag to skip second-derivative computations for linear expressions.
+        For type-erased ``GenericFunction`` objects this value is determined at
+        construction time and cached; for concrete (statically-typed) functions
+        it is a compile-time constant propagated through the type system.
 
         Returns
         -------
@@ -1226,15 +1253,20 @@ class InterpFunction_1:
         """
 
     @overload
-    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute` overload.
+        """
 
     @overload
     def __call__(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
         """
         Evaluate the function at a point (``f(x)``).
 
-        Equivalent to :meth:`compute`.  Accepts a numeric vector or a VectorFunction
-        argument for functional composition — see :meth:`eval` for that overload.
+        Equivalent to :meth:`compute`.  This overload accepts a numeric vector.
+        To compose with another VectorFunction use :meth:`eval` or pass a
+        VectorFunction argument — those are handled by separate ``__call__``
+        overloads.
 
         Parameters
         ----------
@@ -1248,7 +1280,8 @@ class InterpFunction_1:
         """
 
     @overload
-    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """Overload accepting a Python list or tuple; see :meth:`compute`."""
 
     @overload
     def __call__(self, arg: _tychopy.vector_functions.ScalarFunction, /) -> _tychopy.vector_functions.VectorFunction: ...
@@ -1279,15 +1312,18 @@ class InterpFunction_1:
         """
 
     @overload
-    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`jacobian` overload.
+        """
 
     @overload
     def compute_jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
         """
         Evaluate the function and its Jacobian simultaneously.
 
-        Computing both at once is cheaper than two separate calls because internal
-        temporary buffers are shared.
+        For many derivative modes this avoids redundant function evaluations
+        compared to two separate calls to :meth:`compute` and :meth:`jacobian`.
 
         Parameters
         ----------
@@ -1308,7 +1344,10 @@ class InterpFunction_1:
         """
 
     @overload
-    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute_jacobian` overload.
+        """
 
     @overload
     def adjointgradient(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
@@ -1338,7 +1377,10 @@ class InterpFunction_1:
         """
 
     @overload
-    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray: ...
+    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointgradient` overload.
+        """
 
     @overload
     def adjointhessian(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -1368,7 +1410,10 @@ class InterpFunction_1:
         """
 
     @overload
-    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointhessian` overload.
+        """
 
     @overload
     def computeall(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
@@ -1405,7 +1450,10 @@ class InterpFunction_1:
         """
 
     @overload
-    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`computeall` overload.
+        """
 
     def vf(self) -> _tychopy.vector_functions.VectorFunction:
         """
@@ -1490,10 +1538,13 @@ class InterpFunction_3:
 
     def is_linear(self) -> bool:
         """
-        Whether this VectorFunction is known to be linear at compile time.
+        Whether this VectorFunction is known to be linear.
 
         A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
         this flag to skip second-derivative computations for linear expressions.
+        For type-erased ``GenericFunction`` objects this value is determined at
+        construction time and cached; for concrete (statically-typed) functions
+        it is a compile-time constant propagated through the type system.
 
         Returns
         -------
@@ -1524,15 +1575,20 @@ class InterpFunction_3:
         """
 
     @overload
-    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute` overload.
+        """
 
     @overload
     def __call__(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
         """
         Evaluate the function at a point (``f(x)``).
 
-        Equivalent to :meth:`compute`.  Accepts a numeric vector or a VectorFunction
-        argument for functional composition — see :meth:`eval` for that overload.
+        Equivalent to :meth:`compute`.  This overload accepts a numeric vector.
+        To compose with another VectorFunction use :meth:`eval` or pass a
+        VectorFunction argument — those are handled by separate ``__call__``
+        overloads.
 
         Parameters
         ----------
@@ -1546,7 +1602,8 @@ class InterpFunction_3:
         """
 
     @overload
-    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """Overload accepting a Python list or tuple; see :meth:`compute`."""
 
     @overload
     def __call__(self, arg: _tychopy.vector_functions.ScalarFunction, /) -> _tychopy.vector_functions.VectorFunction: ...
@@ -1577,15 +1634,18 @@ class InterpFunction_3:
         """
 
     @overload
-    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`jacobian` overload.
+        """
 
     @overload
     def compute_jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
         """
         Evaluate the function and its Jacobian simultaneously.
 
-        Computing both at once is cheaper than two separate calls because internal
-        temporary buffers are shared.
+        For many derivative modes this avoids redundant function evaluations
+        compared to two separate calls to :meth:`compute` and :meth:`jacobian`.
 
         Parameters
         ----------
@@ -1606,7 +1666,10 @@ class InterpFunction_3:
         """
 
     @overload
-    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute_jacobian` overload.
+        """
 
     @overload
     def adjointgradient(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
@@ -1636,7 +1699,10 @@ class InterpFunction_3:
         """
 
     @overload
-    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray: ...
+    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointgradient` overload.
+        """
 
     @overload
     def adjointhessian(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -1666,7 +1732,10 @@ class InterpFunction_3:
         """
 
     @overload
-    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointhessian` overload.
+        """
 
     @overload
     def computeall(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
@@ -1703,7 +1772,10 @@ class InterpFunction_3:
         """
 
     @overload
-    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`computeall` overload.
+        """
 
     def vf(self) -> _tychopy.vector_functions.VectorFunction:
         """
@@ -1774,10 +1846,13 @@ class InterpFunction_6:
 
     def is_linear(self) -> bool:
         """
-        Whether this VectorFunction is known to be linear at compile time.
+        Whether this VectorFunction is known to be linear.
 
         A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
         this flag to skip second-derivative computations for linear expressions.
+        For type-erased ``GenericFunction`` objects this value is determined at
+        construction time and cached; for concrete (statically-typed) functions
+        it is a compile-time constant propagated through the type system.
 
         Returns
         -------
@@ -1808,15 +1883,20 @@ class InterpFunction_6:
         """
 
     @overload
-    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute` overload.
+        """
 
     @overload
     def __call__(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
         """
         Evaluate the function at a point (``f(x)``).
 
-        Equivalent to :meth:`compute`.  Accepts a numeric vector or a VectorFunction
-        argument for functional composition — see :meth:`eval` for that overload.
+        Equivalent to :meth:`compute`.  This overload accepts a numeric vector.
+        To compose with another VectorFunction use :meth:`eval` or pass a
+        VectorFunction argument — those are handled by separate ``__call__``
+        overloads.
 
         Parameters
         ----------
@@ -1830,7 +1910,8 @@ class InterpFunction_6:
         """
 
     @overload
-    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """Overload accepting a Python list or tuple; see :meth:`compute`."""
 
     @overload
     def __call__(self, arg: _tychopy.vector_functions.ScalarFunction, /) -> _tychopy.vector_functions.VectorFunction: ...
@@ -1861,15 +1942,18 @@ class InterpFunction_6:
         """
 
     @overload
-    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`jacobian` overload.
+        """
 
     @overload
     def compute_jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
         """
         Evaluate the function and its Jacobian simultaneously.
 
-        Computing both at once is cheaper than two separate calls because internal
-        temporary buffers are shared.
+        For many derivative modes this avoids redundant function evaluations
+        compared to two separate calls to :meth:`compute` and :meth:`jacobian`.
 
         Parameters
         ----------
@@ -1890,7 +1974,10 @@ class InterpFunction_6:
         """
 
     @overload
-    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute_jacobian` overload.
+        """
 
     @overload
     def adjointgradient(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
@@ -1920,7 +2007,10 @@ class InterpFunction_6:
         """
 
     @overload
-    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray: ...
+    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointgradient` overload.
+        """
 
     @overload
     def adjointhessian(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -1950,7 +2040,10 @@ class InterpFunction_6:
         """
 
     @overload
-    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointhessian` overload.
+        """
 
     @overload
     def computeall(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
@@ -1987,7 +2080,10 @@ class InterpFunction_6:
         """
 
     @overload
-    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`computeall` overload.
+        """
 
     def vf(self) -> _tychopy.vector_functions.VectorFunction:
         """
@@ -2072,10 +2168,13 @@ class ODEArguments(_tychopy.vector_functions.Arguments):
 
     def is_linear(self) -> bool:
         """
-        Whether this VectorFunction is known to be linear at compile time.
+        Whether this VectorFunction is known to be linear.
 
         A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
         this flag to skip second-derivative computations for linear expressions.
+        For type-erased ``GenericFunction`` objects this value is determined at
+        construction time and cached; for concrete (statically-typed) functions
+        it is a compile-time constant propagated through the type system.
 
         Returns
         -------
@@ -2106,15 +2205,20 @@ class ODEArguments(_tychopy.vector_functions.Arguments):
         """
 
     @overload
-    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def compute(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute` overload.
+        """
 
     @overload
     def __call__(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
         """
         Evaluate the function at a point (``f(x)``).
 
-        Equivalent to :meth:`compute`.  Accepts a numeric vector or a VectorFunction
-        argument for functional composition — see :meth:`eval` for that overload.
+        Equivalent to :meth:`compute`.  This overload accepts a numeric vector.
+        To compose with another VectorFunction use :meth:`eval` or pass a
+        VectorFunction argument — those are handled by separate ``__call__``
+        overloads.
 
         Parameters
         ----------
@@ -2128,7 +2232,8 @@ class ODEArguments(_tychopy.vector_functions.Arguments):
         """
 
     @overload
-    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
+    def __call__(self, arg: numpy.ndarray, /) -> numpy.ndarray:
+        """Overload accepting a Python list or tuple; see :meth:`compute`."""
 
     @overload
     def jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -2153,15 +2258,18 @@ class ODEArguments(_tychopy.vector_functions.Arguments):
         """
 
     @overload
-    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def jacobian(self, arg: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`jacobian` overload.
+        """
 
     @overload
     def compute_jacobian(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
         """
         Evaluate the function and its Jacobian simultaneously.
 
-        Computing both at once is cheaper than two separate calls because internal
-        temporary buffers are shared.
+        For many derivative modes this avoids redundant function evaluations
+        compared to two separate calls to :meth:`compute` and :meth:`jacobian`.
 
         Parameters
         ----------
@@ -2182,7 +2290,10 @@ class ODEArguments(_tychopy.vector_functions.Arguments):
         """
 
     @overload
-    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def compute_jacobian(self, arg: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting a Python list or tuple; see the primary :meth:`compute_jacobian` overload.
+        """
 
     @overload
     def adjointgradient(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> numpy.ndarray:
@@ -2212,7 +2323,10 @@ class ODEArguments(_tychopy.vector_functions.Arguments):
         """
 
     @overload
-    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray: ...
+    def adjointgradient(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> numpy.ndarray:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointgradient` overload.
+        """
 
     @overload
     def adjointhessian(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
@@ -2242,7 +2356,10 @@ class ODEArguments(_tychopy.vector_functions.Arguments):
         """
 
     @overload
-    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]: ...
+    def adjointhessian(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`adjointhessian` overload.
+        """
 
     @overload
     def computeall(self, arg0: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], arg1: Annotated[NDArray[numpy.float64], dict(shape=(None,), writable=False)], /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
@@ -2279,7 +2396,10 @@ class ODEArguments(_tychopy.vector_functions.Arguments):
         """
 
     @overload
-    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]: ...
+    def computeall(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> tuple[numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], numpy.ndarray, Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')]]:
+        """
+        Overload accepting Python lists or tuples; see the primary :meth:`computeall` overload.
+        """
 
     def vf(self) -> _tychopy.vector_functions.VectorFunction:
         """

@@ -23,6 +23,29 @@ def FiniteDiffCheck(Fun, X, L, jsize=1.0e-6, hsize=1.0e-6):
 
 
 def FDDerivChecker(Fun, X):
+    r"""Compare a VectorFunction's analytic derivatives against finite differences.
+
+    Evaluates ``Fun`` at the point ``X`` and, for a sweep of finite-difference
+    step sizes, prints the absolute and relative error between the analytic
+    Jacobian/Hessian (from ``Fun.jacobian`` / ``Fun.adjointhessian``) and a
+    finite-difference approximation built with :class:`PyVectorFunction`. The
+    Hessian is checked against the symmetrized finite-difference of the adjoint
+    gradient. Intended as an interactive debugging aid when hand-writing
+    analytic derivatives for a custom VectorFunction.
+
+    Parameters
+    ----------
+    Fun : VectorFunction
+        The function whose analytic derivatives are being checked.
+    X : array_like
+        Input point at which to evaluate the derivatives; length must equal
+        ``Fun.input_rows()``.
+
+    Returns
+    -------
+    None
+        Results are printed to standard output; nothing is returned.
+    """
     IRows = Fun.input_rows()
     ORows = Fun.output_rows()
     L = np.random.rand((ORows))

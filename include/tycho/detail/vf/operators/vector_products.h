@@ -25,7 +25,10 @@ template <class Derived, class Func1, class Func2, int Vsize> struct FunctionVec
 /// @brief Complex (2-vector) product of two functions, @f$f_1(x)\,f_2(x)@f$ as complex numbers.
 ///
 /// Treats each 2-output operand as a complex number @f$a+bi@f$ and returns their
-/// complex product as a 2-vector.
+/// complex product as a 2-vector. Given @f$f_1=(a,b)^T@f$ and
+/// @f$f_2=(c,d)^T@f$ the output is @f$(ac-bd,\;ad+bc)^T@f$, with analytic
+/// Jacobian and adjoint Hessian. Construct directly as
+/// `FunctionImagProduct<Func1, Func2>{f1, f2}`.
 /// @tparam Func1  Left operand VectorFunction (2-output).
 /// @tparam Func2  Right operand VectorFunction (2-output).
 template <class Func1, class Func2>
@@ -39,6 +42,11 @@ struct FunctionImagProduct
 
 /// @ingroup vf
 /// @brief 3-vector cross product of two functions, @f$f_1(x)\times f_2(x)@f$.
+///
+/// Both operand functions must produce 3-vectors from the same input; the output
+/// is the 3-vector @f$f_1(x)\times f_2(x)@f$ with analytic Jacobian and adjoint
+/// Hessian. Produced in C++ via `f1.cross(f2)` or the free function
+/// `cross_product(f1, f2)`; in Python via `f1.cross(f2)` or `vf.cross(f1, f2)`.
 /// @tparam Func1  Left operand VectorFunction (3-output).
 /// @tparam Func2  Right operand VectorFunction (3-output).
 template <class Func1, class Func2>
@@ -52,6 +60,12 @@ struct FunctionCrossProduct
 
 /// @ingroup vf
 /// @brief Quaternion (4-vector) product of two functions, @f$f_1(x)\otimes f_2(x)@f$.
+///
+/// Both operand functions must produce scalar-last unit quaternions @f$(q_x, q_y,
+/// q_z, q_w)^T@f$; the output is their Hamilton product as a 4-vector, with
+/// analytic Jacobian and adjoint Hessian. Produced in C++ via the free function
+/// `quat_product(f1, f2)` or direct construction; in Python via
+/// `vf.quat_product(f1, f2)`.
 /// @tparam Func1  Left operand VectorFunction (4-output).
 /// @tparam Func2  Right operand VectorFunction (4-output).
 template <class Func1, class Func2>

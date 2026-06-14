@@ -29,7 +29,16 @@ using namespace tycho::utils;
 namespace tycho {
 template <class Func> struct TychoBind<IOScaled<Func>> {
     static void build(nb::module_ &m, const char *name) {
-        auto obj = nb::class_<IOScaled<Func>>(m, name);
+        auto obj = nb::class_<IOScaled<Func>>(m, name,
+            R"doc(An input/output scaling wrapper that non-dimensionalizes a VectorFunction.
+
+``IOScaled(func, input_scales, output_scales)`` multiplies each input
+component by the corresponding entry of ``input_scales`` before passing it to
+*func*, and multiplies each output component by the corresponding entry of
+``output_scales`` after evaluation. Jacobian, adjoint gradient, and adjoint
+Hessian are all transformed consistently. Use this to rescale poorly-conditioned
+dynamics or constraint functions before handing them to PSIOPT.
+)doc");
         obj.def(nb::init<Func, const Eigen::VectorXd &, const Eigen::VectorXd &>(),
                 R"doc(Construct an IO-scaled wrapper around a VectorFunction.
 

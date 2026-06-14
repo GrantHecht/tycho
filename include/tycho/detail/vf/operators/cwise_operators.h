@@ -28,6 +28,10 @@ template <class Derived, class Func> struct CwiseFunctionOperator;
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Element-wise sine of a VectorFunction.
+///
+/// Computes @f$\sin(f(x))@f$ for each output component of the wrapped operand @p func.
+/// First and second derivatives follow @f$\cos(f)@f$ and @f$-\sin(f)@f$ respectively,
+/// propagated through the chain rule. Produced by the free function `sin(f)`.
 /// @tparam Func  Wrapped operand function.
 /// @ingroup vf
 template <class Func> struct CwiseSin : CwiseFunctionOperator<CwiseSin<Func>, Func> {
@@ -84,6 +88,10 @@ template <class Func> struct CwiseSin : CwiseFunctionOperator<CwiseSin<Func>, Fu
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// @brief Element-wise cosine of a VectorFunction.
+///
+/// Computes @f$\cos(f(x))@f$ for each output component of the wrapped operand @p func.
+/// First and second derivatives are @f$-\sin(f)@f$ and @f$-\cos(f)@f$ respectively,
+/// propagated through the chain rule. Produced by the free function `cos(f)`.
 /// @tparam Func  Wrapped operand function.
 /// @ingroup vf
 template <class Func> struct CwiseCos : CwiseFunctionOperator<CwiseCos<Func>, Func> {
@@ -140,6 +148,10 @@ template <class Func> struct CwiseCos : CwiseFunctionOperator<CwiseCos<Func>, Fu
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Element-wise tangent of a VectorFunction.
+///
+/// Computes @f$\tan(f(x))@f$ for each output component of the wrapped operand @p func.
+/// The first derivative is @f$\sec^2(f) = 1/\cos^2(f)@f$ and the second derivative
+/// is @f$2\tan(f)\sec^2(f)@f$, both propagated via the chain rule. Produced by `tan(f)`.
 /// @tparam Func  Wrapped operand function.
 /// @ingroup vf
 template <class Func> struct CwiseTan : CwiseFunctionOperator<CwiseTan<Func>, Func> {
@@ -197,6 +209,11 @@ template <class Func> struct CwiseTan : CwiseFunctionOperator<CwiseTan<Func>, Fu
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// @brief Element-wise arcsine of a VectorFunction.
+///
+/// Computes @f$\arcsin(f(x))@f$ for each output component of the wrapped operand @p func,
+/// with output in @f$[-\pi/2,\,\pi/2]@f$. The first derivative is
+/// @f$1/\sqrt{1 - f^2}@f$, defined for @f$|f| < 1@f$. Produced by the C++ free function
+/// `asin(f)` (Python: `arcsin`).
 /// @tparam Func  Wrapped operand function.
 /// @ingroup vf
 template <class Func> struct CwiseArcSin : CwiseFunctionOperator<CwiseArcSin<Func>, Func> {
@@ -259,6 +276,10 @@ template <class Func> struct CwiseArcSin : CwiseFunctionOperator<CwiseArcSin<Fun
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Element-wise arccosine of a VectorFunction.
+///
+/// Computes @f$\arccos(f(x))@f$ for each output component of the wrapped operand @p func,
+/// with output in @f$[0,\,\pi]@f$. The first derivative is @f$-1/\sqrt{1 - f^2}@f$,
+/// defined for @f$|f| < 1@f$. Produced by the C++ free function `acos(f)` (Python: `arccos`).
 /// @tparam Func  Wrapped operand function.
 /// @ingroup vf
 template <class Func> struct CwiseArcCos : CwiseFunctionOperator<CwiseArcCos<Func>, Func> {
@@ -322,6 +343,11 @@ template <class Func> struct CwiseArcCos : CwiseFunctionOperator<CwiseArcCos<Fun
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Element-wise arctangent of a VectorFunction.
+///
+/// Computes @f$\arctan(f(x))@f$ for each output component of the wrapped operand @p func,
+/// returning values in @f$(-\pi/2,\,\pi/2)@f$. The first derivative is
+/// @f$1/(1 + f^2)@f$. Produced by the C++ free function `atan(f)` (Python: `arctan`);
+/// for quadrant-aware arctangent use `atan2(y, x)` (C++) / `arctan2(y, x)` (Python).
 /// @tparam Func  Wrapped operand function.
 /// @ingroup vf
 template <class Func> struct CwiseArcTan : CwiseFunctionOperator<CwiseArcTan<Func>, Func> {
@@ -384,6 +410,11 @@ template <class Func> struct CwiseArcTan : CwiseFunctionOperator<CwiseArcTan<Fun
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// @brief Element-wise square of a VectorFunction.
+///
+/// Computes @f$f(x)^2@f$ for each output component of the wrapped operand @p func.
+/// The first derivative is @f$2f@f$ and the second derivative is the constant @f$2@f$,
+/// both propagated through the chain rule. Produced by `.square()` (C++) / `.squared()`
+/// (Python). Note: `pow(f, 2)` builds a `CwisePow`, not a `CwiseSquare`.
 /// @tparam Func  Wrapped operand function.
 /// @ingroup vf
 template <class Func> struct CwiseSquare : CwiseFunctionOperator<CwiseSquare<Func>, Func> {
@@ -441,6 +472,12 @@ template <class Func> struct CwiseSquare : CwiseFunctionOperator<CwiseSquare<Fun
 };
 
 /// @brief Element-wise reciprocal of a VectorFunction.
+///
+/// Computes @f$1/f(x)@f$ for each output component of the wrapped operand @p func.
+/// The first derivative is @f$-1/f^2@f$ and the second derivative is @f$2/f^3@f$,
+/// both propagated through the chain rule. Produced in C++ via `.cwise_inverse()`; in
+/// Python via `1.0 / f` (scalar-output only) or `f.pow(-1)` (note: `pow(-1)` builds a
+/// `CwisePow`, not a `CwiseInverse`).
 /// @tparam Func  Wrapped operand function.
 /// @ingroup vf
 template <class Func> struct CwiseInverse : CwiseFunctionOperator<CwiseInverse<Func>, Func> {
@@ -497,6 +534,10 @@ template <class Func> struct CwiseInverse : CwiseFunctionOperator<CwiseInverse<F
 };
 
 /// @brief Element-wise exponential of a VectorFunction.
+///
+/// Computes @f$e^{f(x)}@f$ for each output component of the wrapped operand @p func.
+/// Both the first and second derivatives equal @f$e^{f}@f$, propagated through the
+/// chain rule. Produced by the free function `exp(f)`.
 /// @tparam Func  Wrapped operand function.
 /// @ingroup vf
 template <class Func> struct CwiseExp : CwiseFunctionOperator<CwiseExp<Func>, Func> {
@@ -553,6 +594,10 @@ template <class Func> struct CwiseExp : CwiseFunctionOperator<CwiseExp<Func>, Fu
 };
 
 /// @brief Element-wise natural logarithm of a VectorFunction.
+///
+/// Computes @f$\ln(f(x))@f$ for each output component of the wrapped operand @p func,
+/// defined for @f$f > 0@f$. The first derivative is @f$1/f@f$ and the second is
+/// @f$-1/f^2@f$, propagated through the chain rule. Produced by the free function `log(f)`.
 /// @tparam Func  Wrapped operand function.
 /// @ingroup vf
 template <class Func> struct CwiseLog : CwiseFunctionOperator<CwiseLog<Func>, Func> {
@@ -610,6 +655,10 @@ template <class Func> struct CwiseLog : CwiseFunctionOperator<CwiseLog<Func>, Fu
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Element-wise hyperbolic sine of a VectorFunction.
+///
+/// Computes @f$\sinh(f(x))@f$ for each output component of the wrapped operand @p func.
+/// The first derivative is @f$\cosh(f)@f$ and the second derivative is @f$\sinh(f)@f$,
+/// propagated through the chain rule. Produced by the free function `sinh(f)`.
 /// @tparam Func  Wrapped operand function.
 /// @ingroup vf
 template <class Func> struct CwiseSinH : CwiseFunctionOperator<CwiseSinH<Func>, Func> {
@@ -666,6 +715,10 @@ template <class Func> struct CwiseSinH : CwiseFunctionOperator<CwiseSinH<Func>, 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// @brief Element-wise hyperbolic cosine of a VectorFunction.
+///
+/// Computes @f$\cosh(f(x))@f$ for each output component of the wrapped operand @p func.
+/// The first derivative is @f$\sinh(f)@f$ and the second derivative is @f$\cosh(f)@f$,
+/// propagated through the chain rule. Produced by the free function `cosh(f)`.
 /// @tparam Func  Wrapped operand function.
 /// @ingroup vf
 template <class Func> struct CwiseCosH : CwiseFunctionOperator<CwiseCosH<Func>, Func> {
@@ -722,6 +775,10 @@ template <class Func> struct CwiseCosH : CwiseFunctionOperator<CwiseCosH<Func>, 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Element-wise hyperbolic tangent of a VectorFunction.
+///
+/// Computes @f$\tanh(f(x))@f$ for each output component of the wrapped operand @p func.
+/// The first derivative is @f$1 - \tanh^2(f) = \operatorname{sech}^2(f)@f$ and the second
+/// derivative is @f$-2\tanh(f)\operatorname{sech}^2(f)@f$. Produced by the free function `tanh(f)`.
 /// @tparam Func  Wrapped operand function.
 /// @ingroup vf
 template <class Func> struct CwiseTanH : CwiseFunctionOperator<CwiseTanH<Func>, Func> {
@@ -781,6 +838,11 @@ template <class Func> struct CwiseTanH : CwiseFunctionOperator<CwiseTanH<Func>, 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// @brief Element-wise inverse hyperbolic sine of a VectorFunction.
+///
+/// Computes @f$\operatorname{arcsinh}(f(x))@f$ for each output component of the wrapped operand
+/// @p func, defined for all real inputs. The first derivative is @f$1/\sqrt{1 + f^2}@f$,
+/// propagated through the chain rule. Produced by the C++ free function `asinh(f)`
+/// (Python: `arcsinh`).
 /// @tparam Func  Wrapped operand function.
 /// @ingroup vf
 template <class Func> struct CwiseArcSinH : CwiseFunctionOperator<CwiseArcSinH<Func>, Func> {
@@ -872,6 +934,11 @@ template <class Func> struct CwiseArcSinH : CwiseFunctionOperator<CwiseArcSinH<F
 };
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Element-wise inverse hyperbolic cosine of a VectorFunction.
+///
+/// Computes @f$\operatorname{arccosh}(f(x))@f$ for each output component of the wrapped operand
+/// @p func, defined for @f$f \geq 1@f$ with output in @f$[0, \infty)@f$. The first derivative
+/// is @f$1/\sqrt{f^2 - 1}@f$, propagated through the chain rule. Produced by the C++ free
+/// function `acosh(f)` (Python: `arccosh`).
 /// @tparam Func  Wrapped operand function.
 /// @ingroup vf
 template <class Func> struct CwiseArcCosH : CwiseFunctionOperator<CwiseArcCosH<Func>, Func> {
@@ -965,6 +1032,11 @@ template <class Func> struct CwiseArcCosH : CwiseFunctionOperator<CwiseArcCosH<F
 };
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Element-wise inverse hyperbolic tangent of a VectorFunction.
+///
+/// Computes @f$\operatorname{arctanh}(f(x))@f$ for each output component of the wrapped operand
+/// @p func, defined for @f$|f| < 1@f$. The first derivative is @f$1/(1 - f^2)@f$ and the
+/// second derivative is @f$2f/(1 - f^2)^2@f$. Produced by the C++ free function `atanh(f)`
+/// (Python: `arctanh`).
 /// @tparam Func  Wrapped operand function.
 /// @ingroup vf
 template <class Func> struct CwiseArcTanH : CwiseFunctionOperator<CwiseArcTanH<Func>, Func> {
@@ -1032,6 +1104,10 @@ template <class Func> struct CwiseArcTanH : CwiseFunctionOperator<CwiseArcTanH<F
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// @brief Element-wise square root of a VectorFunction.
+///
+/// Computes @f$\sqrt{f(x)}@f$ for each output component of the wrapped operand @p func,
+/// defined for @f$f \geq 0@f$. The first derivative is @f$1/(2\sqrt{f})@f$ and the
+/// second derivative is @f$-1/(4 f^{3/2})@f$. Produced by the free function `sqrt(f)`.
 /// @tparam Func  Wrapped operand function.
 /// @ingroup vf
 template <class Func> struct CwiseSqrt : CwiseFunctionOperator<CwiseSqrt<Func>, Func> {
@@ -1198,6 +1274,10 @@ template <class Func> struct CwisePow : CwiseFunctionOperator<CwisePow<Func>, Fu
 };
 
 /// @brief Element-wise absolute value of a VectorFunction.
+///
+/// Computes @f$|f(x)|@f$ for each output component of the wrapped operand @p func.
+/// The first derivative is @f$\operatorname{sgn}(f)@f$ (the sign function); the second
+/// derivative is zero almost everywhere and is not populated. Produced by the free function `abs(f)`.
 /// @tparam Func  Wrapped operand function.
 /// @ingroup vf
 template <class Func> struct CwiseAbs : CwiseFunctionOperator<CwiseAbs<Func>, Func> {

@@ -22,6 +22,10 @@ template <class Derived, int USZ, int Power> struct IntegralNorm_Impl;
 
 /// @ingroup vf
 /// @brief Euclidean norm VectorFunction @f$\|x\|_2=\sqrt{x^T x}@f$.
+///
+/// Scalar-output (1×1) expression that computes the @f$\ell_2@f$ length of its
+/// input vector with analytic first and second derivatives. Produced in C++ via
+/// `f.norm()`; in Python via `f.norm()` or the free function `vf.norm(f)`.
 /// @tparam IR  Compile-time input row count (Eigen::Dynamic for runtime size).
 template <int IR> struct Norm : IntegralNorm_Impl<Norm<IR>, IR, 1> {
     /// @brief Convenience alias for the underlying integral-power-norm implementation.
@@ -31,6 +35,11 @@ template <int IR> struct Norm : IntegralNorm_Impl<Norm<IR>, IR, 1> {
 };
 /// @ingroup vf
 /// @brief Squared Euclidean norm VectorFunction @f$\|x\|_2^2=x^T x@f$.
+///
+/// Scalar-output expression returning the sum of squares of the input entries,
+/// avoiding the square-root of @ref Norm and therefore producing simpler
+/// derivatives for unconstrained-magnitude objectives. Produced in C++ via
+/// `f.squared_norm()`; in Python via `f.squared_norm()` or `vf.squared_norm(f)`.
 /// @tparam IR  Compile-time input row count (Eigen::Dynamic for runtime size).
 template <int IR> struct SquaredNorm : IntegralNorm_Impl<SquaredNorm<IR>, IR, 2> {
     /// @brief Convenience alias for the underlying integral-power-norm implementation.
@@ -40,6 +49,10 @@ template <int IR> struct SquaredNorm : IntegralNorm_Impl<SquaredNorm<IR>, IR, 2>
 };
 /// @ingroup vf
 /// @brief Reciprocal Euclidean norm VectorFunction @f$\|x\|_2^{-1}@f$.
+///
+/// Scalar-output expression computing @f$1/\|x\|_2@f$, which arises frequently
+/// in gravitational and electrostatic potential terms. Produced in C++ via
+/// `f.inverse_norm()`; in Python via `f.inverse_norm()` or `vf.inverse_norm(f)`.
 /// @tparam IR  Compile-time input row count (Eigen::Dynamic for runtime size).
 template <int IR> struct InverseNorm : IntegralNorm_Impl<InverseNorm<IR>, IR, -1> {
     /// @brief Convenience alias for the underlying integral-power-norm implementation.
@@ -49,6 +62,11 @@ template <int IR> struct InverseNorm : IntegralNorm_Impl<InverseNorm<IR>, IR, -1
 };
 /// @ingroup vf
 /// @brief Reciprocal squared Euclidean norm VectorFunction @f$\|x\|_2^{-2}@f$.
+///
+/// Scalar-output expression computing @f$1/\|x\|_2^2@f$; the @f$r^{-2}@f$
+/// factor common in gravitational force/acceleration magnitude and inverse-square-law constraints.
+/// Produced in C++ via `f.inverse_squared_norm()`; in Python via
+/// `f.inverse_squared_norm()` or `vf.inverse_squared_norm(f)`.
 /// @tparam IR  Compile-time input row count (Eigen::Dynamic for runtime size).
 template <int IR> struct InverseSquaredNorm : IntegralNorm_Impl<InverseSquaredNorm<IR>, IR, -2> {
     /// @brief Convenience alias for the underlying integral-power-norm implementation.
@@ -58,6 +76,11 @@ template <int IR> struct InverseSquaredNorm : IntegralNorm_Impl<InverseSquaredNo
 };
 /// @ingroup vf
 /// @brief Integer power of the Euclidean norm VectorFunction @f$\|x\|_2^{PW}@f$.
+///
+/// General scalar-output expression for any compile-time integer exponent; common
+/// values (±1 through ±4) are specialised for speed. Produced in C++ via
+/// `f.norm_power<PW>()`; Python exposes `cubed_norm` (`f.cubed_norm()`) as the
+/// only named positive-power shorthand — higher powers use the C++ member directly.
 /// @tparam IR  Compile-time input row count (Eigen::Dynamic for runtime size).
 /// @tparam PW  Integer power applied to the norm.
 template <int IR, int PW> struct NormPower : IntegralNorm_Impl<NormPower<IR, PW>, IR, PW> {
@@ -68,6 +91,12 @@ template <int IR, int PW> struct NormPower : IntegralNorm_Impl<NormPower<IR, PW>
 };
 /// @ingroup vf
 /// @brief Reciprocal integer power of the Euclidean norm VectorFunction @f$\|x\|_2^{-PW}@f$.
+///
+/// Scalar-output expression computing @f$\|x\|_2^{-PW}@f$ for any compile-time
+/// positive integer @p PW; the @f$r^{-3}@f$ factor (PW=3) appears, for instance,
+/// in the gravitational acceleration vector @f$\mu r / \|r\|^3@f$. Produced in
+/// C++ via `f.inverse_norm_power<PW>()`; Python exposes `inverse_cubed_norm` and
+/// `inverse_four_norm` as named shorthands.
 /// @tparam IR  Compile-time input row count (Eigen::Dynamic for runtime size).
 /// @tparam PW  Integer power whose negation is applied to the norm.
 template <int IR, int PW>

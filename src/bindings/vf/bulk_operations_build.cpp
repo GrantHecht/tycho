@@ -65,7 +65,7 @@ Parameters
 ----------
 funcs : list[VectorFunction]
     Scalar-output (output dimension 1) functions sharing the same input
-    dimension.  The list must be non-empty.
+    dimension.
 
 Returns
 -------
@@ -76,8 +76,7 @@ VectorFunction
 Raises
 ------
 ValueError
-    If any two functions have mismatched input dimensions, or the list is
-    empty.
+    If any two functions have mismatched input dimensions.
 
 Examples
 --------
@@ -122,7 +121,7 @@ Parameters
 ----------
 funcs : list[VectorFunction]
     Scalar-output (output dimension 1) functions sharing the same input
-    dimension.  The list must be non-empty.
+    dimension.
 
 Returns
 -------
@@ -133,8 +132,7 @@ VectorFunction
 Raises
 ------
 ValueError
-    If any two functions have mismatched input dimensions, or the list is
-    empty.
+    If any two functions have mismatched input dimensions.
 )doc");
     m.def("stack_scalar", [](const GenS &first, nb::args x) {
         auto funcs = std::vector{first};
@@ -264,9 +262,9 @@ or constraints from individual state or control components.
 
 Parameters
 ----------
-funcs : list[VectorFunction]
-    Single-element segment VectorFunctions sharing the same input dimension.
-    The list must contain at least one element.
+funcs : list[Segment]
+    Single-element segment VectorFunctions (output dimension 1) sharing the
+    same input dimension.  The list must contain at least one element.
 
 Returns
 -------
@@ -280,11 +278,42 @@ ValueError
     If the list is empty or any two elements have mismatched input
     dimensions.
 )doc");
-    m.def("sum_elems", [](const std::vector<ELEM> &elems, const std::vector<double> &scales) {
-        std::vector<Scaled<ELEM>> selems;
-        for (int i = 0; i < elems.size(); i++) {
-            selems.emplace_back(elems[i] * scales[i]);
-        };
-        return make_dynamic_sum<GenS, Scaled<ELEM>>(selems);
-    });
+    m.def(
+        "sum_elems",
+        [](const std::vector<ELEM> &elems, const std::vector<double> &scales) {
+            std::vector<Scaled<ELEM>> selems;
+            for (int i = 0; i < elems.size(); i++) {
+                selems.emplace_back(elems[i] * scales[i]);
+            };
+            return make_dynamic_sum<GenS, Scaled<ELEM>>(selems);
+        },
+        R"doc(Weighted sum of several scalar segment-output VectorFunctions.
+
+Scales each function in *funcs* by the corresponding entry in *scales* and
+returns their sum as a single scalar-output VectorFunction.  All segments
+must share the same input dimension.  Equivalent to
+``sum_elems([s * f for s, f in zip(scales, funcs)])``.
+
+Parameters
+----------
+funcs : list[Segment]
+    Single-element segment VectorFunctions sharing the same input dimension.
+    The list must contain at least one element.
+scales : list[float]
+    Scalar multiplier for each function.  Must have at least as many entries
+    as *funcs*; no length check is performed — passing a shorter *scales*
+    causes undefined behavior.
+
+Returns
+-------
+VectorFunction
+    A scalar-output VectorFunction whose value is
+    ``scales[0]*funcs[0](x) + scales[1]*funcs[1](x) + ...``.
+
+Raises
+------
+ValueError
+    If the list is empty or any two elements have mismatched input
+    dimensions.
+)doc");
 }

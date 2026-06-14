@@ -25,6 +25,11 @@ template <class Derived, int IR, int PW> struct NormalizedPower_Impl;
 
 /// @ingroup vf
 /// @brief Vector-normalizing VectorFunction @f$x/\|x\|_2@f$ returning the unit direction.
+///
+/// Maps an @f$n@f$-vector to the unit vector pointing in the same direction;
+/// output size equals input size. Analytic Jacobian and adjoint Hessian are
+/// provided. Produced in C++ via `f.normalized()`; in Python via `f.normalized()`
+/// or `vf.normalized(f)`.
 /// @tparam IR  Compile-time input/output row count (Eigen::Dynamic for runtime size).
 template <int IR> struct Normalized : NormalizedPower_Impl<Normalized<IR>, IR, 1> {
     /// @brief Convenience alias for the underlying normalized-power implementation.
@@ -36,6 +41,12 @@ template <int IR> struct Normalized : NormalizedPower_Impl<Normalized<IR>, IR, 1
 
 /// @ingroup vf
 /// @brief Vector divided by an integer power of its norm, @f$x/\|x\|_2^{PW}@f$.
+///
+/// Generalises @ref Normalized to arbitrary positive integer denominators; for
+/// example @f$PW=3@f$ yields the @f$x/\|x\|_2^3@f$ factor found in the
+/// two-body gravitational acceleration. Produced in C++ via
+/// `f.normalized_power<PW>()`; Python exposes fixed-power shorthands, namely
+/// `f.normalized_power2()` through `f.normalized_power5()`.
 /// @tparam IR  Compile-time input/output row count (Eigen::Dynamic for runtime size).
 /// @tparam PW  Integer power of the norm in the denominator.
 template <int IR, int PW>

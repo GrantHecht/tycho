@@ -39,6 +39,13 @@ template <class Derived, class Func, int MRows> struct MatrixScaled_Impl;
 
 /// @ingroup vf
 /// @brief Scales a function's output by a compile-time constant value.
+///
+/// Computes @f$ g(x) = c \cdot f(x) @f$ where @f$ c @f$ is the compile-time
+/// constant @p Value::value; the Jacobian, adjoint gradient, and adjoint Hessian
+/// are uniformly scaled by the same factor at zero runtime overhead.
+/// Typically produced by the `*` operator with a `std::integral_constant` or
+/// similar tag on a VectorFunction.
+///
 /// @tparam Func   Wrapped VectorFunction type.
 /// @tparam Value  Compile-time constant providing the scale via `Value::value`.
 template <class Func, class Value>
@@ -51,6 +58,12 @@ struct StaticScaled : StaticScaled_Impl<StaticScaled<Func, Value>, Func, Value> 
 
 /// @ingroup vf
 /// @brief Scales a function's output by a single runtime scalar.
+///
+/// Computes @f$ g(x) = s \cdot f(x) @f$ where @f$ s @f$ is a `double` supplied
+/// at construction; the Jacobian and adjoint quantities are scaled by the same
+/// factor. Produced by the `*` operator on a VectorFunction and a `double`, or
+/// by calling `f.scale(s)`.
+///
 /// @tparam Func  Wrapped VectorFunction type.
 template <class Func> struct Scaled : Scaled_Impl<Scaled<Func>, Func> {
     /// @brief Convenience alias for the underlying scaled implementation.
@@ -61,6 +74,12 @@ template <class Func> struct Scaled : Scaled_Impl<Scaled<Func>, Func> {
 
 /// @ingroup vf
 /// @brief Scales each output row of a function by its own constant factor.
+///
+/// Computes @f$ g_i(x) = s_i \cdot f_i(x) @f$ for each output row @f$ i @f$,
+/// where @f$ \mathbf{s} @f$ is a per-row `Output<double>` vector; the Jacobian
+/// rows and adjoint variables are pre-scaled by the same factors.
+/// Produced by calling `f.row_scale(s)` on a VectorFunction.
+///
 /// @tparam Func  Wrapped VectorFunction type.
 template <class Func> struct RowScaled : RowScaled_Impl<RowScaled<Func>, Func> {
     /// @brief Convenience alias for the underlying row-scaled implementation.
@@ -71,6 +90,13 @@ template <class Func> struct RowScaled : RowScaled_Impl<RowScaled<Func>, Func> {
 
 /// @ingroup vf
 /// @brief Left-multiplies a function's output by a constant matrix.
+///
+/// Computes @f$ g(x) = A \, f(x) @f$ where @f$ A @f$ is an @p MRows
+/// @f$ \times @f$ `Func::ORC` constant `double` matrix stored at construction
+/// time; the Jacobian is similarly left-multiplied and the adjoint variables are
+/// pre-multiplied by @f$ A^\top @f$. Produced by calling `f.matrix_scale(A)` on
+/// a VectorFunction.
+///
 /// @tparam Func   Wrapped VectorFunction type.
 /// @tparam MRows  Compile-time row count of the resulting (matrix-scaled) output.
 template <class Func, int MRows>

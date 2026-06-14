@@ -57,7 +57,23 @@ ValueError
 )doc");
     obj.def("__call__", [](const FType &fun, const std::vector<Gen> &funcs) {
         return FType(fun.eval(DynamicStack(funcs)));
-    });
+    },
+        R"doc(Compose this function by substituting a list of vector-output functions as its input.
+
+The functions in ``funcs`` are vertically stacked and their concatenated outputs
+are used as the input to this function.  Equivalent to the scalar-list overload
+but accepts VectorFunctions with any output dimension.
+
+Parameters
+----------
+funcs : list[VectorFunction]
+    List of VectorFunctions whose stacked outputs form the input to this function.
+
+Returns
+-------
+VectorFunction
+    A new VectorFunction representing the composition.
+)doc");
 
     obj.def("__call__", [](const FType &fun, const Gen &first, nb::args x) {
         auto funcs = std::vector{first};
@@ -65,7 +81,24 @@ ValueError
         for (const auto &f : funcsrest)
             funcs.push_back(f);
         return FType(fun.eval(DynamicStack(funcs)));
-    });
+    },
+        R"doc(Compose this function with a variadic sequence of VectorFunctions.
+
+Convenience variadic form of the list overload.  All positional arguments after
+``self`` are stacked in order and used as the input to this function.
+
+Parameters
+----------
+first : VectorFunction
+    First function in the stack; its ``input_rows()`` sets the shared domain size.
+*args : VectorFunction
+    Additional VectorFunctions to stack after ``first``.
+
+Returns
+-------
+VectorFunction
+    A new VectorFunction representing the composition.
+)doc");
 
     obj.def("__call__", [](const FType &fun, double first, nb::args x) {
         auto funcsrest = ParsePythonArgs(x);
@@ -75,7 +108,26 @@ ValueError
         for (const auto &f : funcsrest)
             funcs.push_back(f);
         return FType(fun.eval(DynamicStack(funcs)));
-    });
+    },
+        R"doc(Compose this function, prepending a scalar constant to the stacked input.
+
+The scalar ``first`` is promoted to a constant scalar VectorFunction whose domain
+size is inferred from the first VectorFunction in ``*args``, then stacked with the
+remaining arguments to form the full input.
+
+Parameters
+----------
+first : float
+    Scalar constant prepended to the input stack.
+*args : VectorFunction
+    VectorFunctions whose stacked outputs (together with ``first``) form the input
+    to this function.
+
+Returns
+-------
+VectorFunction
+    A new VectorFunction representing the composition.
+)doc");
 
     obj.def("__call__", [](const FType &fun, Eigen::VectorXd first, nb::args x) {
         auto funcsrest = ParsePythonArgs(x);
@@ -83,7 +135,26 @@ ValueError
         for (const auto &f : funcsrest)
             funcs.push_back(f);
         return FType(fun.eval(DynamicStack(funcs)));
-    });
+    },
+        R"doc(Compose this function, prepending a constant vector to the stacked input.
+
+The array ``first`` is promoted to a constant vector VectorFunction whose domain
+size is inferred from the first VectorFunction in ``*args``, then stacked with the
+remaining arguments to form the full input.
+
+Parameters
+----------
+first : array_like
+    Constant vector prepended to the input stack.
+*args : VectorFunction
+    VectorFunctions whose stacked outputs (together with ``first``) form the input
+    to this function.
+
+Returns
+-------
+VectorFunction
+    A new VectorFunction representing the composition.
+)doc");
 }
 
 void VectorFunctionBuildPart2(FunctionRegistry &reg, nb::module_ &m) {

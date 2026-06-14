@@ -128,7 +128,36 @@ struct NumbaVectorFunction
 // ───────────────────────────────────────────────────────────────────
 template <int IRR, int ORR> struct TychoBind<PyVectorFunction<IRR, ORR>> {
     static void build(nb::module_ &m, const char *name) {
-        auto obj = nb::class_<PyVectorFunction<IRR, ORR>>(m, name);
+        auto obj = nb::class_<PyVectorFunction<IRR, ORR>>(m, name,
+            R"doc(VectorFunction defined by an arbitrary Python callable, with finite-difference derivatives.
+
+Wrap any Python function ``f(x, *args)`` as a first-class VectorFunction that can
+be used anywhere in the Tycho optimal-control and trajectory-design API.  The
+callable receives a 1-D NumPy array ``x`` of length ``i_rows`` (plus any extra
+positional arguments supplied via ``args``) and must return a 1-D array-like of
+length ``o_rows``.  Jacobians and Hessians are approximated automatically using
+forward finite differences.
+
+Because the Python GIL must be acquired on every evaluation, ``PyVectorFunction``
+cannot execute in parallel across PSIOPT solver threads — calls are serialized by
+the GIL.  For parallel-safe evaluation, use ``NumbaVectorFunction`` instead.
+
+Parameters
+----------
+i_rows : int
+    Number of input components (length of the input vector passed to ``func``).
+o_rows : int
+    Number of output components (length of the array returned by ``func``).
+    Omitted for the scalar-output variant; fixed to 1.
+func : callable
+    Python function ``f(x, *args) -> array_like`` implementing the VectorFunction.
+jstepsize : float, optional
+    Forward finite-difference step size for Jacobian approximation (default 1e-6).
+hstepsize : float, optional
+    Forward finite-difference step size for Hessian approximation (default 1e-4).
+args : tuple, optional
+    Extra positional arguments forwarded to ``func`` after the input vector.
+)doc");
 
         if constexpr (ORR != 1) {
             obj.def(nb::init<int, int, nb::object, double, double, nb::tuple>(), nb::arg("i_rows"),
@@ -162,7 +191,22 @@ args : tuple, optional
         } else {
             obj.def(nb::init<int, nb::object, double, double, nb::tuple>(), nb::arg("i_rows"),
                     nb::arg("func"), nb::arg("jstepsize") = 1.0e-6, nb::arg("hstepsize") = 1.0e-4,
-                    nb::arg("args") = nb::tuple());
+                    nb::arg("args") = nb::tuple(),
+                    R"doc(Scalar-output variant: ``o_rows`` is fixed to 1 and may be omitted.
+
+Parameters
+----------
+i_rows : int
+    Number of input components (length of the input vector passed to ``func``).
+func : callable
+    Python function ``f(x, *args) -> float`` implementing the scalar VectorFunction.
+jstepsize : float, optional
+    Forward finite-difference step size for Jacobian approximation (default 1e-6).
+hstepsize : float, optional
+    Forward finite-difference step size for Hessian approximation (default 1e-4).
+args : tuple, optional
+    Extra positional arguments forwarded to ``func`` after the input vector.
+)doc");
         }
 
         bind::DenseBaseBuild<PyVectorFunction<IRR, ORR>>(obj);
@@ -174,24 +218,60 @@ args : tuple, optional
                         "PyVectorFunction always acquires the GIL and cannot execute in "
                         "parallel. Setting thread_safe=True provides no benefit. Use "
                         "NumbaVectorFunction for parallel-safe functions.");
-            });
+            },
+            R"doc(Whether this function is safe to call from multiple threads simultaneously.
+
+Always ``False`` for ``PyVectorFunction`` — every evaluation acquires the Python
+GIL, so parallel calls are serialized.  Attempting to set this to ``True`` raises
+``ValueError``.  Use ``NumbaVectorFunction`` for genuinely thread-safe evaluation.
+)doc");
     }
 };
 
 // ── TychoBind<NumbaVectorFunction> ───────────────────────────────────────────────────────────────
 template <int IRR, int ORR> struct TychoBind<NumbaVectorFunction<IRR, ORR>> {
     static void build(nb::module_ &m, const char *name) {
-        auto obj = nb::class_<NumbaVectorFunction<IRR, ORR>>(m, name);
+        auto obj = nb::class_<NumbaVectorFunction<IRR, ORR>>(m, name,
+            R"doc(VectorFunction defined by a Numba JIT-compiled C callback, with finite-difference derivatives.
+
+Wrap a Numba ``@cfunc``-decorated (or any compatible C-ABI) function as a
+first-class VectorFunction that can be used anywhere in the Tycho
+optimal-control and trajectory-design API.  The function pointer must have
+the C signature ``void f(double* x, double* fx, int i_rows, int o_rows)`` and
+is passed as the integer address returned by, for example, the ``.address``
+attribute of a Numba ``@cfunc`` object.
+
+Unlike ``PyVectorFunction``, evaluation does NOT hold the Python GIL, so
+``NumbaVectorFunction`` instances can safely be evaluated in parallel across
+PSIOPT solver threads once ``thread_safe`` is set to ``True``.  Jacobians and
+Hessians are approximated automatically using forward finite differences.
+
+Parameters
+----------
+i_rows : int
+    Number of input components (length of the ``x`` buffer passed to the callback).
+o_rows : int
+    Number of output components (length of the ``fx`` buffer filled by the callback).
+    Omitted for the scalar-output (``ORR == 1``) and fully-static variants.
+func : int
+    Integer address of a C function with signature
+    ``void(double*, double*, int, int)``.
+jstepsize : float, optional
+    Forward finite-difference step size for Jacobian approximation (default 1e-6).
+hstepsize : float, optional
+    Forward finite-difference step size for Hessian approximation (default 1e-6).
+)doc");
         obj.def(nb::init<int, int, const typename NumbaVectorFunction<IRR, ORR>::FType &, double,
                          double>(),
-                R"doc(Wrap a Numba JIT-compiled function pointer as a thread-safe VectorFunction.
+                R"doc(Wrap a Numba JIT-compiled function pointer as a VectorFunction.
 
 The function pointer must have the C signature
 ``void f(double* x, double* fx, int i_rows, int o_rows)`` and is passed as an
 integer holding its address (e.g. the ``.address`` attribute of a Numba
-``@cfunc``-decorated function).  Derivatives are approximated by forward finite differences with
-the given step sizes.  Unlike ``PyVectorFunction``, evaluation does not hold the
-Python GIL and is safe to call from multiple threads in parallel.
+``@cfunc``-decorated function).  Derivatives are approximated by forward finite
+differences with the given step sizes.  Unlike ``PyVectorFunction``, evaluation
+does not hold the Python GIL and is safe to call from multiple threads in parallel
+once ``thread_safe`` is set to ``True`` (default ``False``).
 
 Parameters
 ----------
@@ -220,7 +300,14 @@ hstepsize : float
                 nb::init<const typename NumbaVectorFunction<IRR, ORR>::FType &, double, double>());
             obj.def(nb::init<const typename NumbaVectorFunction<IRR, ORR>::FType &>());
         }
-        obj.def_rw("thread_safe", &NumbaVectorFunction<IRR, ORR>::thread_safe_);
+        obj.def_rw("thread_safe", &NumbaVectorFunction<IRR, ORR>::thread_safe_,
+            R"doc(Whether this function is safe to call from multiple threads simultaneously.
+
+Set to ``True`` to allow PSIOPT solver threads to evaluate this function in
+parallel without acquiring the Python GIL.  The underlying C callback must
+itself be thread-safe (i.e., it must not use shared mutable state).
+Defaults to ``False``.
+)doc");
         bind::DenseBaseBuild<NumbaVectorFunction<IRR, ORR>>(obj);
     }
 };
