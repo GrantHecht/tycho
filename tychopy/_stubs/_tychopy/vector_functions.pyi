@@ -1103,7 +1103,7 @@ class VectorFunction:
         """
 
     @overload
-    def apply(self, arg: ScalarFunction, /) -> VectorFunction: ...
+    def apply(self, arg: ScalarFunction, /) -> ScalarFunction: ...
 
 class ScalarFunction:
     @overload
@@ -1975,7 +1975,7 @@ class ScalarFunction:
         """
 
     @overload
-    def apply(self, arg: ScalarFunction, /) -> VectorFunction: ...
+    def apply(self, arg: ScalarFunction, /) -> ScalarFunction: ...
 
     def padded_lower(self, arg: int, /) -> VectorFunction:
         """
@@ -2733,7 +2733,7 @@ class Segment:
         """
 
     @overload
-    def apply(self, arg: ScalarFunction, /) -> VectorFunction: ...
+    def apply(self, arg: ScalarFunction, /) -> ScalarFunction: ...
 
     def padded_lower(self, arg: int, /) -> VectorFunction:
         """
@@ -3719,7 +3719,7 @@ class Element:
         """
 
     @overload
-    def apply(self, arg: ScalarFunction, /) -> VectorFunction: ...
+    def apply(self, arg: ScalarFunction, /) -> ScalarFunction: ...
 
     def padded_lower(self, arg: int, /) -> VectorFunction:
         """
@@ -4594,7 +4594,7 @@ class Arguments:
         """
 
     @overload
-    def apply(self, arg: ScalarFunction, /) -> VectorFunction: ...
+    def apply(self, arg: ScalarFunction, /) -> ScalarFunction: ...
 
     def padded_lower(self, arg: int, /) -> VectorFunction:
         """
@@ -5540,7 +5540,7 @@ class Segment2:
         """
 
     @overload
-    def apply(self, arg: ScalarFunction, /) -> VectorFunction: ...
+    def apply(self, arg: ScalarFunction, /) -> ScalarFunction: ...
 
     def padded_lower(self, arg: int, /) -> VectorFunction:
         """
@@ -6433,7 +6433,7 @@ class Segment3:
         """
 
     @overload
-    def apply(self, arg: ScalarFunction, /) -> VectorFunction: ...
+    def apply(self, arg: ScalarFunction, /) -> ScalarFunction: ...
 
     def padded_lower(self, arg: int, /) -> VectorFunction:
         """
@@ -6731,6 +6731,10 @@ def sum(arg: Sequence[ScalarFunction], /) -> ScalarFunction:
     output dimension (1).  The result evaluates ``f1(x) + f2(x) + ...``
     elementwise; its Jacobian and higher derivatives are accumulated from all
     addends.
+
+    This overload requires scalar (output dimension 1) addends; the general
+    ``sum(list[VectorFunction])`` overload accepts equal-output functions of any
+    dimension.
 
     Parameters
     ----------
@@ -7689,8 +7693,9 @@ def scalar_root_finder(arg0: ScalarFunction, arg1: ScalarFunction, arg2: int, ar
     the implicit-function theorem.
 
     The first element of the input vector is treated as the initial guess for the
-    iteration variable and is updated in place during each evaluation; the remaining
-    elements are differentiated-through parameters.
+    iteration variable; the iteration variable is updated internally during each
+    Newton step (the caller's input array is not mutated — the iteration runs on an
+    internal copy). The remaining elements are differentiated-through parameters.
 
     Parameters
     ----------

@@ -1446,8 +1446,8 @@ VectorFunction
     obj.def(
         "apply",
         [](const Derived &a, const Gen &b) {
-            // return Gen(b.eval(a));
-            return Gen(NestedFunction<Derived, Gen>(a, b));
+            // ``g(self(x))``: g (= b) is the outer function, self (= a) the inner.
+            return Gen(b.eval(a));
         },
         nb::is_operator(),
         R"doc(Apply an outer VectorFunction to the output of this one: ``g(self(.))``.
@@ -1470,8 +1470,8 @@ VectorFunction
     obj.def(
         "apply",
         [](const Derived &a, const GenS &b) {
-            // return GenS(b.eval(a));
-            return Gen(NestedFunction<Derived, GenS>(a, b));
+            // Scalar outer function: ``g(self(x))`` with scalar result.
+            return GenS(b.eval(a));
         },
         nb::is_operator());
 

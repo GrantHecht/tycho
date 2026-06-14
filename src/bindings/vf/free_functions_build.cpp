@@ -962,8 +962,9 @@ output; its derivatives with respect to the remaining inputs are computed via
 the implicit-function theorem.
 
 The first element of the input vector is treated as the initial guess for the
-iteration variable and is updated in place during each evaluation; the remaining
-elements are differentiated-through parameters.
+iteration variable; the iteration variable is updated internally during each
+Newton step (the caller's input array is not mutated — the iteration runs on an
+internal copy). The remaining elements are differentiated-through parameters.
 
 Parameters
 ----------

@@ -90,6 +90,18 @@ nitpick_ignore = [
 # Breathe-rendered signatures; do not pre-populate.
 nitpick_ignore_regex = [
     ("cpp:identifier", r"Eigen(::.*)?"),
+    # Python: autodoc'ing the compiled tychopy.vector_functions module surfaces
+    # the nanobind-bound VF expression types (in signatures) and the NumPy-style
+    # docstring prose pseudo-types (``array_like``, ``shape (n,)``, etc.) as
+    # py:class cross-references. These VF types are not themselves documented as
+    # Sphinx py:class targets (autodoc is deliberately scoped to the worked-
+    # example functions, not the full type hierarchy), so the references will
+    # never resolve. Mirrors the Eigen cpp:identifier ignore above.
+    ("py:class", r"_tychopy\.vector_functions\..*"),
+    ("py:class", r"(VectorFunction|ScalarFunction|GenericFunction|Segment\d*|Element|Arguments)"),
+    ("py:class", r"array_like"),
+    ("py:class", r"shape \(.*\)"),
+    ("py:class", r"list\[.*\]"),
 ]
 
 # -- HTML output -------------------------------------------------------------

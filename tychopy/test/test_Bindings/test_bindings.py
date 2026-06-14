@@ -317,7 +317,13 @@ class TestModuleLayoutHardBreak(unittest.TestCase):
     def test_snake_case_paths_succeed(self):
         import importlib
 
-        for name in ["vector_functions", "optimal_control", "solvers", "utils", "astro"]:
+        for name in [
+            "vector_functions",
+            "optimal_control",
+            "solvers",
+            "utils",
+            "astro",
+        ]:
             importlib.import_module(f"_tychopy.{name}")
             importlib.import_module(f"tychopy.{name}")
 
@@ -488,6 +494,33 @@ class TestParsePythonArgs(unittest.TestCase):
         # 1.0 becomes Constant<-1,1>(3, [1.0]) (1-output) + f (3-output) → 4-output
         self.assertEqual(result.input_rows(), 3)
         self.assertEqual(result.output_rows(), 4)
+
+    def test_apply_reverse_composition(self):
+        """apply(g) composes as g(self(x)) — the reverse of eval(g) = self(g(x)).
+
+        Regression guard: apply previously aliased eval (both produced
+        self(g(x))) because the binding built NestedFunction<self, g> instead
+        of g.eval(self).
+        """
+        # self: R^2 -> R^2, self([x0, x1]) = [x0, x0]
+        self_fn = vf.stack(vf.Element(2, 1, 0), vf.Element(2, 1, 0))
+        # g: R^2 -> R^2, g([y0, y1]) = [y1, y0]  (component swap)
+        g = vf.stack(vf.Element(2, 1, 1), vf.Element(2, 1, 0))
+        x = np.array([1.0, 2.0])
+
+        # apply = g(self(x)) = g([x0, x0]) = [x0, x0]
+        applied = self_fn.apply(g)
+        np.testing.assert_allclose(applied.compute(x), [1.0, 1.0])
+
+        # eval = self(g(x)) = self([x1, x0]) = [x1, x1]
+        evaled = self_fn.eval(g)
+        np.testing.assert_allclose(evaled.compute(x), [2.0, 2.0])
+
+        # apply must no longer be an alias of eval.
+        self.assertFalse(
+            np.allclose(applied.compute(x), evaled.compute(x)),
+            "apply(g) must compute g(self(x)), distinct from eval(g) = self(g(x))",
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -162,6 +162,10 @@ output dimension (1).  The result evaluates ``f1(x) + f2(x) + ...``
 elementwise; its Jacobian and higher derivatives are accumulated from all
 addends.
 
+This overload requires scalar (output dimension 1) addends; the general
+``sum(list[VectorFunction])`` overload accepts equal-output functions of any
+dimension.
+
 Parameters
 ----------
 funcs : list[VectorFunction]
