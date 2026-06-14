@@ -288,7 +288,7 @@ ValueError
         auto tmp = MatrixFunctionProduct<rowmattype, colmattype>(m1, m2);
         return colmattype(tmp, m1.matrix_rows_, m2.matrix_cols_);
     },
-               R"doc(Matrix product of two row-major matrix VectorFunctions (``self @ other``).
+               R"doc(Matrix product of this row-major matrix VectorFunction with another (``self @ other``).
 
 Computes ``M1(x) @ M2(x)`` where both factors are evaluated at the same input
 ``x``.  The inner dimension of ``M1`` must equal the outer dimension of ``M2``.
@@ -302,9 +302,9 @@ other : ColMatrix or RowMatrix or VectorFunction or float
 
 Returns
 -------
-ColMatrix or RowMatrix
-    Column-major matrix (or row-major when both operands are RowMatrix)
-    representing the product.
+ColMatrix
+    The matrix product, always returned as a column-major matrix (or a flat
+    VectorFunction when ``other`` is a column vector).
 
 Raises
 ------

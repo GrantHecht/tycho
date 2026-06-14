@@ -53,9 +53,9 @@ extracting a single component of the original output vector.
 
 Returns
 -------
-list of GenericFunction (scalar)
-    A list of ``output_rows`` scalar functions, where element *i* extracts
-    output component *i*.
+list of Element
+    A list of ``output_rows`` scalar Element functions, where element *i*
+    extracts output component *i*.
 )doc");
 
     obj.def("tolist", [](const Derived &func, std::vector<int> coeffs) {

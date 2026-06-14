@@ -51,8 +51,9 @@ VectorFunction
 Raises
 ------
 ValueError
-    If the stacked output size does not match ``self.input_rows()``, or if the
-    functions in ``funcs`` do not share a common input size.
+    If the stacked output size does not match ``self.input_rows()``, if the
+    functions in ``funcs`` do not share a common input size, or if ``funcs``
+    is empty.
 )doc");
     obj.def("__call__", [](const FType &fun, const std::vector<Gen> &funcs) {
         return FType(fun.eval(DynamicStack(funcs)));

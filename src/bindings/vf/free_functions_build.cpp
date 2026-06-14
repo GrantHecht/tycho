@@ -321,7 +321,7 @@ fun : VectorFunction
 Returns
 -------
 VectorFunction
-    A new scalar VectorFunction evaluating ``ln(fun(x))``.
+    A new scalar VectorFunction evaluating ``log(fun(x))`` (natural logarithm).
 )doc");
     m.def(
         "squared", [UnaryOpLam](const T &fun) { return UnaryOpLam(fun, "squared"); },
@@ -430,23 +430,27 @@ VectorFunction
 )doc");
 
     m.def(
-        "pow", [UnaryOpLam](const T &fun) { return UnaryOpLam(fun, "pow"); },
-        R"doc(Elementwise real power of a scalar VectorFunction.
+        "pow",
+        [](const T &fun, double power) {
+            nb::object f = nb::cast(fun);
+            return f.attr("pow")(power);
+        },
+        R"doc(Raise a scalar VectorFunction to a real power.
 
-Delegates to the ``.pow(exponent)`` method on *fun*. Prefer using the method
-form ``fun.pow(p)`` or the ``**`` operator directly, as the free-function form
-does not forward the exponent argument.
+Equivalent to the method form ``fun.pow(power)`` and the ``**`` operator.
 
 Parameters
 ----------
 fun : VectorFunction
     Scalar-valued (output dimension 1) VectorFunction. The base value must be
     positive at all evaluation points for non-integer exponents.
+power : float
+    The real exponent.
 
 Returns
 -------
 VectorFunction
-    A new scalar VectorFunction evaluating ``fun(x)**p``.
+    A new scalar VectorFunction evaluating ``fun(x) ** power``.
 )doc");
 
     m.def(

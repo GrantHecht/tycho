@@ -96,7 +96,7 @@ template <class PYCLASS> void MinMaxBuild(PYCLASS &obj) {
     obj.def("max", [](const GenS &f1, const GenS &f2) {
         return GenS(ComparativeFunction<GenS, GenS>(ComparativeFlags::MaxFlag, f1, f2));
     },
-    R"doc(Return a VectorFunction that evaluates the elementwise maximum of two scalar functions.
+    R"doc(Return a VectorFunction that evaluates the pointwise maximum of two scalar functions.
 
 Both operands must be scalar-valued (output rows = 1) and share the same input
 dimension. At each evaluation point the result equals ``max(f1(x), f2(x))``.
@@ -150,7 +150,7 @@ ValueError
     obj.def("min", [](const GenS &f1, const GenS &f2) {
         return GenS(ComparativeFunction<GenS, GenS>(ComparativeFlags::MinFlag, f1, f2));
     },
-    R"doc(Return a VectorFunction that evaluates the elementwise minimum of two scalar functions.
+    R"doc(Return a VectorFunction that evaluates the pointwise minimum of two scalar functions.
 
 Both operands must be scalar-valued (output rows = 1) and share the same input
 dimension. At each evaluation point the result equals ``min(f1(x), f2(x))``.
@@ -223,8 +223,9 @@ x : array_like, shape (input_rows,)
 
 Returns
 -------
-numpy.ndarray, shape (output_rows,)
-    Output of the comparative (min or max) function at *x*.
+bool
+    Result of the underlying comparison predicate at *x* (which operand the
+    min/max selects).
 )doc");
 
     bind::MinMaxBuild(obj);

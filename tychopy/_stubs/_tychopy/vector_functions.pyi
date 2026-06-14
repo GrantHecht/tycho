@@ -325,8 +325,9 @@ class VectorFunction:
         Raises
         ------
         ValueError
-            If the stacked output size does not match ``self.input_rows()``, or if the
-            functions in ``funcs`` do not share a common input size.
+            If the stacked output size does not match ``self.input_rows()``, if the
+            functions in ``funcs`` do not share a common input size, or if ``funcs``
+            is empty.
         """
 
     @overload
@@ -529,15 +530,11 @@ class VectorFunction:
         ----------
         b : array_like, shape (output_rows,)
             Constant offset added to the output of ``self`` before normalizing.
-        s : float, optional
-            Scalar multiplier applied to the result.  When omitted the result is
-            not scaled.
 
         Returns
         -------
         VectorFunction
-            Expression evaluating ``(self(x) + b) / ||self(x) + b||³``, or the
-            scaled variant when ``s`` is provided.
+            Expression evaluating ``(self(x) + b) / ||self(x) + b||³``.
         """
 
     @overload
@@ -598,20 +595,7 @@ class VectorFunction:
     def cross(self, arg: VectorFunction, /) -> VectorFunction: ...
 
     @overload
-    def dot(self, arg: Segment, /) -> ScalarFunction:
-        """
-        Dot product of this VectorFunction with another equal-length one.
-
-        Parameters
-        ----------
-        other : VectorFunction or array_like, shape (n,)
-            Right-hand operand; must have the same output dimension as ``self``.
-
-        Returns
-        -------
-        ScalarFunction
-            Expression evaluating ``self(x) · other(x)``.
-        """
+    def dot(self, arg: Segment, /) -> ScalarFunction: ...
 
     @overload
     def dot(self, arg: VectorFunction, /) -> ScalarFunction:
@@ -625,8 +609,8 @@ class VectorFunction:
 
         Returns
         -------
-        VectorFunction
-            Scalar VectorFunction evaluating ``self(x) . other(x)``.
+        ScalarFunction
+            Expression evaluating ``self(x) · other(x)``.
         """
 
     @overload
@@ -808,12 +792,12 @@ class VectorFunction:
         """
         Divide this VectorFunction by a scalar constant (``self / b``).
 
+        A separate overload accepts a scalar VectorFunction divisor.
+
         Parameters
         ----------
-        b : float or scalar VectorFunction
-            Divisor.  When a float, every output component is divided by ``b``.
-            When a scalar VectorFunction, each output is divided element-wise by
-            the runtime value of ``b(x)``.
+        b : float
+            Constant divisor; every output component is divided by ``b``.
 
         Returns
         -------
@@ -1322,8 +1306,9 @@ class ScalarFunction:
         Raises
         ------
         ValueError
-            If the stacked output size does not match ``self.input_rows()``, or if the
-            functions in ``funcs`` do not share a common input size.
+            If the stacked output size does not match ``self.input_rows()``, if the
+            functions in ``funcs`` do not share a common input size, or if ``funcs``
+            is empty.
         """
 
     @overload
@@ -1662,12 +1647,12 @@ class ScalarFunction:
         """
         Divide this VectorFunction by a scalar constant (``self / b``).
 
+        A separate overload accepts a scalar VectorFunction divisor.
+
         Parameters
         ----------
-        b : float or scalar VectorFunction
-            Divisor.  When a float, every output component is divided by ``b``.
-            When a scalar VectorFunction, each output is divided element-wise by
-            the runtime value of ``b(x)``.
+        b : float
+            Constant divisor; every output component is divided by ``b``.
 
         Returns
         -------
@@ -1913,8 +1898,8 @@ class ScalarFunction:
 
         Returns
         -------
-        VectorFunction
-            Scalar VectorFunction evaluating ``self(x) . other(x)``.
+        ScalarFunction
+            Expression evaluating ``self(x) · other(x)``.
         """
 
     @overload
@@ -2581,12 +2566,12 @@ class Segment:
         """
         Divide this VectorFunction by a scalar constant (``self / b``).
 
+        A separate overload accepts a scalar VectorFunction divisor.
+
         Parameters
         ----------
-        b : float or scalar VectorFunction
-            Divisor.  When a float, every output component is divided by ``b``.
-            When a scalar VectorFunction, each output is divided element-wise by
-            the runtime value of ``b(x)``.
+        b : float
+            Constant divisor; every output component is divided by ``b``.
 
         Returns
         -------
@@ -2639,15 +2624,11 @@ class Segment:
         ----------
         b : array_like, shape (output_rows,)
             Constant offset added to the output of ``self`` before normalizing.
-        s : float, optional
-            Scalar multiplier applied to the result.  When omitted the result is
-            not scaled.
 
         Returns
         -------
         VectorFunction
-            Expression evaluating ``(self(x) + b) / ||self(x) + b||³``, or the
-            scaled variant when ``s`` is provided.
+            Expression evaluating ``(self(x) + b) / ||self(x) + b||³``.
         """
 
     @overload
@@ -2705,8 +2686,8 @@ class Segment:
 
         Returns
         -------
-        VectorFunction
-            Scalar VectorFunction evaluating ``self(x) . other(x)``.
+        ScalarFunction
+            Expression evaluating ``self(x) · other(x)``.
         """
 
     @overload
@@ -2981,9 +2962,9 @@ class Segment:
 
         Returns
         -------
-        list of GenericFunction (scalar)
-            A list of ``output_rows`` scalar functions, where element *i* extracts
-            output component *i*.
+        list of Element
+            A list of ``output_rows`` scalar Element functions, where element *i*
+            extracts output component *i*.
         """
 
     @overload
@@ -3446,12 +3427,12 @@ class Element:
         """
         Divide this VectorFunction by a scalar constant (``self / b``).
 
+        A separate overload accepts a scalar VectorFunction divisor.
+
         Parameters
         ----------
-        b : float or scalar VectorFunction
-            Divisor.  When a float, every output component is divided by ``b``.
-            When a scalar VectorFunction, each output is divided element-wise by
-            the runtime value of ``b(x)``.
+        b : float
+            Constant divisor; every output component is divided by ``b``.
 
         Returns
         -------
@@ -3697,8 +3678,8 @@ class Element:
 
         Returns
         -------
-        VectorFunction
-            Scalar VectorFunction evaluating ``self(x) . other(x)``.
+        ScalarFunction
+            Expression evaluating ``self(x) · other(x)``.
         """
 
     @overload
@@ -3925,9 +3906,9 @@ class Element:
 
         Returns
         -------
-        list of GenericFunction (scalar)
-            A list of ``output_rows`` scalar functions, where element *i* extracts
-            output component *i*.
+        list of Element
+            A list of ``output_rows`` scalar Element functions, where element *i*
+            extracts output component *i*.
         """
 
     @overload
@@ -4389,12 +4370,12 @@ class Arguments:
         """
         Divide this VectorFunction by a scalar constant (``self / b``).
 
+        A separate overload accepts a scalar VectorFunction divisor.
+
         Parameters
         ----------
-        b : float or scalar VectorFunction
-            Divisor.  When a float, every output component is divided by ``b``.
-            When a scalar VectorFunction, each output is divided element-wise by
-            the runtime value of ``b(x)``.
+        b : float
+            Constant divisor; every output component is divided by ``b``.
 
         Returns
         -------
@@ -4447,15 +4428,11 @@ class Arguments:
         ----------
         b : array_like, shape (output_rows,)
             Constant offset added to the output of ``self`` before normalizing.
-        s : float, optional
-            Scalar multiplier applied to the result.  When omitted the result is
-            not scaled.
 
         Returns
         -------
         VectorFunction
-            Expression evaluating ``(self(x) + b) / ||self(x) + b||³``, or the
-            scaled variant when ``s`` is provided.
+            Expression evaluating ``(self(x) + b) / ||self(x) + b||³``.
         """
 
     @overload
@@ -4519,20 +4496,7 @@ class Arguments:
     def cross(self, arg: Arguments, /) -> VectorFunction: ...
 
     @overload
-    def dot(self, arg: Segment, /) -> ScalarFunction:
-        """
-        Dot product of this VectorFunction with another equal-length one.
-
-        Parameters
-        ----------
-        other : VectorFunction or array_like, shape (n,)
-            Right-hand operand; must have the same output dimension as ``self``.
-
-        Returns
-        -------
-        ScalarFunction
-            Expression evaluating ``self(x) · other(x)``.
-        """
+    def dot(self, arg: Segment, /) -> ScalarFunction: ...
 
     @overload
     def dot(self, arg: VectorFunction, /) -> ScalarFunction: ...
@@ -4549,8 +4513,8 @@ class Arguments:
 
         Returns
         -------
-        VectorFunction
-            Scalar VectorFunction evaluating ``self(x) . other(x)``.
+        ScalarFunction
+            Expression evaluating ``self(x) · other(x)``.
         """
 
     @overload
@@ -4859,9 +4823,9 @@ class Arguments:
 
         Returns
         -------
-        list of GenericFunction (scalar)
-            A list of ``output_rows`` scalar functions, where element *i* extracts
-            output component *i*.
+        list of Element
+            A list of ``output_rows`` scalar Element functions, where element *i*
+            extracts output component *i*.
         """
 
     @overload
@@ -5296,12 +5260,12 @@ class Segment2:
         """
         Divide this VectorFunction by a scalar constant (``self / b``).
 
+        A separate overload accepts a scalar VectorFunction divisor.
+
         Parameters
         ----------
-        b : float or scalar VectorFunction
-            Divisor.  When a float, every output component is divided by ``b``.
-            When a scalar VectorFunction, each output is divided element-wise by
-            the runtime value of ``b(x)``.
+        b : float
+            Constant divisor; every output component is divided by ``b``.
 
         Returns
         -------
@@ -5354,15 +5318,11 @@ class Segment2:
         ----------
         b : array_like, shape (output_rows,)
             Constant offset added to the output of ``self`` before normalizing.
-        s : float, optional
-            Scalar multiplier applied to the result.  When omitted the result is
-            not scaled.
 
         Returns
         -------
         VectorFunction
-            Expression evaluating ``(self(x) + b) / ||self(x) + b||³``, or the
-            scaled variant when ``s`` is provided.
+            Expression evaluating ``(self(x) + b) / ||self(x) + b||³``.
         """
 
     @overload
@@ -5453,7 +5413,7 @@ class Segment2:
 
     def normalized_power2(self) -> VectorFunction:
         """
-        Output normalized and divided by an additional factor of its norm: ``self(x) / ||self(x)||²``.
+        Output divided by the squared Euclidean norm: ``self(x) / ||self(x)||²``.
 
         Returns
         -------
@@ -5463,7 +5423,7 @@ class Segment2:
 
     def normalized_power4(self) -> VectorFunction:
         """
-        Output normalized and divided by the cube of its norm: ``self(x) / ||self(x)||⁴``.
+        Output divided by the fourth power of its Euclidean norm: ``self(x) / ||self(x)||⁴``.
 
         Returns
         -------
@@ -5482,20 +5442,7 @@ class Segment2:
         """
 
     @overload
-    def dot(self, arg: Segment, /) -> ScalarFunction:
-        """
-        Dot product of this VectorFunction with another equal-length one.
-
-        Parameters
-        ----------
-        other : VectorFunction or array_like, shape (n,)
-            Right-hand operand; must have the same output dimension as ``self``.
-
-        Returns
-        -------
-        ScalarFunction
-            Expression evaluating ``self(x) · other(x)``.
-        """
+    def dot(self, arg: Segment, /) -> ScalarFunction: ...
 
     @overload
     def dot(self, arg: VectorFunction, /) -> ScalarFunction: ...
@@ -5512,8 +5459,8 @@ class Segment2:
 
         Returns
         -------
-        VectorFunction
-            Scalar VectorFunction evaluating ``self(x) . other(x)``.
+        ScalarFunction
+            Expression evaluating ``self(x) · other(x)``.
         """
 
     @overload
@@ -5740,9 +5687,9 @@ class Segment2:
 
         Returns
         -------
-        list of GenericFunction (scalar)
-            A list of ``output_rows`` scalar functions, where element *i* extracts
-            output component *i*.
+        list of Element
+            A list of ``output_rows`` scalar Element functions, where element *i*
+            extracts output component *i*.
         """
 
     @overload
@@ -6177,12 +6124,12 @@ class Segment3:
         """
         Divide this VectorFunction by a scalar constant (``self / b``).
 
+        A separate overload accepts a scalar VectorFunction divisor.
+
         Parameters
         ----------
-        b : float or scalar VectorFunction
-            Divisor.  When a float, every output component is divided by ``b``.
-            When a scalar VectorFunction, each output is divided element-wise by
-            the runtime value of ``b(x)``.
+        b : float
+            Constant divisor; every output component is divided by ``b``.
 
         Returns
         -------
@@ -6235,15 +6182,11 @@ class Segment3:
         ----------
         b : array_like, shape (output_rows,)
             Constant offset added to the output of ``self`` before normalizing.
-        s : float, optional
-            Scalar multiplier applied to the result.  When omitted the result is
-            not scaled.
 
         Returns
         -------
         VectorFunction
-            Expression evaluating ``(self(x) + b) / ||self(x) + b||³``, or the
-            scaled variant when ``s`` is provided.
+            Expression evaluating ``(self(x) + b) / ||self(x) + b||³``.
         """
 
     @overload
@@ -6334,7 +6277,7 @@ class Segment3:
 
     def normalized_power2(self) -> VectorFunction:
         """
-        Output normalized and divided by an additional factor of its norm: ``self(x) / ||self(x)||²``.
+        Output divided by the squared Euclidean norm: ``self(x) / ||self(x)||²``.
 
         Returns
         -------
@@ -6344,7 +6287,7 @@ class Segment3:
 
     def normalized_power4(self) -> VectorFunction:
         """
-        Output normalized and divided by the cube of its norm: ``self(x) / ||self(x)||⁴``.
+        Output divided by the fourth power of its Euclidean norm: ``self(x) / ||self(x)||⁴``.
 
         Returns
         -------
@@ -6392,20 +6335,7 @@ class Segment3:
     def cross(self, arg: Segment3, /) -> VectorFunction: ...
 
     @overload
-    def dot(self, arg: Segment, /) -> ScalarFunction:
-        """
-        Dot product of this VectorFunction with another equal-length one.
-
-        Parameters
-        ----------
-        other : VectorFunction or array_like, shape (n,)
-            Right-hand operand; must have the same output dimension as ``self``.
-
-        Returns
-        -------
-        ScalarFunction
-            Expression evaluating ``self(x) · other(x)``.
-        """
+    def dot(self, arg: Segment, /) -> ScalarFunction: ...
 
     @overload
     def dot(self, arg: VectorFunction, /) -> ScalarFunction: ...
@@ -6422,8 +6352,8 @@ class Segment3:
 
         Returns
         -------
-        VectorFunction
-            Scalar VectorFunction evaluating ``self(x) . other(x)``.
+        ScalarFunction
+            Expression evaluating ``self(x) · other(x)``.
         """
 
     @overload
@@ -6691,9 +6621,9 @@ class Segment3:
 
         Returns
         -------
-        list of GenericFunction (scalar)
-            A list of ``output_rows`` scalar functions, where element *i* extracts
-            output component *i*.
+        list of Element
+            A list of ``output_rows`` scalar Element functions, where element *i*
+            extracts output component *i*.
         """
 
     @overload
@@ -6873,7 +6803,7 @@ def sum_scalar(arg: Sequence[ScalarFunction], /) -> ScalarFunction:
 @overload
 def sum_elems(arg: Sequence[Element], /) -> ScalarFunction:
     """
-    Elementwise sum of several scalar segment-output VectorFunctions.
+    Sum several scalar segment-output VectorFunctions into one scalar.
 
     Sums a list of single-element segment VectorFunctions (each extracting one
     output component) into a single scalar-output VectorFunction.  All segments
@@ -7964,7 +7894,7 @@ def log(arg: Element, /) -> object:
     Returns
     -------
     VectorFunction
-        A new scalar VectorFunction evaluating ``ln(fun(x))``.
+        A new scalar VectorFunction evaluating ``log(fun(x))`` (natural logarithm).
     """
 
 @overload
@@ -8109,28 +8039,28 @@ def tanh(arg: Element, /) -> object:
 def tanh(arg: ScalarFunction, /) -> object: ...
 
 @overload
-def pow(arg: Element, /) -> object:
+def pow(arg0: Element, arg1: float, /) -> object:
     """
-    Elementwise real power of a scalar VectorFunction.
+    Raise a scalar VectorFunction to a real power.
 
-    Delegates to the ``.pow(exponent)`` method on *fun*. Prefer using the method
-    form ``fun.pow(p)`` or the ``**`` operator directly, as the free-function form
-    does not forward the exponent argument.
+    Equivalent to the method form ``fun.pow(power)`` and the ``**`` operator.
 
     Parameters
     ----------
     fun : VectorFunction
         Scalar-valued (output dimension 1) VectorFunction. The base value must be
         positive at all evaluation points for non-integer exponents.
+    power : float
+        The real exponent.
 
     Returns
     -------
     VectorFunction
-        A new scalar VectorFunction evaluating ``fun(x)**p``.
+        A new scalar VectorFunction evaluating ``fun(x) ** power``.
     """
 
 @overload
-def pow(arg: ScalarFunction, /) -> object: ...
+def pow(arg0: ScalarFunction, arg1: float, /) -> object: ...
 
 @overload
 def arcsinh(arg: Element, /) -> object:
@@ -8552,7 +8482,7 @@ class RowMatrix:
     @overload
     def __mul__(self, arg: ColMatrix, /) -> ColMatrix:
         """
-        Matrix product of two row-major matrix VectorFunctions (``self @ other``).
+        Matrix product of this row-major matrix VectorFunction with another (``self @ other``).
 
         Computes ``M1(x) @ M2(x)`` where both factors are evaluated at the same input
         ``x``.  The inner dimension of ``M1`` must equal the outer dimension of ``M2``.
@@ -8566,9 +8496,9 @@ class RowMatrix:
 
         Returns
         -------
-        ColMatrix or RowMatrix
-            Column-major matrix (or row-major when both operands are RowMatrix)
-            representing the product.
+        ColMatrix
+            The matrix product, always returned as a column-major matrix (or a flat
+            VectorFunction when ``other`` is a column vector).
 
         Raises
         ------
@@ -8884,14 +8814,15 @@ class Comparative:
 
         Returns
         -------
-        numpy.ndarray, shape (output_rows,)
-            Output of the comparative (min or max) function at *x*.
+        bool
+            Result of the underlying comparison predicate at *x* (which operand the
+            min/max selects).
         """
 
     @overload
     def max(self, arg: ScalarFunction, /) -> ScalarFunction:
         """
-        Return a VectorFunction that evaluates the elementwise maximum of two scalar functions.
+        Return a VectorFunction that evaluates the pointwise maximum of two scalar functions.
 
         Both operands must be scalar-valued (output rows = 1) and share the same input
         dimension. At each evaluation point the result equals ``max(f1(x), f2(x))``.
@@ -8934,7 +8865,7 @@ class Comparative:
     @overload
     def min(self, arg: ScalarFunction, /) -> ScalarFunction:
         """
-        Return a VectorFunction that evaluates the elementwise minimum of two scalar functions.
+        Return a VectorFunction that evaluates the pointwise minimum of two scalar functions.
 
         Both operands must be scalar-valued (output rows = 1) and share the same input
         dimension. At each evaluation point the result equals ``min(f1(x), f2(x))``.
@@ -9590,8 +9521,8 @@ class NumbaVectorFunction:
 
         The function pointer must have the C signature
         ``void f(double* x, double* fx, int i_rows, int o_rows)`` and is passed as an
-        integer holding its address (as returned by ``numba.extending.get_cython_function_address``
-        or equivalent).  Derivatives are approximated by forward finite differences with
+        integer holding its address (e.g. the ``.address`` attribute of a Numba
+        ``@cfunc``-decorated function).  Derivatives are approximated by forward finite differences with
         the given step sizes.  Unlike ``PyVectorFunction``, evaluation does not hold the
         Python GIL and is safe to call from multiple threads in parallel.
 
@@ -9902,8 +9833,8 @@ class NumbaScalarFunction:
 
         The function pointer must have the C signature
         ``void f(double* x, double* fx, int i_rows, int o_rows)`` and is passed as an
-        integer holding its address (as returned by ``numba.extending.get_cython_function_address``
-        or equivalent).  Derivatives are approximated by forward finite differences with
+        integer holding its address (e.g. the ``.address`` attribute of a Numba
+        ``@cfunc``-decorated function).  Derivatives are approximated by forward finite differences with
         the given step sizes.  Unlike ``PyVectorFunction``, evaluation does not hold the
         Python GIL and is safe to call from multiple threads in parallel.
 
@@ -10843,11 +10774,11 @@ class IOScaled:
         IOScaled
             Wrapped function with scaled input and output.
 
-        Raises
-        ------
-        ValueError
-            If the length of ``input_scales`` or ``output_scales`` does not match the
-            corresponding dimension of ``func``.
+        Notes
+        -----
+        The scale-vector lengths are not validated against ``func``'s dimensions;
+        supplying ``input_scales`` or ``output_scales`` of the wrong length leads to
+        undefined behavior at evaluation time.
         """
 
     def input_rows(self) -> int:

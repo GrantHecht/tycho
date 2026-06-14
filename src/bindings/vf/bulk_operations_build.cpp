@@ -251,7 +251,7 @@ ValueError
     m.def("sum", [](const std::vector<Gen> &elems) { return DynamicSum(elems); });
 
     m.def("sum_elems", &make_dynamic_sum<GenS, ELEM>,
-          R"doc(Elementwise sum of several scalar segment-output VectorFunctions.
+          R"doc(Sum several scalar segment-output VectorFunctions into one scalar.
 
 Sums a list of single-element segment VectorFunctions (each extracting one
 output component) into a single scalar-output VectorFunction.  All segments

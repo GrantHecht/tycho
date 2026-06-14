@@ -461,12 +461,12 @@ VectorFunction
         nb::is_operator(),
         R"doc(Divide this VectorFunction by a scalar constant (``self / b``).
 
+A separate overload accepts a scalar VectorFunction divisor.
+
 Parameters
 ----------
-b : float or scalar VectorFunction
-    Divisor.  When a float, every output component is divided by ``b``.
-    When a scalar VectorFunction, each output is divided element-wise by
-    the runtime value of ``b(x)``.
+b : float
+    Constant divisor; every output component is divided by ``b``.
 
 Returns
 -------
@@ -546,15 +546,11 @@ Parameters
 ----------
 b : array_like, shape (output_rows,)
     Constant offset added to the output of ``self`` before normalizing.
-s : float, optional
-    Scalar multiplier applied to the result.  When omitted the result is
-    not scaled.
 
 Returns
 -------
 VectorFunction
-    Expression evaluating ``(self(x) + b) / ||self(x) + b||³``, or the
-    scaled variant when ``s`` is provided.
+    Expression evaluating ``(self(x) + b) / ||self(x) + b||³``.
 )doc");
         obj.def("normalized_power3", [](const Derived &a, Eigen::VectorXd b, double s) {
             return Gen(((a + b).template normalized_power<3>()) * s);
@@ -635,7 +631,7 @@ VectorFunction
 
             obj.def("normalized_power2",
                     [](const Derived &a) { return Gen(a.template normalized_power<2>()); },
-                    R"doc(Output normalized and divided by an additional factor of its norm: ``self(x) / ||self(x)||²``.
+                    R"doc(Output divided by the squared Euclidean norm: ``self(x) / ||self(x)||²``.
 
 Returns
 -------
@@ -645,7 +641,7 @@ VectorFunction
 
             obj.def("normalized_power4",
                     [](const Derived &a) { return Gen(a.template normalized_power<4>()); },
-                    R"doc(Output normalized and divided by the cube of its norm: ``self(x) / ||self(x)||⁴``.
+                    R"doc(Output divided by the fourth power of its Euclidean norm: ``self(x) / ||self(x)||⁴``.
 
 Returns
 -------
@@ -1263,22 +1259,9 @@ VectorFunction
 
     if constexpr (OR != 1) {
         if constexpr (!is_seg)
-            obj.def("dot",
-                    [](const Derived &seg1, const SEG &seg2) {
-                        return GenS(dot_product(seg1, seg2));
-                    },
-                    R"doc(Dot product of this VectorFunction with another equal-length one.
-
-Parameters
-----------
-other : VectorFunction or array_like, shape (n,)
-    Right-hand operand; must have the same output dimension as ``self``.
-
-Returns
--------
-ScalarFunction
-    Expression evaluating ``self(x) · other(x)``.
-)doc");
+            obj.def("dot", [](const Derived &seg1, const SEG &seg2) {
+                return GenS(dot_product(seg1, seg2));
+            });
 
         if constexpr (!is_gen)
             obj.def("dot", [](const Derived &seg1, const Gen &seg2) {
@@ -1350,8 +1333,8 @@ other : VectorFunction or array_like, shape (n,)
 
 Returns
 -------
-VectorFunction
-    Scalar VectorFunction evaluating ``self(x) . other(x)``.
+ScalarFunction
+    Expression evaluating ``self(x) · other(x)``.
 )doc");
     obj.def("cwise_product", [](const Derived &seg1, const Derived &seg2) {
         return BinGen(CwiseFunctionProduct<Derived, Derived>(seg1, seg2));

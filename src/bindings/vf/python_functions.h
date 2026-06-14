@@ -188,8 +188,8 @@ template <int IRR, int ORR> struct TychoBind<NumbaVectorFunction<IRR, ORR>> {
 
 The function pointer must have the C signature
 ``void f(double* x, double* fx, int i_rows, int o_rows)`` and is passed as an
-integer holding its address (as returned by ``numba.extending.get_cython_function_address``
-or equivalent).  Derivatives are approximated by forward finite differences with
+integer holding its address (e.g. the ``.address`` attribute of a Numba
+``@cfunc``-decorated function).  Derivatives are approximated by forward finite differences with
 the given step sizes.  Unlike ``PyVectorFunction``, evaluation does not hold the
 Python GIL and is safe to call from multiple threads in parallel.
 
