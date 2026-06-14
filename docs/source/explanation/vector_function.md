@@ -61,6 +61,7 @@ f.jacobian([1.0, 2.0, 3.0])  # 1 x 3 Jacobian
 ```cpp
 #include <tycho/tycho.h>
 using namespace tycho;
+using namespace tycho::vf;
 
 auto args  = Arguments<3>();
 auto x     = args.coeff<0>();
@@ -177,13 +178,14 @@ inherited.
 :::{tab-item} C++
 ```cpp
 #include <tycho/tycho.h>
-namespace tycho {
+using namespace tycho;
+using namespace tycho::vf;
 
 // f(x) = [x_0^2, x_1^2, ..., x_{n-1}^2]
 template <int IR>
 struct CwiseSquareExample : VectorFunction<CwiseSquareExample<IR>, IR, IR> {
     using Base = VectorFunction<CwiseSquareExample<IR>, IR, IR>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 
     static const bool is_vectorizable = true;   // safe: only Eigen array ops below
 
@@ -191,14 +193,12 @@ struct CwiseSquareExample : VectorFunction<CwiseSquareExample<IR>, IR, IR> {
     CwiseSquareExample(int ir) { this->set_io_rows(ir, ir); }
 
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x,
-                             ConstVectorBaseRef<OutType> fx_) const {
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        fx = x.array().square();
+    inline void compute_impl(const Eigen::MatrixBase<InType> &x,
+                             const Eigen::MatrixBase<OutType> &fx_) const {
+        Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
+        fx = x.array().square().matrix();
     }
 };
-
-} // namespace tycho
 ```
 :::
 :::{tab-item} Python
@@ -224,8 +224,8 @@ A few details earn their place in the contract:
 - `compute_impl` is a *template* on the scalar type. Writing the body in terms of
   Eigen array operations (`.square()`, `.sin()`, `+`, `*`) means it works
   unchanged for `double` and for the SIMD batch type.
-- `DENSE_FUNCTION_BASE_TYPES(Base)` pulls in the inherited type aliases the body
-  relies on.
+- `VF_TYPE_ALIASES(Base)` pulls in the inherited type aliases (`Input`, `Output`,
+  `Jacobian`, …) the body relies on.
 
 For C++ ODE definitions there is a more declarative path: a struct that returns a
 VectorFunction expression from a static `Definition` method, wrapped by the
@@ -324,13 +324,14 @@ ode = vf.stack([v, gravity * (-1.0)])   # 6-output dynamics
 ```cpp
 #include <tycho/tycho.h>
 using namespace tycho;
+using namespace tycho::vf;
 
 auto args = Arguments<6>();
 auto r    = args.head<3>();
 auto v    = args.tail<3>();
 
 auto speed   = v.norm();
-auto gravity = r.normalized_power3();
+auto gravity = r.normalized_power<3>();   // r / ||r||^3
 auto ode     = StackedOutputs{v, gravity * (-1.0)};
 ```
 :::
