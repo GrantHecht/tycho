@@ -164,21 +164,20 @@ once you know the layers and what each contributes:
 
 | Layer | Responsibility |
 | --- | --- |
-| `ComputableBase` | `compute()` dispatch and the solver-facing `constraints()` batch loop |
-| `Computable` | scalar-output (`OR == 1`) specialization of the type aliases |
-| `DenseFunctionBase` | the operator DSL: indexing, slicing, math methods, Jacobian products, KKT fill |
-| `DenseFunction` | routing — for `OR == 1` it swaps in `DenseScalarFunctionBase`, which adds the objective/gradient interface the optimizer calls on scalar objectives |
-| `DenseFirstDerivatives` / `DenseSecondDerivatives` | select the Jacobian and Hessian *strategy* (analytic, finite-difference, or Enzyme) by partial specialization |
+| `ComputableBase` (+ `DomainHolder`) | `compute()` dispatch, the solver-facing `constraints()` batch loop, and input-domain tracking |
+| `DenseFunctionBase` | the operator DSL (indexing, slicing, math methods, Jacobian products, KKT fill), plus the scalar-objective interface (`objective()`, `objective_gradient()`, `objective_gradient_hessian()`) constrained to `OR == 1` |
+| `DenseFirstDerivatives` → `DenseSecondDerivatives` | select the Jacobian and Hessian *strategy* (analytic, finite-difference, or Enzyme) by partial specialization |
 | `VectorFunction` | the aggregate the user inherits from |
 
-The separation matters for two reasons. First, the scalar-output specialization
-is why a scalar objective gets `objective()`,
-`objective_gradient()`, and `objective_gradient_hessian()` for free while a
-vector constraint does not — the routing layer chooses the right base from `OR`.
-Second, the derivative strategy is a *layer*, not a runtime branch: choosing
-`FDiffFwd` instead of `Analytic` substitutes a different `DenseFirstDerivatives`
-specialization at compile time, so a function never carries code for a mode it
-does not use.
+The separation matters for two reasons. First, the scalar-objective methods
+(`objective()`, `objective_gradient()`, `objective_gradient_hessian()`) carry a
+C++20 `requires(OR == 1)` constraint, so they exist *only* on scalar functions:
+the optimizer can call them on an objective, while a vector constraint simply
+does not have them — no separate base class or runtime check, just the
+constraint. Second, the derivative strategy is a *layer*, not a runtime branch:
+choosing `FDiffFwd` instead of `Analytic` substitutes a different
+`DenseFirstDerivatives` specialization at compile time, so a function never
+carries code for a mode it does not use.
 
 ### The sizing parameters
 
@@ -209,7 +208,7 @@ struct CwiseSquareExample : VectorFunction<CwiseSquareExample<IR>, IR, IR> {
     using Base = VectorFunction<CwiseSquareExample<IR>, IR, IR>;
     VF_TYPE_ALIASES(Base);
 
-    static const bool is_vectorizable = true;   // safe: only Eigen array ops below
+    static constexpr bool is_vectorizable = true;   // safe: only Eigen array ops below
 
     CwiseSquareExample() {}
     CwiseSquareExample(int ir) { this->set_io_rows(ir, ir); }
@@ -402,7 +401,7 @@ implement derivatives by hand:
 | Norms | `Norm`, `SquaredNorm`, `InverseNorm`, `NormPower` | scalar output; all vectorizable |
 | Normalization | `Normalized`, `NormalizedPower` | `x / ‖x‖^p`, common in gravity models |
 | Vector products | dot, cross, elementwise product, vector·scalar product | analytic, 3-D where applicable |
-| Control flow | `Conditional`, `Comparative` | branch and min/max selection, type-erased |
+| Control flow | `GenericConditional`, `GenericComparative` | branch and min/max selection, type-erased |
 
 Each carries the same derivative contract as a user-authored function, which is
 what makes the whole algebra closed: any expression you can write is, to the
