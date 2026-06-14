@@ -103,36 +103,58 @@ a SIMD batch type (`Eigen::Array<double, N, 1>`, discussed under
 
 ```cpp
 template <class InType, class OutType>
-void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx) const;
+void compute_impl(const Eigen::MatrixBase<InType> &x,
+                  const Eigen::MatrixBase<OutType> &fx) const;
 ```
 
 C++ does not allow virtual function templates. That rules out classical
-inheritance for the hot path and leaves two realistic options: static
-polymorphism (CRTP), or runtime type erasure. CRTP wins on the hot loop because:
+inheritance for the hot path, and CRTP is the static-polymorphism answer. It
+wins on the hot loop because:
 
 - **Zero overhead.** Dispatch is `this->derived().compute_impl(...)`, resolved at
   compile time. There is no vtable indirection, and the compiler can inline the
   entire expression tree into a single tight kernel.
+- **One body, every scalar type.** Because `compute_impl` is a template, the same
+  source evaluates for `double`, for the SIMD batch type, and for any future
+  scalar — no base class has to enumerate the scalar types it supports.
 - **Global optimization.** A composite type such as
   `NestedFunction<Outer, Inner>` carries the *exact* types of its operands, so
-  the optimizer sees through the whole composition and optimizes across operand
-  boundaries.
+  the compiler sees through the whole composition and optimizes across operand
+  boundaries instead of stopping at a call.
 
 CRTP is not free. Every distinct expression is a distinct C++ type, so deep
-expressions produce deeply nested template types that are slow to compile, and
-you cannot store two differently-shaped expressions in the same container. Tycho
-accepts the compile-time cost on the hot path and recovers runtime flexibility
-with a type-erasure layer ([GenericFunction](#type-erasure-genericfunction))
-exactly where heterogeneity is needed.
+expressions produce deeply nested template types that are slow to compile;
+two differently-shaped expressions cannot share a container; and the inheritance
+chain is deep enough to be hard to navigate (see
+[the layered hierarchy](#the-layered-hierarchy) below). Tycho accepts these costs
+on the hot path and recovers runtime flexibility with a type-erasure layer
+([GenericFunction](#type-erasure-genericfunction)) exactly where heterogeneity is
+needed.
 
-:::{note}
-CRTP is an *implementation choice*, not a mathematical necessity. C++23's
-"deducing this" (P0847) could eventually replace the dispatch mechanism and
-simplify the class declarations, but it would not change the expression-type
-explosion, the type-erasure boundary, or the sizing parameters — those are the
-genuinely hard parts of the design and are orthogonal to CRTP. The internal
-developer notes discuss this trade-off in depth.
-:::
+### Alternatives, and why CRTP
+
+CRTP is an implementation choice, not a mathematical necessity. The same four
+derivative quantities could be delivered by other architectures — each was
+considered and rejected for a concrete reason:
+
+- **Virtual functions over a fixed scalar set.** Declare `compute_double`,
+  `compute_batch`, … as ordinary virtuals. This removes the template machinery,
+  but bakes the list of supported scalar types into the base class: adding a new
+  one (a higher-width batch, an extended-precision type) means editing every
+  function in the library.
+- **Type erasure everywhere.** Make `GenericFunction` the only representation.
+  The code is far simpler, but every sub-expression pays a virtual call and the
+  compiler can never inline across expression boundaries — precisely the hot-loop
+  cost CRTP exists to avoid.
+- **Code generation / JIT.** Emit specialized evaluation code at problem-setup
+  time, as JAX or CasADi do. This sidesteps both CRTP's compile cost and virtual
+  overhead, but adds a code-generation step and a runtime to maintain.
+
+Tycho picks CRTP because solver iterations run millions of function evaluations,
+where hot-path inlining dominates everything else, and because compile-time types
+catch dimension mismatches before the program ever runs. The `GenericFunction`
+layer then buys back exactly the runtime flexibility a pure-CRTP design gives up
+— which is why the two appear together throughout the library.
 
 ### The layered hierarchy
 
