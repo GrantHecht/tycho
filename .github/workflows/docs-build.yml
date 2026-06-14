@@ -73,10 +73,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/docs/.doctrees
-          key: doctrees-${{ runner.os }}-${{ hashFiles('docs/**', 'include/tycho/**', 'src/bindings/**') }}-${{ github.run_id }}
+          # The restore-key set is intentionally pinned to the source hash.
+          # A looser "doctrees-${{ runner.os }}-" catch-all was removed: it let
+          # a doctree built against a different source tree be restored, and
+          # Breathe records per-symbol Doxygen-XML dependencies in the doctree
+          # env. Reusing one across a symbol removal makes Sphinx's
+          # env-get-outdated crash stat-ing the deleted XML (e.g. a removed VF
+          # struct's structtycho_1_1vf_1_1*.xml). The stale dep even propagated
+          # into same-hash caches via the old catch-all, so the cache namespace
+          # is bumped to v2 to abandon the poisoned snapshots.
+          key: doctrees-v2-${{ runner.os }}-${{ hashFiles('docs/**', 'include/tycho/**', 'src/bindings/**') }}-${{ github.run_id }}
           restore-keys: |
-            doctrees-${{ runner.os }}-${{ hashFiles('docs/**', 'include/tycho/**', 'src/bindings/**') }}-
-            doctrees-${{ runner.os }}-
+            doctrees-v2-${{ runner.os }}-${{ hashFiles('docs/**', 'include/tycho/**', 'src/bindings/**') }}-
 
       - name: Configure + build _tychopy
         shell: bash -elo pipefail {0}

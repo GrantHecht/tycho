@@ -36,6 +36,17 @@ WARN_LOGFILE           = @CMAKE_CURRENT_BINARY_DIR@/doxygen-vf-strict/warnings.l
 INTERNAL_DOCS          = YES
 ENABLED_SECTIONS       = internal
 
+# Inheritance-graph node budget. Once the VF CRTP base classes carry
+# docstrings, Doxygen renders an inheritance graph for each, and the deep
+# template hierarchy exceeds Doxygen's default DOT_GRAPH_MAX_NODES of 50
+# (observed up to 96 nodes for DenseSecondDerivatives). Under
+# WARN_AS_ERROR=FAIL_ON_WARNINGS those "too many nodes" messages are promoted
+# to hard errors and fail the gate, even though every symbol is documented.
+# Raise the budget above the largest VF graph so legitimate coverage is not
+# blocked by graph size. Scoped to the strict gate only; the published docs
+# keep the base Doxyfile default.
+DOT_GRAPH_MAX_NODES    = 120
+
 # Exclusions:
 #   - Avoid:: is dead test scaffolding (function_templates.h), not public API
 #     and not included by any TU.
