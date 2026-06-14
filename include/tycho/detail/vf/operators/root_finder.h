@@ -22,8 +22,17 @@ namespace tycho::vf {
 
 template <class Derived, class FX, class DFX> struct ScalarRootFinder_Impl;
 
+/// @ingroup vf
+/// @brief VectorFunction returning the root of a scalar function found by Newton iteration.
+///
+/// The first input is the scalar iteration variable (initialised to the guess);
+/// the remaining inputs are differentiated through. @c DFX optionally supplies the
+/// derivative of @c FX with respect to the iteration variable.
+/// @tparam FX   Scalar VectorFunction whose root is sought.
+/// @tparam DFX  Derivative of @c FX (or @c std::false_type to derive from the Jacobian).
 template <class FX, class DFX>
 struct ScalarRootFinder : ScalarRootFinder_Impl<ScalarRootFinder<FX, DFX>, FX, DFX> {
+    /// @brief Convenience alias for the underlying root-finder implementation.
     using Base = ScalarRootFinder_Impl<ScalarRootFinder<FX, DFX>, FX, DFX>;
     using Base::Base;
 };
@@ -39,20 +48,37 @@ struct ScalarRootFinder : ScalarRootFinder_Impl<ScalarRootFinder<FX, DFX>, FX, D
 /// <typeparam name="Derived"></typeparam>
 /// <typeparam name="FX"></typeparam>
 /// <typeparam name="DFX"></typeparam>
+/// @internal
+/// @brief Shared implementation of @ref ScalarRootFinder.
+///
+/// Runs Newton iteration on the scalar function @c FX to locate a root, then
+/// differentiates the converged root with respect to the remaining inputs via
+/// the implicit-function theorem.
+/// @tparam Derived  CRTP host type (@ref ScalarRootFinder).
+/// @tparam FX       Scalar VectorFunction whose root is sought.
+/// @tparam DFX      Derivative of @c FX (or @c std::false_type).
+/// @endinternal
 template <class Derived, class FX, class DFX>
 struct ScalarRootFinder_Impl : VectorFunction<Derived, FX::IRC, 1> {
 
+    /// @brief Convenience alias for the VectorFunction CRTP base class.
     using Base = VectorFunction<Derived, FX::IRC, 1>;
     VF_TYPE_ALIASES(Base);
 
-    double tol = 1.0e-9;
-    int MaxIters = 10;
+    double tol = 1.0e-9; ///< Convergence tolerance on the residual.
+    int MaxIters = 10;   ///< Maximum number of Newton iterations.
 
-    FX fxfunc;
-    DFX dfxfunc;
+    FX fxfunc;   ///< The scalar function whose root is sought.
+    DFX dfxfunc; ///< Optional derivative of @c fxfunc w.r.t. the iteration variable.
 
+    /// @brief Default constructor; leaves the iteration parameters at their defaults.
     ScalarRootFinder_Impl() {}
 
+    /// @brief Construct from the function, its derivative, and iteration controls.
+    /// @param f     The scalar function whose root is sought.
+    /// @param df    Derivative of @p f w.r.t. the iteration variable (or @c std::false_type).
+    /// @param iter  Maximum number of Newton iterations.
+    /// @param tol   Convergence tolerance on the residual.
     ScalarRootFinder_Impl(FX f, DFX df, int iter, double tol)
         : fxfunc(f), dfxfunc(df), MaxIters(iter), tol(tol) {
 
@@ -65,6 +91,13 @@ struct ScalarRootFinder_Impl : VectorFunction<Derived, FX::IRC, 1> {
         this->set_io_rows(f.input_rows(), 1);
     }
 
+    /// @internal
+    /// @brief Run the Newton iteration in place, leaving the root in @p x[0].
+    /// @tparam VecType  Eigen working-vector type.
+    /// @tparam JacType  Eigen working-Jacobian type.
+    /// @param x   Working vector; @c x[0] is the iteration variable, updated in place.
+    /// @param jx  Scratch Jacobian used when no explicit derivative is supplied.
+    /// @endinternal
     template <class VecType, class JacType> void find_root(VecType &x, JacType &jx) const {
         typedef typename VecType::Scalar Scalar;
         Vector1<Scalar> fx;
@@ -91,6 +124,13 @@ struct ScalarRootFinder_Impl : VectorFunction<Derived, FX::IRC, 1> {
         }
     }
 
+    /// @internal
+    /// @brief Evaluate the root-finder, writing the converged root into @p fx_.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @param x    Input vector (initial guess and parameters).
+    /// @param fx_  Output scalar (1-vector) to write.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
@@ -109,6 +149,15 @@ struct ScalarRootFinder_Impl : VectorFunction<Derived, FX::IRC, 1> {
             tycho::utils::TempSpec<Jacobian<Scalar>>(1, irows));
     }
 
+    /// @internal
+    /// @brief Evaluate the converged root and its Jacobian via implicit differentiation.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @tparam JacType  Eigen Jacobian-matrix type.
+    /// @param x    Input vector (initial guess and parameters).
+    /// @param fx_  Output scalar (1-vector) to write.
+    /// @param jx_  Output Jacobian to write.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -133,6 +182,21 @@ struct ScalarRootFinder_Impl : VectorFunction<Derived, FX::IRC, 1> {
             Impl, tycho::utils::TempSpec<Input<Scalar>>(irows, 1),
             tycho::utils::TempSpec<Jacobian<Scalar>>(1, irows));
     }
+    /// @internal
+    /// @brief Evaluate the converged root, its Jacobian, adjoint gradient, and adjoint Hessian.
+    /// @tparam InType       Eigen input-vector type.
+    /// @tparam OutType      Eigen output-vector type.
+    /// @tparam JacType      Eigen Jacobian-matrix type.
+    /// @tparam AdjGradType  Eigen adjoint-gradient vector type.
+    /// @tparam AdjHessType  Eigen adjoint-Hessian matrix type.
+    /// @tparam AdjVarType   Eigen adjoint-variable vector type.
+    /// @param x        Input vector (initial guess and parameters).
+    /// @param fx_      Output scalar (1-vector) to write.
+    /// @param jx_      Output Jacobian to write.
+    /// @param adjgrad_ Output adjoint gradient to write.
+    /// @param adjhess_ Output adjoint Hessian to write.
+    /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(

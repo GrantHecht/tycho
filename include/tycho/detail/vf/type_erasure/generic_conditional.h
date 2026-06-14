@@ -45,27 +45,54 @@
 
 namespace tycho::vf {
 
+/// @brief Type-erased boolean predicate over an input vector.
+///
+/// GenericConditional holds any value-typed conditional (a comparison such as
+/// `a < b`, a logical combination via AND/OR, or a constant) behind a single
+/// uniform interface. It is the runtime-polymorphic predicate the library uses
+/// to drive IfElseFunction branching, and is exposed to Python as the
+/// `Conditional` type. Copies are deep (the wrapped predicate is cloned).
+/// @tparam IR  Compile-time input-row count (-1 for dynamic).
+/// @ingroup vf
 template <int IR> struct GenericConditional {
+    /// @brief Const reference to the fixed-size input vector accepted by compute().
     using InType = Eigen::Ref<const Eigen::Matrix<double, IR, 1>>;
 
-    static constexpr bool is_conditional = true;
-    static constexpr int IRC = IR;
+    static constexpr bool is_conditional = true; ///< @brief Trait flag: this is a conditional.
+    static constexpr int IRC = IR;               ///< @brief Compile-time input-row count.
 
+    /// @brief Type-erased storage holding the wrapped predicate.
     tycho::utils::TypeStorage<ConditionalBase<IR>> storage;
 
+    /// @brief Construct an empty predicate (no wrapped function).
     GenericConditional() = default;
 
+    /// @brief Construct by type-erasing an arbitrary predicate @p t.
+    /// @tparam T  Any type satisfying the conditional interface (input_rows, compute).
+    /// @param t   Predicate to wrap and store.
     template <class T> GenericConditional(const T &t) {
         storage.template emplace<ConditionalModel<IR, std::decay_t<T>>>(t);
     }
 
+    /// @brief Deep-copy constructor (clones the wrapped predicate).
     GenericConditional(const GenericConditional &) = default;
+    /// @brief Move constructor.
     GenericConditional(GenericConditional &&) noexcept = default;
+    /// @brief Deep-copy assignment (clones the wrapped predicate).
+    /// @return Reference to this object.
     GenericConditional &operator=(const GenericConditional &) = default;
+    /// @brief Move assignment.
+    /// @return Reference to this object.
     GenericConditional &operator=(GenericConditional &&) noexcept = default;
 
+    /// @brief Number of input rows the wrapped predicate accepts.
+    /// @return Input-row count.
     int input_rows() const { return storage.get().input_rows(); }
 
+    /// @brief Evaluate the wrapped predicate at @p x.
+    /// @tparam InTypeT  Eigen expression type of the input vector.
+    /// @param x  Input vector.
+    /// @return Boolean result of the predicate.
     template <class InTypeT> bool compute(const Eigen::MatrixBase<InTypeT> &x) const {
         InType xt(x.derived());
         return storage.get().compute(xt);

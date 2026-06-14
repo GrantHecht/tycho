@@ -16,6 +16,13 @@
 
 namespace tycho::vf {
 
+/// @internal
+/// @brief Defines a SFINAE trait `Detect_X` testing for a member named `X`.
+///
+/// The generated `Detect_##X<T>::value` is `true` iff `T` declares a member
+/// named `X`. Implemented via the inherited-ambiguity idiom.
+/// @param X  Member name to probe for.
+/// @endinternal
 #define CREATE_MEMBER_DETECTOR(X)                                                                  \
     template <typename T> class Detect_##X {                                                       \
         struct Fallback {                                                                          \

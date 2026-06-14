@@ -20,19 +20,39 @@
 
 namespace tycho::vf {
 
+/// @brief Forward declaration of the shared base for element-wise function operators.
+/// @tparam Derived  CRTP-derived Cwise operator type.
+/// @tparam Func     Wrapped operand function the operation is applied to.
+/// @ingroup vf
 template <class Derived, class Func> struct CwiseFunctionOperator;
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Element-wise sine of a VectorFunction.
+/// @tparam Func  Wrapped operand function.
+/// @ingroup vf
 template <class Func> struct CwiseSin : CwiseFunctionOperator<CwiseSin<Func>, Func> {
+    /// @brief Shared base implementing the operator's compute/derivative dispatch.
     using Base = CwiseFunctionOperator<CwiseSin<Func>, Func>;
     using Base::Base;
     VF_TYPE_ALIASES(Base);
 
+    /// @brief Apply the element-wise operation to the operand output.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
     template <class InType, class OutType>
     static void cwise_compute(CVecRef<InType> x, CVecRef<OutType> fx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         fx = x.array().sin();
     }
+    /// @brief Apply the element-wise operation and its first derivative (diagonal Jacobian).
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
     template <class InType, class OutType, class JacType>
     static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CVecRef<JacType> jx_) {
@@ -41,6 +61,15 @@ template <class Func> struct CwiseSin : CwiseFunctionOperator<CwiseSin<Func>, Fu
         fx = x.array().sin();
         jx = x.array().cos();
     }
+    /// @brief Apply the element-wise operation with its first and second derivatives.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element first-derivative vector.
+    /// @tparam HessType Eigen type of the per-element second-derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
+    /// @param hx_  Reference receiving the per-element second derivatives.
     template <class InType, class OutType, class JacType, class HessType>
     static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                                CVecRef<JacType> jx_, CVecRef<HessType> hx_) {
@@ -54,16 +83,32 @@ template <class Func> struct CwiseSin : CwiseFunctionOperator<CwiseSin<Func>, Fu
 };
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// @brief Element-wise cosine of a VectorFunction.
+/// @tparam Func  Wrapped operand function.
+/// @ingroup vf
 template <class Func> struct CwiseCos : CwiseFunctionOperator<CwiseCos<Func>, Func> {
+    /// @brief Shared base implementing the operator's compute/derivative dispatch.
     using Base = CwiseFunctionOperator<CwiseCos<Func>, Func>;
     using Base::Base;
     VF_TYPE_ALIASES(Base);
 
+    /// @brief Apply the element-wise operation to the operand output.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
     template <class InType, class OutType>
     static void cwise_compute(CVecRef<InType> x, CVecRef<OutType> fx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         fx = x.array().cos();
     }
+    /// @brief Apply the element-wise operation and its first derivative (diagonal Jacobian).
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
     template <class InType, class OutType, class JacType>
     static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
@@ -72,6 +117,15 @@ template <class Func> struct CwiseCos : CwiseFunctionOperator<CwiseCos<Func>, Fu
         fx = x.array().cos();
         jx.derived() = -x.array().sin();
     }
+    /// @brief Apply the element-wise operation with its first and second derivatives.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element first-derivative vector.
+    /// @tparam HessType Eigen type of the per-element second-derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
+    /// @param hx_  Reference receiving the per-element second derivatives.
     template <class InType, class OutType, class JacType, class HessType>
     static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                                CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
@@ -85,16 +139,32 @@ template <class Func> struct CwiseCos : CwiseFunctionOperator<CwiseCos<Func>, Fu
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Element-wise tangent of a VectorFunction.
+/// @tparam Func  Wrapped operand function.
+/// @ingroup vf
 template <class Func> struct CwiseTan : CwiseFunctionOperator<CwiseTan<Func>, Func> {
+    /// @brief Shared base implementing the operator's compute/derivative dispatch.
     using Base = CwiseFunctionOperator<CwiseTan<Func>, Func>;
     using Base::Base;
     VF_TYPE_ALIASES(Base);
 
+    /// @brief Apply the element-wise operation to the operand output.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
     template <class InType, class OutType>
     static void cwise_compute(CVecRef<InType> x, CVecRef<OutType> fx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         fx = x.array().tan();
     }
+    /// @brief Apply the element-wise operation and its first derivative (diagonal Jacobian).
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
     template <class InType, class OutType, class JacType>
     static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
@@ -103,6 +173,15 @@ template <class Func> struct CwiseTan : CwiseFunctionOperator<CwiseTan<Func>, Fu
         fx = x.array().tan();
         jx.derived() = x.array().cos().square().inverse();
     }
+    /// @brief Apply the element-wise operation with its first and second derivatives.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element first-derivative vector.
+    /// @tparam HessType Eigen type of the per-element second-derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
+    /// @param hx_  Reference receiving the per-element second derivatives.
     template <class InType, class OutType, class JacType, class HessType>
     static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                                CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
@@ -117,17 +196,34 @@ template <class Func> struct CwiseTan : CwiseFunctionOperator<CwiseTan<Func>, Fu
 };
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// @brief Element-wise arcsine of a VectorFunction.
+/// @tparam Func  Wrapped operand function.
+/// @ingroup vf
 template <class Func> struct CwiseArcSin : CwiseFunctionOperator<CwiseArcSin<Func>, Func> {
+    /// @brief Shared base implementing the operator's compute/derivative dispatch.
     using Base = CwiseFunctionOperator<CwiseArcSin<Func>, Func>;
     using Base::Base;
     VF_TYPE_ALIASES(Base);
+    /// @brief Disables SIMD SuperScalar evaluation for this operator.
     static constexpr bool is_vectorizable = false;
 
+    /// @brief Apply the element-wise operation to the operand output.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
     template <class InType, class OutType>
     static void cwise_compute(CVecRef<InType> x, CVecRef<OutType> fx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         fx = x.array().asin();
     }
+    /// @brief Apply the element-wise operation and its first derivative (diagonal Jacobian).
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
     template <class InType, class OutType, class JacType>
     static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
@@ -138,6 +234,15 @@ template <class Func> struct CwiseArcSin : CwiseFunctionOperator<CwiseArcSin<Fun
         jx.derived() = jx.derived() - x.cwiseProduct(x);
         jx.derived() = (jx.derived().cwiseSqrt()).cwiseInverse();
     }
+    /// @brief Apply the element-wise operation with its first and second derivatives.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element first-derivative vector.
+    /// @tparam HessType Eigen type of the per-element second-derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
+    /// @param hx_  Reference receiving the per-element second derivatives.
     template <class InType, class OutType, class JacType, class HessType>
     static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                                CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
@@ -153,17 +258,34 @@ template <class Func> struct CwiseArcSin : CwiseFunctionOperator<CwiseArcSin<Fun
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Element-wise arccosine of a VectorFunction.
+/// @tparam Func  Wrapped operand function.
+/// @ingroup vf
 template <class Func> struct CwiseArcCos : CwiseFunctionOperator<CwiseArcCos<Func>, Func> {
+    /// @brief Shared base implementing the operator's compute/derivative dispatch.
     using Base = CwiseFunctionOperator<CwiseArcCos<Func>, Func>;
     using Base::Base;
     VF_TYPE_ALIASES(Base);
+    /// @brief Disables SIMD SuperScalar evaluation for this operator.
     static constexpr bool is_vectorizable = false;
 
+    /// @brief Apply the element-wise operation to the operand output.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
     template <class InType, class OutType>
     static void cwise_compute(CVecRef<InType> x, CVecRef<OutType> fx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         fx = x.array().acos();
     }
+    /// @brief Apply the element-wise operation and its first derivative (diagonal Jacobian).
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
     template <class InType, class OutType, class JacType>
     static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
@@ -174,6 +296,15 @@ template <class Func> struct CwiseArcCos : CwiseFunctionOperator<CwiseArcCos<Fun
         jx.derived() = jx.derived() - x.cwiseProduct(x);
         jx.derived() = -(jx.derived().cwiseSqrt()).cwiseInverse();
     }
+    /// @brief Apply the element-wise operation with its first and second derivatives.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element first-derivative vector.
+    /// @tparam HessType Eigen type of the per-element second-derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
+    /// @param hx_  Reference receiving the per-element second derivatives.
     template <class InType, class OutType, class JacType, class HessType>
     static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                                CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
@@ -190,17 +321,34 @@ template <class Func> struct CwiseArcCos : CwiseFunctionOperator<CwiseArcCos<Fun
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Element-wise arctangent of a VectorFunction.
+/// @tparam Func  Wrapped operand function.
+/// @ingroup vf
 template <class Func> struct CwiseArcTan : CwiseFunctionOperator<CwiseArcTan<Func>, Func> {
+    /// @brief Shared base implementing the operator's compute/derivative dispatch.
     using Base = CwiseFunctionOperator<CwiseArcTan<Func>, Func>;
     using Base::Base;
     VF_TYPE_ALIASES(Base);
+    /// @brief Enables SIMD SuperScalar evaluation for this operator.
     static constexpr bool is_vectorizable = true;
 
+    /// @brief Apply the element-wise operation to the operand output.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
     template <class InType, class OutType>
     static void cwise_compute(CVecRef<InType> x, CVecRef<OutType> fx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         fx = x.array().atan();
     }
+    /// @brief Apply the element-wise operation and its first derivative (diagonal Jacobian).
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
     template <class InType, class OutType, class JacType>
     static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
@@ -210,6 +358,15 @@ template <class Func> struct CwiseArcTan : CwiseFunctionOperator<CwiseArcTan<Fun
         jx.derived().setOnes();
         jx.derived() = (jx.derived() + x.cwiseProduct(x)).cwiseInverse();
     }
+    /// @brief Apply the element-wise operation with its first and second derivatives.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element first-derivative vector.
+    /// @tparam HessType Eigen type of the per-element second-derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
+    /// @param hx_  Reference receiving the per-element second derivatives.
     template <class InType, class OutType, class JacType, class HessType>
     static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                                CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
@@ -226,16 +383,32 @@ template <class Func> struct CwiseArcTan : CwiseFunctionOperator<CwiseArcTan<Fun
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// @brief Element-wise square of a VectorFunction.
+/// @tparam Func  Wrapped operand function.
+/// @ingroup vf
 template <class Func> struct CwiseSquare : CwiseFunctionOperator<CwiseSquare<Func>, Func> {
+    /// @brief Shared base implementing the operator's compute/derivative dispatch.
     using Base = CwiseFunctionOperator<CwiseSquare<Func>, Func>;
     using Base::Base;
     VF_TYPE_ALIASES(Base);
 
+    /// @brief Apply the element-wise operation to the operand output.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
     template <class InType, class OutType>
     static void cwise_compute(CVecRef<InType> x, CVecRef<OutType> fx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         fx = x.array().square();
     }
+    /// @brief Apply the element-wise operation and its first derivative (diagonal Jacobian).
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
     template <class InType, class OutType, class JacType>
     static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
@@ -245,6 +418,15 @@ template <class Func> struct CwiseSquare : CwiseFunctionOperator<CwiseSquare<Fun
         fx = x.array().square();
         jx.derived() = Scalar(2.0) * x;
     }
+    /// @brief Apply the element-wise operation with its first and second derivatives.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element first-derivative vector.
+    /// @tparam HessType Eigen type of the per-element second-derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
+    /// @param hx_  Reference receiving the per-element second derivatives.
     template <class InType, class OutType, class JacType, class HessType>
     static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                                CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
@@ -258,16 +440,32 @@ template <class Func> struct CwiseSquare : CwiseFunctionOperator<CwiseSquare<Fun
     }
 };
 
+/// @brief Element-wise reciprocal of a VectorFunction.
+/// @tparam Func  Wrapped operand function.
+/// @ingroup vf
 template <class Func> struct CwiseInverse : CwiseFunctionOperator<CwiseInverse<Func>, Func> {
+    /// @brief Shared base implementing the operator's compute/derivative dispatch.
     using Base = CwiseFunctionOperator<CwiseInverse<Func>, Func>;
     using Base::Base;
     VF_TYPE_ALIASES(Base);
 
+    /// @brief Apply the element-wise operation to the operand output.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
     template <class InType, class OutType>
     static void cwise_compute(CVecRef<InType> x, CVecRef<OutType> fx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         fx = x.array().inverse();
     }
+    /// @brief Apply the element-wise operation and its first derivative (diagonal Jacobian).
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
     template <class InType, class OutType, class JacType>
     static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
@@ -276,6 +474,15 @@ template <class Func> struct CwiseInverse : CwiseFunctionOperator<CwiseInverse<F
         fx = x.array().inverse();
         jx.derived() = -fx.cwiseProduct(fx);
     }
+    /// @brief Apply the element-wise operation with its first and second derivatives.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element first-derivative vector.
+    /// @tparam HessType Eigen type of the per-element second-derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
+    /// @param hx_  Reference receiving the per-element second derivatives.
     template <class InType, class OutType, class JacType, class HessType>
     static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                                CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
@@ -289,16 +496,32 @@ template <class Func> struct CwiseInverse : CwiseFunctionOperator<CwiseInverse<F
     }
 };
 
+/// @brief Element-wise exponential of a VectorFunction.
+/// @tparam Func  Wrapped operand function.
+/// @ingroup vf
 template <class Func> struct CwiseExp : CwiseFunctionOperator<CwiseExp<Func>, Func> {
+    /// @brief Shared base implementing the operator's compute/derivative dispatch.
     using Base = CwiseFunctionOperator<CwiseExp<Func>, Func>;
     using Base::Base;
     VF_TYPE_ALIASES(Base);
 
+    /// @brief Apply the element-wise operation to the operand output.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
     template <class InType, class OutType>
     static void cwise_compute(CVecRef<InType> x, CVecRef<OutType> fx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         fx = x.array().exp();
     }
+    /// @brief Apply the element-wise operation and its first derivative (diagonal Jacobian).
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
     template <class InType, class OutType, class JacType>
     static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
@@ -307,6 +530,15 @@ template <class Func> struct CwiseExp : CwiseFunctionOperator<CwiseExp<Func>, Fu
         fx = x.array().exp();
         jx.derived() = fx;
     }
+    /// @brief Apply the element-wise operation with its first and second derivatives.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element first-derivative vector.
+    /// @tparam HessType Eigen type of the per-element second-derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
+    /// @param hx_  Reference receiving the per-element second derivatives.
     template <class InType, class OutType, class JacType, class HessType>
     static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                                CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
@@ -320,16 +552,32 @@ template <class Func> struct CwiseExp : CwiseFunctionOperator<CwiseExp<Func>, Fu
     }
 };
 
+/// @brief Element-wise natural logarithm of a VectorFunction.
+/// @tparam Func  Wrapped operand function.
+/// @ingroup vf
 template <class Func> struct CwiseLog : CwiseFunctionOperator<CwiseLog<Func>, Func> {
+    /// @brief Shared base implementing the operator's compute/derivative dispatch.
     using Base = CwiseFunctionOperator<CwiseLog<Func>, Func>;
     using Base::Base;
     VF_TYPE_ALIASES(Base);
 
+    /// @brief Apply the element-wise operation to the operand output.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
     template <class InType, class OutType>
     static void cwise_compute(CVecRef<InType> x, CVecRef<OutType> fx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         fx = x.array().log();
     }
+    /// @brief Apply the element-wise operation and its first derivative (diagonal Jacobian).
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
     template <class InType, class OutType, class JacType>
     static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
@@ -338,6 +586,15 @@ template <class Func> struct CwiseLog : CwiseFunctionOperator<CwiseLog<Func>, Fu
         fx = x.array().log();
         jx.derived() = x.cwiseInverse();
     }
+    /// @brief Apply the element-wise operation with its first and second derivatives.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element first-derivative vector.
+    /// @tparam HessType Eigen type of the per-element second-derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
+    /// @param hx_  Reference receiving the per-element second derivatives.
     template <class InType, class OutType, class JacType, class HessType>
     static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                                CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
@@ -352,16 +609,32 @@ template <class Func> struct CwiseLog : CwiseFunctionOperator<CwiseLog<Func>, Fu
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Element-wise hyperbolic sine of a VectorFunction.
+/// @tparam Func  Wrapped operand function.
+/// @ingroup vf
 template <class Func> struct CwiseSinH : CwiseFunctionOperator<CwiseSinH<Func>, Func> {
+    /// @brief Shared base implementing the operator's compute/derivative dispatch.
     using Base = CwiseFunctionOperator<CwiseSinH<Func>, Func>;
     using Base::Base;
     VF_TYPE_ALIASES(Base);
 
+    /// @brief Apply the element-wise operation to the operand output.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
     template <class InType, class OutType>
     static void cwise_compute(CVecRef<InType> x, CVecRef<OutType> fx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         fx = x.array().sinh();
     }
+    /// @brief Apply the element-wise operation and its first derivative (diagonal Jacobian).
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
     template <class InType, class OutType, class JacType>
     static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CVecRef<JacType> jx_) {
@@ -370,6 +643,15 @@ template <class Func> struct CwiseSinH : CwiseFunctionOperator<CwiseSinH<Func>, 
         fx = x.array().sinh();
         jx = x.array().cosh();
     }
+    /// @brief Apply the element-wise operation with its first and second derivatives.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element first-derivative vector.
+    /// @tparam HessType Eigen type of the per-element second-derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
+    /// @param hx_  Reference receiving the per-element second derivatives.
     template <class InType, class OutType, class JacType, class HessType>
     static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                                CVecRef<JacType> jx_, CVecRef<HessType> hx_) {
@@ -383,16 +665,32 @@ template <class Func> struct CwiseSinH : CwiseFunctionOperator<CwiseSinH<Func>, 
 };
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// @brief Element-wise hyperbolic cosine of a VectorFunction.
+/// @tparam Func  Wrapped operand function.
+/// @ingroup vf
 template <class Func> struct CwiseCosH : CwiseFunctionOperator<CwiseCosH<Func>, Func> {
+    /// @brief Shared base implementing the operator's compute/derivative dispatch.
     using Base = CwiseFunctionOperator<CwiseCosH<Func>, Func>;
     using Base::Base;
     VF_TYPE_ALIASES(Base);
 
+    /// @brief Apply the element-wise operation to the operand output.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
     template <class InType, class OutType>
     static void cwise_compute(CVecRef<InType> x, CVecRef<OutType> fx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         fx = x.array().cosh();
     }
+    /// @brief Apply the element-wise operation and its first derivative (diagonal Jacobian).
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
     template <class InType, class OutType, class JacType>
     static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
@@ -401,6 +699,15 @@ template <class Func> struct CwiseCosH : CwiseFunctionOperator<CwiseCosH<Func>, 
         fx = x.array().cosh();
         jx.derived() = x.array().sinh();
     }
+    /// @brief Apply the element-wise operation with its first and second derivatives.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element first-derivative vector.
+    /// @tparam HessType Eigen type of the per-element second-derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
+    /// @param hx_  Reference receiving the per-element second derivatives.
     template <class InType, class OutType, class JacType, class HessType>
     static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                                CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
@@ -414,16 +721,32 @@ template <class Func> struct CwiseCosH : CwiseFunctionOperator<CwiseCosH<Func>, 
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Element-wise hyperbolic tangent of a VectorFunction.
+/// @tparam Func  Wrapped operand function.
+/// @ingroup vf
 template <class Func> struct CwiseTanH : CwiseFunctionOperator<CwiseTanH<Func>, Func> {
+    /// @brief Shared base implementing the operator's compute/derivative dispatch.
     using Base = CwiseFunctionOperator<CwiseTanH<Func>, Func>;
     using Base::Base;
     VF_TYPE_ALIASES(Base);
 
+    /// @brief Apply the element-wise operation to the operand output.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
     template <class InType, class OutType>
     static void cwise_compute(CVecRef<InType> x, CVecRef<OutType> fx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         fx = x.array().tanh();
     }
+    /// @brief Apply the element-wise operation and its first derivative (diagonal Jacobian).
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
     template <class InType, class OutType, class JacType>
     static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
@@ -433,6 +756,15 @@ template <class Func> struct CwiseTanH : CwiseFunctionOperator<CwiseTanH<Func>, 
         jx.derived().setOnes();
         jx.derived() = jx.derived().array() - fx.derived().array().square();
     }
+    /// @brief Apply the element-wise operation with its first and second derivatives.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element first-derivative vector.
+    /// @tparam HessType Eigen type of the per-element second-derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
+    /// @param hx_  Reference receiving the per-element second derivatives.
     template <class InType, class OutType, class JacType, class HessType>
     static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                                CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
@@ -448,16 +780,32 @@ template <class Func> struct CwiseTanH : CwiseFunctionOperator<CwiseTanH<Func>, 
 };
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// @brief Element-wise inverse hyperbolic sine of a VectorFunction.
+/// @tparam Func  Wrapped operand function.
+/// @ingroup vf
 template <class Func> struct CwiseArcSinH : CwiseFunctionOperator<CwiseArcSinH<Func>, Func> {
+    /// @brief Shared base implementing the operator's compute/derivative dispatch.
     using Base = CwiseFunctionOperator<CwiseArcSinH<Func>, Func>;
     using Base::Base;
     VF_TYPE_ALIASES(Base);
 
+    /// @brief Apply the element-wise operation to the operand output.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
     template <class InType, class OutType>
     static void cwise_compute(CVecRef<InType> x, CVecRef<OutType> fx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         fx = x.array().asinh();
     }
+    /// @brief Apply the element-wise operation and its first derivative (diagonal Jacobian).
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
     template <class InType, class OutType, class JacType>
     static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CVecRef<JacType> jx_) {
@@ -484,6 +832,15 @@ template <class Func> struct CwiseArcSinH : CwiseFunctionOperator<CwiseArcSinH<F
 
         jx = jx.cwiseInverse();
     }
+    /// @brief Apply the element-wise operation with its first and second derivatives.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element first-derivative vector.
+    /// @tparam HessType Eigen type of the per-element second-derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
+    /// @param hx_  Reference receiving the per-element second derivatives.
     template <class InType, class OutType, class JacType, class HessType>
     static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                                CVecRef<JacType> jx_, CVecRef<HessType> hx_) {
@@ -514,16 +871,32 @@ template <class Func> struct CwiseArcSinH : CwiseFunctionOperator<CwiseArcSinH<F
     }
 };
 /////////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Element-wise inverse hyperbolic cosine of a VectorFunction.
+/// @tparam Func  Wrapped operand function.
+/// @ingroup vf
 template <class Func> struct CwiseArcCosH : CwiseFunctionOperator<CwiseArcCosH<Func>, Func> {
+    /// @brief Shared base implementing the operator's compute/derivative dispatch.
     using Base = CwiseFunctionOperator<CwiseArcCosH<Func>, Func>;
     using Base::Base;
     VF_TYPE_ALIASES(Base);
 
+    /// @brief Apply the element-wise operation to the operand output.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
     template <class InType, class OutType>
     static void cwise_compute(CVecRef<InType> x, CVecRef<OutType> fx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         fx = x.array().acosh();
     }
+    /// @brief Apply the element-wise operation and its first derivative (diagonal Jacobian).
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
     template <class InType, class OutType, class JacType>
     static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CVecRef<JacType> jx_) {
@@ -551,6 +924,15 @@ template <class Func> struct CwiseArcCosH : CwiseFunctionOperator<CwiseArcCosH<F
 
         jx = jx.cwiseInverse();
     }
+    /// @brief Apply the element-wise operation with its first and second derivatives.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element first-derivative vector.
+    /// @tparam HessType Eigen type of the per-element second-derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
+    /// @param hx_  Reference receiving the per-element second derivatives.
     template <class InType, class OutType, class JacType, class HessType>
     static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                                CVecRef<JacType> jx_, CVecRef<HessType> hx_) {
@@ -582,16 +964,32 @@ template <class Func> struct CwiseArcCosH : CwiseFunctionOperator<CwiseArcCosH<F
     }
 };
 /////////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Element-wise inverse hyperbolic tangent of a VectorFunction.
+/// @tparam Func  Wrapped operand function.
+/// @ingroup vf
 template <class Func> struct CwiseArcTanH : CwiseFunctionOperator<CwiseArcTanH<Func>, Func> {
+    /// @brief Shared base implementing the operator's compute/derivative dispatch.
     using Base = CwiseFunctionOperator<CwiseArcTanH<Func>, Func>;
     using Base::Base;
     VF_TYPE_ALIASES(Base);
 
+    /// @brief Apply the element-wise operation to the operand output.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
     template <class InType, class OutType>
     static void cwise_compute(CVecRef<InType> x, CVecRef<OutType> fx_) {
         VecRef<OutType> fx = fx_.const_cast_derived();
         fx = x.array().atanh();
     }
+    /// @brief Apply the element-wise operation and its first derivative (diagonal Jacobian).
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
     template <class InType, class OutType, class JacType>
     static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CVecRef<JacType> jx_) {
@@ -605,6 +1003,15 @@ template <class Func> struct CwiseArcTanH : CwiseFunctionOperator<CwiseArcTanH<F
         jx -= x.cwiseProduct(x);
         jx = jx.cwiseInverse();
     }
+    /// @brief Apply the element-wise operation with its first and second derivatives.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element first-derivative vector.
+    /// @tparam HessType Eigen type of the per-element second-derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
+    /// @param hx_  Reference receiving the per-element second derivatives.
     template <class InType, class OutType, class JacType, class HessType>
     static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                                CVecRef<JacType> jx_, CVecRef<HessType> hx_) {
@@ -624,13 +1031,23 @@ template <class Func> struct CwiseArcTanH : CwiseFunctionOperator<CwiseArcTanH<F
 };
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// @brief Element-wise square root of a VectorFunction.
+/// @tparam Func  Wrapped operand function.
+/// @ingroup vf
 template <class Func> struct CwiseSqrt : CwiseFunctionOperator<CwiseSqrt<Func>, Func> {
+    /// @brief Shared base implementing the operator's compute/derivative dispatch.
     using Base = CwiseFunctionOperator<CwiseSqrt<Func>, Func>;
     using Base::Base;
     VF_TYPE_ALIASES(Base);
 
+    /// @brief Enables SIMD SuperScalar evaluation for this operator.
     static constexpr bool is_vectorizable = true;
 
+    /// @brief Apply the element-wise operation to the operand output.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
     template <class InType, class OutType>
     static void cwise_compute(CVecRef<InType> x, CVecRef<OutType> fx_) {
         typedef typename InType::Scalar Scalar;
@@ -647,6 +1064,13 @@ template <class Func> struct CwiseSqrt : CwiseFunctionOperator<CwiseSqrt<Func>, 
             fx = x.array().sqrt();
         }
     }
+    /// @brief Apply the element-wise operation and its first derivative (diagonal Jacobian).
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
     template <class InType, class OutType, class JacType>
     static void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                        CEigRef<JacType> jx_) {
@@ -666,6 +1090,15 @@ template <class Func> struct CwiseSqrt : CwiseFunctionOperator<CwiseSqrt<Func>, 
         }
         jx.derived() = fx.array().inverse() * Scalar(0.5);
     }
+    /// @brief Apply the element-wise operation with its first and second derivatives.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element first-derivative vector.
+    /// @tparam HessType Eigen type of the per-element second-derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
+    /// @param hx_  Reference receiving the per-element second derivatives.
     template <class InType, class OutType, class JacType, class HessType>
     static void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                                CEigRef<JacType> jx_, CEigRef<HessType> hx_) {
@@ -691,22 +1124,46 @@ template <class Func> struct CwiseSqrt : CwiseFunctionOperator<CwiseSqrt<Func>, 
     }
 };
 
+/// @brief Element-wise power of a VectorFunction, @f$ x^p @f$.
+///
+/// The exponent @p power is a runtime double supplied at construction.
+/// @tparam Func  Wrapped operand function.
+/// @ingroup vf
 template <class Func> struct CwisePow : CwiseFunctionOperator<CwisePow<Func>, Func> {
+    /// @brief Shared base implementing the operator's compute/derivative dispatch.
     using Base = CwiseFunctionOperator<CwisePow<Func>, Func>;
     using Base::Base;
     VF_TYPE_ALIASES(Base);
 
+    /// @brief Enables SIMD SuperScalar evaluation for this operator.
     static constexpr bool is_vectorizable = true;
+    /// @brief Runtime exponent applied element-wise.
     double power = 1;
 
+    /// @brief Construct from an operand function and an exponent.
+    /// @param f      Operand function to wrap.
+    /// @param power  Exponent applied element-wise.
     CwisePow(Func f, double power) : Base(f), power(power) {}
+    /// @brief Default constructor; leaves the operand default-constructed and exponent at 1.
     CwisePow() {}
+    /// @brief Apply the element-wise operation to the operand output.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
     template <class InType, class OutType>
     void cwise_compute(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         fx = x.array().pow(Scalar(this->power));
     }
+    /// @brief Apply the element-wise operation and its first derivative (diagonal Jacobian).
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
     template <class InType, class OutType, class JacType>
     void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                 CEigRef<JacType> jx_) const {
@@ -716,6 +1173,15 @@ template <class Func> struct CwisePow : CwiseFunctionOperator<CwisePow<Func>, Fu
         fx = x.array().pow(Scalar(this->power));
         jx.derived() = Scalar(this->power) * x.array().pow(Scalar(this->power - 1.0));
     }
+    /// @brief Apply the element-wise operation with its first and second derivatives.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element first-derivative vector.
+    /// @tparam HessType Eigen type of the per-element second-derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
+    /// @param hx_  Reference receiving the per-element second derivatives.
     template <class InType, class OutType, class JacType, class HessType>
     void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                         CEigRef<JacType> jx_, CEigRef<HessType> hx_) const {
@@ -731,11 +1197,20 @@ template <class Func> struct CwisePow : CwiseFunctionOperator<CwisePow<Func>, Fu
     }
 };
 
+/// @brief Element-wise absolute value of a VectorFunction.
+/// @tparam Func  Wrapped operand function.
+/// @ingroup vf
 template <class Func> struct CwiseAbs : CwiseFunctionOperator<CwiseAbs<Func>, Func> {
+    /// @brief Shared base implementing the operator's compute/derivative dispatch.
     using Base = CwiseFunctionOperator<CwiseAbs<Func>, Func>;
     using Base::Base;
     VF_TYPE_ALIASES(Base);
 
+    /// @brief Apply the element-wise operation to the operand output.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
     template <class InType, class OutType>
     void cwise_compute(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
@@ -743,6 +1218,13 @@ template <class Func> struct CwiseAbs : CwiseFunctionOperator<CwiseAbs<Func>, Fu
 
         fx = x.cwiseAbs();
     }
+    /// @brief Apply the element-wise operation and its first derivative (the sign function).
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
     template <class InType, class OutType, class JacType>
     void cwise_compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                 CEigRef<JacType> jx_) const {
@@ -759,6 +1241,15 @@ template <class Func> struct CwiseAbs : CwiseFunctionOperator<CwiseAbs<Func>, Fu
             jx = x.array().sign();
         }
     }
+    /// @brief Apply the element-wise operation with its first and (zero) second derivatives.
+    /// @tparam InType   Eigen type of the operand output.
+    /// @tparam OutType  Eigen type of this operator's output.
+    /// @tparam JacType  Eigen type of the per-element first-derivative vector.
+    /// @tparam HessType Eigen type of the per-element second-derivative vector.
+    /// @param x    Operand output values.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Reference receiving the per-element first derivatives.
+    /// @param hx_  Reference receiving the per-element second derivatives.
     template <class InType, class OutType, class JacType, class HessType>
     void cwise_compute_jacobian_hessian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                         CEigRef<JacType> jx_, CEigRef<HessType> hx_) const {
@@ -784,29 +1275,56 @@ template <class Func> struct CwiseAbs : CwiseFunctionOperator<CwiseAbs<Func>, Fu
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// <summary>
-///  This template Bas class defines all operations that are common to CwiseOperators.
-///  Provides compute and derivative methods for derived classes so long as they implement
-///  cwise_compute,cwise_compute_jacobian, etc.
-/// </summary>
-/// <typeparam name="Derived"></typeparam>
-/// <typeparam name="Func"></typeparam>
-
+/// @brief Shared base for element-wise function operators that wrap one operand.
+///
+/// Defines the operations common to all Cwise operators: it composes a wrapped
+/// operand function @p Func with a per-element transform, providing compute and
+/// derivative methods for any derived class that implements the static
+/// `cwise_compute`, `cwise_compute_jacobian`, and `cwise_compute_jacobian_hessian`
+/// hooks. Derivatives are propagated by chaining the wrapped operand's Jacobian
+/// with the diagonal per-element derivative supplied by the derived class.
+/// @tparam Derived  CRTP-derived Cwise operator type.
+/// @tparam Func     Wrapped operand function the operation is applied to.
+/// @ingroup vf
 template <class Derived, class Func>
 struct CwiseFunctionOperator : VectorFunction<Derived, Func::IRC, Func::ORC> {
+    /// @brief VectorFunction base inheriting the operand's input and output sizes.
     using Base = VectorFunction<Derived, Func::IRC, Func::ORC>;
     using Base::compute;
     VF_TYPE_ALIASES(Base);
 
+    /// @internal
+    /// @brief Input domain inherited from the wrapped operand function.
+    /// @endinternal
     using INPUT_DOMAIN = typename Func::INPUT_DOMAIN;
+    /// @internal
+    /// @brief The wrapped operand function the element-wise transform is applied to.
+    /// @endinternal
     Func func_;
+    /// @internal
+    /// @brief True when the wrapped operand is SIMD-vectorizable.
+    /// @endinternal
     static constexpr bool is_vectorizable = Func::is_vectorizable;
+    /// @internal
+    /// @brief Default constructor; leaves the operand default-constructed.
+    /// @endinternal
     CwiseFunctionOperator() {}
+    /// @internal
+    /// @brief Construct from an operand function and configure I/O rows and input domain.
+    /// @param f  Operand function to wrap.
+    /// @endinternal
     CwiseFunctionOperator(Func f) : func_(std::move(f)) {
         this->set_io_rows(this->func_.input_rows(), this->func_.output_rows());
         this->set_input_domain(this->input_rows(), {func_.input_domain()});
     }
 
+    /// @internal
+    /// @brief Evaluate the operand and apply the derived class's element-wise transform.
+    /// @tparam InType   Eigen type of the input vector.
+    /// @tparam OutType  Eigen type of the output.
+    /// @param x    Input vector.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
@@ -819,6 +1337,15 @@ struct CwiseFunctionOperator : VectorFunction<Derived, Func::IRC, Func::ORC> {
         this->func_.compute(x, fxt);
         this->derived().cwise_compute(fxt, fx_);
     }
+    /// @internal
+    /// @brief Evaluate the transform and its Jacobian via the chain rule.
+    /// @tparam InType   Eigen type of the input vector.
+    /// @tparam OutType  Eigen type of the output.
+    /// @tparam JacType  Eigen type of the Jacobian.
+    /// @param x    Input vector.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Jacobian reference.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -842,6 +1369,21 @@ struct CwiseFunctionOperator : VectorFunction<Derived, Func::IRC, Func::ORC> {
                                                std::bool_constant<true>());
         }
     }
+    /// @internal
+    /// @brief Evaluate the transform, Jacobian, adjoint gradient, and adjoint Hessian.
+    /// @tparam InType       Eigen type of the input vector.
+    /// @tparam OutType      Eigen type of the output.
+    /// @tparam JacType      Eigen type of the Jacobian.
+    /// @tparam AdjGradType  Eigen type of the adjoint gradient.
+    /// @tparam AdjHessType  Eigen type of the adjoint Hessian.
+    /// @tparam AdjVarType   Eigen type of the adjoint (dual) variables.
+    /// @param x        Input vector.
+    /// @param fx_      Output reference receiving the transformed values.
+    /// @param jx_      Jacobian reference.
+    /// @param adjgrad_ Adjoint gradient reference.
+    /// @param adjhess_ Adjoint Hessian reference.
+    /// @param adjvars  Adjoint (dual) variables seeding the reverse pass.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
@@ -888,16 +1430,41 @@ struct CwiseFunctionOperator : VectorFunction<Derived, Func::IRC, Func::ORC> {
     }
 };
 
+/// @brief Base for square element-wise operators that act directly on the input vector.
+///
+/// Unlike CwiseFunctionOperator (which wraps another function), this base applies the
+/// derived class's `cwise_compute*` hooks straight to the input, producing a square
+/// (IR-by-IR) Jacobian whose only non-zeros lie on the diagonal.
+/// @tparam Derived  CRTP-derived operator type.
+/// @tparam IR       Compile-time input and output rows.
+/// @ingroup vf
 template <class Derived, int IR> struct CwiseOperator : VectorFunction<Derived, IR, IR> {
+    /// @brief Square VectorFunction base with equal input and output sizes.
     using Base = VectorFunction<Derived, IR, IR>;
     using Base::compute;
     VF_TYPE_ALIASES(Base);
 
+    /// @internal
+    /// @brief Apply the derived class's element-wise transform to the input directly.
+    /// @tparam InType   Eigen type of the input vector.
+    /// @tparam OutType  Eigen type of the output.
+    /// @param x    Input vector.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
         this->derived().cwise_compute(x, fx_);
     }
+    /// @internal
+    /// @brief Apply the transform and write its derivative onto the Jacobian diagonal.
+    /// @tparam InType   Eigen type of the input vector.
+    /// @tparam OutType  Eigen type of the output.
+    /// @tparam JacType  Eigen type of the Jacobian.
+    /// @param x    Input vector.
+    /// @param fx_  Output reference receiving the transformed values.
+    /// @param jx_  Jacobian reference (diagonal populated).
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian(CVecRef<InType> x, CVecRef<OutType> fx_,
                                  CMatRef<JacType> jx_) const {
@@ -905,6 +1472,21 @@ template <class Derived, int IR> struct CwiseOperator : VectorFunction<Derived, 
         MatRef<JacType> jx = jx_.const_cast_derived();
         this->derived().cwise_compute_jacobian(x, fx_, jx.diagonal());
     }
+    /// @internal
+    /// @brief Apply the transform with diagonal Jacobian, adjoint gradient, and Hessian.
+    /// @tparam InType       Eigen type of the input vector.
+    /// @tparam OutType      Eigen type of the output.
+    /// @tparam JacType      Eigen type of the Jacobian.
+    /// @tparam AdjGradType  Eigen type of the adjoint gradient.
+    /// @tparam AdjHessType  Eigen type of the adjoint Hessian.
+    /// @tparam AdjVarType   Eigen type of the adjoint (dual) variables.
+    /// @param x        Input vector.
+    /// @param fx_      Output reference receiving the transformed values.
+    /// @param jx_      Jacobian reference (diagonal populated).
+    /// @param adjgrad_ Adjoint gradient reference.
+    /// @param adjhess_ Adjoint Hessian reference (diagonal populated).
+    /// @param adjvars  Adjoint (dual) variables seeding the reverse pass.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian(CVecRef<InType> x,

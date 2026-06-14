@@ -18,28 +18,54 @@
 
 namespace tycho::vf {
 
+/// @brief Wraps a function so its derivatives are taken by finite differences.
+///
+/// ADFun forwards the primal value of @p Func but overrides its derivative modes
+/// to finite differencing (central-difference array Jacobian, forward-difference
+/// Hessian). It is primarily a debugging/validation aid: the test() helpers
+/// compare the wrapped function's own Jacobian and Hessian (computed with
+/// whatever derivative mode @p Func was configured with) against the
+/// finite-difference reference. The "AD" name is historical; this path is
+/// finite-difference, not algorithmic differentiation.
+/// @tparam Func  The wrapped VectorFunction whose value is evaluated.
+/// @ingroup vf
 template <class Func>
 struct ADFun : VectorFunction<ADFun<Func>, Func::IRC, Func::ORC,
                               DenseDerivativeMode::FDiffCentArray, DenseDerivativeMode::FDiffFwd> {
+    /// @brief CRTP VectorFunction base with finite-difference derivative modes.
     using Base = VectorFunction<ADFun<Func>, Func::IRC, Func::ORC,
                                 DenseDerivativeMode::FDiffCentArray, DenseDerivativeMode::FDiffFwd>;
     VF_TYPE_ALIASES(Base)
 
-    Func func_;
+    Func func_; ///< @brief The wrapped function whose value is evaluated.
+    /// @brief Construct by taking ownership of the wrapped function.
+    /// @param f  Function to wrap.
     ADFun(Func f) : func_(std::move(f)) {
         this->set_io_rows(this->func_.input_rows(), this->func_.output_rows());
     }
+    /// @internal
+    /// @brief Forward the primal value to the wrapped function (CRTP compute hook).
+    /// @tparam InType   Input vector expression type.
+    /// @tparam OutType  Output vector expression type.
+    /// @param x    Input vector.
+    /// @param fx_  Output vector to fill.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         this->func_.compute(x, fx_);
     }
 
+    /// @brief Run the derivative-comparison check at a random input.
     void test() {
         Input<double> x;
         x.setRandom();
         return test_derivs(x);
     };
+    /// @brief Run the derivative-comparison check at a given input.
+    /// @param x  Input point to evaluate at.
     void test(Input<double> x) { return test_derivs(x); };
+    /// @brief Print the Jacobian and Hessian error between finite-diff and the wrapped function.
+    /// @param x  Input point to evaluate at.
     void test_derivs(Input<double> x) {
         Output<double> l;
         l.setOnes();

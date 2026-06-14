@@ -3,7 +3,6 @@
 
 // Public detail headers (not pulled in by optimal_control.h directly)
 #include "tycho/detail/vf/derivatives/fd_deriv_arbitrary.h"
-#include "tycho/detail/vf/derivatives/fd_deriv_uniform.h"
 
 // Binding headers (guarded by #ifdef TYCHO_PYTHON_BINDINGS, defined on binding CMake targets)
 #include "bindings/integrators/integrator_bind.h"

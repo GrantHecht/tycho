@@ -73,10 +73,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/docs/.doctrees
-          key: doctrees-${{ runner.os }}-${{ hashFiles('docs/**', 'include/tycho/**', 'src/bindings/**') }}-${{ github.run_id }}
+          # The restore-key set is intentionally pinned to the source hash.
+          # A looser "doctrees-${{ runner.os }}-" catch-all was removed: it let
+          # a doctree built against a different source tree be restored, and
+          # Breathe records per-symbol Doxygen-XML dependencies in the doctree
+          # env. Reusing one across a symbol removal makes Sphinx's
+          # env-get-outdated crash stat-ing the deleted XML (e.g. a removed VF
+          # struct's structtycho_1_1vf_1_1*.xml). The stale dep even propagated
+          # into same-hash caches via the old catch-all, so the cache namespace
+          # is bumped to v2 to abandon the poisoned snapshots.
+          key: doctrees-v2-${{ runner.os }}-${{ hashFiles('docs/**', 'include/tycho/**', 'src/bindings/**') }}-${{ github.run_id }}
           restore-keys: |
-            doctrees-${{ runner.os }}-${{ hashFiles('docs/**', 'include/tycho/**', 'src/bindings/**') }}-
-            doctrees-${{ runner.os }}-
+            doctrees-v2-${{ runner.os }}-${{ hashFiles('docs/**', 'include/tycho/**', 'src/bindings/**') }}-
 
       - name: Configure + build _tychopy
         shell: bash -elo pipefail {0}
@@ -109,31 +117,26 @@ jobs:
         shell: bash -elo pipefail {0}
         run: cmake --build build --target tycho_docs_doctest
 
-      - name: VectorFunction Doxygen subsystem-scoped run
+      - name: VectorFunction Doxygen strict gate (full docstring coverage)
         shell: bash -elo pipefail {0}
-        # Runs Doxygen on the VF subsystem and fails loud on any warning via
-        # WARN_LOGFILE. The base Doxyfile keeps WARN_AS_ERROR=NO during
-        # the docstring-coverage build-up; this subsystem-scoped run is the
-        # forward-pressure gate that catches new @-syntax mistakes and
-        # broken cross-refs as they land, without committing the whole
-        # codebase to WARN_AS_ERROR=YES today.
+        # Enforces that EVERY public symbol in the VectorFunction subsystem
+        # carries a Doxygen docstring. Uses the committed, CMake-configured
+        # build/docs/Doxyfile.vf-strict, which un-hides undocumented entities,
+        # turns on WARN_IF_UNDOCUMENTED, counts @internal-documented helpers as
+        # covered (INTERNAL_DOCS=YES), and sets WARN_AS_ERROR=FAIL_ON_WARNINGS
+        # so an undocumented public VF symbol (or any doc error) fails the
+        # build. The base Doxyfile stays permissive (WARN_AS_ERROR=NO) until
+        # every subsystem reaches this standard; this scoped gate keeps the VF
+        # subsystem at 100% public-symbol coverage.
         run: |
-          cp build/docs/Doxyfile /tmp/Doxyfile.vf
-          cat >> /tmp/Doxyfile.vf <<EOF
-          INPUT = ${{ github.workspace }}/include/tycho/vector_functions.h ${{ github.workspace }}/include/tycho/detail/vf
-          OUTPUT_DIRECTORY = /tmp/doxygen-vf
-          WARN_LOGFILE = /tmp/doxygen-vf/warnings.log
-          EOF
-          doxygen /tmp/Doxyfile.vf
-          # Doxygen exits 0 even when WARN_AS_ERROR=NO suppresses real
-          # failures; assert XML was actually produced AND that no warnings
-          # were captured so a broken config cannot silently pass.
-          test -s /tmp/doxygen-vf/xml/index.xml
-          if [ -s /tmp/doxygen-vf/warnings.log ]; then
-            echo "::error::Doxygen emitted warnings on VF subsystem:"
-            cat /tmp/doxygen-vf/warnings.log
+          if ! doxygen build/docs/Doxyfile.vf-strict; then
+            echo "::error::VF subsystem has undocumented public symbols or doc errors:"
+            cat build/docs/doxygen-vf-strict/warnings.log || true
             exit 1
           fi
+          # FAIL_ON_WARNINGS still emits XML on a clean run; assert it exists.
+          test -s build/docs/doxygen-vf-strict/xml/index.xml
+          echo "VF subsystem Doxygen strict gate clean (100% public-symbol coverage)."
 
       - name: Upload Pages artifact
         if: github.ref == 'refs/heads/main'

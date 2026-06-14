@@ -20,50 +20,78 @@ namespace tycho::vf {
 
 template <class Derived, class MatFunc1, class MatFunc2> struct MatrixFunctionProduct_Impl;
 
+/// @ingroup vf
+/// @brief VectorFunction computing the matrix product @f$M_1(x)\,M_2(x)@f$.
+/// @tparam MatFunc1  Matrix-valued VectorFunction producing the left factor.
+/// @tparam MatFunc2  Matrix-valued VectorFunction producing the right factor.
 template <class MatFunc1, class MatFunc2>
 struct MatrixFunctionProduct
     : MatrixFunctionProduct_Impl<MatrixFunctionProduct<MatFunc1, MatFunc2>, MatFunc1, MatFunc2> {
+    /// @brief Convenience alias for the underlying matrix-product implementation.
     using Base =
         MatrixFunctionProduct_Impl<MatrixFunctionProduct<MatFunc1, MatFunc2>, MatFunc1, MatFunc2>;
     using Base::Base;
 };
 
+/// @internal
+/// @brief Shared implementation of the matrix-function-product VectorFunction.
+///
+/// Evaluates both matrix-valued factors, multiplies them, and assembles the
+/// product Jacobian and adjoint derivatives via the matrix product rule.
+/// @tparam Derived   CRTP host type (@ref MatrixFunctionProduct).
+/// @tparam MatFunc1  Matrix-valued VectorFunction producing the left factor.
+/// @tparam MatFunc2  Matrix-valued VectorFunction producing the right factor.
+/// @endinternal
 template <class Derived, class MatFunc1, class MatFunc2>
 struct MatrixFunctionProduct_Impl
     : VectorFunction<Derived, SZ_MAX<MatFunc1::IRC, MatFunc2::IRC>::value,
                      SZ_PROD<MatFunc1::MROWS, MatFunc2::MCOLS>::value,
                      DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic> {
+    /// @brief Convenience alias for the VectorFunction CRTP base class.
     using Base = VectorFunction<Derived, SZ_MAX<MatFunc1::IRC, MatFunc2::IRC>::value,
                                 SZ_PROD<MatFunc1::MROWS, MatFunc2::MCOLS>::value,
                                 DenseDerivativeMode::Analytic, DenseDerivativeMode::Analytic>;
 
-    static constexpr int M1Rows = MatFunc1::MROWS;
-    static constexpr int M1Cols_M2Rows = MatFunc2::MROWS;
-    static constexpr int M2Cols = MatFunc2::MCOLS;
+    static constexpr int M1Rows = MatFunc1::MROWS; ///< Compile-time row count of the left factor.
+    static constexpr int M1Cols_M2Rows =
+        MatFunc2::MROWS; ///< Shared inner dimension (left cols = right rows).
+    static constexpr int M2Cols =
+        MatFunc2::MCOLS; ///< Compile-time column count of the right factor.
 
-    static constexpr int M1Major = MatFunc1::Major;
-    static constexpr int M2Major = MatFunc2::Major;
+    static constexpr int M1Major = MatFunc1::Major; ///< Storage major direction of the left factor.
+    static constexpr int M2Major =
+        MatFunc2::Major; ///< Storage major direction of the right factor.
 
-    int m1rows = 0;
-    int m1cols_m2rows = 0;
-    int m2cols = 0;
+    int m1rows = 0;        ///< Runtime row count of the left factor.
+    int m1cols_m2rows = 0; ///< Runtime shared inner dimension.
+    int m2cols = 0;        ///< Runtime column count of the right factor.
 
+    /// @brief Eigen matrix type of the left factor for scalar type @c Scalar.
     template <class Scalar> using MatrixOne = Eigen::Matrix<Scalar, M1Rows, M1Cols_M2Rows, M1Major>;
+    /// @brief Eigen matrix type of the right factor for scalar type @c Scalar.
     template <class Scalar> using MatrixTwo = Eigen::Matrix<Scalar, M1Cols_M2Rows, M2Cols, M2Major>;
+    /// @brief Eigen matrix type of the product result for scalar type @c Scalar.
     template <class Scalar> using MatrixResult = Eigen::Matrix<Scalar, M1Rows, M2Cols>;
 
-    MatFunc1 matrix_func1;
-    MatFunc2 matrix_func2;
+    MatFunc1 matrix_func1; ///< VectorFunction producing the left factor.
+    MatFunc2 matrix_func2; ///< VectorFunction producing the right factor.
 
+    /// @brief Input-domain descriptor (union of the two factors' domains).
     using INPUT_DOMAIN = CompositeDomain<Base::IRC, typename MatFunc1::INPUT_DOMAIN,
                                          typename MatFunc2::INPUT_DOMAIN>;
 
-    static constexpr bool is_vectorizable = MatFunc1::is_vectorizable && MatFunc2::is_vectorizable;
+    static constexpr bool is_vectorizable =
+        MatFunc1::is_vectorizable &&
+        MatFunc2::is_vectorizable; ///< Vectorizable iff both factors are.
     // static constexpr bool is_vectorizable = false;
 
     VF_TYPE_ALIASES(Base);
 
+    /// @brief Default constructor; leaves the factors and sizes unset.
     MatrixFunctionProduct_Impl() {}
+    /// @brief Construct from the two matrix-valued factor functions.
+    /// @param mf1  VectorFunction producing the left factor.
+    /// @param mf2  VectorFunction producing the right factor.
     MatrixFunctionProduct_Impl(MatFunc1 mf1, MatFunc2 mf2) : matrix_func1(mf1), matrix_func2(mf2) {
         m1rows = this->matrix_func1.matrix_rows_;
         m1cols_m2rows = this->matrix_func2.matrix_rows_;
@@ -81,6 +109,13 @@ struct MatrixFunctionProduct_Impl
                                {matrix_func1.input_domain(), matrix_func2.input_domain()});
     }
 
+    /// @internal
+    /// @brief Evaluate both factors and write their matrix product into @p fx_.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @param x    Input vector.
+    /// @param fx_  Output vector (reshaped product matrix) to write.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
@@ -108,6 +143,15 @@ struct MatrixFunctionProduct_Impl
             tycho::utils::TempSpec<typename MatFunc2::template Output<Scalar>>(o2, 1),
             tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
     }
+    /// @internal
+    /// @brief Evaluate the matrix product and its Jacobian via the product rule.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @tparam JacType  Eigen Jacobian-matrix type.
+    /// @param x    Input vector.
+    /// @param fx_  Output vector (reshaped product matrix) to write.
+    /// @param jx_  Output Jacobian to write.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -177,6 +221,21 @@ struct MatrixFunctionProduct_Impl
             tycho::utils::TempSpec<Output<Scalar>>(orows, 1),
             tycho::utils::TempSpec<Eigen::Matrix<Scalar, M1Rows, 1>>(m1rows, 1));
     }
+    /// @internal
+    /// @brief Evaluate the matrix product, its Jacobian, adjoint gradient, and adjoint Hessian.
+    /// @tparam InType       Eigen input-vector type.
+    /// @tparam OutType      Eigen output-vector type.
+    /// @tparam JacType      Eigen Jacobian-matrix type.
+    /// @tparam AdjGradType  Eigen adjoint-gradient vector type.
+    /// @tparam AdjHessType  Eigen adjoint-Hessian matrix type.
+    /// @tparam AdjVarType   Eigen adjoint-variable vector type.
+    /// @param x        Input vector.
+    /// @param fx_      Output vector (reshaped product matrix) to write.
+    /// @param jx_      Output Jacobian to write.
+    /// @param adjgrad_ Output adjoint gradient to write.
+    /// @param adjhess_ Output adjoint Hessian to write.
+    /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(

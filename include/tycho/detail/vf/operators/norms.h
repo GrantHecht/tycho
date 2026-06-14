@@ -20,54 +20,99 @@ namespace tycho::vf {
 
 template <class Derived, int USZ, int Power> struct IntegralNorm_Impl;
 
+/// @ingroup vf
+/// @brief Euclidean norm VectorFunction @f$\|x\|_2=\sqrt{x^T x}@f$.
+/// @tparam IR  Compile-time input row count (Eigen::Dynamic for runtime size).
 template <int IR> struct Norm : IntegralNorm_Impl<Norm<IR>, IR, 1> {
+    /// @brief Convenience alias for the underlying integral-power-norm implementation.
     using Base = IntegralNorm_Impl<Norm<IR>, IR, 1>;
     VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
+/// @ingroup vf
+/// @brief Squared Euclidean norm VectorFunction @f$\|x\|_2^2=x^T x@f$.
+/// @tparam IR  Compile-time input row count (Eigen::Dynamic for runtime size).
 template <int IR> struct SquaredNorm : IntegralNorm_Impl<SquaredNorm<IR>, IR, 2> {
+    /// @brief Convenience alias for the underlying integral-power-norm implementation.
     using Base = IntegralNorm_Impl<SquaredNorm<IR>, IR, 2>;
     VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
+/// @ingroup vf
+/// @brief Reciprocal Euclidean norm VectorFunction @f$\|x\|_2^{-1}@f$.
+/// @tparam IR  Compile-time input row count (Eigen::Dynamic for runtime size).
 template <int IR> struct InverseNorm : IntegralNorm_Impl<InverseNorm<IR>, IR, -1> {
+    /// @brief Convenience alias for the underlying integral-power-norm implementation.
     using Base = IntegralNorm_Impl<InverseNorm<IR>, IR, -1>;
     VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
+/// @ingroup vf
+/// @brief Reciprocal squared Euclidean norm VectorFunction @f$\|x\|_2^{-2}@f$.
+/// @tparam IR  Compile-time input row count (Eigen::Dynamic for runtime size).
 template <int IR> struct InverseSquaredNorm : IntegralNorm_Impl<InverseSquaredNorm<IR>, IR, -2> {
+    /// @brief Convenience alias for the underlying integral-power-norm implementation.
     using Base = IntegralNorm_Impl<InverseSquaredNorm<IR>, IR, -2>;
     VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
+/// @ingroup vf
+/// @brief Integer power of the Euclidean norm VectorFunction @f$\|x\|_2^{PW}@f$.
+/// @tparam IR  Compile-time input row count (Eigen::Dynamic for runtime size).
+/// @tparam PW  Integer power applied to the norm.
 template <int IR, int PW> struct NormPower : IntegralNorm_Impl<NormPower<IR, PW>, IR, PW> {
+    /// @brief Convenience alias for the underlying integral-power-norm implementation.
     using Base = IntegralNorm_Impl<NormPower<IR, PW>, IR, PW>;
     VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
+/// @ingroup vf
+/// @brief Reciprocal integer power of the Euclidean norm VectorFunction @f$\|x\|_2^{-PW}@f$.
+/// @tparam IR  Compile-time input row count (Eigen::Dynamic for runtime size).
+/// @tparam PW  Integer power whose negation is applied to the norm.
 template <int IR, int PW>
 struct InverseNormPower : IntegralNorm_Impl<InverseNormPower<IR, PW>, IR, -PW> {
+    /// @brief Convenience alias for the underlying integral-power-norm implementation.
     using Base = IntegralNorm_Impl<InverseNormPower<IR, PW>, IR, -PW>;
     VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 
+/// @internal
+/// @brief Shared implementation of all integer-power-of-norm VectorFunctions.
+///
+/// Computes @f$\|x\|_2^{Power}@f$ with analytic first and second derivatives,
+/// specialising small integer powers for speed.
+/// @tparam Derived  CRTP host type (one of @ref Norm, @ref SquaredNorm, etc.).
+/// @tparam USZ      Compile-time input row count.
+/// @tparam Power    Integer power applied to the Euclidean norm.
+/// @endinternal
 template <class Derived, int USZ, int Power>
 struct IntegralNorm_Impl : VectorFunction<Derived, USZ, 1> {
+    /// @brief Convenience alias for the VectorFunction CRTP base class.
     using Base = VectorFunction<Derived, USZ, 1>;
     VF_TYPE_ALIASES(Base);
     using Base::compute;
 
-    static constexpr int power = Power;
-    static constexpr int pp2 = power - 2;
-    static constexpr int pp4 = power - 4;
-    static constexpr int ppm2 = power * (power - 2);
+    static constexpr int power = Power;              ///< The integer power applied to the norm.
+    static constexpr int pp2 = power - 2;            ///< Helper exponent @f$Power-2@f$.
+    static constexpr int pp4 = power - 4;            ///< Helper exponent @f$Power-4@f$.
+    static constexpr int ppm2 = power * (power - 2); ///< Helper coefficient @f$Power(Power-2)@f$.
     // double IntegralNorm_Scale = 1.0;
-    static constexpr bool is_vectorizable = true;
+    static constexpr bool is_vectorizable = true; ///< Norm powers support SuperScalar evaluation.
 
+    /// @brief Default constructor; leaves the row count unset.
     IntegralNorm_Impl() {}
+    /// @brief Construct with a runtime input row count.
+    /// @param ir  Number of input rows.
     IntegralNorm_Impl(int ir) { this->set_io_rows(ir, 1); }
 
+    /// @internal
+    /// @brief Compute @f$n^{Power}@f$, specialising small integer powers.
+    /// @tparam Scalar  Arithmetic scalar type.
+    /// @param n  The Euclidean norm value to raise to @c Power.
+    /// @return @f$n^{Power}@f$.
+    /// @endinternal
     template <class Scalar> inline Scalar calc_pow_n(Scalar n) const {
         Scalar pow_n;
         if constexpr (power == 1)
@@ -91,6 +136,13 @@ struct IntegralNorm_Impl : VectorFunction<Derived, USZ, 1> {
         return pow_n;
     }
 
+    /// @internal
+    /// @brief Evaluate @f$\|x\|_2^{Power}@f$ into @p fx_.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @param x    Input vector.
+    /// @param fx_  Output scalar (1-vector) to write.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(const Eigen::MatrixBase<InType> &x,
                              Eigen::MatrixBase<OutType> const &fx_) const {
@@ -109,6 +161,15 @@ struct IntegralNorm_Impl : VectorFunction<Derived, USZ, 1> {
         fx[0] = pow_n;
     }
 
+    /// @internal
+    /// @brief Evaluate @f$\|x\|_2^{Power}@f$ and its Jacobian.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @tparam JacType  Eigen Jacobian-matrix type.
+    /// @param x    Input vector.
+    /// @param fx_  Output scalar (1-vector) to write.
+    /// @param jx_  Output Jacobian to write.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(const Eigen::MatrixBase<InType> &x,
                                       Eigen::MatrixBase<OutType> const &fx_,
@@ -133,6 +194,21 @@ struct IntegralNorm_Impl : VectorFunction<Derived, USZ, 1> {
         jx = npd * x.transpose();
     }
 
+    /// @internal
+    /// @brief Evaluate @f$\|x\|_2^{Power}@f$, its Jacobian, adjoint gradient, and adjoint Hessian.
+    /// @tparam InType       Eigen input-vector type.
+    /// @tparam OutType      Eigen output-vector type.
+    /// @tparam JacType      Eigen Jacobian-matrix type.
+    /// @tparam AdjGradType  Eigen adjoint-gradient vector type.
+    /// @tparam AdjHessType  Eigen adjoint-Hessian matrix type.
+    /// @tparam AdjVarType   Eigen adjoint-variable vector type.
+    /// @param x        Input vector.
+    /// @param fx_      Output scalar (1-vector) to write.
+    /// @param jx_      Output Jacobian to write.
+    /// @param adjgrad_ Output adjoint gradient to write.
+    /// @param adjhess_ Output adjoint Hessian to write.
+    /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(

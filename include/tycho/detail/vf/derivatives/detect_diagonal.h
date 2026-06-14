@@ -43,12 +43,34 @@
 
 namespace tycho::vf {
 
+/// @internal
+/// @brief Trait: detects whether `T` is an Eigen diagonal-matrix type.
+///
+/// The primary template inherits `std::false_type`; the specializations report
+/// `std::true_type` for `Eigen::DiagonalMatrix` and `Eigen::DiagonalWrapper` (and its
+/// const form). Used by the derivative machinery to take a cheaper code path when a
+/// Jacobian is structurally diagonal.
+/// @tparam T  Candidate matrix type.
+/// @endinternal
 template <class T> struct Is_EigenDiagonalMatrix : std::false_type {};
 
+/// @internal
+/// @brief Specialization marking `Eigen::DiagonalMatrix` as diagonal.
+/// @tparam Scalar     Element type of the diagonal matrix.
+/// @tparam Rows_Cols  Compile-time dimension of the square matrix.
+/// @endinternal
 template <class Scalar, int Rows_Cols>
 struct Is_EigenDiagonalMatrix<Eigen::DiagonalMatrix<Scalar, Rows_Cols>> : std::true_type {};
 
+/// @internal
+/// @brief Specialization marking `Eigen::DiagonalWrapper` as diagonal.
+/// @tparam T  Wrapped expression type.
+/// @endinternal
 template <class T> struct Is_EigenDiagonalMatrix<Eigen::DiagonalWrapper<T>> : std::true_type {};
+/// @internal
+/// @brief Specialization marking `const Eigen::DiagonalWrapper` as diagonal.
+/// @tparam T  Wrapped expression type.
+/// @endinternal
 template <class T>
 struct Is_EigenDiagonalMatrix<const Eigen::DiagonalWrapper<T>> : std::true_type {};
 

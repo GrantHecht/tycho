@@ -18,13 +18,28 @@
 
 namespace tycho::vf {
 
+/// @ingroup vf
+/// @brief Fixed 6-input / 3-output cross product @f$x_{0:2}\times x_{3:5}@f$ of one input vector.
+///
+/// Takes a single 6-vector, interprets it as a pair of stacked 3-vectors, and
+/// returns their cross product. Provides analytic Jacobian and adjoint Hessian.
 struct CrossProduct : VectorFunction<CrossProduct, 6, 3> {
+    /// @brief Convenience alias for the VectorFunction CRTP base.
     using Base = VectorFunction<CrossProduct, 6, 3>;
     using Base::compute;
     using Base::jacobian;
 
     VF_TYPE_ALIASES(Base);
 
+    /// @internal
+    /// @brief Accumulate the skew-symmetric cross-product matrix of @p x into @p m_.
+    /// @tparam Source   Eigen source-vector type (the 3-vector).
+    /// @tparam Target   Eigen target-matrix type (the 3x3 block).
+    /// @tparam Scalar2  Scalar type of the @p sign multiplier.
+    /// @param x     Source 3-vector.
+    /// @param m_    Target 3x3 matrix block to accumulate into.
+    /// @param sign  Sign multiplier applied to every entry.
+    /// @endinternal
     template <class Source, class Target, class Scalar2>
     static void cprodmat(const Eigen::MatrixBase<Source> &x, Eigen::MatrixBase<Target> const &m_,
                          Scalar2 sign) {
@@ -39,6 +54,13 @@ struct CrossProduct : VectorFunction<CrossProduct, 6, 3> {
         m(1, 2) += -sign * x[0];
     }
 
+    /// @internal
+    /// @brief Evaluate the 6→3 cross product into @p fx_.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @param x    Input 6-vector (two stacked 3-vectors).
+    /// @param fx_  Output 3-vector to write.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(const Eigen::MatrixBase<InType> &x,
                              Eigen::MatrixBase<OutType> const &fx_) const {
@@ -47,6 +69,15 @@ struct CrossProduct : VectorFunction<CrossProduct, 6, 3> {
         fx = x.template head<3>().cross(x.template tail<3>());
     }
 
+    /// @internal
+    /// @brief Evaluate the cross product and its Jacobian.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @tparam JacType  Eigen Jacobian-matrix type.
+    /// @param x    Input 6-vector.
+    /// @param fx_  Output 3-vector to write.
+    /// @param jx_  Output Jacobian to write.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(const Eigen::MatrixBase<InType> &x,
                                       Eigen::MatrixBase<OutType> const &fx_,
@@ -59,6 +90,13 @@ struct CrossProduct : VectorFunction<CrossProduct, 6, 3> {
         cprodmat(x.template head<3>(), jx.template rightCols<3>(), 1.0);
     }
 
+    /// @internal
+    /// @brief Write only the Jacobian of the cross product (value not required).
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam JacType  Eigen Jacobian-matrix type.
+    /// @param x    Input 6-vector.
+    /// @param jx_  Output Jacobian to write.
+    /// @endinternal
     template <class InType, class JacType>
     inline void jacobian(const Eigen::MatrixBase<InType> &x,
                          Eigen::MatrixBase<JacType> const &jx_) const {
@@ -68,6 +106,21 @@ struct CrossProduct : VectorFunction<CrossProduct, 6, 3> {
         cprodmat(x.template head<3>(), jx.template rightCols<3>(), 1.0);
     }
 
+    /// @internal
+    /// @brief Evaluate the cross product, Jacobian, adjoint gradient, and adjoint Hessian.
+    /// @tparam InType       Eigen input-vector type.
+    /// @tparam OutType      Eigen output-vector type.
+    /// @tparam JacType      Eigen Jacobian-matrix type.
+    /// @tparam AdjGradType  Eigen adjoint-gradient vector type.
+    /// @tparam AdjHessType  Eigen adjoint-Hessian matrix type.
+    /// @tparam AdjVarType   Eigen adjoint-variable vector type.
+    /// @param x        Input 6-vector.
+    /// @param fx_      Output 3-vector to write.
+    /// @param jx_      Output Jacobian to write.
+    /// @param adjgrad_ Output adjoint gradient to write.
+    /// @param adjhess_ Output adjoint Hessian to write.
+    /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
@@ -97,34 +150,56 @@ struct CrossProduct : VectorFunction<CrossProduct, 6, 3> {
 
 template <class Derived, class Func1, class Func2> struct FunctionCrossProduct_Impl;
 
+/// @ingroup vf
+/// @brief VectorFunction computing the 3D cross product @f$f_1(x)\times f_2(x)@f$.
+/// @tparam Func1  VectorFunction producing the first (3-vector) operand.
+/// @tparam Func2  VectorFunction producing the second (3-vector) operand.
 template <class Func1, class Func2>
 struct FunctionCrossProduct
     : FunctionCrossProduct_Impl<FunctionCrossProduct<Func1, Func2>, Func1, Func2> {
+    /// @brief Convenience alias for the underlying cross-product implementation.
     using Base = FunctionCrossProduct_Impl<FunctionCrossProduct<Func1, Func2>, Func1, Func2>;
     using Base::Base;
     VF_TYPE_ALIASES(Base);
 };
 
+/// @internal
+/// @brief Shared implementation of the function-cross-product VectorFunction.
+///
+/// Evaluates both 3-vector operand functions, forms their cross product, and
+/// assembles the corresponding Jacobian and adjoint derivatives.
+/// @tparam Derived  CRTP host type (@ref FunctionCrossProduct).
+/// @tparam Func1    VectorFunction producing the first operand.
+/// @tparam Func2    VectorFunction producing the second operand.
+/// @endinternal
 template <class Derived, class Func1, class Func2>
 struct FunctionCrossProduct_Impl
     : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::IRC>::value, 3> {
+    /// @brief Convenience alias for the VectorFunction CRTP base class.
     using Base = VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::IRC>::value, 3>;
     using Base::compute;
     VF_TYPE_ALIASES(Base);
 
-    Func1 func1;
-    Func2 func2;
+    Func1 func1; ///< VectorFunction producing the first operand.
+    Func2 func2; ///< VectorFunction producing the second operand.
 
+    /// @brief Input-domain descriptor (union of the two operands' domains).
     using INPUT_DOMAIN =
         CompositeDomain<Base::IRC, typename Func1::INPUT_DOMAIN, typename Func2::INPUT_DOMAIN>;
 
 #if defined(_WIN32)
-    static constexpr bool is_vectorizable = Func1::is_vectorizable && Func2::is_vectorizable;
+    static constexpr bool is_vectorizable =
+        Func1::is_vectorizable &&
+        Func2::is_vectorizable; ///< Vectorizable iff both operands are (Windows only).
 #else
-    static constexpr bool is_vectorizable = false;
+    static constexpr bool is_vectorizable = false; ///< Vectorization disabled off Windows.
 #endif
 
+    /// @brief Default constructor; leaves the operand functions unset.
     FunctionCrossProduct_Impl() {}
+    /// @brief Construct from the first and second operand functions.
+    /// @param f1  VectorFunction producing the first operand.
+    /// @param f2  VectorFunction producing the second operand.
     FunctionCrossProduct_Impl(Func1 f1, Func2 f2) : func1(f1), func2(f2) {
         int irtemp = std::max(this->func1.input_rows(), this->func2.input_rows());
         this->set_io_rows(irtemp, 3);
@@ -145,6 +220,16 @@ struct FunctionCrossProduct_Impl
     }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    /// @internal
+    /// @brief Compute the 3-vector cross product of @p x1 and @p x2.
+    /// @tparam Scalar  Arithmetic scalar type.
+    /// @tparam T1      Eigen type of the first operand value.
+    /// @tparam T2      Eigen type of the second operand value.
+    /// @param sign  Overall sign multiplier.
+    /// @param x1    First operand value (3-vector).
+    /// @param x2    Second operand value (3-vector).
+    /// @return The cross product as a 3-vector.
+    /// @endinternal
     template <class Scalar, class T1, class T2>
     Vector3<Scalar> crossimpl(Scalar sign, CVecRef<T1> x1, CVecRef<T2> x2) const {
         Vector3<Scalar> out;
@@ -154,6 +239,13 @@ struct FunctionCrossProduct_Impl
         return out;
     }
 
+    /// @internal
+    /// @brief Evaluate the cross product into @p fx_.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @param x    Input vector.
+    /// @param fx_  Output 3-vector to write.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
@@ -170,6 +262,15 @@ struct FunctionCrossProduct_Impl
         fx = crossimpl(Scalar(1.0), fx1, fx2);
     }
 
+    /// @internal
+    /// @brief Evaluate the cross product and its Jacobian.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @tparam JacType  Eigen Jacobian-matrix type.
+    /// @param x    Input vector.
+    /// @param fx_  Output 3-vector to write.
+    /// @param jx_  Output Jacobian to write.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -182,6 +283,7 @@ struct FunctionCrossProduct_Impl
         Eigen::Matrix<Scalar, 3, 3> cpm1;
         Eigen::Matrix<Scalar, 3, 3> cpm2;
 
+        /// @cond INTERNAL
         auto Impl = [&](auto &jx1, auto &jx2) {
             this->func1.compute_jacobian(x, fx1, jx1);
             this->func2.compute_jacobian(x, fx2, jx2);
@@ -193,6 +295,7 @@ struct FunctionCrossProduct_Impl
             this->func2.right_jacobian_product(jx, cpm2, jx2, PlusEqualsAssignment(),
                                                std::bool_constant<false>());
         };
+        /// @endcond
 
         using JType = Eigen::Matrix<Scalar, 3, Base::IRC>;
         const int irows = this->input_rows();
@@ -200,6 +303,21 @@ struct FunctionCrossProduct_Impl
                                                   tycho::utils::TempSpec<JType>(3, irows));
     }
 
+    /// @internal
+    /// @brief Evaluate the cross product, Jacobian, adjoint gradient, and adjoint Hessian.
+    /// @tparam InType       Eigen input-vector type.
+    /// @tparam OutType      Eigen output-vector type.
+    /// @tparam JacType      Eigen Jacobian-matrix type.
+    /// @tparam AdjGradType  Eigen adjoint-gradient vector type.
+    /// @tparam AdjHessType  Eigen adjoint-Hessian matrix type.
+    /// @tparam AdjVarType   Eigen adjoint-variable vector type.
+    /// @param x        Input vector.
+    /// @param fx_      Output 3-vector to write.
+    /// @param jx_      Output Jacobian to write.
+    /// @param adjgrad_ Output adjoint gradient to accumulate.
+    /// @param adjhess_ Output adjoint Hessian to accumulate.
+    /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
@@ -219,6 +337,7 @@ struct FunctionCrossProduct_Impl
         Eigen::Matrix<Scalar, 3, 3> lcpm1;
         Eigen::Matrix<Scalar, 3, 3> lcpm2;
 
+        /// @cond INTERNAL
         auto Impl = [&](auto &jx1, auto &jx2, auto &jttemp, auto &gx2, auto &hx2) {
             this->func1.compute(x, fx1);
             this->func2.compute(x, fx2);
@@ -262,6 +381,7 @@ struct FunctionCrossProduct_Impl
             this->func2.right_jacobian_product(jx, cpm2, jx2, PlusEqualsAssignment(),
                                                std::bool_constant<false>());
         };
+        /// @endcond
 
         using JType = Eigen::Matrix<Scalar, 3, Base::IRC>;
         using GType = typename Func2::template Gradient<Scalar>;

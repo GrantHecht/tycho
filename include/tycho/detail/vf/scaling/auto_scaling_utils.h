@@ -12,6 +12,8 @@
 //   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
+/// @file
+/// @brief Utilities for automatically choosing output scale factors.
 #pragma once
 #include "tycho/detail/vf/scaling/io_scaled.h"
 #include "tycho/vector_functions.h"
@@ -44,6 +46,20 @@
 
 namespace tycho::vf {
 
+/// @ingroup vf
+/// @brief Computes output scale factors that normalize each Jacobian row.
+///
+/// For each test input the function's input-scaled Jacobian is evaluated and the
+/// L2 norm of every row recorded. The returned output scale for each row is the
+/// reciprocal of the mean row norm across the test inputs (rows whose mean norm
+/// is non-finite or near zero default to a scale of 1). Applying these scales
+/// (e.g. via @ref IOScaled) drives each scaled Jacobian row to roughly unit norm,
+/// improving conditioning for the optimizer.
+/// @tparam Func  VectorFunction type to analyze.
+/// @param func          The function whose Jacobian rows are normalized.
+/// @param input_scales  Per-component input scale factors applied during evaluation.
+/// @param test_inputs   Sample inputs at which the Jacobian is evaluated.
+/// @return Per-row output scale factors (length `func.output_rows()`).
 template <class Func>
 Eigen::VectorXd calc_jacobian_row_scales(const Func &func, const Eigen::VectorXd &input_scales,
                                          std::vector<Eigen::VectorXd> &test_inputs) {

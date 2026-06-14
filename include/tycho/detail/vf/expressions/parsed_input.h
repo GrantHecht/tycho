@@ -18,19 +18,40 @@
 
 namespace tycho::vf {
 
+/// @brief Adapts a function to read its inputs from selected positions of a larger vector.
+///
+/// Wraps a function whose inputs are a subset of the caller's input vector,
+/// gathering the required entries (named by the index map) before evaluating
+/// the wrapped function and scattering its derivatives back to the
+/// corresponding outer columns and rows. Detects the contiguous-range case for
+/// a fast no-copy path.
+///
+/// @tparam Func  Wrapped VectorFunction whose inputs are gathered.
+/// @tparam IRC   Input row count of the outer (gathered-from) vector.
+/// @tparam ORC   Output row count (inherited from the wrapped function).
+/// @ingroup vf
 template <class Func, int IRC, int ORC>
 struct ParsedInput
     : VectorFunction<ParsedInput<Func, IRC, ORC>, IRC, ORC, DenseDerivativeMode::Analytic> {
+    /// @brief VectorFunction base carrying the wrapped function's IO sizes.
     using Base =
         VectorFunction<ParsedInput<Func, IRC, ORC>, IRC, ORC, DenseDerivativeMode::Analytic>;
     using Base::compute;
     VF_TYPE_ALIASES(Base);
 
+    /// @brief The wrapped function whose inputs are gathered from the outer vector.
     Func func_;
+    /// @brief Index of each wrapped input within the outer input vector.
     typename Func::template Input<int> varlocs_;
+    /// @brief True when the gathered indices form a contiguous range.
     bool contiguous_ = false;
 
+    /// @brief Default-construct an unconfigured wrapper.
     ParsedInput() {}
+    /// @brief Construct from a wrapped function and its input-location map.
+    /// @param f      Function to wrap.
+    /// @param vlocs  Index of each wrapped input within the outer input vector.
+    /// @param irr    Number of input rows of the outer (gathered-from) vector.
     ParsedInput(Func f, const typename Func::template Input<int> &vlocs, int irr)
         : func_(std::move(f)), varlocs_(vlocs) {
         this->set_io_rows(irr, this->func_.output_rows());
@@ -44,6 +65,11 @@ struct ParsedInput
         // this->set_input_domain(irr, func_.input_domain());
     }
 
+    /// @brief Gather inner inputs from @p x and evaluate the inner function.
+    /// @tparam InType   Concrete Eigen input expression type.
+    /// @tparam OutType  Concrete Eigen output buffer type.
+    /// @param  x        Outer input vector (size = `input_rows()`).
+    /// @param  fx_      Output buffer (size = `output_rows()`).
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         using Scalar = typename InType::Scalar;
@@ -59,6 +85,13 @@ struct ParsedInput
             this->func_.compute(xin, fx_);
         }
     }
+    /// @brief Evaluate value and Jacobian, scattering columns to outer indices.
+    /// @tparam InType   Concrete Eigen input expression type.
+    /// @tparam OutType  Concrete Eigen output buffer type.
+    /// @tparam JacType  Concrete Eigen Jacobian buffer type.
+    /// @param  x        Outer input vector (size = `input_rows()`).
+    /// @param  fx_      Output buffer (size = `output_rows()`).
+    /// @param  jx_      Jacobian buffer (`output_rows()` x `input_rows()`).
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -83,6 +116,23 @@ struct ParsedInput
             }
         }
     }
+    /// @brief Evaluate value, Jacobian, adjoint gradient, and adjoint Hessian.
+    ///
+    /// Inner derivatives are computed on the gathered inputs, then scattered
+    /// back to the outer columns/rows named by `varlocs_`.
+    ///
+    /// @tparam InType       Concrete Eigen input expression type.
+    /// @tparam OutType      Concrete Eigen output buffer type.
+    /// @tparam JacType      Concrete Eigen Jacobian buffer type.
+    /// @tparam AdjGradType  Concrete Eigen adjoint-gradient buffer type.
+    /// @tparam AdjHessType  Concrete Eigen adjoint-Hessian buffer type.
+    /// @tparam AdjVarType   Concrete Eigen adjoint (Lagrange-multiplier) type.
+    /// @param  x        Outer input vector (size = `input_rows()`).
+    /// @param  fx_      Output buffer (size = `output_rows()`).
+    /// @param  jx_      Jacobian buffer (`output_rows()` x `input_rows()`).
+    /// @param  adjgrad_ Adjoint-gradient accumulator (size = `input_rows()`).
+    /// @param  adjhess_ Adjoint-Hessian accumulator (`input_rows()` square).
+    /// @param  adjvars  Adjoint variables seeding the reverse pass.
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(

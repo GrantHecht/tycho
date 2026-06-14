@@ -18,38 +18,69 @@
 
 namespace tycho::vf {
 
+/// @cond INTERNAL
 //! Declaration of \struct NormalizedPower_Impl
 template <class Derived, int IR, int PW> struct NormalizedPower_Impl;
+/// @endcond
 
+/// @ingroup vf
+/// @brief Vector-normalizing VectorFunction @f$x/\|x\|_2@f$ returning the unit direction.
+/// @tparam IR  Compile-time input/output row count (Eigen::Dynamic for runtime size).
 template <int IR> struct Normalized : NormalizedPower_Impl<Normalized<IR>, IR, 1> {
+    /// @brief Convenience alias for the underlying normalized-power implementation.
     using Base = NormalizedPower_Impl<Normalized<IR>, IR, 1>;
 
     VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 
+/// @ingroup vf
+/// @brief Vector divided by an integer power of its norm, @f$x/\|x\|_2^{PW}@f$.
+/// @tparam IR  Compile-time input/output row count (Eigen::Dynamic for runtime size).
+/// @tparam PW  Integer power of the norm in the denominator.
 template <int IR, int PW>
 struct NormalizedPower : NormalizedPower_Impl<NormalizedPower<IR, PW>, IR, PW> {
+    /// @brief Convenience alias for the underlying normalized-power implementation.
     using Base = NormalizedPower_Impl<NormalizedPower<IR, PW>, IR, PW>;
     VF_TYPE_ALIASES(Base);
     using Base::Base;
 };
 
+/// @internal
+/// @brief Shared implementation of @ref Normalized and @ref NormalizedPower.
+///
+/// Computes @f$x/\|x\|_2^{PW}@f$ with analytic first and second derivatives,
+/// specialising small integer powers for speed.
+/// @tparam Derived  CRTP host type (@ref Normalized or @ref NormalizedPower).
+/// @tparam IR       Compile-time input/output row count.
+/// @tparam PW       Integer power of the norm in the denominator.
+/// @endinternal
 template <class Derived, int IR, int PW>
 struct NormalizedPower_Impl : VectorFunction<Derived, IR, IR> {
+    /// @brief Convenience alias for the VectorFunction CRTP base class.
     using Base = VectorFunction<Derived, IR, IR>;
     VF_TYPE_ALIASES(Base)
 
-    static constexpr int power = PW;
-    static constexpr int pp2 = power + 2;
-    static constexpr int pp4 = power + 4;
+    static constexpr int power = PW;      ///< The integer power applied to the norm.
+    static constexpr int pp2 = power + 2; ///< Helper exponent @f$PW+2@f$.
+    static constexpr int pp4 = power + 4; ///< Helper exponent @f$PW+4@f$.
 
     using Base::compute;
-    static constexpr bool is_vectorizable = true;
+    static constexpr bool is_vectorizable =
+        true; ///< Normalised powers support SuperScalar evaluation.
 
+    /// @brief Default constructor; leaves the row count unset.
     NormalizedPower_Impl() {}
+    /// @brief Construct with a runtime input/output row count.
+    /// @param irows  Number of input (and output) rows.
     NormalizedPower_Impl(int irows) { this->set_io_rows(irows, irows); }
 
+    /// @internal
+    /// @brief Compute @f$n^{PW}@f$, specialising small integer powers.
+    /// @tparam Scalar  Arithmetic scalar type.
+    /// @param n  The Euclidean norm value to raise to @c power.
+    /// @return @f$n^{PW}@f$.
+    /// @endinternal
     template <class Scalar> inline Scalar calc_pow_n(Scalar n) const {
         Scalar pow_n;
         if constexpr (power == 1)
@@ -67,6 +98,13 @@ struct NormalizedPower_Impl : VectorFunction<Derived, IR, IR> {
         return pow_n;
     }
 
+    /// @internal
+    /// @brief Evaluate @f$x/\|x\|_2^{PW}@f$ into @p fx_.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @param x    Input vector.
+    /// @param fx_  Output vector to write.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
@@ -84,6 +122,15 @@ struct NormalizedPower_Impl : VectorFunction<Derived, IR, IR> {
         Scalar np = 1.0 / (pow_n);
         fx = x * np;
     }
+    /// @internal
+    /// @brief Evaluate @f$x/\|x\|_2^{PW}@f$ and its Jacobian.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @tparam JacType  Eigen Jacobian-matrix type.
+    /// @param x    Input vector.
+    /// @param fx_  Output vector to write.
+    /// @param jx_  Output Jacobian to write.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {

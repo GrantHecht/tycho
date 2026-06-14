@@ -46,17 +46,37 @@ namespace tycho::vf {
 using utils::const_tuple_for_each;
 using utils::make_array;
 
+/// @brief Compile-time input domain of a single contiguous range.
+/// @ingroup vf
+///
+/// Describes a VectorFunction that reads exactly one contiguous block of its
+/// input vector: `Size` elements starting at offset `Start`.
+/// @tparam IR  Total input row count.
+/// @tparam Start  Offset of the active range.
+/// @tparam Size  Length of the active range.
 template <int IR, int Start, int Size> struct SingleDomain {
-    static constexpr int DomainSize = IR;
+    static constexpr int DomainSize = IR; ///< @brief Total input row count.
+    /// @brief The single contiguous sub-domain `{Start, Size}`.
     static constexpr std::array<std::array<int, 2>, 1> sub_domains = {
         std::array<int, 2>{Start, Size}};
-    static constexpr int start = Start;
-    static constexpr int size = Size;
+    static constexpr int start = Start; ///< @brief Offset of the active range.
+    static constexpr int size = Size;   ///< @brief Length of the active range.
 };
 
+/// @brief Compile-time input domain formed by merging several sub-domains.
+/// @ingroup vf
+///
+/// Combines the sub-domains of `T, Ts...` into a minimal set of contiguous
+/// ranges over `[0, IR)`, computed entirely at compile time.
+/// @tparam IR  Total input row count.
+/// @tparam T  First contributing domain type.
+/// @tparam Ts  Remaining contributing domain types.
 template <int IR, class T, class... Ts> struct CompositeDomain {
-    static constexpr int DomainSize = IR;
+    static constexpr int DomainSize = IR; ///< @brief Total input row count.
 
+    /// @brief Tests whether input index @p n is covered by any sub-domain.
+    /// @param n  Input index to test.
+    /// @return `true` if @p n lies within a contributing sub-domain.
     static constexpr bool contains_elem(int n) {
         std::tuple<T, Ts...> ts;
         bool t = false;
@@ -72,6 +92,9 @@ template <int IR, class T, class... Ts> struct CompositeDomain {
         });
         return t;
     }
+    /// @brief Counts consecutive covered indices starting at @p start.
+    /// @param start  Index at which to begin counting.
+    /// @return Length of the contiguous covered run beginning at @p start.
     static constexpr int max_range(int start) {
         int maxx = 0;
         for (int i = start; i < IR; i++) {
@@ -82,7 +105,11 @@ template <int IR, class T, class... Ts> struct CompositeDomain {
         }
         return maxx;
     }
+    /// @brief Per-index run lengths of contiguous coverage.
     static constexpr std::array<int, IR> dmn = {make_array<IR>(max_range)};
+    /// @brief Counts the number of distinct contiguous sub-domains.
+    /// @param v  Per-index run-length array (see @ref dmn).
+    /// @return Number of merged contiguous ranges.
     static constexpr int count_sub_domains(std::array<int, IR> v) {
         int sr = 0;
         int i = 0;
@@ -96,7 +123,11 @@ template <int IR, class T, class... Ts> struct CompositeDomain {
         }
         return sr;
     }
-    static constexpr int NumSubDomains = count_sub_domains(dmn);
+    static constexpr int NumSubDomains =
+        count_sub_domains(dmn); ///< @brief Number of merged sub-domains.
+    /// @brief Computes the `{start, size}` of the @p sd-th merged sub-domain.
+    /// @param sd  Zero-based sub-domain index.
+    /// @return The `{start, size}` pair, or `{0, 0}` if out of range.
     static constexpr std::array<int, 2> calc_sub_domains(int sd) {
         std::array<int, 2> v = {0, 0};
         int sr = 0;
@@ -116,6 +147,7 @@ template <int IR, class T, class... Ts> struct CompositeDomain {
         }
         return v;
     }
+    /// @brief The merged contiguous sub-domains as `{start, size}` pairs.
     static constexpr std::array<std::array<int, 2>, NumSubDomains> sub_domains = {
         make_array<NumSubDomains>(calc_sub_domains)};
 
@@ -123,31 +155,60 @@ template <int IR, class T, class... Ts> struct CompositeDomain {
     // CompositeDomain() = default;
 };
 
+/// @brief Dynamic-size specialization of @ref CompositeDomain.
+/// @ingroup vf
+///
+/// Used when the total input size is not known at compile time; the
+/// sub-domain layout is resolved at runtime instead.
+/// @tparam T  First contributing domain type.
+/// @tparam Ts  Remaining contributing domain types.
 template <class T, class... Ts> struct CompositeDomain<-1, T, Ts...> {
 
-    static constexpr int DomainSize = -1;
+    static constexpr int DomainSize = -1; ///< @brief Dynamic-size marker.
+    /// @brief Placeholder sub-domain `{-1, -1}` for the dynamic case.
     static constexpr std::array<std::array<int, 2>, 1> sub_domains = {std::array<int, 2>{-1, -1}};
-    static constexpr int start = -1;
-    static constexpr int size = -1;
+    static constexpr int start = -1; ///< @brief Dynamic-size start marker.
+    static constexpr int size = -1;  ///< @brief Dynamic-size length marker.
 
     // CompositeDomain(int ir, T b, Ts... a) {}
     // CompositeDomain() = default;
 };
 
+/// @brief Holds and reports a VectorFunction's input domain (static size).
+/// @ingroup vf
+///
+/// For a statically-sized function the domain is the single contiguous range
+/// `[0, IR)`, so `set_input_domain` is a no-op.
+/// @tparam IR  Compile-time input row count.
 template <int IR> struct DomainHolder {
+    /// @brief Returns the input domain as a `[0, IR)` domain matrix.
+    /// @return The 2x1 domain matrix `{0, IR}`.
     [[nodiscard]] DomainMatrix input_domain() const {
         DomainMatrix dmn(2, 1);
         dmn(0, 0) = 0;
         dmn(1, 0) = IR;
         return dmn;
     }
+    /// @brief No-op for statically-sized domains.
+    /// @param irr  Total input row count (ignored).
+    /// @param sub_domains  Candidate sub-domains (ignored).
     void set_input_domain(int irr, const std::vector<DomainMatrix> &sub_domains) {};
 };
 
+/// @brief Dynamic-size specialization of @ref DomainHolder.
+/// @ingroup vf
+///
+/// Stores the resolved sub-domain layout at runtime and merges overlapping or
+/// adjacent candidate ranges in `set_input_domain`.
 template <> struct DomainHolder<-1> {
-    DomainMatrix sub_domains;
+    DomainMatrix sub_domains; ///< @brief Runtime sub-domain layout (`{start, size}` columns).
 
+    /// @brief Returns the stored runtime input domain.
+    /// @return The stored sub-domain matrix.
     [[nodiscard]] DomainMatrix input_domain() const { return sub_domains; }
+    /// @brief Resolves and stores the merged input sub-domain layout.
+    /// @param irr  Total input row count.
+    /// @param sub_domains  Candidate sub-domains to merge.
     void set_input_domain(int irr, const std::vector<DomainMatrix> &sub_domains) {
         if (sub_domains.size() == 1) {
             this->sub_domains = sub_domains[0];

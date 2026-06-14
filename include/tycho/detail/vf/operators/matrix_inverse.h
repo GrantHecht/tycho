@@ -18,23 +18,43 @@
 
 namespace tycho::vf {
 
+/// @ingroup vf
+/// @brief VectorFunction inverting a square matrix @f$M^{-1}@f$ packed as a flat vector.
+///
+/// Input and output are the @f$\mathrm{Size}\times\mathrm{Size}@f$ matrix flattened
+/// into a length-@f$\mathrm{Size}^2@f$ vector with the given storage major direction.
+/// @tparam Size   Compile-time matrix dimension (Eigen::Dynamic for a runtime size).
+/// @tparam Major  Storage major direction (Eigen::ColMajor or Eigen::RowMajor).
 template <int Size, int Major>
 struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, Size>::value,
                                       SZ_PROD<Size, Size>::value, DenseDerivativeMode::Analytic,
                                       DenseDerivativeMode::Analytic> {
 
+    /// @brief Convenience alias for the VectorFunction CRTP base class.
     using Base = VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, Size>::value,
                                 SZ_PROD<Size, Size>::value, DenseDerivativeMode::Analytic,
                                 DenseDerivativeMode::Analytic>;
     VF_TYPE_ALIASES(Base);
-    static constexpr bool is_vectorizable = false;
+    static constexpr bool is_vectorizable =
+        false; ///< Matrix inversion is not SuperScalar-vectorizable.
+    /// @brief Eigen matrix type for the square matrix for scalar type @c Scalar.
     template <class Scalar> using Mat = Eigen::Matrix<Scalar, Size, Size>;
 
-    int size;
+    int size; ///< Runtime matrix dimension.
 
+    /// @brief Default constructor; leaves the dimension unset.
     MatrixInverse() {};
+    /// @brief Construct with a runtime matrix dimension.
+    /// @param size  The square-matrix dimension.
     MatrixInverse(int size) : size(size) { this->set_io_rows(size * size, size * size); }
 
+    /// @internal
+    /// @brief Evaluate the matrix inverse into @p fx_.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @param x    Input vector (flattened matrix).
+    /// @param fx_  Output vector (flattened inverse) to write.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
@@ -62,6 +82,15 @@ struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, 
             Impl, tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size),
             tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size));
     }
+    /// @internal
+    /// @brief Evaluate the matrix inverse and its Jacobian.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @tparam JacType  Eigen Jacobian-matrix type.
+    /// @param x    Input vector (flattened matrix).
+    /// @param fx_  Output vector (flattened inverse) to write.
+    /// @param jx_  Output Jacobian to write.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -106,6 +135,21 @@ struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, 
             Impl, tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size),
             tycho::utils::TempSpec<Mat<Scalar>>(this->size, this->size));
     }
+    /// @internal
+    /// @brief Evaluate the matrix inverse, its Jacobian, adjoint gradient, and adjoint Hessian.
+    /// @tparam InType       Eigen input-vector type.
+    /// @tparam OutType      Eigen output-vector type.
+    /// @tparam JacType      Eigen Jacobian-matrix type.
+    /// @tparam AdjGradType  Eigen adjoint-gradient vector type.
+    /// @tparam AdjHessType  Eigen adjoint-Hessian matrix type.
+    /// @tparam AdjVarType   Eigen adjoint-variable vector type.
+    /// @param x        Input vector (flattened matrix).
+    /// @param fx_      Output vector (flattened inverse) to write.
+    /// @param jx_      Output Jacobian to write.
+    /// @param adjgrad_ Output adjoint gradient to write.
+    /// @param adjhess_ Output adjoint Hessian to write.
+    /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(

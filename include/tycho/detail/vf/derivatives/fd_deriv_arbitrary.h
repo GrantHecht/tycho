@@ -42,6 +42,15 @@
 
 namespace tycho::vf {
 
+/// @brief Finite-differences a series of vector samples along one axis.
+///
+/// Computes the per-sample derivative of @p BL with respect to the chosen @p axis using
+/// a mix of forward, central, and backward stencils at the boundaries and interior.
+/// @tparam VectorType  Eigen vector type of each sample.
+/// @param BL       The sampled data series; spacing is inferred from the first two samples.
+/// @param axis     Index of the independent axis within each sample.
+/// @param inctime  Whether the returned samples retain the axis (time) component.
+/// @return One derivative per input sample.
 template <class VectorType>
 std::vector<VectorType> FDiffData(const std::vector<VectorType> &BL, int axis, bool inctime) {
     std::vector<VectorType> BLDot = BL;
@@ -66,27 +75,38 @@ std::vector<VectorType> FDiffData(const std::vector<VectorType> &BL, int axis, b
     return BLDot;
 }
 
-/*!
- * @brief
- *
- * @tparam DType Data Type: An Eigen::Matrix type
- */
+/// @brief Finite-difference differentiation of data sampled on an arbitrary (non-uniform) axis.
+///
+/// The samples need not be equally spaced: stencil weights are solved per
+/// evaluation from the actual node offsets via a Vandermonde system, choosing
+/// forward, central, or backward stencils near the boundaries.
+/// @tparam DType  Data type: an `Eigen::Matrix` type for each sample.
+/// @ingroup vf
 template <class DType> struct FDDerivArbitrary {
   public:
+    /// @brief Scalar element type of the data samples.
     using Scalar = typename DType::Scalar;
 
-    int axis;
-    int length;
-    std::vector<DType> data;
+    int axis;                ///< Index of the independent axis within each sample.
+    int length;              ///< Number of samples.
+    std::vector<DType> data; ///< The sampled data series.
 
+    /// @brief Sets the index of the independent axis within each sample.
+    /// @param i  Axis index.
     inline void set_axis(int i) { this->axis = i; }
 
+    /// @brief Loads the sampled data series.
+    /// @param d  Samples to differentiate.
     inline void set_data(const std::vector<DType> &d) {
         this->data = d;
         this->length = d.size();
     }
 
+    /// @brief Constructs an empty differentiator; set axis and data before use.
     FDDerivArbitrary() {};
+    /// @brief Constructs a differentiator with the given axis and data.
+    /// @param i  Index of the independent axis within each sample.
+    /// @param d  Samples to differentiate.
     FDDerivArbitrary(int i, const std::vector<DType> &d) {
         this->set_axis(i);
         this->set_data(d);
@@ -220,10 +240,25 @@ template <class DType> struct FDDerivArbitrary {
         return bulk;
     }
 
+    /// @brief Python-binding shim: returns all derivatives at once.
+    /// @internal
+    /// @tparam DerivType  Output Eigen type.
+    /// @param Order     Derivative order to compute.
+    /// @param Accuracy  Finite-difference accuracy order.
+    /// @return One derivative per sample index.
+    /// @endinternal
     template <class DerivType>
     inline std::vector<DerivType> allderiv_python(const int Order, const int Accuracy) const {
         return deriv<DerivType>(Order, Accuracy);
     }
+    /// @brief Python-binding shim: returns the derivative at a single sample index.
+    /// @internal
+    /// @tparam DerivType  Output Eigen type.
+    /// @param i         Sample index at which to evaluate the derivative.
+    /// @param Order     Derivative order to compute.
+    /// @param Accuracy  Finite-difference accuracy order.
+    /// @return The derivative at index @p i.
+    /// @endinternal
     template <class DerivType>
     inline DerivType ithderiv_python(const int i, const int Order, const int Accuracy) const {
         return deriv_at<DerivType>(i, Order, Accuracy);

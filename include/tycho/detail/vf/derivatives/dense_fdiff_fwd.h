@@ -18,38 +18,46 @@
 
 namespace tycho::vf {
 
-//! First derivatives using forward finite difference
-/*!
-  \tparam IR Input Rows
-  \tparam OR Output Rows
-*/
+/// @brief Forward finite-difference Jacobian specialization of @ref DenseFirstDerivatives.
+///
+/// Approximates the Jacobian columnwise with a first-order forward difference
+/// @f$ \partial f / \partial x_i \approx (f(x + h\,e_i) - f(x)) / h @f$, requiring
+/// @f$ \mathrm{IR}+1 @f$ primal evaluations per Jacobian.
+/// @tparam Derived  The concrete VectorFunction type (CRTP self type).
+/// @tparam IR       Input dimension (rows), or `Eigen::Dynamic`.
+/// @tparam OR       Output dimension (rows), or `Eigen::Dynamic`.
+/// @ingroup vf
 template <class Derived, int IR, int OR>
 struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::FDiffFwd>
     : DenseFunctionBase<Derived, IR, OR> {
+    /// @brief The dense function base providing the primal `compute` interface.
     using Base = DenseFunctionBase<Derived, IR, OR>;
     VF_TYPE_ALIASES(Base)
 
+    /// @brief Constructs the mode with a default Jacobian step size of 1e-7.
     DenseFirstDerivatives() { this->set_jac_fd_steps(1.0e-7); }
 
-    //! Set step size for each input dimension
+    /// @brief Sets a per-input-dimension Jacobian finite-difference step size.
+    /// @param steps  Step size for each input dimension.
     void set_jac_fd_steps(const Input<double> &steps) { this->jac_fd_steps = steps; }
-    //! Set step size for all input dimensions
+    /// @brief Sets a single Jacobian finite-difference step size for all input dimensions.
+    /// @param step  Step size applied uniformly to every input dimension.
     void set_jac_fd_steps(double step) {
         this->jac_fd_steps.resize(this->input_rows());
         this->jac_fd_steps.setConstant(step);
     }
 
-    //! Jacobian implementation
-    /*!
-      \tparam InType Eigen type of input x
-      \tparam OutType Eigen type of output fx
-      \tparam JacType Eigen type of jacobian jx
-      \param x const reference to input vector
-      \param fx_ const reference to output vector
-      \param jx_ const reference to jacobian matrix
-      Calculates function and jacobian and stores them in fx_ and jx_. Requires
-      (IR+1) function calls.
-    */
+    /// @brief Computes the function value and forward finite-difference Jacobian.
+    /// @internal
+    /// Stores the primal in @p fx_ and the Jacobian in @p jx_; requires
+    /// @f$ \mathrm{IR}+1 @f$ calls to the underlying function.
+    /// @tparam InType   Eigen type of the input vector @p x.
+    /// @tparam OutType  Eigen type of the output vector @p fx_.
+    /// @tparam JacType  Eigen type of the Jacobian matrix @p jx_.
+    /// @param x    Input vector at which to evaluate.
+    /// @param fx_  Output function value, written in place.
+    /// @param jx_  Output Jacobian, written in place.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -73,43 +81,51 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::FDiffFwd>
     }
 
   protected:
+    /// @brief Per-input-dimension Jacobian finite-difference step sizes.
     Eigen::VectorXd jac_fd_steps;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Second derivatives using forward finite difference
-/*!
-  \tparam IR Input Rows
-  \tparam OR Output Rows
-  \tparam JMode Jacobian Mode (enumerator)
-*/
+/// @brief Forward finite-difference Hessian specialization of @ref DenseSecondDerivatives.
+///
+/// Forms the adjoint Hessian by forward-differencing the adjoint gradient
+/// @f$ g(x) = J(x)^\top \lambda @f$ columnwise, then symmetrizing. The Jacobian is
+/// supplied by the chosen @p JMode first-derivative layer.
+/// @tparam Derived  The concrete VectorFunction type (CRTP self type).
+/// @tparam IR       Input dimension (rows), or `Eigen::Dynamic`.
+/// @tparam OR       Output dimension (rows), or `Eigen::Dynamic`.
+/// @tparam JMode    Jacobian-evaluation mode used for the first-derivative layer.
+/// @ingroup vf
 template <class Derived, int IR, int OR, DenseDerivativeMode JMode>
 struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::FDiffFwd>
     : DenseFirstDerivatives<Derived, IR, OR, JMode> {
+    /// @brief The first-derivative layer providing the Jacobian interface.
     using Base = DenseFirstDerivatives<Derived, IR, OR, JMode>;
     VF_TYPE_ALIASES(Base)
 
+    /// @brief Constructs the mode with a default Hessian step size of 1e-7.
     DenseSecondDerivatives() { this->set_hess_fd_steps(1.0e-7); }
     using Base::adjointhessian;
-    //! Set step size for each input dimension
+    /// @brief Sets a per-input-dimension Hessian finite-difference step size.
+    /// @param steps  Step size for each input dimension.
     void set_hess_fd_steps(const Input<double> &steps) { this->hess_fd_steps = steps; }
-    //! Set step size for all input dimensions
+    /// @brief Sets a single Hessian finite-difference step size for all input dimensions.
+    /// @param step  Step size applied uniformly to every input dimension.
     void set_hess_fd_steps(double step) {
         this->hess_fd_steps = Input<double>::Constant(this->input_rows(), step);
     }
 
-    //! Adjoint hessian implementation
-    /*!
-      \tparam InType Eigen type of input x
-      \tparam AdjHessType Eigen type of output adjoint hessian matrix
-      \tparam AdjVarType Eigen type of adjoint coefficient vector
-      \param x const reference to input vector
-      \param adjhess_ const reference to adjoint hessian matrix
-      \param adjvars const reference to adjoint coefficient vector
-      Calculates adjoint hessian matrix by taking the derivative of the adjoint
-      gradient vector.
-    */
+    /// @brief Computes the adjoint Hessian by finite-differencing the adjoint gradient.
+    ///
+    /// Differentiates the adjoint gradient @f$ J^\top \lambda @f$ columnwise and
+    /// symmetrizes the result.
+    /// @tparam InType       Eigen type of the input vector @p x.
+    /// @tparam AdjHessType  Eigen type of the output adjoint Hessian @p adjhess_.
+    /// @tparam AdjVarType   Eigen type of the adjoint coefficient vector @p adjvars.
+    /// @param x        Input vector at which to evaluate.
+    /// @param adjhess_ Output adjoint Hessian, written in place.
+    /// @param adjvars  Adjoint (Lagrange) coefficients weighting each output row.
     template <class InType, class AdjHessType, class AdjVarType>
     inline void adjointhessian(CVecRef<InType> x, CMatRef<AdjHessType> adjhess_,
                                CVecRef<AdjVarType> adjvars) const {
@@ -142,6 +158,23 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::FDiff
         adjhess = (adjhess + adjhess.transpose()).eval() * Scalar(0.5);
     }
 
+    /// @brief Computes value, Jacobian, adjoint gradient, and adjoint Hessian.
+    /// @internal
+    /// Delegates value/Jacobian/adjoint-gradient to the base function, then forms the
+    /// adjoint Hessian via @ref adjointhessian.
+    /// @tparam InType       Eigen type of the input vector @p x.
+    /// @tparam OutType      Eigen type of the output value @p fx_.
+    /// @tparam JacType      Eigen type of the Jacobian @p jx_.
+    /// @tparam AdjGradType  Eigen type of the adjoint gradient @p adjgrad_.
+    /// @tparam AdjHessType  Eigen type of the adjoint Hessian @p adjhess_.
+    /// @tparam AdjVarType   Eigen type of the adjoint coefficients @p adjvars.
+    /// @param x        Input vector at which to evaluate.
+    /// @param fx_      Output value, written in place.
+    /// @param jx_      Output Jacobian, written in place.
+    /// @param adjgrad_ Output adjoint gradient, written in place.
+    /// @param adjhess_ Output adjoint Hessian, written in place.
+    /// @param adjvars  Adjoint (Lagrange) coefficients weighting each output row.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
@@ -153,6 +186,7 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::FDiff
     }
 
   protected:
+    /// @brief Per-input-dimension Hessian finite-difference step sizes.
     Input<double> hess_fd_steps;
 };
 
