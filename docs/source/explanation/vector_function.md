@@ -239,6 +239,10 @@ f.compute([1.0, 2.0, 3.0, 4.0])   # [1, 4, 9, 16]
 
 A few details earn their place in the contract:
 
+- The argument types are written out as `const Eigen::MatrixBase<…>&` here for
+  clarity; the codebase abbreviates them with the aliases `CVecRef`/`VecRef`
+  (and `CMatRef`/`MatRef` for matrices), which expand to exactly these types, so
+  in-tree code reads `CVecRef<InType> x`.
 - The output argument arrives `const` and is "un-`const`-ed" with
   `const_cast_derived()`. This is an Eigen idiom for writing through an
   expression reference; it does not copy.
