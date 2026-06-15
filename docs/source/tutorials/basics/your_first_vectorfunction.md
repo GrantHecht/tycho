@@ -144,7 +144,8 @@ variants, `exp`, `log`, `sqrt`, `squared`, `pow`, `abs`, and `sign`.
 
 The point of building with these is that **the chain rule is automatic**. Define
 $\rho = \sqrt{x^2 + y^2}$ and ask for its Jacobian at $(3, 4)$ — you get
-$x/\rho,\ y/\rho = 0.6,\ 0.8$ without writing a single derivative:
+$\partial\rho/\partial x,\ \partial\rho/\partial y = x/\rho,\ y/\rho = 0.6,\ 0.8$
+without writing a single derivative:
 
 ::::{tab-set}
 :::{tab-item} Python
