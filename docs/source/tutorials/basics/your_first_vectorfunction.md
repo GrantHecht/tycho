@@ -16,8 +16,11 @@ catalog of every type and function, see the
 {doc}`Python </reference/python/vector_functions>` and
 {doc}`C++ </reference/cpp/vector_functions>` references.
 
-Every Python block below is executed as part of Tycho's test suite, so the
-results you see are real. Follow along in a REPL — each step builds on the last.
+Every `{doctest}` block below (the ones showing `>>>` prompts) is executed as
+part of Tycho's test suite, so the results you see are real. The C++ equivalents
+appear alongside in tabs; those are illustrative fragments that share context
+across steps (each is compile-checked, but not run here). Follow along in a
+REPL — each step builds on the last.
 
 :::{note}
 `.compute(...)` returns a NumPy array. To keep results tidy in this tutorial we
@@ -165,6 +168,25 @@ auto Jr  = rho.jacobian(Eigen::Vector3d(3.0, 4.0, 0.0));   // -> [0.6, 0.8, 0.0]
 :::
 ::::
 
+The whole catalog composes the same way. Stack a representative mix to evaluate
+several at once (`arctan2(y, x)` is the two-argument arctangent, matching
+`numpy.arctan2`):
+
+```{doctest}
+>>> vf.stack([vf.exp(x), vf.log(y), vf.tanh(z), vf.abs(x), vf.sign(z),
+...           vf.arctan2(y, x)]).compute([1.0, 2.0, 3.0]).round(6).tolist()
+[2.718282, 0.693147, 0.995055, 1.0, 1.0, 1.107149]
+```
+
+The derivatives are the ones you would expect, including for the non-smooth
+functions: `abs` differentiates to $\pm 1$ away from zero and `sign` is locally
+constant, so its derivative is zero. At $x = 1$, $z = 3$:
+
+```{doctest}
+>>> vf.stack([vf.abs(x), vf.sign(z)]).jacobian([1.0, 2.0, 3.0]).round(4).tolist()
+[[1.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+```
+
 ## 4. Vectors: stacking and vector operations
 
 So far our outputs have been scalars. To build a **vector-valued** function,
@@ -243,8 +265,8 @@ dimension.
 :::{tab-item} Python
 ```{doctest}
 >>> inner = vf.stack([x + y, x * y])     # R^3 -> R^2  (uses x, y)
->>> p, q = vf.Arguments(2).tolist()
->>> outer = p + q                        # R^2 -> R^1  (sum of two inputs)
+>>> u, w = vf.Arguments(2).tolist()
+>>> outer = u + w                        # R^2 -> R^1  (sum of two inputs)
 >>> composed = outer(inner)              # R^3 -> R^1: (x+y) + (x*y)
 >>> composed.compute([2.0, 3.0, 0.0]).round(6).tolist()
 [11.0]
@@ -260,9 +282,18 @@ auto composed = outer(inner);                // R^3 -> R^1
 :::
 ::::
 
-At $(2, 3)$ that is $(2 + 3) + (2 \cdot 3) = 11$. Composition is how large
-dynamics models stay readable: you name intermediate quantities and feed them
-forward, and Tycho keeps the derivatives consistent through every layer.
+At $(2, 3)$ that is $(2 + 3) + (2 \cdot 3) = 11$. The derivative flows through the
+seam automatically — $\partial/\partial x = 1 + y = 4$ and
+$\partial/\partial y = 1 + x = 3$ at $(2, 3)$:
+
+```{doctest}
+>>> composed.jacobian([2.0, 3.0, 0.0]).round(6).tolist()
+[[4.0, 3.0, 0.0]]
+```
+
+Composition is how large dynamics models stay readable: you name intermediate
+quantities and feed them forward, and Tycho keeps the derivatives consistent
+through every layer.
 
 ## 6. Derivatives come for free
 
@@ -287,6 +318,19 @@ gradient and the adjoint Hessian is the ordinary Hessian:
 [1.080605, 0.841471, 6.0]
 >>> f.adjointhessian([1.0, 2.0, 3.0], [1.0]).round(4).tolist()
 [[-1.6829, 0.5403, 0.0], [0.5403, 0.0, 0.0], [0.0, 0.0, 2.0]]
+```
+
+For a vector-valued function the multipliers $\lambda$ genuinely matter: the
+adjoint gradient sums the rows of the Jacobian weighted by $\lambda$, and the
+adjoint Hessian sums the per-output Hessians the same way. Take the 3-output
+`s` from the stacking section with $\lambda = [1, 2, 0.5]$ — the `0.5` weight on
+the $x\,y$ output is exactly the off-diagonal of the result:
+
+```{doctest}
+>>> s.adjointgradient([1.0, 2.0, 3.0], [1.0, 2.0, 0.5]).round(4).tolist()
+[3.0, 2.5, 2.0]
+>>> s.adjointhessian([1.0, 2.0, 3.0], [1.0, 2.0, 0.5]).round(4).tolist()
+[[2.0, 0.5, 0.0], [0.5, 0.0, 0.0], [0.0, 0.0, 0.0]]
 ```
 
 These derivatives are analytic and exact — not finite differences. If you ever
@@ -342,11 +386,13 @@ auto ode   = StackedOutputs{sin(theta) * v_,
 ::::
 
 `ode` is a complete $\mathbb{R}^5 \to \mathbb{R}^3$ dynamics function, and its
-Jacobian (a $3 \times 5$ matrix) is available immediately:
+$3 \times 5$ Jacobian is available immediately. Only the $v$ and $\theta$ columns
+(indices 2 and 4) are non-zero, since the right-hand side depends on nothing
+else:
 
 ```{doctest}
->>> ode.jacobian([0.0, 10.0, 5.0, 0.3, 0.7]).shape
-(3, 5)
+>>> ode.jacobian([0.0, 10.0, 5.0, 0.3, 0.7]).round(4).tolist()
+[[0.0, 0.0, 0.6442, 0.0, 3.8242], [0.0, 0.0, -0.7648, 0.0, 3.2211], [0.0, 0.0, 0.0, 0.0, -6.3198]]
 ```
 
 That is everything the transcription layer needs to turn these dynamics into an
@@ -388,6 +434,18 @@ auto rhs = StackedOutputs{v6, r6.normalized_power<3>() * (-mu)};
 (The `+ 0.0` just normalizes harmless negative zeros for display.) At the
 unit circular state the result reads off cleanly: $\dot{r} = v = \hat{y}$ and
 $\dot{v} = -\hat{x}$ — the centripetal acceleration of a circular orbit.
+
+The Jacobian carries the interesting part. Its top-right $3\times3$ block is the
+identity ($\partial\dot{r}/\partial v = I$) and its bottom-left block is the
+gravity gradient
+$\partial\dot{v}/\partial r = -\mu\bigl(I/\lVert r\rVert^3 - 3\,r r^\top/\lVert r\rVert^5\bigr)$ —
+all of it produced by differentiating `normalized_power3`, with nothing written
+by hand:
+
+```{doctest}
+>>> (rhs.jacobian([1.0, 0.0, 0.0, 0.0, 1.0, 0.0]) + 0.0).round(6).tolist()
+[[0.0, 0.0, 0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 1.0], [2.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, -1.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, -1.0, 0.0, 0.0, 0.0]]
+```
 
 ## What you learned
 
