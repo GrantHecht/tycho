@@ -416,6 +416,7 @@ and `stack`, the whole right-hand side is two lines:
 >>> v6  = sc.tail(3)
 >>> rhs = vf.stack([v6, r6.normalized_power3() * (-mu)])
 >>> # circular orbit: r = x_hat, v = y_hat  ->  rdot = v, vdot = -r
+>>> # (the + 0.0 below clears display-only negative zeros)
 >>> (rhs.compute([1.0, 0.0, 0.0, 0.0, 1.0, 0.0]) + 0.0).round(6).tolist()
 [0.0, 1.0, 0.0, -1.0, 0.0, 0.0]
 ```

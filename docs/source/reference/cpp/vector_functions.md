@@ -11,14 +11,14 @@ differentiable map $f : \mathbb{R}^{n} \to \mathbb{R}^{m}$. Concrete
 functions are built by composing {cpp:struct}`tycho::vf::Arguments` with the
 operator DSL and the expression types below; the resulting type evaluates
 its primal, Jacobian, and Hessian according to its derivative mode. For the
-conceptual model see the {doc}`Explanation </explanation/index>` section.
+conceptual model see {doc}`The VectorFunction model </explanation/vector_function>`.
 
 ## Core types
 
-The CRTP base classes shared by every VectorFunction. `DenseFunctionBase`
-provides the operator DSL (`+`, `*`, `.dot()`, `.norm()`, `.segment()`, …)
-available on all functions; `VectorFunction` is the user-derivable base for
-authoring custom dynamics.
+The CRTP base classes every VectorFunction shares. `VectorFunction` is the base
+users inherit from to author a custom function; lower in the inheritance chain,
+`DenseFunctionBase` supplies the operator DSL (`+`, `*`, `.dot()`, `.norm()`,
+`.segment()`, …) that every expression inherits.
 
 ```{eval-rst}
 .. doxygenstruct:: tycho::vf::VectorFunction
@@ -128,9 +128,8 @@ contiguous sub-vectors from it.
 
 ## Elementwise math expressions
 
-One expression type per scalar elementwise operation. These are produced by
-the free functions `sin`, `cos`, `exp`, … and the corresponding Python
-helpers.
+One expression type per scalar elementwise operation, produced by the free
+functions `sin`, `cos`, `exp`, ….
 
 ```{eval-rst}
 .. doxygenstruct:: tycho::vf::CwiseSin
@@ -377,5 +376,7 @@ stacks and sums; `stack` and `sum` are the fixed-size counterparts.
 .. doxygenfunction:: tycho::vf::dot_product
    :project: tycho
 .. doxygenfunction:: tycho::vf::quat_product
+   :project: tycho
+.. doxygenfunction:: tycho::vf::quat_rotate(const DenseFunctionBase<QFunc, QIR, QOR>&, const DenseFunctionBase<VFunc, VIR, VOR>&)
    :project: tycho
 ```

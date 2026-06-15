@@ -18,12 +18,12 @@ testing
 ## Where to start
 
 - **Building from source** — set up a development environment and produce
-  a working `_tychopy` extension. Start with [Building](building.md).
+  a working `_tychopy` extension. Start with {doc}`building`.
 - **Style conventions** — the C++ and Python docstring rules every PR is
   checked against, plus naming and formatting. Start with the
-  [Style guide](style.md).
+  {doc}`style guide <style>`.
 - **Testing** — how to run Tycho's Python unit tests, example suite, C++
-  unit tests, and benchmarks. Start with [Testing](testing.md).
+  unit tests, and benchmarks. Start with {doc}`testing`.
 
 For internal engineering notes (build-performance analyses, AD design
 docs, ongoing work plans), see

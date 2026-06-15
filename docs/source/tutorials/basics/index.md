@@ -1,6 +1,6 @@
 # Basics
 
-Foundational walkthroughs for VectorFunction, ODE, and Phase.
+Foundational walkthroughs, starting with the VectorFunction core.
 
 ```{toctree}
 :maxdepth: 1

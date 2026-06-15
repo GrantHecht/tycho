@@ -6,9 +6,10 @@ constraint, and objective you hand to the optimizer is a VectorFunction, and
 almost everything else in the library is built on top of them. This page
 explains *what* a VectorFunction is, *why* it is designed the way it is, and
 *how* the pieces fit together. It is conceptual rather than exhaustive — for the
-full API surface see the {doc}`Python </reference/python/vector_functions>` and
-{doc}`C++ </reference/cpp/vector_functions>` reference pages, and for a
-step-by-step build see the {doc}`Tutorials </tutorials/index>`.
+full API surface see the {doc}`Python reference </reference/python/vector_functions>`
+and {doc}`C++ reference </reference/cpp/vector_functions>`, and for a step-by-step
+build see the
+{doc}`first-VectorFunction tutorial </tutorials/basics/your_first_vectorfunction>`.
 
 ## What a VectorFunction is
 
@@ -32,10 +33,10 @@ vector of adjoint variables $\lambda$, a VectorFunction can produce, on demand:
 The adjoint gradient and Hessian are exactly the quantities the optimizer needs
 to assemble the Karush–Kuhn–Tucker (KKT) system: for a constraint the $\lambda_i$
 are Lagrange multipliers; for an objective there is a single scaling factor.
-Because each VectorFunction knows how to deliver all four quantities through one
-fused call, the solver never has to reconstruct derivatives numerically or
-re-walk the expression — the work is computed once, together, where the
-intermediate values are already in registers.
+Because each VectorFunction delivers all four quantities through one fused call,
+the solver never reconstructs derivatives numerically or re-traverses the
+expression tree. The work happens once, while the intermediate values from the
+primal evaluation are still warm.
 
 The second defining property is that a VectorFunction is **symbolic at
 construction time**. When you write `vf.sin(theta) * v` in Python, no arithmetic
@@ -45,9 +46,8 @@ evaluated later, at full native speed, inside the solver's hot loop.
 ::::{tab-set}
 :::{tab-item} Python
 ```python
-import tychopy as typy
+from tychopy import vector_functions as vf
 
-vf = typy.vector_functions
 args = vf.Arguments(3)
 x, y, z = args.tolist()
 
@@ -76,9 +76,9 @@ auto fx = f.compute(xv);       // evaluated at native speed
 :::
 ::::
 
-This split — symbolic assembly, then compiled evaluation — is the source of both
-Tycho's performance and most of its design complexity. The rest of this page is
-about the machinery that makes it work.
+This split — symbolic assembly, then compiled evaluation — is the source of
+Tycho's performance, and the reason the machinery underneath is worth
+understanding. The rest of this page walks through it.
 
 ## Why CRTP
 
@@ -122,16 +122,21 @@ wins on the hot loop because:
   the compiler sees through the whole composition and optimizes across operand
   boundaries instead of stopping at a call.
 
-CRTP is not free. Every distinct expression is a distinct C++ type, so deep
-expressions produce deeply nested template types that are slow to compile;
-two differently-shaped expressions cannot share a container; and the inheritance
-chain is deep enough to be hard to navigate (see
-[the layered hierarchy](#the-layered-hierarchy) below). Tycho accepts these costs
-on the hot path and recovers runtime flexibility with a type-erasure layer
-([GenericFunction](#type-erasure-genericfunction)) exactly where heterogeneity is
-needed.
+CRTP is not free, and the costs mirror the wins:
 
-### Alternatives, and why CRTP
+- **Slow compiles.** Every distinct expression is a distinct C++ type, so deep
+  expressions produce deeply nested template types that take a long time to
+  instantiate.
+- **No shared container.** Two differently-shaped expressions are unrelated
+  types; they cannot be stored together or passed through a common interface.
+- **A deep hierarchy.** The inheritance chain is long enough to be hard to
+  navigate (see [the layered hierarchy](#the-layered-hierarchy) below).
+
+Tycho accepts these costs on the hot path and recovers runtime flexibility with a
+type-erasure layer ([GenericFunction](#type-erasure-genericfunction)) exactly
+where heterogeneity is needed.
+
+### Why not the alternatives
 
 CRTP is an implementation choice, not a mathematical necessity. The same four
 derivative quantities could be delivered by other architectures — each was
@@ -224,8 +229,7 @@ struct CwiseSquareExample : VectorFunction<CwiseSquareExample<IR>, IR, IR> {
 :::
 :::{tab-item} Python
 ```python
-import tychopy as typy
-vf = typy.vector_functions
+from tychopy import vector_functions as vf
 
 # In Python you rarely write a raw struct; you compose existing primitives.
 # The equivalent of CwiseSquare is just an elementwise power:
@@ -330,8 +334,7 @@ function returns a *new* VectorFunction expression type; the algebra is closed.
 ::::{tab-set}
 :::{tab-item} Python
 ```python
-import tychopy as typy
-vf = typy.vector_functions
+from tychopy import vector_functions as vf
 
 args = vf.Arguments(6)
 r = args.head(3)          # Segment: first 3 inputs
@@ -404,7 +407,7 @@ implement derivatives by hand:
 | Elementwise math | `CwiseSin`, `CwiseCos`, `CwiseExp`, `CwiseSqrt`, … | scalar functions with diagonal Jacobians |
 | Norms | `Norm`, `SquaredNorm`, `InverseNorm`, `NormPower` | scalar output; all vectorizable |
 | Normalization | `Normalized`, `NormalizedPower` | `x / ‖x‖^p`, common in gravity models |
-| Vector products | dot, cross, elementwise product, vector·scalar product | analytic, 3-D where applicable |
+| Vector products | `FunctionDotProduct`, `FunctionCrossProduct`, `CwiseFunctionProduct`, `VectorScalarFunctionProduct` | inner / cross / elementwise / vector·scalar; 3-D where applicable |
 | Control flow | `GenericConditional`, `GenericComparative` | branch and min/max selection, type-erased |
 
 Each carries the same derivative contract as a user-authored function, which is
@@ -493,11 +496,12 @@ solver decides batching is worthwhile and `enable_vectorization_` is set.
 This page covered the model. To put it to work:
 
 - **Reference.** The complete, curated API surface lives in the
-  {doc}`Python </reference/python/vector_functions>` and
-  {doc}`C++ </reference/cpp/vector_functions>` reference pages — every public
-  class and free function, with signatures and notes.
-- **Tutorials.** For a guided, end-to-end build of a real dynamics model and a
-  small solve, start with the {doc}`Tutorials </tutorials/index>`.
+  {doc}`Python reference </reference/python/vector_functions>` and
+  {doc}`C++ reference </reference/cpp/vector_functions>` — every public class and
+  free function, with signatures and notes.
+- **Tutorial.** For a guided build that works up from a single symbolic input to
+  complete dynamics expressions, start with the
+  {doc}`first-VectorFunction tutorial </tutorials/basics/your_first_vectorfunction>`.
 - **How-to guides.** When you already know the concepts and just need the recipe
   for adding a new dynamics model, see the {doc}`How-to guides </how_to/index>`.
 

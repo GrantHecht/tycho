@@ -1,6 +1,7 @@
 # Reference
 
-Complete API reference for the Python, C++, and (forthcoming) Julia front-ends.
+API reference for the Python and C++ front-ends, covering the VectorFunction
+subsystem, with a Julia front-end forthcoming.
 
 ```{toctree}
 :maxdepth: 2
