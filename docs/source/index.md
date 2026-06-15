@@ -4,25 +4,40 @@ sd_hide_title: true
 
 # Tycho
 
+```{div} sd-text-center sd-fs-3 sd-font-weight-bold sd-pt-3
+Tycho
+```
+
+```{div} sd-text-center sd-fs-5 sd-text-muted
+Trajectory design and optimal control in C++ and Python
+```
+
+```{div} sd-text-center sd-pt-2 sd-pb-2
+A high-performance library for general optimal-control problems and space
+trajectory optimization. Problems are defined with composable, self-
+differentiating **VectorFunctions**, transcribed by direct collocation, and
+solved with the built-in **PSIOPT** interior-point solver.
+```
+
 ::::{grid} 1 2 2 2
 :class-container: sd-text-center sd-pt-4
 
 :::{grid-item-card} Getting Started
 :link: getting_started/index
 :link-type: doc
-Install Tycho and run your first phase in five minutes.
+Install Tycho into a conda environment and verify your setup.
 :::
 
 :::{grid-item-card} Tutorials
 :link: tutorials/index
 :link-type: doc
-Learning-oriented walkthroughs for VectorFunction, Phase, and Astro.
+Learning-oriented walkthroughs. Start by composing VectorFunctions.
 :::
 
 :::{grid-item-card} How-to Guides
 :link: how_to/index
 :link-type: doc
-Recipes for common tasks: scaling, mesh refinement, custom dynamics.
+Task-oriented recipes for common Tycho workflows.
 :::
 
 :::{grid-item-card} Reference
@@ -34,7 +49,7 @@ Complete Python and C++ API reference.
 :::{grid-item-card} Explanation
 :link: explanation/index
 :link-type: doc
-Concepts and theory: VectorFunctions, collocation, PSIOPT.
+Concepts and theory, starting with the VectorFunction model.
 :::
 
 :::{grid-item-card} Contributing
