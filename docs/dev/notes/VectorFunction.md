@@ -52,51 +52,38 @@ These derivatives can be computed analytically (hand-derived), via automatic dif
 The entire class hierarchy uses the **Curiously Recurring Template Pattern (CRTP)**, which means each base class is parameterized by its derived type. This enables static (compile-time) polymorphism with zero virtual function overhead.
 
 ```
-InputOutputSize<IR, OR>                     // Stores input/output sizes
-    |
-CRTPBase<Derived>                           // Provides derived() cast
+InputOutputSize<IR, OR>                         // Stores input/output sizes
     |
     v
-ComputableBase<Derived, IR, OR>             // compute() dispatch + solver interface
+ComputableBase<Derived, IR, OR>                 // compute() dispatch + constraints() solver loop
+    |
+    +  DomainHolder<IR>                          // Input domain tracking
     |
     v
-Computable<Derived, IR, OR>                 // Type aliases (specialization for OR=1)
-    |
+DenseFunctionBase<Derived, IR, OR>              // Jacobian ops, indexing, math methods, KKT fill;
+    |                                            //   scalar-objective interface gated by requires(OR == 1)
     v
-DomainHolder<IR>                            // Input domain tracking
-    +
-DenseFunctionBase<Derived, IR, OR>          // Jacobian ops, indexing, math methods
-    |                                       // (OR=1 specialization: DenseScalarFunctionBase)
-    v
-DenseFunction<Derived, IR, OR>              // Routing layer (OR=1 -> scalar base)
-    |
-    v
-DenseFirstDerivatives<Derived, IR, OR, Jm> // 1st derivative strategy
+DenseFirstDerivatives<Derived, IR, OR, Jm>      // 1st derivative strategy
     |
     v
 DenseSecondDerivatives<Derived, IR, OR, Jm, Hm> // 2nd derivative strategy
     |
     v
-DenseDerivatives<Derived, IR, OR, Jm, Hm>  // Aggregates derivative layers
-    |
-    v
-VectorFunction<Derived, IR, OR, Jm, Hm>    // ** Top-level base for user types **
+VectorFunction<Derived, IR, OR, Jm, Hm>         // ** Top-level base for user types **
 ```
 
 Every concrete function (e.g., `Segment`, `Scaled`, `Norm`) inherits from `VectorFunction` and provides its own `compute_impl`, `compute_jacobian_impl`, etc.
 
-### The DenseFunction OR=1 Specialization
+### The OR=1 Scalar-Objective Interface
 
-When a function has scalar output (OR=1), `DenseFunction` routes inheritance through `DenseScalarFunctionBase` instead of `DenseFunctionBase`. This adds objective-specific methods (`objective()`, `objective_gradient()`, `objective_gradient_hessian()`) that the PSIOPT optimizer calls directly.
+When a function has scalar output (OR=1), `DenseFunctionBase` exposes objective-specific methods (`objective()`, `objective_gradient()`, `objective_gradient_hessian()`) that the PSIOPT optimizer calls directly. These are not a separate base class; they live on `DenseFunctionBase` itself and carry a C++20 `requires(OR == 1)` constraint, so they are present only when the output is scalar.
 
 ```cpp
-// OR > 1: vector output -> full DenseFunctionBase
-template <class Derived, int IR, int OR>
-struct DenseFunction : DenseFunctionBase<Derived, IR, OR> {};
-
-// OR == 1: scalar output -> DenseScalarFunctionBase (adds objective interface)
-template <class Derived, int IR>
-struct DenseFunction<Derived, IR, 1> : DenseScalarFunctionBase<Derived, IR> {};
+// In DenseFunctionBase -- present only for scalar-output functions.
+void objective(double ObjScale, ConstEigenRef<Eigen::VectorXd> X, double &Val, /* ... */)
+    requires(OR == 1);
+void objective_gradient(/* ... */) requires(OR == 1);
+void objective_gradient_hessian(/* ... */) requires(OR == 1);
 ```
 
 ### Why CRTP? Design Rationale and Alternatives
@@ -109,7 +96,8 @@ VectorFunctions must be callable with **multiple scalar types** — `double` and
 
 ```cpp
 template <class InType, class OutType>
-inline void compute_impl(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) const;
+inline void compute_impl(const Eigen::MatrixBase<InType> &x,
+                         const Eigen::MatrixBase<OutType> &fx_) const;
 ```
 
 Virtual functions cannot be templates in C++. So the two main architectural options are:
@@ -127,7 +115,7 @@ Virtual functions cannot be templates in C++. So the two main architectural opti
 
 - **Compile times:** Each unique expression tree is a unique C++ type. Deep expressions produce deeply nested template types, which are slow to compile.
 - **No runtime polymorphism:** You can't put a `Scaled<Segment<6,3,0>>` and a `Norm<3>` into the same `std::vector` without type erasure.
-- **Code complexity:** The inheritance chain (`ComputableBase` -> `Computable` -> `DenseFunctionBase` -> `DenseFunction` -> `DenseFirstDerivatives` -> `DenseSecondDerivatives` -> `DenseDerivatives` -> `VectorFunction`) is deep and hard to navigate.
+- **Code complexity:** The inheritance chain (`ComputableBase` -> `DenseFunctionBase` -> `DenseFirstDerivatives` -> `DenseSecondDerivatives` -> `VectorFunction`) is deep and hard to navigate.
 
 #### The Hybrid Approach Tycho Actually Uses
 
@@ -159,7 +147,7 @@ C++23 introduces "deducing this" (explicit object parameters, [P0847](https://wg
 template <class Derived, int IR, int OR>
 struct ComputableBase : CRTPBase<Derived> {
     template <class InType, class OutType>
-    void compute(ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_) {
+    void compute(const Eigen::MatrixBase<InType> &x, const Eigen::MatrixBase<OutType> &fx_) {
         if constexpr (!Derived::is_vectorizable) { /* ... */ }
         this->derived().compute_impl(x, fx_);
     }
@@ -169,8 +157,8 @@ struct ComputableBase : CRTPBase<Derived> {
 template <int IR, int OR>
 struct ComputableBase {
     template <class Self, class InType, class OutType>
-    void compute(this Self const& self, ConstVectorBaseRef<InType> x,
-                 ConstVectorBaseRef<OutType> fx_) {
+    void compute(this Self const& self, const Eigen::MatrixBase<InType> &x,
+                 const Eigen::MatrixBase<OutType> &fx_) {
         if constexpr (!Self::is_vectorizable) { /* ... */ }
         self.compute_impl(x, fx_);
     }
@@ -202,7 +190,7 @@ Concrete types would simplify from `VectorFunction<Norm<IR>, IR, 1>` to `VectorF
       return SEGOP::make_nested(Segment<OR,SZ,ST>(...), self);
   }
   ```
-- The **`DENSE_FUNCTION_BASE_TYPES` macro** propagates type aliases using `Derived` and would need rewriting (though it would get simpler).
+- The **`VF_TYPE_ALIASES` macro** propagates type aliases using `Derived` and would need rewriting (though it would get simpler).
 
 **Summary of pros and cons:**
 
@@ -281,7 +269,7 @@ If you set `Jm = EnzymeAD` (requires `ENABLE_ENZYME_AD=ON` at build time), you o
 
 ### Compile-Time Flags
 
-You can override these `static const bool` flags to enable optimizations:
+You can override these `static constexpr bool` flags to enable optimizations:
 
 | Flag                  | Default | Meaning                                                                                                     |
 | --------------------- | ------- | ----------------------------------------------------------------------------------------------------------- |
@@ -296,39 +284,39 @@ Here's a complete C++ VectorFunction that computes `f(x) = [x_0^2, x_1^2, ..., x
 
 ```cpp
 #include <tycho/tycho.h>
-
-namespace tycho {
+using namespace tycho;
+using namespace tycho::vf;
 
 // Square each element of the input vector
 template <int IR>
 struct CwiseSquareExample : VectorFunction<CwiseSquareExample<IR>, IR, IR> {
     using Base = VectorFunction<CwiseSquareExample<IR>, IR, IR>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 
     // Enable batch evaluation with DefaultSuperScalar
-    static const bool is_vectorizable = true;
+    static constexpr bool is_vectorizable = true;
 
     CwiseSquareExample() {}
     CwiseSquareExample(int ir) { this->set_io_rows(ir, ir); }
 
     // --- Required: compute f(x) ---
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x,
-                             ConstVectorBaseRef<OutType> fx_) const {
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        fx = x.array().square();
+    inline void compute_impl(const Eigen::MatrixBase<InType> &x,
+                             const Eigen::MatrixBase<OutType> &fx_) const {
+        Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
+        fx = x.array().square().matrix();
     }
 
     // --- Analytic Jacobian: diag(2*x) ---
     template <class InType, class OutType, class JacType>
-    inline void compute_jacobian_impl(ConstVectorBaseRef<InType> x,
-                                      ConstVectorBaseRef<OutType> fx_,
-                                      ConstMatrixBaseRef<JacType> jx_) const {
+    inline void compute_jacobian_impl(const Eigen::MatrixBase<InType> &x,
+                                      const Eigen::MatrixBase<OutType> &fx_,
+                                      const Eigen::MatrixBase<JacType> &jx_) const {
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
+        Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
+        Eigen::MatrixBase<JacType> &jx = jx_.const_cast_derived();
 
-        fx = x.array().square();
+        fx = x.array().square().matrix();
         jx.diagonal() = x * Scalar(2.0);
     }
 
@@ -336,25 +324,23 @@ struct CwiseSquareExample : VectorFunction<CwiseSquareExample<IR>, IR, IR> {
     template <class InType, class OutType, class JacType,
               class AdjGradType, class AdjHessType, class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
-        ConstVectorBaseRef<InType> x, ConstVectorBaseRef<OutType> fx_,
-        ConstMatrixBaseRef<JacType> jx_, ConstVectorBaseRef<AdjGradType> adjgrad_,
-        ConstMatrixBaseRef<AdjHessType> adjhess_,
-        ConstVectorBaseRef<AdjVarType> adjvars) const {
+        const Eigen::MatrixBase<InType> &x, const Eigen::MatrixBase<OutType> &fx_,
+        const Eigen::MatrixBase<JacType> &jx_, const Eigen::MatrixBase<AdjGradType> &adjgrad_,
+        const Eigen::MatrixBase<AdjHessType> &adjhess_,
+        const Eigen::MatrixBase<AdjVarType> &adjvars) const {
 
         typedef typename InType::Scalar Scalar;
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        MatrixBaseRef<JacType> jx = jx_.const_cast_derived();
-        VectorBaseRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
-        MatrixBaseRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
+        Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
+        Eigen::MatrixBase<JacType> &jx = jx_.const_cast_derived();
+        Eigen::MatrixBase<AdjGradType> &adjgrad = adjgrad_.const_cast_derived();
+        Eigen::MatrixBase<AdjHessType> &adjhess = adjhess_.const_cast_derived();
 
-        fx = x.array().square();
+        fx = x.array().square().matrix();
         jx.diagonal() = x * Scalar(2.0);
         adjgrad = jx.transpose() * adjvars;
         adjhess.diagonal() = adjvars * Scalar(2.0);
     }
 };
-
-} // namespace tycho
 ```
 
 ### Using EnzymeAD Instead of Manual Derivatives
@@ -367,9 +353,9 @@ template <int IR>
 struct CwiseSquareEnzyme : VectorFunction<CwiseSquareEnzyme<IR>, IR, IR,
                                           EnzymeAD, EnzymeAD> {
     using Base = VectorFunction<CwiseSquareEnzyme<IR>, IR, IR, EnzymeAD, EnzymeAD>;
-    DENSE_FUNCTION_BASE_TYPES(Base);
+    VF_TYPE_ALIASES(Base);
 
-    static const bool is_vectorizable = true;
+    static constexpr bool is_vectorizable = true;
 
     CwiseSquareEnzyme() {}
     CwiseSquareEnzyme(int ir) { this->set_io_rows(ir, ir); }
@@ -377,10 +363,10 @@ struct CwiseSquareEnzyme : VectorFunction<CwiseSquareEnzyme<IR>, IR, IR,
     // Only compute_impl is needed -- Enzyme generates Jacobians and Hessians
     // at compile time via LLVM IR differentiation (no dual numbers required).
     template <class InType, class OutType>
-    inline void compute_impl(ConstVectorBaseRef<InType> x,
-                             ConstVectorBaseRef<OutType> fx_) const {
-        VectorBaseRef<OutType> fx = fx_.const_cast_derived();
-        fx = x.array().square();
+    inline void compute_impl(const Eigen::MatrixBase<InType> &x,
+                             const Eigen::MatrixBase<OutType> &fx_) const {
+        Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
+        fx = x.array().square().matrix();
     }
 };
 ```
@@ -514,8 +500,8 @@ differentiate. If a `compute_impl` body marked `is_vectorizable = true` calls
 #include <tycho/math.h>
 
 template <class InType, class OutType>
-inline void compute_impl(ConstVectorBaseRef<InType> x,
-                         ConstVectorBaseRef<OutType> fx_) const {
+inline void compute_impl(const Eigen::MatrixBase<InType> &x,
+                         const Eigen::MatrixBase<OutType> &fx_) const {
     using tycho::math::cos;   // ADL hits both double (-> std::cos) and
     using tycho::math::sin;   // Eigen::Array<double, W, 1> (-> per-lane libm).
     // ...
@@ -877,7 +863,7 @@ In Python, the same operators and functions are available:
 
 ```python
 import tychopy as typy
-vf = typy.VectorFunctions
+vf = typy.vector_functions
 Args = vf.Arguments
 
 args = Args(3)
@@ -1033,8 +1019,8 @@ During a single PSIOPT iteration:
 
 ```python
 import tychopy as typy
-vf = typy.VectorFunctions
-oc = typy.OptimalControl
+vf = typy.vector_functions
+oc = typy.optimal_control
 Args = vf.Arguments
 ```
 
@@ -1195,8 +1181,8 @@ The classic minimum-time brachistochrone: find the wire shape that lets a bead s
 import numpy as np
 import tychopy as typy
 
-vf = typy.VectorFunctions
-oc = typy.OptimalControl
+vf = typy.vector_functions
+oc = typy.optimal_control
 
 class Brachistochrone(oc.ODEBase):
     def __init__(self, g):
@@ -1369,29 +1355,19 @@ auto ode = StackedOutputs{p, ...};  // StackedOutputs<VectorScalarFunctionProduc
 
 ```
 InputOutputSize<IR,OR>
- + CRTPBase<Derived>
     |
     v
 ComputableBase<Derived,IR,OR>          CORE: compute(), constraints(), gatherInput()
+ + DomainHolder<IR>                     Input domain tracking
     |
     v
-Computable<Derived,IR,OR>              Aliases (OR=1 specialization exists)
- + DomainHolder<IR>
-    |
-    v
-DenseFunctionBase<Derived,IR,OR>       CORE: jacobian ops, indexing, math, KKT fill
-    |                                    OR=1 --> DenseScalarFunctionBase (objective interface)
-    v
-DenseFunction<Derived,IR,OR>           Routing: OR=1 -> DenseScalarFunctionBase
-    |
+DenseFunctionBase<Derived,IR,OR>       CORE: jacobian ops, indexing, math, KKT fill;
+    |                                    objective interface gated by requires(OR == 1)
     v
 DenseFirstDerivatives<Derived,IR,OR,Jm>   Jacobian strategy (Analytic/EnzymeAD/FDiff)
     |
     v
 DenseSecondDerivatives<Derived,IR,OR,Jm,Hm>  Hessian strategy
-    |
-    v
-DenseDerivatives<Derived,IR,OR,Jm,Hm>       Aggregate
     |
     v
 VectorFunction<Derived,IR,OR,Jm,Hm>         ** BASE FOR ALL USER TYPES **
@@ -1423,7 +1399,7 @@ VectorFunction<Derived,IR,OR,Jm,Hm>         ** BASE FOR ALL USER TYPES **
     |--- FunctionPlusVector<Func>
     |--- PaddedOutput<Func,UP,LP>
     |--- MatrixFunctionView<Func,MR,MC,Major>
-    |--- Conditional<Func>
+    |--- GenericConditional<IR>  /  GenericComparative<IR>
     |
     |--- GenericFunction<IR,OR>  (TYPE ERASURE via rubber_types)
 ```
@@ -1439,10 +1415,9 @@ include/tycho/detail/vf/
     core/                         Core VectorFunction infrastructure
         vector_function.h         Top-level struct + VectorExpression + BUILD_* macros
         computable_base.h         compute() dispatch, constraints() solver interface
-        computable.h              Minimal wrapper, OR=1 specialization
-        dense_function_base.h     Jacobian ops, indexing, math, KKT fill
-        dense_scalar_function_base.h  objective/gradient/hessian interface (OR=1)
-        dense_function.h          DenseFunction -> DenseScalarFunctionBase routing
+        dense_function_base.h     Jacobian ops, indexing, math, KKT fill;
+                                    objective/gradient/hessian interface gated by requires(OR == 1)
+        eigen_ref_aliases.h       CVecRef/VecRef/CMatRef Eigen reference aliases
         function_domains.h        SingleDomain, CompositeDomain, DomainHolder
         input_output_size.h       Static/dynamic size storage
         functional_flags.h        ParsedIOFlags, VarTypes enums
@@ -1451,7 +1426,7 @@ include/tycho/detail/vf/
         dense_function_specs.h    Concepts for compute/jacobian interfaces
         expression_fwd_declarations.h  forward declarations for expression types
         function_templates.h      CRTP helper templates
-        function_type_def_macros.h    BUILD_VF_TYPEDEFS and related macros
+        function_type_def_macros.h    VF_TYPE_ALIASES and related macros
         object_detectors.h        Is_VectorFunction, Is_DenseFunction traits
         sparse_function_base.h    SparseFunctionBase (solver-interface layer)
         vector_function_concepts.h    C++20 concepts for VectorFunction types
