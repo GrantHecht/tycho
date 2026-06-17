@@ -79,11 +79,13 @@ cd build && ninja -j6 all
 :::{tab-item} Windows x64
 The Windows build uses LLVM/Clang with the `clang-cl` frontend and **Intel
 oneAPI MKL**. Install LLVM (with `clang-cl` and `lld-link`), Ninja, and MKL; the
-preset hard-codes the LLVM paths (see `CMakePresets.json`).
+preset hard-codes the LLVM paths (see `CMakePresets.json`). This preset builds
+into `out/build/x64-Clang-Release/`, so build it through the preset rather than
+`cd`-ing into a directory:
 
 ```bat
 cmake --preset x64-Clang-Release
-cd build & ninja -j6 all
+cmake --build --preset x64-Clang-Release
 ```
 :::
 ::::
