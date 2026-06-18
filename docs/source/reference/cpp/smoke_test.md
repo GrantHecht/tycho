@@ -1,3 +1,7 @@
+---
+orphan: true
+---
+
 # Smoke Test (Pipeline Verification)
 
 Minimal Breathe directives that exercise the Doxygen → Breathe → Sphinx

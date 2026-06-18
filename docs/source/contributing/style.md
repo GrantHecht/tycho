@@ -36,7 +36,7 @@ conda run -n tycho ruff check --select I --fix .
 Configuration is in `pyproject.toml`. Line length is 88 (Black default).
 `dep/` and `build/` are excluded automatically.
 
-## Naming Conventions
+## Naming conventions
 
 | Symbol kind                         | Convention             | Example                                |
 | ----------------------------------- | ---------------------- | -------------------------------------- |
@@ -52,7 +52,7 @@ C++ method `add_boundary_value(...)` becomes
 exist for legacy nanobind methods named `adjointgradient`,
 `adjointhessian`, and `computeall`; do not introduce new exceptions.
 
-## C++ Docstring Style (Doxygen JavaDoc)
+## C++ docstring style (Doxygen JavaDoc)
 
 New and public code uses **JavaDoc `@`-style** Doxygen comments —
 `@brief`, `@param`, `@return`, etc. — in preference to the older
@@ -143,7 +143,7 @@ inline void compute(CVecRef<InType> x, CVecRef<OutType> fx_) const;
 Tycho ships a small set of custom Doxygen aliases for recurring
 patterns; see the `ALIASES` block in `docs/Doxyfile.in`.
 
-## Python Docstring Style (NumPy + napoleon)
+## Python docstring style (NumPy + napoleon)
 
 The Python side uses **NumPy-style** docstrings, rendered by the
 Sphinx [napoleon](https://www.sphinx-doc.org/en/master/usage/extensions/napoleon.html)

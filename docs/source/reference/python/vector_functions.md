@@ -16,8 +16,9 @@ $f : \mathbb{R}^{n} \to \mathbb{R}^{m}$. You build one by composing the
 {py:class}`~tychopy.vector_functions.Arguments` placeholder with the elementwise math functions,
 vector operations, and composition helpers documented here; the resulting
 object evaluates its primal, Jacobian, and Hessian on demand. For the
-conceptual model see the {doc}`Explanation </explanation/index>` section; for
-a hands-on introduction see the {doc}`Tutorials </tutorials/basics/index>`.
+conceptual model see {doc}`The VectorFunction model </explanation/vector_function>`;
+for a hands-on introduction see the
+{doc}`first-VectorFunction tutorial </tutorials/basics/your_first_vectorfunction>`.
 
 ## Argument construction
 
@@ -51,6 +52,9 @@ The base wrapper types returned by composition.
 {py:class}`~tychopy.vector_functions.VectorFunction` is the vector-valued
 base; {py:class}`~tychopy.vector_functions.ScalarFunction` is its
 scalar-output counterpart.
+{py:class}`~tychopy.vector_functions.Comparative` and
+{py:class}`~tychopy.vector_functions.Conditional` are the type-erased wrappers
+produced by the min/max helpers and by `ifelse`, respectively.
 
 ```{eval-rst}
 .. autoclass:: VectorFunction
@@ -107,7 +111,8 @@ Scalar elementwise functions. Each accepts a scalar-valued VectorFunction
 ## Vector operations
 
 Operations over vector-valued VectorFunctions: norms, normalization, and
-the inner/outer/cross products.
+the inner/outer/cross products. `normalize` is an alias of `normalized` (both
+return $x/\lVert x\rVert$); use whichever reads better.
 
 ```{eval-rst}
 .. autofunction:: norm

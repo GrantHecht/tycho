@@ -31,19 +31,19 @@ Install Tycho into a conda environment and verify your setup.
 :::{grid-item-card} Tutorials
 :link: tutorials/index
 :link-type: doc
-Learning-oriented walkthroughs. Start by composing VectorFunctions.
+Hands-on walkthroughs. Build and differentiate your first VectorFunction.
 :::
 
 :::{grid-item-card} How-to Guides
 :link: how_to/index
 :link-type: doc
-Task-oriented recipes for common Tycho workflows.
+Short, problem-first recipes for common tasks — a growing collection.
 :::
 
 :::{grid-item-card} Reference
 :link: reference/index
 :link-type: doc
-Complete Python and C++ API reference.
+Python and C++ API reference for the VectorFunction subsystem.
 :::
 
 :::{grid-item-card} Explanation

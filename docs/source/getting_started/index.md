@@ -1,8 +1,9 @@
 # Getting Started
 
-Install Tycho into a conda environment and verify your setup. When you are ready
-to build something, head to the
-{doc}`first-VectorFunction tutorial </tutorials/basics/your_first_vectorfunction>`.
+Get Tycho built into a conda environment and confirm `import tychopy` works,
+then head to the
+{doc}`first-VectorFunction tutorial </tutorials/basics/your_first_vectorfunction>`
+to build something.
 
 ```{toctree}
 :maxdepth: 2

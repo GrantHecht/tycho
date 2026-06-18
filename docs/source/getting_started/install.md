@@ -102,7 +102,7 @@ your environment's `site-packages`.
 ## 4. Verify the install
 
 ```bash
-python -c "import tychopy; from tychopy import vector_functions as vf; print(vf.Arguments(3).compute([1.0, 2.0, 3.0]))"
+python -c "from tychopy import vector_functions as vf; print(vf.Arguments(3).compute([1.0, 2.0, 3.0]))"
 ```
 
 You should see `[1. 2. 3.]` — the identity VectorFunction evaluated at

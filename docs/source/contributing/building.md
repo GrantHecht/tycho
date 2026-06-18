@@ -177,7 +177,7 @@ The docs build is opt-in via the `BUILD_SPHINX_DOCS` CMake option.
 pip install -e ".[docs]"                       # Sphinx + theme + extensions (also compiles _tychopy)
 cmake --preset <preset-name> -DBUILD_SPHINX_DOCS=ON
 cd build && ninja tycho_docs
-xdg-open docs/html/index.html                  # or `open` on macOS
+xdg-open docs/html/index.html                  # from build/; or `open` on macOS
 ```
 
 Because the build backend is scikit-build-core, the editable
@@ -195,8 +195,9 @@ Additional docs targets:
 
 - `tycho_doxygen` — Doxygen XML output only (fast, no Sphinx)
 - `tycho_docs_doctest` — runs `>>> ` doctest blocks
-- `tycho_docs_linkcheck` — checks every external URL
-- `tycho_docs_serve` — Sphinx live-reload server on port 8000
+- `tycho_docs_linkcheck` — checks external URLs (network-bound, slow)
+- `tycho_docs_serve` — static HTTP preview on port 8000 (serves the last
+  built HTML; re-run `ninja tycho_docs` to refresh)
 - `tycho_docs_clean` — wipes the HTML and Doxygen output trees
 
 If you edit any binding signature or Python-side docstring inside a
