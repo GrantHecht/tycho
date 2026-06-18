@@ -34,37 +34,57 @@ using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;
 
+/// @ingroup optimal_control
+/// @brief 2-D cubic/linear interpolation table over a scalar field @f$z(x,y)@f$.
+///
+/// Stores a scalar field sampled on a rectilinear @f$(x,y)@f$ grid and
+/// interpolates it (and its gradient and Hessian) with bicubic or bilinear
+/// interpolation. Exposed to expressions via @ref InterpFunction2D.
 struct InterpTable2D {
 
-    using MatType = Eigen::Matrix<double, -1, -1, Eigen::RowMajor>;
+    using MatType =
+        Eigen::Matrix<double, -1, -1, Eigen::RowMajor>; ///< @brief Row-major double matrix.
 
   private:
     // Cached derivative state: mutating any of these without rerunning
     // calc_derivs() corrupts cubic evaluation. Access only via set_data().
-    Eigen::VectorXd xs_;
-    Eigen::VectorXd ys_;
-    MatType zs_;
-    MatType dzxs_;
-    MatType dzys_;
-    MatType dzys_dxs_;
-    Eigen::Matrix<Eigen::Array4d, -1, -1, Eigen::RowMajor> all_dat_;
-    InterpType interp_kind_ = InterpType::Cubic;
+    Eigen::VectorXd xs_; ///< X grid coordinates (ascending).
+    Eigen::VectorXd ys_; ///< Y grid coordinates (ascending).
+    MatType zs_;         ///< Field values @f$z(x,y)@f$.
+    MatType dzxs_;       ///< Cached @f$\partial z/\partial x@f$ at grid nodes.
+    MatType dzys_;       ///< Cached @f$\partial z/\partial y@f$ at grid nodes.
+    MatType dzys_dxs_;   ///< Cached @f$\partial^2 z/\partial x\partial y@f$ at grid nodes.
+    Eigen::Matrix<Eigen::Array4d, -1, -1, Eigen::RowMajor>
+        all_dat_;                                ///< Per-cell coefficient cache.
+    InterpType interp_kind_ = InterpType::Cubic; ///< Interpolation kind.
 
   public:
-    bool xeven_ = true;
-    bool yeven_ = true;
-    int xsize_;
-    double xtotal_;
-    int ysize_;
-    double ytotal_;
+    bool xeven_ = true; ///< Whether the X grid is evenly spaced.
+    bool yeven_ = true; ///< Whether the Y grid is evenly spaced.
+    int xsize_;         ///< Number of X grid nodes.
+    double xtotal_;     ///< Total X span.
+    int ysize_;         ///< Number of Y grid nodes.
+    double ytotal_;     ///< Total Y span.
 
+    /// @brief Default constructor; produces an empty table (call @ref set_data first).
     InterpTable2D() {}
 
+    /// @brief Construct from grid coordinates and a field matrix.
+    /// @param Xs    X grid coordinates (ascending, length >= 5).
+    /// @param Ys    Y grid coordinates (ascending, length >= 5).
+    /// @param Zs    Field values (rows index Y, cols index X).
+    /// @param kind  Interpolation kind.
     InterpTable2D(const Eigen::VectorXd &Xs, const Eigen::VectorXd &Ys, const MatType &Zs,
                   InterpType kind) {
         set_data(Xs, Ys, Zs, kind);
     }
 
+    /// @brief Set the table data and (for cubic mode) precompute derivatives.
+    /// @param Xs    X grid coordinates (ascending, length >= 5).
+    /// @param Ys    Y grid coordinates (ascending, length >= 5).
+    /// @param Zs    Field values (rows index Y, cols index X).
+    /// @param kind  Interpolation kind.
+    /// @throws std::invalid_argument on too-few nodes, size mismatch, or non-ascending grids.
     void set_data(const Eigen::VectorXd &Xs, const Eigen::VectorXd &Ys, const MatType &Zs,
                   InterpType kind) {
 
@@ -124,6 +144,9 @@ struct InterpTable2D {
             calc_derivs();
     }
 
+    /// @internal
+    /// @brief Precompute the grid-node partial derivatives used by bicubic interpolation.
+    /// @endinternal
     void calc_derivs() {
         dzxs_.resize(ysize_, xsize_);
         dzys_.resize(ysize_, xsize_);
@@ -208,6 +231,12 @@ struct InterpTable2D {
         }
     }
 
+    /// @internal
+    /// @brief Find the grid interval index containing a value (uneven-grid search).
+    /// @param vals  Ascending grid coordinates.
+    /// @param v     Query value.
+    /// @return Index of the lower node of the containing interval.
+    /// @endinternal
     int find_elem(const Eigen::VectorXd &vals, double v) const {
         int center = int(vals.size() / 2);
         int shift = (vals[center] > v) ? 0 : center;
@@ -216,6 +245,12 @@ struct InterpTable2D {
         return elem;
     }
 
+    /// @internal
+    /// @brief Locate the grid cell containing @f$(x,y)@f$.
+    /// @param x  Query x coordinate.
+    /// @param y  Query y coordinate.
+    /// @return Tuple of {x-interval index, y-interval index}.
+    /// @endinternal
     std::tuple<int, int> get_xyelems(double x, double y) const {
         int xelem, yelem;
 
@@ -244,6 +279,12 @@ struct InterpTable2D {
         return std::tuple{xelem, yelem};
     }
 
+    /// @internal
+    /// @brief Build the 4x4 bicubic coefficient matrix for one grid cell.
+    /// @param xelem  X-interval index.
+    /// @param yelem  Y-interval index.
+    /// @return The bicubic coefficient matrix for the cell.
+    /// @endinternal
     Eigen::Matrix4<double> get_amatrix(int xelem, int yelem) const {
 
         double xstep = xs_[xelem + 1] - xs_[xelem];
@@ -285,6 +326,16 @@ struct InterpTable2D {
         return a;
     }
 
+    /// @internal
+    /// @brief Core interpolation kernel writing the value and requested derivatives.
+    /// @param x       Query x coordinate.
+    /// @param y       Query y coordinate.
+    /// @param deriv   Highest derivative order to compute (0, 1, or 2).
+    /// @param z       Output interpolated value.
+    /// @param dzxy    Output gradient @f$[\partial_x z, \partial_y z]@f$ (if @p deriv > 0).
+    /// @param d2zxy   Output Hessian (if @p deriv > 1).
+    /// @throws std::invalid_argument if @p x or @p y is outside the table range.
+    /// @endinternal
     void interp_impl(double x, double y, int deriv, double &z, Eigen::Vector2<double> &dzxy,
                      Eigen::Matrix2<double> &d2zxy) const {
 
@@ -376,6 +427,10 @@ struct InterpTable2D {
         }
     }
 
+    /// @brief Interpolate the field value at a point.
+    /// @param x  Query x coordinate.
+    /// @param y  Query y coordinate.
+    /// @return The interpolated value.
     double interp(double x, double y) const {
 
         double z;
@@ -386,6 +441,10 @@ struct InterpTable2D {
         return z;
     }
 
+    /// @brief Interpolate the field value at a grid of points.
+    /// @param x_vals  X coordinates of the query points.
+    /// @param y_vals  Y coordinates of the query points (same shape as @p x_vals).
+    /// @return Matrix of interpolated values.
     MatType interp(const MatType &x_vals, const MatType &y_vals) const {
         MatType z_out(x_vals.rows(), x_vals.cols());
 
@@ -397,6 +456,10 @@ struct InterpTable2D {
         return z_out;
     }
 
+    /// @brief Interpolate the value and gradient at a point.
+    /// @param x  Query x coordinate.
+    /// @param y  Query y coordinate.
+    /// @return Tuple of {value, gradient}.
     std::tuple<double, Eigen::Vector2<double>> interp_deriv1(double x, double y) const {
         double z;
         Eigen::Vector2<double> dzxy;
@@ -407,6 +470,10 @@ struct InterpTable2D {
         return std::tuple{z, dzxy}; // intellisense is confused pls ignore
     }
 
+    /// @brief Interpolate the value, gradient, and Hessian at a point.
+    /// @param x  Query x coordinate.
+    /// @param y  Query y coordinate.
+    /// @return Tuple of {value, gradient, Hessian}.
     std::tuple<double, Eigen::Vector2<double>, Eigen::Matrix2<double>>
     interp_deriv2(double x, double y) const {
         double z;
@@ -419,23 +486,48 @@ struct InterpTable2D {
     }
 };
 
+/// @ingroup optimal_control
+/// @brief VectorFunction wrapping an @ref InterpTable2D as a function of @f$(x,y)@f$.
+///
+/// Maps a 2-vector input to the interpolated scalar field value, with analytic
+/// gradient and Hessian, for composition into VectorFunction expressions.
 struct InterpFunction2D : VectorFunction<InterpFunction2D, 2, 1, DenseDerivativeMode::Analytic,
                                          DenseDerivativeMode::Analytic> {
+    /// @brief Convenience alias for the VectorFunction CRTP base class.
     using Base = VectorFunction<InterpFunction2D, 2, 1, DenseDerivativeMode::Analytic,
                                 DenseDerivativeMode::Analytic>;
     VF_TYPE_ALIASES(Base);
 
-    std::shared_ptr<InterpTable2D> tab;
+    std::shared_ptr<InterpTable2D> tab; ///< The interpolation table being wrapped.
 
+    /// @brief Default constructor; leaves the table unset.
     InterpFunction2D() {}
+    /// @brief Construct from an interpolation table.
+    /// @param tab  The table to wrap.
     InterpFunction2D(std::shared_ptr<InterpTable2D> tab) : tab(tab) { this->set_io_rows(2, 1); }
 
+    /// @internal
+    /// @brief Evaluate the interpolated value at the input point.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @param x    Input @c [x, y].
+    /// @param fx_  Output value (1-vector) to write.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         fx[0] = this->tab->interp(x[0], x[1]);
     }
+    /// @internal
+    /// @brief Evaluate the interpolated value and gradient (Jacobian).
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @tparam JacType  Eigen Jacobian-matrix type.
+    /// @param x    Input @c [x, y].
+    /// @param fx_  Output value (1-vector) to write.
+    /// @param jx_  Output Jacobian (gradient) to write.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -447,6 +539,21 @@ struct InterpFunction2D : VectorFunction<InterpFunction2D, 2, 1, DenseDerivative
         fx[0] = z;
         jx = dzdx.transpose();
     }
+    /// @internal
+    /// @brief Evaluate the value, Jacobian, adjoint gradient, and adjoint Hessian.
+    /// @tparam InType       Eigen input-vector type.
+    /// @tparam OutType      Eigen output-vector type.
+    /// @tparam JacType      Eigen Jacobian-matrix type.
+    /// @tparam AdjGradType  Eigen adjoint-gradient vector type.
+    /// @tparam AdjHessType  Eigen adjoint-Hessian matrix type.
+    /// @tparam AdjVarType   Eigen adjoint-variable vector type.
+    /// @param x        Input @c [x, y].
+    /// @param fx_      Output value (1-vector) to write.
+    /// @param jx_      Output Jacobian to write.
+    /// @param adjgrad_ Output adjoint gradient to write.
+    /// @param adjhess_ Output adjoint Hessian to write.
+    /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(

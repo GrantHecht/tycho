@@ -29,12 +29,24 @@ using vf::ThreadingFlags;
 using vf::VectorExpression;
 using vf::VectorFunction;
 
+/// @internal
+/// @brief Compile-time input/output sizes of a collocation defect function.
+///
+/// Derives the packed-input and output row counts of a defect constraint from
+/// the ODE dimensions and the number of cardinal states per interval.
+/// @tparam _CS    Number of cardinal states per defect interval.
+/// @tparam ODEXV  ODE state-vector dimension.
+/// @tparam ODEUV  ODE control-vector dimension.
+/// @tparam ODEPV  ODE parameter-vector dimension.
+/// @endinternal
 template <int _CS, int ODEXV, int ODEUV, int ODEPV> struct DefectConstSizes {
-    static constexpr int CS = _CS;
-    static constexpr int IS = SZ_NEG<CS - 1>::value;
-    static constexpr int XTU = SZ_SUM<ODEXV, ODEUV, 1>::value;
-    static constexpr int DefIRC = SZ_SUM<SZ_PROD<CS, XTU>::value, ODEPV>::value;
-    static constexpr int DefORC = SZ_PROD<IS, ODEXV>::value;
+    static constexpr int CS = _CS;                   ///< Cardinal states per interval.
+    static constexpr int IS = SZ_NEG<CS - 1>::value; ///< Number of interior states.
+    static constexpr int XTU =
+        SZ_SUM<ODEXV, ODEUV, 1>::value; ///< State + time + control dimension.
+    static constexpr int DefIRC =
+        SZ_SUM<SZ_PROD<CS, XTU>::value, ODEPV>::value;       ///< Defect input row count.
+    static constexpr int DefORC = SZ_PROD<IS, ODEXV>::value; ///< Defect output row count.
 };
 
 } // namespace tycho::oc

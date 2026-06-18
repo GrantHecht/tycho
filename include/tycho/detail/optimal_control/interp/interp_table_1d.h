@@ -33,36 +33,56 @@ using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;
 
+/// @ingroup optimal_control
+/// @brief 1-D cubic/linear interpolation table over sampled vector data.
+///
+/// Stores vector-valued samples @f$v(t)@f$ on a 1-D grid of times and
+/// interpolates them (and their first and second time derivatives) with either
+/// cubic-Hermite or linear interpolation. Used to inject tabulated data into
+/// VectorFunction expressions via @ref InterpFunction1D.
 struct InterpTable1D {
 
-    using MatType = Eigen::Matrix<double, -1, -1>;
+    using MatType = Eigen::Matrix<double, -1, -1>; ///< @brief Dense double matrix type.
 
   private:
     // Cached derivative state: mutating any of these without rerunning
     // calc_derivs() corrupts cubic evaluation. Access only via set_data().
-    Eigen::VectorXd ts_;
-    MatType vs_;
-    MatType dvs_dts_;
-    InterpType interp_kind_ = InterpType::Cubic;
+    Eigen::VectorXd ts_; ///< Sample times (ascending).
+    MatType vs_;         ///< Sample values (columns are time samples).
+    MatType dvs_dts_;    ///< Cached per-sample time derivatives (cubic mode).
+    InterpType interp_kind_ = InterpType::Cubic; ///< Interpolation kind.
 
   public:
-    bool teven_ = true;
-    int axis_ = 0;
-    int tsize_;
-    double ttotal_;
-    int vlen_;
+    bool teven_ = true; ///< Whether the time grid is evenly spaced.
+    int axis_ = 0;      ///< Axis along which values are stored (0 or 1).
+    int tsize_;         ///< Number of time samples.
+    double ttotal_;     ///< Total time span.
+    int vlen_;          ///< Length of each value vector.
 
+    /// @brief Default constructor; produces an empty table (call @ref set_data first).
     InterpTable1D() {}
 
+    /// @brief Construct from a time grid and a value matrix.
+    /// @param Ts    Sample times (ascending, length >= 5).
+    /// @param Vs    Sample values.
+    /// @param axis  Axis of @p Vs that indexes time (0 or 1).
+    /// @param kind  Interpolation kind.
     InterpTable1D(const Eigen::VectorXd &Ts, const MatType &Vs, int axis, InterpType kind) {
         set_data(Ts, Vs, axis, kind);
     }
-    // VectorXd value input is 1-dimensional, so axis is not user-selectable —
-    // the data is always stored along axis 1 internally.
+    /// @brief Construct a scalar-valued table from a time grid and a value vector.
+    /// @param Ts    Sample times (ascending, length >= 5).
+    /// @param Vs    Sample values (one per time).
+    /// @param kind  Interpolation kind.
     InterpTable1D(const Eigen::VectorXd &Ts, const Eigen::VectorXd &Vs, InterpType kind) {
         MatType Vstmp = Vs.transpose();
         set_data(Ts, Vstmp, 1, kind);
     }
+    /// @brief Construct from a list of value-plus-time vectors.
+    /// @param Vts   Each vector packs the values and a time coordinate.
+    /// @param tvar  Index of the time coordinate within each vector (negative counts from end).
+    /// @param kind  Interpolation kind.
+    /// @throws std::invalid_argument if the input is empty, malformed, or @p tvar is out of range.
     InterpTable1D(const std::vector<Eigen::VectorXd> &Vts, int tvar, InterpType kind) {
 
         if (Vts.size() == 0) {
@@ -101,6 +121,13 @@ struct InterpTable1D {
         set_data(Ts, Vs, 1, kind);
     }
 
+    /// @brief Set the table data and (for cubic mode) precompute derivatives.
+    /// @param Ts    Sample times (ascending, length >= 5).
+    /// @param Vs    Sample values.
+    /// @param axis  Axis of @p Vs that indexes time (0 or 1).
+    /// @param kind  Interpolation kind.
+    /// @throws std::invalid_argument if @p axis is invalid, fewer than 5 times are given,
+    ///         sizes mismatch, or times are not ascending.
     void set_data(const Eigen::VectorXd &Ts, const MatType &Vs, int axis, InterpType kind) {
 
         this->ts_ = Ts;
@@ -147,6 +174,9 @@ struct InterpTable1D {
             calc_derivs();
     }
 
+    /// @internal
+    /// @brief Precompute the per-sample time derivatives used by cubic interpolation.
+    /// @endinternal
     void calc_derivs() {
 
         this->dvs_dts_.resize(this->vlen_, this->tsize_);
@@ -194,6 +224,11 @@ struct InterpTable1D {
         }
     }
 
+    /// @internal
+    /// @brief Locate the grid interval index containing time @p t.
+    /// @param t  Query time.
+    /// @return Index of the lower grid node of the containing interval.
+    /// @endinternal
     int get_telem(double t) const {
         int telem;
         if (this->teven_) {
@@ -212,6 +247,16 @@ struct InterpTable1D {
         return telem;
     }
 
+    /// @internal
+    /// @brief Core interpolation kernel writing the value and requested derivatives.
+    /// @tparam VType  The value-vector type.
+    /// @param t        Query time.
+    /// @param deriv    Highest derivative order to compute (0, 1, or 2).
+    /// @param v        Output interpolated value.
+    /// @param dv_dt    Output first time derivative (if @p deriv > 0).
+    /// @param dv2_dt2  Output second time derivative (if @p deriv > 1).
+    /// @throws std::invalid_argument if @p t is outside the table range.
+    /// @endinternal
     template <class VType>
     void interp_impl(double t, int deriv, VType &v, VType &dv_dt, VType &dv2_dt2) const {
 
@@ -272,6 +317,9 @@ struct InterpTable1D {
         }
     }
 
+    /// @brief Interpolate the value at a single time.
+    /// @param t  Query time.
+    /// @return The interpolated value vector.
     Eigen::VectorXd interp(double t) const {
 
         Eigen::VectorXd v;
@@ -280,6 +328,9 @@ struct InterpTable1D {
         return v;
     }
 
+    /// @brief Interpolate the value at several times.
+    /// @param t_vals  Query times.
+    /// @return Matrix of interpolated values (one column per query time).
     Eigen::MatrixXd interp(const Eigen::VectorXd &t_vals) const {
 
         Eigen::MatrixXd v_out;
@@ -296,6 +347,9 @@ struct InterpTable1D {
         return v_out;
     }
 
+    /// @brief Interpolate the value and its first time derivative at a time.
+    /// @param t  Query time.
+    /// @return Tuple of {value, d/dt}.
     std::tuple<Eigen::VectorXd, Eigen::VectorXd> interp_deriv1(double t) const {
 
         Eigen::VectorXd v;
@@ -308,6 +362,9 @@ struct InterpTable1D {
         return std::tuple{v, dv_dt};
     }
 
+    /// @brief Interpolate the value and its first and second time derivatives at a time.
+    /// @param t  Query time.
+    /// @return Tuple of {value, d/dt, d2/dt2}.
     std::tuple<Eigen::VectorXd, Eigen::VectorXd, Eigen::VectorXd> interp_deriv2(double t) const {
 
         Eigen::VectorXd v;
@@ -323,21 +380,39 @@ struct InterpTable1D {
     }
 };
 
+/// @ingroup optimal_control
+/// @brief VectorFunction wrapping an @ref InterpTable1D as a function of time.
+///
+/// Maps a scalar time input to the interpolated table value, with analytic first
+/// and second derivatives, so tabulated data can be composed into VectorFunction
+/// expressions.
+/// @tparam ORR  Compile-time output dimension (table value length).
 template <int ORR>
 struct InterpFunction1D
     : VectorFunction<InterpFunction1D<ORR>, 1, ORR, DenseDerivativeMode::Analytic,
                      DenseDerivativeMode::Analytic> {
+    /// @brief Convenience alias for the VectorFunction CRTP base class.
     using Base = VectorFunction<InterpFunction1D<ORR>, 1, ORR, DenseDerivativeMode::Analytic,
                                 DenseDerivativeMode::Analytic>;
     VF_TYPE_ALIASES(Base);
 
-    std::shared_ptr<InterpTable1D> tab;
+    std::shared_ptr<InterpTable1D> tab; ///< The interpolation table being wrapped.
 
+    /// @brief Default constructor; leaves the table unset.
     InterpFunction1D() {}
+    /// @brief Construct from an interpolation table.
+    /// @param tab  The table to wrap.
     InterpFunction1D(std::shared_ptr<InterpTable1D> tab) : tab(tab) {
         this->set_io_rows(1, tab->vlen_);
     }
 
+    /// @internal
+    /// @brief Evaluate the interpolated value at the input time.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @param x    Input time (1-vector).
+    /// @param fx_  Output interpolated-value vector to write.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
@@ -351,6 +426,15 @@ struct InterpFunction1D
         tycho::utils::BumpAllocator::allocate_run(Impl,
                                                   TempSpec<Output<Scalar>>(this->output_rows(), 1));
     }
+    /// @internal
+    /// @brief Evaluate the interpolated value and its time derivative (Jacobian).
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @tparam JacType  Eigen Jacobian-matrix type.
+    /// @param x    Input time (1-vector).
+    /// @param fx_  Output interpolated-value vector to write.
+    /// @param jx_  Output Jacobian (d/dt) to write.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -368,6 +452,21 @@ struct InterpFunction1D
                                                   TempSpec<Output<Scalar>>(this->output_rows(), 1),
                                                   TempSpec<Output<Scalar>>(this->output_rows(), 1));
     }
+    /// @internal
+    /// @brief Evaluate the interpolated value, Jacobian, adjoint gradient, and adjoint Hessian.
+    /// @tparam InType       Eigen input-vector type.
+    /// @tparam OutType      Eigen output-vector type.
+    /// @tparam JacType      Eigen Jacobian-matrix type.
+    /// @tparam AdjGradType  Eigen adjoint-gradient vector type.
+    /// @tparam AdjHessType  Eigen adjoint-Hessian matrix type.
+    /// @tparam AdjVarType   Eigen adjoint-variable vector type.
+    /// @param x        Input time (1-vector).
+    /// @param fx_      Output interpolated-value vector to write.
+    /// @param jx_      Output Jacobian (d/dt) to write.
+    /// @param adjgrad_ Output adjoint gradient to write.
+    /// @param adjhess_ Output adjoint Hessian to write.
+    /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(

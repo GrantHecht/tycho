@@ -21,13 +21,18 @@ using oc::OptimalControlProblemBase;
 // Solvers types
 using tycho::solvers::PSIOPT;
 
-/// Thin wrapper around OptimalControlProblemBase with Phase-aware overloads.
+/// @ingroup optimal_control
+/// @brief Builder-API multi-phase optimal control problem over @ref Phase wrappers.
 ///
-/// Accepts Phase wrapper objects directly (no base_ptr() needed) and
-/// supports named-variable link constraints.  Use base() for any
-/// OptimalControlProblemBase method not wrapped here.
+/// Thin wrapper around @ref tycho::oc::OptimalControlProblemBase that accepts
+/// @ref Phase wrapper objects directly (no @c base_ptr() needed) and supports
+/// named-variable link constraints. Use @ref base() for any base method not
+/// wrapped here.
+/// @note Phases are stored by raw pointer; the caller must keep every added
+///       @ref Phase alive and non-relocated for the lifetime of this problem.
 class OptimalControlProblem {
   public:
+    /// @brief Construct an empty problem with no phases.
     OptimalControlProblem() = default;
 
     // The OCP stores a raw pointer to each Phase passed to add_phase. The
@@ -36,11 +41,18 @@ class OptimalControlProblem {
     // the OCP. Name-resolution overloads (add_direct_link_equal_con by int
     // phase index) read the caller's live VarRegistry and sp-name map, so
     // names registered on the Phase after add_phase are visible to the OCP.
+    /// @brief Add a phase to the problem.
+    /// @param p  The phase to add (must outlive the problem).
+    /// @return The index assigned to the phase.
     int add_phase(Phase &p) {
         phases_.push_back(&p);
         return ocp_.add_phase(p.base_ptr());
     }
 
+    /// @brief Add a phase to the problem with an explicit name.
+    /// @param p     The phase to add (must outlive the problem).
+    /// @param name  Unique name for the phase.
+    /// @return The index assigned to the phase.
     int add_phase(Phase &p, const std::string &name) {
         phases_.push_back(&p);
         return ocp_.add_phase(p.base_ptr(), name);
@@ -137,36 +149,67 @@ class OptimalControlProblem {
                                               ScaleModes::AUTO);
     }
 
+    /// @brief Solve the problem for feasibility (no optimization).
+    /// @return The solver convergence flag.
+    /// @throws std::invalid_argument if no phases have been added.
     PSIOPT::ConvergenceFlags solve() {
         check_has_phases("solve");
         return ocp_.solve();
     }
+    /// @brief Optimize the problem (minimize the objective subject to constraints).
+    /// @return The solver convergence flag.
+    /// @throws std::invalid_argument if no phases have been added.
     PSIOPT::ConvergenceFlags optimize() {
         check_has_phases("optimize");
         return ocp_.optimize();
     }
+    /// @brief Solve for feasibility, then optimize.
+    /// @return The solver convergence flag.
+    /// @throws std::invalid_argument if no phases have been added.
     PSIOPT::ConvergenceFlags solve_optimize() {
         check_has_phases("solve_optimize");
         return ocp_.solve_optimize();
     }
+    /// @brief Optimize, then solve to tighten feasibility.
+    /// @return The solver convergence flag.
+    /// @throws std::invalid_argument if no phases have been added.
     PSIOPT::ConvergenceFlags optimize_solve() {
         check_has_phases("optimize_solve");
         return ocp_.optimize_solve();
     }
 
+    /// @brief Enable/disable automatic scaling, optionally propagating to phases.
+    /// @param autoscale     Whether to enable automatic scaling.
+    /// @param applytophases Whether to also set the flag on each phase.
     void set_auto_scaling(bool autoscale, bool applytophases = true) {
         ocp_.set_auto_scaling(autoscale, applytophases);
     }
+    /// @brief Enable/disable adaptive mesh refinement, optionally propagating to phases.
+    /// @param amesh         Whether to enable adaptive mesh refinement.
+    /// @param applytophases Whether to also set the flag on each phase.
     void set_adaptive_mesh(bool amesh, bool applytophases = true) {
         ocp_.set_adaptive_mesh(amesh, applytophases);
     }
+    /// @brief Set the mesh-error tolerance on every phase.
+    /// @param t  Tolerance.
     void set_mesh_tol(double t) { ocp_.set_mesh_tol(t); }
+    /// @brief Set the number of solver partitions.
+    /// @param n  Number of partitions.
     void set_num_partitions(int n) { ocp_.set_num_partitions(n); }
+    /// @brief Set the number of solver partitions and QP threads.
+    /// @param n           Number of partitions.
+    /// @param qp_threads  Number of QP (linear-solver) threads.
     void set_num_partitions(int n, int qp_threads) { ocp_.set_num_partitions(n, qp_threads); }
 
+    /// @brief Access the underlying PSIOPT optimizer.
+    /// @return Reference to the optimizer.
     PSIOPT &optimizer() { return *ocp_.optimizer_; }
 
+    /// @brief Access the wrapped base problem.
+    /// @return Reference to the underlying @ref tycho::oc::OptimalControlProblemBase.
     OptimalControlProblemBase &base() { return ocp_; }
+    /// @brief Access the wrapped base problem (const).
+    /// @return Const reference to the underlying base problem.
     const OptimalControlProblemBase &base() const { return ocp_; }
 
   private:

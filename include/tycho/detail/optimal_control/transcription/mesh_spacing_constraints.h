@@ -29,21 +29,44 @@ using vf::ThreadingFlags;
 using vf::VectorExpression;
 using vf::VectorFunction;
 
+/// @ingroup optimal_control
+/// @brief Linear constraint fixing one interior node at a given cardinal spacing.
+///
+/// Scalar-output equality constraint enforcing that the middle of three node
+/// times sits at the prescribed fractional spacing within the interval (used to
+/// pin mesh-node positions). Linear, so its Hessian vanishes.
 struct SingleMeshSpacing : VectorFunction<SingleMeshSpacing, 3, 1> {
+    /// @brief Convenience alias for the VectorFunction CRTP base class.
     using Base = VectorFunction<SingleMeshSpacing, 3, 1>;
+    /// @brief Output-vector type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using Output = typename Base::template Output<Scalar>;
+    /// @brief Input-vector type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using Input = typename Base::template Input<Scalar>;
+    /// @brief Jacobian type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using Jacobian = typename Base::template Jacobian<Scalar>;
+    /// @brief Hessian type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using Hessian = typename Base::template Hessian<Scalar>;
 
-    double cardinal_spacing_;
-    double scale_ = 1.0;
-    static constexpr bool IsLinearFunction = true;
+    double cardinal_spacing_; ///< Target fractional spacing of the interior node.
+    double scale_ = 1.0;      ///< Constraint output scale.
+    static constexpr bool IsLinearFunction = true; ///< The constraint is linear.
 
+    /// @brief Default constructor; leaves the spacing unset.
     SingleMeshSpacing() {}
+    /// @brief Construct with a target cardinal spacing.
+    /// @param cs  Target fractional spacing in @f$[0,1]@f$.
     SingleMeshSpacing(double cs) { cardinal_spacing_ = cs; }
 
+    /// @brief Set the target cardinal spacing.
+    /// @param cs  Target fractional spacing in @f$[0,1]@f$.
     void set_spacing(double cs) { cardinal_spacing_ = cs; }
+    /// @internal
+    /// @brief Evaluate the spacing residual.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @param x    Input @c [t0, t_mid, t1].
+    /// @param fx_  Output residual to write.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(const Eigen::MatrixBase<InType> &x,
                              Eigen::MatrixBase<OutType> const &fx_) const {
@@ -54,6 +77,15 @@ struct SingleMeshSpacing : VectorFunction<SingleMeshSpacing, 3, 1> {
         fx[0] *= scale_;
     }
 
+    /// @internal
+    /// @brief Evaluate the spacing residual and its Jacobian.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @tparam JacType  Eigen Jacobian-matrix type.
+    /// @param x    Input @c [t0, t_mid, t1].
+    /// @param fx_  Output residual to write.
+    /// @param jx_  Output Jacobian to write.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(const Eigen::MatrixBase<InType> &x,
                                       Eigen::MatrixBase<OutType> const &fx_,
@@ -71,6 +103,19 @@ struct SingleMeshSpacing : VectorFunction<SingleMeshSpacing, 3, 1> {
         jx *= scale_;
     }
 
+    /// @internal
+    /// @brief Evaluate the residual, Jacobian, and adjoint gradient.
+    /// @tparam InType       Eigen input-vector type.
+    /// @tparam OutType      Eigen output-vector type.
+    /// @tparam JacType      Eigen Jacobian-matrix type.
+    /// @tparam AdjGradType  Eigen adjoint-gradient vector type.
+    /// @tparam AdjVarType   Eigen adjoint-variable vector type.
+    /// @param x        Input node times.
+    /// @param fx_      Output residual to write.
+    /// @param jx_      Output Jacobian to write.
+    /// @param adjgrad_ Output adjoint gradient to write.
+    /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjVarType>
     inline void compute_jacobian_adjointgradient(
         const Eigen::MatrixBase<InType> &x, Eigen::MatrixBase<OutType> const &fx_,
@@ -81,6 +126,21 @@ struct SingleMeshSpacing : VectorFunction<SingleMeshSpacing, 3, 1> {
         adjgrad = (adjvars.transpose() * jx_).transpose();
     }
 
+    /// @internal
+    /// @brief Evaluate the residual, Jacobian, adjoint gradient, and adjoint Hessian.
+    /// @tparam InType       Eigen input-vector type.
+    /// @tparam OutType      Eigen output-vector type.
+    /// @tparam JacType      Eigen Jacobian-matrix type.
+    /// @tparam AdjGradType  Eigen adjoint-gradient vector type.
+    /// @tparam AdjHessType  Eigen adjoint-Hessian matrix type.
+    /// @tparam AdjVarType   Eigen adjoint-variable vector type.
+    /// @param x        Input node times.
+    /// @param fx_      Output residual to write.
+    /// @param jx_      Output Jacobian to write.
+    /// @param adjgrad_ Output adjoint gradient to write.
+    /// @param adjhess_ Output adjoint Hessian to write.
+    /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
@@ -107,14 +167,33 @@ struct SingleMeshSpacing : VectorFunction<SingleMeshSpacing, 3, 1> {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// @ingroup optimal_control
+/// @brief Constraint pinning all interior LGL nodes to their cardinal spacings.
+///
+/// Equality constraint VectorFunction enforcing that each interior cardinal node
+/// of an LGL interval sits at its prescribed fractional spacing, given the full
+/// set of @c CSC node times.
+/// @tparam CSC  Number of cardinal states per interval.
 template <int CSC> struct LGLMeshSpacing : VectorFunction<LGLMeshSpacing<CSC>, CSC, CSC - 2> {
+    /// @brief Convenience alias for the VectorFunction CRTP base class.
     using Base = VectorFunction<LGLMeshSpacing<CSC>, CSC, CSC - 2>;
+    /// @brief Output-vector type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using Output = typename Base::template Output<Scalar>;
+    /// @brief Input-vector type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using Input = typename Base::template Input<Scalar>;
+    /// @brief Jacobian type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using Jacobian = typename Base::template Jacobian<Scalar>;
+    /// @brief Hessian type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using Hessian = typename Base::template Hessian<Scalar>;
-    using Coeffs = LGLCoeffs<CSC>;
+    using Coeffs = LGLCoeffs<CSC>; ///< @brief The LGL coefficient table for this order.
 
+    /// @internal
+    /// @brief Evaluate the per-interior-node spacing residuals.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @param x    Input node times of the interval.
+    /// @param fx_  Output residual vector to write.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute(const Eigen::MatrixBase<InType> &x,
                         Eigen::MatrixBase<OutType> const &fx_) const {
@@ -126,6 +205,15 @@ template <int CSC> struct LGLMeshSpacing : VectorFunction<LGLMeshSpacing<CSC>, C
         }
     }
 
+    /// @internal
+    /// @brief Evaluate the spacing residuals and their Jacobian.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @tparam JacType  Eigen Jacobian-matrix type.
+    /// @param x    Input node times of the interval.
+    /// @param fx_  Output residual vector to write.
+    /// @param jx_  Output Jacobian to write.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(const Eigen::MatrixBase<InType> &x,
                                       Eigen::MatrixBase<OutType> const &fx_,
@@ -142,6 +230,19 @@ template <int CSC> struct LGLMeshSpacing : VectorFunction<LGLMeshSpacing<CSC>, C
         }
     }
 
+    /// @internal
+    /// @brief Evaluate the residual, Jacobian, and adjoint gradient.
+    /// @tparam InType       Eigen input-vector type.
+    /// @tparam OutType      Eigen output-vector type.
+    /// @tparam JacType      Eigen Jacobian-matrix type.
+    /// @tparam AdjGradType  Eigen adjoint-gradient vector type.
+    /// @tparam AdjVarType   Eigen adjoint-variable vector type.
+    /// @param x        Input node times.
+    /// @param fx_      Output residual to write.
+    /// @param jx_      Output Jacobian to write.
+    /// @param adjgrad_ Output adjoint gradient to write.
+    /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjVarType>
     inline void compute_jacobian_adjointgradient(
         const Eigen::MatrixBase<InType> &x, Eigen::MatrixBase<OutType> const &fx_,
@@ -152,6 +253,21 @@ template <int CSC> struct LGLMeshSpacing : VectorFunction<LGLMeshSpacing<CSC>, C
         adjgrad = (adjvars.transpose() * jx_).transpose();
     }
 
+    /// @internal
+    /// @brief Evaluate the residual, Jacobian, adjoint gradient, and adjoint Hessian.
+    /// @tparam InType       Eigen input-vector type.
+    /// @tparam OutType      Eigen output-vector type.
+    /// @tparam JacType      Eigen Jacobian-matrix type.
+    /// @tparam AdjGradType  Eigen adjoint-gradient vector type.
+    /// @tparam AdjHessType  Eigen adjoint-Hessian matrix type.
+    /// @tparam AdjVarType   Eigen adjoint-variable vector type.
+    /// @param x        Input node times.
+    /// @param fx_      Output residual to write.
+    /// @param jx_      Output Jacobian to write.
+    /// @param adjgrad_ Output adjoint gradient to write.
+    /// @param adjhess_ Output adjoint Hessian to write.
+    /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(

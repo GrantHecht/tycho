@@ -18,19 +18,25 @@
 
 namespace tycho {
 
-/// Maps string variable names to XtUP-space indices.
+/// @ingroup optimal_control
+/// @brief Maps string variable names to XtUP-space indices for the builder API.
 ///
-/// XtUP-space is the concatenated layout [X_0..X_{n-1}, t, U_0..U_{m-1}, P_0..P_{k-1}]
-/// used as the input vector for ODE functions.
-///
-/// After construction and registration of names/groups, the registry is
-/// intended to be populated during setup and then used read-only.
-/// Thread-safe for concurrent reads after registration is complete.
-/// Not thread-safe for concurrent writes or mixed read/write access.
+/// XtUP-space is the concatenated layout @c [X_0..X_{n-1}, t, U_0..U_{m-1}, P_0..P_{k-1}]
+/// used as the input vector for ODE functions. After construction and
+/// registration of names/groups, the registry is populated during setup and
+/// then used read-only.
+/// @note Thread-safe for concurrent reads after registration is complete; not
+///       thread-safe for concurrent writes or mixed read/write access.
 class VarRegistry {
   public:
+    /// @brief Construct an empty registry with zero dimensions.
     VarRegistry() = default;
 
+    /// @brief Construct a registry for the given ODE dimensions.
+    /// @param xvars  Number of state variables (must be non-negative).
+    /// @param uvars  Number of control variables (must be non-negative).
+    /// @param pvars  Number of parameter variables (must be non-negative).
+    /// @throws std::invalid_argument if any dimension is negative.
     VarRegistry(int xvars, int uvars, int pvars) : xvars_(xvars), uvars_(uvars), pvars_(pvars) {
         if (xvars < 0)
             throw std::invalid_argument(
@@ -163,11 +169,19 @@ class VarRegistry {
 
     // ── Accessors ───────────────────────────────────────────────────────
 
+    /// @brief Number of state variables. @return The state-variable count.
     int xvars() const { return xvars_; }
+    /// @brief Number of control variables. @return The control-variable count.
     int uvars() const { return uvars_; }
+    /// @brief Number of parameter variables. @return The parameter-variable count.
     int pvars() const { return pvars_; }
+    /// @brief Total XtUP-space size. @return The packed input-vector length.
     int xtup_size() const { return xvars_ + 1 + uvars_ + pvars_; }
+    /// @brief Whether no names are registered. @return True if the registry is empty.
     bool empty() const { return map_.empty(); }
+    /// @brief Whether a name is registered.
+    /// @param name  The variable name to look up.
+    /// @return True if @p name is registered.
     bool contains(const std::string &name) const { return map_.count(name) > 0; }
 
     /// Read-only access to registered name-index pairs (used by

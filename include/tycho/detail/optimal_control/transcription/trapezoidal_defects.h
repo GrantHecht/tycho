@@ -31,32 +31,56 @@ using vf::ThreadingFlags;
 using vf::VectorExpression;
 using vf::VectorFunction;
 
+/// @ingroup optimal_control
+/// @brief Trapezoidal collocation defect constraint for an ODE.
+///
+/// The equality constraint VectorFunction enforcing the trapezoidal (2nd-order)
+/// collocation defect @f$x_1-x_0-\tfrac{h}{2}(f_0+f_1)=0@f$ across each interval,
+/// with analytic Jacobian and adjoint-Hessian derivatives and optional exact
+/// Hessian-sparsity exploitation.
+/// @tparam DODE  The concrete ODE type whose dynamics are collocated.
 template <class DODE>
 struct TrapezoidalDefects
     : VectorFunction<TrapezoidalDefects<DODE>,
                      DefectConstSizes<2, DODE::XV, DODE::UV, DODE::PV>::DefIRC,
                      DefectConstSizes<2, DODE::XV, DODE::UV, DODE::PV>::DefORC> {
-    static constexpr int CS = 2;
+    static constexpr int CS = 2; ///< Cardinal states per interval (always 2 for trapezoidal).
+    /// @brief Convenience alias for the VectorFunction CRTP base class.
     using Base = VectorFunction<TrapezoidalDefects<DODE>,
                                 DefectConstSizes<CS, DODE::XV, DODE::UV, DODE::PV>::DefIRC,
                                 DefectConstSizes<CS, DODE::XV, DODE::UV, DODE::PV>::DefORC>;
 
     /////////////////////////////////////////////////////////////////////////////////
+    /// @brief Defect output-vector type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using Output = typename Base::template Output<Scalar>;
+    /// @brief Defect input-vector type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using Input = typename Base::template Input<Scalar>;
+    /// @brief Defect Jacobian type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using Jacobian = typename Base::template Jacobian<Scalar>;
+    /// @brief Defect Hessian type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using Hessian = typename Base::template Hessian<Scalar>;
     ///////////////////////////////////////////////////////////////////////////////////
+    /// @brief ODE output-vector type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using ODEOutput = typename DODE::template Output<Scalar>;
+    /// @brief ODE input-vector type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using ODEInput = typename DODE::template Input<Scalar>;
+    /// @brief ODE gradient type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using ODEGrad = typename DODE::template Gradient<Scalar>;
+    /// @brief ODE Jacobian type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using ODEJacobian = typename DODE::template Jacobian<Scalar>;
+    /// @brief ODE Hessian type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using ODEHessian = typename DODE::template Hessian<Scalar>;
-    DODE ode_;
-    bool enable_hessian_sparsity_ = false;
-    Eigen::MatrixXi nz_locs_;
-    static constexpr bool is_vectorizable = DODE::is_vectorizable;
+    DODE ode_;                             ///< The ODE whose dynamics are collocated.
+    bool enable_hessian_sparsity_ = false; ///< Whether to exploit the known Hessian sparsity.
+    Eigen::MatrixXi nz_locs_;              ///< Nonzero-pattern mask of the adjoint Hessian.
+    static constexpr bool is_vectorizable =
+        DODE::is_vectorizable; ///< Inherits SuperScalar support from the ODE.
 
+    /// @internal
+    /// @brief Refine the Hessian sparsity mask by probing two representative states.
+    /// @param xtup1  First representative packed state/time/control vector.
+    /// @param xtup2  Second representative packed state/time/control + params vector.
+    /// @endinternal
     void exact_hessian_sparsity(Eigen::VectorXd xtup1, Eigen::VectorXd xtup2) {
 
         Input<double> xin(this->input_rows());
@@ -87,7 +111,11 @@ struct TrapezoidalDefects
         }
     }
 
+    /// @brief Construct from an ODE and size the defect function.
+    /// @param od  The ODE to collocate.
     TrapezoidalDefects(const DODE &od) { this->set_ode(od); }
+    /// @brief Set the ODE, derive the defect IO row counts, and build the sparsity mask.
+    /// @param od  The ODE to collocate.
     void set_ode(const DODE &od) {
         this->ode_ = od;
         this->set_output_rows(this->ode_.output_rows() * (CS - 1));
@@ -129,6 +157,12 @@ struct TrapezoidalDefects
         nz_locs_.row(this->ode_.t_var() + this->ode_.xtu_vars() * (cardinals - 1)).setOnes();
     }
 
+    /// @internal
+    /// @brief Whether the given adjoint-Hessian element is (possibly) nonzero.
+    /// @param row  Hessian row index.
+    /// @param col  Hessian column index.
+    /// @return True if the element may be nonzero (always true unless sparsity is enabled).
+    /// @endinternal
     inline bool hessian_elem_is_non_zero(int row, int col) const {
         if (this->enable_hessian_sparsity_) {
             return bool(this->nz_locs_(row, col));
@@ -136,6 +170,15 @@ struct TrapezoidalDefects
             return true;
         }
     }
+    /// @internal
+    /// @brief Accumulate one adjoint-Hessian element into the sparse storage.
+    /// @param v        The value to add.
+    /// @param row      Hessian row index.
+    /// @param col      Hessian column index.
+    /// @param mpt      Pointer to the dense value storage.
+    /// @param lpt      Pointer to the element-location index table.
+    /// @param freeloc  In/out next free slot in @p lpt; advanced if the element is stored.
+    /// @endinternal
     inline void add_hessian_elem(double v, int row, int col, double *mpt, const int *lpt,
                                  int &freeloc) const {
         if (this->enable_hessian_sparsity_) {
@@ -149,6 +192,13 @@ struct TrapezoidalDefects
         }
     }
 
+    /// @internal
+    /// @brief Evaluate the trapezoidal defect residual for one interval.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @param x    Packed two endpoint states and parameters of the interval.
+    /// @param fx_  Output defect-residual vector to write.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(const Eigen::MatrixBase<InType> &x,
                              Eigen::MatrixBase<OutType> const &fx_) const {
@@ -183,6 +233,15 @@ struct TrapezoidalDefects
         fx *= Scalar(-1.0);
     }
 
+    /// @internal
+    /// @brief Evaluate the trapezoidal defect residual and its Jacobian.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @tparam JacType  Eigen Jacobian-matrix type.
+    /// @param x    Packed two endpoint states and parameters of the interval.
+    /// @param fx_  Output defect-residual vector to write.
+    /// @param jx_  Output Jacobian to write.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(const Eigen::MatrixBase<InType> &x,
                                       Eigen::MatrixBase<OutType> const &fx_,
@@ -255,6 +314,21 @@ struct TrapezoidalDefects
         jx *= Scalar(-1.0);
     }
 
+    /// @internal
+    /// @brief Evaluate the trapezoidal defect, Jacobian, adjoint gradient, and adjoint Hessian.
+    /// @tparam InType       Eigen input-vector type.
+    /// @tparam OutType      Eigen output-vector type.
+    /// @tparam JacType      Eigen Jacobian-matrix type.
+    /// @tparam AdjGradType  Eigen adjoint-gradient vector type.
+    /// @tparam AdjHessType  Eigen adjoint-Hessian matrix type.
+    /// @tparam AdjVarType   Eigen adjoint-variable vector type.
+    /// @param x        Packed two endpoint states and parameters of the interval.
+    /// @param fx_      Output defect-residual vector to write.
+    /// @param jx_      Output Jacobian to write.
+    /// @param adjgrad_ Output adjoint gradient to write.
+    /// @param adjhess_ Output adjoint Hessian to write.
+    /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(

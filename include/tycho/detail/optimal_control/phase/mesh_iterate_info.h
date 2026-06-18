@@ -40,25 +40,40 @@
 
 namespace tycho::oc {
 
+/// @ingroup optimal_control
+/// @brief Per-iteration mesh-refinement diagnostics for one phase.
+///
+/// Records the discretization error of a single mesh-refinement iteration: the
+/// per-segment error and the error-density distribution used to redistribute
+/// nodes, plus aggregate (max/avg/geometric/global) error statistics and the
+/// recommended updated segment count. Also provides the equidistribution
+/// binning and pretty-printing used by the mesh-refinement loop.
 struct MeshIterateInfo {
 
-    bool converged_ = false;
-    int numsegs_;
-    int up_numsegs_;
-    double tol_;
+    bool converged_ = false; ///< Whether the mesh met the tolerance this iteration.
+    int numsegs_;            ///< Number of segments in the current mesh.
+    int up_numsegs_;         ///< Recommended segment count for the next iteration.
+    double tol_;             ///< Target mesh-error tolerance.
 
-    double avg_error_;
-    double gmean_error_;
-    double max_error_;
-    double global_error_ = -1;
+    double avg_error_;         ///< Time-weighted average per-segment error.
+    double gmean_error_;       ///< Geometric mean of the max and average error.
+    double max_error_;         ///< Maximum per-segment error.
+    double global_error_ = -1; ///< End-to-end (global) error, or -1 if unset.
 
-    Eigen::VectorXd times_;
-    Eigen::VectorXd error_;
-    Eigen::VectorXd distribution_;
-    Eigen::VectorXd distintegral_;
+    Eigen::VectorXd times_;        ///< Node times of the current mesh.
+    Eigen::VectorXd error_;        ///< Per-segment error estimates.
+    Eigen::VectorXd distribution_; ///< Error-density distribution over the mesh.
+    Eigen::VectorXd distintegral_; ///< Normalized cumulative integral of @ref distribution_.
 
+    /// @brief Default constructor; leaves all statistics unset.
     MeshIterateInfo() {}
 
+    /// @brief Construct from mesh data and compute the aggregate error statistics.
+    /// @param numsegs       Number of segments in the mesh.
+    /// @param tol           Target mesh-error tolerance.
+    /// @param times         Node times of the mesh.
+    /// @param error         Per-segment error estimates.
+    /// @param distribution  Error-density distribution over the mesh.
     MeshIterateInfo(int numsegs, double tol, const Eigen::VectorXd &times,
                     const Eigen::VectorXd &error, const Eigen::VectorXd &distribution)
         : numsegs_(numsegs), up_numsegs_(numsegs), tol_(tol), times_(times), error_(error),
@@ -90,6 +105,9 @@ struct MeshIterateInfo {
         /////////////////////////////////////////////////////
     }
 
+    /// @brief Compute equidistributing node times that level the error density.
+    /// @param nbins  Number of bins (segments) to produce.
+    /// @return Vector of @c nbins+1 node times equidistributing the error integral.
     Eigen::VectorXd calc_bins(int nbins) {
 
         Eigen::VectorXd bins;
@@ -111,6 +129,8 @@ struct MeshIterateInfo {
         return bins;
     }
 
+    /// @brief Print the table header for a mesh-refinement iteration.
+    /// @param iter  The mesh-iteration number to display.
     static void print_header(int iter) {
 
         fmt::print("{0:=^{1}}\n", "", 52);
@@ -119,6 +139,8 @@ struct MeshIterateInfo {
         fmt::print("|Phase|#Segs| Max Err | Avg Err | EtE Err |Up #Segs|\n");
     }
 
+    /// @brief Print this iteration's error statistics as a color-coded table row.
+    /// @param phasenum  The phase index to display in the row.
     void print(int phasenum) {
 
         auto level1 = std::log(tol_);

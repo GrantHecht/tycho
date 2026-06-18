@@ -25,11 +25,18 @@ namespace tycho {
 using oc::ODEArguments;
 using vf::GenericFunction;
 
-/// Proxy passed to the ODEBuilder::define() lambda.  Provides simplified
-/// x_var/u_var/t_var/p_var/x_vec/u_vec/p_vec accessors for building VectorFunction
-/// expressions from the XtUP input layout.
+/// @ingroup optimal_control
+/// @brief Proxy passed to the @ref ODEBuilder::define() lambda for building dynamics.
+///
+/// Provides simplified @c x_var / @c u_var / @c t_var / @c p_var / @c x_vec /
+/// @c u_vec / @c p_vec accessors for building VectorFunction expressions from the
+/// XtUP input layout.
 class ODEArgsProxy {
   public:
+    /// @brief Construct a proxy for the given ODE dimensions.
+    /// @param xv  Number of state variables.
+    /// @param uv  Number of control variables.
+    /// @param pv  Number of parameter variables.
     ODEArgsProxy(int xv, int uv, int pv) : args_(xv, uv, pv) {}
 
     /// i-th state variable (0-based within X).
@@ -158,27 +165,41 @@ class ODEArgsProxy {
         return args_.segment<SZ>(args_.xtu_vars() + start);
     }
 
+    /// @brief Number of state variables. @return The state-variable count.
     int xvars() const { return args_.x_vars(); }
+    /// @brief Number of control variables. @return The control-variable count.
     int uvars() const { return args_.u_vars(); }
+    /// @brief Number of parameter variables. @return The parameter-variable count.
     int pvars() const { return args_.p_vars(); }
 
   private:
     ODEArguments<> args_;
 };
 
-/// Fluent builder for ODE.
+/// @ingroup optimal_control
+/// @brief Fluent builder for an @ref ODE from a lambda or expression.
 ///
-/// Usage:
-///   auto ode = ODEBuilder(3, 1)
-///       .define([](const auto& args) {
-///           auto v = args.x_var(2);
-///           auto theta = args.u_var(0);
-///           return stack(sin(theta)*v, cos(theta)*v*(-1.0), 9.81*cos(theta));
-///       })
-///       .var_names({{"x",0}, {"y",1}, {"v",2}, {"t",3}, {"theta",4}})
-///       .build();
+/// Accepts dynamics via a lambda (receiving an @ref ODEArgsProxy) or a pre-built
+/// VectorFunction expression, optionally registers named variables, and produces
+/// a runtime @ref ODE.
+/// @code{.cpp}
+/// auto ode = ODEBuilder(3, 1)
+///     .define([](const auto& args) {
+///         auto v = args.x_var(2);
+///         auto theta = args.u_var(0);
+///         return stack(sin(theta)*v, cos(theta)*v*(-1.0), 9.81*cos(theta));
+///     })
+///     .var_names({{"x",0}, {"y",1}, {"v",2}, {"t",3}, {"theta",4}})
+///     .build();
+/// @endcode
 class ODEBuilder {
   public:
+    /// @brief Construct a builder for the given ODE dimensions.
+    /// @param xvars  Number of state variables (must be positive).
+    /// @param uvars  Number of control variables (must be non-negative).
+    /// @param pvars  Number of parameter variables (must be non-negative).
+    /// @throws std::invalid_argument if @p xvars is not positive or any other dimension is
+    /// negative.
     ODEBuilder(int xvars, int uvars = 0, int pvars = 0)
         : xvars_(xvars), uvars_(uvars), pvars_(pvars) {
         if (xvars <= 0)

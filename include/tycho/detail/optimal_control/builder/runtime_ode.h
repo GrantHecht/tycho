@@ -29,17 +29,28 @@ using vf::GenericFunction;
 class Phase;             // forward
 class IntegratorBuilder; // forward
 
-/// A runtime-defined ODE wrapping a type-erased VectorFunction and optional
-/// named-variable registry.  Construct via ODEBuilder, from a VectorFunction
-/// expression (auto-erased), or from a pre-built GenericFunction.  Call
-/// phase() to produce a Phase object for setting up constraints, objectives,
+/// @ingroup optimal_control
+/// @brief A runtime-defined ODE wrapping a type-erased VectorFunction.
+///
+/// Holds a type-erased dynamics function plus size metadata and an optional
+/// named-variable registry. Construct via @ref ODEBuilder, from a VectorFunction
+/// expression (auto-erased), or from a pre-built @c GenericFunction. Call
+/// @ref phase() to produce a @ref Phase for setting up constraints, objectives,
 /// and solving.
 class ODE {
   public:
-    using DynODE = GenericODE<GenericFunction<-1, -1>, -1, -1, -1>;
-    using DynIntegrator = integrators::Integrator<DynODE>;
+    using DynODE =
+        GenericODE<GenericFunction<-1, -1>, -1, -1, -1>; ///< @brief Fully-dynamic ODE type.
+    using DynIntegrator =
+        integrators::Integrator<DynODE>; ///< @brief Integrator over the dynamic ODE.
 
-    /// Construct from any VectorFunction expression and explicit sizes.
+    /// @brief Construct from any VectorFunction expression and explicit sizes.
+    /// @tparam Func  The VectorFunction expression type.
+    /// @param ode_func  The dynamics expression.
+    /// @param xvars     Number of state variables (must be positive).
+    /// @param uvars     Number of control variables.
+    /// @param pvars     Number of parameter variables.
+    /// @throws std::invalid_argument on invalid sizes or an IO-size mismatch.
     template <typename Func>
     ODE(const Func &ode_func, int xvars, int uvars, int pvars = 0)
         : func_(ode_func), xvars_(xvars), uvars_(uvars), pvars_(pvars) {
@@ -47,13 +58,21 @@ class ODE {
         validate();
     }
 
-    /// Construct from an already type-erased GenericFunction and sizes.
+    /// @brief Construct from an already type-erased GenericFunction and sizes.
+    /// @param func   The type-erased dynamics function.
+    /// @param xvars  Number of state variables (must be positive).
+    /// @param uvars  Number of control variables.
+    /// @param pvars  Number of parameter variables.
+    /// @throws std::invalid_argument on invalid sizes or an IO-size mismatch.
     ODE(GenericFunction<-1, -1> func, int xvars, int uvars, int pvars = 0)
         : func_(std::move(func)), xvars_(xvars), uvars_(uvars), pvars_(pvars) {
         validate_sizes();
         validate();
     }
 
+    /// @brief Register named variables (name to XtUP index).
+    /// @param names  Name/index pairs to register.
+    /// @return Reference to this ODE for chaining.
     ODE &var_names(std::initializer_list<std::pair<std::string, int>> names) {
         ensure_registry();
         for (const auto &[name, idx] : names)
@@ -61,12 +80,21 @@ class ODE {
         return *this;
     }
 
+    /// @brief Register a named variable group as a contiguous range.
+    /// @param name   Group name.
+    /// @param start  Start index in XtUP space.
+    /// @param count  Number of variables in the group.
+    /// @return Reference to this ODE for chaining.
     ODE &var_group(const std::string &name, int start, int count) {
         ensure_registry();
         registry_->add_group(name, start, count);
         return *this;
     }
 
+    /// @brief Register a named variable group as the union of existing names.
+    /// @param name     Group name.
+    /// @param members  Names of previously registered variables to union.
+    /// @return Reference to this ODE for chaining.
     ODE &var_group(const std::string &name, std::initializer_list<std::string> members) {
         ensure_registry();
         registry_->add_group(name, members);
@@ -84,22 +112,36 @@ class ODE {
     /// IntegratorBuilder below for the full API.
     IntegratorBuilder integrator() const;
 
+    /// @brief Build an XtUP input vector from name-value pairs (unset entries default to 0).
+    /// @param vals  Name/value pairs to assign.
+    /// @return The packed input vector.
     Eigen::VectorXd make_input(std::initializer_list<std::pair<std::string, double>> vals) const {
         check_registry();
         return registry_->make_input(vals);
     }
 
+    /// @brief Build an XtUP scaling vector from name-value pairs (unset entries default to 1).
+    /// @param vals  Name/unit pairs to assign.
+    /// @return The packed scaling vector.
     Eigen::VectorXd make_units(std::initializer_list<std::pair<std::string, double>> vals) const {
         check_registry();
         return registry_->make_units(vals);
     }
 
+    /// @brief Number of state variables. @return The state-variable count.
     int xvars() const { return xvars_; }
+    /// @brief Number of control variables. @return The control-variable count.
     int uvars() const { return uvars_; }
+    /// @brief Number of parameter variables. @return The parameter-variable count.
     int pvars() const { return pvars_; }
+    /// @brief Total XtUP-space size. @return The packed input-vector length.
     int xtup_size() const { return xvars_ + 1 + uvars_ + pvars_; }
 
+    /// @brief Whether a variable registry has been created. @return True if a registry exists.
     bool has_registry() const { return registry_.has_value(); }
+    /// @brief Access the variable registry.
+    /// @return The variable registry.
+    /// @throws std::invalid_argument if no names have been registered.
     const VarRegistry &registry() const {
         check_registry();
         return *registry_;
@@ -165,33 +207,37 @@ class ODE {
     DynODE make_dyn_ode() const;
 };
 
-/// Fluent builder for DynIntegrator. Obtained via ODE::integrator().
+/// @ingroup optimal_control
+/// @brief Fluent builder for a @ref ODE::DynIntegrator. Obtained via @ref ODE::integrator().
 ///
-/// Configuration:
-///   - .step(defstep)                 [required]
-///   - .method(IVPAlg)                [optional, defaults to DOPRI87]
-///   - exactly one of:
-///       .control()                                  [no control — default]
-///       .control(ulaw, Eigen::VectorXi varlocs)     [indexed]
-///       .control(ulaw, {"u1","u2"})                 [named; requires registry]
-///       .control(const Eigen::VectorXd& u_const)    [constant control]
-///       .control(tab, Eigen::VectorXi ulocs)        [LGL table + indexed]
-///       .control(tab)                               [LGL table, auto ulocs]
-/// Call .build() to materialize the integrator. Calling .control(...) more
-/// than once throws.
+/// Configure the step size (required) via @c step(), optionally the method via
+/// @c method(), and at most one control specification via one of the @c control()
+/// overloads, then call @c build().
 class IntegratorBuilder {
   public:
+    /// @brief Construct a builder bound to an ODE.
+    /// @param ode  The ODE to integrate (must outlive the builder).
     explicit IntegratorBuilder(const ODE &ode) : ode_(&ode) {}
 
+    /// @brief Set the integration method.
+    /// @param m  The IVP algorithm (defaults to DOPRI87).
+    /// @return Reference to this builder for chaining.
     IntegratorBuilder &method(IVPAlg m) {
         method_ = m;
         return *this;
     }
+    /// @brief Set the default integration step size (required).
+    /// @param s  The step size.
+    /// @return Reference to this builder for chaining.
     IntegratorBuilder &step(double s) {
         step_ = s;
         return *this;
     }
 
+    /// @brief Use a control law indexed by explicit variable locations.
+    /// @param ulaw     The control-law function.
+    /// @param varlocs  State indices fed to the control law.
+    /// @return Reference to this builder for chaining.
     IntegratorBuilder &control(GenericFunction<-1, -1> ulaw, const Eigen::VectorXi &varlocs) {
         set_kind(ControlKind::IndexedLaw);
         ulaw_ = std::move(ulaw);
@@ -199,6 +245,10 @@ class IntegratorBuilder {
         return *this;
     }
 
+    /// @brief Use a control law indexed by named variables (requires a registry).
+    /// @param ulaw   The control-law function.
+    /// @param names  Variable names fed to the control law.
+    /// @return Reference to this builder for chaining.
     IntegratorBuilder &control(GenericFunction<-1, -1> ulaw,
                                std::initializer_list<std::string> names) {
         set_kind(ControlKind::NamedLaw);
@@ -207,12 +257,19 @@ class IntegratorBuilder {
         return *this;
     }
 
+    /// @brief Use a constant control over the integration.
+    /// @param u_const  The constant control vector.
+    /// @return Reference to this builder for chaining.
     IntegratorBuilder &control(const Eigen::VectorXd &u_const) {
         set_kind(ControlKind::Const);
         u_const_ = u_const;
         return *this;
     }
 
+    /// @brief Use a control interpolated from an LGL table at explicit locations.
+    /// @param tab    The control interpolation table.
+    /// @param ulocs  State indices the control is written into.
+    /// @return Reference to this builder for chaining.
     IntegratorBuilder &control(std::shared_ptr<oc::LGLInterpTable> tab,
                                const Eigen::VectorXi &ulocs) {
         set_kind(ControlKind::TableIndexed);
@@ -221,6 +278,9 @@ class IntegratorBuilder {
         return *this;
     }
 
+    /// @brief Use a control interpolated from an LGL table with inferred locations.
+    /// @param tab  The control interpolation table.
+    /// @return Reference to this builder for chaining.
     IntegratorBuilder &control(std::shared_ptr<oc::LGLInterpTable> tab) {
         set_kind(ControlKind::TableAuto);
         tab_ = std::move(tab);

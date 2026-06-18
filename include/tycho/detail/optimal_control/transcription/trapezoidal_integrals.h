@@ -31,7 +31,23 @@ using vf::ThreadingFlags;
 using vf::VectorExpression;
 using vf::VectorFunction;
 
+/// @internal
+/// @brief Expression builder for the trapezoidal-rule integral of an integrand.
+///
+/// Builds the VectorFunction expression approximating @f$\int g\,dt@f$ over one
+/// interval as @f$\tfrac{h}{2}(g_0+g_1)@f$.
+/// @tparam Integrand  The scalar integrand expression type.
+/// @tparam XV         ODE state-vector dimension.
+/// @tparam PV         ODE parameter-vector dimension.
+/// @endinternal
 template <class Integrand, int XV, int PV> struct TrapInteg_Impl {
+    /// @internal
+    /// @brief Build the trapezoidal integral expression over one interval.
+    /// @param integ  The scalar integrand.
+    /// @param xv     Runtime state dimension.
+    /// @param pv     Runtime parameter dimension.
+    /// @return The VectorFunction expression for the interval integral.
+    /// @endinternal
     static auto Definition(const Integrand &integ, int xv, int pv) {
         constexpr int IRC = SZ_SUM<SZ_PROD<2, XV>::value, 2, PV>::value;
         constexpr int XTV = SZ_SUM<XV, 1>::value;
@@ -64,14 +80,28 @@ template <class Integrand, int XV, int PV> struct TrapInteg_Impl {
     }
 };
 
+/// @ingroup optimal_control
+/// @brief VectorFunction computing the trapezoidal-rule integral of an integrand.
+///
+/// Wraps @c TrapInteg_Impl as a usable expression evaluating the per-interval
+/// integral @f$\tfrac{h}{2}(g_0+g_1)@f$ and its derivatives.
+/// @tparam Integrand  The scalar integrand expression type.
+/// @tparam XV         ODE state-vector dimension.
+/// @tparam PV         ODE parameter-vector dimension.
 template <class Integrand, int XV, int PV>
 struct TrapezoidalIntegral
     : VectorExpression<TrapezoidalIntegral<Integrand, XV, PV>, TrapInteg_Impl<Integrand, XV, PV>,
                        const Integrand &, int, int> {
+    /// @brief Convenience alias for the VectorExpression base class.
     using Base = VectorExpression<TrapezoidalIntegral<Integrand, XV, PV>,
                                   TrapInteg_Impl<Integrand, XV, PV>, const Integrand &, int, int>;
 
+    /// @brief Default constructor; leaves the integrand unset.
     TrapezoidalIntegral() {}
+    /// @brief Construct from an integrand and runtime dimensions.
+    /// @param integ  The scalar integrand.
+    /// @param xv     Runtime state dimension.
+    /// @param pv     Runtime parameter dimension.
     TrapezoidalIntegral(const Integrand &integ, int xv, int pv) : Base(integ, xv, pv) {}
 };
 

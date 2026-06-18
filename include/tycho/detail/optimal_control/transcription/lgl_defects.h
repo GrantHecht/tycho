@@ -32,43 +32,76 @@ using vf::GenericFunction;
 using vf::ThreadingFlags;
 using vf::VectorExpression;
 using vf::VectorFunction;
+/// @ingroup optimal_control
+/// @brief Legendre-Gauss-Lobatto collocation defect constraint for an ODE.
+///
+/// The equality constraint VectorFunction enforcing that an ODE's discretized
+/// trajectory satisfies the LGL collocation defect equations over each interval
+/// (the dynamics constraint of the transcription). Provides analytic Jacobian
+/// and adjoint-Hessian derivatives.
+/// @tparam DODE  The concrete ODE type whose dynamics are collocated.
+/// @tparam CS    Number of cardinal states per collocation interval.
 template <class DODE, int CS>
 struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
                                    DefectConstSizes<CS, DODE::XV, DODE::UV, DODE::PV>::DefIRC,
                                    DefectConstSizes<CS, DODE::XV, DODE::UV, DODE::PV>::DefORC> {
-    static constexpr int Cardinals = CS;
-    static constexpr int Interiors = CS - 1;
+    static constexpr int Cardinals = CS;     ///< Number of cardinal states per interval.
+    static constexpr int Interiors = CS - 1; ///< Number of interior (defect) points per interval.
 
+    /// @brief Convenience alias for the VectorFunction CRTP base class.
     using Base = VectorFunction<LGLDefects<DODE, CS>,
                                 DefectConstSizes<CS, DODE::XV, DODE::UV, DODE::PV>::DefIRC,
                                 DefectConstSizes<CS, DODE::XV, DODE::UV, DODE::PV>::DefORC>;
 
     /////////////////////////////////////////////////////////////////////////////////
+    /// @brief Defect output-vector type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using Output = typename Base::template Output<Scalar>;
+    /// @brief Defect input-vector type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using Input = typename Base::template Input<Scalar>;
+    /// @brief Defect Jacobian type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using Jacobian = typename Base::template Jacobian<Scalar>;
+    /// @brief Defect Hessian type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using Hessian = typename Base::template Hessian<Scalar>;
     //////////////////////////////////////////////////////////////////////////////////
+    /// @brief ODE output-vector type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using ODEOutput = typename DODE::template Output<Scalar>;
+    /// @brief ODE input-vector type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using ODEInput = typename DODE::template Input<Scalar>;
+    /// @brief ODE gradient type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using ODEGrad = typename DODE::template Gradient<Scalar>;
+    /// @brief ODE Jacobian type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using ODEJacobian = typename DODE::template Jacobian<Scalar>;
+    /// @brief ODE Hessian type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using ODEHessian = typename DODE::template Hessian<Scalar>;
 
+    /// @brief Convenience alias for a fixed-size std::array.
+    /// @tparam T   Element type.
+    /// @tparam SZ  Array length.
     template <class T, int SZ> using STDarray = std::array<T, SZ>;
-    using Coeffs = LGLCoeffs<CS>;
+    using Coeffs = LGLCoeffs<CS>; ///< @brief The LGL coefficient table for this order.
     /////////////////////////////////////////////////////////////////////////////
-    DODE ode_;
-    static constexpr bool is_vectorizable = DODE::is_vectorizable;
+    DODE ode_; ///< The ODE whose dynamics are collocated.
+    static constexpr bool is_vectorizable =
+        DODE::is_vectorizable; ///< Inherits SuperScalar support from the ODE.
 
+    /// @brief Construct from an ODE and size the defect function.
+    /// @param od  The ODE to collocate.
     LGLDefects(const DODE &od) { this->set_ode(od); }
+    /// @brief Set the ODE and derive the defect IO row counts.
+    /// @param od  The ODE to collocate.
     void set_ode(const DODE &od) {
         this->ode_ = od;
         this->set_output_rows(this->ode_.output_rows() * (CS - 1));
         this->set_input_rows(CS * this->ode_.xtu_vars() + this->ode_.p_vars());
     }
 
-    ////////////////////////////////////////////////////////////////////////////////////
+    /// @internal
+    /// @brief Evaluate the LGL defect residuals for one interval block.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @param x    Packed cardinal states and parameters of the interval.
+    /// @param fx_  Output defect-residual vector to write.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(const Eigen::MatrixBase<InType> &x,
                              Eigen::MatrixBase<OutType> const &fx_) const {
@@ -134,6 +167,15 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
                                     ArrayOfTempSpecs<XType, Interiors>(irowsode, 1),
                                     ArrayOfTempSpecs<FXType, Interiors>(orowsode, 1));
     }
+    /// @internal
+    /// @brief Evaluate the LGL defect residuals and their Jacobian.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @tparam JacType  Eigen Jacobian-matrix type.
+    /// @param x    Packed cardinal states and parameters of the interval.
+    /// @param fx_  Output defect-residual vector to write.
+    /// @param jx_  Output Jacobian to write.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(const Eigen::MatrixBase<InType> &x,
                                       Eigen::MatrixBase<OutType> const &fx_,
@@ -298,6 +340,21 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
                                     TempSpec<DIType>(irowsode, this->input_rows()));
     }
 
+    /// @internal
+    /// @brief Evaluate the LGL defect residuals, Jacobian, adjoint gradient, and adjoint Hessian.
+    /// @tparam InType       Eigen input-vector type.
+    /// @tparam OutType      Eigen output-vector type.
+    /// @tparam JacType      Eigen Jacobian-matrix type.
+    /// @tparam AdjGradType  Eigen adjoint-gradient vector type.
+    /// @tparam AdjHessType  Eigen adjoint-Hessian matrix type.
+    /// @tparam AdjVarType   Eigen adjoint-variable vector type.
+    /// @param x        Packed cardinal states and parameters of the interval.
+    /// @param fx_      Output defect-residual vector to write.
+    /// @param jx_      Output Jacobian to write.
+    /// @param adjgrad_ Output adjoint gradient to write.
+    /// @param adjhess_ Output adjoint Hessian to write.
+    /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
