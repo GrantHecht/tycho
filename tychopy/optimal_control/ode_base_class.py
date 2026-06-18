@@ -21,7 +21,49 @@ import numpy as np
 
 
 class ODEBase:
+    """Base class for user-defined ordinary differential equations.
+
+    Subclass :class:`ODEBase` and, in ``__init__``, build the right-hand side
+    of the dynamics as a :class:`~tychopy.vector_functions.VectorFunction` over
+    an :class:`~tychopy.optimal_control.ODEArguments` input, then call
+    ``super().__init__(ode, Xvars, Uvars)``. The resulting object can spawn
+    collocation phases (:meth:`phase`) and integrators (:meth:`integrator`) for
+    the dynamics.
+
+    The ODE input is the ordered vector ``[x, t, u, p]`` -- the state ``x``
+    (size ``Xvars``), time ``t``, control ``u`` (size ``Uvars``), and ODE
+    parameters ``p`` (size ``Pvars``); the right-hand side returns the state
+    derivative ``xdot`` (size ``Xvars``).
+
+    Examples
+    --------
+    >>> class Brachistochrone(oc.ODEBase):
+    ...     def __init__(self, g):
+    ...         args = oc.ODEArguments(3, 1)
+    ...         x, y, v = args.x_vec().tolist()
+    ...         theta = args.u_var(0)
+    ...         ode = vf.stack([vf.sin(theta) * v, -vf.cos(theta) * v, g * vf.cos(theta)])
+    ...         super().__init__(ode, 3, 1)
+    """
+
     def __init__(self, odefunc, Xvars, Uvars=None, Pvars=None, Vgroups=None):
+        """Bind a right-hand-side function as a sized ODE.
+
+        Parameters
+        ----------
+        odefunc : VectorFunction
+            The right-hand side ``xdot = f(x, t, u, p)``, an output of size
+            ``Xvars`` defined over the packed ``[x, t, u, p]`` input.
+        Xvars : int
+            Number of state variables.
+        Uvars : int, optional
+            Number of control variables. ``None`` or ``0`` means no controls.
+        Pvars : int, optional
+            Number of ODE parameters. ``None`` or ``0`` means no parameters.
+        Vgroups : dict, optional
+            Named variable groups mapping a name (or sequence of names) to the
+            indices it labels, for use with :meth:`make_input` / :meth:`get_vars`.
+        """
 
         mlist = inspect.getmembers(_tychopy.optimal_control)
 
@@ -218,12 +260,54 @@ class ODEBase:
         return self.ode.idx(Vname)
 
     def phase(self, *args):
+        """Create a collocation phase for these dynamics.
+
+        Parameters
+        ----------
+        *args
+            Forwarded to the underlying phase constructor. The common form is
+            ``phase(transcription_mode, traj, num_segments)`` where
+            ``transcription_mode`` is a :class:`TranscriptionModes` value (or its
+            string name, e.g. ``"LGL3"``), ``traj`` is an initial-guess
+            trajectory (a list of packed ``[x, t, u, p]`` node vectors), and
+            ``num_segments`` is the number of collocation segments.
+
+        Returns
+        -------
+        PhaseInterface
+            A phase ready to be configured with boundary values, bounds,
+            constraints, and objectives.
+
+        Examples
+        --------
+        >>> phase = ode.phase("LGL3", Xs, 32)
+        """
         return self.ode.phase(*args)
 
     def integrator(self, *args):
+        """Create a numerical integrator for these dynamics.
+
+        Parameters
+        ----------
+        *args
+            Forwarded to the underlying integrator constructor (typically a
+            step size, optionally followed by control/parameter bindings).
+
+        Returns
+        -------
+        Integrator
+            An integrator for the ODE right-hand side.
+        """
         return self.ode.integrator(*args)
 
     def vf(self):
+        """Return the ODE right-hand side as a VectorFunction.
+
+        Returns
+        -------
+        VectorFunction
+            The dynamics function ``xdot = f(x, t, u, p)``.
+        """
         return self.ode.vf()
 
     def x_vars(self):

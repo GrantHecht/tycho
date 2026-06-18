@@ -34,50 +34,88 @@ void GenericODESIntegratorPart6(FunctionRegistry &reg, nb::module_ &m);
 void RKFlagsBuild(nb::module_ &m);
 
 static void OCPFlagsBuild(nb::module_ &m) {
-    nb::enum_<TranscriptionModes>(m, "TranscriptionModes")
-        .value("LGL3", TranscriptionModes::LGL3)
-        .value("LGL5", TranscriptionModes::LGL5)
-        .value("LGL7", TranscriptionModes::LGL7)
-        .value("Trapezoidal", TranscriptionModes::Trapezoidal)
-        .value("CentralShooting", TranscriptionModes::CentralShooting);
+    nb::enum_<TranscriptionModes>(m, "TranscriptionModes",
+                                  R"doc(Collocation/transcription scheme used to discretize a phase.
 
-    nb::enum_<IntegralModes>(m, "IntegralModes")
-        .value("BaseIntegral", IntegralModes::BaseIntegral)
-        .value("TrapIntegral", IntegralModes::TrapIntegral);
+Passed (as an enum or its string name, e.g. ``"LGL3"``) when constructing
+a phase to select how the continuous dynamics are converted into a
+finite-dimensional set of collocation constraints.
+)doc")
+        .value("LGL3", TranscriptionModes::LGL3, "3rd-order Legendre-Gauss-Lobatto collocation.")
+        .value("LGL5", TranscriptionModes::LGL5, "5th-order Legendre-Gauss-Lobatto collocation.")
+        .value("LGL7", TranscriptionModes::LGL7, "7th-order Legendre-Gauss-Lobatto collocation.")
+        .value("Trapezoidal", TranscriptionModes::Trapezoidal,
+               "Trapezoidal (2nd-order) collocation.")
+        .value("CentralShooting", TranscriptionModes::CentralShooting,
+               "Central (forward/backward) shooting transcription.");
 
-    nb::enum_<ControlModes>(m, "ControlModes")
-        .value("HighestOrderSpline", ControlModes::HighestOrderSpline)
-        .value("FirstOrderSpline", ControlModes::FirstOrderSpline)
-        .value("NoSpline", ControlModes::NoSpline)
-        .value("BlockConstant", ControlModes::BlockConstant);
+    nb::enum_<IntegralModes>(
+        m, "IntegralModes",
+        R"doc(Quadrature rule used to evaluate integral terms over a phase.)doc")
+        .value("BaseIntegral", IntegralModes::BaseIntegral,
+               "Default quadrature matched to the transcription order.")
+        .value("TrapIntegral", IntegralModes::TrapIntegral, "Trapezoidal-rule quadrature.");
 
-    nb::enum_<PhaseRegionFlags>(m, "PhaseRegionFlags")
-        .value("Front", PhaseRegionFlags::Front)
-        .value("Back", PhaseRegionFlags::Back)
-        .value("Path", PhaseRegionFlags::Path)
-        .value("NodalPath", PhaseRegionFlags::NodalPath)
-        .value("FrontandBack", PhaseRegionFlags::FrontandBack)
-        .value("BackandFront", PhaseRegionFlags::BackandFront)
-        .value("Params", PhaseRegionFlags::Params)
-        .value("InnerPath", PhaseRegionFlags::InnerPath)
-        .value("ODEParams", PhaseRegionFlags::ODEParams)
-        .value("StaticParams", PhaseRegionFlags::StaticParams)
-        .value("PairWisePath", PhaseRegionFlags::PairWisePath);
+    nb::enum_<ControlModes>(m, "ControlModes",
+                            R"doc(Interpolation/representation scheme for the control history.)doc")
+        .value("HighestOrderSpline", ControlModes::HighestOrderSpline,
+               "Spline matching the transcription's highest order.")
+        .value("FirstOrderSpline", ControlModes::FirstOrderSpline,
+               "Piecewise-linear (first-order) control spline.")
+        .value("NoSpline", ControlModes::NoSpline,
+               "Independent control values, no inter-node spline.")
+        .value("BlockConstant", ControlModes::BlockConstant,
+               "Control held constant over each transcription block.");
 
-    nb::enum_<ScaleModes>(m, "ScaleModes")
-        .value("AUTO", ScaleModes::AUTO)
-        .value("CUSTOM", ScaleModes::CUSTOM)
-        .value("NONE", ScaleModes::NONE);
+    nb::enum_<PhaseRegionFlags>(
+        m, "PhaseRegionFlags",
+        R"doc(Region of a phase that a state function (constraint or objective) acts on.
 
-    nb::enum_<MeshErrorEstimators>(m, "MeshErrorEstimators")
-        .value("DEBOOR", MeshErrorEstimators::DEBOOR)
-        .value("INTEGRATOR", MeshErrorEstimators::INTEGRATOR);
+Selects which discretized state(s) -- endpoints, interior nodes, or
+parameter blocks -- are passed as arguments to a state function when it is
+attached to a phase. Most phase methods accept either the enum value or its
+string name (e.g. ``"Front"``, ``"Path"``).
+)doc")
+        .value("Front", PhaseRegionFlags::Front, "The first (initial-time) node of the phase.")
+        .value("Back", PhaseRegionFlags::Back, "The last (final-time) node of the phase.")
+        .value("Path", PhaseRegionFlags::Path, "Every node of the phase (full path constraint).")
+        .value("NodalPath", PhaseRegionFlags::NodalPath, "Every nodal (mesh) point along the path.")
+        .value("FrontandBack", PhaseRegionFlags::FrontandBack,
+               "Both endpoints, front state followed by back state.")
+        .value("BackandFront", PhaseRegionFlags::BackandFront,
+               "Both endpoints, back state followed by front state.")
+        .value("Params", PhaseRegionFlags::Params, "The combined parameter vector of the phase.")
+        .value("InnerPath", PhaseRegionFlags::InnerPath,
+               "Every interior node, excluding the two endpoints.")
+        .value("ODEParams", PhaseRegionFlags::ODEParams, "The ODE (dynamics) parameter sub-vector.")
+        .value("StaticParams", PhaseRegionFlags::StaticParams,
+               "The static (non-ODE) parameter sub-vector.")
+        .value("PairWisePath", PhaseRegionFlags::PairWisePath,
+               "Each consecutive pair of nodes along the path.");
 
-    nb::enum_<MeshErrorAggregation>(m, "MeshErrorAggregation")
-        .value("MAX", MeshErrorAggregation::MAX)
-        .value("AVG", MeshErrorAggregation::AVG)
-        .value("GEOMETRIC", MeshErrorAggregation::GEOMETRIC)
-        .value("ENDTOEND", MeshErrorAggregation::ENDTOEND);
+    nb::enum_<ScaleModes>(m, "ScaleModes",
+                          R"doc(Source of the variable/equation scaling applied to a phase.)doc")
+        .value("AUTO", ScaleModes::AUTO, "Scales are computed automatically from the problem.")
+        .value("CUSTOM", ScaleModes::CUSTOM, "Scales are supplied explicitly by the user.")
+        .value("NONE", ScaleModes::NONE, "No scaling is applied (unit scales).");
+
+    nb::enum_<MeshErrorEstimators>(
+        m, "MeshErrorEstimators",
+        R"doc(Method used to estimate the per-interval mesh (discretization) error.)doc")
+        .value("DEBOOR", MeshErrorEstimators::DEBOOR,
+               "de Boor collocation-residual error estimate.")
+        .value("INTEGRATOR", MeshErrorEstimators::INTEGRATOR,
+               "Error estimate from a reference numerical integrator.");
+
+    nb::enum_<MeshErrorAggregation>(
+        m, "MeshErrorAggregation",
+        R"doc(Reduction used to aggregate per-interval mesh errors into a scalar.)doc")
+        .value("MAX", MeshErrorAggregation::MAX, "Maximum error over all intervals.")
+        .value("AVG", MeshErrorAggregation::AVG, "Arithmetic mean of per-interval errors.")
+        .value("GEOMETRIC", MeshErrorAggregation::GEOMETRIC,
+               "Geometric mean of per-interval errors.")
+        .value("ENDTOEND", MeshErrorAggregation::ENDTOEND,
+               "End-to-end (accumulated) trajectory error.");
 
     m.def("strto_phase_region_flag",
           nb::overload_cast<const std::string &>(&strto_PhaseRegionFlag));

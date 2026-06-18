@@ -30,7 +30,41 @@ using StateObjective = StateFunction<ScalarFunctionalX>;
 
 void TychoBind<ODEPhaseBase>::build(nb::module_ &m) {
     auto obj = nb::class_<ODEPhaseBase, OptimizationProblemBase>(m, "PhaseInterface");
-    obj.doc() = "Base Class for All Optimal Control Phases";
+    obj.doc() = R"doc(A single phase of an optimal control problem.
+
+A phase couples an ODE, a discretized trajectory, and the boundary values,
+bounds, constraints, and objectives that define a direct-collocation problem.
+Phases are not constructed directly; build one from an ODE with
+``ode.phase(transcription_mode, traj, num_segments)`` (see
+:class:`~tychopy.optimal_control.ODEBase`), then attach problem data with the
+``add_*`` methods below.
+
+Variables are addressed within a region of the phase. A *region* (see
+:class:`PhaseRegionFlags`) selects which discretized state(s) a function or
+bound applies to -- e.g. ``"Front"`` (initial node), ``"Back"`` (final node),
+or ``"Path"`` (every node). Region selectors accept either the enum value or
+its string name. Variable indices refer to the packed node layout
+``[x, t, u, p]``.
+
+Once configured, solve the phase with :meth:`optimize` (or :meth:`solve`),
+then retrieve the result with :meth:`return_traj`.
+
+Notes
+-----
+:meth:`optimize`, :meth:`solve`, and the ``optimizer`` handle are inherited
+from the shared optimization-problem base; ``phase.optimizer`` exposes the
+underlying PSIOPT solver (e.g. ``phase.optimizer.set_print_level(0)``).
+
+Examples
+--------
+>>> phase = ode.phase("LGL3", Xs, 32)
+>>> phase.add_boundary_value("Front", range(0, 4), [x0, y0, v0, 0])
+>>> phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
+>>> phase.add_boundary_value("Back", [0, 1], [xf, yf])
+>>> phase.add_delta_time_objective(1.0)
+>>> phase.optimize()
+>>> traj = phase.return_traj()
+)doc";
 
     auto set_mesh_error_estimator = [](ODEPhaseBase &self, nb::object val) {
         if (nb::isinstance<MeshErrorEstimators>(val))
@@ -70,7 +104,20 @@ void TychoBind<ODEPhaseBase>::build(nb::module_ &m) {
                             &ODEPhaseBase::set_traj));
 
     obj.def("set_traj",
-            nb::overload_cast<const std::vector<Eigen::VectorXd> &>(&ODEPhaseBase::set_traj));
+            nb::overload_cast<const std::vector<Eigen::VectorXd> &>(&ODEPhaseBase::set_traj),
+            R"doc(Set (or replace) the phase's initial-guess trajectory.
+
+Parameters
+----------
+mesh : list of numpy.ndarray
+    Trajectory nodes, each packed as ``[x, t, u, p]``, in increasing time
+    order. This becomes the initial guess that collocation refines.
+
+Notes
+-----
+Additional overloads accept a defect-segment count or an explicit
+defects-binding/defects-per-block specification; see the C++ reference.
+)doc");
 
     obj.def("switch_transcription_mode",
             nb::overload_cast<TranscriptionModes, VectorXd, VectorXi>(
@@ -86,12 +133,43 @@ void TychoBind<ODEPhaseBase>::build(nb::module_ &m) {
     obj.def("switch_transcription_mode",
             nb::overload_cast<std::string>(&ODEPhaseBase::switch_transcription_mode), "");
 
-    obj.def("transcribe", nb::overload_cast<bool, bool>(&ODEPhaseBase::transcribe), "");
+    obj.def("transcribe", nb::overload_cast<bool, bool>(&ODEPhaseBase::transcribe),
+            R"doc(Transcribe the phase into its underlying nonlinear program.
 
-    obj.def("refine_traj_manual", nb::overload_cast<int>(&ODEPhaseBase::refine_traj_manual), "");
+Builds the collocation NLP (defect constraints, user constraints, and
+objectives) from the current configuration. This is performed automatically
+by :meth:`optimize`/:meth:`solve`; call it explicitly only to inspect the
+transcribed problem or to force a rebuild.
+
+Parameters
+----------
+showstats : bool
+    Print transcription statistics (variable/constraint counts).
+showfuns : bool
+    Print the set of transcribed functions.
+)doc");
+
+    obj.def("refine_traj_manual", nb::overload_cast<int>(&ODEPhaseBase::refine_traj_manual),
+            R"doc(Resample the current trajectory onto a new number of segments.
+
+Parameters
+----------
+num : int
+    New segment count to interpolate the existing trajectory onto.
+)doc");
     obj.def("refine_traj_manual",
-            nb::overload_cast<VectorXd, VectorXi>(&ODEPhaseBase::refine_traj_manual), "");
-    obj.def("refine_traj_equal", &ODEPhaseBase::refine_traj_equal, "");
+            nb::overload_cast<VectorXd, VectorXi>(&ODEPhaseBase::refine_traj_manual),
+            R"doc(Resample the current trajectory onto an explicit mesh specification.
+
+Parameters
+----------
+bin_times : numpy.ndarray
+    Normalized bin boundary times in ``[0, 1]``.
+bin_segments : numpy.ndarray of int
+    Number of segments to place in each bin.
+)doc");
+    obj.def("refine_traj_equal", &ODEPhaseBase::refine_traj_equal,
+            R"doc(Resample the current trajectory onto an equally-spaced mesh.)doc");
 
     obj.def("set_static_params",
             nb::overload_cast<VectorXd, VectorXd>(&ODEPhaseBase::set_static_params), "");
@@ -129,12 +207,50 @@ void TychoBind<ODEPhaseBase>::build(nb::module_ &m) {
     obj.def("sub_variable",
             nb::overload_cast<std::string, int, double>(&ODEPhaseBase::sub_variable), "");
 
-    obj.def("return_traj", &ODEPhaseBase::return_traj, "");
-    obj.def("return_traj_range", &ODEPhaseBase::return_traj_range, "");
+    obj.def("return_traj", &ODEPhaseBase::return_traj,
+            R"doc(Return the current discretized trajectory.
+
+Returns
+-------
+list of numpy.ndarray
+    One packed state vector ``[x, t, u, p]`` per node, in time order. After a
+    successful :meth:`optimize`/:meth:`solve` this is the optimized solution.
+
+Examples
+--------
+>>> phase.optimize()
+>>> traj = phase.return_traj()
+)doc");
+    obj.def("return_traj_range", &ODEPhaseBase::return_traj_range,
+            R"doc(Return the trajectory resampled to ``num`` points over a time range.
+
+Parameters
+----------
+num : int
+    Number of output samples.
+tl : float
+    Lower time bound.
+th : float
+    Upper time bound.
+
+Returns
+-------
+list of numpy.ndarray
+    ``num`` interpolated node vectors spanning ``[tl, th]``.
+)doc");
     obj.def("return_traj_range_nd", &ODEPhaseBase::return_traj_range_nd, "");
     obj.def("return_traj_table", &ODEPhaseBase::return_traj_table);
 
-    obj.def("return_costate_traj", &ODEPhaseBase::return_costate_traj, "");
+    obj.def("return_costate_traj", &ODEPhaseBase::return_costate_traj,
+            R"doc(Return the costate (adjoint/dual) trajectory.
+
+Returns
+-------
+list of numpy.ndarray
+    One costate vector per node, recovered from the dynamics-defect
+    Lagrange multipliers of the converged solution. Only meaningful after a
+    successful :meth:`optimize`/:meth:`solve`.
+)doc");
     obj.def("return_traj_error", &ODEPhaseBase::return_traj_error);
 
     obj.def("return_u_spline_con_lmults", &ODEPhaseBase::return_u_spline_con_lmults);
@@ -184,7 +300,37 @@ void TychoBind<ODEPhaseBase>::build(nb::module_ &m) {
             nb::overload_cast<RegionType, VarIndexType, const std::variant<double, VectorXd> &,
                               ScaleType>(&ODEPhaseBase::add_boundary_value),
             nb::arg("phase_region"), nb::arg("index"), nb::arg("value"),
-            nb::arg("auto_scale").none() = std::string("auto"));
+            nb::arg("auto_scale").none() = std::string("auto"),
+            R"doc(Fix selected region variables to given values (a boundary-value constraint).
+
+Adds an equality constraint pinning the named variables -- evaluated in the
+given region -- to ``value``. This is the usual way to set initial/final
+conditions.
+
+Parameters
+----------
+phase_region : PhaseRegionFlags or str
+    Region the variables are read from, e.g. ``"Front"`` for the initial node
+    or ``"Back"`` for the final node.
+index : int or sequence of int
+    Variable index or indices (into the packed ``[x, t, u, p]`` layout) to fix.
+value : float or numpy.ndarray
+    Target value(s). A scalar is broadcast to all selected variables; a vector
+    must match the number of selected indices.
+auto_scale : ScaleModes or str, optional
+    Constraint output-scaling mode (``"auto"``, ``"custom"``, or ``"none"``).
+    Defaults to ``"auto"``.
+
+Returns
+-------
+int
+    The index assigned to the new constraint.
+
+Examples
+--------
+>>> phase.add_boundary_value("Front", range(0, 4), [x0, y0, v0, 0])
+>>> phase.add_boundary_value("Back", [0, 1], [xf, yf])
+)doc");
 
     obj.def("add_delta_var_equal_con",
             nb::overload_cast<VarIndexType, double, double, ScaleType>(
@@ -223,18 +369,87 @@ void TychoBind<ODEPhaseBase>::build(nb::module_ &m) {
             nb::overload_cast<RegionType, VarIndexType, double, double, double, ScaleType>(
                 &ODEPhaseBase::add_lu_var_bound),
             nb::arg("phase_region"), nb::arg("var"), nb::arg("lowerbound"), nb::arg("upperbound"),
-            nb::arg("scale") = 1.0, nb::arg("auto_scale").none() = std::string("auto"));
+            nb::arg("scale") = 1.0, nb::arg("auto_scale").none() = std::string("auto"),
+            R"doc(Bound a variable from below and above (an inequality constraint).
+
+Parameters
+----------
+phase_region : PhaseRegionFlags or str
+    Region the variable is read from, e.g. ``"Path"`` to bound it at every node.
+var : int
+    Variable index (into the packed ``[x, t, u, p]`` layout) to bound.
+lowerbound : float
+    Lower bound.
+upperbound : float
+    Upper bound.
+scale : float, optional
+    Constraint scaling applied to both the lower and upper bound. Default 1.0.
+auto_scale : ScaleModes or str, optional
+    Output-scaling mode (``"auto"``, ``"custom"``, or ``"none"``). Defaults to
+    ``"auto"``.
+
+Returns
+-------
+int
+    The index assigned to the new bound constraint.
+
+Examples
+--------
+>>> phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
+)doc");
     obj.def("add_lower_var_bound",
             nb::overload_cast<RegionType, VarIndexType, double, double, ScaleType>(
                 &ODEPhaseBase::add_lower_var_bound),
             nb::arg("phase_region"), nb::arg("var"), nb::arg("lowerbound"), nb::arg("scale") = 1.0,
-            nb::arg("auto_scale").none() = std::string("auto"));
+            nb::arg("auto_scale").none() = std::string("auto"),
+            R"doc(Bound a variable from below (an inequality constraint).
+
+Parameters
+----------
+phase_region : PhaseRegionFlags or str
+    Region the variable is read from.
+var : int
+    Variable index (into the packed ``[x, t, u, p]`` layout) to bound.
+lowerbound : float
+    Lower bound.
+scale : float, optional
+    Constraint scaling. Default 1.0.
+auto_scale : ScaleModes or str, optional
+    Output-scaling mode (``"auto"``, ``"custom"``, or ``"none"``). Defaults to
+    ``"auto"``.
+
+Returns
+-------
+int
+    The index assigned to the new bound constraint.
+)doc");
 
     obj.def("add_upper_var_bound",
             nb::overload_cast<RegionType, VarIndexType, double, double, ScaleType>(
                 &ODEPhaseBase::add_upper_var_bound),
             nb::arg("phase_region"), nb::arg("var"), nb::arg("upperbound"), nb::arg("scale") = 1.0,
-            nb::arg("auto_scale").none() = std::string("auto"));
+            nb::arg("auto_scale").none() = std::string("auto"),
+            R"doc(Bound a variable from above (an inequality constraint).
+
+Parameters
+----------
+phase_region : PhaseRegionFlags or str
+    Region the variable is read from.
+var : int
+    Variable index (into the packed ``[x, t, u, p]`` layout) to bound.
+upperbound : float
+    Upper bound.
+scale : float, optional
+    Constraint scaling. Default 1.0.
+auto_scale : ScaleModes or str, optional
+    Output-scaling mode (``"auto"``, ``"custom"``, or ``"none"``). Defaults to
+    ``"auto"``.
+
+Returns
+-------
+int
+    The index assigned to the new bound constraint.
+)doc");
 
     obj.def(
         "add_lu_func_bound",
@@ -351,21 +566,103 @@ void TychoBind<ODEPhaseBase>::build(nb::module_ &m) {
             nb::overload_cast<RegionType, ScalarFunctionalX, VarIndexType, ScaleType>(
                 &ODEPhaseBase::add_state_objective),
             nb::arg("phase_region"), nb::arg("func"), nb::arg("input_index"),
-            nb::arg("auto_scale").none() = std::string("auto"));
+            nb::arg("auto_scale").none() = std::string("auto"),
+            R"doc(Add a (terminal/boundary) objective evaluated at a region of the phase.
+
+Adds the scalar value of ``func``, evaluated over the selected variables in
+the given region, to the problem objective (a Mayer-type term).
+
+Parameters
+----------
+phase_region : PhaseRegionFlags or str
+    Region the function is evaluated over, e.g. ``"Back"`` for a terminal cost.
+func : VectorFunction
+    Scalar-valued function of the selected variables.
+input_index : int or sequence of int
+    Variable index/indices (into the packed ``[x, t, u, p]`` layout) passed to
+    ``func``.
+auto_scale : ScaleModes or str, optional
+    Output-scaling mode (``"auto"``, ``"custom"``, or ``"none"``). Defaults to
+    ``"auto"``.
+
+Returns
+-------
+int
+    The index assigned to the new objective.
+)doc");
 
     obj.def("add_value_objective",
             nb::overload_cast<RegionType, VarIndexType, double, ScaleType>(
                 &ODEPhaseBase::add_value_objective),
             nb::arg("phase_region"), nb::arg("var"), nb::arg("scale"),
-            nb::arg("auto_scale").none() = std::string("auto"));
+            nb::arg("auto_scale").none() = std::string("auto"),
+            R"doc(Add an objective equal to a scaled single variable at a region.
+
+Parameters
+----------
+phase_region : PhaseRegionFlags or str
+    Region the variable is read from.
+var : int
+    Variable index (into the packed ``[x, t, u, p]`` layout).
+scale : float
+    Multiplier applied to the variable's value in the objective. Use a
+    negative value to maximize the variable.
+auto_scale : ScaleModes or str, optional
+    Output-scaling mode (``"auto"``, ``"custom"``, or ``"none"``). Defaults to
+    ``"auto"``.
+
+Returns
+-------
+int
+    The index assigned to the new objective.
+)doc");
 
     obj.def(
         "add_delta_var_objective",
         nb::overload_cast<VarIndexType, double, ScaleType>(&ODEPhaseBase::add_delta_var_objective),
-        nb::arg("var"), nb::arg("scale"), nb::arg("auto_scale").none() = std::string("auto"));
+        nb::arg("var"), nb::arg("scale"), nb::arg("auto_scale").none() = std::string("auto"),
+        R"doc(Add an objective on the front-to-back change of a variable.
+
+Parameters
+----------
+var : int
+    Variable index (into the packed ``[x, t, u, p]`` layout).
+scale : float
+    Multiplier applied to the change (back value minus front value).
+auto_scale : ScaleModes or str, optional
+    Output-scaling mode (``"auto"``, ``"custom"``, or ``"none"``). Defaults to
+    ``"auto"``.
+
+Returns
+-------
+int
+    The index assigned to the new objective.
+)doc");
     obj.def("add_delta_time_objective",
             nb::overload_cast<double, ScaleType>(&ODEPhaseBase::add_delta_time_objective),
-            nb::arg("var"), nb::arg("auto_scale").none() = std::string("auto"));
+            nb::arg("scale"), nb::arg("auto_scale").none() = std::string("auto"),
+            R"doc(Add an objective on the total elapsed time of the phase.
+
+A scaled minimum-time objective: minimizes ``scale * (t_back - t_front)``.
+
+Parameters
+----------
+scale : float
+    Multiplier applied to the elapsed time. Use ``1.0`` for a minimum-time
+    objective.
+auto_scale : ScaleModes or str, optional
+    Output-scaling mode (``"auto"``, ``"custom"``, or ``"none"``). Defaults to
+    ``"auto"``.
+
+Returns
+-------
+int
+    The index assigned to the new objective.
+
+Examples
+--------
+>>> phase.add_delta_time_objective(1.0)
+)doc");
     //////////////////////////////////
     /////// IntegralObjectives /////////
     obj.def(
@@ -379,7 +676,28 @@ void TychoBind<ODEPhaseBase>::build(nb::module_ &m) {
             nb::overload_cast<ScalarFunctionalX, VarIndexType, ScaleType>(
                 &ODEPhaseBase::add_integral_objective),
             nb::arg("func"), nb::arg("input_index"),
-            nb::arg("auto_scale").none() = std::string("auto"));
+            nb::arg("auto_scale").none() = std::string("auto"),
+            R"doc(Add a running-cost (Lagrange) objective integrated over the phase.
+
+Adds the time integral of ``func`` -- evaluated along the trajectory -- to the
+problem objective.
+
+Parameters
+----------
+func : VectorFunction
+    Scalar-valued integrand, a function of the selected variables.
+input_index : int or sequence of int
+    Variable index/indices (into the packed ``[x, t, u, p]`` layout) passed to
+    ``func`` at each node.
+auto_scale : ScaleModes or str, optional
+    Output-scaling mode (``"auto"``, ``"custom"``, or ``"none"``). Defaults to
+    ``"auto"``.
+
+Returns
+-------
+int
+    The index assigned to the new objective.
+)doc");
     //////////////////////////////////
     /////// IntegralParamFunction /////////
     obj.def("add_integral_param_function",
@@ -427,9 +745,31 @@ void TychoBind<ODEPhaseBase>::build(nb::module_ &m) {
 
     ////////////////////////////////////////////////////
     obj.def("get_mesh_info", &ODEPhaseBase::get_mesh_info);
-    obj.def("refine_traj_auto", &ODEPhaseBase::refine_traj_auto);
-    obj.def("calc_global_error", &ODEPhaseBase::calc_global_error);
-    obj.def("get_mesh_iters", &ODEPhaseBase::get_mesh_iters);
+    obj.def("refine_traj_auto", &ODEPhaseBase::refine_traj_auto,
+            R"doc(Run one automatic mesh-refinement step.
+
+Estimates the per-interval discretization error and redistributes mesh nodes
+to drive it below :attr:`mesh_tol`. This is invoked automatically when
+:attr:`adaptive_mesh` is enabled; call it directly for manual control of the
+refinement loop.
+)doc");
+    obj.def("calc_global_error", &ODEPhaseBase::calc_global_error,
+            R"doc(Estimate the global (end-to-end) discretization error of the trajectory.
+
+Returns
+-------
+numpy.ndarray
+    Per-state global error estimate of the current trajectory.
+)doc");
+    obj.def("get_mesh_iters", &ODEPhaseBase::get_mesh_iters,
+            R"doc(Return the per-iteration adaptive-mesh refinement history.
+
+Returns
+-------
+list of MeshIterateInfo
+    One :class:`MeshIterateInfo` record per mesh-refinement iteration that was
+    performed during the last solve.
+)doc");
 
     obj.def_rw("adaptive_mesh", &ODEPhaseBase::adaptive_mesh_);
     obj.def_rw("auto_scaling", &ODEPhaseBase::auto_scaling_);
