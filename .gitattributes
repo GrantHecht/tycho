@@ -1,0 +1,12 @@
+# GitHub Linguist (language-statistics) overrides.
+#
+# doc-legacy/ is the frozen, archived asset_asrl documentation carryover. It is
+# not part of Tycho's source and is not rendered. It also contains large
+# interactive Plotly HTML exports (tens of MB) that otherwise dominate the
+# repository's language statistics and mislabel Tycho as an "HTML" project.
+# Exclude the whole tree from language detection.
+doc-legacy/** linguist-documentation
+
+# The large interactive trajectory pages are generated artifacts — also collapse
+# them in diffs.
+doc-legacy/tutorials/_static/*.html linguist-generated
