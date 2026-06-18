@@ -525,7 +525,6 @@ class Phase {
     void set_static_param_names(std::initializer_list<std::pair<std::string, int>> names) {
         sp_names_.clear();
         for (const auto &[name, idx] : names)
-            /// @brief Register a single named static parameter.
             add_static_param_name(name, idx);
     }
 

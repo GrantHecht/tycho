@@ -61,8 +61,11 @@ class ODEBase:
         Pvars : int, optional
             Number of ODE parameters. ``None`` or ``0`` means no parameters.
         Vgroups : dict, optional
-            Named variable groups mapping a name (or sequence of names) to the
-            indices it labels, for use with :meth:`make_input` / :meth:`get_vars`.
+            Named variable groups, a dict mapping a name (str) or sequence of
+            names (tuple of str) to the indices they label. Each value may be an
+            int, a list of ints, or a VectorFunction whose ``input_domain``
+            encodes the indices. For use with :meth:`make_input` /
+            :meth:`get_vars`.
         """
 
         mlist = inspect.getmembers(_tychopy.optimal_control)
@@ -204,8 +207,10 @@ class ODEBase:
 
         Parameters
         ----------
-        names : str,list
-            Name,list of names/indices of the variables or sub-vectors to retrieve.
+        names : str or list
+            A single group name (str), or a list of group names (str) and/or
+            integer indices, identifying the variables or sub-vectors to
+            retrieve. A bare integer is not accepted; wrap it in a list.
         source : np.ndarray,list
             Source vector or 2d-array for retreiving variables.
         retscalar : bool, optional
@@ -290,8 +295,9 @@ class ODEBase:
         Parameters
         ----------
         *args
-            Forwarded to the underlying integrator constructor (typically a
-            step size, optionally followed by control/parameter bindings).
+            Forwarded to the underlying integrator constructor. Common forms
+            are ``integrator(dt)``, ``integrator(alg_name, dt)`` (e.g.
+            ``"DOPRI87"``), and ``integrator(dt, control_func, indices)``.
 
         Returns
         -------

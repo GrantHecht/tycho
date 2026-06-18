@@ -115,7 +115,7 @@ string name (e.g. ``"Front"``, ``"Path"``).
         .value("GEOMETRIC", MeshErrorAggregation::GEOMETRIC,
                "Geometric mean of per-interval errors.")
         .value("ENDTOEND", MeshErrorAggregation::ENDTOEND,
-               "End-to-end (accumulated) trajectory error.");
+               "End-to-end re-integration trajectory error.");
 
     m.def("strto_phase_region_flag",
           nb::overload_cast<const std::string &>(&strto_PhaseRegionFlag));

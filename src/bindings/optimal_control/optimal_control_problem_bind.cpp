@@ -362,7 +362,7 @@ shared link parameters) -- to the problem objective.
 
 Parameters
 ----------
-func : VectorFunction
+func : ScalarFunction
     Scalar-valued function of the linked variables.
 phase0 : int, PhaseInterface, or str
     First phase.

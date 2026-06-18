@@ -57,13 +57,16 @@ enum class PhaseRegionFlags {
     NodalPath,          ///< Every nodal (mesh) point along the path.
     DefectPath,         ///< Every defect (collocation) point along the path.
     PairWisePath,       ///< Each consecutive pair of nodes along the path.
-    DefectPairWisePath, ///< Each consecutive pair of defect points along the path.
-    FrontNodalBackPath, ///< Front node, all nodal points, then back node.
+    DefectPairWisePath, ///< Per adjacent defect-interval pair: all cardinal states spanning the
+                        ///< two overlapping intervals.
+    FrontNodalBackPath, ///< Per interior nodal point: the phase's first state, that nodal point,
+                        ///< and the phase's last state (one application per interior node).
     Params,             ///< The combined parameter vector of the phase.
     ODEParams,          ///< The ODE (dynamics) parameter sub-vector.
     StaticParams,       ///< The static (non-ODE) parameter sub-vector.
-    Accumulate,         ///< Accumulated (summed) contribution across the path.
-    BlockDefectPath,    ///< Defect points grouped into transcription blocks.
+    Accumulate,         ///< Internal sentinel — not a user-facing region selector.
+    BlockDefectPath,    ///< Per defect interval: all cardinal states plus the block-constant
+                        ///< control value (BlockConstant control mode).
 };
 
 /// @ingroup optimal_control
@@ -78,8 +81,8 @@ enum class LinkFlags {
     BackToBack,        ///< Back of the first phase to back of the second.
     ParamsToParams,    ///< Parameter vector of one phase to that of another.
     LinkParams,        ///< The shared link-parameter vector.
-    BackTwoToTwoFront, ///< Last two states of one phase to first two of another.
-    FrontTwoToTwoBack, ///< First two states of one phase to last two of another.
+    BackTwoToTwoFront, ///< Last two states of one phase to first two of another; not yet implemented.
+    FrontTwoToTwoBack, ///< First two states of one phase to last two of another; not yet implemented.
     PathToPath,        ///< Path nodes of one phase to path nodes of another.
     ReadRegions,       ///< Regions are read from an explicit specification.
 };
@@ -107,7 +110,7 @@ enum class TranscriptionModes {
 /// @brief Quadrature rule used to evaluate integral terms over a phase.
 enum class IntegralModes {
     BaseIntegral,    ///< Default quadrature matched to the transcription order.
-    SimpsonIntegral, ///< Simpson's-rule quadrature.
+    SimpsonIntegral, ///< Simpson's-rule quadrature (unimplemented placeholder; not currently dispatched).
     TrapIntegral,    ///< Trapezoidal-rule quadrature.
 };
 
@@ -132,7 +135,7 @@ enum class MeshErrorAggregation {
     MAX,       ///< Maximum error over all intervals.
     AVG,       ///< Arithmetic mean of per-interval errors.
     GEOMETRIC, ///< Geometric mean of per-interval errors.
-    ENDTOEND,  ///< End-to-end (accumulated) trajectory error.
+    ENDTOEND,  ///< End-to-end re-integration trajectory error.
 };
 
 /// @brief Parse a ScaleModes value from its string name.

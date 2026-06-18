@@ -98,7 +98,7 @@ template <> struct LGLCoeffs<2> { /// Cubic Hermite-LGL3
 /// @internal
 /// @brief LGL5 collocation coefficient table.
 /// @endinternal
-template <> struct LGLCoeffs<3> { /// Cubic Hermite-LGL3
+template <> struct LGLCoeffs<3> { /// LGL5
 
     /// @brief Convenience alias for a fixed-size std::array.
     /// @tparam T   Element type.

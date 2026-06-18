@@ -18,7 +18,7 @@
 /// - **Phases** (@ref tycho::Phase) carrying boundary values, path
 ///   constraints, integral objectives, and a discretization mesh,
 /// - **Multi-phase problems** (@ref tycho::OptimalControlProblem) that link
-///   phases together with link functions,
+///   phases together with link constraints,
 /// - **Transcription schemes** (LGL collocation, trapezoidal, shooting) and
 ///   **mesh-error estimation/refinement**, and
 /// - **builder wrappers** that expose the above as the Python-facing API.

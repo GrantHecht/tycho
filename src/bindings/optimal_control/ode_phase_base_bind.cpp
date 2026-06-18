@@ -168,8 +168,15 @@ bin_times : numpy.ndarray
 bin_segments : numpy.ndarray of int
     Number of segments to place in each bin.
 )doc");
-    obj.def("refine_traj_equal", &ODEPhaseBase::refine_traj_equal,
-            R"doc(Resample the current trajectory onto an equally-spaced mesh.)doc");
+    obj.def("refine_traj_equal", &ODEPhaseBase::refine_traj_equal, nb::arg("n"),
+            R"doc(Resample the current trajectory onto an equally-spaced mesh.
+
+Parameters
+----------
+n : int
+    Number of equally-spaced segments (defect intervals) to divide the mesh
+    into.
+)doc");
 
     obj.def("set_static_params",
             nb::overload_cast<VectorXd, VectorXd>(&ODEPhaseBase::set_static_params), "");
@@ -247,9 +254,13 @@ list of numpy.ndarray
 Returns
 -------
 list of numpy.ndarray
-    One costate vector per node, recovered from the dynamics-defect
-    Lagrange multipliers of the converged solution. Only meaningful after a
-    successful :meth:`optimize`/:meth:`solve`.
+    One costate vector per trajectory node (same count as :meth:`return_traj`),
+    each of length ``x_vars + 1`` -- the ``x_vars`` costate components plus a
+    time entry at the time index. Costates are recovered from the
+    dynamics-defect Lagrange multipliers, which are defined at the defect
+    points and then linearly interpolated (extrapolated at the endpoints) onto
+    the trajectory nodes. Only meaningful after a successful
+    :meth:`optimize`/:meth:`solve`.
 )doc");
     obj.def("return_traj_error", &ODEPhaseBase::return_traj_error);
 
@@ -576,7 +587,7 @@ Parameters
 ----------
 phase_region : PhaseRegionFlags or str
     Region the function is evaluated over, e.g. ``"Back"`` for a terminal cost.
-func : VectorFunction
+func : ScalarFunction
     Scalar-valued function of the selected variables.
 input_index : int or sequence of int
     Variable index/indices (into the packed ``[x, t, u, p]`` layout) passed to
@@ -684,7 +695,7 @@ problem objective.
 
 Parameters
 ----------
-func : VectorFunction
+func : ScalarFunction
     Scalar-valued integrand, a function of the selected variables.
 input_index : int or sequence of int
     Variable index/indices (into the packed ``[x, t, u, p]`` layout) passed to

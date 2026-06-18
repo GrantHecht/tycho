@@ -916,15 +916,16 @@ struct LGLInterpTable {
     }
 
     /// @internal
-    /// @brief General-order interpolation of state and first/second derivatives within a block.
+    /// @brief General-order interpolation of state and its first derivative within a block.
     /// @tparam Scalar       Arithmetic scalar type.
     /// @tparam OutType      Eigen output type.
     /// @tparam XtUBlockType Eigen state-block type.
     /// @tparam DXBlockType  Eigen derivative-block type.
     /// @param t       Local fractional time in @f$[0,1]@f$.
-    /// @param fx      Output @c [value, d/dt] matrix to write.
+    /// @param fx      Output @c [value, d/dt] matrix to write (value and first derivative only).
     /// @param xtublk  State/time/control data columns of the block.
     /// @param dxblk   State-derivative data columns of the block.
+    /// @note Not on the active 2nd-derivative dispatch path.
     /// @endinternal
     template <class Scalar, class OutType, class XtUBlockType, class DXBlockType>
     void interp_block_deriv2_gen(Scalar t, const Eigen::MatrixBase<OutType> &fx,
@@ -1162,7 +1163,8 @@ struct LGLInterpTable {
     }
 
     /// @internal
-    /// @brief Dispatch state interpolation to the LGL3 or general kernel by method.
+    /// @brief Dispatch state interpolation to the cubic-Hermite (LGL3/Trapezoidal) or
+    ///        general-order kernel by method.
     /// @tparam Scalar       Arithmetic scalar type.
     /// @tparam OutType      Eigen output type.
     /// @tparam XtUBlockType Eigen state-block type.
@@ -1183,7 +1185,8 @@ struct LGLInterpTable {
         return this->interp_block_gen(t, fx, xtublk, dxblk);
     }
     /// @internal
-    /// @brief Dispatch state+derivative interpolation to the LGL3 or general kernel.
+    /// @brief Dispatch state+derivative interpolation to the cubic-Hermite (LGL3/Trapezoidal)
+    ///        or general-order kernel by method.
     /// @tparam Scalar       Arithmetic scalar type.
     /// @tparam OutType      Eigen output type.
     /// @tparam XtUBlockType Eigen state-block type.

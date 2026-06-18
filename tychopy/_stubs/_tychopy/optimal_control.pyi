@@ -172,7 +172,7 @@ class MeshErrorAggregation(enum.Enum):
     """Geometric mean of per-interval errors."""
 
     ENDTOEND = 3
-    """End-to-end (accumulated) trajectory error."""
+    """End-to-end re-integration trajectory error."""
 
 def strto_phase_region_flag(arg: str, /) -> PhaseRegionFlags: ...
 
@@ -391,8 +391,16 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
             Number of segments to place in each bin.
         """
 
-    def refine_traj_equal(self, arg: int, /) -> list[numpy.ndarray]:
-        """Resample the current trajectory onto an equally-spaced mesh."""
+    def refine_traj_equal(self, n: int) -> list[numpy.ndarray]:
+        """
+        Resample the current trajectory onto an equally-spaced mesh.
+
+        Parameters
+        ----------
+        n : int
+            Number of equally-spaced segments (defect intervals) to divide the mesh
+            into.
+        """
 
     @overload
     def set_static_params(self, arg0: numpy.ndarray, arg1: numpy.ndarray, /) -> None: ...
@@ -484,9 +492,13 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
         Returns
         -------
         list of numpy.ndarray
-            One costate vector per node, recovered from the dynamics-defect
-            Lagrange multipliers of the converged solution. Only meaningful after a
-            successful :meth:`optimize`/:meth:`solve`.
+            One costate vector per trajectory node (same count as :meth:`return_traj`),
+            each of length ``x_vars + 1`` -- the ``x_vars`` costate components plus a
+            time entry at the time index. Costates are recovered from the
+            dynamics-defect Lagrange multipliers, which are defined at the defect
+            points and then linearly interpolated (extrapolated at the endpoints) onto
+            the trajectory nodes. Only meaningful after a successful
+            :meth:`optimize`/:meth:`solve`.
         """
 
     def return_traj_error(self) -> list[numpy.ndarray]: ...
@@ -719,7 +731,7 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
         ----------
         phase_region : PhaseRegionFlags or str
             Region the function is evaluated over, e.g. ``"Back"`` for a terminal cost.
-        func : VectorFunction
+        func : ScalarFunction
             Scalar-valued function of the selected variables.
         input_index : int or sequence of int
             Variable index/indices (into the packed ``[x, t, u, p]`` layout) passed to
@@ -818,7 +830,7 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
 
         Parameters
         ----------
-        func : VectorFunction
+        func : ScalarFunction
             Scalar-valued integrand, a function of the selected variables.
         input_index : int or sequence of int
             Variable index/indices (into the packed ``[x, t, u, p]`` layout) passed to
@@ -1153,7 +1165,7 @@ class OptimalControlProblem(_tychopy.solvers.OptimizationProblemBase):
 
         Parameters
         ----------
-        func : VectorFunction
+        func : ScalarFunction
             Scalar-valued function of the linked variables.
         phase0 : int, PhaseInterface, or str
             First phase.

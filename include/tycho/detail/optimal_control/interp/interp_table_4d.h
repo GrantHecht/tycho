@@ -134,7 +134,7 @@ struct InterpTable4D {
             throw std::invalid_argument("Z coordinates must be third dimension of value tensor");
         }
         if (wsize_ != fs_.dimension(3)) {
-            throw std::invalid_argument("W coordinates must be third dimension of value tensor");
+            throw std::invalid_argument("W coordinates must be fourth dimension of value tensor");
         }
 
         for (int i = 0; i < xsize_ - 1; i++) {
