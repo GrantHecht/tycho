@@ -37,13 +37,15 @@ class ODEBase:
 
     Examples
     --------
-    >>> class Brachistochrone(oc.ODEBase):
-    ...     def __init__(self, g):
-    ...         args = oc.ODEArguments(3, 1)
-    ...         x, y, v = args.x_vec().tolist()
-    ...         theta = args.u_var(0)
-    ...         ode = vf.stack([vf.sin(theta) * v, -vf.cos(theta) * v, g * vf.cos(theta)])
-    ...         super().__init__(ode, 3, 1)
+    Define the brachistochrone dynamics as an ``ODEBase`` subclass::
+
+        class Brachistochrone(oc.ODEBase):
+            def __init__(self, g):
+                args = oc.ODEArguments(3, 1)
+                x, y, v = args.x_vec().tolist()
+                theta = args.u_var(0)
+                ode = vf.stack([vf.sin(theta) * v, -vf.cos(theta) * v, g * vf.cos(theta)])
+                super().__init__(ode, 3, 1)
     """
 
     def __init__(self, odefunc, Xvars, Uvars=None, Pvars=None, Vgroups=None):
@@ -285,7 +287,9 @@ class ODEBase:
 
         Examples
         --------
-        >>> phase = ode.phase("LGL3", Xs, 32)
+        Create an LGL3 phase with 32 segments from an initial guess::
+
+            phase = ode.phase("LGL3", Xs, 32)
         """
         return self.ode.phase(*args)
 

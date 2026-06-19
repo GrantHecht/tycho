@@ -298,13 +298,15 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
 
     Examples
     --------
-    >>> phase = ode.phase("LGL3", Xs, 32)
-    >>> phase.add_boundary_value("Front", range(0, 4), [x0, y0, v0, 0])
-    >>> phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
-    >>> phase.add_boundary_value("Back", [0, 1], [xf, yf])
-    >>> phase.add_delta_time_objective(1.0)
-    >>> phase.optimize()
-    >>> traj = phase.return_traj()
+    Build a phase, constrain it, solve, and read the trajectory::
+
+        phase = ode.phase("LGL3", Xs, 32)
+        phase.add_boundary_value("Front", range(0, 4), [x0, y0, v0, 0])
+        phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
+        phase.add_boundary_value("Back", [0, 1], [xf, yf])
+        phase.add_delta_time_objective(1.0)
+        phase.optimize()
+        traj = phase.return_traj()
     """
 
     def enable_vectorization(self, arg: bool, /) -> None: ...
@@ -458,8 +460,10 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
 
         Examples
         --------
-        >>> phase.optimize()
-        >>> traj = phase.return_traj()
+        Solve the phase and read back the optimized trajectory::
+
+            phase.optimize()
+            traj = phase.return_traj()
         """
 
     def return_traj_range(self, arg0: int, arg1: float, arg2: float, /) -> list[numpy.ndarray]:
@@ -579,8 +583,10 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
 
         Examples
         --------
-        >>> phase.add_boundary_value("Front", range(0, 4), [x0, y0, v0, 0])
-        >>> phase.add_boundary_value("Back", [0, 1], [xf, yf])
+        Pin the front state fully and the back position to a target::
+
+            phase.add_boundary_value("Front", range(0, 4), [x0, y0, v0, 0])
+            phase.add_boundary_value("Back", [0, 1], [xf, yf])
         """
 
     def add_delta_var_equal_con(self, var: int | Sequence[int] | str | list[str], value: float, scale: float = 1.0, auto_scale: Union[float, numpy.ndarray, ScaleModes, str, None] | None = 'auto') -> int: ...
@@ -627,7 +633,9 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
 
         Examples
         --------
-        >>> phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
+        Bound the control variable along the whole path::
+
+            phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
         """
 
     def add_lower_var_bound(self, phase_region: PhaseRegionFlags | str, var: int | Sequence[int] | str | list[str], lowerbound: float, scale: float = 1.0, auto_scale: Union[float, numpy.ndarray, ScaleModes, str, None] | None = 'auto') -> int:
@@ -814,7 +822,9 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
 
         Examples
         --------
-        >>> phase.add_delta_time_objective(1.0)
+        Minimize the phase duration::
+
+            phase.add_delta_time_objective(1.0)
         """
 
     @overload
@@ -1078,11 +1088,13 @@ class OptimalControlProblem(_tychopy.solvers.OptimizationProblemBase):
 
     Examples
     --------
-    >>> ocp = OptimalControlProblem()
-    >>> ocp.add_phase(phase0)
-    >>> ocp.add_phase(phase1)
-    >>> ocp.add_forward_link_equal_con(0, 1, range(0, 5))
-    >>> ocp.optimize()
+    Assemble a multi-phase problem, link adjacent phases, and solve::
+
+        ocp = OptimalControlProblem()
+        ocp.add_phase(phase0)
+        ocp.add_phase(phase1)
+        ocp.add_forward_link_equal_con(0, 1, range(0, 5))
+        ocp.optimize()
     """
 
     def __init__(self) -> None:
@@ -1126,7 +1138,9 @@ class OptimalControlProblem(_tychopy.solvers.OptimizationProblemBase):
 
         Examples
         --------
-        >>> ocp.add_forward_link_equal_con(0, 1, range(0, 5))
+        Make the first five variables continuous across phases 0 and 1::
+
+            ocp.add_forward_link_equal_con(0, 1, range(0, 5))
         """
 
     def add_param_link_equal_con(self, phase0: int | PhaseInterface | str, phase1: int | PhaseInterface | str, reg0: PhaseRegionFlags | str, vars: int | Sequence[int] | str | list[str], auto_scale: Union[float, numpy.ndarray, ScaleModes, str, None] | None = 'auto') -> list[int]: ...
@@ -2821,9 +2835,11 @@ class ODEArguments(_tychopy.vector_functions.Arguments):
 
     Examples
     --------
-    >>> XtU = ODEArguments(3, 1)        # 3 states, 1 control
-    >>> x, y, v = XtU.x_vec().tolist()
-    >>> theta = XtU.u_var(0)
+    Build the ODE argument set and slice out named state/control expressions::
+
+        XtU = ODEArguments(3, 1)        # 3 states, 1 control
+        x, y, v = XtU.x_vec().tolist()
+        theta = XtU.u_var(0)
     """
 
     @overload

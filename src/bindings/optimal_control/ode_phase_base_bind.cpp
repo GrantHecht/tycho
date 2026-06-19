@@ -57,13 +57,15 @@ underlying PSIOPT solver (e.g. ``phase.optimizer.set_print_level(0)``).
 
 Examples
 --------
->>> phase = ode.phase("LGL3", Xs, 32)
->>> phase.add_boundary_value("Front", range(0, 4), [x0, y0, v0, 0])
->>> phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
->>> phase.add_boundary_value("Back", [0, 1], [xf, yf])
->>> phase.add_delta_time_objective(1.0)
->>> phase.optimize()
->>> traj = phase.return_traj()
+Build a phase, constrain it, solve, and read the trajectory::
+
+    phase = ode.phase("LGL3", Xs, 32)
+    phase.add_boundary_value("Front", range(0, 4), [x0, y0, v0, 0])
+    phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
+    phase.add_boundary_value("Back", [0, 1], [xf, yf])
+    phase.add_delta_time_objective(1.0)
+    phase.optimize()
+    traj = phase.return_traj()
 )doc";
 
     auto set_mesh_error_estimator = [](ODEPhaseBase &self, nb::object val) {
@@ -225,8 +227,10 @@ list of numpy.ndarray
 
 Examples
 --------
->>> phase.optimize()
->>> traj = phase.return_traj()
+Solve the phase and read back the optimized trajectory::
+
+    phase.optimize()
+    traj = phase.return_traj()
 )doc");
     obj.def("return_traj_range", &ODEPhaseBase::return_traj_range,
             R"doc(Return the trajectory resampled to ``num`` points over a time range.
@@ -339,8 +343,10 @@ int
 
 Examples
 --------
->>> phase.add_boundary_value("Front", range(0, 4), [x0, y0, v0, 0])
->>> phase.add_boundary_value("Back", [0, 1], [xf, yf])
+Pin the front state fully and the back position to a target::
+
+    phase.add_boundary_value("Front", range(0, 4), [x0, y0, v0, 0])
+    phase.add_boundary_value("Back", [0, 1], [xf, yf])
 )doc");
 
     obj.def("add_delta_var_equal_con",
@@ -406,7 +412,9 @@ int
 
 Examples
 --------
->>> phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
+Bound the control variable along the whole path::
+
+    phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
 )doc");
     obj.def("add_lower_var_bound",
             nb::overload_cast<RegionType, VarIndexType, double, double, ScaleType>(
@@ -672,7 +680,9 @@ int
 
 Examples
 --------
->>> phase.add_delta_time_objective(1.0)
+Minimize the phase duration::
+
+    phase.add_delta_time_objective(1.0)
 )doc");
     //////////////////////////////////
     /////// IntegralObjectives /////////

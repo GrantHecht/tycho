@@ -42,9 +42,11 @@ combined arithmetically to build the dynamics.
 
 Examples
 --------
->>> XtU = ODEArguments(3, 1)        # 3 states, 1 control
->>> x, y, v = XtU.x_vec().tolist()
->>> theta = XtU.u_var(0)
+Build the ODE argument set and slice out named state/control expressions::
+
+    XtU = ODEArguments(3, 1)        # 3 states, 1 control
+    x, y, v = XtU.x_vec().tolist()
+    theta = XtU.u_var(0)
 )doc");
         obj.def(nb::init<int, int, int>(),
                 R"doc(Construct with explicit state, control, and parameter counts.

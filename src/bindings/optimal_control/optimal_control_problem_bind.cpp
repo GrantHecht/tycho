@@ -50,11 +50,13 @@ optimization-problem base.
 
 Examples
 --------
->>> ocp = OptimalControlProblem()
->>> ocp.add_phase(phase0)
->>> ocp.add_phase(phase1)
->>> ocp.add_forward_link_equal_con(0, 1, range(0, 5))
->>> ocp.optimize()
+Assemble a multi-phase problem, link adjacent phases, and solve::
+
+    ocp = OptimalControlProblem()
+    ocp.add_phase(phase0)
+    ocp.add_phase(phase1)
+    ocp.add_forward_link_equal_con(0, 1, range(0, 5))
+    ocp.optimize()
 )doc");
     obj.def(nb::init<>(), R"doc(Construct an empty optimal control problem with no phases.)doc");
 
@@ -269,7 +271,9 @@ auto_scale : ScaleModes or str, optional
 
 Examples
 --------
->>> ocp.add_forward_link_equal_con(0, 1, range(0, 5))
+Make the first five variables continuous across phases 0 and 1::
+
+    ocp.add_forward_link_equal_con(0, 1, range(0, 5))
 )doc");
 
         obj.def("add_param_link_equal_con",
