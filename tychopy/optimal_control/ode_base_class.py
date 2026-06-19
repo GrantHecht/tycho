@@ -27,8 +27,8 @@ class ODEBase:
     of the dynamics as a :class:`~tychopy.vector_functions.VectorFunction` over
     an :class:`~tychopy.optimal_control.ODEArguments` input, then call
     ``super().__init__(ode, Xvars, Uvars)``. The resulting object can spawn
-    collocation phases (:meth:`phase`) and integrators (:meth:`integrator`) for
-    the dynamics.
+    phases (:meth:`phase`) and integrators (:meth:`integrator`) for the
+    dynamics.
 
     The ODE input is the ordered vector ``[x, t, u, p]`` -- the state ``x``
     (size ``Xvars``), time ``t``, control ``u`` (size ``Uvars``), and ODE
@@ -107,7 +107,7 @@ class ODEBase:
             self.add_Vgroups(Vgroups)
 
     def _make_index_set(self, idxs):
-
+        """Normalize ``idxs`` to a flat list of integer indices."""
         if (
             hasattr(idxs, "input_domain")
             and hasattr(idxs, "vf")
@@ -134,6 +134,24 @@ class ODEBase:
             raise Exception("Invalid index: {}".format(str(idxs)))
 
     def add_Vgroups(self, Vgroups):
+        """Register named variable index groups on the underlying ODE object.
+
+        Parameters
+        ----------
+        Vgroups : dict
+            Mapping from a name (``str``) or sequence of names (tuple of
+            ``str``) to the indices they label.  Each value may be an ``int``,
+            a list of ``int``, or a ``VectorFunction`` whose
+            ``input_domain`` encodes the indices.  Delegates to
+            the internal ``_make_index_set`` helper for index normalization
+            and to the C++ ``add_idx`` method for registration.
+
+        Raises
+        ------
+        ValueError
+            If a group name is already registered or the resolved index list
+            is empty.
+        """
         for name in Vgroups:
             idxs = self._make_index_set(Vgroups[name])
             if isinstance(name, str):
@@ -264,10 +282,29 @@ class ODEBase:
             return output
 
     def idx(self, Vname):
+        """Return the absolute index vector for a named variable group.
+
+        Parameters
+        ----------
+        Vname : str
+            Name of a variable group previously registered via the ``Vgroups``
+            constructor argument or :meth:`add_Vgroups`.
+
+        Returns
+        -------
+        numpy.ndarray of int
+            Absolute indices of the variables in the group within the packed
+            ``[x, t, u, p]`` input vector.
+
+        Raises
+        ------
+        ValueError
+            If no group named ``Vname`` exists.
+        """
         return self.ode.idx(Vname)
 
     def phase(self, *args):
-        """Create a collocation phase for these dynamics.
+        """Create a phase for these dynamics.
 
         Parameters
         ----------
@@ -275,9 +312,11 @@ class ODEBase:
             Forwarded to the underlying phase constructor. The common form is
             ``phase(transcription_mode, traj, num_segments)`` where
             ``transcription_mode`` is a :class:`TranscriptionModes` value (or its
-            string name, e.g. ``"LGL3"``), ``traj`` is an initial-guess
-            trajectory (a list of packed ``[x, t, u, p]`` node vectors), and
-            ``num_segments`` is the number of collocation segments.
+            string name) selecting the transcription method -- direct
+            collocation (e.g. ``"LGL3"``, ``"Trapezoidal"``) or central shooting
+            (``"CentralShooting"``); ``traj`` is an initial-guess trajectory (a
+            list of packed ``[x, t, u, p]`` node vectors); and ``num_segments``
+            is the number of discretization segments.
 
         Returns
         -------
@@ -321,45 +360,171 @@ class ODEBase:
         return self.ode.vf()
 
     def x_vars(self):
+        """Return the number of state variables.
+
+        Returns
+        -------
+        int
+            Dimension of the state vector ``x``.
+        """
         return self.ode.x_vars()
 
     def u_vars(self):
+        """Return the number of control variables.
+
+        Returns
+        -------
+        int
+            Dimension of the control vector ``u``.  ``0`` if the ODE has no
+            controls.
+        """
         return self.ode.u_vars()
 
     def p_vars(self):
+        """Return the number of ODE parameter variables.
+
+        Returns
+        -------
+        int
+            Dimension of the ODE parameter vector ``p``.  ``0`` if the ODE
+            has no parameters.
+        """
         return self.ode.p_vars()
 
     def t_var(self):
+        """Return the index of the time variable within the packed input.
+
+        The packed ODE input is ordered ``[x, t, u, p]``, so ``t_var()``
+        equals ``x_vars()``.
+
+        Returns
+        -------
+        int
+            Zero-based index of the time variable.
+        """
         return self.ode.t_var()
 
     def xt_vars(self):
+        """Return the number of state-plus-time variables.
+
+        Returns
+        -------
+        int
+            ``x_vars() + 1``.
+        """
         return self.ode.xt_vars()
 
     def xtu_vars(self):
+        """Return the number of state-plus-time-plus-control variables.
+
+        Returns
+        -------
+        int
+            ``x_vars() + 1 + u_vars()``.
+        """
         return self.ode.xtu_vars()
 
     def xtup_vars(self):
+        """Return the total number of ODE input variables.
+
+        Returns
+        -------
+        int
+            ``x_vars() + 1 + u_vars() + p_vars()``.  This is the length of
+            the packed ``[x, t, u, p]`` input vector.
+        """
         return self.ode.xtup_vars()
 
     def x_idxs(self, *args):
+        """Return absolute indices of state variables.
+
+        With no arguments, returns all state indices ``[0, x_vars())``.
+        With a single argument (an ``int`` or list of ``int``), returns the
+        absolute indices of the specified relative positions within the state
+        block.
+
+        Parameters
+        ----------
+        *args : int or list of int, optional
+            Relative index or indices into the state block.  If more than one
+            positional argument is provided they are combined into a list.
+
+        Returns
+        -------
+        numpy.ndarray of int
+            Absolute indices within the packed ``[x, t, u, p]`` input vector.
+        """
         if len(args) > 1:
             return self.ode.x_idxs(list(args))
         else:
             return self.ode.x_idxs(*args)
 
     def xt_idxs(self, *args):
+        """Return absolute indices of state-plus-time variables.
+
+        With no arguments, returns all state and time indices
+        ``[0, xt_vars())``.  With arguments, returns absolute indices for the
+        specified relative positions within the state-plus-time block.
+
+        Parameters
+        ----------
+        *args : int or list of int, optional
+            Relative index or indices into the state-plus-time block.  If more
+            than one positional argument is provided they are combined into a
+            list.
+
+        Returns
+        -------
+        numpy.ndarray of int
+            Absolute indices within the packed ``[x, t, u, p]`` input vector.
+        """
         if len(args) > 1:
             return self.ode.xt_idxs(list(args))
         else:
             return self.ode.xt_idxs(*args)
 
     def xtu_idxs(self, *args):
+        """Return absolute indices of state-plus-time-plus-control variables.
+
+        With no arguments, returns all state, time, and control indices
+        ``[0, xtu_vars())``.  With arguments, returns absolute indices for
+        the specified relative positions within that block.
+
+        Parameters
+        ----------
+        *args : int or list of int, optional
+            Relative index or indices into the state-plus-time-plus-control
+            block.  If more than one positional argument is provided they are
+            combined into a list.
+
+        Returns
+        -------
+        numpy.ndarray of int
+            Absolute indices within the packed ``[x, t, u, p]`` input vector.
+        """
         if len(args) > 1:
             return self.ode.xtu_idxs(list(args))
         else:
             return self.ode.xtu_idxs(*args)
 
     def u_idxs(self, *args):
+        """Return absolute indices of control variables.
+
+        With no arguments, returns all control indices
+        ``[xt_vars(), xtu_vars())``.  With arguments, returns absolute indices
+        for the specified relative positions within the control block.
+
+        Parameters
+        ----------
+        *args : int or list of int, optional
+            Relative index or indices into the control block.  If more than
+            one positional argument is provided they are combined into a list.
+
+        Returns
+        -------
+        numpy.ndarray of int
+            Absolute indices within the packed ``[x, t, u, p]`` input vector.
+        """
         if len(args) > 1:
             return self.ode.u_idxs(list(args))
         else:

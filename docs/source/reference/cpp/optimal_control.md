@@ -7,11 +7,13 @@ through the `include/tycho/optimal_control.h` umbrella header. Python users
 should consult the {doc}`Python reference </reference/python/optimal_control>`.
 
 The subsystem converts a continuous optimal-control problem into a
-finite-dimensional nonlinear program by direct collocation: dynamics are an
+finite-dimensional nonlinear program by *transcription*: dynamics are an
 {cpp:struct}`tycho::oc::ODEBase`, discretized into an
 {cpp:struct}`tycho::oc::ODEPhase`, with constraints and objectives attached and
 several phases optionally linked inside an
-{cpp:class}`tycho::OptimalControlProblem`. For the conceptual model see
+{cpp:class}`tycho::OptimalControlProblem`. The primary transcription method is
+direct collocation (the LGL and Trapezoidal schemes), but central shooting
+(`CentralShooting`) is also supported. For the conceptual model see
 {doc}`Direct collocation in Tycho </explanation/direct_collocation>`.
 
 ## Core ODE types
@@ -36,7 +38,7 @@ runtime- and compile-time-sized ODE wrappers.
 
 ## Phase and problem
 
-The collocation phase and the multi-phase optimal-control problem container,
+The phase and the multi-phase optimal-control problem container,
 with their runtime base classes.
 
 ```{eval-rst}
@@ -78,7 +80,7 @@ trajectory, and the one- to four-dimensional lookup-table functions.
 The high-level, fluent builder types (in namespace `tycho`, not `tycho::oc`)
 that most C++ users construct problems through:
 {cpp:class}`tycho::ODEBuilder` assembles a dynamics model,
-{cpp:class}`tycho::Phase` wraps a single collocation phase, and
+{cpp:class}`tycho::Phase` wraps a single phase, and
 {cpp:class}`tycho::OptimalControlProblem` links phases into a multi-phase
 problem.
 

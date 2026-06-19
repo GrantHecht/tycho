@@ -27,8 +27,15 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.mathjax",
     "sphinx.ext.doctest",
+    "matplotlib.sphinxext.plot_directive",
     "breathe",
 ]
+
+# matplotlib plot_directive: render figures from executable snippets inline.
+plot_html_show_source_link = False
+plot_html_show_formats = False
+plot_formats = [("png", 110)]
+plot_include_source = False
 
 # Resolve to absolute paths so Sphinx finds _templates/_static whether
 # conf.py is loaded from the source tree or the CMake build dir.

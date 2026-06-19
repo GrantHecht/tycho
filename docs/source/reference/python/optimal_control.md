@@ -12,13 +12,17 @@ top of one); C++ users should consult the
 ```
 
 The subsystem turns a continuous optimal-control problem into a
-finite-dimensional nonlinear program by direct collocation: you describe the
+finite-dimensional nonlinear program by *transcription*: you describe the
 dynamics as an {py:class}`~tychopy.optimal_control.ODEBase`, discretize them
 into a {py:class}`~tychopy.optimal_control.PhaseInterface`, attach constraints
 and objectives, and solve — optionally linking several phases together inside
-an {py:class}`~tychopy.optimal_control.OptimalControlProblem`. For the
-conceptual model see {doc}`Direct collocation in Tycho </explanation/direct_collocation>`; for a hands-on
-introduction see the {doc}`Setting up a phase </tutorials/basics/your_first_phase>`.
+an {py:class}`~tychopy.optimal_control.OptimalControlProblem`. The primary
+transcription method is direct collocation (the LGL and Trapezoidal
+{py:class}`~tychopy.optimal_control.TranscriptionModes`), but central shooting
+is also supported (``CentralShooting``). For the conceptual model see
+{doc}`Direct collocation in Tycho </explanation/direct_collocation>`; for a
+hands-on introduction see the
+{doc}`Setting up a phase </tutorials/basics/your_first_phase>`.
 
 ## ODE definition
 

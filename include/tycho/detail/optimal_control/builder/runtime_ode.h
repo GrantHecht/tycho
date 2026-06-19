@@ -101,15 +101,29 @@ class ODE {
         return *this;
     }
 
-    /// Create a Phase from this ODE with a trajectory guess and segment count.
+    /// @brief Create a @ref Phase from this ODE with a trajectory guess and segment count.
+    ///
+    /// Builds a fully-dynamic @c GenericODE (populating the internal variable
+    /// name map from the registry, if present) and constructs a @ref Phase
+    /// using the given collocation mode, initial trajectory guess, and mesh size.
+    ///
+    /// @param mode          Collocation/transcription mode (e.g. @c LGL3, @c LGL5).
+    /// @param traj          Initial trajectory guess as a sequence of XtUP-space
+    ///                      state vectors (one per collocation node).
+    /// @param num_segments  Number of collocation segments in the mesh.
+    /// @return The constructed @ref Phase ready for constraint/objective setup.
     Phase phase(TranscriptionModes mode, const std::vector<Eigen::VectorXd> &traj,
                 int num_segments) const;
 
-    /// Returns a fluent builder for constructing a DynIntegrator.
-    /// Configure the step size (required) via .step(double), and optionally
-    /// the method via .method(IVPAlg), and a control specification via
-    /// .control(...). Call .build() to materialize the integrator. See
-    /// IntegratorBuilder below for the full API.
+    /// @brief Return a fluent @ref IntegratorBuilder for constructing a @ref DynIntegrator.
+    ///
+    /// Configure the step size (required) via @ref IntegratorBuilder::step(),
+    /// optionally the integration method via @ref IntegratorBuilder::method(),
+    /// and at most one control specification via one of the
+    /// @ref IntegratorBuilder::control() overloads.  Call
+    /// @ref IntegratorBuilder::build() to materialise the integrator.
+    ///
+    /// @return A new @ref IntegratorBuilder bound to this ODE.
     IntegratorBuilder integrator() const;
 
     /// @brief Build an XtUP input vector from name-value pairs (unset entries default to 0).
@@ -147,10 +161,18 @@ class ODE {
         return *registry_;
     }
 
-    /// Access the underlying GenericFunction (for advanced use).
+    /// @brief Access the underlying type-erased dynamics function (for advanced use).
+    /// @return Const reference to the @c GenericFunction storing the ODE dynamics.
     const GenericFunction<-1, -1> &function() const { return func_; }
 
-    /// Build the fully-dynamic GenericODE.
+    /// @brief Build the fully-dynamic @c GenericODE wrapping this ODE's function and sizes.
+    ///
+    /// The returned object is suitable for direct use with the low-level
+    /// phase and integrator APIs.  Variable name metadata is NOT transferred
+    /// by this overload; use @c ODE::phase() when name-mapping is needed.
+    ///
+    /// @return A @c DynODE (i.e. @c GenericODE<GenericFunction<-1,-1>,-1,-1,-1>)
+    ///         constructed from the stored function and size parameters.
     DynODE generic_ode() const { return DynODE(func_, xvars_, uvars_, pvars_); }
 
   private:
@@ -287,7 +309,15 @@ class IntegratorBuilder {
         return *this;
     }
 
-    /// Construct the integrator. Throws if .step() was never called.
+    /// @brief Construct and return the configured @ref ODE::DynIntegrator.
+    ///
+    /// Resolves any named control-law variable locations via the ODE's registry
+    /// (if @c control with named variables was used), assembles
+    /// the appropriate integrator variant, and returns it.
+    ///
+    /// @return The materialised @c ODE::DynIntegrator ready for propagation.
+    /// @throws std::invalid_argument if @ref step() was never called or if a
+    ///         named control law was requested but the ODE has no variable registry.
     ODE::DynIntegrator build() const;
 
   private:

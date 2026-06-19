@@ -178,6 +178,81 @@ $(10, 5)$ as required.
 [10.0, 5.0]
 ```
 
+## 7. Visualize the trajectory
+
+Numbers confirm the solve; a picture makes it intuitive. `return_traj()` hands
+back the full state and control at every node, so a couple of `matplotlib` calls
+turn the result into the two plots that matter: the **path** the bead follows
+through space, and the **optimal control** schedule that produces it. Stack the
+trajectory into a NumPy array — each row is $[x, y, v, t, \theta]$ — and slice
+out the columns you want.
+
+```python
+import matplotlib.pyplot as plt
+import numpy as np
+
+T = np.array(Traj)  # rows of [x, y, v, t, theta]
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9, 3.6))
+ax1.plot(T[:, 0], T[:, 1], "-o", ms=3)
+ax1.set(xlabel="x", ylabel="y", title="Brachistochrone path")
+
+ax2.plot(T[:, 3], np.degrees(T[:, 4]), "-o", ms=3, color="C1")
+ax2.set(xlabel="time [s]", ylabel=r"control $\theta$ [deg]", title="Optimal control")
+
+fig.tight_layout()
+plt.show()
+```
+
+```{eval-rst}
+.. plot::
+
+   import numpy as np
+   import matplotlib.pyplot as plt
+   from tychopy import vector_functions as vf
+   from tychopy import optimal_control as oc
+
+   class Brachistochrone(oc.ODEBase):
+       def __init__(self, g):
+           args = oc.ODEArguments(3, 1)
+           x, y, v = args.x_vec().tolist()
+           theta = args.u_var(0)
+           xdot = vf.sin(theta) * v
+           ydot = -1.0 * vf.cos(theta) * v
+           vdot = g * vf.cos(theta)
+           ode = vf.stack([xdot, ydot, vdot])
+           super().__init__(ode, 3, 1)
+
+   g = 9.81
+   ode = Brachistochrone(g)
+   ts = np.linspace(0.0, 1.0, 100)
+   Xs = [[10.0 * t, 10.0 - 5.0 * t, g * t * np.cos(1.0), t, 1.0] for t in ts]
+   phase = ode.phase("LGL3", Xs, 32)
+   phase.add_boundary_value("Front", range(0, 4), [0.0, 10.0, 0.0, 0.0])
+   phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
+   phase.add_boundary_value("Back", [0, 1], [10.0, 5.0])
+   phase.add_delta_time_objective(1.0)
+   phase.optimizer.set_print_level(0)
+   phase.optimize()
+   T = np.array(phase.return_traj())
+
+   fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9, 3.6))
+   ax1.plot(T[:, 0], T[:, 1], "-o", ms=3)
+   ax1.set(xlabel="x", ylabel="y", title="Brachistochrone path")
+   ax1.grid(True, alpha=0.3)
+
+   ax2.plot(T[:, 3], np.degrees(T[:, 4]), "-o", ms=3, color="C1")
+   ax2.set(xlabel="time [s]", ylabel=r"control $\theta$ [deg]", title="Optimal control")
+   ax2.grid(True, alpha=0.3)
+
+   fig.tight_layout()
+```
+
+The path traces the characteristic cycloid — steep at the start to build speed,
+flattening toward the target — while the control angle sweeps smoothly from near
+vertical to past horizontal. That smooth, monotone control is the hallmark of a
+cleanly converged collocation solution.
+
 ## What you learned
 
 - A **Phase** turns an ODE plus constraints and an objective into a solvable

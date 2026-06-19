@@ -24,18 +24,18 @@ problem. We seek a state trajectory $x(t)$ and a control history $u(t)$ over a
 time interval $[t_0, t_f]$ that
 
 $$
-\min_{x(\cdot),\,u(\cdot),\,t_0,\,t_f}\;
-  \underbrace{\phi\big(x(t_0), t_0, x(t_f), t_f\big)}_{\text{Mayer term}}
+\min_{x(\cdot),\,u(\cdot),\,p,\,t_0,\,t_f}\;
+  \underbrace{\phi\big(x(t_0), t_0, x(t_f), t_f, p\big)}_{\text{Mayer term}}
   \;+\;
-  \underbrace{\int_{t_0}^{t_f} L\big(x(t), u(t), t\big)\,dt}_{\text{Lagrange term}}
+  \underbrace{\int_{t_0}^{t_f} L\big(x(t), u(t), t, p\big)\,dt}_{\text{Lagrange term}}
 $$
 
 subject to the dynamics, boundary conditions, and path constraints
 
 $$
-\dot{x}(t) = f\big(x(t), u(t), t\big), \qquad
-g\big(x(t), u(t), t\big) \le 0, \qquad
-b\big(x(t_0), x(t_f)\big) = 0 .
+\dot{x}(t) = f\big(x(t), u(t), t, p\big), \qquad
+g\big(x(t), u(t), t, p\big) \le 0, \qquad
+b\big(x(t_0), x(t_f), p\big) = 0 .
 $$
 
 The objective can carry a **Mayer** term — a function of the boundary states and
@@ -44,6 +44,14 @@ Either or both may be present; a minimum-time problem is a pure Mayer objective
 on $t_f$, a minimum-fuel problem is typically a Lagrange integral of control
 effort. The endpoints $t_0$ and $t_f$ may be fixed or free, and when free they
 become unknowns the optimizer solves for alongside the trajectory itself.
+
+The vector $p$ holds **static parameters**: time-independent unknowns shared
+across the whole trajectory — an unknown mass, a thrust magnitude, a free coast
+duration. Like the endpoint times, they are optimization variables rather than
+fixed inputs, and they may enter the dynamics, the path and boundary
+constraints, and the objective. A phase carries its own static parameters; the
+related *link parameters* on an {py:class}`~tychopy.optimal_control.OptimalControlProblem`
+play the same role but are shared across several phases.
 
 In Tycho this maps onto two objects. The dynamics $f$ are supplied as an **ODE**:
 a VectorFunction of the packed argument $[x, t, u, p]$ (state, time, control, and
@@ -83,13 +91,13 @@ then at each interior (collocation) point its time derivative must equal the
 dynamics evaluated there:
 
 $$
-\dot{\tilde{x}}(t_c) \;=\; f\big(\tilde{x}(t_c), u(t_c), t_c\big).
+\dot{\tilde{x}}(t_c) \;=\; f\big(\tilde{x}(t_c), u(t_c), t_c, p\big).
 $$
 
 The **defect** is the amount by which this fails to hold:
 
 $$
-\delta_c \;=\; \dot{\tilde{x}}(t_c) - f\big(\tilde{x}(t_c), u(t_c), t_c\big).
+\delta_c \;=\; \dot{\tilde{x}}(t_c) - f\big(\tilde{x}(t_c), u(t_c), t_c, p\big).
 $$
 
 Forcing every defect to zero, $\delta_c = 0$, is exactly the statement that the
@@ -99,7 +107,7 @@ cardinal state values and the dynamics evaluated at the cardinal nodes, so the
 defect for an interval reads schematically as
 
 $$
-\delta \;=\; \sum_j w^{x}_{j}\, x_j \;+\; h\sum_j w^{f}_{j}\, f(x_j, u_j, t_j) \;=\; 0,
+\delta \;=\; \sum_j w^{x}_{j}\, x_j \;+\; h\sum_j w^{f}_{j}\, f(x_j, u_j, t_j, p) \;=\; 0,
 $$
 
 where $h$ is the interval duration and the weights $w$ come from the LGL
@@ -132,11 +140,20 @@ second-order scheme — the interval polynomial is effectively linear and the
 defect is a trapezoidal-rule integration of the dynamics — cheap and very robust,
 useful as a first pass or for coarse feasibility studies. `CentralShooting` is a
 fundamentally different idea: instead of enforcing a polynomial defect, it
-*integrates* the dynamics across each interval with a numerical propagator and
-constrains the propagated endpoint to match the next node's state. Shooting can
-be more accurate for stiff or highly nonlinear dynamics, at the cost of a less
-sparse, sometimes less robust, NLP. The phase abstraction is the same in every
-case; only the residual that enforces the dynamics changes.
+*integrates* the dynamics with a numerical propagator. For each interval
+$[t_k, t_{k+1}]$ it shoots both bounding nodes to the interval **midpoint**
+$t_m = \tfrac{1}{2}(t_k + t_{k+1})$ — the left node propagated forward from
+$(x_k, t_k)$, the right node propagated backward from $(x_{k+1}, t_{k+1})$ — and
+the defect constrains the two propagated states to agree at $t_m$. (Matching at
+the midpoint rather than at one endpoint is what makes it *central* shooting,
+and keeps the residual symmetric in the two nodes.) Each defect still couples
+only the two bounding nodes, so the NLP keeps the same interval-banded
+sparsity as collocation; but the per-interval Jacobian blocks are dense —
+filled from the integrator's state-transition matrix — and each evaluation
+runs a full numerical propagation, so iterations are more expensive. Shooting
+can be more robust for stiff or highly nonlinear dynamics where a fixed-order
+polynomial struggles to represent the arc. The phase abstraction is the same in
+every case; only the residual that enforces the dynamics changes.
 
 ## What transcription produces
 

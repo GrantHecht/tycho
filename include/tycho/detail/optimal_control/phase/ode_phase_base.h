@@ -322,7 +322,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         this->reset_transcription();
         this->integral_mode_ = m;
     }
-    /// @brief Set the transcription (collocation) scheme.
+    /// @brief Set the transcription scheme.
     /// @param m  Transcription mode.
     virtual void set_transcription_mode(TranscriptionModes m) = 0;
 

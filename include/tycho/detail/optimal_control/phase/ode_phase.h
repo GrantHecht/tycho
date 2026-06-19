@@ -113,7 +113,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
 
     /// @brief Construct a phase from an ODE and a transcription mode.
     /// @param ode    The ODE to discretize.
-    /// @param Tmode  The transcription (collocation) mode.
+    /// @param Tmode  The transcription mode.
     ODEPhase(const DODE &ode, TranscriptionModes Tmode)
         : ODEPhaseBase(ode.x_vars(), ode.u_vars(), ode.p_vars()) {
         this->ode_ = ode;
@@ -257,7 +257,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
     }
 
     /// @brief Set the transcription scheme and rebuild the interpolation table.
-    /// @param m  The transcription (collocation) mode.
+    /// @param m  The transcription mode.
     /// @throws std::invalid_argument if @p m is not a valid transcription method.
     virtual void set_transcription_mode(TranscriptionModes m) {
         this->reset_transcription();
