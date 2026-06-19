@@ -8,4 +8,5 @@ every problem definition is built on.
 :maxdepth: 2
 
 vector_function
+direct_collocation
 ```
