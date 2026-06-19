@@ -12,7 +12,7 @@ finite-dimensional nonlinear program by direct collocation: dynamics are an
 {cpp:struct}`tycho::oc::ODEPhase`, with constraints and objectives attached and
 several phases optionally linked inside an
 {cpp:class}`tycho::OptimalControlProblem`. For the conceptual model see
-{doc}`Explanation </explanation/index>`.
+{doc}`Direct collocation in Tycho </explanation/direct_collocation>`.
 
 ## Core ODE types
 

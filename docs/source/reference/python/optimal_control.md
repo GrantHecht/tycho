@@ -17,8 +17,8 @@ dynamics as an {py:class}`~tychopy.optimal_control.ODEBase`, discretize them
 into a {py:class}`~tychopy.optimal_control.PhaseInterface`, attach constraints
 and objectives, and solve — optionally linking several phases together inside
 an {py:class}`~tychopy.optimal_control.OptimalControlProblem`. For the
-conceptual model see {doc}`Explanation </explanation/index>`; for a hands-on
-introduction see the {doc}`Tutorials </tutorials/index>`.
+conceptual model see {doc}`Direct collocation in Tycho </explanation/direct_collocation>`; for a hands-on
+introduction see the {doc}`Setting up a phase </tutorials/basics/your_first_phase>`.
 
 ## ODE definition
 
