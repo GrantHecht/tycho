@@ -6,8 +6,8 @@ Where a {doc}`VectorFunction </explanation/vector_function>` describes *what* a
 quantity is — the dynamics, a constraint, an objective — a phase describes *what
 to do with them*: find a trajectory that obeys the dynamics, satisfies the
 constraints, and minimizes the objective. This page explains the conceptual
-model that takes you from a continuous problem statement to a number the solver
-can optimize: the continuous optimal-control problem, its **direct collocation**
+model that takes a continuous problem statement to a form the solver can
+optimize: the continuous optimal-control problem, its **direct collocation**
 transcription into a finite-dimensional nonlinear program (NLP), the solve, and
 the mesh-refinement loop that makes the discrete answer faithful to the
 continuous one.
@@ -85,7 +85,7 @@ because they make the interpolating polynomial and its associated quadrature
 unusually accurate. The nodes that carry decision variables are the **cardinal**
 points; additional **interior** points are where the approximation is *tested*.
 
-The key idea — the heart of collocation — is the **defect constraint**. If the
+The central idea of collocation is the **defect constraint**. If the
 interval polynomial $\tilde{x}(t)$ truly represents a solution of the dynamics,
 then at each interior (collocation) point its time derivative must equal the
 dynamics evaluated there:
@@ -121,8 +121,8 @@ The **order** of the collocation polynomial sets the accuracy of this
 approximation per interval, and Tycho exposes it through `TranscriptionModes`:
 
 - **LGL3** — a third-order (cubic) polynomial per interval, two cardinal states
-  and one collocation point. This is the Hermite–Simpson scheme: lightweight,
-  robust, a good default.
+  and one collocation point. This is the Hermite–Simpson scheme: low per-interval
+  cost, robust convergence, and a sound default for most problems.
 - **LGL5** — a fifth-order polynomial, more cardinal states and collocation
   points per interval. Higher order means each interval can represent more curved
   dynamics accurately, so a coarser mesh suffices.
@@ -131,9 +131,9 @@ approximation per interval, and Tycho exposes it through `TranscriptionModes`:
 
 Higher order trades more work and more decision variables *per interval* for
 fewer intervals at a given accuracy. Which side of that trade wins depends on how
-smooth the trajectory is: smooth arcs love high order, while trajectories with
-sharp control switches are often better served by a finer mesh of lower-order
-intervals.
+smooth the trajectory is: high-order polynomials represent smooth arcs
+efficiently, while trajectories with sharp control switches are often better
+served by a finer mesh of lower-order intervals.
 
 Collocation is not the only transcription Tycho offers. `Trapezoidal` is a
 second-order scheme — the interval polynomial is effectively linear and the
@@ -236,14 +236,16 @@ numerical one:
 Conceptually, the control mode decides how many control decision variables there
 are and how they relate across an interval. A smoother parameterization has fewer
 effective degrees of freedom and tends to regularize the solution; a looser one
-(`NoSpline`) can capture bang-bang or discontinuous controls but gives the
-optimizer more to chew on. The mode is independent of the transcription order: you
+(`NoSpline`) can represent bang-bang or discontinuous controls but enlarges the
+search space the optimizer must explore. The mode is independent of the
+transcription order: you
 can pair a high-order state polynomial with a piecewise-linear control.
 
 ## Mesh refinement
 
-A single fixed mesh is a guess. You choose some number of intervals up front, but
-you do not yet know whether they are placed where the trajectory needs them. If
+A single fixed mesh is only an initial guess at the discretization. You choose
+some number of intervals up front, but you do not yet know whether they are
+placed where the trajectory needs them. If
 the dynamics are nearly linear over most of the flight but turn sharply during a
 short maneuver, a uniform mesh wastes intervals on the easy regions and
 under-resolves the hard one. The defects can be driven to zero on a coarse mesh
@@ -280,10 +282,10 @@ cheap iterations early, accurate iterations late. The result is a mesh shaped by
 the problem: dense where the trajectory is hard, sparse where it is easy, and
 demonstrably accurate to the tolerance you asked for.
 
-The conceptual payoff is that mesh refinement is what makes the discrete answer a
-trustworthy stand-in for the continuous one. Collocation gives you a finite
-problem; mesh refinement gives you confidence that the finite problem's solution
-actually approximates the infinite-dimensional trajectory you set out to find.
+The broader point is that mesh refinement is what makes the discrete answer a
+reliable surrogate for the continuous one. Collocation produces a finite
+problem; mesh refinement establishes that the finite problem's solution
+approximates the infinite-dimensional trajectory to the specified tolerance.
 
 ## Where to go next
 
@@ -291,7 +293,7 @@ This page covered the conceptual pipeline: continuous problem → collocation me
 and defects → sparse NLP → PSIOPT solve → mesh refinement. To go further:
 
 - **Reference.** The complete API for phases, ODEs, transcription modes, control
-  modes, and mesh settings lives in the
+  modes, and mesh settings is documented in the
   {doc}`Python reference </reference/python/optimal_control>` and the
   {doc}`C++ reference </reference/cpp/optimal_control>`.
 - **The dynamics layer.** Every defect, constraint, and objective in a phase is a
@@ -300,7 +302,7 @@ and defects → sparse NLP → PSIOPT solve → mesh refinement. To go further:
 - **Tutorials.** For a guided, runnable build of a phase from an ODE through to a
   solved trajectory, see the {doc}`Tutorials </tutorials/index>`.
 
-The two ideas to keep in mind are the ones this page opened and closed with: a
+The two organizing ideas of this page are these: a
 phase turns a continuous optimal-control problem into a sparse, differentiable
 NLP by enforcing the dynamics as **defect constraints** on a collocation mesh,
 and **mesh refinement** iterates that discretization until the discrete solution

@@ -4,8 +4,8 @@ A fixed mesh chosen up front almost always under-resolves part of the
 trajectory. Direct collocation approximates the dynamics with piecewise
 polynomials of bounded order, so wherever the true solution bends sharply —
 a control switch, an atmospheric pass, a thrust arc boundary — a coarse,
-uniform mesh leaves a large discretization error that the optimizer happily
-declares "feasible." Adaptive refinement closes that gap: it estimates the
+uniform mesh leaves a large discretization error that the optimizer may still
+accept as feasible. Adaptive refinement addresses this: it estimates the
 per-interval error, redistributes (and adds) mesh nodes where the error
 concentrates, and re-solves until every interval is below a tolerance you set.
 
@@ -24,7 +24,8 @@ phase.set_adaptive_mesh(True)
 phase.set_mesh_tol(1.0e-7)
 
 # Keep the equality-constraint tolerance at least as tight as the mesh
-# tolerance — otherwise the optimizer "converges" before the mesh does.
+# tolerance; otherwise the optimizer can satisfy its optimality conditions
+# before the mesh-error criterion is met.
 phase.optimizer.eq_con_tol = 1.0e-8
 ```
 
@@ -67,8 +68,8 @@ phase.set_mesh_error_criteria(oc.MeshErrorAggregation.ENDTOEND)
 ```
 
 `ENDTOEND` measures how far a re-integration of the converged solution drifts
-from the collocated final state — use it when what you really care about is
-trajectory accuracy at the endpoint. With `ENDTOEND` on a low-order
+from the collocated final state — use it when endpoint trajectory accuracy is
+the primary concern. With `ENDTOEND` on a low-order
 transcription you often need to raise the error safety factor:
 
 ```python
@@ -110,7 +111,7 @@ PhaseMeshErrorPlot(phase, show=True)
 For a multi-phase problem, `OCPMeshErrorPlot(ocp)` from the same module calls
 it for every phase.
 
-A complete worked example lives in
+A complete worked example is
 `examples/python_examples/MeshRefinement/Reentry.py`, which uses the
 `INTEGRATOR` estimator with `ENDTOEND` aggregation on a space-shuttle reentry.
 

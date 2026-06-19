@@ -1,11 +1,11 @@
 # How to scale variables and constraints
 
-PSIOPT is an interior-point solver, and interior-point methods are sensitive
+PSIOPT is an interior-point optimizer, and interior-point methods are sensitive
 to the *conditioning* of the problem. When a state is measured in meters
 (~10⁷) sitting next to one measured in radians (~1) and a control near unity,
 the KKT system is badly scaled: step lengths shrink, the line search stalls,
 and convergence slows or fails outright. Scaling brings every variable and
-every constraint residual to a comparable order of magnitude so the solver
+every constraint residual to a comparable order of magnitude so the optimizer
 sees a well-conditioned problem.
 
 This recipe assumes you already have a phase set up — see
@@ -22,7 +22,7 @@ The {py:class}`~tychopy.optimal_control.ScaleModes` enum has three values:
 - `NONE` — no scaling; unit scales everywhere.
 
 There are two complementary mechanisms, and they work together: **units**
-(per-variable scales you supply) and **auto-scaling** (the solver deriving
+(per-variable scales you supply) and **auto-scaling** (the optimizer deriving
 constraint/objective scales). The most robust recipe for a well-understood
 physical problem is to supply units *and* turn on auto-scaling.
 
@@ -34,7 +34,7 @@ Turn auto-scaling on per phase (and on the OCP for a multi-phase problem):
 phase.set_auto_scaling(True)
 ```
 
-With nothing else, the solver derives scales from the problem itself. The
+With nothing else, the optimizer derives scales from the problem itself. The
 boolean is also the read/write attribute `phase.auto_scaling`. For a
 multi-phase problem, the same call on the
 {py:class}`~tychopy.optimal_control.OptimalControlProblem` propagates to every
@@ -46,8 +46,8 @@ ocp.set_auto_scaling(True)        # second arg apply_to_phases defaults True
 
 ## Supply per-variable units
 
-When you know the natural magnitudes of your variables — characteristic
-length, time, velocity, mass — feed them in as *units* (the divisor that
+When the natural magnitudes of your variables are known — characteristic
+length, time, velocity, mass — supply them as *units* (the divisor that
 non-dimensionalizes each variable). The cleanest way is by variable-group
 name, which requires that your ODE registered named groups (`Vgroups`) at
 construction:
@@ -97,17 +97,16 @@ phase.add_boundary_value("Back", "gamma", 0.0, auto_scale="none")
 
 ## When to use NONE
 
-Reach for `ScaleModes.NONE` (or `set_auto_scaling(False)` with unit units)
-only when your problem is already non-dimensionalized to order one across the
-board — many of the astrodynamics examples pre-scale by characteristic
-quantities, in which case extra scaling adds nothing. If the solver struggles
-with step sizes or stalls early, that is usually the signal to turn scaling
-back on.
+Use `ScaleModes.NONE` (or `set_auto_scaling(False)` with unit scales) only when
+your problem is already non-dimensionalized to order one throughout — many of
+the astrodynamics examples pre-scale by characteristic quantities, in which case
+additional scaling adds nothing. If the optimizer exhibits short step lengths or
+stalls in early iterations, enable scaling.
 
-Worked examples: `examples/python_examples/MultiPhaseCannon.py` combines
-`make_units` + `set_auto_scaling`, and
-`examples/python_examples/Delta3Launch.py` shows both the vector and named
-forms of `set_units`.
+Two worked examples illustrate these settings:
+`examples/python_examples/MultiPhaseCannon.py` combines `make_units` with
+`set_auto_scaling`, and `examples/python_examples/Delta3Launch.py` shows both
+the vector and named forms of `set_units`.
 
 ## See also
 

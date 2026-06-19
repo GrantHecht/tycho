@@ -66,7 +66,7 @@ ocp.add_forward_link_equal_con(aphase, dphase, range(0, 5))
 
 If a parameter must agree across phases (for example a shared design variable
 like a radius), link it separately with `add_param_link_equal_con`, naming the
-region it lives in:
+region it belongs to:
 
 ```python
 ocp.add_param_link_equal_con(aphase, dphase, "ODEParams", "rad")

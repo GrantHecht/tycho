@@ -4,15 +4,15 @@
 A **Phase** is the object that turns dynamics, constraints, and an objective into
 an optimal-control problem Tycho can solve. Where
 {doc}`your first VectorFunction </tutorials/basics/your_first_vectorfunction>`
-deliberately stopped at *defining* dynamics, this tutorial is the payoff: you will
+covered *defining* dynamics, this tutorial builds on that foundation: you will
 wrap a VectorFunction in an ODE, build a `Phase`, pin its boundary conditions, add
 an objective, and **solve it with PSIOPT** — Tycho's interior-point optimizer.
 
-The worked problem is the classic **brachistochrone**: find the shape of the wire
+The worked problem is the **brachistochrone**: find the shape of the wire
 down which a bead slides, under gravity, from one point to another in the least
 time. The continuous answer is a cycloid; here we recover its travel time by
 direct collocation. By the end you will have a converged trajectory and will read
-its optimal time straight off the result.
+the optimal travel time directly from the result.
 
 This is a hands-on, learning-oriented walkthrough. For the *why* behind the
 transcription — how a continuous problem becomes a finite-dimensional NLP — read
@@ -21,8 +21,8 @@ complete catalog of every phase method, see the
 {doc}`Python reference </reference/python/optimal_control>`.
 
 Every `{doctest}` block below (the ones showing `>>>` prompts) is executed as part
-of Tycho's test suite, so the results you see are real. Follow along in a REPL —
-each step builds on the last.
+of Tycho's test suite, so the results shown are real. Each step builds on the
+previous one; run them in order in a REPL or script to reproduce the example.
 
 :::{note}
 Several phase-building methods (`add_boundary_value`, `add_lu_var_bound`,
@@ -88,7 +88,7 @@ Instantiate it with $g = 9.81\ \mathrm{m/s^2}$:
 ## 2. An initial guess
 
 Direct collocation is a local method: it needs a starting trajectory to refine.
-The guess does not have to be good — just feasible-ish in shape. We supply one
+The guess need not be accurate — a geometrically reasonable trajectory suffices. We supply one
 state-and-time-and-control vector $[x, y, v, t, \theta]$ per sample, marching
 straight from the start point $(0, 10)$ toward the end point $(10, 5)$ over a
 unit time interval, with a constant guess angle of one radian.
@@ -115,7 +115,7 @@ number of mesh segments.
 
 The phase now holds 32 segments of LGL3 collocation, seeded from our guess. It is
 not yet a well-posed problem — nothing pins where the trajectory starts or ends,
-and there is no objective. That is the next step.
+and there is no objective.
 
 ## 4. Boundary values, bounds, and the objective
 
@@ -138,8 +138,8 @@ adds the phase's total time, scaled by `1.0`, to the cost.
 >>> _ = phase.add_delta_time_objective(1.0)
 ```
 
-That is a complete, well-posed minimum-time problem: fixed start, fixed end
-position, bounded control, minimize arrival time.
+The problem is now fully posed: a fixed start, a fixed end position, a bounded
+control angle, and a minimum-arrival-time objective.
 
 ## 5. Solve
 
@@ -180,12 +180,11 @@ $(10, 5)$ as required.
 
 ## 7. Visualize the trajectory
 
-Numbers confirm the solve; a picture makes it intuitive. `return_traj()` hands
-back the full state and control at every node, so a couple of `matplotlib` calls
-turn the result into the two plots that matter: the **path** the bead follows
-through space, and the **optimal control** schedule that produces it. Stack the
+`return_traj()` returns the full state and control history at every collocation
+node. The two most informative views are the spatial trajectory and the optimal
+control schedule, both straightforward to produce with `matplotlib`. Stack the
 trajectory into a NumPy array — each row is $[x, y, v, t, \theta]$ — and slice
-out the columns you want.
+out the columns you need.
 
 ```python
 import matplotlib.pyplot as plt
@@ -265,7 +264,8 @@ cleanly converged collocation solution.
 - `add_boundary_value`, `add_lu_var_bound`, and `add_delta_time_objective` pin
   the start and end, bound the control, and set the cost.
 - `phase.optimize()` solves with PSIOPT and returns a convergence flag;
-  `return_traj()` hands back the optimized trajectory to read results from.
+  `return_traj()` returns the optimized trajectory as a list of
+  state-and-control rows.
 
 ## Next steps
 

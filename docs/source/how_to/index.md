@@ -1,10 +1,8 @@
 # How-to Guides
 
-Task-oriented, problem-first recipes — short answers to "how do I…?" questions
-that assume you already know the basics.
-
-These optimal-control recipes each answer one focused question; for end-to-end
-workflows see the {doc}`tutorials </tutorials/index>` and for the full API the
+Task-oriented recipes that each answer a single focused question, assuming
+familiarity with the basics. For end-to-end workflows see the
+{doc}`tutorials </tutorials/index>`; for the full API see the
 {doc}`reference </reference/index>`.
 
 ```{toctree}
