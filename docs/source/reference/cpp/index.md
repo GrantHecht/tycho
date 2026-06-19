@@ -4,4 +4,5 @@
 :maxdepth: 2
 
 vector_functions
+optimal_control
 ```

@@ -106,6 +106,16 @@ nitpick_ignore_regex = [
     ("cpp:identifier", r"SZ_\w+.*"),
     ("cpp:identifier", r"return_type_t.*"),
     ("cpp:identifier", r"(Derived|Scalar|Func\d*|IR\d*|OR\d*|ST\d*|JMode)"),
+    # C++ optimal-control reference page: Breathe renders the member signatures
+    # of the ``tycho::oc`` phase/problem types with bare (unqualified) internal
+    # typedef names and prose references that Doxygen's curated scope does not
+    # document as resolvable cross-reference targets. These are auto-generated
+    # signature xrefs, not authored links, so they are absorbed by class rather
+    # than enumerated. ``ScaleType``/``RegionType``/``VarIndexType`` are
+    # phase-internal index typedefs; ``MeshIterateInfo`` and ``PSIOPT`` are
+    # cross-subsystem types not documented under the OC page's Doxygen subset;
+    # a lone ``vf`` is a bare namespace fragment from a return-type signature.
+    ("cpp:identifier", r"(ScaleType|RegionType|VarIndexType|MeshIterateInfo|PSIOPT|vf)"),
     # Python: autodoc'ing the compiled tychopy.vector_functions module surfaces
     # the nanobind-bound VF expression types and the NumPy-style docstring prose
     # pseudo-types (``shape (n,)``, ``tuple[numpy.ndarray, ...]``, ``(int, int)``,
@@ -126,9 +136,23 @@ nitpick_ignore_regex = [
     ("py:class", r"callable"),  # NumPy "type" line on Py/Numba function bindings
     ("py:class", r"dtype.*"),
     ("py:class", r"Sign"),  # docstring Returns-prose pseudo-type (sign())
+    # Python optimal-control reference page: autodoc'ing the compiled
+    # tychopy.optimal_control module surfaces the same class of NumPy-style
+    # docstring prose pseudo-types as the VF page, plus a cross-module base.
+    # ``np.ndarray`` is the abbreviated NumPy alias used in a Returns line;
+    # ``sequence``, ``shape``, ``numsegs``, and ``Integrator`` are bare-word
+    # prose pseudo-types (no whitespace, so the character-class rule above does
+    # not catch them); ``_tychopy.solvers.OptimizationProblemBase`` is the
+    # nanobind base class, documented under the solvers subsystem rather than
+    # this page's Doxygen subset.
+    ("py:class", r"np\.ndarray"),
+    ("py:class", r"(sequence|shape|numsegs|Integrator)"),
+    ("py:class", r"_tychopy\.solvers\..*"),
     # Dunder/method names mentioned in docstring prose (e.g. a class blurb that
     # references ``__and__``/``__or__``, or ``eval``) are not autodoc targets.
-    ("py:meth", r"(__\w+__|eval)"),
+    # ``solve``/``optimize`` are prose method mentions in OC docstrings that
+    # point at methods not exposed on the documented class.
+    ("py:meth", r"(__\w+__|eval|solve|optimize)"),
 ]
 
 # -- HTML output -------------------------------------------------------------

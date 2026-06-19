@@ -189,12 +189,12 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
 
     double mesh_tol_ = 1.0e-6; ///< Target mesh-error tolerance.
 
-    MeshErrorEstimators mesh_error_estimator_ =
-        MeshErrorEstimators::DEBOOR; ///< Mesh-error estimator.
-    MeshErrorAggregation mesh_error_criteria_ =
-        MeshErrorAggregation::MAX; ///< Convergence aggregation.
-    MeshErrorAggregation mesh_error_distributor_ =
-        MeshErrorAggregation::AVG; ///< Distribution aggregation.
+    MeshErrorEstimators mesh_error_estimator_ = MeshErrorEstimators::DEBOOR; ///< Mesh-error
+                                                                             ///< estimator.
+    MeshErrorAggregation mesh_error_criteria_ = MeshErrorAggregation::MAX; ///< Convergence
+                                                                          ///< aggregation.
+    MeshErrorAggregation mesh_error_distributor_ = MeshErrorAggregation::AVG; ///< Distribution
+                                                                             ///< aggregation.
     PSIOPT::ConvergenceFlags mesh_abort_flag_ =
         PSIOPT::ConvergenceFlags::DIVERGING; ///< Solver flag that aborts the mesh loop.
 
