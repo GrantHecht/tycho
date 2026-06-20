@@ -201,34 +201,109 @@ are met exactly: $p = 1.2$ and $f = g = h = k = 0$ at arrival.
 0.0
 ```
 
-## 7. Visualize the trajectory (illustrative)
+## 7. Visualize the trajectory
 
-The snippet below shows how to plot the semi-latus rectum and control magnitude
-over the transfer.  It is not executed by the test suite because it opens a
-display window.
+A picture makes the result concrete. `return_traj()` gives the full converged
+trajectory, so a few `matplotlib` calls turn it into three views: the physical
+spiral as the orbit is raised, the semi-latus rectum climbing to its target, and
+the control magnitude over the transfer. Each row is
+$[p, f, g, h, k, L, t, u_r, u_t, u_n]$; converting each MEE state back to
+Cartesian with `astro.modified_to_cartesian` gives the spiral in the orbit plane.
 
 ```python
 import matplotlib.pyplot as plt
 
-T = np.array(Traj)          # rows of [p, f, g, h, k, L, t, ur, ut, un]
-times   = T[:, 6]           # column 6: time
-p_vals  = T[:, 0]           # column 0: semi-latus rectum
-u_mag   = np.linalg.norm(T[:, 7:10], axis=1)  # |u|
+T = np.array(Traj)                              # rows [p,f,g,h,k,L,t,ur,ut,un]
+times  = T[:, 6]
+p_vals = T[:, 0]
+u_mag  = np.linalg.norm(T[:, 7:10], axis=1)
+xy     = np.array([astro.modified_to_cartesian(row[:6], mu)[:2] for row in T])
 
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9, 3.5))
+fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(12, 3.6))
 
-ax1.plot(times, p_vals)
-ax1.axhline(pf, color="C1", linestyle="--", label=r"target $p$")
-ax1.set(xlabel="time [TU]", ylabel=r"$p$ [AU]", title="Semi-latus rectum")
-ax1.legend()
+th = np.linspace(0, 2 * np.pi, 200)
+ax0.plot(p0 * np.cos(th), p0 * np.sin(th), "k--", lw=0.8, label="initial orbit")
+ax0.plot(pf * np.cos(th), pf * np.sin(th), color="C1", ls="--", lw=0.8, label="target orbit")
+ax0.plot(xy[:, 0], xy[:, 1], color="C0", lw=1.5, label="transfer")
+ax0.set(xlabel="x", ylabel="y", title="Transfer trajectory")
+ax0.set_aspect("equal"); ax0.legend(fontsize=8)
 
-ax2.plot(times, u_mag)
-ax2.axhline(acc_max, color="C2", linestyle="--", label=r"$a_{\max}$")
+ax1.plot(times, p_vals, color="C0")
+ax1.axhline(pf, color="C1", ls="--", label=r"target $p$")
+ax1.set(xlabel="time [TU]", ylabel=r"$p$", title="Semi-latus rectum"); ax1.legend(fontsize=8)
+
+ax2.plot(times, u_mag, color="C0")
+ax2.axhline(acc_max, color="C2", ls="--", label=r"$a_{\max}$")
 ax2.set(xlabel="time [TU]", ylabel=r"$|u|$", title="Control magnitude")
-ax2.legend()
+ax2.set_ylim(0, acc_max * 1.3); ax2.legend(fontsize=8)
 
 fig.tight_layout()
 plt.show()
+```
+
+```{eval-rst}
+.. plot::
+
+   import numpy as np
+   import matplotlib.pyplot as plt
+   from tychopy import astro
+   from tychopy import vector_functions as vf
+   from tychopy import optimal_control as oc
+
+   mu = 1.0
+   p0, pf = 1.0, 1.2
+   acc_max = 0.01
+   mee0 = np.array([p0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+   class MEETransfer(oc.ODEBase):
+       def __init__(self, mu):
+           args = oc.ODEArguments(6, 3)
+           super().__init__(astro.modified_dynamics(mu)(vf.stack([args.x_vec(), args.u_vec()])), 6, 3)
+
+   ode = MEETransfer(mu)
+
+   u_prograde = vf.ConstantVector(6, np.array([0.0, acc_max, 0.0]))
+   integ = ode.integrator(0.001, u_prograde, range(0, 6))
+   integ.adaptive = True
+   X0 = np.array([p0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, acc_max, 0.0])
+   TrajIG = integ.integrate_dense(X0, 9.0, 200)
+
+   phase = ode.phase("LGL3", TrajIG, 50)
+   phase.add_boundary_value("Front", range(0, 7), list(mee0) + [0.0])
+   phase.add_boundary_value("Back", [0, 1, 2, 3, 4], [pf, 0.0, 0.0, 0.0, 0.0])
+   phase.add_lu_norm_bound("Path", [7, 8, 9], 0.0001, acc_max, 1.0)
+   phase.add_delta_time_objective(1.0)
+   phase.optimizer.set_print_level(0)
+   phase.optimize()
+   T = np.array(phase.return_traj())
+
+   times = T[:, 6]
+   p_vals = T[:, 0]
+   u_mag = np.linalg.norm(T[:, 7:10], axis=1)
+   xy = np.array([astro.modified_to_cartesian(row[:6], mu)[:2] for row in T])
+
+   fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(12, 3.6))
+
+   th = np.linspace(0, 2 * np.pi, 200)
+   ax0.plot(p0 * np.cos(th), p0 * np.sin(th), "k--", lw=0.8, label="initial orbit")
+   ax0.plot(pf * np.cos(th), pf * np.sin(th), color="C1", ls="--", lw=0.8, label="target orbit")
+   ax0.plot(xy[:, 0], xy[:, 1], color="C0", lw=1.5, label="transfer")
+   ax0.set(xlabel="x", ylabel="y", title="Transfer trajectory")
+   ax0.set_aspect("equal")
+   ax0.legend(fontsize=8)
+
+   ax1.plot(times, p_vals, color="C0")
+   ax1.axhline(pf, color="C1", ls="--", label="target p")
+   ax1.set(xlabel="time [TU]", ylabel="p", title="Semi-latus rectum")
+   ax1.legend(fontsize=8)
+
+   ax2.plot(times, u_mag, color="C0")
+   ax2.axhline(acc_max, color="C2", ls="--", label="a_max")
+   ax2.set(xlabel="time [TU]", ylabel="|u|", title="Control magnitude")
+   ax2.set_ylim(0, acc_max * 1.3)
+   ax2.legend(fontsize=8)
+
+   fig.tight_layout()
 ```
 
 The optimal solution fires the engine at full throttle throughout the transfer.
