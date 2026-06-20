@@ -2,11 +2,19 @@
 
 The dynamics models in `tychopy.astro` — `modified_dynamics`, `cartesian_dynamics`,
 and `crtbp_dynamics` — each return a `VectorFunction` with input layout
-`[state(6), control(3)]` (IR = 9, OR = 6).  This layout does **not** include a
-time slot.  The phase machinery, however, expects an ODE whose input layout is
-`[state(6), t, control(3)]` — the time occupies the seventh slot.  Passing a
-dynamics model directly to a phase therefore misaligns the time slot and produces
-wrong constraint structure.
+`[state(6), a(3)]` (IR = 9, OR = 6).  The trailing three inputs are **not**
+specifically a control.  They are the *non-two-body acceleration* acting on the
+spacecraft — the total perturbing acceleration beyond central-body point-mass
+gravity.  That acceleration may be a control you optimize (e.g. low-thrust), a
+modeled environmental perturbation (J2, atmospheric drag, solar-radiation
+pressure), or the sum of several such terms.  For `modified_dynamics` it is
+expressed in the RSW (radial / along-track / cross-track) frame; for
+`cartesian_dynamics` and `crtbp_dynamics` it is in the same frame as the state.
+
+This layout does **not** include a time slot.  The phase machinery, however,
+expects an ODE whose input layout is `[state(6), t, a(3)]` — the time occupies
+the seventh slot.  Passing a dynamics model directly to a phase therefore
+misaligns the time slot and produces wrong constraint structure.
 
 The fix is to wrap the dynamics model in an `ODEBase` subclass that uses
 `ODEArguments` to extract state and control from the full phase input, stack
@@ -45,6 +53,11 @@ state, and `args.u_vec()` for the control.  `vf.stack([state, control])` forms
 the 9-element input that `modified_dynamics` expects, skipping the time slot at
 index 6.  The resulting `rhs` maps the full 10-element phase input to the
 6-element MEE state derivative.
+
+In this recipe the non-two-body acceleration is a pure thrust control, so it
+comes straight from `args.u_vec()`.  The same three slots also accept a modeled
+perturbation, or thrust plus a perturbation summed together — see
+[Adding perturbations](#adding-perturbations) below.
 
 ```python
 mu = 1.0    # normalized gravitational parameter
@@ -110,7 +123,7 @@ p_f  = Traj[-1][0]   # semi-latus rectum at arrival
 ## Adapting to other dynamics models
 
 The same pattern works for `cartesian_dynamics` and `crtbp_dynamics` — both
-have the same IR = 9, OR = 6 interface with input layout `[state(6), control(3)]`
+have the same IR = 9, OR = 6 interface with input layout `[state(6), a(3)]`
 and no time slot.  Substitute the appropriate factory function:
 
 ```python
@@ -133,9 +146,10 @@ $\mu = m_2 / (m_1 + m_2) \in (0, 1)$, not a gravitational parameter.
 
 ## Adding perturbations
 
-To include J2 or solar-sail perturbations, build a composite right-hand side by
-adding a perturbation VectorFunction to the gravitational dynamics inside the
-ODE wrapper.  For example, to add J2 to Cartesian dynamics:
+The three acceleration slots are exactly where modeled perturbations belong.
+Build the perturbing acceleration as a VectorFunction of the state and feed it
+into the acceleration input — on its own, or summed with a thrust control.  For
+example, to fly the orbit-raising transfer above under J2:
 
 ```python
 class J2CartesianODE(oc.ODEBase):
@@ -143,15 +157,20 @@ class J2CartesianODE(oc.ODEBase):
         args = oc.ODEArguments(6, 3)
         state   = args.x_vec()
         control = args.u_vec()
-        grav_rhs = astro.cartesian_dynamics(mu)(vf.stack([state, control]))
         # j2_cartesian takes [rx, ry, rz, nx, ny, nz] (position + pole direction)
-        north = vf.ConstantVector(3, np.array(north_pole))
+        # and returns the J2 acceleration in the same inertial frame as the state.
+        # args.constant builds a constant whose input arity matches the phase input.
+        north  = args.constant(np.array(north_pole))
         j2_acc = astro.j2_cartesian(mu, J2, Rb)(vf.stack([state.head(3), north]))
-        # Inject J2 into velocity derivative slots (indices 3–5 of grav_rhs)
-        grav_rhs_arr = vf.stack([grav_rhs.head(3),
-                                 grav_rhs.segment(3, 3) + j2_acc])
-        super().__init__(grav_rhs_arr, 6, 3)
+        # Total non-two-body acceleration = thrust control + J2 perturbation.
+        total_accel = control + j2_acc
+        rhs = astro.cartesian_dynamics(mu)(vf.stack([state, total_accel]))
+        super().__init__(rhs, 6, 3)
 ```
+
+Drop the `control` term for J2 with no thrust (a perturbed ballistic
+propagation), or add further terms — drag, solar-radiation pressure — the same
+way; they all sum into the single acceleration input.
 
 A complete worked example is `examples/python_examples/SimpleLowThrust.py`,
 which uses Cartesian dynamics to optimize a low-thrust orbit-raising transfer,

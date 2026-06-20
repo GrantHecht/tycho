@@ -215,8 +215,14 @@ shape to initialize a trajectory before the optimizer refines it.
 ## Dynamics models
 
 A dynamics model in Tycho is a **VectorFunction** that maps the packed input
-$[\text{state}(6), \text{control}(3)]$ (IR = 9) to the state derivative
-$\dot{x}$ (OR = 6). This is exactly the ODE form that a `Phase` expects: the
+$[\text{state}(6), \mathbf{a}(3)]$ (IR = 9) to the state derivative
+$\dot{x}$ (OR = 6). The trailing three inputs are the *non-two-body
+acceleration* — every acceleration on the spacecraft beyond central-body
+point-mass gravity. In an optimal-control problem this is usually the thrust
+control the optimizer chooses, but it can equally carry modeled perturbations
+(J2, atmospheric drag, solar-radiation pressure), or their sum (see
+{doc}`How to use astrodynamics dynamics in a phase </how_to/astro_dynamics_in_a_phase>`).
+This is exactly the ODE form that a `Phase` expects: the
 {doc}`direct collocation </explanation/direct_collocation>` transcription
 enforces the defect $\dot{\tilde{x}} = f(\tilde{x}, u)$ at every collocation
 point, where $f$ is the dynamics VectorFunction. Each model carries analytic
@@ -227,20 +233,21 @@ second-derivative information rather than finite-difference approximations.
 
 `CartesianDynamics` is the two-body equations of motion in Cartesian
 coordinates. Its input layout is
-$[r_x, r_y, r_z, v_x, v_y, v_z, a_{x,\text{ctrl}}, a_{y,\text{ctrl}}, a_{z,\text{ctrl}}]$
+$[r_x, r_y, r_z, v_x, v_y, v_z, a_x, a_y, a_z]$
 and its output is the state derivative
 $[\dot{r}_x, \dot{r}_y, \dot{r}_z, \dot{v}_x, \dot{v}_y, \dot{v}_z]$:
 
 $$
 \begin{pmatrix} \dot{\mathbf{r}} \\ \dot{\mathbf{v}} \end{pmatrix}
 =
-\begin{pmatrix} \mathbf{v} \\ -\dfrac{\mu}{r^3}\mathbf{r} + \mathbf{a}_{\text{ctrl}} \end{pmatrix}
+\begin{pmatrix} \mathbf{v} \\ -\dfrac{\mu}{r^3}\mathbf{r} + \mathbf{a} \end{pmatrix}
 $$
 
-where $r = \|\mathbf{r}\|$ and $\mu$ is the gravitational parameter. The control
-acceleration $\mathbf{a}_{\text{ctrl}}$ is applied directly in the inertial
-frame; the optimizer selects its magnitude and direction at each collocation
-node.
+where $r = \|\mathbf{r}\|$ and $\mu$ is the gravitational parameter. The
+non-two-body acceleration $\mathbf{a}$ enters directly in the inertial frame. In
+a low-thrust problem it is the thrust control whose magnitude and direction the
+optimizer selects at each collocation node; perturbations modeled as functions
+of the state are added into the same term.
 
 `CartesianDynamics` is appropriate for problems where the state is most naturally
 expressed in Cartesian coordinates: high-thrust or impulsive transfers, short-arc
@@ -250,7 +257,7 @@ Cartesian.
 ### MEEDynamics
 
 `MEEDynamics` is the two-body equations of motion in Modified Equinoctial
-Elements with control acceleration given in the **RSW frame** (radial,
+Elements with the non-two-body acceleration given in the **RSW frame** (radial,
 along-track, and out-of-plane). The input layout is
 $[p, f, g, h, k, L, u_r, u_t, u_n]$ and the output is $[\dot{p}, \dot{f},
 \dot{g}, \dot{h}, \dot{k}, \dot{L}]$ as given by the Gauss variation-of-parameters
@@ -297,9 +304,9 @@ $$
 =
 \begin{pmatrix}
   \mathbf{v} \\[4pt]
-  x - \dfrac{(1-\mu)(x+\mu)}{r_1^3} - \dfrac{\mu(x+\mu-1)}{r_2^3} + 2v_y + a_{x,\text{ctrl}} \\[4pt]
-  y - \dfrac{(1-\mu)\,y}{r_1^3} - \dfrac{\mu\,y}{r_2^3} - 2v_x + a_{y,\text{ctrl}} \\[4pt]
-  -\dfrac{(1-\mu)\,z}{r_1^3} - \dfrac{\mu\,z}{r_2^3} + a_{z,\text{ctrl}}
+  x - \dfrac{(1-\mu)(x+\mu)}{r_1^3} - \dfrac{\mu(x+\mu-1)}{r_2^3} + 2v_y + a_x \\[4pt]
+  y - \dfrac{(1-\mu)\,y}{r_1^3} - \dfrac{\mu\,y}{r_2^3} - 2v_x + a_y \\[4pt]
+  -\dfrac{(1-\mu)\,z}{r_1^3} - \dfrac{\mu\,z}{r_2^3} + a_z
 \end{pmatrix}
 $$
 
@@ -356,12 +363,12 @@ dynamics model — connects at a single interface: the `Phase`.
 
 A dynamics model such as `MEEDynamics` or `CartesianDynamics` is a
 {doc}`VectorFunction </explanation/vector_function>` of the packed
-$[\text{state}(6), \text{control}(3)]$ input returning $\dot{x}$. Passing it to
+$[\text{state}(6), \mathbf{a}(3)]$ input returning $\dot{x}$. Passing it to
 a `Phase` as the ODE registers the dynamics with the collocation layer:
 
-`modified_dynamics` has the input layout $[\text{state}(6), \text{control}(3)]$
+`modified_dynamics` has the input layout $[\text{state}(6), \mathbf{a}(3)]$
 with no time slot, so it is wrapped in an `ODEBase` whose argument layout
-$[\text{state}, t, \text{control}]$ the phase machinery expects:
+$[\text{state}, t, \mathbf{a}]$ the phase machinery expects:
 
 ```python
 from tychopy import optimal_control as oc, vector_functions as vf, astro
