@@ -15,10 +15,7 @@ use as the ODE of a {py:class}`~tychopy.optimal_control.PhaseInterface`.
 For the conceptual model — state representations, propagation, and the dynamics
 models as phase ODEs — see {doc}`Astrodynamics in Tycho </explanation/astrodynamics>`.
 
-<!-- TODO: cross-link /tutorials/astrodynamics/index once that page exists (Task 6 of the docs plan).
-     Link to add when ready:
-       For hands-on examples see the {doc}`astrodynamics tutorials </tutorials/astrodynamics/index>`.
--->
+For hands-on examples see the {doc}`astrodynamics tutorials </tutorials/astrodynamics/index>`.
 
 ```{eval-rst}
 .. currentmodule:: tychopy.astro

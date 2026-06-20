@@ -215,6 +215,7 @@ doctest_global_setup = """
 import numpy as np
 from tychopy import vector_functions as vf
 from tychopy import optimal_control as oc
+from tychopy import astro
 """
 
 # -- Breathe (Doxygen XML → Sphinx) -----------------------------------------
