@@ -1484,17 +1484,19 @@ def lambert_izzo_multirev(R1: Annotated[NDArray[numpy.float64], dict(shape=(3), 
 
 def modified_dynamics(arg: float, /) -> _tychopy.vector_functions.VectorFunction:
     """
-    Build the MEE two-body + RSW-thrust dynamics VectorFunction (IR=9, OR=6).
+    Build the MEE two-body dynamics VectorFunction with an RSW-frame non-two-body acceleration (IR=9, OR=6).
 
     Returns a VectorFunction suitable for use as the ODE of an optimal-control
     :class:`~tychopy.optimal_control.PhaseInterface`.
 
-    Input layout ``[state(6), control(3)]``:
+    Input layout ``[state(6), a(3)]``:
 
     * State (indices 0–5): ``[p, f, g, h, k, L]`` — Modified Equinoctial
       Elements where ``L`` is the true longitude (radians).
-    * Control (indices 6–8): ``[ur, ut, un]`` — RSW-frame accelerations
-      (radial, tangential/along-track, out-of-plane/normal).
+    * Acceleration (indices 6–8): ``[ur, ut, un]`` — the non-two-body
+      (perturbing) acceleration in the RSW frame (radial, tangential/along-track,
+      out-of-plane/normal). This may be a thrust control, a modeled
+      perturbation (J2, drag, SRP), or their sum.
 
     Output (6,): state derivative ``[dp/dt, df/dt, dg/dt, dh/dt, dk/dt, dL/dt]``.
 
@@ -1515,20 +1517,21 @@ def modified_dynamics(arg: float, /) -> _tychopy.vector_functions.VectorFunction
 
 def cartesian_dynamics(arg: float, /) -> _tychopy.vector_functions.VectorFunction:
     """
-    Build the Cartesian two-body + thrust dynamics VectorFunction (IR=9, OR=6).
+    Build the Cartesian two-body dynamics VectorFunction with a non-two-body acceleration (IR=9, OR=6).
 
     Returns a VectorFunction suitable for use as the ODE of an optimal-control
     :class:`~tychopy.optimal_control.PhaseInterface`.
 
-    Input layout ``[state(6), control(3)]``:
+    Input layout ``[state(6), a(3)]``:
 
     * State (indices 0–5): ``[rx, ry, rz, vx, vy, vz]`` — inertial Cartesian
       position and velocity.
-    * Control (indices 6–8): ``[ax_ctrl, ay_ctrl, az_ctrl]`` — inertial control
-      acceleration.
+    * Acceleration (indices 6–8): ``[ax, ay, az]`` — the non-two-body
+      (perturbing) acceleration in the inertial frame. This may be a thrust
+      control, a modeled perturbation (J2, drag, SRP), or their sum.
 
     Output (6,): state derivative
-    ``[vx, vy, vz, ax_grav + ax_ctrl, ay_grav + ay_ctrl, az_grav + az_ctrl]``.
+    ``[vx, vy, vz, ax_grav + ax, ay_grav + ay, az_grav + az]``.
 
     Parameters
     ----------
@@ -1552,12 +1555,13 @@ def crtbp_dynamics(arg: float, /) -> _tychopy.vector_functions.VectorFunction:
     Returns a VectorFunction suitable for use as the ODE of an optimal-control
     :class:`~tychopy.optimal_control.PhaseInterface`.
 
-    Input layout ``[state(6), control(3)]``:
+    Input layout ``[state(6), a(3)]``:
 
     * State (indices 0–5): ``[x, y, z, vx, vy, vz]`` — position and velocity
       in the rotating (synodic) frame with the primaries on the x-axis.
-    * Control (indices 6–8): ``[ax_ctrl, ay_ctrl, az_ctrl]`` — control
-      acceleration in the synodic frame.
+    * Acceleration (indices 6–8): ``[ax, ay, az]`` — the non-two-body
+      (perturbing) acceleration in the synodic frame. This may be a thrust
+      control, a modeled perturbation, or their sum.
 
     Output (6,): state derivative
     ``[vx, vy, vz, x_ddot, y_ddot, z_ddot]`` in the synodic frame

@@ -263,8 +263,9 @@ $[p, f, g, h, k, L, u_r, u_t, u_n]$ and the output is $[\dot{p}, \dot{f},
 \dot{g}, \dot{h}, \dot{k}, \dot{L}]$ as given by the Gauss variation-of-parameters
 equations in MEE form.
 
-The three control components $[u_r, u_t, u_n]$ are accelerations in the
-spacecraft-centered RSW frame (radial, along-track, and out-of-plane):
+The three components $[u_r, u_t, u_n]$ are the non-two-body acceleration in the
+spacecraft-centered RSW frame (radial, along-track, and out-of-plane) — most
+commonly a low-thrust control:
 
 | Component | Direction |
 | --- | --- |

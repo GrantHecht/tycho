@@ -75,8 +75,10 @@ analytic Jacobian and Hessian.
 ## Dynamics models
 
 VectorFunction classes encoding equations of motion for use as the ODE of an
-optimal-control phase.  Each accepts a packed IR=9 input
-`[state(6), control(3)]` and returns the 6-dimensional state derivative.
+optimal-control phase.  Each accepts a packed IR=9 input `[state(6), a(3)]`,
+where the trailing three inputs are the non-two-body (perturbing) acceleration
+— a thrust control, a modeled perturbation, or their sum — and returns the
+6-dimensional state derivative.
 
 ```{eval-rst}
 .. doxygenclass:: tycho::astro::CartesianDynamics
