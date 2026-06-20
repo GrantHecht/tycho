@@ -33,6 +33,15 @@ namespace tycho::astro::detail {
 // kepler_propagate_adjoint_hessian to detect degenerate IFT composition
 // (e.g. r → 0 producing inf in 1/F_X_total) on lanes where the LCD kernel
 // itself converged.
+/// @internal
+/// @brief Returns true when every entry of a dense matrix is finite.
+///
+/// For SuperScalar matrix entries (Eigen::Array<double,W,1>), reduces per-lane
+/// finiteness across all entries.  Used to detect degenerate IFT composition.
+/// @tparam Derived Eigen dense base type.
+/// @param[in] m Matrix to check.
+/// @return True if all entries (and all lanes) are finite.
+/// @endinternal
 template <class Derived> inline bool kepler_block_all_finite(const Eigen::DenseBase<Derived> &m) {
     using Scalar = typename Derived::Scalar;
     if constexpr (std::is_same_v<Scalar, double>) {
@@ -51,22 +60,19 @@ template <class Derived> inline bool kepler_block_all_finite(const Eigen::DenseB
 // Forward declarations
 // -------------------------------------------------------------------------
 
+/// @internal @brief Forward declaration of kepler_propagate (primal only). @endinternal
 template <class Scalar>
 inline void kepler_propagate(const Vector3<Scalar> &R0, const Vector3<Scalar> &V0, Scalar dt,
                              double mu, Vector6<Scalar> &xf);
 
-// The Jacobian and adjoint-Hessian routines take const refs to the codegen
-// primal/residual VFs.  The wrapping KeplerPropagator owns one of each as
-// private members so the precomputed `pcN_` cache (sqrt(mu), 1/sqrt(mu),
-// ...) is set up once at construction and reused across compute calls,
-// rather than being reconstructed per IFT invocation.  Both VFs must be
-// configured with the same mu — the wrapper's set_mu propagates to both.
+/// @internal @brief Forward declaration of kepler_propagate_jacobian (IFT Jacobian). @endinternal
 template <class Scalar>
 inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<Scalar> &V0,
                                       Scalar dt, const ::tycho::astro::detail::KeplerPrimal &primal,
                                       const ::tycho::astro::detail::KeplerResidual &residual,
                                       Vector6<Scalar> &xf, Eigen::Matrix<Scalar, 6, 7> &jac);
 
+/// @internal @brief Forward declaration of kepler_propagate_adjoint_hessian (IFT adjoint Hessian). @endinternal
 template <class Scalar>
 inline void
 kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Vector3<Scalar> &V0, Scalar dt,
@@ -88,10 +94,20 @@ kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Vector3<Scalar
 // roughly 1e-12 < |α| < 1e-9 is well-conditioned for the kernel but suspect
 // for the IFT recursion form.  Set to match the kernel's Stumpff y→0
 // threshold so the Taylor branch covers the whole suspect band.
+/// @internal
+/// @brief Taylor-fallback threshold for IFT-layer alpha partials near the parabolic branch.
+/// @endinternal
 inline constexpr double kIFTAlphaTaylorEps = 1.0e-8;
 
 // ∂U_n/∂X = U_{n-1} for n ≥ 1, and ∂U_0/∂X = -α · U_1 (since U_0 = 1 - α U_2
 // and ∂U_2/∂X = U_1; equivalently U_0' = -α U_2' = -α U_1).
+/// @internal
+/// @brief Compute first-order Stumpff partials w.r.t. the universal anomaly X.
+/// @tparam Scalar Numeric scalar type.
+/// @param[in] alpha Vis-viva energy parameter.
+/// @param[in] k     LCD result containing converged U values.
+/// @return Stumpff bundle { dU0/dX, dU1/dX, dU2/dX, dU3/dX }.
+/// @endinternal
 template <class Scalar>
 inline Stumpff<Scalar> U_partials_X(Scalar alpha, const KeplerLCDResult<Scalar> &k) {
     return {-alpha * k.U.U1, k.U.U0, k.U.U1, k.U.U2};
@@ -104,8 +120,18 @@ inline Stumpff<Scalar> U_partials_X(Scalar alpha, const KeplerLCDResult<Scalar> 
 // the Taylor leading order  U_n = X^n/n! - α X^{n+2}/(n+2)! + O(α²)
 //   ⇒ ∂U_n/∂α |_{α→0} = -X^{n+2} / (n+2)!
 //
-// Scalar/per-call path; SS argument types resolve to the Eigen::Array
-// overload below.
+/// @internal
+/// @brief Compute first-order Stumpff partials w.r.t. the energy parameter alpha (scalar path).
+///
+/// Near |alpha| < alpha_tol uses Taylor leading-order values to avoid the removable 1/alpha
+/// singularity in the recursion form.
+/// @tparam Scalar Numeric scalar type (double).
+/// @param[in] alpha     Vis-viva energy parameter.
+/// @param[in] X         Converged universal anomaly.
+/// @param[in] k         LCD result containing converged U values.
+/// @param[in] alpha_tol Threshold for Taylor fallback.
+/// @return Stumpff bundle { dU0/dalpha, dU1/dalpha, dU2/dalpha, dU3/dalpha }.
+/// @endinternal
 template <class Scalar>
 inline Stumpff<Scalar> U_partials_alpha(Scalar alpha, Scalar X, const KeplerLCDResult<Scalar> &k,
                                         double alpha_tol) {
@@ -129,9 +155,15 @@ inline Stumpff<Scalar> U_partials_alpha(Scalar alpha, Scalar X, const KeplerLCDR
     return out;
 }
 
-// SuperScalar overload for U_partials_alpha.  Per-lane Taylor blending via
-// Eigen::Array::select avoids div-by-zero in lanes where |α| < α_tol while
-// using the recursion in well-conditioned lanes.
+/// @internal
+/// @brief SuperScalar overload of U_partials_alpha with per-lane Taylor blending.
+/// @tparam W SIMD width.
+/// @param[in] alpha     Vis-viva energy parameter (W-lane).
+/// @param[in] X         Converged universal anomaly (W-lane).
+/// @param[in] k         LCD result containing converged U values (W-lane).
+/// @param[in] alpha_tol Threshold for Taylor fallback.
+/// @return W-lane Stumpff bundle { dU0/dalpha, dU1/dalpha, dU2/dalpha, dU3/dalpha }.
+/// @endinternal
 template <int W>
 inline Stumpff<Eigen::Array<double, W, 1>>
 U_partials_alpha(const Eigen::Array<double, W, 1> &alpha, const Eigen::Array<double, W, 1> &X,
@@ -180,30 +212,43 @@ U_partials_alpha(const Eigen::Array<double, W, 1> &alpha, const Eigen::Array<dou
 // chain rule) read in groups.  data_ is private + accessed only via the
 // named accessors so the row/column convention can't be bypassed by a
 // later refactor.
+/// @internal
+/// @brief Named 4×3 table of second-order Stumpff partials (∂²U_n/∂X², ∂²U_n/∂X∂α, ∂²U_n/∂α²).
+///
+/// Rows index U_n (n=0..3); columns index the partial kind (dX2, dXda, da2).
+/// @tparam Scalar Numeric scalar type.
+/// @endinternal
 template <class Scalar> class U_second_partials {
   public:
+    /// @internal @brief Column index enum for the three second-partial kinds. @endinternal
     enum Kind : int { dX2 = 0, dXda = 1, da2 = 2 };
 
+    /// @internal @brief Mutable accessor for ∂²U_n/∂X². @param[in] n Stumpff index (0–3). @return Reference to the entry. @endinternal
     [[nodiscard]] Scalar &d2U_dX2(int n) {
         assert(0 <= n && n < 4);
         return data_(n, dX2);
     }
+    /// @internal @brief Mutable accessor for ∂²U_n/∂X∂α. @param[in] n Stumpff index (0–3). @return Reference to the entry. @endinternal
     [[nodiscard]] Scalar &d2U_dXda(int n) {
         assert(0 <= n && n < 4);
         return data_(n, dXda);
     }
+    /// @internal @brief Mutable accessor for ∂²U_n/∂α². @param[in] n Stumpff index (0–3). @return Reference to the entry. @endinternal
     [[nodiscard]] Scalar &d2U_da2(int n) {
         assert(0 <= n && n < 4);
         return data_(n, da2);
     }
+    /// @internal @brief Const accessor for ∂²U_n/∂X². @param[in] n Stumpff index (0–3). @return Const reference to the entry. @endinternal
     [[nodiscard]] const Scalar &d2U_dX2(int n) const {
         assert(0 <= n && n < 4);
         return data_(n, dX2);
     }
+    /// @internal @brief Const accessor for ∂²U_n/∂X∂α. @param[in] n Stumpff index (0–3). @return Const reference to the entry. @endinternal
     [[nodiscard]] const Scalar &d2U_dXda(int n) const {
         assert(0 <= n && n < 4);
         return data_(n, dXda);
     }
+    /// @internal @brief Const accessor for ∂²U_n/∂α². @param[in] n Stumpff index (0–3). @return Const reference to the entry. @endinternal
     [[nodiscard]] const Scalar &d2U_da2(int n) const {
         assert(0 <= n && n < 4);
         return data_(n, da2);
@@ -213,6 +258,20 @@ template <class Scalar> class U_second_partials {
     Eigen::Matrix<Scalar, 4, 3> data_;
 };
 
+/// @internal
+/// @brief Compute the 4×3 table of second-order Stumpff partials (scalar path).
+///
+/// Near |alpha| < alpha_tol uses Taylor leading-order values for X-alpha and alpha-alpha
+/// partials to avoid the removable 1/alpha singularity.
+/// @tparam Scalar Numeric scalar type (double).
+/// @param[in] alpha     Vis-viva energy parameter.
+/// @param[in] X         Converged universal anomaly.
+/// @param[in] k         LCD result containing converged U values.
+/// @param[in] alpha_tol Threshold for Taylor fallback.
+/// @param[in] dU_dX     First-order X-partials from U_partials_X.
+/// @param[in] dU_da     First-order alpha-partials from U_partials_alpha.
+/// @return Second-order partial table.
+/// @endinternal
 template <class Scalar>
 inline U_second_partials<Scalar>
 compute_U_second_partials(Scalar alpha, Scalar X, const KeplerLCDResult<Scalar> &k,
@@ -272,10 +331,17 @@ compute_U_second_partials(Scalar alpha, Scalar X, const KeplerLCDResult<Scalar> 
     return p;
 }
 
-// SuperScalar overload of compute_U_second_partials.  Per-lane Taylor
-// blending via Eigen::Array::select avoids div-by-zero in lanes where
-// |α| < α_tol while using the recursion in well-conditioned lanes.
-// Mirrors the structure of the U_partials_alpha SuperScalar overload.
+/// @internal
+/// @brief SuperScalar overload of compute_U_second_partials with per-lane Taylor blending.
+/// @tparam W SIMD width.
+/// @param[in] alpha     Vis-viva energy parameter (W-lane).
+/// @param[in] X         Converged universal anomaly (W-lane).
+/// @param[in] k         LCD result containing converged U values (W-lane).
+/// @param[in] alpha_tol Threshold for Taylor fallback.
+/// @param[in] dU_dX     First-order X-partials (W-lane).
+/// @param[in] dU_da     First-order alpha-partials (W-lane).
+/// @return W-lane second-order partial table.
+/// @endinternal
 template <int W>
 inline U_second_partials<Eigen::Array<double, W, 1>>
 compute_U_second_partials(const Eigen::Array<double, W, 1> &alpha,
@@ -346,6 +412,17 @@ compute_U_second_partials(const Eigen::Array<double, W, 1> &alpha,
 // Primal-only propagation
 // -------------------------------------------------------------------------
 
+/// @internal
+/// @brief Propagate Cartesian state using the LCD kernel (primal only, no derivatives).
+///
+/// On any non-convergence NaN-poisons xf entirely (all-or-nothing contract).
+/// @tparam Scalar Numeric scalar type (double or SuperScalar).
+/// @param[in]  R0  Initial position vector.
+/// @param[in]  V0  Initial velocity vector.
+/// @param[in]  dt  Time-of-flight.
+/// @param[in]  mu  Gravitational parameter.
+/// @param[out] xf  Propagated 6-vector [rx, ry, rz, vx, vy, vz].
+/// @endinternal
 template <class Scalar>
 inline void kepler_propagate(const Vector3<Scalar> &R0, const Vector3<Scalar> &V0, Scalar dt,
                              double mu, Vector6<Scalar> &xf) {
@@ -375,6 +452,19 @@ inline void kepler_propagate(const Vector3<Scalar> &R0, const Vector3<Scalar> &V
 // IFT-composed Jacobian
 // -------------------------------------------------------------------------
 
+/// @internal
+/// @brief Propagate Cartesian state and compute its 6×7 Jacobian via IFT composition.
+///
+/// On any non-convergence or post-IFT non-finite result, NaN-poisons both xf and jac.
+/// @tparam Scalar Numeric scalar type (double or SuperScalar).
+/// @param[in]  R0       Initial position vector.
+/// @param[in]  V0       Initial velocity vector.
+/// @param[in]  dt       Time-of-flight.
+/// @param[in]  primal   KeplerPrimal VF (carries precomputed sqrt(mu) cache).
+/// @param[in]  residual KeplerResidual VF (carries precomputed sqrt(mu) cache).
+/// @param[out] xf       Propagated 6-vector [rx, ry, rz, vx, vy, vz].
+/// @param[out] jac      6×7 Jacobian d(rf,vf)/d(R0,V0,dt).
+/// @endinternal
 template <class Scalar>
 inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<Scalar> &V0,
                                       Scalar dt, const ::tycho::astro::detail::KeplerPrimal &primal,
@@ -513,6 +603,23 @@ inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<S
 // (so S_hess(i,j) = Σ_row adjvars[row]·∂²S_row/(∂x_i ∂x_j) in the 11-dim
 // structural input space).  F is single-output, so passing F_lm[0] = 1 makes
 // F_grad and F_hess equal to the raw structural gradient/Hessian of F.
+/// @internal
+/// @brief Propagate Cartesian state and compute its Jacobian, adjoint gradient, and adjoint Hessian.
+///
+/// Implements the full second-order IFT chain rule.  On any non-convergence or
+/// post-IFT non-finite result, NaN-poisons all four output buffers.
+/// @tparam Scalar Numeric scalar type (double or SuperScalar).
+/// @param[in]  R0       Initial position vector.
+/// @param[in]  V0       Initial velocity vector.
+/// @param[in]  dt       Time-of-flight.
+/// @param[in]  primal   KeplerPrimal VF.
+/// @param[in]  residual KeplerResidual VF.
+/// @param[in]  adjvars  Adjoint variables lambda (6-vector).
+/// @param[out] xf       Propagated 6-vector.
+/// @param[out] jac      6×7 Jacobian.
+/// @param[out] adjgrad  Adjoint gradient J^T*lambda (7-vector).
+/// @param[out] adjhess  7×7 adjoint Hessian.
+/// @endinternal
 template <class Scalar>
 inline void
 kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Vector3<Scalar> &V0, Scalar dt,

@@ -22,29 +22,32 @@ using vf::MatRef;
 using vf::VecRef;
 using vf::VectorFunction;
 
+/// @brief Universal-variable Kepler propagator VectorFunction (IR=7, OR=6).
+///
+/// Maps [rx, ry, rz, vx, vy, vz, dt] to the propagated Cartesian state
+/// [rx', ry', rz', vx', vy', vz'] using the LCD kernel with IFT-composed
+/// analytic Jacobian and Hessian.
 class KeplerPropagator
     : public VectorFunction<KeplerPropagator, 7, 6, DenseDerivativeMode::Analytic,
                             DenseDerivativeMode::Analytic> {
   public:
     using Base = VectorFunction<KeplerPropagator, 7, 6, DenseDerivativeMode::Analytic,
-                                DenseDerivativeMode::Analytic>;
+                                DenseDerivativeMode::Analytic>; ///< @internal CRTP base alias. @endinternal
     VF_TYPE_ALIASES(Base);
 
-    static constexpr bool is_vectorizable = true;
+    static constexpr bool is_vectorizable = true; ///< @internal Enable SuperScalar dispatch. @endinternal
 
+    /// @brief Default constructor; sets mu=1.
     KeplerPropagator() : KeplerPropagator(1.0) {}
+    /// @brief Construct with the given gravitational parameter.
+    /// @param[in] mu Gravitational parameter (must be > 0).
     explicit KeplerPropagator(double mu) {
-        // primal_ and residual_ default-construct with the canonical
-        // mu = 1.0, then set_mu propagates the user-supplied mu through
-        // the wrapper-level validation (which fires before primal_'s own
-        // throw, giving the user a KeplerPropagator-flavored message).
         set_mu(mu);
         this->set_io_rows(7, 6);
     }
 
-    // Mutating mu propagates to the owned codegen VFs so their precomputed
-    // sqrt(mu) / 1/sqrt(mu) caches stay coherent — every reachable state of
-    // KeplerPropagator has all three mu storage sites in sync.
+    /// @brief Set the gravitational parameter (propagates to internal codegen VFs).
+    /// @param[in] mu Gravitational parameter (must be > 0).
     void set_mu(double mu) {
         if (!(mu > 0.0))
             throw std::invalid_argument("KeplerPropagator: mu must satisfy mu > 0");
@@ -52,8 +55,10 @@ class KeplerPropagator
         primal_.set_mu(mu);
         residual_.set_mu(mu);
     }
+    /// @brief Return the current gravitational parameter.
     [[nodiscard]] double mu() const noexcept { return mu_; }
 
+    /// @internal @brief Compute propagated Cartesian state (primal only). @endinternal
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         using Scalar = typename InType::Scalar;
@@ -66,6 +71,7 @@ class KeplerPropagator
         fx = out;
     }
 
+    /// @internal @brief Compute propagated state and 6×7 Jacobian via IFT composition. @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -82,6 +88,7 @@ class KeplerPropagator
         jx = jac;
     }
 
+    /// @internal @brief Compute propagated state, Jacobian, adjoint gradient, and adjoint Hessian. @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(

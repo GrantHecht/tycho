@@ -21,6 +21,9 @@ namespace tycho::astro::detail {
 // bounded away from 0 on the elliptic branch, but X (and therefore
 // y = alpha*X^2) can still pass through zero during the LCD iteration on
 // very small dt or near-period seeds.
+/// @internal
+/// @brief Threshold below which Stumpff C/S functions use leading-order Taylor expansion.
+/// @endinternal
 inline constexpr double kStumpffTaylorEps = 1.0e-8;
 
 // Stumpff helper shared by the scalar elliptic branch in
@@ -31,6 +34,13 @@ inline constexpr double kStumpffTaylorEps = 1.0e-8;
 // (rather than a returned pair) match the surrounding compute_*
 // idiom and keep clang's instruction selection bit-for-bit identical
 // to the inlined-by-hand form across both the scalar and SS paths.
+/// @internal
+/// @brief Compute Stumpff C(y) and S(y), switching to Taylor expansion near y=0.
+/// @tparam Scalar Numeric type (double or Eigen::Array SuperScalar).
+/// @param[in]  y  Argument `alpha * X^2`.
+/// @param[out] C  Stumpff C(y) value.
+/// @param[out] S  Stumpff S(y) value.
+/// @endinternal
 template <class Scalar>
 TYCHO_ALWAYS_INLINE void stumpff_C_S(const Scalar &y, Scalar &C, Scalar &S) {
     using std::cos;
@@ -66,13 +76,24 @@ TYCHO_ALWAYS_INLINE void stumpff_C_S(const Scalar &y, Scalar &C, Scalar &S) {
 // exactly-zero alpha when alpha_tol == 0, letting numerically-near-
 // parabolic alphas slip through to the 1/(2*alpha) recursion branch
 // that the Taylor branch is meant to short-circuit.
+/// @internal
+/// @brief Iteration control knobs for the Laguerre-Conway-Der Kepler solver.
+///
+/// Invariants are enforced at construction — every reachable instance is well-formed.
+/// @endinternal
 class KeplerLCDOptions {
   public:
+    /// @internal @brief Default-constructed options with canonical tolerances. @endinternal
     constexpr KeplerLCDOptions() noexcept = default;
 
-    // Validating ctor.  Throws std::invalid_argument on bad inputs.
-    // The negated comparisons (!(x > 0)) reject NaN inputs as well as
-    // zero/negative values, since any comparison against NaN is unordered.
+    /// @internal
+    /// @brief Validating constructor.
+    /// @param[in] Xtol           Convergence tolerance on the universal anomaly X.
+    /// @param[in] alpha_tol      Parabolic-branch threshold on |alpha|.
+    /// @param[in] max_order      Maximum Laguerre order to attempt.
+    /// @param[in] iters_per_order Iterations to run at each Laguerre order before promoting.
+    /// @param[in] hyp_guard      Maximum |sqrt(-alpha)*X| before aborting on hyperbolic orbit.
+    /// @endinternal
     KeplerLCDOptions(double Xtol, double alpha_tol, int max_order, int iters_per_order,
                      double hyp_guard)
         : Xtol_(Xtol), alpha_tol_(alpha_tol), max_order_(max_order),
@@ -89,10 +110,15 @@ class KeplerLCDOptions {
             throw std::invalid_argument("KeplerLCDOptions: hyp_guard must be > 0");
     }
 
+    /// @internal @brief Convergence tolerance on universal anomaly X. @endinternal
     [[nodiscard]] constexpr double Xtol() const noexcept { return Xtol_; }
+    /// @internal @brief Parabolic-branch threshold on |alpha|. @endinternal
     [[nodiscard]] constexpr double alpha_tol() const noexcept { return alpha_tol_; }
+    /// @internal @brief Maximum Laguerre order to attempt. @endinternal
     [[nodiscard]] constexpr int max_order() const noexcept { return max_order_; }
+    /// @internal @brief Iterations to run at each Laguerre order before promoting. @endinternal
     [[nodiscard]] constexpr int iters_per_order() const noexcept { return iters_per_order_; }
+    /// @internal @brief Maximum |sqrt(-alpha)*X| before aborting on hyperbolic orbit. @endinternal
     [[nodiscard]] constexpr double hyp_guard() const noexcept { return hyp_guard_; }
 
   private:
@@ -103,25 +129,42 @@ class KeplerLCDOptions {
     double hyp_guard_ = 30.0;
 };
 
-// Per-lane convergence type: scalar bool for Scalar=double, Eigen lane mask for
-// SuperScalar.  PSIOPT consumers use all_converged() below to reduce to a single
-// bool early-exit gate.
+/// @internal
+/// @brief Per-lane convergence flag type: bool for double, Eigen lane mask for SuperScalar.
+/// @tparam Scalar Numeric scalar type.
+/// @endinternal
 template <class Scalar> struct KeplerLCDConvergedFlag {
-    using type = bool;
+    using type = bool; ///< @internal Scalar convergence flag type. @endinternal
 };
 
+/// @internal
+/// @brief Specialisation for SuperScalar types: convergence flag is a per-lane boolean array.
+/// @tparam W SIMD width.
+/// @endinternal
 template <int W> struct KeplerLCDConvergedFlag<Eigen::Array<double, W, 1>> {
-    using type = Eigen::Array<bool, W, 1>;
+    using type = Eigen::Array<bool, W, 1>; ///< @internal Lane-mask convergence flag type. @endinternal
 };
 
+/// @internal
+/// @brief Returns true when the scalar convergence flag indicates success.
+/// @param[in] b Scalar convergence flag.
+/// @return True if converged.
+/// @endinternal
 inline bool all_converged(bool b) { return b; }
 
+/// @internal
+/// @brief Returns true when all lanes in the SuperScalar convergence mask have converged.
+/// @tparam W SIMD width.
+/// @param[in] m Per-lane convergence mask.
+/// @return True if all lanes converged.
+/// @endinternal
 template <int W> inline bool all_converged(const Eigen::Array<bool, W, 1> &m) { return m.all(); }
 
-// Polymorphic NaN scalar: yields a plain double NaN for Scalar=double, and an
-// SS-broadcast NaN for Scalar=Eigen::Array<double,W,1>.  Used by the IFT layer
-// and propagate_cartesian to NaN-poison outputs when the LCD kernel fails to
-// converge.
+/// @internal
+/// @brief Polymorphic NaN scalar for NaN-poisoning LCD outputs on failure.
+/// @tparam Scalar Numeric scalar type (double or Eigen::Array SuperScalar).
+/// @return Quiet NaN, or a broadcast of quiet NaN for SuperScalar types.
+/// @endinternal
 template <class Scalar> inline Scalar kepler_nan_value() {
     if constexpr (std::is_same_v<Scalar, double>) {
         return std::numeric_limits<double>::quiet_NaN();
@@ -130,34 +173,67 @@ template <class Scalar> inline Scalar kepler_nan_value() {
     }
 }
 
+/// @internal
+/// @brief Output bundle from the Laguerre-Conway-Der Kepler iteration kernel.
+/// @tparam Scalar Numeric scalar type (double or Eigen::Array SuperScalar).
+/// @endinternal
 template <class Scalar> struct KeplerLCDResult {
-    Scalar X;
-    Scalar alpha;
-    Scalar r0;
-    Scalar sigma0;
-    Scalar r;
-    Scalar sigma;
-    Stumpff<Scalar> U;
-    typename KeplerLCDConvergedFlag<Scalar>::type converged;
+    Scalar X;       ///< @internal Converged universal anomaly. @endinternal
+    Scalar alpha;   ///< @internal Vis-viva energy parameter (2/r0 - v^2/mu). @endinternal
+    Scalar r0;      ///< @internal Initial radius |R0|. @endinternal
+    Scalar sigma0;  ///< @internal Initial sigma = R0·V0 / sqrt(mu). @endinternal
+    Scalar r;       ///< @internal Propagated radius at dt. @endinternal
+    Scalar sigma;   ///< @internal Propagated sigma at dt. @endinternal
+    Stumpff<Scalar> U; ///< @internal Converged Stumpff function values at X. @endinternal
+    typename KeplerLCDConvergedFlag<Scalar>::type converged; ///< @internal Per-lane convergence flag. @endinternal
 };
 
-// compute_universal_functions: orbit-type branch lives here.
-// alpha > alpha_tol  -> ellipse via Stumpff
-// alpha < -alpha_tol -> hyperbola via cosh/sinh
-// |alpha| <= alpha_tol -> parabola
+/// @internal
+/// @brief Forward declaration of orbit-type-branched universal-function evaluator.
+///
+/// Dispatches on the sign of alpha relative to alpha_tol:
+/// alpha > alpha_tol → ellipse via Stumpff; alpha < -alpha_tol → hyperbola via cosh/sinh;
+/// |alpha| <= alpha_tol → parabola.
+/// @tparam Scalar Numeric scalar type.
+/// @param[in]  alpha      Vis-viva energy parameter.
+/// @param[in]  X         Universal anomaly.
+/// @param[in]  alpha_tol Threshold separating parabolic from elliptic/hyperbolic branches.
+/// @param[out] U0        Stumpff U0 value.
+/// @param[out] U1        Stumpff U1 value.
+/// @param[out] U2        Stumpff U2 value.
+/// @param[out] U3        Stumpff U3 value.
+/// @endinternal
 template <class Scalar>
 inline void compute_universal_functions(Scalar alpha, Scalar X, double alpha_tol, Scalar &U0,
                                         Scalar &U1, Scalar &U2, Scalar &U3);
 
+/// @internal
+/// @brief Forward declaration of the Laguerre-Conway-Der Kepler iteration.
+/// @tparam Scalar Numeric scalar type.
+/// @param[in] R0   Initial position vector.
+/// @param[in] V0   Initial velocity vector.
+/// @param[in] dt   Time-of-flight.
+/// @param[in] mu   Gravitational parameter (must be > 0).
+/// @param[in] opts Iteration control options.
+/// @return LCD iteration result bundle.
+/// @endinternal
 template <class Scalar>
 KeplerLCDResult<Scalar> kepler_lcd_iterate(const Vector3<Scalar> &R0, const Vector3<Scalar> &V0,
                                            Scalar dt, double mu, const KeplerLCDOptions &opts = {});
 
-// Why the orbit-type branch: the universal-variable Stumpff functions C(y) and
-// S(y) develop a 0/0 indeterminacy as alpha (and hence y = alpha*X^2) crosses
-// zero, so we dispatch on the sign of alpha and use the closed-form cosh/sinh
-// expressions on the hyperbolic branch and the limit values on the parabolic
-// branch.
+/// @internal
+/// @brief Scalar specialisation of the universal-function evaluator (double).
+///
+/// Dispatches on the sign of alpha: ellipse via Stumpff C/S, hyperbola via
+/// cosh/sinh, parabola via limit values.
+/// @param[in]  alpha      Vis-viva energy parameter.
+/// @param[in]  X         Universal anomaly.
+/// @param[in]  alpha_tol Threshold separating parabolic from elliptic/hyperbolic branches.
+/// @param[out] U0        Stumpff U0 value.
+/// @param[out] U1        Stumpff U1 value.
+/// @param[out] U2        Stumpff U2 value.
+/// @param[out] U3        Stumpff U3 value.
+/// @endinternal
 template <>
 inline void compute_universal_functions<double>(double alpha, double X, double alpha_tol,
                                                 double &U0, double &U1, double &U2, double &U3) {
@@ -189,6 +265,18 @@ inline void compute_universal_functions<double>(double alpha, double X, double a
     }
 }
 
+/// @internal
+/// @brief Scalar specialisation of the Laguerre-Conway-Der Kepler iteration (double).
+///
+/// Iterates the universal anomaly X using Laguerre-Conway order N until convergence
+/// or exhaustion of the order budget. NaN-poisons the output on failure.
+/// @param[in] R0   Initial position vector (must have |R0| > 0).
+/// @param[in] V0   Initial velocity vector (must be finite).
+/// @param[in] dt   Time-of-flight (must be finite).
+/// @param[in] mu   Gravitational parameter (must be > 0).
+/// @param[in] opts Iteration control options.
+/// @return LCD result bundle with converged=false on non-convergence.
+/// @endinternal
 template <>
 inline KeplerLCDResult<double> kepler_lcd_iterate<double>(const Vector3<double> &R0,
                                                           const Vector3<double> &V0, double dt,
@@ -326,6 +414,19 @@ inline KeplerLCDResult<double> kepler_lcd_iterate<double>(const Vector3<double> 
     return r;
 }
 
+/// @internal
+/// @brief Per-lane fallback for SuperScalar Kepler iteration.
+///
+/// Dispatches each SIMD lane to the scalar kepler_lcd_iterate<double> kernel.
+/// Used when lanes have mixed orbit types or zero-dt entries.
+/// @tparam W SIMD width.
+/// @param[in] R0   Initial position (W-lane SuperScalar).
+/// @param[in] V0   Initial velocity (W-lane SuperScalar).
+/// @param[in] dt   Time-of-flight per lane.
+/// @param[in] mu   Gravitational parameter (shared, must be > 0).
+/// @param[in] opts Iteration control options.
+/// @return W-lane LCD result bundle.
+/// @endinternal
 template <int W>
 inline KeplerLCDResult<Eigen::Array<double, W, 1>> kepler_lcd_iterate_per_lane(
     const Vector3<Eigen::Array<double, W, 1>> &R0, const Vector3<Eigen::Array<double, W, 1>> &V0,
@@ -355,15 +456,21 @@ inline KeplerLCDResult<Eigen::Array<double, W, 1>> kepler_lcd_iterate_per_lane(
     return out;
 }
 
-// True-SIMD Laguerre-Conway-Der iteration for the case where all W lanes are
-// elliptic (alpha[i] > opts.alpha_tol()) and all have nonzero dt.  The caller is
-// responsible for verifying the precondition; this routine does not re-check.
-//
-// The iteration body is fully packed across lanes — no per-lane scalar
-// dispatch.  Lanes that converge first are kept in an "active" mask: they
-// continue to ride through the SIMD body but no longer update X_new, so the
-// SIMD lane keeps its converged value.  The shared order N is promoted whenever
-// the budget for the current order is exhausted.
+/// @internal
+/// @brief True-SIMD LCD iteration for the all-elliptic, all-nonzero-dt fast path.
+///
+/// All W lanes must satisfy alpha[i] > opts.alpha_tol() and dt[i] != 0.
+/// The caller is responsible for verifying these preconditions; this routine
+/// does not re-check.  Lanes that converge early are frozen in a mask and no
+/// longer update X_new while the shared order N is promoted.
+/// @tparam W SIMD width.
+/// @param[in] R0   Initial position (W-lane SuperScalar, all elliptic).
+/// @param[in] V0   Initial velocity (W-lane SuperScalar).
+/// @param[in] dt   Time-of-flight per lane (all nonzero).
+/// @param[in] mu   Gravitational parameter (must be > 0).
+/// @param[in] opts Iteration control options.
+/// @return W-lane LCD result bundle.
+/// @endinternal
 template <int W>
 inline KeplerLCDResult<Eigen::Array<double, W, 1>> kepler_lcd_iterate_simd_ellipse(
     const Vector3<Eigen::Array<double, W, 1>> &R0, const Vector3<Eigen::Array<double, W, 1>> &V0,
@@ -501,6 +608,19 @@ inline KeplerLCDResult<Eigen::Array<double, W, 1>> kepler_lcd_iterate_simd_ellip
     return r;
 }
 
+/// @internal
+/// @brief SuperScalar Kepler LCD iteration dispatcher.
+///
+/// Selects the true-SIMD elliptic fast path when all lanes are elliptic with
+/// nonzero dt; falls back to the per-lane scalar kernel otherwise.
+/// @tparam W SIMD width.
+/// @param[in] R0   Initial position (W-lane SuperScalar).
+/// @param[in] V0   Initial velocity (W-lane SuperScalar, all lanes finite).
+/// @param[in] dt   Time-of-flight per lane (all lanes finite).
+/// @param[in] mu   Gravitational parameter (must be > 0).
+/// @param[in] opts Iteration control options.
+/// @return W-lane LCD result bundle.
+/// @endinternal
 template <int W>
 inline KeplerLCDResult<Eigen::Array<double, W, 1>> kepler_lcd_iterate(
     const Vector3<Eigen::Array<double, W, 1>> &R0, const Vector3<Eigen::Array<double, W, 1>> &V0,

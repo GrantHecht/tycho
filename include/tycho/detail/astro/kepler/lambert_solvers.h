@@ -42,6 +42,27 @@ namespace tycho::astro {
 
 */
 
+/// @internal
+/// @brief Dario Izzo's Lambert algorithm, vectorizable via Eigen::Array scalar types.
+///
+/// Solves the boundary-value problem for two-body transfer given R1, R2, and transfer time dt.
+/// Implementation based on Rudy Oldenhuis's multiple-revolution MATLAB variant (BSD-2).
+/// @tparam Scalar      Floating-point or Eigen::Array scalar type.
+/// @tparam WayBool     bool or Eigen::Array<bool, W, 1> — long-way flag.
+/// @tparam IntType     int or array — number of revolutions Nin.
+/// @tparam BranchBool  bool or array — right-branch flag.
+/// @tparam ExitInt     int or array — exit/convergence code (out).
+/// @param[in]  R1dim       Departure position vector (physical units).
+/// @param[in]  R2dim       Arrival position vector (physical units).
+/// @param[in]  dtdim       Transfer time (physical units).
+/// @param[in]  mu          Gravitational parameter.
+/// @param[in]  longway     True to use the long-way transfer.
+/// @param[in]  Nin         Number of complete revolutions (0 = direct transfer).
+/// @param[in]  rightbranch True to use the right branch for multi-revolution solutions.
+/// @param[out] V1          Departure velocity vector.
+/// @param[out] V2          Arrival velocity vector.
+/// @param[out] exint       Convergence exit code.
+/// @endinternal
 template <class Scalar, class WayBool, class IntType, class BranchBool, class ExitInt>
 void lambert_izzo_impl(const Vector3<Scalar> &R1dim, const Vector3<Scalar> &R2dim, Scalar dtdim,
                        double mu, WayBool longway, IntType Nin, BranchBool rightbranch,

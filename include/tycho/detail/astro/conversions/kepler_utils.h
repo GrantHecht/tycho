@@ -35,6 +35,17 @@ using vf::VectorFunction;
 ////////////////////              Conversions                  /////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////
 
+/// @brief Convert classical orbital elements to Cartesian state.
+///
+/// Solves Kepler's equation via Newton iteration (elliptic) or the hyperbolic
+/// analogue to find eccentric/hyperbolic anomaly, then rotates to the inertial
+/// frame via the Euler-angle sequence (Omega, i, omega).
+///
+/// @tparam Scalar Floating-point scalar type (double or equivalent).
+/// @param oelems Six classical elements [a, e, i, Omega, omega, M] (semi-major axis,
+///               eccentricity, inclination, RAAN, argument of perigee, mean anomaly).
+/// @param mu     Gravitational parameter (km³/s² or consistent units).
+/// @return Six Cartesian state [rx, ry, rz, vx, vy, vz].
 template <class Scalar>
 Vector6<Scalar> classic_to_cartesian(const Vector6<Scalar> &oelems, Scalar mu) {
 
@@ -125,6 +136,15 @@ Vector6<Scalar> classic_to_cartesian(const Vector6<Scalar> &oelems, Scalar mu) {
     return XV;
 }
 
+/// @brief Convert Cartesian state to classical orbital elements (mean anomaly).
+///
+/// Computes orbital elements via angular momentum and eccentricity vectors.
+/// Mean anomaly is computed from the eccentric (elliptic) or hyperbolic anomaly.
+///
+/// @tparam Scalar Floating-point scalar type (double or equivalent).
+/// @param XV Six Cartesian state [rx, ry, rz, vx, vy, vz].
+/// @param mu Gravitational parameter (km³/s² or consistent units).
+/// @return Six classical elements [a, e, i, Omega, omega, M].
 template <class Scalar> Vector6<Scalar> cartesian_to_classic(const Vector6<Scalar> &XV, Scalar mu) {
 
     const double PI = 3.14159265358979;
@@ -179,6 +199,16 @@ template <class Scalar> Vector6<Scalar> cartesian_to_classic(const Vector6<Scala
     return oelems;
 }
 
+/// @brief Convert Modified Equinoctial Elements (MEE) to Cartesian state.
+///
+/// Direct closed-form conversion using the standard MEE frame vectors.
+/// Elements are [p, f, g, h, k, L] where L is the true longitude.
+///
+/// @tparam Scalar Floating-point scalar type (double or equivalent).
+/// @param meelems Six MEE [p, f, g, h, k, L] (semi-latus rectum, equinoctial
+///                eccentricity components, inclination components, true longitude).
+/// @param mu      Gravitational parameter (km³/s² or consistent units).
+/// @return Six Cartesian state [rx, ry, rz, vx, vy, vz].
 template <class Scalar>
 Vector6<Scalar> modified_to_cartesian(const Vector6<Scalar> &meelems, Scalar mu) {
 
@@ -213,6 +243,15 @@ Vector6<Scalar> modified_to_cartesian(const Vector6<Scalar> &meelems, Scalar mu)
     return XV;
 }
 
+/// @brief Convert Modified Equinoctial Elements to classical orbital elements (mean anomaly).
+///
+/// Converts MEE [p, f, g, h, k, L] to classical elements [a, e, i, Omega, omega, M]
+/// using algebraic relations plus Kepler-equation solution for mean anomaly.
+///
+/// @tparam Scalar Floating-point scalar type (double or equivalent).
+/// @param meelems Six MEE [p, f, g, h, k, L].
+/// @param mu      Gravitational parameter (km³/s² or consistent units).
+/// @return Six classical elements [a, e, i, Omega, omega, M].
 template <class Scalar>
 Vector6<Scalar> modified_to_classic(const Vector6<Scalar> &meelems, Scalar mu) {
 
@@ -251,6 +290,15 @@ Vector6<Scalar> modified_to_classic(const Vector6<Scalar> &meelems, Scalar mu) {
     return oelems;
 }
 
+/// @brief Convert classical orbital elements to Modified Equinoctial Elements.
+///
+/// Solves for the true anomaly from the mean anomaly via Newton iteration, then
+/// computes MEE [p, f, g, h, k, L] algebraically from the classical elements.
+///
+/// @tparam Scalar Floating-point scalar type (double or equivalent).
+/// @param oelems Six classical elements [a, e, i, Omega, omega, M].
+/// @param mu     Gravitational parameter (km³/s² or consistent units).
+/// @return Six MEE [p, f, g, h, k, L].
 template <class Scalar>
 Vector6<Scalar> classic_to_modified(const Vector6<Scalar> &oelems, Scalar mu) {
 
@@ -313,10 +361,16 @@ Vector6<Scalar> classic_to_modified(const Vector6<Scalar> &oelems, Scalar mu) {
     return meelems;
 }
 
-// Direct posigrade Cartesian -> Modified Equinoctial Elements conversion.
-// No detour through classical elements: avoids the Mean<->Eccentric<->True
-// anomaly Kepler-equation path. Mirrors jacobwilliams Fortran-Astrodynamics-
-// Toolkit modified_equinoctial_module.f90::cartesian_to_equinoctial.
+/// @brief Convert Cartesian state to Modified Equinoctial Elements.
+///
+/// Direct posigrade conversion with no Kepler-equation iteration. Mirrors the
+/// Fortran-Astrodynamics-Toolkit modified_equinoctial_module::cartesian_to_equinoctial.
+/// Assumes a posigrade orbit (inclination < 180°).
+///
+/// @tparam Scalar Floating-point scalar type (double or equivalent).
+/// @param XV Six Cartesian state [rx, ry, rz, vx, vy, vz].
+/// @param mu Gravitational parameter (km³/s² or consistent units).
+/// @return Six MEE [p, f, g, h, k, L].
 template <class Scalar>
 Vector6<Scalar> cartesian_to_modified(const Vector6<Scalar> &XV, Scalar mu) {
     using std::atan2;
@@ -371,6 +425,15 @@ Vector6<Scalar> cartesian_to_modified(const Vector6<Scalar> &XV, Scalar mu) {
     return meelems;
 }
 
+/// @brief Convert Cartesian state to classical orbital elements (true anomaly).
+///
+/// Like cartesian_to_classic() but returns true anomaly instead of mean anomaly
+/// as the sixth element. Useful when the true anomaly is needed directly.
+///
+/// @tparam Scalar Floating-point scalar type (double or equivalent).
+/// @param XV Six Cartesian state [rx, ry, rz, vx, vy, vz].
+/// @param mu Gravitational parameter (km³/s² or consistent units).
+/// @return Six classical elements [a, e, i, Omega, omega, nu] (nu = true anomaly).
 template <class Scalar>
 Vector6<Scalar> cartesian_to_classic_true(const Vector6<Scalar> &XV, Scalar mu) {
 
@@ -420,8 +483,14 @@ Vector6<Scalar> cartesian_to_classic_true(const Vector6<Scalar> &XV, Scalar mu) 
 ////////////////////    Conversions as Tycho VectorFunctions   /////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////
 
+/// @internal
+/// @brief Implementation body for the MEE → Cartesian VectorFunction.
+///
+/// Expression-builder implementation; the public type ModifiedToCartesian is created
+/// from this via BUILD_FROM_EXPRESSION.
+/// @endinternal
 struct ModifiedToCartesian_Impl {
-    /// Tycho VectorFunction to convert from Modified Equinoctial Elements to Cartesian State.
+    /// @internal @brief Build the MEE → Cartesian conversion expression. @endinternal
     static auto Definition(double mu) {
 
         auto meelems = Arguments<6>();
@@ -460,10 +529,20 @@ struct ModifiedToCartesian_Impl {
     }
 };
 
+/// @brief MEE → Cartesian VectorFunction (IR=6, OR=6).
+///
+/// Accepts MEE [p, f, g, h, k, L] and returns Cartesian state [rx, ry, rz, vx, vy, vz].
+/// Constructed via BUILD_FROM_EXPRESSION from ModifiedToCartesian_Impl.
 BUILD_FROM_EXPRESSION(ModifiedToCartesian, ModifiedToCartesian_Impl, double);
 
+/// @internal
+/// @brief Implementation body for the Cartesian → classical orbital elements VectorFunction.
+///
+/// Expression-builder implementation using IfElseFunction for the elliptic/hyperbolic branch.
+/// The public type CartesianToClassic is created from this via BUILD_FROM_EXPRESSION.
+/// @endinternal
 struct CartesianToClassic_Impl {
-    /// Tycho VectorFunction to convert from Cartesian State to Classical Orbital Elements.
+    /// @internal @brief Build the Cartesian → classical elements conversion expression. @endinternal
     static auto Definition(double mu) {
         const double PI = 3.14159265358979;
 
@@ -517,6 +596,10 @@ struct CartesianToClassic_Impl {
     }
 };
 
+/// @brief Cartesian → classical orbital elements VectorFunction (IR=6, OR=6).
+///
+/// Accepts Cartesian state [rx, ry, rz, vx, vy, vz] and returns classical elements
+/// [a, e, i, Omega, omega, M]. Constructed via BUILD_FROM_EXPRESSION from CartesianToClassic_Impl.
 BUILD_FROM_EXPRESSION(CartesianToClassic, CartesianToClassic_Impl, double)
 
 // Two-body propagation entry points (propagate_cartesian / propagate_classic /
