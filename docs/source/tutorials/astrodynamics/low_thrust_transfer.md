@@ -43,7 +43,7 @@ initial circular velocity is 1). The spacecraft has a maximum thrust
 acceleration of $a_{\max} = 0.01$ (1% of the local gravitational acceleration),
 applied in the RSW frame.
 
-In MEE the initial circular orbit is simply $[p, f, g, h, k, L] = [1, 0, 0,
+In MEE the initial circular orbit is $[p, f, g, h, k, L] = [1, 0, 0,
 0, 0, 0]$: the eccentricity components $f = g = 0$ mean circular, the
 inclination components $h = k = 0$ mean equatorial, and the true longitude $L$
 starts at zero. The target orbit has the same inclination and zero eccentricity

@@ -359,32 +359,25 @@ A dynamics model such as `MEEDynamics` or `CartesianDynamics` is a
 $[\text{state}(6), \text{control}(3)]$ input returning $\dot{x}$. Passing it to
 a `Phase` as the ODE registers the dynamics with the collocation layer:
 
-::::{tab-set}
-:::{tab-item} Python
+`modified_dynamics` has the input layout $[\text{state}(6), \text{control}(3)]$
+with no time slot, so it is wrapped in an `ODEBase` whose argument layout
+$[\text{state}, t, \text{control}]$ the phase machinery expects:
+
 ```python
-import tychopy as typy
-import tychopy.astro as astro
+from tychopy import optimal_control as oc, vector_functions as vf, astro
 
-# MEE two-body dynamics with mu = 1.0 (non-dimensional)
-ode = astro.modified_dynamics(1.0)
+class MEEDynamicsODE(oc.ODEBase):
+    def __init__(self, mu):
+        args = oc.ODEArguments(6, 3)   # [p, f, g, h, k, L, t, u_r, u_t, u_n]
+        rhs = astro.modified_dynamics(mu)(vf.stack([args.x_vec(), args.u_vec()]))
+        super().__init__(rhs, 6, 3)
 
-phase = typy.optimal_control.ODEPhase(ode, transcription="LGL3")
-phase.setSegments(30)
+ode = MEEDynamicsODE(1.0)              # mu = 1 (non-dimensional)
+phase = ode.phase("LGL3", traj_guess, 30)   # 30 LGL3 segments from an initial guess
 ```
-:::
-:::{tab-item} C++
-```cpp
-#include <tycho/tycho.h>
-using namespace tycho;
-using namespace tycho::oc;
 
-auto ode = astro::MEEDynamics(1.0);
-
-auto phase = ODEPhase(ode, "LGL3");
-phase.setSegments(30);
-```
-:::
-::::
+The {doc}`low-thrust transfer tutorial </tutorials/astrodynamics/low_thrust_transfer>`
+walks through this composition end to end with a runnable solve.
 
 Once a `Phase` holds a dynamics model, the transcription builds defect
 constraints from it at every collocation node, boundary-value and path
