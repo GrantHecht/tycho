@@ -37,22 +37,24 @@ them to `_` throughout to keep the transcript clean.
 ## The problem
 
 We will raise a spacecraft from a circular orbit with semi-latus rectum
-$p_0 = 1$ to a circular orbit with $p_f = 1.2$, using normalized units
-($\mu = 1$, distance unit = initial orbit radius, time unit chosen so that the
-initial circular velocity is 1). The spacecraft has a maximum thrust
+$p_0 = 1$ to a circular orbit of **double the size**, $p_f = 2$, using normalized
+units ($\mu = 1$, distance unit = initial orbit radius, time unit chosen so that
+the initial circular velocity is 1). The spacecraft has a maximum thrust
 acceleration of $a_{\max} = 0.01$ (1% of the local gravitational acceleration),
-applied in the RSW frame.
+applied in the RSW frame. Because the thrust is so small relative to gravity,
+the spacecraft cannot transfer in a single arc — it must spiral outward over
+many revolutions, which is the defining characteristic of low-thrust transfer.
 
 In MEE the initial circular orbit is $[p, f, g, h, k, L] = [1, 0, 0,
 0, 0, 0]$: the eccentricity components $f = g = 0$ mean circular, the
 inclination components $h = k = 0$ mean equatorial, and the true longitude $L$
 starts at zero. The target orbit has the same inclination and zero eccentricity
-but a larger semi-latus rectum: $[p, f, g, h, k] = [1.2, 0, 0, 0, 0]$ with $L$
+but twice the semi-latus rectum: $[p, f, g, h, k] = [2, 0, 0, 0, 0]$ with $L$
 free (we do not care where on the final orbit the spacecraft arrives).
 
 ```{doctest}
 >>> mu = 1.0
->>> p0, pf = 1.0, 1.2
+>>> p0, pf = 1.0, 2.0
 >>> acc_max = 0.01
 >>> mee0 = np.array([p0, 0.0, 0.0, 0.0, 0.0, 0.0])   # initial MEE state
 ```
@@ -98,8 +100,8 @@ the full ten-element ODE input to the six-element state derivative.
 Direct collocation needs a starting trajectory. A constant along-track thrust
 of magnitude $a_{\max}$ raises $p$ at a rate of roughly
 $2 a_{\max} \sqrt{p/\mu}$ per time unit, which for $\mu = p = 1$ gives
-$\dot{p} \approx 0.02$ and a rough transfer time of
-$0.2 / 0.02 = 10$ normalized time units.
+$\dot{p} \approx 0.02$. The rate grows as the orbit expands, so doubling $p$
+takes a few tens of time units spread over several revolutions.
 
 We generate the initial guess by integrating the ODE forward with that
 constant thrust. The `ode.integrator` call creates a numerical integrator; the
@@ -113,14 +115,15 @@ $[0, a_{\max}, 0]$.
 >>> integ.adaptive = True
 ```
 
-We integrate from the initial MEE state over nine time units — slightly longer
-than the rough estimate — to ensure the guess reaches (or passes) the target
-orbit.  The trajectory vector each row contains is
+We integrate from the initial MEE state over eighteen time units to build a
+multi-revolution spiral as the starting shape. The guess does not need to reach
+the target exactly — it only has to be a reasonable spiral; the optimizer
+stretches and refines it to hit $p_f$. Each row of the trajectory vector is
 $[p, f, g, h, k, L, t, u_r, u_t, u_n]$.
 
 ```{doctest}
 >>> X0 = np.array([p0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, acc_max, 0.0])
->>> TrajIG = integ.integrate_dense(X0, 9.0, 200)
+>>> TrajIG = integ.integrate_dense(X0, 18.0, 200)
 >>> len(TrajIG), len(TrajIG[0])
 (200, 10)
 ```
@@ -128,11 +131,11 @@ $[p, f, g, h, k, L, t, u_r, u_t, u_n]$.
 ## 3. Build the phase
 
 ```{doctest}
->>> phase = ode.phase("LGL3", TrajIG, 50)
+>>> phase = ode.phase("LGL3", TrajIG, 90)
 ```
 
-50 LGL3 segments over a ~9-unit transfer — about 0.18 time units per segment
-— gives enough mesh resolution for a clean solve.
+90 LGL3 segments over a ~30-unit transfer — about 0.34 time units per segment
+— gives enough mesh resolution to resolve the several-revolution spiral.
 
 ## 4. Boundary values, norm bound, and objective
 
@@ -185,15 +188,17 @@ transfer time is in the last row's time slot:
 ```{doctest}
 >>> Traj = phase.return_traj()
 >>> round(float(Traj[-1][6]), 4)
-9.9817
+30.4621
 ```
 
-About **9.98 time units** to raise the orbit. The target boundary conditions
-are met exactly: $p = 1.2$ and $f = g = h = k = 0$ at arrival.
+About **30.5 time units** to double the orbit — roughly three full revolutions
+of continuous thrust, compared with the fraction of a revolution a high-thrust
+chemical burn would take. The target boundary conditions are met exactly:
+$p = 2$ and $f = g = h = k = 0$ at arrival.
 
 ```{doctest}
 >>> round(float(Traj[-1][0]), 4)
-1.2
+2.0
 ```
 
 ```{doctest}
@@ -251,7 +256,7 @@ plt.show()
    from tychopy import optimal_control as oc
 
    mu = 1.0
-   p0, pf = 1.0, 1.2
+   p0, pf = 1.0, 2.0
    acc_max = 0.01
    mee0 = np.array([p0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
@@ -266,9 +271,9 @@ plt.show()
    integ = ode.integrator(0.001, u_prograde, range(0, 6))
    integ.adaptive = True
    X0 = np.array([p0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, acc_max, 0.0])
-   TrajIG = integ.integrate_dense(X0, 9.0, 200)
+   TrajIG = integ.integrate_dense(X0, 18.0, 200)
 
-   phase = ode.phase("LGL3", TrajIG, 50)
+   phase = ode.phase("LGL3", TrajIG, 90)
    phase.add_boundary_value("Front", range(0, 7), list(mee0) + [0.0])
    phase.add_boundary_value("Back", [0, 1, 2, 3, 4], [pf, 0.0, 0.0, 0.0, 0.0])
    phase.add_lu_norm_bound("Path", [7, 8, 9], 0.0001, acc_max, 1.0)
