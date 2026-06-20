@@ -1328,7 +1328,7 @@ def propagate_modified(arg0: Annotated[NDArray[numpy.float64], dict(shape=(6), o
     """
 
 @overload
-def lambert_izzo(arg0: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], arg1: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], arg2: float, arg3: float, arg4: bool, /) -> tuple:
+def lambert_izzo(R1: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], R2: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], dt: float, mu: float, longway: bool) -> tuple:
     """
     Solve a Lambert boundary-value problem (zero-revolution, scalar).
 
@@ -1365,7 +1365,7 @@ def lambert_izzo(arg0: Annotated[NDArray[numpy.float64], dict(shape=(3), order='
     """
 
 @overload
-def lambert_izzo(arg0: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], arg1: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], arg2: float, arg3: float, arg4: bool, arg5: int, arg6: bool, /) -> tuple:
+def lambert_izzo(R1: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], R2: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], dt: float, mu: float, longway: bool, Nrevs: int, rightbranch: bool) -> tuple:
     """
     Solve a Lambert boundary-value problem (multi-revolution, scalar).
 
@@ -1447,7 +1447,7 @@ def lambert_izzo(arg0: Annotated[NDArray[numpy.float64], dict(shape=(None, None)
     non-convergence; inspect the returned exit-code vector instead.
     """
 
-def lambert_izzo_multirev(arg0: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], arg1: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], arg2: float, arg3: float, arg4: bool, arg5: int, arg6: bool, /) -> tuple:
+def lambert_izzo_multirev(R1: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], R2: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], dt: float, mu: float, longway: bool, Nrevs: int, rightbranch: bool) -> tuple:
     """
     Solve a multi-revolution Lambert problem (alias for ``lambert_izzo`` 7-arg overload).
 

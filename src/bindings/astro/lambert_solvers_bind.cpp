@@ -45,6 +45,7 @@ void tycho::lambert_solvers_build(FunctionRegistry &reg, nb::module_ &m) {
                                               double dt, double mu, bool longway) {
         return check_finite_pair(lambert_izzo(R1, R2, dt, mu, longway), "lambert_izzo");
     },
+          nb::arg("R1"), nb::arg("R2"), nb::arg("dt"), nb::arg("mu"), nb::arg("longway"),
           R"doc(Solve a Lambert boundary-value problem (zero-revolution, scalar).
 
 Uses Izzo's algorithm to find the transfer orbit connecting ``R1`` to ``R2``
@@ -85,6 +86,8 @@ lambert_izzo_multirev : Multi-revolution overload.
               return check_finite_pair(lambert_izzo(R1, R2, dt, mu, longway, Nrevs, rightbranch),
                                        "lambert_izzo");
           },
+          nb::arg("R1"), nb::arg("R2"), nb::arg("dt"), nb::arg("mu"), nb::arg("longway"),
+          nb::arg("Nrevs"), nb::arg("rightbranch"),
           R"doc(Solve a Lambert boundary-value problem (multi-revolution, scalar).
 
 Overload that additionally accepts a revolution count and branch selector.
@@ -126,6 +129,8 @@ RuntimeError
               return check_finite_pair(lambert_izzo(R1, R2, dt, mu, longway, Nrevs, rightbranch),
                                        "lambert_izzo_multirev");
           },
+          nb::arg("R1"), nb::arg("R2"), nb::arg("dt"), nb::arg("mu"), nb::arg("longway"),
+          nb::arg("Nrevs"), nb::arg("rightbranch"),
           R"doc(Solve a multi-revolution Lambert problem (alias for ``lambert_izzo`` 7-arg overload).
 
 Equivalent to ``lambert_izzo(R1, R2, dt, mu, longway, Nrevs, rightbranch)``.
