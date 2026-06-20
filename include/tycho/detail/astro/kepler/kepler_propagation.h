@@ -14,7 +14,8 @@ namespace tycho::astro {
 /// @tparam Scalar Numeric scalar type (double or Eigen::Array SuperScalar).
 /// @param[in] RV  Initial Cartesian state [rx, ry, rz, vx, vy, vz].
 /// @param[in] dt  Time-of-flight.
-/// @param[in] mu  Gravitational parameter.
+/// @param[in] mu  Gravitational parameter (must be > 0); cast to double internally
+///                regardless of Scalar type.
 /// @return Propagated Cartesian state [rx', ry', rz', vx', vy', vz'].
 template <class Scalar>
 Vector6<Scalar> propagate_cartesian(const Vector6<Scalar> &RV, Scalar dt, Scalar mu) {

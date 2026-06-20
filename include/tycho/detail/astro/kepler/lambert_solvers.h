@@ -61,7 +61,8 @@ namespace tycho::astro {
 /// @param[in]  rightbranch True to use the right branch for multi-revolution solutions.
 /// @param[out] V1          Departure velocity vector.
 /// @param[out] V2          Arrival velocity vector.
-/// @param[out] exint       Convergence exit code.
+/// @param[out] exint       Convergence exit code: 0 = converged, 1 = failed to converge
+///                         within maxiters iterations.
 /// @endinternal
 template <class Scalar, class WayBool, class IntType, class BranchBool, class ExitInt>
 void lambert_izzo_impl(const Vector3<Scalar> &R1dim, const Vector3<Scalar> &R2dim, Scalar dtdim,
@@ -456,10 +457,22 @@ void lambert_izzo_impl(const Vector3<Scalar> &R1dim, const Vector3<Scalar> &R2di
     V2 = (Vr2 * R2 + Vt2 * that2);
 }
 
-// NaN-poison V1/V2 on non-convergence (exitcode != 0) so callers can detect
-// failure via allFinite() rather than silently consuming the unconverged
-// final iterate.  Mirrors the LCD kernel's contract — callers translate to
-// std::runtime_error at the binding boundary (lambert_solvers_bind.cpp).
+/// @brief Solve the Lambert problem (zero-revolution, single transfer arc).
+///
+/// Finds the departure and arrival velocity vectors for a two-body transfer from
+/// R1 to R2 in time dt. NaN-poisons V1/V2 on non-convergence (for Scalar=double)
+/// so callers can detect failure via `allFinite()`. Mirrors the LCD kernel's
+/// contract — callers translate to `std::runtime_error` at the binding boundary
+/// (lambert_solvers_bind.cpp).
+///
+/// @tparam Scalar Floating-point scalar type (double, or Eigen::Array for vectorized use).
+/// @param[in] R1      Departure position vector (physical units).
+/// @param[in] R2      Arrival position vector (physical units).
+/// @param[in] dt      Time of flight (physical units, same as R1/R2).
+/// @param[in] mu      Gravitational parameter (km³/s² or consistent units).
+/// @param[in] longway True to use the long-way (> π) transfer arc; false for short-way.
+/// @return `std::array<Vector3<Scalar>, 2>` = `{V1, V2}`, the departure and arrival
+///         velocity vectors. For Scalar=double, NaN-poisoned on non-convergence.
 template <class Scalar>
 std::array<Vector3<Scalar>, 2> lambert_izzo(const Vector3<Scalar> &R1, const Vector3<Scalar> &R2,
                                             Scalar dt, double mu, bool longway) {
@@ -479,6 +492,24 @@ std::array<Vector3<Scalar>, 2> lambert_izzo(const Vector3<Scalar> &R1, const Vec
     return std::array<Vector3<Scalar>, 2>{V1, V2};
 }
 
+/// @brief Solve the Lambert problem (multi-revolution variant).
+///
+/// Finds the departure and arrival velocity vectors for a two-body transfer from
+/// R1 to R2 in time dt, allowing Nrevs complete revolutions. NaN-poisons V1/V2 on
+/// non-convergence (for Scalar=double) so callers can detect failure via `allFinite()`.
+/// Also aliased as `lambert_izzo_multirev`.
+///
+/// @tparam Scalar Floating-point scalar type (double, or Eigen::Array for vectorized use).
+/// @param[in] R1          Departure position vector (physical units).
+/// @param[in] R2          Arrival position vector (physical units).
+/// @param[in] dt          Time of flight (physical units, same as R1/R2).
+/// @param[in] mu          Gravitational parameter (km³/s² or consistent units).
+/// @param[in] longway     True to use the long-way (> π) transfer arc; false for short-way.
+/// @param[in] Nrevs       Number of complete revolutions (0 = direct single-arc transfer).
+/// @param[in] rightbranch True to use the right branch for multi-revolution solutions
+///                        (only meaningful when Nrevs > 0).
+/// @return `std::array<Vector3<Scalar>, 2>` = `{V1, V2}`, the departure and arrival
+///         velocity vectors. For Scalar=double, NaN-poisoned on non-convergence.
 template <class Scalar>
 std::array<Vector3<Scalar>, 2> lambert_izzo(const Vector3<Scalar> &R1, const Vector3<Scalar> &R2,
                                             Scalar dt, double mu, bool longway, int Nrevs,

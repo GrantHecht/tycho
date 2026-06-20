@@ -4,9 +4,9 @@
 /// @brief Tycho Astrodynamics subsystem umbrella header.
 ///
 /// Including this header brings in all public astrodynamics types:
-/// Kepler two-body propagation, CR3BP dynamics, MEE/Cartesian
-/// coordinate-conversion VectorFunctions, J2 perturbations, solar-sail
-/// thruster models, and Lambert solvers.
+/// Kepler two-body propagation, Cartesian two-body dynamics (CartesianDynamics),
+/// CR3BP dynamics, MEE/Cartesian coordinate-conversion VectorFunctions,
+/// J2 perturbations, solar-sail thruster models, and Lambert solvers.
 
 #include "tycho/vector_functions.h"
 

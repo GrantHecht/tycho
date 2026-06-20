@@ -62,6 +62,10 @@ struct Kepler : StaticODE_Expression<Kepler, Kepler_Impl, double> {
 ///
 /// When `use_kepler_propagator_` is true (the default), shooting segments use the
 /// high-accuracy LCD Kepler propagator instead of numerical integration.
+/// The shooting constraint uses a midpoint (central) shooting defect: each boundary
+/// state is propagated by the LCD Kepler propagator to the interval midpoint and the
+/// two results are differenced (the analytic analogue of CentralShootingDefect),
+/// NOT a simple forward-propagation defect.
 struct KeplerPhase : ODEPhase<Kepler> {
     using Base = ODEPhase<Kepler>; ///< @internal CRTP base alias. @endinternal
     using Base::Base;

@@ -20,7 +20,8 @@ namespace tycho::astro {
 /// @brief Implementation body for the J2 Cartesian perturbation acceleration VectorFunction.
 ///
 /// Takes [r(3), north_pole(3)] and returns the J2 gravitational acceleration
-/// contribution. The public type J2Cartesian is created from this via BUILD_FROM_EXPRESSION.
+/// contribution. The north_pole vector need not be pre-normalized; it is normalized
+/// internally. The public type J2Cartesian is created from this via BUILD_FROM_EXPRESSION.
 /// @endinternal
 struct J2Cartesian_Impl {
     /// @internal @brief Build the J2 Cartesian acceleration expression. @endinternal
@@ -50,6 +51,8 @@ struct J2Cartesian_Impl {
 /// @brief J2 perturbation acceleration in Cartesian coordinates.
 ///
 /// Input: [rx, ry, rz, north_px, north_py, north_pz] (IR=6). Output: J2 acceleration (3-vector).
+/// The north-pole direction [north_px, north_py, north_pz] need not be pre-normalized;
+/// it is normalized internally.
 /// Constructed via BUILD_FROM_EXPRESSION from J2Cartesian_Impl.
 BUILD_FROM_EXPRESSION(J2Cartesian, J2Cartesian_Impl, double, double, double);
 

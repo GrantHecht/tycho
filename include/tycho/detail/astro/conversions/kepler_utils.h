@@ -44,6 +44,8 @@ using vf::VectorFunction;
 /// @tparam Scalar Floating-point scalar type (double or equivalent).
 /// @param oelems Six classical elements [a, e, i, Omega, omega, M] (semi-major axis,
 ///               eccentricity, inclination, RAAN, argument of perigee, mean anomaly).
+///               For hyperbolic orbits (e > 1), a < 0 by convention, and M is the
+///               hyperbolic mean anomaly (M = e·sinh(H) − H).
 /// @param mu     Gravitational parameter (km³/s² or consistent units).
 /// @return Six Cartesian state [rx, ry, rz, vx, vy, vz].
 template <class Scalar>
@@ -144,7 +146,9 @@ Vector6<Scalar> classic_to_cartesian(const Vector6<Scalar> &oelems, Scalar mu) {
 /// @tparam Scalar Floating-point scalar type (double or equivalent).
 /// @param XV Six Cartesian state [rx, ry, rz, vx, vy, vz].
 /// @param mu Gravitational parameter (km³/s² or consistent units).
-/// @return Six classical elements [a, e, i, Omega, omega, M].
+/// @return Six classical elements [a, e, i, Omega, omega, M], where M is the
+///         elliptic mean anomaly (M = E − e·sin(E)) for e < 1 and the hyperbolic
+///         mean anomaly (M = e·sinh(H) − H) for e > 1.
 template <class Scalar> Vector6<Scalar> cartesian_to_classic(const Vector6<Scalar> &XV, Scalar mu) {
 
     const double PI = 3.14159265358979;
@@ -250,8 +254,11 @@ Vector6<Scalar> modified_to_cartesian(const Vector6<Scalar> &meelems, Scalar mu)
 ///
 /// @tparam Scalar Floating-point scalar type (double or equivalent).
 /// @param meelems Six MEE [p, f, g, h, k, L].
-/// @param mu      Gravitational parameter (km³/s² or consistent units).
-/// @return Six classical elements [a, e, i, Omega, omega, M].
+/// @param mu      Gravitational parameter (km³/s² or consistent units); accepted for
+///                API symmetry but is not used in the algebraic conversion.
+/// @return Six classical elements [a, e, i, Omega, omega, M], where M is the
+///         elliptic mean anomaly (M = E − e·sin(E)) for e < 1 and the hyperbolic
+///         mean anomaly (M = e·sinh(H) − H) for e > 1.
 template <class Scalar>
 Vector6<Scalar> modified_to_classic(const Vector6<Scalar> &meelems, Scalar mu) {
 
@@ -297,7 +304,8 @@ Vector6<Scalar> modified_to_classic(const Vector6<Scalar> &meelems, Scalar mu) {
 ///
 /// @tparam Scalar Floating-point scalar type (double or equivalent).
 /// @param oelems Six classical elements [a, e, i, Omega, omega, M].
-/// @param mu     Gravitational parameter (km³/s² or consistent units).
+/// @param mu     Gravitational parameter (km³/s² or consistent units); accepted for
+///               API symmetry but is not used in the algebraic conversion.
 /// @return Six MEE [p, f, g, h, k, L].
 template <class Scalar>
 Vector6<Scalar> classic_to_modified(const Vector6<Scalar> &oelems, Scalar mu) {
@@ -363,9 +371,10 @@ Vector6<Scalar> classic_to_modified(const Vector6<Scalar> &oelems, Scalar mu) {
 
 /// @brief Convert Cartesian state to Modified Equinoctial Elements.
 ///
-/// Direct posigrade conversion with no Kepler-equation iteration. Mirrors the
+/// Direct conversion with no Kepler-equation iteration. Mirrors the
 /// Fortran-Astrodynamics-Toolkit modified_equinoctial_module::cartesian_to_equinoctial.
-/// Assumes a posigrade orbit (inclination < 180°).
+/// Valid for all inclinations except exactly i = 180° (retrograde equatorial), where
+/// the representation is singular; retrograde non-equatorial orbits are supported.
 ///
 /// @tparam Scalar Floating-point scalar type (double or equivalent).
 /// @param XV Six Cartesian state [rx, ry, rz, vx, vy, vz].
@@ -533,6 +542,7 @@ struct ModifiedToCartesian_Impl {
 ///
 /// Accepts MEE [p, f, g, h, k, L] and returns Cartesian state [rx, ry, rz, vx, vy, vz].
 /// Constructed via BUILD_FROM_EXPRESSION from ModifiedToCartesian_Impl.
+/// Constructed with a gravitational parameter argument, e.g. `ModifiedToCartesian vf(mu);`.
 BUILD_FROM_EXPRESSION(ModifiedToCartesian, ModifiedToCartesian_Impl, double);
 
 /// @internal
@@ -598,8 +608,11 @@ struct CartesianToClassic_Impl {
 
 /// @brief Cartesian → classical orbital elements VectorFunction (IR=6, OR=6).
 ///
-/// Accepts Cartesian state [rx, ry, rz, vx, vy, vz] and returns classical elements
-/// [a, e, i, Omega, omega, M]. Constructed via BUILD_FROM_EXPRESSION from CartesianToClassic_Impl.
+/// Accepts Cartesian state [rx, ry, rz, vx, vy, vz] and computes classical orbital
+/// elements [a, e, i, Omega, omega, M], where M is the elliptic mean anomaly
+/// (M = E − e·sin(E)) for e < 1 and the hyperbolic mean anomaly (M = e·sinh(H) − H)
+/// for e > 1. Constructed via BUILD_FROM_EXPRESSION from CartesianToClassic_Impl.
+/// Constructed with a gravitational parameter argument, e.g. `CartesianToClassic vf(mu);`.
 BUILD_FROM_EXPRESSION(CartesianToClassic, CartesianToClassic_Impl, double)
 
 // Two-body propagation entry points (propagate_cartesian / propagate_classic /
