@@ -33,6 +33,7 @@ def _vec6_wrap(fn):
         return fn(np.asarray(arr_or_func, dtype=np.float64), *args)
 
     wrapper.__name__ = fn.__name__
+    wrapper.__doc__ = fn.__doc__
     return wrapper
 
 
