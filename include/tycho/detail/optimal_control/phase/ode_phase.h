@@ -63,33 +63,57 @@ using vf::ThreadingFlags;
 using vf::VectorExpression;
 using vf::VectorFunction;
 
+/// @ingroup optimal_control
+/// @brief A statically-typed optimal control phase for a concrete ODE.
+///
+/// The typed phase the user constructs from an ODE. It owns the ODE and a
+/// scaled copy of it, a reference integrator, and (via @ref ODEPhaseBase) the
+/// constraints, objectives, mesh, and solver. It supplies the transcription
+/// machinery (defect functions, mesh-error estimators, re-integrators)
+/// specialized to the ODE's compile-time dimensions.
+/// @tparam DODE  The concrete ODE type this phase discretizes.
 template <class DODE> struct ODEPhase : ODEPhaseBase {
-    using VectorXi = Eigen::VectorXi;
-    using MatrixXi = Eigen::MatrixXi;
+    using VectorXi = Eigen::VectorXi; ///< @brief Convenience alias for an integer vector.
+    using MatrixXi = Eigen::MatrixXi; ///< @brief Convenience alias for an integer matrix.
 
-    using VectorXd = Eigen::VectorXd;
-    using MatrixXd = Eigen::MatrixXd;
+    using VectorXd = Eigen::VectorXd; ///< @brief Convenience alias for a double vector.
+    using MatrixXd = Eigen::MatrixXd; ///< @brief Convenience alias for a double matrix.
 
-    using VectorFunctionalX = GenericFunction<-1, -1>;
-    using ScalarFunctionalX = GenericFunction<-1, 1>;
+    using VectorFunctionalX =
+        GenericFunction<-1, -1>; ///< @brief Type-erased vector-valued function.
+    using ScalarFunctionalX =
+        GenericFunction<-1, 1>; ///< @brief Type-erased scalar-valued function.
 
-    using StateConstraint = StateFunction<VectorFunctionalX>;
-    using StateObjective = StateFunction<ScalarFunctionalX>;
+    using StateConstraint =
+        StateFunction<VectorFunctionalX>; ///< @brief A constraint bound to a region.
+    using StateObjective =
+        StateFunction<ScalarFunctionalX>; ///< @brief An objective bound to a region.
 
+    /// @brief Convenience alias for an LGL defect function of the given cardinal-state count.
+    /// @tparam ODET  The ODE type the defect wraps.
+    /// @tparam CS    Number of cardinal states per defect interval.
     template <class ODET, int CS> using LGLType = LGLDefects<ODET, CS>;
 
+    /// @brief The ODE's input (state/time/control/param) vector type.
+    /// @tparam Scalar  The arithmetic scalar type.
     template <class Scalar> using ODEState = typename DODE::template Input<Scalar>;
+    /// @brief The ODE's output (state-derivative) vector type.
+    /// @tparam Scalar  The arithmetic scalar type.
     template <class Scalar> using ODEDeriv = typename DODE::template Output<Scalar>;
 
+    /// @brief Type-erased, IO-scaled copy of the ODE used under auto-scaling.
     using ScaledODE = GenericODE<GenericFunction<-1, -1>, DODE::XV, DODE::UV, DODE::PV>;
 
-    DODE ode_;
-    ScaledODE ode_scaled_;
+    DODE ode_;             ///< The concrete ODE this phase discretizes.
+    ScaledODE ode_scaled_; ///< IO-scaled copy of the ODE for auto-scaling.
 
-    Integrator<DODE> integrator_;
-    bool enable_hessian_sparsity_ = false;
-    bool old_shooting_defect_ = false;
+    Integrator<DODE> integrator_;          ///< Reference integrator for the ODE.
+    bool enable_hessian_sparsity_ = false; ///< Whether to exploit Hessian sparsity in defects.
+    bool old_shooting_defect_ = false;     ///< Use the legacy shooting-defect formulation.
 
+    /// @brief Construct a phase from an ODE and a transcription mode.
+    /// @param ode    The ODE to discretize.
+    /// @param Tmode  The transcription mode.
     ODEPhase(const DODE &ode, TranscriptionModes Tmode)
         : ODEPhaseBase(ode.x_vars(), ode.u_vars(), ode.p_vars()) {
         this->ode_ = ode;
@@ -98,31 +122,67 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         this->set_transcription_mode(Tmode);
         this->set_units(Eigen::VectorXd::Ones(this->xtu_p_vars()));
     }
+    /// @brief Construct a phase and set an initial trajectory on a uniform mesh.
+    /// @param ode     The ODE to discretize.
+    /// @param Tmode   The transcription mode.
+    /// @param Traj    Initial trajectory (one packed state per node).
+    /// @param numdef  Number of defect intervals.
     ODEPhase(const DODE &ode, TranscriptionModes Tmode, const std::vector<Eigen::VectorXd> &Traj,
              int numdef)
         : ODEPhase(ode, Tmode) {
         this->set_traj(Traj, numdef);
     }
+    /// @brief Construct a phase and set an initial trajectory, optionally interpolating.
+    /// @param ode     The ODE to discretize.
+    /// @param Tmode   The transcription mode.
+    /// @param Traj    Initial trajectory (one packed state per node).
+    /// @param numdef  Number of defect intervals.
+    /// @param LerpIG  Whether to linearly interpolate the trajectory onto the mesh.
     ODEPhase(const DODE &ode, TranscriptionModes Tmode, const std::vector<Eigen::VectorXd> &Traj,
              int numdef, bool LerpIG)
         : ODEPhase(ode, Tmode) {
         this->set_traj(Traj, numdef, LerpIG);
     }
+    /// @brief Construct a phase and set an initial trajectory, inferring the mesh.
+    /// @param ode    The ODE to discretize.
+    /// @param Tmode  The transcription mode.
+    /// @param Traj   Initial trajectory (one packed state per node).
     ODEPhase(const DODE &ode, TranscriptionModes Tmode, const std::vector<Eigen::VectorXd> &Traj)
         : ODEPhase(ode, Tmode) {
         this->set_traj(Traj);
     }
 
+    /// @brief Construct a phase from an ODE and a transcription-mode name.
+    /// @param ode    The ODE to discretize.
+    /// @param Tmode  The transcription-mode name (see @c strto_TranscriptionMode).
     ODEPhase(const DODE &ode, std::string Tmode) : ODEPhase(ode, strto_TranscriptionMode(Tmode)) {}
+    /// @brief Construct a phase by mode name and set a trajectory on a uniform mesh.
+    /// @param ode     The ODE to discretize.
+    /// @param Tmode   The transcription-mode name.
+    /// @param Traj    Initial trajectory (one packed state per node).
+    /// @param numdef  Number of defect intervals.
     ODEPhase(const DODE &ode, std::string Tmode, const std::vector<Eigen::VectorXd> &Traj,
              int numdef)
         : ODEPhase(ode, strto_TranscriptionMode(Tmode), Traj, numdef) {}
+    /// @brief Construct a phase by mode name and set a trajectory (mesh inferred).
+    /// @param ode    The ODE to discretize.
+    /// @param Tmode  The transcription-mode name.
+    /// @param Traj   Initial trajectory (one packed state per node).
     ODEPhase(const DODE &ode, std::string Tmode, const std::vector<Eigen::VectorXd> &Traj)
         : ODEPhase(ode, strto_TranscriptionMode(Tmode), Traj) {}
+    /// @brief Construct a phase by mode name and set a trajectory, optionally interpolating.
+    /// @param ode     The ODE to discretize.
+    /// @param Tmode   The transcription-mode name.
+    /// @param Traj    Initial trajectory (one packed state per node).
+    /// @param numdef  Number of defect intervals.
+    /// @param LerpIG  Whether to linearly interpolate the trajectory onto the mesh.
     ODEPhase(const DODE &ode, std::string Tmode, const std::vector<Eigen::VectorXd> &Traj,
              int numdef, bool LerpIG)
         : ODEPhase(ode, strto_TranscriptionMode(Tmode), Traj, numdef, LerpIG) {}
 
+    /// @brief Set the scaling units and rebuild the scaled ODE used for auto-scaling.
+    /// @param xtup_units  Per-variable scaling units for the state/time/control/ODE-param block.
+    /// @throws std::invalid_argument if @p xtup_units has the wrong size.
     void set_units(const Eigen::VectorXd &xtup_units) {
 
         if (xtup_units.size() != this->xtu_p_vars()) {
@@ -145,6 +205,10 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         this->ode_scaled_ = ScaledODE(tmp, this->x_vars(), this->u_vars(), this->p_vars());
     }
 
+    /// @internal
+    /// @brief Build a re-integrator over the scaled ODE, wiring in the control interpolant.
+    /// @return An integrator over the scaled ODE configured to match this phase.
+    /// @endinternal
     virtual Integrator<ScaledODE> make_scaled_reintegrator() const {
         Integrator<ScaledODE> Integ;
         if (this->u_vars() == 0 || this->control_mode_ == ControlModes::BlockConstant) {
@@ -172,6 +236,10 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         return Integ;
     }
 
+    /// @internal
+    /// @brief Build a re-integrator over the unscaled ODE, wiring in the control interpolant.
+    /// @return An integrator over the ODE configured to match this phase.
+    /// @endinternal
     virtual Integrator<DODE> make_reintegrator() const {
         Integrator<DODE> Integ;
 
@@ -188,6 +256,9 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         return Integ;
     }
 
+    /// @brief Set the transcription scheme and rebuild the interpolation table.
+    /// @param m  The transcription mode.
+    /// @throws std::invalid_argument if @p m is not a valid transcription method.
     virtual void set_transcription_mode(TranscriptionModes m) {
         this->reset_transcription();
 
@@ -244,6 +315,10 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         }
     }
 
+    /// @internal
+    /// @brief Build and register the ODE defect constraints for the active transcription.
+    /// @throws std::invalid_argument if the transcription mode is invalid.
+    /// @endinternal
     virtual void transcribe_dynamics() {
         VectorXi StateT(this->ode_.xtu_vars());
         for (int i = 0; i < this->ode_.xtu_vars(); i++)
@@ -360,6 +435,10 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         }
     }
 
+    /// @internal
+    /// @brief Build the central-shooting defect constraint for the active configuration.
+    /// @return A type-erased constraint implementing the shooting defect.
+    /// @endinternal
     virtual tycho::solvers::ConstraintInterface make_shooter() {
 
         if (this->auto_scaling_) {
@@ -397,6 +476,10 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         }
     }
 
+    /// @internal
+    /// @brief Compute the end-to-end error by re-integrating the trajectory through the mesh.
+    /// @return Per-state absolute end-to-end error.
+    /// @endinternal
     virtual Eigen::VectorXd calc_global_error() const {
 
         auto CalcError = [&](auto &Integ, const auto &Traj) {
@@ -438,6 +521,12 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         }
     }
 
+    /// @internal
+    /// @brief Estimate per-segment mesh error/distribution via the de Boor method.
+    /// @param tsnd         Output non-dimensional node times.
+    /// @param mesh_errors  Output per-segment error matrix.
+    /// @param mesh_dist    Output per-segment error-distribution matrix.
+    /// @endinternal
     virtual void get_meshinfo_deboor(Eigen::VectorXd &tsnd, Eigen::MatrixXd &mesh_errors,
                                      Eigen::MatrixXd &mesh_dist) const {
 
@@ -582,6 +671,12 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         mesh_errors.col(num_blocks) = mesh_errors.col(num_blocks - 1);
     }
 
+    /// @internal
+    /// @brief Estimate per-segment mesh error/distribution via reference integration.
+    /// @param tsnd         Output non-dimensional node times.
+    /// @param mesh_errors  Output per-segment error matrix.
+    /// @param mesh_dist    Output per-segment error-distribution matrix.
+    /// @endinternal
     virtual void get_meshinfo_integrator(Eigen::VectorXd &tsnd, Eigen::MatrixXd &mesh_errors,
                                          Eigen::MatrixXd &mesh_dist) const {
 
@@ -664,6 +759,9 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         }
     }
 
+    /// @brief Return the ODE defect function for the active transcription mode.
+    /// @return A type-erased defect VectorFunction.
+    /// @throws std::invalid_argument if the transcription mode is invalid.
     VectorFunctionalX get_defect() {
         VectorFunctionalX func;
 

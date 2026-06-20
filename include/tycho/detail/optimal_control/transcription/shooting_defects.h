@@ -65,7 +65,22 @@ using vf::VectorFunction;
 // Solvers types
 using tycho::solvers::SolverIndexingData;
 
+/// @internal
+/// @brief Expression builder for a central-shooting defect via a VF integrator expression.
+///
+/// Builds the defect that integrates both arcs to the interval midpoint and
+/// returns their state difference, using the VectorFunction integrator
+/// expression (the expression-tree formulation of @ref ShootingDefect).
+/// @tparam DODE        The ODE type whose dynamics are shot.
+/// @tparam Integrator  The integrator-expression type.
+/// @endinternal
 template <class DODE, class Integrator> struct ShootingDefect_Impl {
+    /// @internal
+    /// @brief Build the shooting-defect expression.
+    /// @param ode    The ODE to shoot.
+    /// @param integ  The integrator expression.
+    /// @return The VectorFunction expression for the shooting defect.
+    /// @endinternal
     static auto Definition(const DODE &ode, const Integrator &integ) {
         constexpr int IRC = SZ_SUM<SZ_PROD<DODE::XtUV, 2>::value, DODE::PV>::value;
         int input_rows = ode.xtu_vars() * 2 + ode.p_vars();
@@ -100,45 +115,80 @@ template <class DODE, class Integrator> struct ShootingDefect_Impl {
     }
 };
 
+/// @ingroup optimal_control
+/// @brief Expression-tree central-shooting defect constraint.
+///
+/// VectorFunction-expression formulation of the central-shooting defect built
+/// by @c ShootingDefect_Impl; the legacy shooting-defect path.
+/// @tparam DODE        The ODE type whose dynamics are shot.
+/// @tparam Integrator  The integrator-expression type.
 template <class DODE, class Integrator>
 struct ShootingDefect
     : VectorExpression<ShootingDefect<DODE, Integrator>, ShootingDefect_Impl<DODE, Integrator>,
                        const DODE &, const Integrator &> {
+    /// @brief Convenience alias for the VectorExpression base class.
     using Base =
         VectorExpression<ShootingDefect<DODE, Integrator>, ShootingDefect_Impl<DODE, Integrator>,
                          const DODE &, const Integrator &>;
     // using Base::Base;
+    /// @brief Default constructor; leaves the ODE and integrator unset.
     ShootingDefect() {}
+    /// @brief Construct from an ODE and an integrator expression.
+    /// @param ode    The ODE to shoot.
+    /// @param integ  The integrator expression.
     ShootingDefect(const DODE &ode, const Integrator &integ) : Base(ode, integ) {}
-    bool enable_hessian_sparsity_ = false;
+    bool enable_hessian_sparsity_ = false; ///< Whether to exploit Hessian sparsity.
 };
 
+/// @ingroup optimal_control
+/// @brief Central-shooting defect constraint with hand-written STM derivatives.
+///
+/// The equality constraint VectorFunction enforcing that two arcs integrated to
+/// the interval midpoint agree. Derivatives are assembled from the integrator's
+/// state-transition matrices (and second-order STMs for the Hessian); supports
+/// SuperScalar batched evaluation.
+/// @tparam DODE        The ODE type whose dynamics are shot.
+/// @tparam Integrator  The integrator type providing STM integration.
 template <class DODE, class Integrator>
 struct CentralShootingDefect
     : VectorFunction<CentralShootingDefect<DODE, Integrator>,
                      SZ_SUM<SZ_PROD<DODE::XtUV, 2>::value, DODE::PV>::value, DODE::XV> {
 
+    /// @brief Convenience alias for the VectorFunction CRTP base class.
     using Base = VectorFunction<CentralShootingDefect<DODE, Integrator>,
                                 SZ_SUM<SZ_PROD<DODE::XtUV, 2>::value, DODE::PV>::value, DODE::XV>;
 
     VF_TYPE_ALIASES(Base);
 
+    /// @brief ODE input-vector type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using ODEState = typename DODE::template Input<Scalar>;
+    /// @brief ODE output-vector type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using ODEDeriv = typename DODE::template Output<Scalar>;
+    /// @brief Integrator Jacobian (STM) type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using IntegJac = typename Integrator::template Jacobian<Scalar>;
 
-    static constexpr bool is_vectorizable = true;
-    bool enable_hessian_sparsity_ = false;
+    static constexpr bool is_vectorizable = true; ///< Supports SuperScalar batched evaluation.
+    bool enable_hessian_sparsity_ = false;        ///< Whether to exploit Hessian sparsity.
 
-    DODE ode_;
-    Integrator integ_;
+    DODE ode_;         ///< The ODE whose dynamics are shot.
+    Integrator integ_; ///< The integrator providing STM integration.
 
+    /// @brief Construct from an ODE and integrator and size the defect.
+    /// @param ode    The ODE to shoot.
+    /// @param integ  The integrator providing STM integration.
     CentralShootingDefect(const DODE &ode, const Integrator &integ) : ode_(ode), integ_(integ) {
         this->set_io_rows(2 * this->ode_.xtu_vars() + this->ode_.p_vars(), this->ode_.x_vars());
     }
 
+    /// @brief Default constructor; leaves the ODE and integrator unset.
     CentralShootingDefect() {}
 
+    /// @internal
+    /// @brief Unpack a SuperScalar input pack into per-lane double input vectors.
+    /// @tparam InType  Eigen input-vector (SuperScalar) type.
+    /// @param X1X2   The packed SuperScalar input.
+    /// @param X1X2s  Output per-lane double input vectors.
+    /// @endinternal
     template <class InType>
     void extract_scalar_inputs(CVecRef<InType> X1X2, std::vector<Input<double>> &X1X2s) const {
 
@@ -153,6 +203,12 @@ struct CentralShootingDefect
         }
     }
 
+    /// @internal
+    /// @brief Unpack a SuperScalar multiplier pack into per-lane double vectors.
+    /// @tparam InType  Eigen vector (SuperScalar) type.
+    /// @param Lf   The packed SuperScalar multipliers.
+    /// @param Lfs  Output per-lane double multiplier vectors.
+    /// @endinternal
     template <class InType>
     void extract_scalar_lmults(CVecRef<InType> Lf, std::vector<Output<double>> &Lfs) const {
 
@@ -167,6 +223,12 @@ struct CentralShootingDefect
         }
     }
 
+    /// @internal
+    /// @brief Split each two-endpoint input into two ODE states with a shared midpoint time.
+    /// @param X1X2s  Per-application packed two-endpoint inputs.
+    /// @param Xs     Output ODE input states (two per application).
+    /// @param tfs    Output integration target times (midpoint, two per application).
+    /// @endinternal
     void get_input_states_tfs(const std::vector<Input<double>> &X1X2s,
                               std::vector<ODEState<double>> &Xs, Eigen::VectorXd &tfs) const {
 
@@ -194,6 +256,11 @@ struct CentralShootingDefect
             }
         }
     }
+    /// @internal
+    /// @brief Lift output multipliers into ODE-sized seed vectors for both arcs.
+    /// @param Ls   Per-application output multipliers.
+    /// @param Lfs  Output ODE-sized seed vectors (two per application).
+    /// @endinternal
     void get_lmults(const std::vector<Output<double>> &Ls,
                     std::vector<ODEState<double>> &Lfs) const {
 
@@ -211,6 +278,11 @@ struct CentralShootingDefect
         }
     }
 
+    /// @internal
+    /// @brief Batched primal evaluation: integrate both arcs and difference them.
+    /// @param X1X2s  Per-application packed two-endpoint inputs.
+    /// @return Per-application defect-residual vectors.
+    /// @endinternal
     std::vector<Output<double>> compute_impl_v(const std::vector<Input<double>> &X1X2s) const {
 
         std::vector<ODEState<double>> Xs;
@@ -230,6 +302,11 @@ struct CentralShootingDefect
         return fxs;
     }
 
+    /// @internal
+    /// @brief Batched residual + Jacobian via the integrator state-transition matrices.
+    /// @param X1X2s  Per-application packed two-endpoint inputs.
+    /// @return Tuple of per-application {defect residuals, Jacobians}.
+    /// @endinternal
     std::tuple<std::vector<Output<double>>, std::vector<Jacobian<double>>>
     compute_jacobian_impl_v(const std::vector<Input<double>> &X1X2s) const {
 
@@ -281,6 +358,12 @@ struct CentralShootingDefect
         return std::tuple{fxs, jxs};
     }
 
+    /// @internal
+    /// @brief Batched residual, Jacobian, and adjoint Hessian via first/second-order STMs.
+    /// @param X1X2s  Per-application packed two-endpoint inputs.
+    /// @param Ls     Per-application output multipliers.
+    /// @return Tuple of per-application {defect residuals, Jacobians, adjoint Hessians}.
+    /// @endinternal
     std::tuple<std::vector<Output<double>>, std::vector<Jacobian<double>>,
                std::vector<Hessian<double>>>
     compute_all_impl_v(const std::vector<Input<double>> &X1X2s,
@@ -350,6 +433,13 @@ struct CentralShootingDefect
         return std::tuple{fxs, jxs, hxs};
     }
 
+    /// @internal
+    /// @brief Evaluate the shooting-defect residual (scalar or SuperScalar dispatch).
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @param x    Packed two-endpoint input.
+    /// @param fx_  Output defect-residual vector to write.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
@@ -375,6 +465,15 @@ struct CentralShootingDefect
             }
         }
     }
+    /// @internal
+    /// @brief Evaluate the shooting-defect residual and Jacobian (scalar or SuperScalar).
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @tparam JacType  Eigen Jacobian-matrix type.
+    /// @param x    Packed two-endpoint input.
+    /// @param fx_  Output defect-residual vector to write.
+    /// @param jx_  Output Jacobian to write.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -410,6 +509,21 @@ struct CentralShootingDefect
             }
         }
     }
+    /// @internal
+    /// @brief Evaluate the shooting-defect residual, Jacobian, adjoint gradient, and Hessian.
+    /// @tparam InType       Eigen input-vector type.
+    /// @tparam OutType      Eigen output-vector type.
+    /// @tparam JacType      Eigen Jacobian-matrix type.
+    /// @tparam AdjGradType  Eigen adjoint-gradient vector type.
+    /// @tparam AdjHessType  Eigen adjoint-Hessian matrix type.
+    /// @tparam AdjVarType   Eigen adjoint-variable vector type.
+    /// @param x        Packed two-endpoint input.
+    /// @param fx_      Output defect-residual vector to write.
+    /// @param jx_      Output Jacobian to write.
+    /// @param adjgrad_ Output adjoint gradient to write.
+    /// @param adjhess_ Output adjoint Hessian to write.
+    /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
@@ -463,6 +577,18 @@ struct CentralShootingDefect
         adjgrad = jx.transpose() * adjvars;
     }
 
+    /// @internal
+    /// @brief Evaluate constraints/gradients and fill the KKT matrix for all applications.
+    /// @param X             Full decision-variable vector.
+    /// @param L             Full multiplier vector.
+    /// @param FX            Output constraint-residual vector.
+    /// @param AGX           Output adjoint-gradient vector.
+    /// @param KKTmat        The KKT matrix to fill.
+    /// @param KKTLocations  Per-element KKT storage locations.
+    /// @param KKTClashes    Per-element KKT clash counts.
+    /// @param KKTLocks      Per-element KKT write locks.
+    /// @param data          Solver indexing data for this function.
+    /// @endinternal
     void constraints_jacobian_adjointgradient_adjointhessian_test(
         ConstEigenRef<Eigen::VectorXd> X, ConstEigenRef<Eigen::VectorXd> L,
         EigenRef<Eigen::VectorXd> FX, EigenRef<Eigen::VectorXd> AGX,

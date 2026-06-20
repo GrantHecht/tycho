@@ -42,23 +42,38 @@
 
 namespace tycho::oc {
 
+/// @ingroup optimal_control
+/// @brief A VectorFunction attached to a phase region with its variable bindings.
+///
+/// Bundles a user function with the phase region it acts on and the specific
+/// state/time/control (@c xtu), ODE-parameter (@c op), and static-parameter
+/// (@c sp) variable indices it reads, plus its output scaling. This is the
+/// internal record a phase keeps for each constraint or objective the user adds.
+/// @tparam FuncType  The wrapped VectorFunction type.
 template <class FuncType> struct StateFunction {
-    FuncType func_;
-    PhaseRegionFlags region_flag_ = PhaseRegionFlags::NotSet;
-    Eigen::VectorXi xtu_vars_;
-    Eigen::VectorXi op_vars_;
-    Eigen::VectorXi sp_vars_;
+    FuncType func_; ///< The wrapped VectorFunction.
+    PhaseRegionFlags region_flag_ =
+        PhaseRegionFlags::NotSet; ///< Phase region the function acts on.
+    Eigen::VectorXi xtu_vars_;    ///< State/time/control variable indices the function reads.
+    Eigen::VectorXi op_vars_;     ///< ODE-parameter variable indices the function reads.
+    Eigen::VectorXi sp_vars_;     ///< Static-parameter variable indices the function reads.
 
-    Eigen::VectorXi ext_vars_; // dirty i know
+    Eigen::VectorXi ext_vars_; ///< Extra (externally-supplied) variable indices.
 
-    ScaleModes scale_mode_ = ScaleModes::AUTO;
-    bool scales_set_ = false;
-    Eigen::VectorXd output_scales_;
+    ScaleModes scale_mode_ = ScaleModes::AUTO; ///< How the output scales were determined.
+    bool scales_set_ = false;                  ///< Whether explicit output scales were set.
+    Eigen::VectorXd output_scales_;            ///< Per-output scale factors.
 
-    int storage_index_ = 0;
-    int phase_local_index_ = 0;
-    int global_index_ = 0;
+    int storage_index_ = 0;     ///< Index of this function within the phase's storage.
+    int phase_local_index_ = 0; ///< Index of this function within its phase.
+    int global_index_ = 0;      ///< Index of this function within the whole problem.
 
+    /// @brief Construct with explicit state, ODE-param, and static-param bindings.
+    /// @param f     The wrapped VectorFunction.
+    /// @param Reg   Phase region the function acts on.
+    /// @param xtuv  State/time/control variable indices.
+    /// @param opv   ODE-parameter variable indices.
+    /// @param spv   Static-parameter variable indices.
     StateFunction(FuncType f, PhaseRegionFlags Reg, Eigen::VectorXi xtuv, Eigen::VectorXi opv,
                   Eigen::VectorXi spv) {
         this->region_flag_ = Reg;
@@ -69,6 +84,13 @@ template <class FuncType> struct StateFunction {
         this->output_scales_ = Eigen::VectorXd::Ones(this->func_.output_rows());
     }
 
+    /// @brief Construct with explicit bindings and an output-scale specification.
+    /// @param f        The wrapped VectorFunction.
+    /// @param Reg      Phase region the function acts on.
+    /// @param xtuv     State/time/control variable indices.
+    /// @param opv      ODE-parameter variable indices.
+    /// @param spv      Static-parameter variable indices.
+    /// @param scale_t  Output-scale specifier (see @ref ScaleType).
     StateFunction(FuncType f, PhaseRegionFlags Reg, Eigen::VectorXi xtuv, Eigen::VectorXi opv,
                   Eigen::VectorXi spv, ScaleType scale_t)
         : StateFunction(f, Reg, xtuv, opv, spv) {
@@ -80,6 +102,14 @@ template <class FuncType> struct StateFunction {
         this->scales_set_ = scales_set;
     }
 
+    /// @brief Construct from a single variable group, dispatching on the region.
+    ///
+    /// When @p Reg is @c ODEParams or @c StaticParams, @p xtuv is interpreted as
+    /// the corresponding parameter indices; otherwise it is the state/time/control
+    /// indices.
+    /// @param f     The wrapped VectorFunction.
+    /// @param Reg   Phase region (or parameter region) the function acts on.
+    /// @param xtuv  Variable indices, interpreted per @p Reg.
     StateFunction(FuncType f, PhaseRegionFlags Reg, Eigen::VectorXi xtuv) {
         this->func_ = f;
         this->output_scales_ = Eigen::VectorXd::Ones(this->func_.output_rows());
@@ -108,6 +138,11 @@ template <class FuncType> struct StateFunction {
         }
         }
     }
+    /// @brief Construct from a single variable group plus an output-scale specification.
+    /// @param f        The wrapped VectorFunction.
+    /// @param Reg      Phase region (or parameter region) the function acts on.
+    /// @param xtuv     Variable indices, interpreted per @p Reg.
+    /// @param scale_t  Output-scale specifier (see @ref ScaleType).
     StateFunction(FuncType f, PhaseRegionFlags Reg, Eigen::VectorXi xtuv, ScaleType scale_t)
         : StateFunction(f, Reg, xtuv) {
         auto [scale_mode, scales_set, output_scales] =
@@ -117,6 +152,13 @@ template <class FuncType> struct StateFunction {
         this->scales_set_ = scales_set;
     }
 
+    /// @brief Construct binding both a state region and a parameter region.
+    /// @param f       The wrapped VectorFunction.
+    /// @param Reg     Phase region for the state/time/control variables.
+    /// @param xtuv    State/time/control variable indices.
+    /// @param ParReg  Parameter region — must be @c ODEParams or @c StaticParams.
+    /// @param pv      Parameter variable indices.
+    /// @throws std::invalid_argument if @p ParReg is neither @c ODEParams nor @c StaticParams.
     StateFunction(FuncType f, PhaseRegionFlags Reg, Eigen::VectorXi xtuv, PhaseRegionFlags ParReg,
                   Eigen::VectorXi pv) {
         this->func_ = f;
@@ -142,6 +184,7 @@ template <class FuncType> struct StateFunction {
         }
         }
     }
+    /// @brief Default constructor; leaves all bindings empty.
     StateFunction() {}
 };
 

@@ -20,6 +20,20 @@ import seaborn as sns  # pip install seaborn if you dont have it
 
 
 def PhaseMeshErrorPlot(phase, show=True):
+    """Plot the adaptive-mesh refinement history of a single phase.
+
+    Draws three stacked axes -- the per-segment estimated error (log scale,
+    with the tolerance line), the normalized error distribution, and the
+    cumulative error-distribution integral -- one curve per mesh-refinement
+    iteration recorded by ``phase.get_mesh_iters()``.
+
+    Parameters
+    ----------
+    phase : PhaseInterface
+        A phase that has been solved with adaptive mesh refinement enabled.
+    show : bool, optional
+        Call ``matplotlib.pyplot.show()`` before returning. Default ``True``.
+    """
     fig, axs = plt.subplots(3, 1)
     axs[0].set_ylabel("Estimated Error")
     axs[1].set_ylabel("Error Distribution")
@@ -80,7 +94,17 @@ def PhaseMeshErrorPlot(phase, show=True):
 
 
 def OCPMeshErrorPlot(ocp, show=True):
+    """Plot the mesh-refinement history of every phase of an OCP.
 
+    Calls :func:`PhaseMeshErrorPlot` for each phase of a multi-phase problem.
+
+    Parameters
+    ----------
+    ocp : OptimalControlProblem
+        A solved multi-phase optimal control problem.
+    show : bool, optional
+        Call ``matplotlib.pyplot.show()`` before returning. Default ``True``.
+    """
     for phase in ocp.phases:
         PhaseMeshErrorPlot(phase, show=False)
 

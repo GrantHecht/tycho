@@ -6,4 +6,5 @@ Foundational walkthroughs, starting with the VectorFunction core.
 :maxdepth: 1
 
 your_first_vectorfunction
+your_first_phase
 ```

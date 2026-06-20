@@ -34,13 +34,37 @@ using vf::ThreadingFlags;
 using vf::VectorExpression;
 using vf::VectorFunction;
 
+/// @internal
+/// @brief Expression builder for the LGL reduced-quadrature integral of an integrand.
+///
+/// Builds the VectorFunction expression that approximates @f$\int g\,dt@f$ over
+/// one collocation interval using the LGL reduced integral weights.
+/// @tparam Integrand  The scalar integrand expression type.
+/// @tparam CS         Number of cardinal states per interval.
+/// @tparam XV         ODE state-vector dimension.
+/// @tparam PV         ODE parameter-vector dimension.
+/// @endinternal
 template <class Integrand, int CS, int XV, int PV> struct LGLReducedInteg_Impl {
+    /// @brief Convenience alias for a compile-time integer constant.
+    /// @tparam V  The integer value.
     template <int V> using int_const = std::integral_constant<int, V>;
 
+    /// @internal
+    /// @brief The LGL reduced-integral weight of cardinal state @p Elem as a static scale.
+    /// @tparam Elem  The cardinal-state index.
+    /// @endinternal
     template <int Elem> struct Weight : StaticScaleBase<Weight<Elem>> {
-        static constexpr double value = LGLCoeffs<CS>::Reduced_Integral_Weights[Elem];
+        static constexpr double value =
+            LGLCoeffs<CS>::Reduced_Integral_Weights[Elem]; ///< The weight value.
     };
 
+    /// @internal
+    /// @brief Build the integral expression over one collocation interval.
+    /// @param integ  The scalar integrand.
+    /// @param xv     Runtime state dimension.
+    /// @param pv     Runtime parameter dimension.
+    /// @return The VectorFunction expression for the interval integral.
+    /// @endinternal
     static auto Definition(const Integrand &integ, int xv, int pv) {
         constexpr int IRC = SZ_SUM<SZ_PROD<CS, XV>::value, CS, PV>::value;
         constexpr int XTV = SZ_SUM<XV, 1>::value;
@@ -79,15 +103,30 @@ template <class Integrand, int CS, int XV, int PV> struct LGLReducedInteg_Impl {
     }
 };
 
+/// @ingroup optimal_control
+/// @brief VectorFunction computing the LGL reduced-quadrature integral of an integrand.
+///
+/// Wraps @c LGLReducedInteg_Impl as a usable expression that evaluates the
+/// per-interval integral @f$\int g\,dt@f$ and its derivatives.
+/// @tparam Integrand  The scalar integrand expression type.
+/// @tparam CS         Number of cardinal states per interval.
+/// @tparam XV         ODE state-vector dimension.
+/// @tparam PV         ODE parameter-vector dimension.
 template <class Integrand, int CS, int XV, int PV>
 struct LGLIntegral
     : VectorExpression<LGLIntegral<Integrand, CS, XV, PV>,
                        LGLReducedInteg_Impl<Integrand, CS, XV, PV>, const Integrand &, int, int> {
+    /// @brief Convenience alias for the VectorExpression base class.
     using Base =
         VectorExpression<LGLIntegral<Integrand, CS, XV, PV>,
                          LGLReducedInteg_Impl<Integrand, CS, XV, PV>, const Integrand &, int, int>;
     using Base::enable_vectorization_;
+    /// @brief Default constructor; leaves the integrand unset.
     LGLIntegral() {}
+    /// @brief Construct from an integrand and runtime dimensions.
+    /// @param integ  The scalar integrand.
+    /// @param xv     Runtime state dimension.
+    /// @param pv     Runtime parameter dimension.
     LGLIntegral(const Integrand &integ, int xv, int pv) : Base(integ, xv, pv) {}
 };
 

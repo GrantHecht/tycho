@@ -34,6 +34,13 @@ using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;
 
+/// @ingroup optimal_control
+/// @brief 4-D quadricubic/quadrilinear interpolation table over a field @f$f(x,y,z,w)@f$.
+///
+/// Stores a scalar field sampled on a rectilinear @f$(x,y,z,w)@f$ grid (as a
+/// rank-4 Eigen tensor) and interpolates it (and its gradient and Hessian) with
+/// 4-D cubic or linear interpolation, optionally caching per-cell coefficients.
+/// Exposed to expressions via @ref InterpFunction4D.
 struct InterpTable4D {
 
   private:
@@ -58,24 +65,34 @@ struct InterpTable4D {
     InterpType interp_kind_ = InterpType::Linear;
 
   public:
-    bool xeven_ = true;
-    bool yeven_ = true;
-    bool zeven_ = true;
-    bool weven_ = true;
+    bool xeven_ = true; ///< Whether the X grid is evenly spaced.
+    bool yeven_ = true; ///< Whether the Y grid is evenly spaced.
+    bool zeven_ = true; ///< Whether the Z grid is evenly spaced.
+    bool weven_ = true; ///< Whether the W grid is evenly spaced.
 
-    int xsize_;
-    double xtotal_;
-    int ysize_;
-    double ytotal_;
-    int zsize_;
-    double ztotal_;
-    int wsize_;
-    double wtotal_;
+    int xsize_;     ///< Number of X grid nodes.
+    double xtotal_; ///< Total X span.
+    int ysize_;     ///< Number of Y grid nodes.
+    double ytotal_; ///< Total Y span.
+    int zsize_;     ///< Number of Z grid nodes.
+    double ztotal_; ///< Total Z span.
+    int wsize_;     ///< Number of W grid nodes.
+    double wtotal_; ///< Total W span.
 
-    bool cache_alpha_ = false;
+    bool cache_alpha_ = false; ///< Whether per-cell interpolation coefficients are precomputed.
 
+    /// @brief Default constructor; produces an empty table.
     InterpTable4D() {}
 
+    /// @brief Construct from grid coordinates and a value tensor.
+    /// @param Xs     X grid coordinates (ascending, length >= 5).
+    /// @param Ys     Y grid coordinates (ascending, length >= 5).
+    /// @param Zs     Z grid coordinates (ascending, length >= 5).
+    /// @param Ws     W grid coordinates (ascending, length >= 5).
+    /// @param Fs     Field values as a rank-4 tensor (dims index X, Y, Z, W).
+    /// @param kind   Interpolation kind.
+    /// @param cache  Whether to precompute per-cell interpolation coefficients.
+    /// @throws std::invalid_argument on too-few nodes, dimension mismatch, or non-ascending grids.
     InterpTable4D(const Eigen::VectorXd &Xs, const Eigen::VectorXd &Ys, const Eigen::VectorXd &Zs,
                   const Eigen::VectorXd &Ws, const Eigen::Tensor<double, 4> &Fs, InterpType kind,
                   bool cache) {
@@ -117,7 +134,7 @@ struct InterpTable4D {
             throw std::invalid_argument("Z coordinates must be third dimension of value tensor");
         }
         if (wsize_ != fs_.dimension(3)) {
-            throw std::invalid_argument("W coordinates must be third dimension of value tensor");
+            throw std::invalid_argument("W coordinates must be fourth dimension of value tensor");
         }
 
         for (int i = 0; i < xsize_ - 1; i++) {
@@ -181,6 +198,13 @@ struct InterpTable4D {
         }
     }
 
+    /// @internal
+    /// @brief Find the grid interval index containing a value along one axis.
+    /// @param ts     Ascending grid coordinates for the axis.
+    /// @param teven  Whether the axis is evenly spaced.
+    /// @param t      Query value.
+    /// @return Index of the lower node of the containing interval.
+    /// @endinternal
     static int find_elem(const Eigen::VectorXd &ts, bool teven, double t) {
         int elem;
         if (teven) {
@@ -196,6 +220,14 @@ struct InterpTable4D {
         return elem;
     }
 
+    /// @internal
+    /// @brief Locate the grid cell containing @f$(x,y,z,w)@f$.
+    /// @param x  Query x coordinate.
+    /// @param y  Query y coordinate.
+    /// @param z  Query z coordinate.
+    /// @param w  Query w coordinate.
+    /// @return Tuple of {x-, y-, z-, w-interval indices}.
+    /// @endinternal
     std::tuple<int, int, int, int> get_xyzwelems(double x, double y, double z, double w) const {
 
         int xelem = this->find_elem(this->xs_, this->xeven_, x);
@@ -206,6 +238,9 @@ struct InterpTable4D {
         return std::tuple{xelem, yelem, zelem, welem};
     }
 
+    /// @internal
+    /// @brief Precompute the grid-node partial derivatives used by 4-D cubic interpolation.
+    /// @endinternal
     void calc_derivs() {
 
         // First Directional Derivs
@@ -349,6 +384,14 @@ struct InterpTable4D {
         }
     }
 
+    /// @internal
+    /// @brief Compute the 256-element 4-D cubic coefficient vector for one grid cell.
+    /// @param xelem  X-interval index.
+    /// @param yelem  Y-interval index.
+    /// @param zelem  Z-interval index.
+    /// @param welem  W-interval index.
+    /// @return The 4-D cubic coefficient vector for the cell.
+    /// @endinternal
     Eigen::Matrix<double, 256, 1> calc_alphavec(int xelem, int yelem, int zelem, int welem) const {
 
         double xstep = xs_[xelem + 1] - xs_[xelem];
@@ -408,6 +451,14 @@ struct InterpTable4D {
         return apply_coeefs(bvec);
     }
 
+    /// @internal
+    /// @brief Return a cell's 4-D cubic coefficient vector (cached or freshly computed).
+    /// @param xelem  X-interval index.
+    /// @param yelem  Y-interval index.
+    /// @param zelem  Z-interval index.
+    /// @param welem  W-interval index.
+    /// @return The 4-D cubic coefficient vector for the cell.
+    /// @endinternal
     Eigen::Matrix<double, 256, 1> get_alphavec(int xelem, int yelem, int zelem, int welem) const {
         if (this->cache_alpha_) {
             return this->alphavecs_(xelem, yelem, zelem, welem);
@@ -416,6 +467,9 @@ struct InterpTable4D {
         }
     }
 
+    /// @internal
+    /// @brief Precompute and cache the 4-D cubic coefficient vector of every grid cell.
+    /// @endinternal
     void cache_alphavecs() {
         this->alphavecs_.resize(fs_.dimension(0) - 1, fs_.dimension(1) - 1, fs_.dimension(2) - 1,
                                 fs_.dimension(3) - 1);
@@ -431,6 +485,11 @@ struct InterpTable4D {
         }
     }
 
+    /// @internal
+    /// @brief Apply the fixed 4-D cubic interpolation matrix to a sampled-derivative vector.
+    /// @param bvec  The 256-element vector of cell corner values and derivatives.
+    /// @return The 256-element 4-D cubic coefficient vector.
+    /// @endinternal
     Eigen::Matrix<double, 256, 1> apply_coeefs(const Eigen::Matrix<double, 256, 1> &bvec) const {
 
         Eigen::Matrix<double, 256, 1> alphavec;
@@ -2647,6 +2706,18 @@ struct InterpTable4D {
         return alphavec;
     }
 
+    /// @internal
+    /// @brief Core interpolation kernel writing the value and requested derivatives.
+    /// @param x        Query x coordinate.
+    /// @param y        Query y coordinate.
+    /// @param z        Query z coordinate.
+    /// @param w        Query w coordinate.
+    /// @param deriv    Highest derivative order to compute (0, 1, or 2).
+    /// @param fval     Output interpolated value.
+    /// @param dfxyzw   Output gradient (if @p deriv > 0).
+    /// @param d2fxyzw  Output Hessian (if @p deriv > 1).
+    /// @throws std::invalid_argument if any coordinate is outside the table range.
+    /// @endinternal
     void interp_impl(double x, double y, double z, double w, int deriv, double &fval,
                      Eigen::Vector4<double> &dfxyzw, Eigen::Matrix4<double> &d2fxyzw) const {
 
@@ -2911,6 +2982,12 @@ struct InterpTable4D {
         }
     }
 
+    /// @brief Interpolate the field value at a point.
+    /// @param x  Query x coordinate.
+    /// @param y  Query y coordinate.
+    /// @param z  Query z coordinate.
+    /// @param w  Query w coordinate.
+    /// @return The interpolated value.
     double interp(double x, double y, double z, double w) const {
         double f;
         Eigen::Vector4<double> dfxyzw;
@@ -2918,6 +2995,12 @@ struct InterpTable4D {
         interp_impl(x, y, z, w, 0, f, dfxyzw, d2fxyzw);
         return f;
     }
+    /// @brief Interpolate the value and gradient at a point.
+    /// @param x  Query x coordinate.
+    /// @param y  Query y coordinate.
+    /// @param z  Query z coordinate.
+    /// @param w  Query w coordinate.
+    /// @return Tuple of {value, gradient}.
     std::tuple<double, Eigen::Vector4<double>> interp_deriv1(double x, double y, double z,
                                                              double w) const {
         double f;
@@ -2926,6 +3009,12 @@ struct InterpTable4D {
         interp_impl(x, y, z, w, 1, f, dfxyzw, d2fxyzw);
         return std::tuple{f, dfxyzw};
     }
+    /// @brief Interpolate the value, gradient, and Hessian at a point.
+    /// @param x  Query x coordinate.
+    /// @param y  Query y coordinate.
+    /// @param z  Query z coordinate.
+    /// @param w  Query w coordinate.
+    /// @return Tuple of {value, gradient, Hessian}.
     std::tuple<double, Eigen::Vector4<double>, Eigen::Matrix4<double>>
     interp_deriv2(double x, double y, double z, double w) const {
         double f;
@@ -2936,23 +3025,48 @@ struct InterpTable4D {
     }
 };
 
+/// @ingroup optimal_control
+/// @brief VectorFunction wrapping an @ref InterpTable4D as a function of @f$(x,y,z,w)@f$.
+///
+/// Maps a 4-vector input to the interpolated scalar field value, with analytic
+/// gradient and Hessian, for composition into VectorFunction expressions.
 struct InterpFunction4D : VectorFunction<InterpFunction4D, 4, 1, DenseDerivativeMode::Analytic,
                                          DenseDerivativeMode::Analytic> {
+    /// @brief Convenience alias for the VectorFunction CRTP base class.
     using Base = VectorFunction<InterpFunction4D, 4, 1, DenseDerivativeMode::Analytic,
                                 DenseDerivativeMode::Analytic>;
     VF_TYPE_ALIASES(Base);
 
-    std::shared_ptr<InterpTable4D> tab;
+    std::shared_ptr<InterpTable4D> tab; ///< The interpolation table being wrapped.
 
+    /// @brief Default constructor; leaves the table unset.
     InterpFunction4D() {}
+    /// @brief Construct from an interpolation table.
+    /// @param tab  The table to wrap.
     InterpFunction4D(std::shared_ptr<InterpTable4D> tab) : tab(tab) { this->set_io_rows(4, 1); }
 
+    /// @internal
+    /// @brief Evaluate the interpolated value at the input point.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @param x    Input @c [x, y, z, w].
+    /// @param fx_  Output value (1-vector) to write.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         fx[0] = this->tab->interp(x[0], x[1], x[2], x[3]);
     }
+    /// @internal
+    /// @brief Evaluate the interpolated value and gradient (Jacobian).
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @tparam JacType  Eigen Jacobian-matrix type.
+    /// @param x    Input @c [x, y, z, w].
+    /// @param fx_  Output value (1-vector) to write.
+    /// @param jx_  Output Jacobian (gradient) to write.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -2964,6 +3078,21 @@ struct InterpFunction4D : VectorFunction<InterpFunction4D, 4, 1, DenseDerivative
         fx[0] = f;
         jx = dxdydzdw.transpose();
     }
+    /// @internal
+    /// @brief Evaluate the value, Jacobian, adjoint gradient, and adjoint Hessian.
+    /// @tparam InType       Eigen input-vector type.
+    /// @tparam OutType      Eigen output-vector type.
+    /// @tparam JacType      Eigen Jacobian-matrix type.
+    /// @tparam AdjGradType  Eigen adjoint-gradient vector type.
+    /// @tparam AdjHessType  Eigen adjoint-Hessian matrix type.
+    /// @tparam AdjVarType   Eigen adjoint-variable vector type.
+    /// @param x        Input @c [x, y, z, w].
+    /// @param fx_      Output value (1-vector) to write.
+    /// @param jx_      Output Jacobian to write.
+    /// @param adjgrad_ Output adjoint gradient to write.
+    /// @param adjhess_ Output adjoint Hessian to write.
+    /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(

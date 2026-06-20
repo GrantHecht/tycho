@@ -2,8 +2,8 @@
 # The VectorFunction model
 
 A **VectorFunction** is the central abstraction in Tycho. Every dynamics model,
-constraint, and objective you hand to the optimizer is a VectorFunction, and
-almost everything else in the library is built on top of them. This page
+constraint, and objective passed to the optimizer is a VectorFunction, and
+nearly every other subsystem in the library is built on them. This page
 explains *what* a VectorFunction is, *why* it is designed the way it is, and
 *how* the pieces fit together. It is conceptual rather than exhaustive — for the
 full API surface see the {doc}`Python reference </reference/python/vector_functions>`
@@ -77,8 +77,7 @@ auto fx = f.compute(xv);       // evaluated at native speed
 ::::
 
 This split — symbolic assembly, then compiled evaluation — is the source of
-Tycho's performance, and the reason the machinery underneath is worth
-understanding. The rest of this page walks through it.
+Tycho's performance. The sections below explain each layer of that design.
 
 ## Why CRTP
 
@@ -108,8 +107,8 @@ void compute_impl(const Eigen::MatrixBase<InType> &x,
 ```
 
 C++ does not allow virtual function templates. That rules out classical
-inheritance for the hot path, and CRTP is the static-polymorphism answer. It
-wins on the hot loop because:
+inheritance for the hot path, and CRTP is the static-polymorphism solution. It
+eliminates hot-loop overhead because:
 
 - **Zero overhead.** Dispatch is `this->derived().compute_impl(...)`, resolved at
   compile time. There is no vtable indirection, and the compiler can inline the
@@ -122,7 +121,7 @@ wins on the hot loop because:
   the compiler sees through the whole composition and optimizes across operand
   boundaries instead of stopping at a call.
 
-CRTP is not free, and the costs mirror the wins:
+CRTP is not free; its costs correspond to those benefits:
 
 - **Slow compiles.** Every distinct expression is a distinct C++ type, so deep
   expressions produce deeply nested template types that take a long time to
@@ -152,14 +151,15 @@ considered and rejected for a concrete reason:
   compiler can never inline across expression boundaries — precisely the hot-loop
   cost CRTP exists to avoid.
 - **Code generation / JIT.** Emit specialized evaluation code at problem-setup
-  time, as JAX or CasADi do. This sidesteps both CRTP's compile cost and virtual
-  overhead, but adds a code-generation step and a runtime to maintain.
+  time, as JAX or CasADi do. This avoids both CRTP's compile cost and
+  virtual-dispatch overhead, but adds a code-generation step and a runtime to
+  maintain.
 
 Tycho picks CRTP because solver iterations run millions of function evaluations,
 where hot-path inlining dominates everything else, and because compile-time types
 catch dimension mismatches before the program ever runs. The `GenericFunction`
-layer then buys back exactly the runtime flexibility a pure-CRTP design gives up
-— which is why the two appear together throughout the library.
+layer then recovers exactly the runtime flexibility a pure-CRTP design forgoes
+— which is why the two layers are used together throughout the library.
 
 ### The layered hierarchy
 
@@ -241,12 +241,12 @@ f.compute([1.0, 2.0, 3.0, 4.0])   # [1, 4, 9, 16]
 :::
 ::::
 
-A few details earn their place in the contract:
+Several details of the contract are worth noting:
 
 - The argument types are written out as `const Eigen::MatrixBase<…>&` here for
   clarity; the codebase abbreviates them with the aliases `CVecRef`/`VecRef`
   (and `CMatRef`/`MatRef` for matrices), which expand to exactly these types, so
-  in-tree code reads `CVecRef<InType> x`.
+  library source uses `CVecRef<InType> x`.
 - The output argument arrives `const` and is "un-`const`-ed" with
   `const_cast_derived()`. This is an Eigen idiom for writing through an
   expression reference; it does not copy.
@@ -298,9 +298,9 @@ over computing them separately.
 `FDiffFwd` approximates $\partial f / \partial x_i \approx (f(x + h e_i) -
 f(x))/h$; `FDiffCentArray` uses the higher-accuracy central stencil $(f(x + h
 e_i) - f(x - h e_i))/(2h)$ at the cost of more evaluations. These modes need only
-`compute_impl` and work for *any* function — including ones that call external
-libraries whose derivatives you cannot obtain otherwise. They trade accuracy for
-generality.
+`compute_impl` and work for *any* function — including functions that call
+external libraries whose derivatives are otherwise unavailable analytically. They
+trade accuracy for generality.
 
 ### Compiler automatic differentiation (`EnzymeAD`)
 
@@ -311,8 +311,8 @@ receive machine-precision derivatives. The Jacobian uses forward-mode
 (`__enzyme_fwddiff`, optionally propagating several tangents per call); the
 Hessian uses forward-over-reverse. This mode is opt-in at configure time
 (`ENABLE_ENZYME_AD=ON`) and is documented in detail in the build notes — it is
-the right choice when a function's derivatives are painful to derive by hand but
-finite-difference accuracy is not good enough.
+appropriate when a function's derivatives are difficult or tedious to derive
+analytically but finite-difference accuracy is insufficient.
 
 :::{note}
 The Python API does not expose the derivative-mode parameters. Every function you
@@ -327,8 +327,8 @@ sizes and reports the Jacobian and Hessian error.
 
 ## Composition: expressions and operators
 
-The reason you almost never write a raw struct in Python — and rarely in C++ — is
-that VectorFunctions compose through an operator DSL. Every operator and free
+In practice, a raw struct is rarely written in Python (and seldom in C++),
+because VectorFunctions compose through an operator DSL. Every operator and free
 function returns a *new* VectorFunction expression type; the algebra is closed.
 
 ::::{tab-set}
@@ -422,8 +422,8 @@ speed but impossible for storage: a `Scaled<Segment<6,3,0>>` and a
 container, a function signature, or a class member.
 
 `GenericFunction<IR, OR>` solves this by wrapping *any* compatible expression in
-a type-erased container that itself satisfies the VectorFunction interface. It is
-the bridge between the compile-time world and the runtime world:
+a type-erased container that itself satisfies the VectorFunction interface. It
+bridges compile-time expression types and runtime storage:
 
 ```cpp
 GenericFunction<6, 3> f = some_complicated_expression;   // erased
@@ -441,8 +441,8 @@ is erased to a `GenericFunction` the moment it is handed to the optimal-control
 layer (`vf.stack`, `vf.sum`, and an ODE's registration all produce erased
 functions); from there the solver calls through a uniform interface while each
 call still runs the inlined kernel. The two-layer architecture — CRTP for speed,
-type erasure for flexibility — is what lets the same VectorFunction be both a
-zero-overhead kernel and a first-class runtime object.
+type erasure for flexibility — lets the same VectorFunction serve as both a
+zero-overhead compiled kernel and a uniformly addressable runtime object.
 
 ## Vectorization: SuperScalar dispatch
 
@@ -495,7 +495,7 @@ solver decides batching is worthwhile and `enable_vectorization_` is set.
 
 This page covered the model. To put it to work:
 
-- **Reference.** The complete, curated API surface lives in the
+- **Reference.** The complete, curated API surface is documented in the
   {doc}`Python reference </reference/python/vector_functions>` and
   {doc}`C++ reference </reference/cpp/vector_functions>` — every public class and
   free function, with signatures and notes.
@@ -505,8 +505,8 @@ This page covered the model. To put it to work:
 - **How-to guides.** When you already know the concepts and just need the recipe
   for adding a new dynamics model, see the {doc}`How-to guides </how_to/index>`.
 
-The two abstractions to keep in mind are the ones this page opened and closed
-with: a VectorFunction is a *differentiable, symbolic* map that carries its own
-derivatives, and it lives a double life — a zero-overhead compiled kernel via
-CRTP, and a uniform runtime object via `GenericFunction`. Everything else is
-detail in service of those two ideas.
+The two organizing ideas of this page are these: a VectorFunction is a
+*differentiable, symbolic* map that carries its own derivatives, and it operates
+at two levels — a zero-overhead compiled kernel via CRTP, and a uniform runtime
+object via `GenericFunction`. Everything else is detail in service of those two
+ideas.

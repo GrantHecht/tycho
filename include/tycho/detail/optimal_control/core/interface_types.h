@@ -41,10 +41,29 @@
 
 namespace tycho::oc {
 
+/// @ingroup optimal_control
+/// @brief Flexible variable-selector accepted by the phase/OCP interface.
+///
+/// A variable group may be given as a single index, an index vector, a single
+/// named group, or a list of named groups.
 using VarIndexType = std::variant<int, Eigen::VectorXi, std::string, std::vector<std::string>>;
+/// @ingroup optimal_control
+/// @brief Flexible scaling specifier accepted by the phase/OCP interface.
+///
+/// A scale may be given as a uniform scalar, a per-output vector, a
+/// @ref ScaleModes enumerator, or its string name.
 using ScaleType = std::variant<double, Eigen::VectorXd, ScaleModes, std::string>;
+/// @ingroup optimal_control
+/// @brief Flexible region specifier accepted by the phase/OCP interface.
+///
+/// A region may be given as a @ref PhaseRegionFlags enumerator or its string name.
 using RegionType = std::variant<PhaseRegionFlags, std::string>;
 
+/// @internal
+/// @brief Resolve a @ref RegionType selector to a concrete @ref PhaseRegionFlags.
+/// @param reg_t  Region as an enum value or its string name.
+/// @return The corresponding PhaseRegionFlags enumerator.
+/// @endinternal
 static PhaseRegionFlags get_PhaseRegion(RegionType reg_t) {
     PhaseRegionFlags reg;
 
@@ -56,6 +75,15 @@ static PhaseRegionFlags get_PhaseRegion(RegionType reg_t) {
     return reg;
 }
 
+/// @internal
+/// @brief Resolve a @ref ScaleType selector into an explicit scale specification.
+/// @param orows    Number of output rows the scale applies to.
+/// @param scale_t  Scale as a scalar, per-output vector, mode enum, or mode name.
+/// @return Tuple of (resolved @ref ScaleModes, whether explicit scales were set,
+///         per-output scale vector of length @p orows).
+/// @throws std::invalid_argument if a vector scale's size mismatches @p orows, or
+///         if @c ScaleModes::CUSTOM is requested without explicit scale values.
+/// @endinternal
 static std::tuple<ScaleModes, bool, Eigen::VectorXd> get_scale_info(int orows, ScaleType scale_t) {
 
     Eigen::VectorXd OutputScales(orows);

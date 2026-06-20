@@ -18,19 +18,25 @@
 
 namespace tycho {
 
-/// Maps string variable names to XtUP-space indices.
+/// @ingroup optimal_control
+/// @brief Maps string variable names to XtUP-space indices for the builder API.
 ///
-/// XtUP-space is the concatenated layout [X_0..X_{n-1}, t, U_0..U_{m-1}, P_0..P_{k-1}]
-/// used as the input vector for ODE functions.
-///
-/// After construction and registration of names/groups, the registry is
-/// intended to be populated during setup and then used read-only.
-/// Thread-safe for concurrent reads after registration is complete.
-/// Not thread-safe for concurrent writes or mixed read/write access.
+/// XtUP-space is the concatenated layout @c [X_0..X_{n-1}, t, U_0..U_{m-1}, P_0..P_{k-1}]
+/// used as the input vector for ODE functions. After construction and
+/// registration of names/groups, the registry is populated during setup and
+/// then used read-only.
+/// @note Thread-safe for concurrent reads after registration is complete; not
+///       thread-safe for concurrent writes or mixed read/write access.
 class VarRegistry {
   public:
+    /// @brief Construct an empty registry with zero dimensions.
     VarRegistry() = default;
 
+    /// @brief Construct a registry for the given ODE dimensions.
+    /// @param xvars  Number of state variables (must be non-negative).
+    /// @param uvars  Number of control variables (must be non-negative).
+    /// @param pvars  Number of parameter variables (must be non-negative).
+    /// @throws std::invalid_argument if any dimension is negative.
     VarRegistry(int xvars, int uvars, int pvars) : xvars_(xvars), uvars_(uvars), pvars_(pvars) {
         if (xvars < 0)
             throw std::invalid_argument(
@@ -45,7 +51,12 @@ class VarRegistry {
 
     // ── Registration ────────────────────────────────────────────────────
 
-    /// Map a single name to one XtUP-space index.
+    /// @brief Register a single variable name mapped to one XtUP-space index.
+    ///
+    /// @param name        Variable name (must be non-empty and not already registered).
+    /// @param xtup_index  Zero-based index in @c [0, xtup_size()).
+    /// @throws std::invalid_argument if @p name is empty, already registered,
+    ///         or @p xtup_index is outside @c [0, xtup_size()).
     void add_name(const std::string &name, int xtup_index) {
         check_name_not_empty(name, "add_name");
         check_not_registered(name);
@@ -55,7 +66,16 @@ class VarRegistry {
         map_.emplace(name, std::move(idx));
     }
 
-    /// Map a name to a contiguous range [start, start+count-1] in XtUP space.
+    /// @brief Register a group name mapped to a contiguous range in XtUP space.
+    ///
+    /// The group maps @p name to the index sequence
+    /// @c [start, start+1, ..., start+count-1].
+    ///
+    /// @param name   Group name (must be non-empty and not already registered).
+    /// @param start  Zero-based start index in @c [0, xtup_size()).
+    /// @param count  Number of contiguous variables (must be positive).
+    /// @throws std::invalid_argument if @p name is empty or already registered,
+    ///         @p count is not positive, or the range exceeds @c xtup_size().
     void add_group(const std::string &name, int start, int count) {
         check_name_not_empty(name, "add_group");
         check_not_registered(name);
@@ -71,7 +91,16 @@ class VarRegistry {
         map_.emplace(name, std::move(idx));
     }
 
-    /// Map a group name to the union of previously registered names.
+    /// @brief Register a group name as the ordered union of previously registered names.
+    ///
+    /// Each element of @p members is resolved to its index vector and the
+    /// results are concatenated in order.  All member names must already be
+    /// registered.
+    ///
+    /// @param name     Group name (must be non-empty and not already registered).
+    /// @param members  Previously registered names whose indices are concatenated.
+    /// @throws std::invalid_argument if @p name is empty, already registered,
+    ///         @p members is empty, or any member name is not registered.
     void add_group(const std::string &name, std::initializer_list<std::string> members) {
         check_name_not_empty(name, "add_group");
         check_not_registered(name);
@@ -95,7 +124,10 @@ class VarRegistry {
 
     // ── Resolution ──────────────────────────────────────────────────────
 
-    /// Resolve a single name to its index vector.
+    /// @brief Resolve a single registered name to its XtUP index vector.
+    /// @param name  The variable or group name to look up.
+    /// @return The index vector associated with @p name.
+    /// @throws std::invalid_argument if @p name is not registered.
     Eigen::VectorXi resolve(const std::string &name) const {
         auto it = map_.find(name);
         if (it == map_.end()) {
@@ -105,19 +137,36 @@ class VarRegistry {
         return it->second;
     }
 
-    /// Resolve multiple names, concatenating their indices.
+    /// @brief Resolve multiple names, concatenating their index vectors in order.
+    /// @param names  Brace-enclosed list of registered variable or group names.
+    /// @return A single index vector formed by concatenating the index vectors
+    ///         of all @p names in order.
+    /// @throws std::invalid_argument if any name in @p names is not registered.
     Eigen::VectorXi resolve(std::initializer_list<std::string> names) const {
         return resolve_impl(names);
     }
 
-    /// Resolve a vector of names.
+    /// @brief Resolve a @c std::vector of names, concatenating their index vectors in order.
+    /// @param names  Registered variable or group names to resolve.
+    /// @return A single index vector formed by concatenating the index vectors
+    ///         of all @p names in order.
+    /// @throws std::invalid_argument if any name in @p names is not registered.
     Eigen::VectorXi resolve(const std::vector<std::string> &names) const {
         return resolve_impl(names);
     }
 
     // ── Convenience builders ────────────────────────────────────────────
 
-    /// Build an XtUP vector from name-value pairs.  Unset entries default to 0.
+    /// @brief Build an XtUP-sized input vector from name-value pairs.
+    ///
+    /// Each pair assigns a scalar value to the XtUP index associated with the
+    /// given name (which must map to exactly one index).  Unassigned entries
+    /// default to @c 0.0.
+    ///
+    /// @param scalar_vals  Name/value pairs; each name must map to a single index.
+    /// @return A zero-initialised XtUP-sized vector with the specified entries set.
+    /// @throws std::invalid_argument if a name is not registered, maps to more
+    ///         than one index, or is assigned more than once.
     Eigen::VectorXd
     make_input(std::initializer_list<std::pair<std::string, double>> scalar_vals) const {
         Eigen::VectorXd vec = Eigen::VectorXd::Zero(xtup_size());
@@ -141,7 +190,16 @@ class VarRegistry {
         return vec;
     }
 
-    /// Build an XtUP-sized scaling vector from name-value pairs.  Unset entries default to 1.
+    /// @brief Build an XtUP-sized variable-scaling vector from name-value pairs.
+    ///
+    /// Each pair assigns a scaling factor to every XtUP index associated with
+    /// the given name (which may map to one or more indices, e.g. for a group).
+    /// Unassigned entries default to @c 1.0.
+    ///
+    /// @param unit_vals  Name/scale pairs applied to all indices of each name.
+    /// @return A ones-initialised XtUP-sized vector with the specified entries set.
+    /// @throws std::invalid_argument if a name is not registered or any
+    ///         resolved index is assigned more than once.
     Eigen::VectorXd
     make_units(std::initializer_list<std::pair<std::string, double>> unit_vals) const {
         Eigen::VectorXd vec = Eigen::VectorXd::Ones(xtup_size());
@@ -163,15 +221,29 @@ class VarRegistry {
 
     // ── Accessors ───────────────────────────────────────────────────────
 
+    /// @brief Number of state variables. @return The state-variable count.
     int xvars() const { return xvars_; }
+    /// @brief Number of control variables. @return The control-variable count.
     int uvars() const { return uvars_; }
+    /// @brief Number of parameter variables. @return The parameter-variable count.
     int pvars() const { return pvars_; }
+    /// @brief Total XtUP-space size. @return The packed input-vector length.
     int xtup_size() const { return xvars_ + 1 + uvars_ + pvars_; }
+    /// @brief Whether no names are registered. @return True if the registry is empty.
     bool empty() const { return map_.empty(); }
+    /// @brief Whether a name is registered.
+    /// @param name  The variable name to look up.
+    /// @return True if @p name is registered.
     bool contains(const std::string &name) const { return map_.count(name) > 0; }
 
-    /// Read-only access to registered name-index pairs (used by
-    /// ODE::phase() to populate the GenericODE's internal index map).
+    /// @brief Read-only access to the full map of registered name-to-index entries.
+    ///
+    /// Used internally by @ref ODE::phase() to populate the @c GenericODE's
+    /// flat variable-name index map.  Also useful for inspecting registered
+    /// names programmatically.
+    ///
+    /// @return Const reference to the underlying @c unordered_map keyed by
+    ///         variable/group name.
     const std::unordered_map<std::string, Eigen::VectorXi> &entries() const { return map_; }
 
   private:

@@ -1,13 +1,13 @@
 (tutorial-first-vectorfunction)=
 # Your first VectorFunction
 
-A **VectorFunction** is the object you use to describe *everything* you hand to
+A **VectorFunction** is the object used to describe *everything* passed to
 Tycho — dynamics, constraints, and objectives are all VectorFunctions. This
 tutorial teaches you to build them by composition, starting from a single
 symbolic input and working up to a complete set of spacecraft dynamics. By the
 end you will be able to read, write, and evaluate VectorFunctions of arbitrary
 complexity, and you will have seen that **every VectorFunction differentiates
-itself** — its Jacobian and Hessian come for free.
+itself** — its Jacobian and Hessian are computed automatically.
 
 This is a hands-on, learning-oriented walkthrough. For the *why* behind the
 design — CRTP, expression templates, vectorization — read
@@ -17,10 +17,10 @@ catalog of every type and function, see the
 {doc}`C++ </reference/cpp/vector_functions>` references.
 
 Every `{doctest}` block below (the ones showing `>>>` prompts) is executed as
-part of Tycho's test suite, so the results you see are real. The C++ equivalents
+part of Tycho's test suite, so the results shown are real. The C++ equivalents
 appear alongside in tabs; those are illustrative fragments that share context
-across steps (each is compile-checked, but not run here). Follow along in a
-REPL — each step builds on the last.
+across steps (each is compile-checked, but not run here). Each step builds on
+the previous one; run them in order in a REPL or script to follow along.
 
 :::{note}
 `.compute(...)` returns a NumPy array. To keep results tidy in this tutorial we
@@ -30,7 +30,7 @@ Python list. You do not need this in real code — operate on the array directly
 
 ## Setup
 
-Import the module. The Python VectorFunction API lives in
+Import the module. The Python VectorFunction API is in
 `tychopy.vector_functions`; we alias it to `vf`.
 
 ```{doctest}
@@ -68,10 +68,10 @@ auto fx = a.compute(p);              // -> [5, 6, 7]
 :::
 ::::
 
-You pull pieces out of the input by **indexing** and **slicing**. A single index
-gives a scalar function (one output); a slice or `head`/`tail`/`segment` gives a
-sub-vector. `tolist()` unpacks the whole input into individual scalar functions —
-the most common way to name your variables.
+Elements and sub-vectors are extracted from the input by **indexing** and
+**slicing**. A single index gives a scalar function (one output); a slice or
+`head`/`tail`/`segment` gives a sub-vector. `tolist()` unpacks the whole input
+into individual scalar functions — a convenient way to name the input variables.
 
 ::::{tab-set}
 :::{tab-item} Python
@@ -101,9 +101,9 @@ auto s1 = a.segment<1, 1>();         // size 1 at offset 1
 :::
 ::::
 
-`x`, `y`, and `z` are not numbers — they are *functions* of the input. Nothing
-has been computed yet. That is the key idea: you are assembling a symbolic
-expression that will be evaluated later.
+`x`, `y`, and `z` are *functions* of the input, not numbers. Nothing is computed
+until `.compute()` is called; the operators assemble a symbolic expression that
+is evaluated later.
 
 ## 2. Scalar expressions
 
@@ -145,10 +145,10 @@ VectorFunction and returning a new one:
 `sin`, `cos`, `tan`, `arcsin`, `arccos`, `arctan`, `arctan2`, the hyperbolic
 variants, `exp`, `log`, `sqrt`, `squared`, `pow`, `abs`, and `sign`.
 
-The point of building with these is that **the chain rule is automatic**. Define
-$\rho = \sqrt{x^2 + y^2}$ and ask for its Jacobian at $(3, 4)$ — you get
+Because **the chain rule is applied automatically**, defining
+$\rho = \sqrt{x^2 + y^2}$ and requesting its Jacobian at $(3, 4)$ gives
 $\partial\rho/\partial x,\ \partial\rho/\partial y = x/\rho,\ y/\rho = 0.6,\ 0.8$
-without writing a single derivative:
+with no derivative code:
 
 ::::{tab-set}
 :::{tab-item} Python
@@ -168,8 +168,8 @@ auto Jr  = rho.jacobian(Eigen::Vector3d(3.0, 4.0, 0.0));   // -> [0.6, 0.8, 0.0]
 :::
 ::::
 
-The whole catalog composes the same way. Stack a representative mix to evaluate
-several at once (`arctan2(y, x)` is the two-argument arctangent, matching
+The whole catalog composes the same way. Stack several functions to evaluate
+them together (`arctan2(y, x)` is the two-argument arctangent, matching
 `numpy.arctan2`):
 
 ```{doctest}
@@ -211,8 +211,8 @@ auto s = StackedOutputs{x * x, y + z, x * y};   // R^3 -> R^3
 
 Once you have a vector-valued function, the **vector operations** apply. These
 are the workhorses of trajectory dynamics — norms, normalization, and the
-inner/outer products. Build a 6-vector of inputs, treat the first three as a
-position `r` and the last three as a velocity `v`, and evaluate at
+inner/outer products. Build a 6-vector input, take the first three components as
+a position `r` and the last three as a velocity `v`, and evaluate at
 $r = (3, 0, 4)$, $v = (1, 0, 0)$:
 
 ::::{tab-set}
@@ -249,17 +249,17 @@ auto grav  = r.normalized_power<3>();     // r / ||r||^3
 :::
 ::::
 
-`normalized_power3` — $r/\lVert r\rVert^3$ — appears constantly in gravity
-models, which is exactly where we are headed.
+`normalized_power3` — $r/\lVert r\rVert^3$ — appears frequently in gravity
+models, as the two-body example below illustrates.
 
 ## 5. Composition: building bigger functions from smaller ones
 
 Every operator and helper returns a VectorFunction, so expressions nest to any
 depth: `rho` above already wrapped `sqrt` around `x**2 + y**2`. You can also
 substitute one whole function into another by *calling* it — `outer(inner)`
-evaluates `outer` at the output of `inner`, applying the chain rule across the
-seam. The inner function's output dimension must match the outer's input
-dimension.
+evaluates `outer` at the output of `inner`, applying the chain rule at the
+composition boundary. The inner function's output dimension must match the
+outer's input dimension.
 
 ::::{tab-set}
 :::{tab-item} Python
@@ -282,8 +282,8 @@ auto composed = outer(inner);                // R^3 -> R^1
 :::
 ::::
 
-At $(2, 3)$ that is $(2 + 3) + (2 \cdot 3) = 11$. The derivative flows through the
-seam automatically — $\partial/\partial x = 1 + y = 4$ and
+At $(2, 3)$ this is $(2 + 3) + (2 \cdot 3) = 11$. The derivative propagates
+through the composition automatically — $\partial/\partial x = 1 + y = 4$ and
 $\partial/\partial y = 1 + x = 3$ at $(2, 3)$:
 
 ```{doctest}
@@ -291,15 +291,15 @@ $\partial/\partial y = 1 + x = 3$ at $(2, 3)$:
 [[4.0, 3.0, 0.0]]
 ```
 
-Composition is how large dynamics models stay readable: you name intermediate
-quantities and feed them forward, and Tycho keeps the derivatives consistent
-through every layer.
+Composition is what keeps large dynamics models readable: intermediate
+quantities are named and passed through successive layers, and Tycho keeps the
+derivatives consistent at each one.
 
-## 6. Derivatives come for free
+## 6. Automatic derivatives
 
-The reason VectorFunctions exist — rather than plain Python functions — is that
-they carry exact derivatives. Beyond `.jacobian()`, three more methods give you
-everything an optimizer needs:
+VectorFunctions exist to carry exact derivatives, which is what distinguishes
+them from ordinary Python functions. Beyond `.jacobian()`, three more methods
+provide everything an optimizer needs:
 
 - `compute_jacobian(x)` returns the value **and** Jacobian together (cheaper than
   asking for each separately).
@@ -324,7 +324,7 @@ For a vector-valued function the multipliers $\lambda$ genuinely matter: the
 adjoint gradient sums the rows of the Jacobian weighted by $\lambda$, and the
 adjoint Hessian sums the per-output Hessians the same way. Take the 3-output
 `s` from the stacking section with $\lambda = [1, 2, 0.5]$ — the `0.5` weight on
-the $x\,y$ output is exactly the off-diagonal of the result:
+the $x\,y$ output produces the off-diagonal entries of the result:
 
 ```{doctest}
 >>> s.adjointgradient([1.0, 2.0, 3.0], [1.0, 2.0, 0.5]).round(4).tolist()
@@ -395,10 +395,10 @@ else:
 [[0.0, 0.0, 0.6442, 0.0, 3.8242], [0.0, 0.0, -0.7648, 0.0, 3.2211], [0.0, 0.0, 0.0, 0.0, -6.3198]]
 ```
 
-That is everything the transcription layer needs to turn these dynamics into an
-optimal-control problem — but defining and solving a `Phase` is the subject of a
-later tutorial. Here the point is that the dynamics *are* a VectorFunction,
-assembled entirely from the building blocks above.
+This is sufficient for the transcription layer to turn these dynamics into an
+optimal-control problem; defining and solving a `Phase` is covered in a later
+tutorial. The key point is that the dynamics *are* a VectorFunction, assembled
+entirely from the building blocks above.
 
 ## 8. Worked example: two-body gravity
 
@@ -432,16 +432,16 @@ auto rhs = StackedOutputs{v6, r6.normalized_power<3>() * (-mu)};
 :::
 ::::
 
-(The `+ 0.0` just normalizes harmless negative zeros for display.) At the
-unit circular state the result reads off cleanly: $\dot{r} = v = \hat{y}$ and
+(The `+ 0.0` normalizes harmless negative zeros for display.) At the
+unit circular state the result is exactly $\dot{r} = v = \hat{y}$ and
 $\dot{v} = -\hat{x}$ — the centripetal acceleration of a circular orbit.
 
-The Jacobian carries the interesting part. Its top-right $3\times3$ block is the
-identity ($\partial\dot{r}/\partial v = I$) and its bottom-left block is the
-gravity gradient
+The Jacobian shows the structure of the dynamics. Its top-right $3\times3$ block
+is the identity ($\partial\dot{r}/\partial v = I$) and its bottom-left block is
+the gravity gradient
 $\partial\dot{v}/\partial r = -\mu\bigl(I/\lVert r\rVert^3 - 3\,r r^\top/\lVert r\rVert^5\bigr)$ —
-all of it produced by differentiating `normalized_power3`, with nothing written
-by hand:
+all produced by differentiating `normalized_power3`, with no hand-written
+derivatives:
 
 ```{doctest}
 >>> (rhs.jacobian([1.0, 0.0, 0.0, 0.0, 1.0, 0.0]) + 0.0).round(6).tolist()

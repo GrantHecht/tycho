@@ -34,6 +34,13 @@ using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;
 
+/// @ingroup optimal_control
+/// @brief 3-D tricubic/trilinear interpolation table over a scalar field @f$f(x,y,z)@f$.
+///
+/// Stores a scalar field sampled on a rectilinear @f$(x,y,z)@f$ grid (as an
+/// Eigen tensor) and interpolates it (and its gradient and Hessian) with
+/// tricubic or trilinear interpolation, optionally caching per-cell coefficients.
+/// Exposed to expressions via @ref InterpFunction3D.
 struct InterpTable3D {
 
   private:
@@ -66,21 +73,30 @@ struct InterpTable3D {
     InterpType interp_kind_ = InterpType::Linear;
 
   public:
-    bool xeven_ = true;
-    bool yeven_ = true;
-    bool zeven_ = true;
+    bool xeven_ = true; ///< Whether the X grid is evenly spaced.
+    bool yeven_ = true; ///< Whether the Y grid is evenly spaced.
+    bool zeven_ = true; ///< Whether the Z grid is evenly spaced.
 
-    int xsize_;
-    double xtotal_;
-    int ysize_;
-    double ytotal_;
-    int zsize_;
-    double ztotal_;
-    bool cache_alpha_ = false;
-    int cache_threads_ = 1;
+    int xsize_;                ///< Number of X grid nodes.
+    double xtotal_;            ///< Total X span.
+    int ysize_;                ///< Number of Y grid nodes.
+    double ytotal_;            ///< Total Y span.
+    int zsize_;                ///< Number of Z grid nodes.
+    double ztotal_;            ///< Total Z span.
+    bool cache_alpha_ = false; ///< Whether per-cell tricubic coefficients are precomputed.
+    int cache_threads_ = 1;    ///< Threads used to populate the coefficient cache.
 
+    /// @brief Default constructor; produces an empty table.
     InterpTable3D() {}
 
+    /// @brief Construct from grid coordinates and a value tensor.
+    /// @param Xs     X grid coordinates (ascending, length >= 5).
+    /// @param Ys     Y grid coordinates (ascending, length >= 5).
+    /// @param Zs     Z grid coordinates (ascending, length >= 5).
+    /// @param Fs     Field values as a rank-3 tensor (dims index X, Y, Z).
+    /// @param kind   Interpolation kind.
+    /// @param cache  Whether to precompute per-cell tricubic coefficients.
+    /// @throws std::invalid_argument on too-few nodes, dimension mismatch, or non-ascending grids.
     InterpTable3D(const Eigen::VectorXd &Xs, const Eigen::VectorXd &Ys, const Eigen::VectorXd &Zs,
                   const Eigen::Tensor<double, 3> &Fs, InterpType kind, bool cache) {
 
@@ -164,6 +180,9 @@ struct InterpTable3D {
         }
     }
 
+    /// @internal
+    /// @brief Precompute the grid-node partial derivatives used by tricubic interpolation.
+    /// @endinternal
     void calc_derivs() {
 
         fs_dx_.resize(fs_.dimension(0), fs_.dimension(1), fs_.dimension(2));
@@ -234,6 +253,9 @@ struct InterpTable3D {
         fdiffimpl(2, this->zeven_, this->zs_, this->fs_dxdy_, this->fs_dxdydz_);
     }
 
+    /// @internal
+    /// @brief Precompute and cache the tricubic coefficient vector of every grid cell.
+    /// @endinternal
     void cache_alphavecs() {
         this->alphavecs_.resize(fs_.dimension(0) - 1, fs_.dimension(1) - 1, fs_.dimension(2) - 1);
         for (int i = 0; i < zsize_ - 1; i++) {
@@ -245,6 +267,13 @@ struct InterpTable3D {
         }
     }
 
+    /// @internal
+    /// @brief Find the grid interval index containing a value along one axis.
+    /// @param ts     Ascending grid coordinates for the axis.
+    /// @param teven  Whether the axis is evenly spaced.
+    /// @param t      Query value.
+    /// @return Index of the lower node of the containing interval.
+    /// @endinternal
     static int find_elem(const Eigen::VectorXd &ts, bool teven, double t) {
         int elem;
         if (teven) {
@@ -262,6 +291,13 @@ struct InterpTable3D {
         return elem;
     }
 
+    /// @internal
+    /// @brief Locate the grid cell containing @f$(x,y,z)@f$.
+    /// @param x  Query x coordinate.
+    /// @param y  Query y coordinate.
+    /// @param z  Query z coordinate.
+    /// @return Tuple of {x-, y-, z-interval indices}.
+    /// @endinternal
     std::tuple<int, int, int> get_xyzelems(double x, double y, double z) const {
 
         int xelem = this->find_elem(this->xs_, this->xeven_, x);
@@ -271,6 +307,13 @@ struct InterpTable3D {
         return std::tuple{xelem, yelem, zelem};
     }
 
+    /// @internal
+    /// @brief Compute the 64-element tricubic coefficient vector for one grid cell.
+    /// @param xelem  X-interval index.
+    /// @param yelem  Y-interval index.
+    /// @param zelem  Z-interval index.
+    /// @return The tricubic coefficient vector for the cell.
+    /// @endinternal
     Eigen::Matrix<double, 64, 1> calc_alphavec(int xelem, int yelem, int zelem) const {
 
         double xstep = xs_[xelem + 1] - xs_[xelem];
@@ -312,6 +355,11 @@ struct InterpTable3D {
         return this->apply_coeefs(bvec);
     }
 
+    /// @internal
+    /// @brief Apply the fixed tricubic interpolation matrix to a sampled-derivative vector.
+    /// @param bvec  The 64-element vector of cell corner values and derivatives.
+    /// @return The 64-element tricubic coefficient vector.
+    /// @endinternal
     Eigen::Matrix<double, 64, 1> apply_coeefs(const Eigen::Matrix<double, 64, 1> &bvec) const {
 
         Eigen::Matrix<double, 64, 1> alphavec;
@@ -552,6 +600,13 @@ struct InterpTable3D {
         return alphavec;
     }
 
+    /// @internal
+    /// @brief Return a cell's tricubic coefficient vector (cached or freshly computed).
+    /// @param xelem  X-interval index.
+    /// @param yelem  Y-interval index.
+    /// @param zelem  Z-interval index.
+    /// @return The tricubic coefficient vector for the cell.
+    /// @endinternal
     Eigen::Matrix<double, 64, 1> get_alphavec(int xelem, int yelem, int zelem) const {
         if (this->cache_alpha_) {
             return this->alphavecs_(xelem, yelem, zelem);
@@ -560,6 +615,17 @@ struct InterpTable3D {
         }
     }
 
+    /// @internal
+    /// @brief Core interpolation kernel writing the value and requested derivatives.
+    /// @param x       Query x coordinate.
+    /// @param y       Query y coordinate.
+    /// @param z       Query z coordinate.
+    /// @param deriv   Highest derivative order to compute (0, 1, or 2).
+    /// @param fval    Output interpolated value.
+    /// @param dfxyz   Output gradient (if @p deriv > 0).
+    /// @param d2fxyz  Output Hessian (if @p deriv > 1).
+    /// @throws std::invalid_argument if @p x, @p y, or @p z is outside the table range.
+    /// @endinternal
     void interp_impl(double x, double y, double z, int deriv, double &fval,
                      Eigen::Vector3<double> &dfxyz, Eigen::Matrix3<double> &d2fxyz) const {
 
@@ -775,6 +841,11 @@ struct InterpTable3D {
         }
     }
 
+    /// @brief Interpolate the field value at a point.
+    /// @param x  Query x coordinate.
+    /// @param y  Query y coordinate.
+    /// @param z  Query z coordinate.
+    /// @return The interpolated value.
     double interp(double x, double y, double z) const {
         double f;
         Eigen::Vector3<double> dfxyz;
@@ -783,6 +854,11 @@ struct InterpTable3D {
         return f;
     }
 
+    /// @brief Interpolate the value and gradient at a point.
+    /// @param x  Query x coordinate.
+    /// @param y  Query y coordinate.
+    /// @param z  Query z coordinate.
+    /// @return Tuple of {value, gradient}.
     std::tuple<double, Eigen::Vector3<double>> interp_deriv1(double x, double y, double z) const {
         double f;
         Eigen::Vector3<double> dfxyz;
@@ -790,6 +866,11 @@ struct InterpTable3D {
         interp_impl(x, y, z, 1, f, dfxyz, d2fxyz);
         return std::tuple{f, dfxyz};
     }
+    /// @brief Interpolate the value, gradient, and Hessian at a point.
+    /// @param x  Query x coordinate.
+    /// @param y  Query y coordinate.
+    /// @param z  Query z coordinate.
+    /// @return Tuple of {value, gradient, Hessian}.
     std::tuple<double, Eigen::Vector3<double>, Eigen::Matrix3<double>>
     interp_deriv2(double x, double y, double z) const {
         double f;
@@ -800,23 +881,48 @@ struct InterpTable3D {
     }
 };
 
+/// @ingroup optimal_control
+/// @brief VectorFunction wrapping an @ref InterpTable3D as a function of @f$(x,y,z)@f$.
+///
+/// Maps a 3-vector input to the interpolated scalar field value, with analytic
+/// gradient and Hessian, for composition into VectorFunction expressions.
 struct InterpFunction3D : VectorFunction<InterpFunction3D, 3, 1, DenseDerivativeMode::Analytic,
                                          DenseDerivativeMode::Analytic> {
+    /// @brief Convenience alias for the VectorFunction CRTP base class.
     using Base = VectorFunction<InterpFunction3D, 3, 1, DenseDerivativeMode::Analytic,
                                 DenseDerivativeMode::Analytic>;
     VF_TYPE_ALIASES(Base);
 
-    std::shared_ptr<InterpTable3D> tab;
+    std::shared_ptr<InterpTable3D> tab; ///< The interpolation table being wrapped.
 
+    /// @brief Default constructor; leaves the table unset.
     InterpFunction3D() {}
+    /// @brief Construct from an interpolation table.
+    /// @param tab  The table to wrap.
     InterpFunction3D(std::shared_ptr<InterpTable3D> tab) : tab(tab) { this->set_io_rows(3, 1); }
 
+    /// @internal
+    /// @brief Evaluate the interpolated value at the input point.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @param x    Input @c [x, y, z].
+    /// @param fx_  Output value (1-vector) to write.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         fx[0] = this->tab->interp(x[0], x[1], x[2]);
     }
+    /// @internal
+    /// @brief Evaluate the interpolated value and gradient (Jacobian).
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @tparam JacType  Eigen Jacobian-matrix type.
+    /// @param x    Input @c [x, y, z].
+    /// @param fx_  Output value (1-vector) to write.
+    /// @param jx_  Output Jacobian (gradient) to write.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -828,6 +934,21 @@ struct InterpFunction3D : VectorFunction<InterpFunction3D, 3, 1, DenseDerivative
         fx[0] = z;
         jx = dzdx.transpose();
     }
+    /// @internal
+    /// @brief Evaluate the value, Jacobian, adjoint gradient, and adjoint Hessian.
+    /// @tparam InType       Eigen input-vector type.
+    /// @tparam OutType      Eigen output-vector type.
+    /// @tparam JacType      Eigen Jacobian-matrix type.
+    /// @tparam AdjGradType  Eigen adjoint-gradient vector type.
+    /// @tparam AdjHessType  Eigen adjoint-Hessian matrix type.
+    /// @tparam AdjVarType   Eigen adjoint-variable vector type.
+    /// @param x        Input @c [x, y, z].
+    /// @param fx_      Output value (1-vector) to write.
+    /// @param jx_      Output Jacobian to write.
+    /// @param adjgrad_ Output adjoint gradient to write.
+    /// @param adjhess_ Output adjoint Hessian to write.
+    /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(

@@ -29,40 +29,63 @@ using vf::ThreadingFlags;
 using vf::VectorExpression;
 using vf::VectorFunction;
 
+/// @internal
+/// @brief Sizing layer of the LGL control-spline constraint (static-control case).
+/// @tparam Derived  The concrete spline type (CRTP host).
+/// @tparam CSC      Number of cardinal states per interval.
+/// @tparam USZ      Control-vector dimension.
+/// @tparam Order    Spline continuity order.
+/// @endinternal
 template <class Derived, int CSC, int USZ, int Order>
 struct LGLControlSplineSize : VectorFunction<Derived, (2 * CSC - 1) * (USZ + 1), USZ * Order> {
+    /// @brief Convenience alias for the VectorFunction CRTP base class.
     using Base = VectorFunction<Derived, (2 * CSC - 1) * (USZ + 1), USZ * Order>;
     using Base::Base;
 
-    static constexpr int Usz = USZ;
-    static constexpr int t_usz = USZ + 1;
+    static constexpr int Usz = USZ;       ///< Control-vector dimension.
+    static constexpr int t_usz = USZ + 1; ///< Time + control dimension per node.
 
-    const int t_usize() const { return t_usz; }
-    const int Usize() const { return Usz; }
+    const int t_usize() const { return t_usz; } ///< @brief Time + control size per node.
+    const int Usize() const { return Usz; }     ///< @brief Control size per node.
 
+    /// @brief Time + control node-vector type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using TUVec = Eigen::Matrix<Scalar, USZ + 1, 1>;
+    /// @brief Control node-vector type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using UVec = Eigen::Matrix<Scalar, USZ, 1>;
 
+    /// @brief No-op setter (control size is fixed at compile time).
+    /// @param u  Ignored.
     void set_usize(int u) {}
 };
 
+/// @internal
+/// @brief Runtime-control specialization of @ref LGLControlSplineSize (`USZ == -1`).
+/// @tparam Derived  The concrete spline type (CRTP host).
+/// @tparam CSC      Number of cardinal states per interval.
+/// @tparam Order    Spline continuity order.
+/// @endinternal
 template <class Derived, int CSC, int Order>
 struct LGLControlSplineSize<Derived, CSC, -1, Order> : VectorFunction<Derived, -1, -1> {
+    /// @brief Convenience alias for the VectorFunction CRTP base class.
     using Base = VectorFunction<Derived, -1, -1>;
     using Base::Base;
 
-    static constexpr int Usz = -1;
-    static constexpr int t_usz = -1;
+    static constexpr int Usz = -1;   ///< Control dimension (runtime).
+    static constexpr int t_usz = -1; ///< Time + control dimension (runtime).
 
-    int usz_d_ = -1;
-    int t_usz_d_ = -1;
+    int usz_d_ = -1;   ///< Runtime control dimension.
+    int t_usz_d_ = -1; ///< Runtime time + control dimension.
 
-    int t_usize() const { return t_usz_d_; }
-    int Usize() const { return usz_d_; }
+    int t_usize() const { return t_usz_d_; } ///< @brief Time + control size per node.
+    int Usize() const { return usz_d_; }     ///< @brief Control size per node.
 
+    /// @brief Time + control node-vector type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using TUVec = Eigen::Matrix<Scalar, -1, 1>;
+    /// @brief Control node-vector type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using UVec = Eigen::Matrix<Scalar, -1, 1>;
 
+    /// @brief Set the runtime control size and derive the IO row counts.
+    /// @param u  Number of control variables.
     void set_usize(int u) {
         this->usz_d_ = u;
         this->t_usz_d_ = u + 1;
@@ -72,23 +95,48 @@ struct LGLControlSplineSize<Derived, CSC, -1, Order> : VectorFunction<Derived, -
     }
 };
 
+/// @ingroup optimal_control
+/// @brief Control-continuity constraint joining two LGL intervals at a shared node.
+///
+/// Equality constraint VectorFunction enforcing continuity (up to @p Order
+/// derivatives) of the polynomial control spline across the boundary between
+/// two consecutive LGL intervals.
+/// @tparam CSC    Number of cardinal states per interval.
+/// @tparam USZ    Control-vector dimension (`Eigen::Dynamic` for runtime size).
+/// @tparam Order  Number of derivative-continuity conditions enforced.
 template <int CSC, int USZ, int Order = CSC - 2>
 struct LGLControlSpline : LGLControlSplineSize<LGLControlSpline<CSC, USZ, Order>, CSC, USZ, Order> {
+    /// @brief Convenience alias for the sizing CRTP base class.
     using SplineBase = LGLControlSplineSize<LGLControlSpline<CSC, USZ, Order>, CSC, USZ, Order>;
 
+    /// @brief Time + control node-vector type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using TUVec = typename SplineBase::template TUVec<Scalar>;
+    /// @brief Control node-vector type. @tparam Scalar Arithmetic scalar type.
     template <class Scalar> using UVec = typename SplineBase::template UVec<Scalar>;
 
+    /// @brief Convenience alias for a fixed-size std::array.
+    /// @tparam T   Element type.
+    /// @tparam SZ  Array length.
     template <class T, int SZ> using STDarray = std::array<T, SZ>;
-    using Coeffs = LGLCoeffs<CSC>;
+    using Coeffs = LGLCoeffs<CSC>; ///< @brief The LGL coefficient table for this order.
 
-    static constexpr int t_u_num = (2 * CSC - 1);
-    static constexpr int UeqNum = Order;
+    static constexpr int t_u_num = (2 * CSC - 1); ///< Number of time/control nodes across the join.
+    static constexpr int UeqNum = Order;          ///< Number of continuity conditions.
 
+    /// @brief Default constructor; control size must be set before use.
     LGLControlSpline() {}
 
+    /// @brief Construct with a runtime control size.
+    /// @param usize  Number of control variables.
     LGLControlSpline(int usize) { this->set_usize(usize); }
 
+    /// @internal
+    /// @brief Evaluate the control-continuity residuals.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @param x    Packed time/control node values across the two intervals.
+    /// @param fx_  Output continuity-residual vector to write.
+    /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(const Eigen::MatrixBase<InType> &x,
                              Eigen::MatrixBase<OutType> const &fx_) const {
@@ -115,6 +163,15 @@ struct LGLControlSpline : LGLControlSplineSize<LGLControlSpline<CSC, USZ, Order>
         }
     }
 
+    /// @internal
+    /// @brief Evaluate the control-continuity residuals and their Jacobian.
+    /// @tparam InType   Eigen input-vector type.
+    /// @tparam OutType  Eigen output-vector type.
+    /// @tparam JacType  Eigen Jacobian-matrix type.
+    /// @param x    Packed time/control node values across the two intervals.
+    /// @param fx_  Output continuity-residual vector to write.
+    /// @param jx_  Output Jacobian to write.
+    /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(const Eigen::MatrixBase<InType> &x,
                                       Eigen::MatrixBase<OutType> const &fx_,
@@ -174,6 +231,19 @@ struct LGLControlSpline : LGLControlSplineSize<LGLControlSpline<CSC, USZ, Order>
         }
     }
 
+    /// @internal
+    /// @brief Evaluate the continuity residuals, Jacobian, and adjoint gradient.
+    /// @tparam InType       Eigen input-vector type.
+    /// @tparam OutType      Eigen output-vector type.
+    /// @tparam JacType      Eigen Jacobian-matrix type.
+    /// @tparam AdjGradType  Eigen adjoint-gradient vector type.
+    /// @tparam AdjVarType   Eigen adjoint-variable vector type.
+    /// @param x        Packed time/control node values across the two intervals.
+    /// @param fx_      Output continuity-residual vector to write.
+    /// @param jx_      Output Jacobian to write.
+    /// @param adjgrad_ Output adjoint gradient to write.
+    /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjVarType>
     inline void compute_jacobian_adjointgradient(
         const Eigen::MatrixBase<InType> &x, Eigen::MatrixBase<OutType> const &fx_,
@@ -184,6 +254,21 @@ struct LGLControlSpline : LGLControlSplineSize<LGLControlSpline<CSC, USZ, Order>
         adjgrad = (adjvars.transpose() * jx_).transpose();
     }
 
+    /// @internal
+    /// @brief Evaluate the continuity residuals, Jacobian, adjoint gradient, and adjoint Hessian.
+    /// @tparam InType       Eigen input-vector type.
+    /// @tparam OutType      Eigen output-vector type.
+    /// @tparam JacType      Eigen Jacobian-matrix type.
+    /// @tparam AdjGradType  Eigen adjoint-gradient vector type.
+    /// @tparam AdjHessType  Eigen adjoint-Hessian matrix type.
+    /// @tparam AdjVarType   Eigen adjoint-variable vector type.
+    /// @param x        Packed time/control node values across the two intervals.
+    /// @param fx_      Output continuity-residual vector to write.
+    /// @param jx_      Output Jacobian to write.
+    /// @param adjgrad_ Output adjoint gradient to write.
+    /// @param adjhess_ Output adjoint Hessian to write.
+    /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
+    /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(

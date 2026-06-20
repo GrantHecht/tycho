@@ -52,17 +52,31 @@ using vf::ThreadingFlags;
 using vf::VectorExpression;
 using vf::VectorFunction;
 
+/// @internal
+/// @brief Re-presents an ODE's controls as parameters for block-constant transcription.
+///
+/// Wraps an ODE so that, from the defect machinery's perspective, the controls
+/// become part of the parameter block (zero controls, controls+params
+/// parameters). Used when controls are held constant over each transcription
+/// block.
+/// @tparam DODE  The wrapped ODE type.
+/// @endinternal
 template <class DODE> struct Blocked_ODE_Wrapper : DODE {
-    static constexpr int UV = 0;
-    static constexpr int PV = SZ_SUM<DODE::PV, DODE::UV>::value;
-    static constexpr int XtUV = DODE::XtV;
-    using Base = DODE;
+    static constexpr int UV = 0; ///< No controls in the wrapped view.
+    static constexpr int PV = SZ_SUM<DODE::PV, DODE::UV>::value; ///< Controls folded into params.
+    static constexpr int XtUV = DODE::XtV;                       ///< State + time dimension.
+    using Base = DODE; ///< @brief Convenience alias for the wrapped ODE base class.
 
-    inline int xtu_vars() const { return Base::xt_vars(); }
-    inline int u_vars() const { return 0; }
+    inline int xtu_vars() const { return Base::xt_vars(); } ///< @brief State + time variable count.
+    inline int u_vars() const { return 0; }                 ///< @brief Control count (always zero).
+    /// @brief Parameter count (original controls plus parameters).
+    /// @return The combined control + parameter count of the wrapped ODE.
     inline int p_vars() const { return Base::u_vars() + Base::p_vars(); }
 
+    /// @brief Default constructor.
     Blocked_ODE_Wrapper() {};
+    /// @brief Wrap an existing ODE.
+    /// @param ode  The ODE to wrap.
     Blocked_ODE_Wrapper(const DODE &ode) : Base(ode) {}
 };
 

@@ -50,45 +50,58 @@ namespace tycho::oc {
 using vf::FDDerivArbitrary;
 using vf::GenericFunction;
 
+/// @ingroup optimal_control
+/// @brief Piecewise polynomial interpolation table over a discretized trajectory.
+///
+/// Stores a trajectory as per-block LGL (or trapezoidal) polynomial segments and
+/// provides time-continuous interpolation of the state, control, and their first
+/// and second derivatives, plus mesh-error estimation and node-redistribution
+/// helpers. Backs @ref InterpFunction and the phase's trajectory queries.
 struct LGLInterpTable {
-    using VectorFunctionalX = GenericFunction<-1, -1>;
+    using VectorFunctionalX =
+        GenericFunction<-1, -1>; ///< @brief Type-erased vector function (the ODE).
 
-    Eigen::MatrixXd xtu_data_;
-    Eigen::MatrixXd xdot_data_;
+    Eigen::MatrixXd xtu_data_;  ///< Per-node state/time/control data (columns are nodes).
+    Eigen::MatrixXd xdot_data_; ///< Per-node state-derivative data.
 
-    int x_vars_ = 0;
-    int u_vars_ = 0;
-    int xtu_vars_ = 0;
-    int axis_ = 0;
+    int x_vars_ = 0;   ///< Number of state variables.
+    int u_vars_ = 0;   ///< Number of control variables.
+    int xtu_vars_ = 0; ///< Total state + time + control variables per node.
+    int axis_ = 0;     ///< Index of the time axis within a node vector.
 
-    double delta_t_ = 0.0;
-    double total_t_ = 0.0;
-    double t0_ = 0;
-    double tf_ = 0;
-    double eps_ = 1.0e-4;
+    double delta_t_ = 0.0; ///< Time span of one block (even data).
+    double total_t_ = 0.0; ///< Total time span of the trajectory.
+    double t0_ = 0;        ///< Initial time.
+    double tf_ = 0;        ///< Final time.
+    double eps_ = 1.0e-4;  ///< Finite-difference step for error estimation.
 
-    TranscriptionModes method_ = TranscriptionModes::LGL3;
-    bool blocked_controls_ = false;
-    bool has_ode_ = false;
-    double order_ = 3.0;
-    double error_weight_;
+    TranscriptionModes method_ = TranscriptionModes::LGL3; ///< Interpolation/transcription scheme.
+    bool blocked_controls_ = false;                        ///< Whether controls are block-constant.
+    bool has_ode_ = false; ///< Whether an ODE is available for derivatives.
+    double order_ = 3.0;   ///< Polynomial order of the interpolant.
+    double error_weight_;  ///< Error-estimate weighting coefficient.
 
-    int block_size_ = 0;
-    int num_blocks_ = 0;
-    int num_states_ = 0;
-    mutable int last_block_accessed_ = 0;
+    int block_size_ = 0;                  ///< Number of nodes per interpolation block.
+    int num_blocks_ = 0;                  ///< Number of interpolation blocks.
+    int num_states_ = 0;                  ///< Total number of stored nodes.
+    mutable int last_block_accessed_ = 0; ///< Cache of the last block hit (search hint).
 
-    bool periodic_ = false;
-    bool even_data_ = false;
+    bool periodic_ = false;  ///< Whether the trajectory is treated as periodic.
+    bool even_data_ = false; ///< Whether nodes are evenly spaced in time.
 
-    bool warn_out_of_bounds_ = true;
-    bool throw_out_of_bounds_ = false;
+    bool warn_out_of_bounds_ = true;   ///< Warn on out-of-range time queries.
+    bool throw_out_of_bounds_ = false; ///< Throw on out-of-range time queries.
 
-    Eigen::VectorXd t_spacing_;
-    Eigen::MatrixXd x_weights_;
-    Eigen::MatrixXd dx_weights_;
-    Eigen::MatrixXd u_weights_;
-    VectorFunctionalX ode_;
+    Eigen::VectorXd t_spacing_;  ///< Normalized within-block node spacing.
+    Eigen::MatrixXd x_weights_;  ///< Polynomial weights for the state interpolant.
+    Eigen::MatrixXd dx_weights_; ///< Polynomial weights for the state-derivative interpolant.
+    Eigen::MatrixXd u_weights_;  ///< Polynomial weights for the control interpolant.
+    VectorFunctionalX ode_;      ///< The ODE used to compute node derivatives.
+    /// @brief Construct an empty table bound to an ODE and transcription mode.
+    /// @param od  The ODE used to compute node derivatives.
+    /// @param xv  Number of state variables.
+    /// @param uv  Number of control variables.
+    /// @param m   Transcription mode.
     LGLInterpTable(VectorFunctionalX od, int xv, int uv, TranscriptionModes m) {
         this->x_vars_ = xv;
         this->u_vars_ = uv;
@@ -98,6 +111,13 @@ struct LGLInterpTable {
         this->has_ode_ = true;
         this->set_method(m);
     }
+    /// @brief Construct from an ODE, dimensions, mode, and trajectory data.
+    /// @param od      The ODE used to compute node derivatives.
+    /// @param xv      Number of state variables.
+    /// @param uv      Number of control variables.
+    /// @param m       Transcription mode.
+    /// @param xtudat  Trajectory node data (one packed state per node).
+    /// @param dnum    Number of defect intervals to resample to.
     LGLInterpTable(VectorFunctionalX od, int xv, int uv, TranscriptionModes m,
                    const std::vector<Eigen::VectorXd> &xtudat, int dnum) {
         this->x_vars_ = xv;
@@ -110,6 +130,14 @@ struct LGLInterpTable {
         this->load_uneven_data(dnum, xtudat);
     }
 
+    /// @brief Construct from an ODE, dimensions (with params), mode name, and data.
+    /// @param od      The ODE used to compute node derivatives.
+    /// @param xv      Number of state variables.
+    /// @param uv      Number of control variables.
+    /// @param pv      Number of parameter variables (folded into controls).
+    /// @param m       Transcription-mode name.
+    /// @param xtudat  Trajectory node data.
+    /// @param dnum    Number of defect intervals to resample to.
     LGLInterpTable(VectorFunctionalX od, int xv, int uv, int pv, std::string m,
                    const std::vector<Eigen::VectorXd> &xtudat, int dnum) {
         this->x_vars_ = xv;
@@ -121,16 +149,40 @@ struct LGLInterpTable {
         this->set_method(strto_TranscriptionMode(m));
         this->load_uneven_data(dnum, xtudat);
     }
+    /// @brief Construct with params and default LGL3 mode, resampling the whole trajectory.
+    /// @param od      The ODE used to compute node derivatives.
+    /// @param xv      Number of state variables.
+    /// @param uv      Number of control variables.
+    /// @param pv      Number of parameter variables.
+    /// @param xtudat  Trajectory node data.
     LGLInterpTable(VectorFunctionalX od, int xv, int uv, int pv,
                    const std::vector<Eigen::VectorXd> &xtudat)
         : LGLInterpTable(od, xv, uv, pv, "LGL3", xtudat, xtudat.size() - 1) {}
+    /// @brief Construct with default LGL3 mode, resampling the whole trajectory.
+    /// @param od      The ODE used to compute node derivatives.
+    /// @param xv      Number of state variables.
+    /// @param uv      Number of control variables.
+    /// @param xtudat  Trajectory node data.
     LGLInterpTable(VectorFunctionalX od, int xv, int uv, const std::vector<Eigen::VectorXd> &xtudat)
         : LGLInterpTable(od, xv, uv, 0, "LGL3", xtudat, xtudat.size() - 1) {}
 
+    /// @brief Construct from an ODE, dimensions, mode name, and data.
+    /// @param od      The ODE used to compute node derivatives.
+    /// @param xv      Number of state variables.
+    /// @param uv      Number of control variables.
+    /// @param m       Transcription-mode name.
+    /// @param xtudat  Trajectory node data.
+    /// @param dnum    Number of defect intervals to resample to.
     LGLInterpTable(VectorFunctionalX od, int xv, int uv, std::string m,
                    const std::vector<Eigen::VectorXd> &xtudat, int dnum)
         : LGLInterpTable(od, xv, uv, 0, m, xtudat, dnum) {}
 
+    /// @brief Construct without an ODE, deriving node derivatives by finite difference.
+    /// @param xv      Number of state variables.
+    /// @param uv      Number of control variables.
+    /// @param m       Transcription mode.
+    /// @param xtudat  Trajectory node data.
+    /// @param dnum    Number of defect intervals to resample to.
     LGLInterpTable(int xv, int uv, TranscriptionModes m, const std::vector<Eigen::VectorXd> &xtudat,
                    int dnum) {
         this->x_vars_ = xv;
@@ -141,6 +193,10 @@ struct LGLInterpTable {
         this->load_uneven_data(dnum, xtudat);
     }
 
+    /// @brief Construct a state-only table (no controls, FD derivatives).
+    /// @param xv      Number of state variables.
+    /// @param xtudat  Trajectory node data.
+    /// @param dnum    Number of defect intervals to resample to.
     LGLInterpTable(int xv, const std::vector<Eigen::VectorXd> &xtudat, int dnum) {
         this->x_vars_ = xv;
         this->u_vars_ = 0;
@@ -149,6 +205,8 @@ struct LGLInterpTable {
         this->set_method(TranscriptionModes::LGL3);
         this->load_uneven_data(dnum, xtudat);
     }
+    /// @brief Construct a state-only table inferring dimensions from the data.
+    /// @param xtudat  Trajectory node data (last entry of each is time).
     LGLInterpTable(const std::vector<Eigen::VectorXd> &xtudat) {
         this->x_vars_ = xtudat[0].size() - 1;
         this->u_vars_ = 0;
@@ -157,6 +215,10 @@ struct LGLInterpTable {
         this->set_method(TranscriptionModes::LGL3);
         this->load_uneven_data(xtudat.size() - 1, xtudat);
     }
+    /// @brief Construct an empty table with the given dimensions and mode.
+    /// @param xv  Number of state variables.
+    /// @param uv  Number of control variables.
+    /// @param m   Transcription mode.
     LGLInterpTable(int xv, int uv, TranscriptionModes m) {
         this->x_vars_ = xv;
         this->u_vars_ = uv;
@@ -164,12 +226,23 @@ struct LGLInterpTable {
         this->xtu_vars_ = xv + uv + 1;
         this->set_method(m);
     }
+    /// @brief Default constructor; produces an empty, unconfigured table.
     LGLInterpTable() {}
+    /// @brief Return a (non-owning) shared pointer to this table.
+    /// @return Shared pointer aliasing this table.
     std::shared_ptr<LGLInterpTable> get_table_ptr() {
         return std::shared_ptr<LGLInterpTable>(this);
     }
+    /// @brief Set the interpolation method and load the corresponding polynomial weights.
+    /// @param m  Transcription mode.
     void set_method(TranscriptionModes m);
 
+    /// @internal
+    /// @brief Validate that input node times are strictly monotonic and non-duplicated.
+    /// @tparam VecType  The node-vector type.
+    /// @param xtudat  Trajectory node data.
+    /// @throws std::invalid_argument on duplicate or non-monotonic times.
+    /// @endinternal
     template <class VecType> void check_input(const std::vector<VecType> &xtudat) {
 
         double t0 = xtudat.front()[this->axis_];
@@ -190,6 +263,7 @@ struct LGLInterpTable {
         }
     }
 
+    /// @brief Mark the trajectory periodic and snap the last node to the first state.
     void make_periodic() {
         this->periodic_ = true;
 
@@ -205,6 +279,10 @@ struct LGLInterpTable {
         xtu_data_.col(xtu_data_.cols() - 1).head(this->x_vars_) = x0.head(this->x_vars_);
         xdot_data_.col(xdot_data_.cols() - 1).head(this->x_vars_) = xd0.head(this->x_vars_);
     }
+    /// @internal
+    /// @brief Load evenly-time-spaced node data, computing derivatives from the ODE or FD.
+    /// @param xtudat  Trajectory node data (evenly spaced).
+    /// @endinternal
     void load_even_data(const std::vector<Eigen::VectorXd> &xtudat) {
         int msize = xtudat[0].size();
         if (msize != this->xtu_vars_) {
@@ -252,6 +330,11 @@ struct LGLInterpTable {
         }
     }
 
+    /// @internal
+    /// @brief Load evenly-spaced node data together with supplied derivatives.
+    /// @param xtudat   Trajectory node data (evenly spaced).
+    /// @param xdotdat  Per-node state derivatives.
+    /// @endinternal
     void load_even_data2(const std::vector<Eigen::VectorXd> &xtudat,
                          const std::vector<Eigen::VectorXd> &xdotdat) {
         int msize = xtudat[0].size();
@@ -284,6 +367,11 @@ struct LGLInterpTable {
         }
     }
 
+    /// @internal
+    /// @brief Load arbitrarily-spaced node data and resample onto an even mesh.
+    /// @param dnum    Number of defect intervals to resample to.
+    /// @param xtudat  Trajectory node data (unevenly spaced).
+    /// @endinternal
     void load_uneven_data(int dnum, const std::vector<Eigen::VectorXd> &xtudat) {
         int msize = xtudat[0].size();
         if (msize != this->xtu_vars_) {
@@ -345,6 +433,11 @@ struct LGLInterpTable {
         this->load_even_data(nxs);
     }
 
+    /// @internal
+    /// @brief Load node data and resample it onto an even mesh using the ODE for derivatives.
+    /// @param dnum    Number of defect intervals to resample to.
+    /// @param xtudat  Trajectory node data.
+    /// @endinternal
     void load_regular_data(int dnum, const std::vector<Eigen::VectorXd> &xtudat) {
 
         check_input(xtudat);
@@ -371,6 +464,10 @@ struct LGLInterpTable {
         std::vector<Eigen::VectorXd> nxs = this->nd_equidist(dnum, 0.0, 1.0);
         this->load_even_data(nxs);
     }
+    /// @internal
+    /// @brief Load node data exactly (no resampling), computing derivatives from the ODE.
+    /// @param xtudat  Trajectory node data.
+    /// @endinternal
     void load_exact_data(const std::vector<Eigen::VectorXd> &xtudat) {
 
         check_input(xtudat);
@@ -395,6 +492,13 @@ struct LGLInterpTable {
             this->xdot_data_.col(i) = temp;
         }
     }
+    /// @internal
+    /// @brief Load node data and explicit derivatives exactly (no resampling).
+    /// @tparam V1  Node-vector type.
+    /// @tparam V2  Derivative-vector type.
+    /// @param xtudat   Trajectory node data.
+    /// @param xdotdat  Per-node state derivatives.
+    /// @endinternal
     template <class V1, class V2>
     void load_exact_data(const std::vector<V1> &xtudat, const std::vector<V2> &xdotdat) {
         check_input(xtudat);
@@ -416,6 +520,12 @@ struct LGLInterpTable {
         }
     }
 
+    /// @brief Resample the trajectory onto a custom within-block spacing over a sub-range.
+    /// @param spacing  Normalized within-block node spacing.
+    /// @param dnum     Number of blocks to produce.
+    /// @param low      Lower fractional time bound in @f$[0,1]@f$.
+    /// @param high     Upper fractional time bound in @f$[0,1]@f$.
+    /// @return Resampled trajectory nodes.
     std::vector<Eigen::VectorXd> nd_equidist(Eigen::VectorXd spacing, int dnum, double low,
                                              double high) { // 0 to 1;
         Eigen::VectorXd node_space;
@@ -434,9 +544,19 @@ struct LGLInterpTable {
         }
         return mesh;
     }
+    /// @brief Resample using the table's default spacing over a sub-range.
+    /// @param dnum  Number of blocks to produce.
+    /// @param low   Lower fractional time bound in @f$[0,1]@f$.
+    /// @param high  Upper fractional time bound in @f$[0,1]@f$.
+    /// @return Resampled trajectory nodes.
     std::vector<Eigen::VectorXd> nd_equidist(int dnum, double low, double high) {
         return this->nd_equidist(this->t_spacing_, dnum, low, high);
     }
+    /// @brief Resample with per-segment block counts and node times (custom spacing).
+    /// @param ndspacing  Normalized within-block node spacing.
+    /// @param ndtimes    Fractional segment boundary times (length defper.size()+1).
+    /// @param defper     Number of defect intervals per segment.
+    /// @return Resampled trajectory nodes.
     std::vector<Eigen::VectorXd> nd_distribute(Eigen::VectorXd ndspacing, Eigen::VectorXd ndtimes,
                                                Eigen::VectorXi defper) { // 0-1
         std::vector<Eigen::VectorXd> mesh;
@@ -452,19 +572,36 @@ struct LGLInterpTable {
         }
         return mesh;
     }
+    /// @brief Resample with per-segment block counts using the default spacing.
+    /// @param ndtimes  Fractional segment boundary times.
+    /// @param defper   Number of defect intervals per segment.
+    /// @return Resampled trajectory nodes.
     std::vector<Eigen::VectorXd> nd_distribute(Eigen::VectorXd ndtimes, Eigen::VectorXi defper) {
         return this->nd_distribute(this->t_spacing_, ndtimes, defper);
     }
 
+    /// @brief Resample @p dnum points over an absolute time sub-range.
+    /// @param dnum  Number of samples to produce.
+    /// @param tlow  Lower absolute time bound.
+    /// @param thig  Upper absolute time bound.
+    /// @return Resampled trajectory samples.
     std::vector<Eigen::VectorXd> interp_range(int dnum, double tlow, double thig) {
         double frac1 = (tlow - this->t0_) / this->total_t_;
         double frac2 = (thig - this->t0_) / this->total_t_;
         return this->nd_equidist(dnum, frac1, frac2);
     }
+    /// @brief Resample @p dnum points over the full trajectory time range.
+    /// @param dnum  Number of samples to produce.
+    /// @return Resampled trajectory samples.
     std::vector<Eigen::VectorXd> interp_whole_range(int dnum) {
         return this->nd_equidist(dnum, 0.0, 1.0);
     }
 
+    /// @internal
+    /// @brief Compute the cumulative discretization-error integral over the trajectory.
+    /// @param num_samps  Number of time samples.
+    /// @return Per-sample @c [cumulative-error, time] pairs.
+    /// @endinternal
     std::vector<Eigen::VectorXd> error_integral(int num_samps) {
         Eigen::VectorXd ts;
         ts.setLinSpaced(num_samps, this->t0_, this->tf_);
@@ -491,23 +628,48 @@ struct LGLInterpTable {
         return errint;
     }
 
+    /// @internal
+    /// @brief Compute the updated-formulation cumulative error integral.
+    /// @return Per-sample @c [cumulative-error, time] pairs.
+    /// @endinternal
     std::vector<Eigen::VectorXd> new_error_integral();
 
+    /// @internal
+    /// @brief Estimate per-segment mesh error and distribution via the de Boor method.
+    /// @param tsnd         Output non-dimensional node times.
+    /// @param mesh_errors  Output per-segment error matrix.
+    /// @param mesh_dist    Output per-segment error-distribution matrix.
+    /// @endinternal
     void deboor_mesh_error(Eigen::VectorXd &tsnd, Eigen::MatrixXd &mesh_errors,
                            Eigen::MatrixXd &mesh_dist) const;
 
+    /// @brief Interpolate the full state/time/control vector at a global time.
+    /// @tparam Scalar  Arithmetic scalar type.
+    /// @param tglobal  Global query time.
+    /// @return The interpolated packed state vector.
     template <class Scalar> VectorX<Scalar> interpolate(Scalar tglobal) const {
         VectorX<Scalar> fx(this->xtu_vars_);
         fx.setZero();
         this->interpolate_ref(tglobal, fx);
         return fx;
     }
+    /// @brief Interpolate the state and its time derivative at a global time.
+    /// @tparam Scalar  Arithmetic scalar type.
+    /// @param tglobal  Global query time.
+    /// @return A two-column matrix of @c [value, d/dt].
     template <class Scalar> Eigen::Matrix<Scalar, -1, 2> interpolate_deriv(Scalar tglobal) const {
         Eigen::Matrix<Scalar, -1, 2> fx(this->xtu_vars_, 2);
         fx.setZero();
         this->interpolate_deriv_ref(tglobal, fx);
         return fx;
     }
+    /// @internal
+    /// @brief Locate the block containing a global time and the local fractional time.
+    /// @tparam Scalar  Arithmetic scalar type.
+    /// @param tglobal  Global query time.
+    /// @param tnd      Output local (within-block) fractional time.
+    /// @param element  Output block index.
+    /// @endinternal
     template <class Scalar> void find_block(Scalar tglobal, Scalar &tnd, int &element) const {
         if (this->even_data_) {
             Scalar tlocal = tglobal - this->t0_;
@@ -553,6 +715,13 @@ struct LGLInterpTable {
         tnd = (tglobal - tb0) / (tbf - tb0);
     }
 
+    /// @internal
+    /// @brief Interpolate the packed state at a global time into @p fx.
+    /// @tparam Scalar   Arithmetic scalar type.
+    /// @tparam OutType  Eigen output type.
+    /// @param tglobal  Global query time.
+    /// @param fx       Output packed-state vector to write.
+    /// @endinternal
     template <class Scalar, class OutType>
     void interpolate_ref(Scalar tglobal, const Eigen::MatrixBase<OutType> &fx) const {
         int element = 0;
@@ -561,6 +730,13 @@ struct LGLInterpTable {
 
         return interp_ith_block(tnd, fx, element);
     }
+    /// @internal
+    /// @brief Interpolate the state and its time derivative at a global time into @p fx.
+    /// @tparam Scalar   Arithmetic scalar type.
+    /// @tparam OutType  Eigen output type.
+    /// @param tglobal  Global query time.
+    /// @param fx       Output @c [value, d/dt] matrix to write.
+    /// @endinternal
     template <class Scalar, class OutType>
     void interpolate_deriv_ref(Scalar tglobal, const Eigen::MatrixBase<OutType> &fx) const {
         int element = 0;
@@ -568,6 +744,13 @@ struct LGLInterpTable {
         this->find_block(tglobal, tnd, element);
         return interp_ith_block_deriv(tnd, fx, element);
     }
+    /// @internal
+    /// @brief Interpolate the state and its first/second time derivatives at a global time.
+    /// @tparam Scalar   Arithmetic scalar type.
+    /// @tparam OutType  Eigen output type.
+    /// @param tglobal  Global query time.
+    /// @param fx       Output @c [value, d/dt, d2/dt2] matrix to write.
+    /// @endinternal
     template <class Scalar, class OutType>
     void interpolate_2nd_deriv_ref(Scalar tglobal, const Eigen::MatrixBase<OutType> &fx) const {
         int element = 0;
@@ -576,18 +759,42 @@ struct LGLInterpTable {
         return interp_ith_block_2nd_deriv(tnd, fx, element);
     }
 
+    /// @internal
+    /// @brief Interpolate the state within block @p i at local fractional time @p t.
+    /// @tparam Scalar   Arithmetic scalar type.
+    /// @tparam OutType  Eigen output type.
+    /// @param t   Local fractional time in @f$[0,1]@f$.
+    /// @param fx  Output packed-state vector to write.
+    /// @param i   Block index.
+    /// @endinternal
     template <class Scalar, class OutType>
     void interp_ith_block(Scalar t, const Eigen::MatrixBase<OutType> &fx, int i) const {
         return this->interp_block(
             t, fx, this->xtu_data_.middleCols((this->block_size_ - 1) * i, this->block_size_),
             this->xdot_data_.middleCols((this->block_size_ - 1) * i, this->block_size_));
     }
+    /// @internal
+    /// @brief Interpolate the state and derivative within block @p i at local time @p t.
+    /// @tparam Scalar   Arithmetic scalar type.
+    /// @tparam OutType  Eigen output type.
+    /// @param t   Local fractional time in @f$[0,1]@f$.
+    /// @param fx  Output @c [value, d/dt] matrix to write.
+    /// @param i   Block index.
+    /// @endinternal
     template <class Scalar, class OutType>
     void interp_ith_block_deriv(Scalar t, const Eigen::MatrixBase<OutType> &fx, int i) const {
         return this->interp_block_deriv(
             t, fx, this->xtu_data_.middleCols((this->block_size_ - 1) * i, this->block_size_),
             this->xdot_data_.middleCols((this->block_size_ - 1) * i, this->block_size_));
     }
+    /// @internal
+    /// @brief Interpolate state and first/second derivatives within block @p i at local time @p t.
+    /// @tparam Scalar   Arithmetic scalar type.
+    /// @tparam OutType  Eigen output type.
+    /// @param t   Local fractional time in @f$[0,1]@f$.
+    /// @param fx  Output @c [value, d/dt, d2/dt2] matrix to write.
+    /// @param i   Block index.
+    /// @endinternal
     template <class Scalar, class OutType>
     void interp_ith_block_2nd_deriv(Scalar t, const Eigen::MatrixBase<OutType> &fx, int i) const {
         return this->interp_block_2nd_deriv(
@@ -595,6 +802,17 @@ struct LGLInterpTable {
             this->xdot_data_.middleCols((this->block_size_ - 1) * i, this->block_size_));
     }
 
+    /// @internal
+    /// @brief General (any-order) polynomial state interpolation within a block.
+    /// @tparam Scalar       Arithmetic scalar type.
+    /// @tparam OutType      Eigen output type.
+    /// @tparam XtUBlockType Eigen state-block type.
+    /// @tparam DXBlockType  Eigen derivative-block type.
+    /// @param t       Local fractional time in @f$[0,1]@f$.
+    /// @param fx      Output packed-state vector to write.
+    /// @param xtublk  State/time/control data columns of the block.
+    /// @param dxblk   State-derivative data columns of the block.
+    /// @endinternal
     template <class Scalar, class OutType, class XtUBlockType, class DXBlockType>
     void interp_block_gen(Scalar t, const Eigen::MatrixBase<OutType> &fx,
                           const Eigen::MatrixBase<XtUBlockType> &xtublk,
@@ -634,6 +852,17 @@ struct LGLInterpTable {
         }
     }
 
+    /// @internal
+    /// @brief General-order interpolation of state and its time derivative within a block.
+    /// @tparam Scalar       Arithmetic scalar type.
+    /// @tparam OutType      Eigen output type.
+    /// @tparam XtUBlockType Eigen state-block type.
+    /// @tparam DXBlockType  Eigen derivative-block type.
+    /// @param t       Local fractional time in @f$[0,1]@f$.
+    /// @param fx      Output @c [value, d/dt] matrix to write.
+    /// @param xtublk  State/time/control data columns of the block.
+    /// @param dxblk   State-derivative data columns of the block.
+    /// @endinternal
     template <class Scalar, class OutType, class XtUBlockType, class DXBlockType>
     void interp_block_deriv_gen(Scalar t, const Eigen::MatrixBase<OutType> &fx,
                                 const Eigen::MatrixBase<XtUBlockType> &xtublk,
@@ -686,6 +915,18 @@ struct LGLInterpTable {
         }
     }
 
+    /// @internal
+    /// @brief General-order interpolation of state and its first derivative within a block.
+    /// @tparam Scalar       Arithmetic scalar type.
+    /// @tparam OutType      Eigen output type.
+    /// @tparam XtUBlockType Eigen state-block type.
+    /// @tparam DXBlockType  Eigen derivative-block type.
+    /// @param t       Local fractional time in @f$[0,1]@f$.
+    /// @param fx      Output @c [value, d/dt] matrix to write (value and first derivative only).
+    /// @param xtublk  State/time/control data columns of the block.
+    /// @param dxblk   State-derivative data columns of the block.
+    /// @note Not on the active 2nd-derivative dispatch path.
+    /// @endinternal
     template <class Scalar, class OutType, class XtUBlockType, class DXBlockType>
     void interp_block_deriv2_gen(Scalar t, const Eigen::MatrixBase<OutType> &fx,
                                  const Eigen::MatrixBase<XtUBlockType> &xtublk,
@@ -736,6 +977,17 @@ struct LGLInterpTable {
         }
     }
 
+    /// @internal
+    /// @brief Cubic-Hermite (LGL3) interpolation of state within a block.
+    /// @tparam Scalar       Arithmetic scalar type.
+    /// @tparam OutType      Eigen output type.
+    /// @tparam XtUBlockType Eigen state-block type.
+    /// @tparam DXBlockType  Eigen derivative-block type.
+    /// @param t       Local fractional time in @f$[0,1]@f$.
+    /// @param fx      Output packed-state vector to write.
+    /// @param xtublk  State/time/control data columns of the block.
+    /// @param dxblk   State-derivative data columns of the block.
+    /// @endinternal
     template <class Scalar, class OutType, class XtUBlockType, class DXBlockType>
     void interp_block_lgl3(Scalar t, const Eigen::MatrixBase<OutType> &fx,
                            const Eigen::MatrixBase<XtUBlockType> &xtublk,
@@ -773,6 +1025,17 @@ struct LGLInterpTable {
         }
     }
 
+    /// @internal
+    /// @brief Cubic-Hermite (LGL3) interpolation of state and time derivative within a block.
+    /// @tparam Scalar       Arithmetic scalar type.
+    /// @tparam OutType      Eigen output type.
+    /// @tparam XtUBlockType Eigen state-block type.
+    /// @tparam DXBlockType  Eigen derivative-block type.
+    /// @param t       Local fractional time in @f$[0,1]@f$.
+    /// @param fx      Output @c [value, d/dt] matrix to write.
+    /// @param xtublk  State/time/control data columns of the block.
+    /// @param dxblk   State-derivative data columns of the block.
+    /// @endinternal
     template <class Scalar, class OutType, class XtUBlockType, class DXBlockType>
     void interp_block_deriv_lgl3(Scalar t, const Eigen::MatrixBase<OutType> &fx,
                                  const Eigen::MatrixBase<XtUBlockType> &xtublk,
@@ -833,6 +1096,17 @@ struct LGLInterpTable {
         }
     }
 
+    /// @internal
+    /// @brief Cubic-Hermite (LGL3) interpolation of state and 1st/2nd derivatives within a block.
+    /// @tparam Scalar       Arithmetic scalar type.
+    /// @tparam OutType      Eigen output type.
+    /// @tparam XtUBlockType Eigen state-block type.
+    /// @tparam DXBlockType  Eigen derivative-block type.
+    /// @param t       Local fractional time in @f$[0,1]@f$.
+    /// @param fx      Output @c [value, d/dt, d2/dt2] matrix to write.
+    /// @param xtublk  State/time/control data columns of the block.
+    /// @param dxblk   State-derivative data columns of the block.
+    /// @endinternal
     template <class Scalar, class OutType, class XtUBlockType, class DXBlockType>
     void interp_block_deriv2_lgl3(Scalar t, const Eigen::MatrixBase<OutType> &fx,
                                   const Eigen::MatrixBase<XtUBlockType> &xtublk,
@@ -888,6 +1162,18 @@ struct LGLInterpTable {
         }
     }
 
+    /// @internal
+    /// @brief Dispatch state interpolation to the cubic-Hermite (LGL3/Trapezoidal) or
+    ///        general-order kernel by method.
+    /// @tparam Scalar       Arithmetic scalar type.
+    /// @tparam OutType      Eigen output type.
+    /// @tparam XtUBlockType Eigen state-block type.
+    /// @tparam DXBlockType  Eigen derivative-block type.
+    /// @param t       Local fractional time in @f$[0,1]@f$.
+    /// @param fx      Output packed-state vector to write.
+    /// @param xtublk  State/time/control data columns of the block.
+    /// @param dxblk   State-derivative data columns of the block.
+    /// @endinternal
     template <class Scalar, class OutType, class XtUBlockType, class DXBlockType>
     void interp_block(Scalar t, const Eigen::MatrixBase<OutType> &fx,
                       const Eigen::MatrixBase<XtUBlockType> &xtublk,
@@ -898,6 +1184,18 @@ struct LGLInterpTable {
         }
         return this->interp_block_gen(t, fx, xtublk, dxblk);
     }
+    /// @internal
+    /// @brief Dispatch state+derivative interpolation to the cubic-Hermite (LGL3/Trapezoidal)
+    ///        or general-order kernel by method.
+    /// @tparam Scalar       Arithmetic scalar type.
+    /// @tparam OutType      Eigen output type.
+    /// @tparam XtUBlockType Eigen state-block type.
+    /// @tparam DXBlockType  Eigen derivative-block type.
+    /// @param t       Local fractional time in @f$[0,1]@f$.
+    /// @param fx      Output @c [value, d/dt] matrix to write.
+    /// @param xtublk  State/time/control data columns of the block.
+    /// @param dxblk   State-derivative data columns of the block.
+    /// @endinternal
     template <class Scalar, class OutType, class XtUBlockType, class DXBlockType>
     void interp_block_deriv(Scalar t, const Eigen::MatrixBase<OutType> &fx,
                             const Eigen::MatrixBase<XtUBlockType> &xtublk,
@@ -909,6 +1207,18 @@ struct LGLInterpTable {
         return this->interp_block_deriv_gen(t, fx, xtublk, dxblk);
     }
 
+    /// @internal
+    /// @brief Dispatch second-derivative interpolation (LGL3 only).
+    /// @tparam Scalar       Arithmetic scalar type.
+    /// @tparam OutType      Eigen output type.
+    /// @tparam XtUBlockType Eigen state-block type.
+    /// @tparam DXBlockType  Eigen derivative-block type.
+    /// @param t       Local fractional time in @f$[0,1]@f$.
+    /// @param fx      Output @c [value, d/dt, d2/dt2] matrix to write.
+    /// @param xtublk  State/time/control data columns of the block.
+    /// @param dxblk   State-derivative data columns of the block.
+    /// @throws std::invalid_argument for methods other than LGL3.
+    /// @endinternal
     template <class Scalar, class OutType, class XtUBlockType, class DXBlockType>
     void interp_block_2nd_deriv(Scalar t, const Eigen::MatrixBase<OutType> &fx,
                                 const Eigen::MatrixBase<XtUBlockType> &xtublk,
@@ -920,6 +1230,13 @@ struct LGLInterpTable {
         }
     }
 
+    /// @internal
+    /// @brief Determine the search direction for the block containing a global time.
+    /// @tparam Scalar  Arithmetic scalar type.
+    /// @param tglob  Global query time.
+    /// @param i      Candidate block index.
+    /// @return -1 to search earlier blocks, +1 for later, 0 if @p i contains the time.
+    /// @endinternal
     template <class Scalar> int check_ith_block(Scalar tglob, int i) const {
         Scalar t0 =
             this->xtu_data_.middleCols((this->block_size_ - 1) * i, this->block_size_)(axis_, 0);
