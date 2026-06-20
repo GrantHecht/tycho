@@ -12,10 +12,11 @@ models ({py:func}`~tychopy.astro.cartesian_dynamics`,
 {py:func}`~tychopy.astro.crtbp_dynamics`) return VectorFunctions suitable for
 use as the ODE of a {py:class}`~tychopy.optimal_control.PhaseInterface`.
 
-<!-- TODO: cross-link /explanation/astrodynamics and /tutorials/astrodynamics/index
-     once those pages exist (Tasks 5-6 of the docs plan).
-     Example links to add when ready:
-       For the conceptual model see {doc}`Astrodynamics in Tycho </explanation/astrodynamics>`.
+For the conceptual model — state representations, propagation, and the dynamics
+models as phase ODEs — see {doc}`Astrodynamics in Tycho </explanation/astrodynamics>`.
+
+<!-- TODO: cross-link /tutorials/astrodynamics/index once that page exists (Task 6 of the docs plan).
+     Link to add when ready:
        For hands-on examples see the {doc}`astrodynamics tutorials </tutorials/astrodynamics/index>`.
 -->
 
