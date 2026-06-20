@@ -592,22 +592,23 @@ class ModifiedToCartesian:
 
 class CartesianToClassic:
     """
-    Cartesian-to-classical orbital elements VectorFunction (IR=6, OR=6).
+    Cartesian-to-classical orbital elements differentiable VectorFunction (IR=6, OR=6).
 
     Accepts Cartesian state ``[rx, ry, rz, vx, vy, vz]`` and computes classical
-    elements ``[a, e, i, Omega, omega, M]`` where ``M`` is the mean anomaly
-    (elliptic for e < 1, hyperbolic for e > 1).  Implements the conversion as a
-    differentiable VectorFunction expression for use inside optimal control
-    expression graphs.
+    orbital elements ``[a, e, i, Omega, omega, nu_or_M]`` as a differentiable
+    VectorFunction expression for embedding inside optimal control expression
+    graphs.
 
     Parameters
     ----------
     mu : float
         Gravitational parameter (must be > 0).
 
-    See Also
-    --------
-    cartesian_to_classic : Scalar overload for numeric arrays.
+    Notes
+    -----
+    Intended for use as a VectorFunction component in expression graphs.
+    For direct numeric conversion of array inputs, use
+    :func:`cartesian_to_classic` or :func:`cartesian_to_classic_true`.
     """
 
     def __init__(self, arg: float, /) -> None: ...
@@ -1254,10 +1255,13 @@ def propagate_cartesian(arg0: Annotated[NDArray[numpy.float64], dict(shape=(6), 
 
     Raises
     ------
+    ValueError
+        If ``mu <= 0``, ``dt`` is non-finite, ``RV`` contains non-finite
+        entries, or ``|R0| == 0``.
     RuntimeError
-        If the LCD iteration fails to converge within 30 steps (near-parabolic
-        orbits, very large time steps, or approach to the hyperbolic asymptote
-        where sqrt(-alpha)*X ≈ 30).
+        If the LCD iteration fails to converge (near-parabolic orbits, very
+        large time steps) or the hyperbolic-asymptote guard fires
+        (``sqrt(-alpha)*X ≈ 30``).
     """
 
 def propagate_classic(arg0: Annotated[NDArray[numpy.float64], dict(shape=(6), order='C')], arg1: float, arg2: float, /) -> Annotated[NDArray[numpy.float64], dict(shape=(6), order='C')]:
@@ -1276,8 +1280,7 @@ def propagate_classic(arg0: Annotated[NDArray[numpy.float64], dict(shape=(6), or
     dt : float
         Time-of-flight.  Units consistent with ``mu``.
     mu : float
-        Gravitational parameter (must be > 0).  Raises ``ValueError`` if
-        ``mu <= 0`` or if the semi-major axis ``a`` is zero or non-finite.
+        Gravitational parameter (must be > 0).
 
     Returns
     -------
@@ -1316,13 +1319,15 @@ def propagate_modified(arg0: Annotated[NDArray[numpy.float64], dict(shape=(6), o
     Raises
     ------
     ValueError
-        If ``mu <= 0``.
+        If ``mu <= 0``, or if the semi-major axis derived from the MEE
+        elements is zero or non-finite (raised by the internal
+        ``propagate_classic`` call).
     RuntimeError
         If the propagation produces non-finite output.
     """
 
 @overload
-def lambert_izzo(arg0: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], arg1: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], arg2: float, arg3: float, arg4: bool, /) -> "std::array<Eigen::Matrix<double, 3, 1, 0, 3, 1>, 2ul>":
+def lambert_izzo(arg0: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], arg1: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], arg2: float, arg3: float, arg4: bool, /) -> tuple:
     """
     Solve a Lambert boundary-value problem (zero-revolution, scalar).
 
@@ -1359,7 +1364,7 @@ def lambert_izzo(arg0: Annotated[NDArray[numpy.float64], dict(shape=(3), order='
     """
 
 @overload
-def lambert_izzo(arg0: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], arg1: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], arg2: float, arg3: float, arg4: bool, arg5: int, arg6: bool, /) -> "std::array<Eigen::Matrix<double, 3, 1, 0, 3, 1>, 2ul>":
+def lambert_izzo(arg0: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], arg1: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], arg2: float, arg3: float, arg4: bool, arg5: int, arg6: bool, /) -> tuple:
     """
     Solve a Lambert boundary-value problem (multi-revolution, scalar).
 
@@ -1441,7 +1446,7 @@ def lambert_izzo(arg0: Annotated[NDArray[numpy.float64], dict(shape=(None, None)
     non-convergence; inspect the returned exit-code vector instead.
     """
 
-def lambert_izzo_multirev(arg0: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], arg1: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], arg2: float, arg3: float, arg4: bool, arg5: int, arg6: bool, /) -> "std::array<Eigen::Matrix<double, 3, 1, 0, 3, 1>, 2ul>":
+def lambert_izzo_multirev(arg0: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], arg1: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], arg2: float, arg3: float, arg4: bool, arg5: int, arg6: bool, /) -> tuple:
     """
     Solve a multi-revolution Lambert problem (alias for ``lambert_izzo`` 7-arg overload).
 

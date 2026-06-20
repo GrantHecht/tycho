@@ -47,22 +47,23 @@ modified_to_cartesian : Scalar overload for numeric arrays.
 
 template <> struct TychoBind<CartesianToClassic> {
     static void build(nb::module_ &m, const char *name) {
-        auto obj = nb::class_<CartesianToClassic>(m, name, R"doc(Cartesian-to-classical orbital elements VectorFunction (IR=6, OR=6).
+        auto obj = nb::class_<CartesianToClassic>(m, name, R"doc(Cartesian-to-classical orbital elements differentiable VectorFunction (IR=6, OR=6).
 
 Accepts Cartesian state ``[rx, ry, rz, vx, vy, vz]`` and computes classical
-elements ``[a, e, i, Omega, omega, M]`` where ``M`` is the mean anomaly
-(elliptic for e < 1, hyperbolic for e > 1).  Implements the conversion as a
-differentiable VectorFunction expression for use inside optimal control
-expression graphs.
+orbital elements ``[a, e, i, Omega, omega, nu_or_M]`` as a differentiable
+VectorFunction expression for embedding inside optimal control expression
+graphs.
 
 Parameters
 ----------
 mu : float
     Gravitational parameter (must be > 0).
 
-See Also
---------
-cartesian_to_classic : Scalar overload for numeric arrays.
+Notes
+-----
+Intended for use as a VectorFunction component in expression graphs.
+For direct numeric conversion of array inputs, use
+:func:`cartesian_to_classic` or :func:`cartesian_to_classic_true`.
 )doc").def(nb::init<double>());
         bind::DenseBaseBuild<CartesianToClassic>(obj);
     }
@@ -410,10 +411,13 @@ ndarray, shape (6,)
 
 Raises
 ------
+ValueError
+    If ``mu <= 0``, ``dt`` is non-finite, ``RV`` contains non-finite
+    entries, or ``|R0| == 0``.
 RuntimeError
-    If the LCD iteration fails to converge within 30 steps (near-parabolic
-    orbits, very large time steps, or approach to the hyperbolic asymptote
-    where sqrt(-alpha)*X ≈ 30).
+    If the LCD iteration fails to converge (near-parabolic orbits, very
+    large time steps) or the hyperbolic-asymptote guard fires
+    (``sqrt(-alpha)*X ≈ 30``).
 )doc");
     // propagate_classic / propagate_modified do not run an LCD iteration —
     // input validation in the C++ overloads (see kepler_propagation.h) raises
@@ -441,8 +445,7 @@ oelems : array_like, shape (6,)
 dt : float
     Time-of-flight.  Units consistent with ``mu``.
 mu : float
-    Gravitational parameter (must be > 0).  Raises ``ValueError`` if
-    ``mu <= 0`` or if the semi-major axis ``a`` is zero or non-finite.
+    Gravitational parameter (must be > 0).
 
 Returns
 -------
@@ -485,7 +488,9 @@ ndarray, shape (6,)
 Raises
 ------
 ValueError
-    If ``mu <= 0``.
+    If ``mu <= 0``, or if the semi-major axis derived from the MEE
+    elements is zero or non-finite (raised by the internal
+    ``propagate_classic`` call).
 RuntimeError
     If the propagation produces non-finite output.
 )doc");

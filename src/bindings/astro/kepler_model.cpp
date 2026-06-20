@@ -65,7 +65,10 @@ Specialised :class:`~tychopy.optimal_control.PhaseInterface` for the Kepler
 ODE.  When ``use_kepler_propagator`` is ``True`` (default), shooting
 intervals use the analytic LCD Kepler propagator
 (:class:`~astro.kepler.KeplerPropagator`) instead of numerical integration,
-giving exact two-body trajectories.
+giving exact two-body trajectories.  The shooting defect is a midpoint
+(central) shooting defect: each boundary state is propagated by the LCD
+Kepler propagator to the interval midpoint and the two results are
+differenced — the analytic analogue of ``CentralShootingDefect``.
 
 Attributes
 ----------
@@ -145,9 +148,12 @@ Parameters
 mode : TranscriptionModes or str
     Transcription scheme.
 traj : list of ndarray
-    Initial-guess trajectory nodes, each packed as ``[x, t, u, p]``.
+    Initial-guess trajectory nodes.  Each node is a 7-element vector
+    ``[rx, ry, rz, vx, vy, vz, t]`` (Kepler ODE has no controls or
+    parameters).
 num_segs : int
-    Number of defect segments (ignored for collocation; used by shooting).
+    Number of defect (collocation/shooting) intervals to discretize
+    the trajectory into.
 
 Returns
 -------
@@ -180,9 +186,12 @@ Parameters
 mode : str
     Transcription scheme name.
 traj : list of ndarray
-    Initial-guess trajectory nodes.
+    Initial-guess trajectory nodes.  Each node is a 7-element vector
+    ``[rx, ry, rz, vx, vy, vz, t]`` (Kepler ODE has no controls or
+    parameters).
 num_segs : int
-    Number of defect segments.
+    Number of defect (collocation/shooting) intervals to discretize
+    the trajectory into.
 
 Returns
 -------

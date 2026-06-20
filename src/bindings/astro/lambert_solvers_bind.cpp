@@ -38,7 +38,7 @@ void tycho::lambert_solvers_build(FunctionRegistry &reg, nb::module_ &m) {
         if (!result[0].allFinite() || !result[1].allFinite())
             throw std::runtime_error(std::string(name) +
                                      ": iteration did not converge within 20 iterations");
-        return result;
+        return nb::make_tuple(result[0], result[1]);
     };
 
     m.def("lambert_izzo", [check_finite_pair](const Vector3<double> &R1, const Vector3<double> &R2,
