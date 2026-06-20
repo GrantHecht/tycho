@@ -50,9 +50,9 @@ template <> struct TychoBind<CartesianToClassic> {
         auto obj = nb::class_<CartesianToClassic>(m, name, R"doc(Cartesian-to-classical orbital elements differentiable VectorFunction (IR=6, OR=6).
 
 Accepts Cartesian state ``[rx, ry, rz, vx, vy, vz]`` and computes classical
-orbital elements ``[a, e, i, Omega, omega, nu_or_M]`` as a differentiable
-VectorFunction expression for embedding inside optimal control expression
-graphs.
+orbital elements ``[a, e, i, Omega, omega, M]`` (with mean anomaly ``M``) as a
+differentiable VectorFunction expression for embedding inside optimal-control
+expression graphs.
 
 Parameters
 ----------
@@ -61,9 +61,10 @@ mu : float
 
 Notes
 -----
-Intended for use as a VectorFunction component in expression graphs.
-For direct numeric conversion of array inputs, use
-:func:`cartesian_to_classic` or :func:`cartesian_to_classic_true`.
+Produces the same classical elements as the scalar
+:func:`cartesian_to_classic` (mean anomaly ``M``), as a differentiable
+VectorFunction suitable for embedding in expression graphs. For direct numeric
+conversion of array inputs, use :func:`cartesian_to_classic`.
 )doc").def(nb::init<double>());
         bind::DenseBaseBuild<CartesianToClassic>(obj);
     }
