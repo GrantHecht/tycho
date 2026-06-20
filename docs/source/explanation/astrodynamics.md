@@ -96,7 +96,7 @@ to remove the singularities of the classical representation:
 | $L$ | True longitude, $L = \omega + \Omega + \nu$ (true anomaly $\nu$) |
 
 The mapping to classical elements is algebraic and closed-form:
-$e = \sqrt{f^2 + g^2}$, $i = 2\arctan\!\sqrt{h^2 + k^2}$,
+$e = \sqrt{f^2 + g^2}$, $i = 2\arctan\!\sqrt{h^2 + k^2}$ (for $i < 180^\circ$),
 $\Omega = \text{atan2}(k, h)$, $\omega = \text{atan2}(gh - fk,\, fh + gk)$.
 
 At $e = 0$ the components $f$ and $g$ both go to zero smoothly — no angle
@@ -202,8 +202,8 @@ The Tycho API selects between them with the `longway` boolean flag.
 one or more full orbits before arriving. Each additional revolution introduces
 two more solutions (associated with two branches of the multi-revolution Lambert
 problem). The `lambert_izzo_multirev` function accepts the number of complete
-revolutions `Nin` and a `rightbranch` flag to select between the two branches
-for $\text{Nin} \geq 1$.
+revolutions `Nrevs` and a `rightbranch` flag to select between the two branches
+for $\text{Nrevs} \geq 1$.
 
 Lambert's problem is the enabling computation for the **pork-chop plot** and for
 impulsive maneuver design, where the departure and arrival positions are
@@ -257,7 +257,7 @@ $[p, f, g, h, k, L, u_r, u_t, u_n]$ and the output is $[\dot{p}, \dot{f},
 equations in MEE form.
 
 The three control components $[u_r, u_t, u_n]$ are accelerations in the
-spacecraft-centered RSW (radial–tangential–normal) frame:
+spacecraft-centered RSW frame (radial, along-track, and out-of-plane):
 
 | Component | Direction |
 | --- | --- |
@@ -266,10 +266,11 @@ spacecraft-centered RSW (radial–tangential–normal) frame:
 | $u_n$ | Out-of-plane (normal): along the orbit normal $\hat{\mathbf{h}}$ |
 
 The RSW frame is standard for low-thrust trajectory design because the
-sensitivity of each element to each force direction is transparent: tangential
-thrust is most effective for changing $a$ and $e$; normal thrust is the most
-efficient way to change inclination; radial thrust primarily perturbs
-eccentricity.
+sensitivity of each element to each force direction is transparent. As a rule of
+thumb for near-circular orbits, along-track thrust is the most efficient way to
+change the orbit's size (semi-major axis), out-of-plane thrust changes its
+inclination, and radial thrust — the least efficient of the three axes —
+primarily rotates the apse line and adjusts eccentricity.
 
 The absence of singularities at $e = 0$ and $i = 0$, combined with the RSW
 control parameterization, makes `MEEDynamics` the standard choice for low-thrust
@@ -335,8 +336,9 @@ sail. The `NonIdealSolarSail` VectorFunction takes the position vector and sail
 normal direction (IR = 6) as inputs and returns the sail acceleration (3-vector)
 parameterized by the lightness number $\beta$ and optical efficiency coefficients
 $(n_1, n_2, t_1)$ for normal-force efficiency, absorption efficiency, and
-tangential-force efficiency respectively. The sail normal is the optimizer's
-primary control variable in solar-sail trajectory design.
+tangential-force efficiency respectively. In solar-sail trajectory design the
+sail normal is typically the control variable, whose direction the optimizer
+determines at each collocation node.
 
 **Thrust.** For low-thrust problems the control acceleration in `CartesianDynamics`
 and `MEEDynamics` acts directly as the thrust force per unit mass. Adding a
@@ -355,8 +357,7 @@ dynamics model — connects at a single interface: the `Phase`.
 A dynamics model such as `MEEDynamics` or `CartesianDynamics` is a
 {doc}`VectorFunction </explanation/vector_function>` of the packed
 $[\text{state}(6), \text{control}(3)]$ input returning $\dot{x}$. Passing it to
-a `Phase` as the ODE is the only step required to connect the astrodynamics
-layer to the collocation layer:
+a `Phase` as the ODE registers the dynamics with the collocation layer:
 
 ::::{tab-set}
 :::{tab-item} Python
