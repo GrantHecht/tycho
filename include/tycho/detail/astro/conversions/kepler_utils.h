@@ -577,7 +577,11 @@ struct CartesianToClassic_Impl {
 
         auto vtmp = acos(evec.normalized().dot(R.normalized()));
 
-        auto v = IfElseFunction{drv < 0, vtmp, 2 * PI - vtmp};
+        // True-anomaly quadrant: when R·V < 0 (past periapsis, descending), the
+        // true anomaly is 2*PI - vtmp. This matches the scalar cartesian_to_classic
+        // and the Omega/w branches below (the original had these two branches
+        // swapped, producing the wrong anomaly quadrant for descending states).
+        auto v = IfElseFunction{drv < 0, 2 * PI - vtmp, vtmp};
 
         auto M =
             [mu]() {
