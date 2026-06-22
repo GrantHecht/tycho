@@ -7,9 +7,16 @@
 
 namespace tycho::astro {
 
-// Cartesian-state two-body propagation via the universal-variable
-// Laguerre-Conway-Der iteration in detail::kepler_lcd_iterate, followed by the
-// Goodyear closed-form f-g map.
+/// @brief Propagate a Cartesian state forward under two-body gravity.
+///
+/// Uses the universal-variable LCD iteration followed by the Goodyear f-g map.
+/// On LCD non-convergence returns a NaN-poisoned vector.
+/// @tparam Scalar Numeric scalar type (double or Eigen::Array SuperScalar).
+/// @param[in] RV  Initial Cartesian state [rx, ry, rz, vx, vy, vz].
+/// @param[in] dt  Time-of-flight.
+/// @param[in] mu  Gravitational parameter (must be > 0); cast to double internally
+///                regardless of Scalar type.
+/// @return Propagated Cartesian state [rx', ry', rz', vx', vy', vz'].
 template <class Scalar>
 Vector6<Scalar> propagate_cartesian(const Vector6<Scalar> &RV, Scalar dt, Scalar mu) {
     using std::sqrt;
@@ -39,10 +46,15 @@ Vector6<Scalar> propagate_cartesian(const Vector6<Scalar> &RV, Scalar dt, Scalar
     return fx;
 }
 
-// Classical-element two-body propagation: mean anomaly increments by n*dt,
-// where n = sqrt(mu / |a|^3).  No iteration here — the only way to produce
-// non-finite output is from non-finite input; validate at the boundary so
-// downstream callers don't have to attribute failure to a phantom kernel.
+/// @brief Propagate classic orbital elements forward by dt.
+///
+/// Increments the mean anomaly: M_new = M + n*dt, n = sqrt(mu/|a|^3).
+/// All angles are in radians; M is the mean anomaly (oelems[5]).
+/// @tparam Scalar Numeric scalar type.
+/// @param[in] oelems Classic elements [a, e, i, Omega, w, M].
+/// @param[in] dt     Time-of-flight.
+/// @param[in] mu     Gravitational parameter (must be > 0).
+/// @return Propagated classic elements (only M is updated).
 template <class Scalar>
 Vector6<Scalar> propagate_classic(const Vector6<Scalar> &oelems, Scalar dt, Scalar mu) {
     using std::abs;
@@ -61,8 +73,15 @@ Vector6<Scalar> propagate_classic(const Vector6<Scalar> &oelems, Scalar dt, Scal
     return noelems;
 }
 
-// Modified-equinoctial-element propagation: round-trip through classical for
-// the analytic mean-anomaly update.
+/// @brief Propagate Modified Equinoctial Elements forward by dt.
+///
+/// Round-trips through classical elements for the analytic mean-anomaly update:
+/// MEE → classic → propagate_classic → classic → MEE.
+/// @tparam Scalar Numeric scalar type.
+/// @param[in] meelems MEE state [p, f, g, h, k, L] with L the true longitude.
+/// @param[in] dt      Time-of-flight.
+/// @param[in] mu      Gravitational parameter (must be > 0).
+/// @return Propagated MEE state.
 template <class Scalar>
 Vector6<Scalar> propagate_modified(const Vector6<Scalar> &meelems, Scalar dt, Scalar mu) {
     if constexpr (std::is_same_v<Scalar, double>) {

@@ -8,4 +8,5 @@ builds you up from a single symbolic input to complete dynamics expressions.
 :maxdepth: 2
 
 basics/index
+astrodynamics/index
 ```

@@ -11,4 +11,8 @@ familiarity with the basics. For end-to-end workflows see the
 mesh_refinement
 multi_phase_linkage
 scaling
+element_conversions
+kepler_propagation
+lambert_transfer
+astro_dynamics_in_a_phase
 ```

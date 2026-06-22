@@ -9,4 +9,5 @@ every problem definition is built on.
 
 vector_function
 direct_collocation
+astrodynamics
 ```

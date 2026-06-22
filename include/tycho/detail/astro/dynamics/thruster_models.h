@@ -27,8 +27,13 @@ using vf::VectorFunction;
 ////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////
 
+/// @internal
+/// @brief Implementation body for the ideal solar-sail acceleration VectorFunction.
+///
+/// Input: [rx, ry, rz, nx, ny, nz] (position and sail normal). Output: 3-vector acceleration.
+/// @endinternal
 struct IdealSolarSail_Impl {
-    /// Tycho VectorFunction to compute thrust output of an Ideal Solar Sail.
+    /// @internal @brief Build the ideal solar-sail acceleration expression. @endinternal
     static auto Definition(double mu, double beta) {
 
         double scale = mu * beta;
@@ -44,13 +49,24 @@ struct IdealSolarSail_Impl {
     }
 };
 
+/// @brief Ideal solar-sail thrust acceleration VectorFunction.
+///
+/// Input: [rx, ry, rz, nx, ny, nz] (IR=6). Output: sail acceleration (3-vector).
+/// Constructed via BUILD_FROM_EXPRESSION from IdealSolarSail_Impl.
 BUILD_FROM_EXPRESSION(IdealSolarSail, IdealSolarSail_Impl, double, double);
 
 ////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////
 
+/// @internal
+/// @brief Implementation body for the non-ideal solar-sail acceleration VectorFunction.
+///
+/// Input: [rx, ry, rz, nx, ny, nz] (position and sail normal). Output: 3-vector acceleration.
+/// Parameters: mu, beta (lightness number), n1 (normal force efficiency), n2 (absorption efficiency),
+/// t1 (tangential force efficiency).
+/// @endinternal
 struct NonIdealSolarSail_Impl {
-    /// Tycho VectorFunction to compute thrust output of a Non-Ideal Solar Sail.
+    /// @internal @brief Build the non-ideal solar-sail acceleration expression. @endinternal
     static auto Definition(double mu, double beta, double n1, double n2, double t1) {
         double scale = mu * beta / 2.0;
 
@@ -68,6 +84,10 @@ struct NonIdealSolarSail_Impl {
     }
 };
 
+/// @brief Non-ideal solar-sail thrust acceleration VectorFunction.
+///
+/// Input: [rx, ry, rz, nx, ny, nz] (IR=6). Output: sail acceleration (3-vector).
+/// Constructed via BUILD_FROM_EXPRESSION from NonIdealSolarSail_Impl.
 BUILD_FROM_EXPRESSION(NonIdealSolarSail, NonIdealSolarSail_Impl, double, double, double, double,
                       double);
 

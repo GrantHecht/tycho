@@ -38,27 +38,131 @@ void tycho::lambert_solvers_build(FunctionRegistry &reg, nb::module_ &m) {
         if (!result[0].allFinite() || !result[1].allFinite())
             throw std::runtime_error(std::string(name) +
                                      ": iteration did not converge within 20 iterations");
-        return result;
+        return nb::make_tuple(result[0], result[1]);
     };
 
     m.def("lambert_izzo", [check_finite_pair](const Vector3<double> &R1, const Vector3<double> &R2,
                                               double dt, double mu, bool longway) {
         return check_finite_pair(lambert_izzo(R1, R2, dt, mu, longway), "lambert_izzo");
-    });
+    },
+          nb::arg("R1"), nb::arg("R2"), nb::arg("dt"), nb::arg("mu"), nb::arg("longway"),
+          R"doc(Solve a Lambert boundary-value problem (zero-revolution, scalar).
+
+Uses Izzo's algorithm to find the transfer orbit connecting ``R1`` to ``R2``
+in time ``dt``.
+
+Parameters
+----------
+R1 : array_like, shape (3,)
+    Departure position vector.  Units consistent with ``mu``.
+R2 : array_like, shape (3,)
+    Arrival position vector.  Same units as ``R1``.
+dt : float
+    Transfer time-of-flight (must be > 0).
+mu : float
+    Gravitational parameter (must be > 0).
+longway : bool
+    ``True`` for the long-way transfer (transfer angle > 180°);
+    ``False`` for the short-way transfer.
+
+Returns
+-------
+tuple[ndarray shape (3,), ndarray shape (3,)]
+    ``(V1, V2)`` — departure and arrival velocity vectors.
+
+Raises
+------
+RuntimeError
+    If the iteration fails to converge within 20 iterations.
+
+See Also
+--------
+lambert_izzo_multirev : Multi-revolution overload.
+)doc");
 
     m.def("lambert_izzo",
           [check_finite_pair](const Vector3<double> &R1, const Vector3<double> &R2, double dt,
                               double mu, bool longway, int Nrevs, bool rightbranch) {
               return check_finite_pair(lambert_izzo(R1, R2, dt, mu, longway, Nrevs, rightbranch),
                                        "lambert_izzo");
-          });
+          },
+          nb::arg("R1"), nb::arg("R2"), nb::arg("dt"), nb::arg("mu"), nb::arg("longway"),
+          nb::arg("Nrevs"), nb::arg("rightbranch"),
+          R"doc(Solve a Lambert boundary-value problem (multi-revolution, scalar).
+
+Overload that additionally accepts a revolution count and branch selector.
+For zero revolutions (``Nrevs=0``) this is equivalent to the 5-argument
+overload.
+
+Parameters
+----------
+R1 : array_like, shape (3,)
+    Departure position vector.
+R2 : array_like, shape (3,)
+    Arrival position vector.
+dt : float
+    Transfer time-of-flight (must be > 0).
+mu : float
+    Gravitational parameter (must be > 0).
+longway : bool
+    ``True`` for the long-way (>180°) transfer.
+Nrevs : int
+    Number of complete revolutions (0 = direct transfer).
+rightbranch : bool
+    For ``Nrevs > 0``: ``True`` selects the right branch of the
+    multi-revolution solution family, ``False`` selects the left branch.
+
+Returns
+-------
+tuple[ndarray shape (3,), ndarray shape (3,)]
+    ``(V1, V2)`` — departure and arrival velocity vectors.
+
+Raises
+------
+RuntimeError
+    If the iteration fails to converge within 20 iterations.
+)doc");
 
     m.def("lambert_izzo_multirev",
           [check_finite_pair](const Vector3<double> &R1, const Vector3<double> &R2, double dt,
                               double mu, bool longway, int Nrevs, bool rightbranch) {
               return check_finite_pair(lambert_izzo(R1, R2, dt, mu, longway, Nrevs, rightbranch),
                                        "lambert_izzo_multirev");
-          });
+          },
+          nb::arg("R1"), nb::arg("R2"), nb::arg("dt"), nb::arg("mu"), nb::arg("longway"),
+          nb::arg("Nrevs"), nb::arg("rightbranch"),
+          R"doc(Solve a multi-revolution Lambert problem (alias for ``lambert_izzo`` 7-arg overload).
+
+Equivalent to ``lambert_izzo(R1, R2, dt, mu, longway, Nrevs, rightbranch)``.
+Provided as a named alias to make call sites self-documenting.
+
+Parameters
+----------
+R1 : array_like, shape (3,)
+    Departure position vector.
+R2 : array_like, shape (3,)
+    Arrival position vector.
+dt : float
+    Transfer time-of-flight (must be > 0).
+mu : float
+    Gravitational parameter (must be > 0).
+longway : bool
+    ``True`` for the long-way (>180°) transfer.
+Nrevs : int
+    Number of complete revolutions (must be > 0 for a multi-rev solution).
+rightbranch : bool
+    ``True`` selects the right branch; ``False`` selects the left branch.
+
+Returns
+-------
+tuple[ndarray shape (3,), ndarray shape (3,)]
+    ``(V1, V2)`` — departure and arrival velocity vectors.
+
+Raises
+------
+RuntimeError
+    If the iteration fails to converge within 20 iterations.
+)doc");
 
     using NumpyMat = Eigen::Matrix<double, -1, -1, Eigen::RowMajor>;
 
@@ -169,5 +273,46 @@ void tycho::lambert_solvers_build(FunctionRegistry &reg, nb::module_ &m) {
               }
 
               return exitcodes;
-          });
+          },
+          R"doc(Solve a batch of Lambert problems in-place (vectorized overload).
+
+Solves ``N`` independent Lambert problems simultaneously, writing results
+directly into pre-allocated output matrices.  Uses 8-wide SuperScalar SIMD
+packing when ``vectorize=True`` for throughput-critical applications.
+
+Parameters
+----------
+R1s : ndarray, shape (3, N) or (N, 3)
+    Departure position vectors.  Layout selected by ``axis``.
+R2s : ndarray, shape (3, N) or (N, 3)
+    Arrival position vectors.  Same layout as ``R1s``.
+dts : ndarray, shape (N,)
+    Transfer times for each problem.
+mu : float
+    Gravitational parameter (scalar, same for all problems).
+longways : list of bool, length N
+    Long-way flag for each problem.
+V1s : ndarray, shape (3, N) or (N, 3), writeable
+    Output buffer for departure velocities.  Must be pre-allocated.
+V2s : ndarray, shape (3, N) or (N, 3), writeable
+    Output buffer for arrival velocities.  Must be pre-allocated.
+axis : int
+    ``0`` if vectors are stored as columns (shape ``(3, N)``);
+    ``1`` if vectors are stored as rows (shape ``(N, 3)``).
+vectorize : bool
+    If ``True``, processes problems in packs of 8 using SuperScalar SIMD
+    for higher throughput.  The remainder (``N mod 8``) is handled
+    scalar-wise.
+
+Returns
+-------
+ndarray of int, shape (N,)
+    Per-problem exit codes: ``0`` = converged, ``1`` = not converged
+    within 20 iterations.
+
+Notes
+-----
+Unlike the scalar overloads this function does **not** raise on
+non-convergence; inspect the returned exit-code vector instead.
+)doc");
 }

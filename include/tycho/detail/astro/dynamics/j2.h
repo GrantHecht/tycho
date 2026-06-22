@@ -16,15 +16,15 @@
 #include "tycho/vector_functions.h"
 
 namespace tycho::astro {
+/// @internal
+/// @brief Implementation body for the J2 Cartesian perturbation acceleration VectorFunction.
+///
+/// Takes [r(3), north_pole(3)] and returns the J2 gravitational acceleration
+/// contribution. The north_pole vector need not be pre-normalized; it is normalized
+/// internally. The public type J2Cartesian is created from this via BUILD_FROM_EXPRESSION.
+/// @endinternal
 struct J2Cartesian_Impl {
-    /// <summary>
-    /// Computes J2 effect given position vector relative to body and the north pole vector of the
-    /// body
-    /// </summary>
-    /// <param name="mu"></param>
-    /// <param name="J2"></param>
-    /// <param name="Rb"></param>
-    /// <returns></returns>
+    /// @internal @brief Build the J2 Cartesian acceleration expression. @endinternal
     static auto Definition(double mu, double J2, double Rb) {
 
         auto rp = Arguments<6>();
@@ -48,17 +48,19 @@ struct J2Cartesian_Impl {
     }
 };
 
+/// @brief J2 perturbation acceleration in Cartesian coordinates.
+///
+/// Input: [rx, ry, rz, north_px, north_py, north_pz] (IR=6). Output: J2 acceleration (3-vector).
+/// The north-pole direction [north_px, north_py, north_pz] need not be pre-normalized;
+/// it is normalized internally.
+/// Constructed via BUILD_FROM_EXPRESSION from J2Cartesian_Impl.
 BUILD_FROM_EXPRESSION(J2Cartesian, J2Cartesian_Impl, double, double, double);
 
+/// @internal
+/// @brief Incomplete implementation body for J2 perturbation in MEE coordinates (stub only).
+/// @endinternal
 struct J2Modified_Impl {
-    /// <summary>
-    /// Computes J2 effect given position vector relative to body and the north pole vector of the
-    /// body
-    /// </summary>
-    /// <param name="mu"></param>
-    /// <param name="J2"></param>
-    /// <param name="Rb"></param>
-    /// <returns></returns>
+    /// @internal @brief Placeholder Definition — not yet implemented, do not use. @endinternal
     static auto Definition(double mu, double J2, double Rb) {
 
         auto args = Arguments<6>();

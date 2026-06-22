@@ -40,18 +40,163 @@ void tycho::astro_build(FunctionRegistry &reg, nb::module_ &m) {
     /////////////////////////////////////////////////////////////
 
     mod.def("modified_dynamics",
-            [](double mu) { return GenericFunction<-1, -1>(MEEDynamics(mu)); });
+            [](double mu) { return GenericFunction<-1, -1>(MEEDynamics(mu)); },
+            R"doc(Build the MEE two-body dynamics VectorFunction with an RSW-frame non-two-body acceleration (IR=9, OR=6).
+
+Returns a VectorFunction suitable for use as the ODE of an optimal-control
+:class:`~tychopy.optimal_control.PhaseInterface`.
+
+Input layout ``[state(6), a(3)]``:
+
+* State (indices 0–5): ``[p, f, g, h, k, L]`` — Modified Equinoctial
+  Elements where ``L`` is the true longitude (radians).
+* Acceleration (indices 6–8): ``[ur, ut, un]`` — the non-two-body
+  (perturbing) acceleration in the RSW frame (radial, tangential/along-track,
+  out-of-plane/normal). This may be a thrust control, a modeled
+  perturbation (J2, drag, SRP), or their sum.
+
+Output (6,): state derivative ``[dp/dt, df/dt, dg/dt, dh/dt, dk/dt, dL/dt]``.
+
+Parameters
+----------
+mu : float
+    Gravitational parameter (must be > 0).
+
+Returns
+-------
+VectorFunction (IR=9, OR=6)
+    MEE equations of motion with analytic Jacobian and Hessian.
+
+See Also
+--------
+cartesian_dynamics : Equivalent model in Cartesian coordinates.
+)doc");
 
     mod.def("cartesian_dynamics",
-            [](double mu) { return GenericFunction<-1, -1>(CartesianDynamics(mu)); });
+            [](double mu) { return GenericFunction<-1, -1>(CartesianDynamics(mu)); },
+            R"doc(Build the Cartesian two-body dynamics VectorFunction with a non-two-body acceleration (IR=9, OR=6).
 
-    mod.def("crtbp_dynamics", [](double mu) { return GenericFunction<-1, -1>(CRTBPDynamics(mu)); });
+Returns a VectorFunction suitable for use as the ODE of an optimal-control
+:class:`~tychopy.optimal_control.PhaseInterface`.
+
+Input layout ``[state(6), a(3)]``:
+
+* State (indices 0–5): ``[rx, ry, rz, vx, vy, vz]`` — inertial Cartesian
+  position and velocity.
+* Acceleration (indices 6–8): ``[ax, ay, az]`` — the non-two-body
+  (perturbing) acceleration in the inertial frame. This may be a thrust
+  control, a modeled perturbation (J2, drag, SRP), or their sum.
+
+Output (6,): state derivative
+``[vx, vy, vz, ax_grav + ax, ay_grav + ay, az_grav + az]``.
+
+Parameters
+----------
+mu : float
+    Gravitational parameter (must be > 0).
+
+Returns
+-------
+VectorFunction (IR=9, OR=6)
+    Cartesian equations of motion with analytic Jacobian and Hessian.
+
+See Also
+--------
+modified_dynamics : Equivalent model in Modified Equinoctial Elements.
+)doc");
+
+    mod.def("crtbp_dynamics", [](double mu) { return GenericFunction<-1, -1>(CRTBPDynamics(mu)); },
+            R"doc(Build the CR3BP dynamics VectorFunction in the synodic frame (IR=9, OR=6).
+
+Returns a VectorFunction suitable for use as the ODE of an optimal-control
+:class:`~tychopy.optimal_control.PhaseInterface`.
+
+Input layout ``[state(6), a(3)]``:
+
+* State (indices 0–5): ``[x, y, z, vx, vy, vz]`` — position and velocity
+  in the rotating (synodic) frame with the primaries on the x-axis.
+* Acceleration (indices 6–8): ``[ax, ay, az]`` — the non-two-body
+  (perturbing) acceleration in the synodic frame. This may be a thrust
+  control, a modeled perturbation, or their sum.
+
+Output (6,): state derivative
+``[vx, vy, vz, x_ddot, y_ddot, z_ddot]`` in the synodic frame
+(includes Coriolis and centrifugal terms).
+
+Parameters
+----------
+mu : float
+    CR3BP mass ratio ``mu = m2 / (m1 + m2)``, must satisfy ``0 < mu < 1``.
+    This is **not** a gravitational parameter — it is the dimensionless
+    mass fraction of the smaller primary.
+
+Returns
+-------
+VectorFunction (IR=9, OR=6)
+    CR3BP equations of motion with analytic Jacobian and Hessian.
+)doc");
 
     mod.def("j2_cartesian", [](double mu, double J2, double Rb) {
         return GenericFunction<-1, -1>(J2Cartesian_Impl::Definition(mu, J2, Rb));
-    });
+    },
+            R"doc(Build the J2 perturbation acceleration VectorFunction in Cartesian coordinates.
+
+Returns a VectorFunction that computes the J2 gravitational perturbation
+acceleration given position and north-pole direction.
+
+Input layout (IR=6): ``[rx, ry, rz, north_px, north_py, north_pz]``.
+The north-pole direction need not be pre-normalized.
+
+Output (OR=3): J2 acceleration vector ``[ax_J2, ay_J2, az_J2]``.
+
+Parameters
+----------
+mu : float
+    Gravitational parameter (must be > 0).
+J2 : float
+    J2 zonal harmonic coefficient (dimensionless, typically ~1.08e-3 for
+    Earth).
+Rb : float
+    Reference body radius (same units as position).
+
+Returns
+-------
+VectorFunction (IR=6, OR=3)
+    J2 perturbation acceleration with analytic derivatives.
+)doc");
 
     mod.def("non_ideal_solar_sail", [](double mu, double beta, double n1, double n2, double t1) {
         return GenericFunction<-1, -1>(NonIdealSolarSail_Impl::Definition(mu, beta, n1, n2, t1));
-    });
+    },
+            R"doc(Build the non-ideal solar-sail thrust acceleration VectorFunction.
+
+Returns a VectorFunction that models a non-ideal solar sail, accounting for
+absorption efficiency and tangential force, in addition to the ideal
+radiation-pressure term.
+
+Input layout (IR=6): ``[rx, ry, rz, nx, ny, nz]`` — inertial position and
+sail-normal direction.  The sail normal need not be pre-normalized.
+
+Output (OR=3): sail acceleration vector ``[ax, ay, az]``.
+
+Parameters
+----------
+mu : float
+    Gravitational parameter of the central body (used to scale the
+    radiation-pressure force via the lightness number; must be > 0).
+beta : float
+    Lightness number (ratio of solar radiation pressure to gravity at
+    the reference distance).
+n1 : float
+    Normal force efficiency coefficient.
+n2 : float
+    Absorption efficiency coefficient.
+t1 : float
+    Tangential force efficiency coefficient.
+
+Returns
+-------
+VectorFunction (IR=6, OR=3)
+    Non-ideal solar-sail acceleration with analytic derivatives.
+)doc");
 }

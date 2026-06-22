@@ -27,7 +27,13 @@ using oc::StaticODE_Expression;
 using vf::Arguments;
 using vf::StackedOutputs;
 
+/// @internal
+/// @brief ODE implementation body for the Kepler two-body equations of motion.
+///
+/// Defines the 6-state [rx, ry, rz, vx, vy, vz] dynamics dX/dt = [V, -mu*R/|R|^3].
+/// @endinternal
 struct Kepler_Impl : ODESize<6, 0, 0> {
+    /// @internal @brief Build the ODE expression for the given gravitational parameter. @endinternal
     static auto Definition(double mu) {
         auto args = Arguments<7>();
         auto X = args.head<3>();
@@ -40,18 +46,33 @@ struct Kepler_Impl : ODESize<6, 0, 0> {
 };
 struct KeplerPhase;
 
+/// @brief 6-state Keplerian two-body ODE (no perturbations) for use with ODEPhase.
+///
+/// State vector: [rx, ry, rz, vx, vy, vz]. Dynamics: dR/dt = V, dV/dt = -mu*R/|R|^3.
 struct Kepler : StaticODE_Expression<Kepler, Kepler_Impl, double> {
-    using Base = StaticODE_Expression<Kepler, Kepler_Impl, double>;
+    using Base = StaticODE_Expression<Kepler, Kepler_Impl, double>; ///< @internal CRTP base alias. @endinternal
     using Base::Base;
-    double mu_ = 1.0;
+    double mu_ = 1.0; ///< Gravitational parameter.
+    /// @brief Construct with the given gravitational parameter.
+    /// @param[in] mu Gravitational parameter.
     Kepler(double mu) : Base(mu) { this->mu_ = mu; }
 };
 
+/// @brief ODEPhase for Keplerian two-body propagation with an optional KeplerPropagator shooting backbone.
+///
+/// When `use_kepler_propagator_` is true (the default), shooting segments use the
+/// high-accuracy LCD Kepler propagator instead of numerical integration.
+/// The shooting constraint uses a midpoint (central) shooting defect: each boundary
+/// state is propagated by the LCD Kepler propagator to the interval midpoint and the
+/// two results are differenced (the analytic analogue of CentralShootingDefect),
+/// NOT a simple forward-propagation defect.
 struct KeplerPhase : ODEPhase<Kepler> {
-    using Base = ODEPhase<Kepler>;
+    using Base = ODEPhase<Kepler>; ///< @internal CRTP base alias. @endinternal
     using Base::Base;
-    bool use_kepler_propagator_ = true;
+    bool use_kepler_propagator_ = true; ///< Use the analytic KeplerPropagator for shooting segments.
 
+    /// @brief Build the shooting constraint, optionally using KeplerPropagator.
+    /// @return ConstraintInterface for the shooting defect.
     tycho::solvers::ConstraintInterface make_shooter() {
         if (use_kepler_propagator_) {
             auto kprop = KeplerPropagator(this->ode_.mu_);

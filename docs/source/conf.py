@@ -160,6 +160,24 @@ nitpick_ignore_regex = [
     # ``solve``/``optimize`` are prose method mentions in OC docstrings that
     # point at methods not exposed on the documented class.
     ("py:meth", r"(__\w+__|eval|solve|optimize)"),
+    # Python astrodynamics reference page: autodoc'ing the compiled
+    # tychopy.astro (and tychopy.astro.kepler) modules surfaces cross-module
+    # class references in docstrings that Sphinx cannot resolve from this page's
+    # current-module context.
+    # ``astro.kepler.phase`` / ``astro.kepler.KeplerPropagator`` /
+    # ``astro.kepler.ode.phase`` — short relative references used in :class:
+    # roles inside the kepler sub-module docstrings; they are not fully qualified
+    # relative to any documented currentmodule.  ``TranscriptionModes`` is an
+    # enum from the optimal_control module mentioned in the kepler.ode.phase()
+    # method signature docstring.  ``writeable`` is a prose pseudo-type in the
+    # vectorized lambert_izzo overload docstring (not a real Python class).
+    ("py:class", r"astro\.kepler\.(phase|KeplerPropagator|ode\.phase|integrator)"),
+    ("py:class", r"TranscriptionModes"),
+    ("py:class", r"writeable"),
+    # ``astro.kepler.ode.phase`` appears as a :meth: target in the kepler.phase
+    # docstring cross-reference (pointing to the ode factory method); the method
+    # lives on ode, not on the class being documented.
+    ("py:meth", r"astro\.kepler\.ode\.phase"),
 ]
 
 # -- HTML output -------------------------------------------------------------
@@ -197,6 +215,7 @@ doctest_global_setup = """
 import numpy as np
 from tychopy import vector_functions as vf
 from tychopy import optimal_control as oc
+from tychopy import astro
 """
 
 # -- Breathe (Doxygen XML → Sphinx) -----------------------------------------
