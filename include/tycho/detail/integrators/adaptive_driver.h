@@ -26,12 +26,19 @@ namespace tycho::integrators {
 /// Integrator-level settings that control the adaptive loop's behavior.
 /// Ownership stays with the caller; the driver reads only.
 struct AdaptiveConfig {
+    /// Error estimator order; enters the step-size exponent q=err^(1/p).
     int error_order = 4;
+    /// Error norm variant (RMS or infinity norm).
     ErrorNormType error_norm_type = ErrorNormType::RMS;
+    /// Initial/fixed step size when Hairer-Wanner auto-init is off.
     double def_step_size = 0.01;
+    /// Maximum ratio |dt_new/dt_old| allowed per step (must be > 1).
     double max_step_change = 10.0;
+    /// Hard cap on total steps (accepted + rejected) before throwing.
     int max_steps = 1'000'000;
+    /// When false, use fixed step-size integration.
     bool adaptive = true;
+    /// When true, estimate initial dt via Hairer-Wanner algorithm.
     bool use_hairer_wanner_initdt = true;
 
     /// Cheap sanity check — throws `std::invalid_argument` on any value
@@ -81,8 +88,11 @@ struct AdaptiveConfig {
 /// call so the driver can be reused without copying Integrator-level config.
 template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
   public:
+    /// ODE state vector type for the given Scalar.
     using ODEState = typename DODE::template Input<Scalar>;
+    /// ODE derivative vector type for the given Scalar.
     using ODEDeriv = typename DODE::template Output<Scalar>;
+    /// Alias for the event specification type.
     using EventPack = typename EventHandler::EventPack;
 
     /// Output-side references and per-call storage flags. Groups the 9
@@ -91,14 +101,23 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
     /// positional args to 9. The caller owns every referent; the driver
     /// only reads flags and writes through the references.
     struct IO {
+        /// Reference to the caller's accepted-step counter.
         int &naccept;
+        /// Reference to the caller's rejected-step counter.
         int &nreject;
+        /// Events to monitor during integration.
         const std::vector<EventPack> &events;
+        /// Output: bracketed crossing intervals [t_prev, t_next].
         std::vector<std::vector<Eigen::Vector2d>> &eventtimes;
+        /// When true, collect intermediate states into states.
         bool storestates;
+        /// When true, collect intermediate derivatives into derivs.
         bool storederivs;
+        /// When true, also collect midpoint states/derivs.
         bool storemidpoints;
+        /// Output: collected trajectory states (when storestates).
         std::vector<ODEState> &states;
+        /// Output: collected trajectory derivatives (when storederivs).
         std::vector<ODEDeriv> &derivs;
     };
 

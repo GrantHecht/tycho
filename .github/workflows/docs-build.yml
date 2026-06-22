@@ -180,6 +180,28 @@ jobs:
           test -s build/docs/doxygen-astro-strict/xml/index.xml
           echo "Astro subsystem Doxygen strict gate clean (100% public-symbol coverage)."
 
+      - name: Integrators Doxygen strict gate (full docstring coverage)
+        shell: bash -elo pipefail {0}
+        # Enforces that EVERY public symbol in the Integrators subsystem
+        # carries a Doxygen docstring. Uses the committed, CMake-configured
+        # build/docs/Doxyfile.integrators-strict, which un-hides undocumented
+        # entities, turns on WARN_IF_UNDOCUMENTED, counts @internal-documented
+        # helpers as covered (INTERNAL_DOCS=YES), and sets
+        # WARN_AS_ERROR=FAIL_ON_WARNINGS so an undocumented public Integrators
+        # symbol (or any doc error) fails the build. The base Doxyfile stays
+        # permissive (WARN_AS_ERROR=NO) until every subsystem reaches this
+        # standard; this scoped gate keeps the Integrators subsystem at 100%
+        # public-symbol coverage.
+        run: |
+          if ! doxygen build/docs/Doxyfile.integrators-strict; then
+            echo "::error::Integrators subsystem has undocumented public symbols or doc errors:"
+            cat build/docs/doxygen-integrators-strict/warnings.log || true
+            exit 1
+          fi
+          # FAIL_ON_WARNINGS still emits XML on a clean run; assert it exists.
+          test -s build/docs/doxygen-integrators-strict/xml/index.xml
+          echo "Integrators subsystem Doxygen strict gate clean (100% public-symbol coverage)."
+
       - name: Upload Pages artifact
         if: github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
