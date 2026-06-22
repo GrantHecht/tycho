@@ -1402,6 +1402,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return tab;
     }
 
+    /// @internal
     /// @brief Builds an LGLInterpTable from a state+derivative sequence for event refinement.
     std::shared_ptr<LGLInterpTable> make_table(const std::vector<ODEState<double>> &xs,
                                                const std::vector<ODEDeriv<double>> &d_xs,
