@@ -24,20 +24,24 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
 
     using RKData = RKCoeffs<Alg>;                           ///< @internal Butcher tableau type.
     static constexpr int Stages = RKData::Stages;           ///< @internal Number of main RK stages.
-    /// @internal Stages minus one (loop bound).
+    /// @internal
+    /// @brief Stages minus one (loop bound).
     static constexpr int Stgsm1 = Stages - 1;
 
     // k_vals_extra layout (matches the production RKCoeffs dense-output schema):
     //   [0]                 — f(xf)·h when !LastStageIsFxf (DOPRI87 / Vern*)
     //   [offset..offset+e]  — interpolation extra stages (BS5/Tsit5/Vern*)
     //   offset = LastStageIsFxf ? 0 : 1
-    /// @internal Index of first extra interp stage in k_vals_extra.
+    /// @internal
+    /// @brief Index of first extra interp stage in k_vals_extra.
     static constexpr int ExtraOffset = RKData::LastStageIsFxf ? 0 : 1;
-    /// @internal Total extra stage slots allocated.
+    /// @internal
+    /// @brief Total extra stage slots allocated.
     static constexpr int ExtraCount = RKData::InterpStages + ExtraOffset;
 
     using ODEState = typename DODE::template Input<Scalar>;  ///< @internal Scalar-typed ODE state.
-    /// @internal Scalar-typed ODE derivative.
+    /// @internal
+    /// @brief Scalar-typed ODE derivative.
     using ODEDeriv = typename DODE::template Output<Scalar>;
 
     /// Snapshot of the FSAL cache for reject-rollback in adaptive drivers.
@@ -101,9 +105,11 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
         }
         return k_fsal_;
     }
-    /// @internal True if k_fsal_ may be used as k[0] for the next step.
+    /// @internal
+    /// @brief True if k_fsal_ may be used as k[0] for the next step.
     bool fsal_valid() const { return fsal_valid_; }
-    /// @internal True if k_fsal_ unambiguously holds f(xf) from the most recent step.
+    /// @internal
+    /// @brief True if k_fsal_ unambiguously holds f(xf) from the most recent step.
     bool peek_fresh() const { return peek_fresh_; }
 
   private:
@@ -289,7 +295,8 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
             utils::ArrayOfTempSpecs<ODEDeriv, ExtraCount>(ode.output_rows(), 1));
     }
 
-    /// @internal Returns the embedded error estimator order from the Butcher tableau.
+    /// @internal
+    /// @brief Returns the embedded error estimator order from the Butcher tableau.
     static constexpr int error_order() { return RKData::ErrorOrder; }
 };
 

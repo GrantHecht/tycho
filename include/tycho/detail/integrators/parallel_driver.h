@@ -46,17 +46,23 @@ namespace tycho::integrators {
 /// pre-step xdotis, so the retry sees the correct f(xi)).
 template <IVPAlg Alg, class DODE> class ParallelDriver {
   public:
-    /// @internal SIMD packet type for batch propagation.
+    /// @internal
+    /// @brief SIMD packet type for batch propagation.
     using SuperScalar = tycho::DefaultSuperScalar;
-    /// @internal Per-lane scalar ODE state.
+    /// @internal
+    /// @brief Per-lane scalar ODE state.
     using ScalarState = typename DODE::template Input<double>;
-    /// @internal Per-lane scalar ODE derivative.
+    /// @internal
+    /// @brief Per-lane scalar ODE derivative.
     using ScalarDeriv = typename DODE::template Output<double>;
-    /// @internal SIMD-packed ODE state.
+    /// @internal
+    /// @brief SIMD-packed ODE state.
     using SSState = typename DODE::template Input<SuperScalar>;
-    /// @internal SIMD-packed ODE derivative.
+    /// @internal
+    /// @brief SIMD-packed ODE derivative.
     using SSDeriv = typename DODE::template Output<SuperScalar>;
-    /// @internal Event specification type.
+    /// @internal
+    /// @brief Event specification type.
     using EventPack = typename EventHandler::EventPack;
 
     /// Per-lane output-side references and per-call storage flags. Groups
@@ -65,23 +71,32 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
     /// trajectories. Reduces the public batch signature from 17 positional
     /// args to 9. The caller owns every referent.
     struct IO {
-        /// @internal Per-lane accept counters.
+        /// @internal
+        /// @brief Per-lane accept counters.
         std::vector<int> &nacc;
-        /// @internal Per-lane reject counters.
+        /// @internal
+        /// @brief Per-lane reject counters.
         std::vector<int> &nrej;
-        /// @internal Event specs (shared across all lanes).
+        /// @internal
+        /// @brief Event specs (shared across all lanes).
         const std::vector<EventPack> &events;
-        /// @internal Per-lane per-event crossing brackets.
+        /// @internal
+        /// @brief Per-lane per-event crossing brackets.
         std::vector<std::vector<std::vector<Eigen::Vector2d>>> &eventtimes_s;
-        /// @internal Whether to record state trajectory per lane.
+        /// @internal
+        /// @brief Whether to record state trajectory per lane.
         bool storestates;
-        /// @internal Whether to record derivative trajectory per lane.
+        /// @internal
+        /// @brief Whether to record derivative trajectory per lane.
         bool storederivs;
-        /// @internal Whether to record midpoint states per step.
+        /// @internal
+        /// @brief Whether to record midpoint states per step.
         bool storemidpoints;
-        /// @internal Per-lane state trajectories.
+        /// @internal
+        /// @brief Per-lane state trajectories.
         std::vector<std::vector<ScalarState>> &states_s;
-        /// @internal Per-lane derivative trajectories.
+        /// @internal
+        /// @brief Per-lane derivative trajectories.
         std::vector<std::vector<ScalarDeriv>> &derivs_s;
     };
 

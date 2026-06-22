@@ -190,7 +190,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     // the integrator has no user controller. std::optional encodes the
     // "no controller" branch structurally, so the copy-ctor only touches
     // a populated GenericFunction (its default-state copy throws).
-    /// @internal User control-law spec (function + input-variable locations); empty when no
+    /// @internal
+    /// @brief User control-law spec (function + input-variable locations); empty when no
     /// controller.
     std::optional<std::pair<ControllerType, Eigen::VectorXi>> controller_spec_;
     StepperWrapperType stepper_; ///< @internal Type-erased RK stepper.
@@ -382,7 +383,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         reset_controller(this->controller_variant_);
     }
 
-    /// @internal Wires up the RKStepper and optional controller for the selected RKOp tableau.
+    /// @internal
+    /// @brief Wires up the RKStepper and optional controller for the selected RKOp tableau.
     template <IVPAlg RKOp>
     void init_stepper_and_controller(const DODE &odet, bool usecontrol,
                                      const GenericFunction<-1, -1> &ucon,
@@ -458,9 +460,11 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     /////////////////////////////////////////////////////////////////////////////////////
 
+    /// @internal
     /// @brief Returns the type-erased stepper function.
     GenericFunction<-1, -1> get_stepper() { return this->stepper_; }
 
+    /// @internal
     /// @brief Resolves a control-variable index spec to concrete variable locations.
     Eigen::VectorXi get_var_locs(const ControlIndexType &varlocs_t) {
 
@@ -496,7 +500,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return varlocs;
     }
 
-    int error_order_ = 7; ///< @internal Error estimator order (step-size exponent).
+    int error_order_ = 7; ///< @internal Embedded error-estimator order p; the step-size exponent is 1/p.
     double def_step_size_ = 0.1; ///< @internal Initial/fixed step size.
     double max_step_change_ = 10.0; ///< @internal Max per-step growth ratio |dt_new/dt_old|.
     // Julia-style maxiters cap — safety net against runaway rejection loops or
@@ -506,13 +510,15 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     bool adaptive_ = true; ///< @internal Whether adaptive step-size control is active.
     double event_tol_ = 1.0e-6; ///< @internal Event-crossing refinement tolerance.
     int max_event_iters_ = 10; ///< @internal Max Newton iterations per event refinement.
-    /// @internal Whether batch calls use the vectorized driver.
+    /// @internal
+    /// @brief Whether batch calls use the vectorized driver.
     bool vectorize_batch_calls_ = true;
 
     // Prototype controller. Read-only during integrate — workers clone via
     // make_worker_controller(). Mutated only by set_method / set_controller,
     // neither of which is concurrent-safe with an in-flight integrate.
-    /// @internal Prototype controller; cloned per worker via make_worker_controller().
+    /// @internal
+    /// @brief Prototype controller; cloned per worker via make_worker_controller().
     ControllerVariant controller_variant_;
     ErrorNormType error_norm_type_ = ErrorNormType::RMS; ///< @internal Error norm variant.
 
@@ -606,7 +612,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     // `get_naccept()` returning the previous call's value — misleading when
     // debugging where a long run blew up. Mutable members allow a
     // const-Integrator reference to write through.
-    /// @internal RAII guard that writes per-call naccept/nreject back into the Integrator on scope
+    /// @internal
+    /// @brief RAII guard that writes per-call naccept/nreject back into the Integrator on scope
     /// exit.
     struct CounterWriteback {
         const Integrator &integ; ///< @internal Target integrator.
@@ -622,7 +629,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     // into the member counters on scope exit. On exception the members
     // reflect only trajectories that completed before the first failure;
     // unstarted lanes contribute zero.
-    /// @internal RAII guard that sums per-trajectory naccept/nreject vectors into Integrator
+    /// @internal
+    /// @brief RAII guard that sums per-trajectory naccept/nreject vectors into Integrator
     /// counters.
     struct BatchCounterWriteback {
         const Integrator &integ; ///< @internal Target integrator.
@@ -634,7 +642,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         }
     };
 
-    /// @internal RAII guard that writes the event refinement failure count into the Integrator on
+    /// @internal
+    /// @brief RAII guard that writes the event refinement failure count into the Integrator on
     /// scope exit.
     struct EventCounterWriteback {
         const Integrator &integ; ///< @internal Target integrator.
@@ -646,11 +655,13 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         }
     };
 
-    /// @internal RAII guard that sums per-trajectory event failure counts into the Integrator
+    /// @internal
+    /// @brief RAII guard that sums per-trajectory event failure counts into the Integrator
     /// counter.
     struct BatchEventCounterWriteback {
         const Integrator &integ; ///< @internal Target integrator.
-        /// @internal Per-trajectory event-refinement failure counters.
+        /// @internal
+        /// @brief Per-trajectory event-refinement failure counters.
         const std::vector<int> &nfailed;
         ~BatchEventCounterWriteback() noexcept {
             integ.n_failed_event_refinements_.store(
@@ -668,29 +679,36 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     // ordering convention — direct access to the atomic is intentionally
     // forbidden to prevent a future call site from quietly weakening the
     // ordering.
-    /// @internal Copyable wrapper around std::atomic<int64_t>; lets Integrator remain copyable.
+    /// @internal
+    /// @brief Copyable wrapper around std::atomic<int64_t>; lets Integrator remain copyable.
     class AtomicInt64 {
       public:
         AtomicInt64() = default; ///< @internal Default-constructs to zero.
-        /// @internal Copy-constructs via acquire-load of the source.
+        /// @internal
+        /// @brief Copy-constructs via acquire-load of the source.
         AtomicInt64(const AtomicInt64 &o) noexcept : value_(o.load()) {}
-        /// @internal Copy-assigns via acquire-load + release-store.
+        /// @internal
+        /// @brief Copy-assigns via acquire-load + release-store.
         AtomicInt64 &operator=(const AtomicInt64 &o) noexcept {
             if (this != &o)
                 store(o.load());
             return *this;
         }
-        /// @internal Move-constructs via acquire-load of the source.
+        /// @internal
+        /// @brief Move-constructs via acquire-load of the source.
         AtomicInt64(AtomicInt64 &&o) noexcept : value_(o.load()) {}
-        /// @internal Move-assigns via acquire-load + release-store.
+        /// @internal
+        /// @brief Move-assigns via acquire-load + release-store.
         AtomicInt64 &operator=(AtomicInt64 &&o) noexcept {
             if (this != &o)
                 store(o.load());
             return *this;
         }
-        /// @internal Acquire-loads the stored value.
+        /// @internal
+        /// @brief Acquire-loads the stored value.
         int64_t load() const noexcept { return value_.load(std::memory_order_acquire); }
-        /// @internal Release-stores `v`.
+        /// @internal
+        /// @brief Release-stores `v`.
         void store(int64_t v) noexcept { value_.store(v, std::memory_order_release); }
 
       private:
@@ -707,12 +725,14 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     // get_failed_event_count() do not race the writeback store on x86;
     // release-store + acquire-load is one mov each on the single-threaded
     // path.
-    /// @internal Count of event crossings that failed both refinement passes.
+    /// @internal
+    /// @brief Count of event crossings that failed both refinement passes.
     mutable AtomicInt64 n_failed_event_refinements_{};
 
     // Flipped off by set_initial_step_size() so a caller-supplied initial
     // step is respected (principle of least surprise).
-    /// @internal Whether Hairer-Wanner auto-initdt is active.
+    /// @internal
+    /// @brief Whether Hairer-Wanner auto-initdt is active.
     bool use_hairer_wanner_initdt_ = true;
 
     ODEDeriv<double> abs_tols_; ///< @internal Per-component absolute tolerances.
@@ -949,7 +969,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /////////////////////////////////////////////////////////////////////////////////////
 
   protected:
-    /// @internal Returns the default step-size controller variant with per-method tuned parameters.
+    /// @internal
+    /// @brief Returns the default step-size controller variant with per-method tuned parameters.
     static ControllerVariant default_controller_for(IVPAlg alg) {
         switch (alg) {
         case IVPAlg::DOPRI54: {
@@ -1009,7 +1030,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         }
     }
 
-    /// @internal Returns a controller of the requested kind with per-method tuned parameters
+    /// @internal
+    /// @brief Returns a controller of the requested kind with per-method tuned parameters
     /// when available; falls back to generic defaults for off-preference combinations.
     static ControllerVariant controller_defaults_for(IVPAlg alg, IVPController kind) {
         auto preferred = default_controller_for(alg);
@@ -1029,7 +1051,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         throw std::logic_error("controller_defaults_for: unknown IVPController kind");
     }
 
-    /// @internal Applies the user controller to the state tuple, filling the control variables
+    /// @internal
+    /// @brief Applies the user controller to the state tuple, filling the control variables
     /// in-place.
     template <class State> void update_control(State &xtup) const {
         if constexpr (DODE::UV != 0) {
@@ -1040,7 +1063,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         }
     }
 
-    /// @internal Scalar adaptive integration worker with full state/deriv storage control.
+    /// @internal
+    /// @brief Scalar adaptive integration worker with full state/deriv storage control.
     ///
     /// Per-call state lives in three caller-owned references:
     ///   - `controller`: seeded (and pre-reset) by the caller from
@@ -1080,7 +1104,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         });
     }
 
-    /// @internal Vectorized (multi-trajectory) integration worker; same contract as integrate_impl
+    /// @internal
+    /// @brief Vectorized (multi-trajectory) integration worker; same contract as integrate_impl
     /// but with per-trajectory controllers and counters. Drives a SIMD/batched AdaptiveDriver.
     std::vector<Output<double>>
     integrate_impl_vectorized(const std::vector<ODEState<double>> &xs, const Eigen::VectorXd &tfs,
@@ -1121,7 +1146,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// this is what makes concurrent worker invocations race-free.
     /// @{
 
-    /// @internal Scalar integrate (no events, no dense output).
+    /// @internal
+    /// @brief Scalar integrate (no events, no dense output).
     IntegRet integrate_core(const ODEState<double> &x0, double tf, ControllerVariant &controller,
                             int &naccept, int &nreject) const {
         ODEState<double> xf;
@@ -1137,7 +1163,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return xf;
     }
 
-    /// @internal Scalar integrate with events, forwarding nfailed = 0.
+    /// @internal
+    /// @brief Scalar integrate with events, forwarding nfailed = 0.
     IntegEventRet integrate_core(const ODEState<double> &x0, double tf,
                                  const std::vector<EventPack> &events,
                                  ControllerVariant &controller, int &naccept, int &nreject) const {
@@ -1145,7 +1172,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return this->integrate_core(x0, tf, events, controller, naccept, nreject, nfailed);
     }
 
-    /// @internal Scalar integrate with events, storing all states/derivs and refining event
+    /// @internal
+    /// @brief Scalar integrate with events, storing all states/derivs and refining event
     /// crossings.
     IntegEventRet integrate_core(const ODEState<double> &x0, double tf,
                                  const std::vector<EventPack> &events,
@@ -1173,7 +1201,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return std::tuple{xf, eventlocs};
     }
 
-    /// @internal Dense integrate (no events); returns trajectory state vector.
+    /// @internal
+    /// @brief Dense integrate (no events); returns trajectory state vector.
     DenseRet integrate_dense_core(const ODEState<double> &x0, double tf,
                                   ControllerVariant &controller, int &naccept, int &nreject) const {
         ODEState<double> xf;
@@ -1189,7 +1218,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return xs;
     }
 
-    /// @internal Dense integrate with events, forwarding nfailed = 0.
+    /// @internal
+    /// @brief Dense integrate with events, forwarding nfailed = 0.
     DenseEventRet integrate_dense_core(const ODEState<double> &x0, double tf,
                                        const std::vector<EventPack> &events, bool alloutput,
                                        ControllerVariant &controller, int &naccept,
@@ -1199,7 +1229,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                           nfailed);
     }
 
-    /// @internal Dense integrate with events; builds interpolation table and refines crossings.
+    /// @internal
+    /// @brief Dense integrate with events; builds interpolation table and refines crossings.
     DenseEventRet integrate_dense_core(const ODEState<double> &x0, double tf,
                                        const std::vector<EventPack> &events, bool alloutput,
                                        ControllerVariant &controller, int &naccept, int &nreject,
@@ -1229,7 +1260,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             return std::tuple{midpoints_removed(xs), eventlocs};
     }
 
-    /// @internal Dense integrate with events and n interpolation points, forwarding nfailed = 0.
+    /// @internal
+    /// @brief Dense integrate with events and n interpolation points, forwarding nfailed = 0.
     DenseEventRet integrate_dense_core(const ODEState<double> &x0, double tf, int n,
                                        const std::vector<EventPack> &events,
                                        ControllerVariant &controller, int &naccept,
@@ -1238,7 +1270,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return this->integrate_dense_core(x0, tf, n, events, controller, naccept, nreject, nfailed);
     }
 
-    /// @internal Dense integrate with events; interpolates to n evenly-spaced output states.
+    /// @internal
+    /// @brief Dense integrate with events; interpolates to n evenly-spaced output states.
     DenseEventRet integrate_dense_core(const ODEState<double> &x0, double tf, int n,
                                        const std::vector<EventPack> &events,
                                        ControllerVariant &controller, int &naccept, int &nreject,
@@ -1266,7 +1299,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return std::tuple{x_interp, eventlocs};
     }
 
-    /// @internal Dense integrate (no events); interpolates to n evenly-spaced output states.
+    /// @internal
+    /// @brief Dense integrate (no events); interpolates to n evenly-spaced output states.
     DenseRet integrate_dense_core(const ODEState<double> &x0, double tf, int n,
                                   ControllerVariant &controller, int &naccept, int &nreject) const {
         ODEState<double> xf;
@@ -1290,7 +1324,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return x_interp;
     }
 
-    /// @internal STM integrate (no events); computes final state and state transition matrix.
+    /// @internal
+    /// @brief STM integrate (no events); computes final state and state transition matrix.
     STMRet integrate_stm_core(const ODEState<double> &x0, double tf, ControllerVariant &controller,
                               int &naccept, int &nreject) const {
         auto xs = this->integrate_dense_core(x0, tf, controller, naccept, nreject);
@@ -1298,7 +1333,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return std::tuple{xs.back(), jx};
     }
 
-    /// @internal STM integrate with events; computes final state, STM, and refined event locs.
+    /// @internal
+    /// @brief STM integrate with events; computes final state, STM, and refined event locs.
     STMEventRet integrate_stm_core(const ODEState<double> &x0, double tf,
                                    const std::vector<EventPack> &events,
                                    ControllerVariant &controller, int &naccept, int &nreject,
@@ -1341,7 +1377,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return this->find_events_counted(tab, events, eventtimes, nfailed);
     }
 
-    /// Build an LGLInterpTable from a dense state sequence for use with
+    /// @internal
+    /// @brief Build an LGLInterpTable from a dense state sequence for use with
     /// find_events without re-running a dense integrate.
     std::shared_ptr<LGLInterpTable> make_table(const std::vector<ODEState<double>> &xs,
                                                bool fifthorder) const {
@@ -1386,7 +1423,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
 
   protected:
-    /// @internal Returns `xs` with every other element dropped (removes stored midpoints).
+    /// @internal
+    /// @brief Returns `xs` with every other element dropped (removes stored midpoints).
     std::vector<ODEState<double>> midpoints_removed(const std::vector<ODEState<double>> &xs) const {
         std::vector<ODEState<double>> x_new;
         x_new.reserve((xs.size() + 1) / 2);
@@ -1396,7 +1434,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return x_new;
     }
 
-    /// @internal Batch state-transition-matrix computation via STMDriver.
+    /// @internal
+    /// @brief Batch state-transition-matrix computation via STMDriver.
     std::vector<Jacobian<double>>
     calculate_jacobians(const std::vector<std::vector<ODEState<double>>> &xs_s) const {
         auto tmp = STMDriver::calculate_jacobians(this->stepper_, this->ode_, xs_s,
@@ -1407,7 +1446,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return out;
     }
 
-    /// @internal Single-trajectory state-transition-matrix computation via STMDriver.
+    /// @internal
+    /// @brief Single-trajectory state-transition-matrix computation via STMDriver.
     Jacobian<double> calculate_jacobian(const std::vector<ODEState<double>> &xs) const {
         Jacobian<double> out;
         out = STMDriver::calculate_jacobian(this->stepper_, this->ode_, xs, this->input_rows(),
@@ -1415,7 +1455,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return out;
     }
 
-    /// @internal Single-trajectory STM + adjoint-Hessian computation via STMDriver.
+    /// @internal
+    /// @brief Single-trajectory STM + adjoint-Hessian computation via STMDriver.
     std::tuple<Jacobian<double>, Hessian<double>>
     calculate_jacobian_hessian(const std::vector<ODEState<double>> &xs,
                                const ODEState<double> &lf) const {
@@ -1434,7 +1475,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return {jx, hx};
     }
 
-    /// @internal Batch STM + adjoint-Hessian computation via STMDriver.
+    /// @internal
+    /// @brief Batch STM + adjoint-Hessian computation via STMDriver.
     std::tuple<std::vector<Jacobian<double>>, std::vector<Hessian<double>>>
     calculate_jacobians_hessians(const std::vector<std::vector<ODEState<double>>> &xs_s,
                                  const std::vector<ODEState<double>> &lf_s) const {
@@ -1581,7 +1623,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return this->integrate_core(x0, tf, events, ctrl, na, nr, nf);
     }
 
-    /// @internal Generic parallel integrate dispatcher; drives thread pool over integrate
+    /// @internal
+    /// @brief Generic parallel integrate dispatcher; drives thread pool over integrate
     /// overloads.
     template <class... Args>
     auto integrate_parallel_impl(const std::vector<ODEState<double>> &x0s,
@@ -1619,7 +1662,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return results;
     }
 
-    /// @internal Parallel STM integrate with events; dispatches integrate_stm_core per trajectory.
+    /// @internal
+    /// @brief Parallel STM integrate with events; dispatches integrate_stm_core per trajectory.
     std::vector<STMEventRet> integrate_stm_parallel_events_impl(
         const std::vector<ODEState<double>> &x0s, const Eigen::VectorXd &tfs, int n_parts,
         std::vector<int> &nacc_out, std::vector<int> &nrej_out, std::vector<int> &nfailed_out,
@@ -1653,7 +1697,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return results;
     }
 
-    /// @internal Parallel dense integrate with per-trajectory state counts and events.
+    /// @internal
+    /// @brief Parallel dense integrate with per-trajectory state counts and events.
     std::vector<DenseEventRet> integrate_dense_parallel_events_impl_n(
         const std::vector<ODEState<double>> &x0s, const Eigen::VectorXd &tfs,
         const std::vector<int> &ns, int n_parts, std::vector<int> &nacc_out,
@@ -1693,7 +1738,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return results;
     }
 
-    /// @internal Parallel dense integrate with events; drives integrate_dense_core per trajectory.
+    /// @internal
+    /// @brief Parallel dense integrate with events; drives integrate_dense_core per trajectory.
     std::vector<DenseEventRet> integrate_dense_parallel_events_impl(
         const std::vector<ODEState<double>> &x0s, const Eigen::VectorXd &tfs, int n_parts,
         std::vector<int> &nacc_out, std::vector<int> &nrej_out, std::vector<int> &nfailed_out,
@@ -1728,7 +1774,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return results;
     }
 
-    /// @internal Parallel integrate with events; dispatches integrate_core per trajectory.
+    /// @internal
+    /// @brief Parallel integrate with events; dispatches integrate_core per trajectory.
     std::vector<IntegEventRet> integrate_parallel_events_impl(
         const std::vector<ODEState<double>> &x0s, const Eigen::VectorXd &tfs, int n_parts,
         std::vector<int> &nacc_out, std::vector<int> &nrej_out, std::vector<int> &nfailed_out,
@@ -1843,7 +1890,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return xout;
     }
 
-    /// @internal Generic parallel dense integrate dispatcher; drives thread pool over
+    /// @internal
+    /// @brief Generic parallel dense integrate dispatcher; drives thread pool over
     /// integrate_dense.
     template <class... Args>
     auto integrate_dense_parallel_impl(const std::vector<ODEState<double>> &x0s,
@@ -1905,7 +1953,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     }
     /////////////////////////////////////////////////////////////////////////////////////
 
-    /// @internal Parallel dense integrate dispatcher with per-trajectory state count argument.
+    /// @internal
+    /// @brief Parallel dense integrate dispatcher with per-trajectory state count argument.
     template <class... Args>
     auto integrate_dense_parallel_impl_n(const std::vector<ODEState<double>> &x0s,
                                          const Eigen::VectorXd &tfs, const std::vector<int> &ns,
@@ -1991,7 +2040,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return this->integrate_stm_core(x0, tf, events, ctrl, na, nr, nf);
     }
 
-    /// @internal Parallel STM integrate dispatcher; drives integrate_stm_core per trajectory.
+    /// @internal
+    /// @brief Parallel STM integrate dispatcher; drives integrate_stm_core per trajectory.
     std::vector<STMRet> integrate_stm_parallel_impl(const std::vector<ODEState<double>> &x0s,
                                                     const Eigen::VectorXd &tfs, int n_parts,
                                                     std::vector<int> &nacc_out,
@@ -2200,7 +2250,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     /////////////////////////////////////////////////////////////////////////////////////
 
-    /// @internal VectorFunction primal: maps (x0, tf) to the integrated final state.
+    /// @internal
+    /// @brief VectorFunction primal: maps (x0, tf) to the integrated final state.
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
@@ -2216,7 +2267,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         int na = 0, nr = 0;
         fx = this->integrate_core(x0, tf, ctrl, na, nr);
     }
-    /// @internal VectorFunction Jacobian: final state plus its state-transition matrix.
+    /// @internal
+    /// @brief VectorFunction Jacobian: final state plus its state-transition matrix.
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
@@ -2232,7 +2284,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         fx = xs.back();
         jx = this->calculate_jacobian(xs);
     }
-    /// @internal VectorFunction adjoint path: Jacobian, adjoint gradient, and adjoint Hessian.
+    /// @internal
+    /// @brief VectorFunction adjoint path: Jacobian, adjoint gradient, and adjoint Hessian.
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
