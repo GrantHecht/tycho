@@ -197,7 +197,9 @@ template <> struct RCBase<-1, -1> {
 /// @internal
 /// @brief Tuple of default-constructed stack temporaries for fully compile-time-sized specs.
 template <class... TempSpecs> struct ExactTempPack {
-    std::tuple<typename std::remove_cvref_t<TempSpecs>::ExactTempType...> data; ///< @internal Stack-allocated temporaries.
+    /// @internal
+    /// @brief Stack-allocated temporaries.
+    std::tuple<typename std::remove_cvref_t<TempSpecs>::ExactTempType...> data;
     ExactTempPack() {}
 };
 
@@ -211,13 +213,18 @@ template <class... TempSpecs> struct ExactTempPack {
 ///
 /// @tparam T Eigen matrix or array type whose dimensions are described.
 template <class T> struct TempSpec : detail::RCBase<T::RowsAtCompileTime, T::ColsAtCompileTime> {
-    using Base = detail::RCBase<T::RowsAtCompileTime, T::ColsAtCompileTime>; ///< @internal RCBase specialisation.
+    /// @internal @brief RCBase specialisation.
+    using Base = detail::RCBase<T::RowsAtCompileTime, T::ColsAtCompileTime>;
     using ExactTempType = T;               ///< @internal Exact Eigen type to instantiate.
     using MatType = T;                     ///< @internal Underlying matrix type.
     using Scalar = typename T::Scalar;     ///< @internal Scalar element type.
-    static constexpr int RowsAtCompileTime = T::RowsAtCompileTime; ///< @internal Compile-time row count (-1 if dynamic).
-    static constexpr int ColsAtCompileTime = T::ColsAtCompileTime; ///< @internal Compile-time column count (-1 if dynamic).
-    static constexpr bool IsConstantSize = (RowsAtCompileTime >= 0) && (ColsAtCompileTime >= 0); ///< @internal True when both dimensions are compile-time constants.
+    /// @internal @brief Compile-time row count (-1 if dynamic).
+    static constexpr int RowsAtCompileTime = T::RowsAtCompileTime;
+    /// @internal @brief Compile-time column count (-1 if dynamic).
+    static constexpr int ColsAtCompileTime = T::ColsAtCompileTime;
+    /// @internal @brief True when both dimensions are compile-time constants.
+    static constexpr bool IsConstantSize =
+        (RowsAtCompileTime >= 0) && (ColsAtCompileTime >= 0);
     static constexpr bool IsArray = false; ///< @internal False for scalar TempSpec.
     static constexpr bool IsTuple = false; ///< @internal False for scalar TempSpec.
 
@@ -234,14 +241,17 @@ template <class T> struct TempSpec : detail::RCBase<T::RowsAtCompileTime, T::Col
 /// @tparam T    Eigen matrix or array type for each element.
 /// @tparam Size Number of elements in the array.
 template <class T, int Size> struct ArrayOfTempSpecs {
-    using Scalar = typename T::Scalar;          ///< @internal Scalar element type.
-    using ExactTempType = std::array<T, Size>;  ///< @internal Exact `std::array` type to instantiate.
-    using MatType = T;                          ///< @internal Underlying matrix type of each element.
-    static constexpr int size = Size;           ///< @internal Number of array elements.
-    static constexpr bool IsConstantSize = TempSpec<T>::IsConstantSize; ///< @internal True when T has compile-time dimensions.
-    static constexpr bool IsArray = true;       ///< @internal True for ArrayOfTempSpecs.
-    static constexpr bool IsTuple = false;      ///< @internal False for ArrayOfTempSpecs.
-    TempSpec<T> tspec;                          ///< @internal Descriptor for each element.
+    using Scalar = typename T::Scalar;     ///< @internal Scalar element type.
+    /// @internal @brief Exact `std::array` type to instantiate.
+    using ExactTempType = std::array<T, Size>;
+    /// @internal @brief Underlying matrix type of each element.
+    using MatType = T;
+    static constexpr int size = Size;      ///< @internal Number of array elements.
+    /// @internal @brief True when T has compile-time dimensions.
+    static constexpr bool IsConstantSize = TempSpec<T>::IsConstantSize;
+    static constexpr bool IsArray = true;  ///< @internal True for ArrayOfTempSpecs.
+    static constexpr bool IsTuple = false; ///< @internal False for ArrayOfTempSpecs.
+    TempSpec<T> tspec;                     ///< @internal Descriptor for each element.
     /// @brief Construct with runtime row and column counts for each element.
     ArrayOfTempSpecs(int rows, int cols) : tspec(rows, cols) {}
 };
@@ -253,16 +263,20 @@ template <class T, int Size> struct ArrayOfTempSpecs {
 ///
 /// @tparam T... Eigen matrix or array types for each element.
 template <class... T> struct TupleOfTempSpecs {
-    using Scalar = typename std::remove_cvref_t<decltype(std::get<0>(std::tuple<T...>()))>::Scalar; ///< @internal Scalar type of the first element.
+    /// @internal @brief Scalar type of the first element.
+    using Scalar =
+        typename std::remove_cvref_t<decltype(std::get<0>(std::tuple<T...>()))>::Scalar;
     using ExactTempType = std::tuple<T...>; ///< @internal Exact `std::tuple` type to instantiate.
 
-    static constexpr bool IsConstantSize = (... && TempSpec<T>::IsConstantSize); ///< @internal True when all elements have compile-time dimensions.
-    static constexpr bool IsArray = false;      ///< @internal False for TupleOfTempSpecs.
-    static constexpr bool IsTuple = true;       ///< @internal True for TupleOfTempSpecs.
-    static constexpr int size = sizeof...(T);   ///< @internal Number of tuple elements.
+    /// @internal @brief True when all elements have compile-time dimensions.
+    static constexpr bool IsConstantSize = (... && TempSpec<T>::IsConstantSize);
+    static constexpr bool IsArray = false;    ///< @internal False for TupleOfTempSpecs.
+    static constexpr bool IsTuple = true;     ///< @internal True for TupleOfTempSpecs.
+    static constexpr int size = sizeof...(T); ///< @internal Number of tuple elements.
 
     std::tuple<TempSpec<T>...> tspecs; ///< @internal Descriptors for each element.
     /// @brief Construct from a tuple of per-element `TempSpec` descriptors.
+    /// @param tsp Tuple of `TempSpec<T>` descriptors, one per element type.
     TupleOfTempSpecs(std::tuple<TempSpec<T>...> tsp) : tspecs(tsp) {}
 };
 
@@ -277,8 +291,9 @@ template <class... T> struct TupleOfTempSpecs {
 /// Call `resize()` at startup to pre-size the per-thread arenas and avoid reallocation
 /// during hot-path evaluation.
 struct BumpAllocator {
-    using ScalarStackType = detail::BumpStack<double>;                       ///< @internal Scalar arena type.
-    using SuperScalarStackType = detail::BumpStack<tycho::DefaultSuperScalar>; ///< @internal SuperScalar arena type.
+    using ScalarStackType = detail::BumpStack<double>;         ///< @internal Scalar arena type.
+    /// @internal @brief SuperScalar arena type.
+    using SuperScalarStackType = detail::BumpStack<tycho::DefaultSuperScalar>;
 
     /// @brief Allocate temporaries and invoke `f` with them.
     ///

@@ -21,15 +21,16 @@ namespace tycho::utils {
 /// @return  `i!` (returns 1 for i = 0 or i = 1).
 inline int factorial(int i) { return (i == 1 || i == 0) ? 1 : factorial(i - 1) * i; }
 
-/// @brief Compute the product of all integers strictly between two bounds.
+/// @brief Compute the partial factorial `max(i,j)! / min(i,j)!`.
 ///
-/// Returns the product of the integers in the open interval formed by @p i
-/// and @p j, handling the degenerate cases where either argument is zero or
-/// the arguments are adjacent (returns the larger one) or equal (returns 1).
+/// Returns the product of all integers from `min(i,j)+1` to `max(i,j)`
+/// inclusive.  Degenerate cases: equal arguments return 1; adjacent arguments
+/// return the larger value; zero arguments are normalised to 1 before
+/// recursing.
 ///
-/// @param i  First bound (non-negative integer).
-/// @param j  Second bound (non-negative integer).
-/// @return  The partial-factorial product between @p i and @p j.
+/// @param i  First non-negative integer bound.
+/// @param j  Second non-negative integer bound.
+/// @return  Product of integers in `(min(i,j), max(i,j)]`; 1 when `i == j`.
 inline int factorial_div(int i, int j) {
     if (i == 0) {
         return factorial_div(i + 1, j);

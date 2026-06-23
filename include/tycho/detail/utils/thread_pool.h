@@ -49,7 +49,6 @@ struct DispatchContext {
     // enough distinct messages to debug without forcing every caller to
     // unwrap a composite. Storage is per-DispatchContext on the dispatch
     // caller's stack, so the size cost is bounded.
-    /// @internal
     static constexpr int kMaxCaptured = 16; ///< @internal Maximum number of captured exceptions.
 
     std::latch done;           ///< @internal Countdown latch; each worker calls count_down().
@@ -501,8 +500,16 @@ class ThreadPool {
     friend void set_num_threads(int n);
     friend struct ThreadPoolTestAccess;
 
-    /// Submit a task and get a future for its result.
-    /// Cold path only (Jet full solves, Integrator STM).
+    /// @brief Submit a callable to the pool and return a future for its result.
+    ///
+    /// Cold path only (Jet full solves, Integrator STM). Prefer the dispatch
+    /// helpers (`parallel_blocks`, `parallel_sequence`, `parallel_task`) for
+    /// hot-path parallel work.
+    ///
+    /// @tparam F  Callable with signature `R()` for any return type `R`.
+    /// @param f   Callable to execute on a pool worker thread.
+    /// @return    `std::future<R>` that holds the callable's return value (or
+    ///            any exception it throws).
     template <std::invocable F>
     auto submit_task(F &&f) -> std::future<std::invoke_result_t<std::decay_t<F>>> {
         using R = std::invoke_result_t<std::decay_t<F>>;
@@ -512,7 +519,7 @@ class ThreadPool {
         return future;
     }
 
-    /// Block until all enqueued tasks have completed.
+    /// @brief Block the calling thread until all enqueued tasks have completed.
     void wait() {
         int val = m_tasks_pending.load(std::memory_order_acquire);
         while (val != 0) {
@@ -534,24 +541,32 @@ class ThreadPool {
 // inside algorithms. Algorithms should never change it.
 // ---------------------------------------------------------------------------
 
-/// Returns the process-global thread pool (Meyers singleton, fixed address).
-/// Created lazily on first call, sized to hardware_concurrency().
+/// @brief Return the process-global thread pool (Meyers singleton, fixed address).
+///
+/// Created lazily on first call, sized to `std::thread::hardware_concurrency()`.
+/// The returned reference is stable for the lifetime of the process.
 ThreadPool &thread_pool();
 
-/// Set the number of threads used for parallel work.
-/// n <= 1: single-threaded mode (all work runs inline, pool is never touched).
-/// n > 1: resize the pool to n threads.
+/// @brief Set the number of threads used for parallel work.
+///
+/// @param n Thread count. `n <= 1` selects single-threaded mode (all work runs
+///          inline; the pool is never touched). `n > 1` resizes the pool to
+///          @p n threads.
 void set_num_threads(int n);
 
-/// Returns the current thread count setting. 1 = single-threaded mode.
+/// @brief Return the current thread count setting.
+///
+/// @return The number of threads. 1 means single-threaded mode.
 int get_num_threads();
 
-/// Fast check: returns true if the global pool should be used (num_threads > 1).
+/// @brief Return true if the global pool should be used (`num_threads > 1`).
 inline bool use_thread_pool() { return get_num_threads() > 1; }
 
-/// Returns true if set_num_threads() is mid-reset. Best-effort safety net:
-/// dispatch helpers throw if this is true, catching the common misuse of
-/// calling set_num_threads() from another thread during active computation.
+/// @brief Return true if `set_num_threads()` is currently mid-reset.
+///
+/// Best-effort safety net: dispatch helpers throw if this returns true,
+/// catching the common misuse of calling `set_num_threads()` from a thread
+/// other than the one that initiated the configuration change.
 bool pool_configuring();
 
 // ---------------------------------------------------------------------------
@@ -567,8 +582,17 @@ bool pool_configuring();
 // inherently safe — each dispatch waits only on its own latch.
 // ---------------------------------------------------------------------------
 
-/// Run func(start, stop) over [0, count) split into nparts blocks.
-/// Dispatches N-1 blocks to pool, runs last block inline, then waits.
+/// @brief Partition `[0, count)` into @p nparts blocks and run `func(start, stop)` in parallel.
+///
+/// Dispatches `nparts-1` blocks to the thread pool and runs the last block
+/// inline on the calling thread, then waits for all pool tasks to finish.
+/// Falls back to a single `func(0, count)` call when `nparts <= 1` or the
+/// pool is inactive (`use_thread_pool()` is false).
+///
+/// @tparam F    Callable with signature `void(int start, int stop)`.
+/// @param count  Total range size; no-op if `count <= 0`.
+/// @param func   Callable invoked once per block with the half-open range.
+/// @param nparts Requested number of partitions; clamped to `count`.
 template <typename F> void parallel_blocks(int count, F &&func, int nparts) {
     if (count <= 0)
         return;
@@ -613,8 +637,15 @@ template <typename F> void parallel_blocks(int count, F &&func, int nparts) {
     }
 }
 
-/// Run func(i) for i in [0, n). Dispatches N-1 tasks to pool, runs last
-/// partition inline on calling thread, then waits.
+/// @brief Invoke `func(i)` for each `i` in `[0, n)` in parallel.
+///
+/// Dispatches `n-1` tasks to the thread pool and runs the last index
+/// inline on the calling thread, then waits for all pool tasks to finish.
+/// Falls back to a sequential loop when `n <= 1` or the pool is inactive.
+///
+/// @tparam F  Callable with signature `void(int i)`.
+/// @param n    Number of iterations; no-op if `n <= 0`.
+/// @param func Callable invoked once per index.
 template <typename F> void parallel_sequence(int n, F &&func) {
     if (n <= 0)
         return;
@@ -653,10 +684,19 @@ template <typename F> void parallel_sequence(int n, F &&func) {
     }
 }
 
-/// Run pool_work concurrently with inline_work on the calling thread.
-/// Only dispatches when nparts > 1 AND the pool is active — when
-/// nparts == 1 (e.g. during Jet with NumPartitions=1), both run inline,
-/// avoiding deadlock from nested dispatch.
+/// @brief Run `pool_work` on the pool concurrently with `inline_work` on the calling thread.
+///
+/// Submits `pool_work` to the thread pool and immediately executes
+/// `inline_work` on the caller, then waits for the pool task to finish.
+/// Only dispatches when `nparts > 1` AND the pool is active — when
+/// `nparts == 1` (e.g. during Jet with NumPartitions=1), both callables
+/// run sequentially inline, avoiding deadlock from nested dispatch.
+///
+/// @tparam FTask    Callable with signature `void()` sent to the pool.
+/// @tparam FInline  Callable with signature `void()` run on the calling thread.
+/// @param nparts     Number of active partitions; both run inline when `<= 1`.
+/// @param pool_work  Callable executed on a pool worker thread.
+/// @param inline_work Callable executed on the calling thread concurrently.
 template <typename FTask, typename FInline>
 void parallel_task(int nparts, FTask &&pool_work, FInline &&inline_work) {
     if (nparts > 1 && use_thread_pool()) {

@@ -103,9 +103,9 @@ template <typename Key, typename Value> class FlatMap {
     /// @brief Reserve capacity for at least `n` entries.
     void reserve(std::size_t n) { data_.reserve(n); }
 
-    /// @brief Return a mutable iterator to the first key-value pair.
+    /// @brief Return an iterator to the first key-value pair.
     const_iterator begin() { return data_.begin(); }
-    /// @brief Return a mutable past-the-end iterator.
+    /// @brief Return a past-the-end iterator.
     const_iterator end() { return data_.end(); }
     /// @brief Return a const iterator to the first key-value pair.
     const_iterator begin() const { return data_.begin(); }
