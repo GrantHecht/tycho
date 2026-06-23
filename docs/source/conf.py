@@ -178,6 +178,20 @@ nitpick_ignore_regex = [
     # docstring cross-reference (pointing to the ode factory method); the method
     # lives on ode, not on the class being documented.
     ("py:meth", r"astro\.kepler\.ode\.phase"),
+    # Python integrators reference page: integrator method docstrings use
+    # bare :class: references to ``IVPController``, ``ErrorNormType``, and
+    # ``EventPack`` without a module qualifier; Sphinx cannot resolve them from
+    # the ``tychopy.optimal_control.ode_x`` currentmodule context because they
+    # live at ``tychopy.optimal_control.*``.  These are docstring cross-reference
+    # shorthand, not broken authored links.
+    ("py:class", r"(IVPController|ErrorNormType|EventPack)"),
+    # C++ integrators reference page: Breathe renders member signatures of
+    # ``Integrator``, ``AdaptiveDriver``, and ``ParallelDriver`` with internal
+    # typedef names (``ControllerVariant``, ``AdaptiveConfig``, ``ScalarState``,
+    # ``ScalarDeriv``, ``LGLInterpTable``) and standard-library types
+    # (``int64_t``) as cpp:identifier xrefs.  These are auto-generated signature
+    # xrefs, not authored links; they are absorbed here.
+    ("cpp:identifier", r"(ControllerVariant|AdaptiveConfig|ScalarState|ScalarDeriv|LGLInterpTable|int64_t)"),
 ]
 
 # -- HTML output -------------------------------------------------------------
@@ -216,6 +230,7 @@ import numpy as np
 from tychopy import vector_functions as vf
 from tychopy import optimal_control as oc
 from tychopy import astro
+from tychopy import utils
 """
 
 # -- Breathe (Doxygen XML → Sphinx) -----------------------------------------
@@ -251,4 +266,11 @@ breathe_show_enumvalue_initializer = True
 # ``ref.doc``) and API links use ``:py:...:`` / ``:cpp:...:`` roles (validated
 # under ``ref.class``/``ref.cpp``). Prefer those roles over ``{ref}`` in new
 # pages so the suppression cannot mask a real authored-link error.
-suppress_warnings = ["ref.ref"]
+suppress_warnings = [
+    "ref.ref",
+    # Breathe renders the same Doxygen enum (tycho::integrators::ErrorNormType)
+    # on both smoke_test.md (pipeline verification) and the integrators reference
+    # page.  The resulting duplicate C++ declaration warning is an unavoidable
+    # artefact of the smoke_test page; it cannot mask a real authored duplicate.
+    "duplicate_declaration.cpp",
+]

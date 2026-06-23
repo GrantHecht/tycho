@@ -13,4 +13,6 @@ drift.
 vector_functions
 optimal_control
 astrodynamics
+integrators
+utilities
 ```
