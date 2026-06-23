@@ -26,10 +26,10 @@ To select a different algorithm, pass it as the **first** positional argument,
 before `dt`. Both an enum value and a string are accepted:
 
 ```python
-import tychopy.integrators as integ_mod
+from tychopy import optimal_control as oc
 
 # Enum form
-integ = ode.integrator(integ_mod.IVPAlg.DOPRI54, 0.01)
+integ = ode.integrator(oc.IVPAlg.DOPRI54, 0.01)
 
 # Equivalent string form
 integ = ode.integrator("DOPRI54", 0.01)
