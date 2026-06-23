@@ -50,16 +50,19 @@ computationally practical.
 Tycho provides eight user-selectable embedded Runge-Kutta algorithms via the
 `IVPAlg` enum:
 
-| Algorithm | Stages | Order pair | FSAL | Notes |
-| --------- | ------ | ---------- | ---- | ----- |
-| `BS3`     | 4      | 3(2)       | yes  | Low-order, fast, coarse tolerances |
-| `Tsit5`   | 7      | 5(4)       | yes  | Efficient general-purpose method |
-| `DOPRI54` | 7      | 5(4)       | yes  | Classic Dormand-Prince; Matlab's `ode45` default |
-| `BS5`     | 8 + 3  | 5(4)       | no   | Smooth dense output; 3 extra interp stages |
-| `DOPRI87` | 13     | 8(7)       | no   | High-order; default for tight tolerances |
-| `Vern7`   | 10 + 6 | 7(6)       | no   | High-order + smooth interpolant |
-| `Vern8`   | 13 + 8 | 8(7)       | no   | High-order + smooth interpolant |
-| `Vern9`   | 16 + 10| 9(8)       | no   | Highest order; expensive per step |
+| Algorithm | Stages (main + interp) | Order pair | FSAL | Notes |
+| --------- | ---------------------- | ---------- | ---- | ----- |
+| `BS3`     | 4                      | 3(2)       | yes  | Low-order, fast, coarse tolerances |
+| `Tsit5`   | 7                      | 5(4)       | yes  | Efficient general-purpose method |
+| `DOPRI54` | 7                      | 5(4)       | yes  | Classic Dormand-Prince; Matlab's `ode45` default |
+| `BS5`     | 8 + 3                  | 5(4)       | no   | Smooth dense output; 3 extra interp stages |
+| `DOPRI87` | 13                     | 8(7)       | no   | High-order; default for tight tolerances |
+| `Vern7`   | 10 + 6                 | 7(6)       | no   | High-order + smooth interpolant |
+| `Vern8`   | 13 + 8                 | 8(7)       | no   | High-order + smooth interpolant |
+| `Vern9`   | 16 + 10                | 9(8)       | no   | Highest order; expensive per step |
+
+*Stage counts shown as `main + interp`; the extra interpolation stages are
+evaluated only when dense output is requested (see Dense output below).*
 
 **Order pair notation.** `p(q)` means the main solution has order $p$ (the local
 error scales as $h^{p+1}$) and the embedded error estimator has order $q$.
@@ -108,7 +111,9 @@ $$
 
 where $p$ is the order of the embedded error estimator (the lower-order solution),
 $\gamma < 1$ is a safety factor (default 0.9), and $q$ is clipped to the range
-$[1/q_{\max}, 1/q_{\min}]$ to prevent runaway growth or catastrophic shrinkage.
+$[1/q_{\max}, 1/q_{\min}]$ to prevent runaway growth or catastrophic shrinkage
+(equivalently, the step is never grown by more than $q_{\max}$ or shrunk below
+$1/q_{\min}$ per step, since larger $q$ means a smaller $h_{\text{new}}$).
 The exponent $1/(p+1)$ — not $1/p$ — is correct: it matches the relationship between
 the estimator order, the truncation error, and the asymptotic step-growth law
 derived from assuming $\text{EEst} \approx C h^{p+1}$ and solving for the $h$ that
@@ -117,7 +122,11 @@ would give $\text{EEst} = 1$.
 ### The controller family
 
 Tycho provides three controllers with increasing sophistication, selectable at
-runtime via `IVPController`:
+runtime via `IVPController`. All three share a *deadband*: when the proposed
+step-change factor falls within the interval
+$[q_{\text{steady,min}}, q_{\text{steady,max}}]$, the step size is left unchanged.
+This avoids unnecessary step resizing on nearly-smooth segments where the change
+would be within the controller's noise floor.
 
 **`I` (integral controller).** Uses only the current error estimate:
 $q = \text{EEst}^{1/(p+1)} / \gamma$. Simple and robust but can oscillate on
@@ -140,11 +149,6 @@ The accept condition is $\text{dt\_factor} \geq \text{accept\_safety}$ (default 
 rather than $\text{EEst} \leq 1$, which is slightly more permissive on marginal
 steps.
 
-All three controllers implement a *deadband*: when the proposed step-change factor
-falls within the interval $[q_{\text{steady,min}}, q_{\text{steady,max}}]$, the
-step size is left unchanged. This avoids unnecessary step resizing on nearly-smooth
-segments where the change would be within the controller's noise floor.
-
 ### Error norms
 
 The per-component scaled residual for component $i$ is:
@@ -155,14 +159,14 @@ $$
 
 where $\alpha_i$ is the absolute tolerance for component $i$, $\rho_i$ is the
 relative tolerance, $x_0$ is the pre-step state, and $x_1$ is the post-step state.
-This mixed absolute-relative scaling is the standard `calculate_residuals` formula
-from Julia's `DiffEqBase` and prevents the denominator from collapsing when a state
-component passes through zero.
+This mixed absolute–relative scaling (matching the OrdinaryDiffEq.jl convention)
+prevents the denominator from collapsing when a state component passes through
+zero.
 
 Two error-norm strategies are available via `ErrorNormType`:
 
 - **`RMS`** (root-mean-square): $\text{EEst} = \sqrt{\frac{1}{n}\sum_i r_i^2}$.
-  This is the default and matches Julia's `ODE_DEFAULT_NORM`. It spreads the
+  This is the default and uses the conventional RMS normalization. It spreads the
   tolerance over all components evenly.
 - **`MAX`** (L∞): $\text{EEst} = \max_i |r_i|$. More conservative; the worst
   component must satisfy the tolerance. Useful when one component is safety-critical
@@ -394,21 +398,19 @@ elements and avoid the warm-up overhead for known large problems.
 
 ## Putting it together
 
-The conceptual flow of a parallel batch integration is:
-
-1. The user provides a list of initial conditions and an ODE VectorFunction.
-2. `integrate_parallel` dispatches one trajectory per pool worker via
-   `parallel_sequence`.
-3. Each worker runs an `AdaptiveDriver` loop: attempt a step with the selected `IVPAlg`,
-   evaluate the error norm, run the controller to accept or reject and propose $h_{\text{new}}$,
-   check events via `EventHandler`, record the dense interpolant table.
-4. All temporary allocations inside the ODE evaluation go through the worker thread's
-   `BumpAllocator` arena — no cross-thread allocation contention.
-5. When all workers finish, the calling thread collects results and re-throws any
-   accumulated worker exceptions.
-6. If STM sensitivity is requested (`integrate_stm`), `STMDriver` traverses the dense
-   state sequence, multiplying analytic step Jacobians via the chain rule to produce
-   $\Phi(t_f, t_0)$ without finite differences.
+A parallel batch integration begins when the caller provides a list of initial
+conditions and an ODE VectorFunction. `integrate_parallel` fans this out to the
+pool via `parallel_sequence`, dispatching one trajectory per worker. Each worker
+independently runs an `AdaptiveDriver` accept/reject loop — attempting a step
+with the selected `IVPAlg`, evaluating the error norm, running the controller to
+compute $h_{\text{new}}$, checking events via `EventHandler`, and recording the
+dense interpolant table — with all temporary allocations satisfied by its
+thread-local `BumpAllocator` arena and no cross-thread contention. When every
+worker finishes, the calling thread collects results and re-throws any
+accumulated worker exceptions. If STM sensitivity is requested
+(`integrate_stm`), `STMDriver` then traverses the dense state sequence,
+multiplying analytic per-step Jacobians via the chain rule to produce
+$\Phi(t_f, t_0)$ without any finite-difference perturbation.
 
 The same ODE VectorFunction participates in the
 {doc}`direct collocation </explanation/direct_collocation>` transcription when a

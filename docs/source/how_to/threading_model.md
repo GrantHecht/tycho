@@ -59,26 +59,28 @@ then call `integrate_parallel`:
 
 ```python
 import numpy as np
+from tychopy import utils
 
 x0s = [x0_base + np.random.randn(7) * 1e-4 for _ in range(500)]
 tfs  = np.full(500, 10.0)
 
-results = integ.integrate_parallel(x0s, tfs, threads=8)
+results = integ.integrate_parallel(x0s, tfs, threads=utils.get_num_threads())
 # results[i] is the final state-and-time vector for x0s[i]
 ```
 
 For trajectory output use `integrate_dense_parallel`:
 
 ```python
-trajs = integ.integrate_dense_parallel(x0s, tfs, threads=8)
+trajs = integ.integrate_dense_parallel(x0s, tfs, threads=utils.get_num_threads())
 # trajs[i] is the dense trajectory for x0s[i]
 ```
 
 Both methods release the GIL for the duration of the parallel work, so they are
 safe to call from a Python thread without blocking other threads. The `threads`
-argument controls the parallelism for that specific call independent of
-`utils.set_num_threads` — you can run a batch with more threads than the global
-default without changing the global setting.
+argument controls how many tasks this call dispatches; it does not resize the
+global pool set by `set_num_threads`. You can therefore run a batch with a
+different thread count than the global default without affecting any concurrent
+work.
 
 A worked example that uses `integrate_dense_parallel` to fan out from a
 heteroclinic trajectory is `examples/python_examples/Heteroclinic.py`.

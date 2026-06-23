@@ -67,9 +67,11 @@ Each element of `traj` is an array with the same layout as the ODE input:
 ## Set error tolerances
 
 The adaptive controller targets both absolute and relative error bounds on every
-state component. The defaults are tight (`1e-12` absolute, `1e-6` relative) and
-are usually fine for orbit mechanics initial-guess generation. Loosen them for
-cheap scans; tighten them when accuracy matters:
+state component. By default the integrator uses a pure **absolute** tolerance:
+`1e-12` absolute and `0` relative. This is conservative enough for most
+orbit-mechanics initial-guess generation. Loosen the absolute tolerance for fast,
+rough scans; tighten it (and/or add a relative tolerance) when you need higher
+accuracy:
 
 ```python
 integ.set_abs_tol(1.0e-9)   # uniform absolute tolerance for all states
@@ -77,12 +79,13 @@ integ.set_rel_tol(1.0e-9)   # uniform relative tolerance
 
 # Per-component variant — useful when state variables differ wildly in scale
 import numpy as np
-integ.set_abs_tols(np.array([1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 0.0]))
+integ.set_abs_tols(np.array([1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9]))  # one per state component (excludes time)
 ```
 
 Setting `integ.adaptive = False` switches to a fixed step size equal to
-`integ.def_step_size`. Use this only when the ODE is stiff at a known frequency
-or you need bit-reproducible integration:
+`integ.def_step_size`. Use fixed-step mode only when you have a specific reason
+to control the step size directly — e.g. comparing trajectories at identical
+discrete times, or bit-reproducible integration for testing:
 
 ```python
 integ.adaptive = False
@@ -100,10 +103,11 @@ The **controller** selects the feedback scheme:
 integ.set_controller("PI")   # I, PI, or PID
 ```
 
-`PI` (the default) uses the current and previous error estimates; it is
-smoother than the basic `I` controller and generally preferred. `PID` adds
-a second derivative term and can help with very smooth problems at tight
-tolerances.
+The default controller is algorithm-dependent: `DOPRI87` (the default algorithm)
+uses the basic `I` controller; the other methods default to `PI`. `PI`
+incorporates the previous step's error as well as the current one, which dampens
+step-size oscillations and is generally preferred for smooth problems. `PID` adds
+a further derivative term for very smooth problems at tight tolerances.
 
 The **error norm** determines how per-component errors are combined into the
 scalar that drives the controller:
@@ -120,9 +124,9 @@ even if others are more forgiving.
 
 | Algorithm | Order | Cost per step | When to use |
 |-----------|-------|---------------|-------------|
-| `DOPRI54` | 5(4)  | Moderate      | General-purpose default for moderate-accuracy needs; fewest stages for Dormand-Prince family |
+| `DOPRI54` | 5(4)  | Moderate      | General-purpose default for moderate-accuracy needs; classic Dormand-Prince |
 | `DOPRI87` | 8(7)  | Higher        | Default when no algorithm is specified; best balance of high accuracy and robustness for orbit mechanics |
-| `Tsit5`   | 5(4)  | Low           | Efficient general-purpose propagation; fewer stages than DOPRI54 at similar accuracy |
+| `Tsit5`   | 5(4)  | Low           | Efficient general-purpose propagation; same stage count as DOPRI54 (7) but optimized coefficients give a lower error constant |
 | `BS3`     | 3(2)  | Very low      | Cheap initial guesses at loose tolerances; short-duration propagation |
 | `BS5`     | 5(4)  | Moderate      | Smooth problems where BS5's coefficient set gives better error constants |
 | `Vern7`   | 7(6)  | Moderate–high | High accuracy without the full cost of an 8th-order method |
