@@ -18,7 +18,18 @@
 
 namespace tycho::utils {
 
+/// @internal
+/// @brief Compile-time dispatch table that maps a runtime integer to one of
+/// three static size constants (J1, J2, J3) or to -1 (dynamic) when the
+/// value exceeds all thresholds.
+///
+/// Used internally by VectorFunction expression templates to select a
+/// statically-sized code path at the call site without a switch statement.
 template <int J1, int J2, int J3> struct LambdaJumpTable {
+    /// @internal
+    /// @brief Invoke @p f with the first threshold that satisfies
+    /// `crit_size <= threshold`, or with `std::integral_constant<int,-1>`
+    /// when `crit_size > J3`.
     template <class Ftype> static void run(Ftype &f, int crit_size) {
         if (crit_size <= J1) {
             f(std::integral_constant<int, J1>());

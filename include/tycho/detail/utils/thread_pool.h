@@ -34,28 +34,31 @@ namespace detail {
 /// Set to true on each pool worker thread.
 inline thread_local bool g_is_pool_worker{false};
 
-/// Per-dispatch synchronization context.
-/// Lives on the caller's stack. Workers hold &ctx — caller MUST wait()
-/// on the latch before ctx goes out of scope.
+/// @internal
+/// @brief Per-dispatch synchronization context used by the parallel dispatch helpers.
 ///
-/// Exception aggregation: captures up to kMaxCaptured distinct worker
-/// exceptions. If a single worker throws, rethrow_if_exception() rethrows
-/// that exception unchanged (preserves type). If multiple workers throw
-/// concurrently, rethrow_if_exception() composes a std::runtime_error whose
-/// message concatenates every captured .what() — callers cannot distinguish
-/// "one lane diverged" from "all lanes diverged" without this.
+/// Lives on the caller's stack. Workers hold `&ctx` — the caller MUST call
+/// `done.wait()` before `ctx` goes out of scope.
+///
+/// Exception aggregation: captures up to `kMaxCaptured` distinct worker exceptions.
+/// If a single worker throws, `rethrow_if_exception()` rethrows that exception
+/// unchanged (preserves type). If multiple workers throw concurrently, it composes
+/// a `std::runtime_error` whose message concatenates every captured `.what()`.
 struct DispatchContext {
     // 16 lets a 256-trajectory STM that diverges in many lanes preserve
     // enough distinct messages to debug without forcing every caller to
     // unwrap a composite. Storage is per-DispatchContext on the dispatch
     // caller's stack, so the size cost is bounded.
-    static constexpr int kMaxCaptured = 16;
+    /// @internal
+    static constexpr int kMaxCaptured = 16; ///< @internal Maximum number of captured exceptions.
 
-    std::latch done;
-    std::atomic<int> captured{0};
-    std::atomic<int> suppressed{0};
-    std::array<std::exception_ptr, kMaxCaptured> exceptions{};
+    std::latch done;           ///< @internal Countdown latch; each worker calls count_down().
+    std::atomic<int> captured{0};   ///< @internal Number of exceptions stored so far.
+    std::atomic<int> suppressed{0}; ///< @internal Count of exceptions beyond kMaxCaptured.
+    std::array<std::exception_ptr, kMaxCaptured> exceptions{}; ///< @internal Stored exceptions.
 
+    /// @internal
+    /// @brief Construct with a latch count equal to the number of pool tasks.
     explicit DispatchContext(std::ptrdiff_t count) : done(count) {}
 
     /// Store an exception. Only called from catch blocks (cold path).
@@ -139,6 +142,13 @@ inline bool is_pool_worker() noexcept { return detail::g_is_pool_worker; }
 // in the constructor (line ~95) is the actual enforcement mechanism.
 // =============================================================================
 
+/// @internal
+/// @brief Move-only SBO callable wrapper used as the pool task unit.
+///
+/// Stores any `std::invocable` callable inline (up to 64 bytes) with zero heap
+/// allocation. A `static_assert` fires at instantiation time if the closure
+/// exceeds the buffer. Use `operator()()` to invoke; `operator bool()` to check
+/// whether the task is non-empty.
 class task {
     static constexpr std::size_t BUF_SIZE = 64;
     static constexpr std::size_t ALIGN = alignof(std::max_align_t);
@@ -151,6 +161,8 @@ class task {
   public:
     task() = default;
 
+    /// @internal
+    /// @brief Construct from any invocable `F`; stores the callable in the SBO buffer.
     template <typename F>
         requires std::invocable<F &>
     task(F &&f) noexcept {
@@ -167,6 +179,8 @@ class task {
         };
     }
 
+    /// @internal
+    /// @brief Move constructor; transfers ownership of the stored callable.
     task(task &&o) noexcept : m_invoke(o.m_invoke), m_destroy(o.m_destroy), m_move(o.m_move) {
         if (m_move) {
             m_move(o.m_buf, m_buf);
@@ -176,6 +190,8 @@ class task {
         }
     }
 
+    /// @internal
+    /// @brief Move-assignment operator; transfers ownership of the stored callable.
     task &operator=(task &&o) noexcept {
         if (this != &o) {
             if (m_destroy)
@@ -198,10 +214,14 @@ class task {
             m_destroy(m_buf);
     }
 
+    /// @internal
+    /// @brief Invoke the stored callable. Asserts that the task is non-empty.
     void operator()() {
         assert(m_invoke && "task::operator() called on empty task");
         m_invoke(m_buf);
     }
+    /// @internal
+    /// @brief Returns true if the task holds a callable (i.e., is non-empty).
     explicit operator bool() const noexcept { return m_invoke != nullptr; }
 
     task(const task &) = delete;
@@ -221,6 +241,11 @@ class task {
 // Thieves steal from back (FIFO — older tasks, reduces contention with owner's LIFO pops).
 // =============================================================================
 
+/// @internal
+/// @brief Per-worker mutex-based work-stealing task queue used by `ThreadPool`.
+///
+/// Owner pushes/pops from the front (LIFO). Thief threads steal from the back (FIFO).
+/// Not lock-free: at Tycho's ms-scale task granularity, mutex overhead is negligible.
 class WorkStealingQueue {
     std::deque<task> m_deque;
     mutable std::mutex m_mutex;
@@ -228,7 +253,8 @@ class WorkStealingQueue {
     bool m_done = false;
 
   public:
-    // Owner pushes to front (blocking, always succeeds)
+    /// @internal
+    /// @brief Blocking push to front of queue (owner side, always succeeds).
     void push(task f) {
         {
             std::lock_guard lock(m_mutex);
@@ -237,7 +263,8 @@ class WorkStealingQueue {
         m_cv.notify_one();
     }
 
-    // Non-blocking push. Moves from f on success, leaves f untouched on failure.
+    /// @internal
+    /// @brief Non-blocking push to front; moves `f` on success, leaves it untouched on failure.
     bool try_push(task &f) {
         std::unique_lock lock(m_mutex, std::try_to_lock);
         if (!lock.owns_lock())
@@ -248,7 +275,8 @@ class WorkStealingQueue {
         return true;
     }
 
-    // Owner pops from front (LIFO, non-blocking)
+    /// @internal
+    /// @brief Non-blocking LIFO pop from front (owner side).
     bool try_pop(task &f) {
         std::unique_lock lock(m_mutex, std::try_to_lock);
         if (!lock.owns_lock() || m_deque.empty())
@@ -258,7 +286,8 @@ class WorkStealingQueue {
         return true;
     }
 
-    // Thief steals from back (FIFO, non-blocking)
+    /// @internal
+    /// @brief Non-blocking FIFO steal from back (thief side).
     bool try_steal(task &f) {
         std::unique_lock lock(m_mutex, std::try_to_lock);
         if (!lock.owns_lock() || m_deque.empty())
@@ -268,8 +297,8 @@ class WorkStealingQueue {
         return true;
     }
 
-    // Owner blocks until work arrives or done() is called.
-    // Returns false on shutdown (m_done && empty).
+    /// @internal
+    /// @brief Blocking pop from front; returns false when the queue is shut down and empty.
     bool pop(task &f) {
         std::unique_lock lock(m_mutex);
         m_cv.wait(lock, [this] { return !m_deque.empty() || m_done; });
@@ -280,7 +309,8 @@ class WorkStealingQueue {
         return true;
     }
 
-    // Signal shutdown — wakes all blocked pop() calls
+    /// @internal
+    /// @brief Signal shutdown, waking all threads blocked in `pop()`.
     void done() {
         {
             std::lock_guard lock(m_mutex);
@@ -300,6 +330,13 @@ class WorkStealingQueue {
 
 struct ThreadPoolTestAccess; // forward-declared for friend access from tests
 
+/// @internal
+/// @brief Work-stealing thread pool backing the Tycho parallel dispatch helpers.
+///
+/// Each worker thread has its own `WorkStealingQueue`. Tasks are enqueued
+/// round-robin; workers try their own queue first, then steal from others.
+/// Use `set_num_threads()`, `get_num_threads()`, and `thread_pool()` for all
+/// external access — do not instantiate `ThreadPool` directly.
 class ThreadPool {
     std::vector<WorkStealingQueue> m_queues;
     std::vector<std::thread> m_threads;
@@ -434,6 +471,8 @@ class ThreadPool {
     }
 
   public:
+    /// @internal
+    /// @brief Construct the pool with `threads` worker threads (default: hardware concurrency).
     explicit ThreadPool(unsigned threads = std::max(1u, std::thread::hardware_concurrency()))
         : m_queues(threads), m_count(threads) {
         if (threads == 0)
@@ -482,6 +521,8 @@ class ThreadPool {
         }
     }
 
+    /// @internal
+    /// @brief Return the number of worker threads in the pool.
     unsigned get_thread_count() const noexcept { return m_count; }
 };
 

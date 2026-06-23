@@ -18,8 +18,12 @@
 
 namespace std {
 
+/// @internal
+/// @brief Type trait that strips both `const` and reference qualifiers from T
+/// in a single step (equivalent to `std::remove_const_t<std::remove_reference_t<T>>`).
 template <class T> struct remove_const_reference {
-    using type = typename std::remove_const<typename std::remove_reference<T>::type>::type;
+    using type = ///< @internal Resolved type with const and reference removed.
+        typename std::remove_const<typename std::remove_reference<T>::type>::type;
 };
 
 } // namespace std
