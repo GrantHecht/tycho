@@ -37,9 +37,8 @@ There are two per-thread arenas:
 * **SuperScalar arena** — holds ``DefaultSuperScalar`` (SIMD-width
   ``double`` array) temporaries.
 
-The default arena sizes are chosen automatically; use :meth:`resize` only
-when profiling reveals arena overflow (fallback heap allocation) in tight
-loops.
+The default arena capacity is 64 elements per thread; the arena
+self-tunes upward after overflow (use :meth:`resize` to pre-size).
 )doc");
     obj.def_static("resize", nb::overload_cast<int>(&BumpAllocator::resize),
                    R"doc(Resize both per-thread arenas to the same element count.

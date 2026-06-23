@@ -20,14 +20,16 @@ namespace tycho {
 using namespace tycho::utils;
 
 void utils_build(nb::module_ &m) {
-    auto um = m.def_submodule("utils", "Contains miscilanaeous utilities");
+    auto um = m.def_submodule("utils", "Contains miscellaneous utilities");
     um.def("get_core_count", &tycho::utils::get_core_count,
            R"doc(Return the number of physical CPU cores on the current machine.
 
-Uses platform-specific APIs (e.g. ``sysconf`` on Linux/macOS,
-``GetSystemInfo`` on Windows) to query the physical core count.  Falls
-back to ``std::thread::hardware_concurrency()`` when the platform query
-is unavailable or fails.
+Uses platform-specific APIs to query the physical core count:
+``/proc/cpuinfo`` on Linux, ``sysctlbyname("hw.physicalcpu")`` on macOS,
+and ``GetLogicalProcessorInformation`` on Windows.  The result is capped
+at ``std::thread::hardware_concurrency()``.  Falls back to
+``std::thread::hardware_concurrency()`` when the platform query is
+unavailable or fails.
 
 Returns
 -------
@@ -44,12 +46,16 @@ from inside a parallel region or from a worker thread.
 Parameters
 ----------
 n : int
-    Thread count.  ``n <= 1`` selects single-threaded mode (all work
-    runs inline on the calling thread; the thread pool is not used).
-    ``n > 1`` sizes the pool to ``n`` worker threads.
+    Thread count.  ``n <= 1`` (including 0/negative) selects
+    single-threaded mode: work runs inline on the calling thread; the
+    pool stays alive but is bypassed.  ``n > 1`` resizes the pool to
+    ``n`` worker threads.
 )doc");
     um.def("get_num_threads", &tycho::utils::get_num_threads,
            R"doc(Return the current process-global thread count.
+
+The default before any :func:`set_num_threads` call is
+``std::thread::hardware_concurrency()``.
 
 Returns
 -------

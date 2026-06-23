@@ -26,7 +26,7 @@ namespace tycho::integrators {
 /// Integrator-level settings that control the adaptive loop's behavior.
 /// Ownership stays with the caller; the driver reads only.
 struct AdaptiveConfig {
-    /// Error estimator order; enters the step-size exponent q=err^(1/p).
+    /// Error estimator order p; enters the step-size exponent q=err^(1/(p+1)).
     int error_order = 4;
     /// Error norm variant (RMS or infinity norm).
     ErrorNormType error_norm_type = ErrorNormType::RMS;
@@ -59,8 +59,8 @@ struct AdaptiveConfig {
         }
         if (error_order <= 0) {
             throw std::invalid_argument(
-                "AdaptiveConfig::error_order must be positive (enters the q=err^(1/p) exponent); "
-                "got " +
+                "AdaptiveConfig::error_order must be positive "
+                "(enters the q=err^(1/(p+1)) exponent); got " +
                 std::to_string(error_order));
         }
         if (!std::isfinite(def_step_size) || def_step_size <= 0.0) {

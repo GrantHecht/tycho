@@ -500,7 +500,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         return varlocs;
     }
 
-    int error_order_ = 7; ///< @internal Embedded error-estimator order p; the step-size exponent is 1/p.
+    /// @internal Embedded error-estimator order p; the step-size exponent is 1/(p+1).
+    int error_order_ = 7;
     double def_step_size_ = 0.1; ///< @internal Initial/fixed step size.
     double max_step_change_ = 10.0; ///< @internal Max per-step growth ratio |dt_new/dt_old|.
     // Julia-style maxiters cap — safety net against runaway rejection loops or

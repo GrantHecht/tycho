@@ -84,10 +84,18 @@ method : IVPAlg or str, optional
     ``IVPAlg.DOPRI87`` when omitted.
 control_fn : VectorFunction or LGLInterpTable, optional
     Control law evaluated at each step (only for ODEs with control inputs).
+control_vec : numpy.ndarray, optional
+    Constant control vector applied at every step.  Shorthand for wrapping
+    a fixed array in a ``Constant`` control function (only for ODEs with
+    control inputs).  Supply either ``control_fn`` or ``control_vec``, not
+    both.
 var_locs : int, array-like of int, str, or list of str, optional
-    Indices (or named variables) in the ODE input vector that the control
-    law writes to.  Required when ``control_fn`` is a ``VectorFunction``
-    that does not already carry location information.
+    When ``control_fn`` is a ``VectorFunction``, these are the indices (or
+    named variables) in the ODE input vector that the control law writes to.
+    When ``control_fn`` is an ``LGLInterpTable``, these are the column
+    indices of the table to select (the ODE time variable is used
+    implicitly as the table input).  Required when the control function
+    does not already carry location information.
 
 Returns
 -------
@@ -304,7 +312,7 @@ list of tuple
 
         obj.def("integrate_stm2", &Integrator<DODE>::integrate_stm2, nb::arg("xt0_ups"),
                 nb::arg("tfs"), nb::arg("lfs"), nb::call_guard<nb::gil_scoped_release>(),
-                R"doc(Integrate a batch with the STM and second-order sensitivity (Hessian), serially.
+                R"doc(Integrate a batch with the STM and adjoint Hessian (d²(lf·xf)/dx0²), serially.
 
 Parameters
 ----------
@@ -313,14 +321,15 @@ xt0_ups : list of array_like
 tfs : numpy.ndarray
     Final times, one per initial condition.
 lfs : list of array_like
-    Adjoint (co-state) vectors at the final time, one per trajectory.
-    Used to compute the adjoint-vector product for the Hessian.
+    Adjoint/co-state vectors at the final time, one per trajectory.
+    Each defines the terminal quantity whose second-order sensitivity
+    (d²(lf·xf)/dx0²) is computed.
 
 Returns
 -------
 list of tuple
-    Each element is ``(final_state, STM, Hessian)`` — the final state,
-    state-transition matrix, and second-order sensitivity matrix.
+    Each element is ``(final_state, STM, adjoint_Hessian)`` — the final
+    state, state-transition matrix, and adjoint Hessian d²(lf·xf)/dx0².
 )doc");
 
         obj.def("integrate_parallel",
@@ -457,8 +466,9 @@ tf : float
 n : int
     Number of evenly-spaced output states requested.
 stop_func : callable
-    Called after each accepted step with the current state-and-time vector.
-    Integration stops early when it returns a truthy value.
+    Called after each evenly-spaced output segment (``n - 1`` times) with
+    the state-and-time vector at the segment endpoint.  Integration stops
+    before the next segment when it returns a truthy value.
 
 Returns
 -------
@@ -483,8 +493,9 @@ tf : float
 events : list of EventPack or list of tuple
     Event specifications (see :meth:`integrate` with events for the format).
 alloutput : bool, optional
-    If ``True``, return the full dense trajectory in addition to event
-    locations.  If ``False`` (default), return only the final state.
+    If ``False`` (default), the trajectory contains every other
+    accepted-step state (midpoints removed).  If ``True``, it contains
+    all stored states.
 
 Returns
 -------
@@ -673,10 +684,11 @@ tuple
                                               int))&Integrator<DODE>::integrate_stm_parallel,
                 nb::arg("xt0_up"), nb::arg("tf"), nb::arg("threads"),
                 nb::call_guard<nb::gil_scoped_release>(),
-                R"doc(Integrate a single trajectory with STM using parallel columns.
+                R"doc(Integrate a single trajectory with STM using time-domain parallelism.
 
-Computes the state-transition matrix by propagating each column of the
-identity perturbation in parallel.
+Splits the time interval ``[t0, tf]`` into ``threads`` segments, propagates
+each segment concurrently, and chains the per-segment state-transition
+matrices by matrix multiplication to form the full STM.
 
 Parameters
 ----------
@@ -685,7 +697,7 @@ xt0_up : array_like
 tf : float
     Final time.
 threads : int
-    Number of threads to use for parallel column propagation.
+    Number of time segments (and threads) to use.
 
 Returns
 -------
@@ -749,7 +761,12 @@ list of tuple
 When ``True``, batch integration methods pack multiple trajectories into
 SuperScalar (SIMD) lanes and evaluate the ODE and RK stages in parallel
 across the batch.  Only has an effect when the underlying ODE supports
-vectorisation (``is_vectorizable = True``).
+vectorization (``is_vectorizable = True``).
+
+See Also
+--------
+vectorize_batch_calls : further controls whether SuperScalar evaluation
+    is used for batch calls.
 )doc");
 
         // def_step_size routes through set_initial_step_size so Python writes
@@ -849,7 +866,7 @@ numpy.ndarray
 )doc");
 
         obj.def("set_initial_step_size", &Integrator<DODE>::set_initial_step_size, nb::arg("h"),
-                R"doc(Set the initial step size and disable automatic step-size initialisation.
+                R"doc(Set the initial step size and disable automatic step-size initialization.
 
 Calling this method fixes the first step to ``h`` and turns off the
 Hairer-Wanner automatic initial step-size selection.  The adaptive controller
@@ -861,14 +878,14 @@ h : float
     Initial step size.  Must be positive and finite.
 )doc");
         obj.def("set_max_steps", &Integrator<DODE>::set_max_steps, nb::arg("n"),
-                R"doc(Set the maximum number of accepted steps per integration call.
+                R"doc(Set the maximum number of total steps (accepted + rejected) per integration call.
 
 If the integrator reaches this limit before ``tf``, it raises an error.
 
 Parameters
 ----------
 n : int
-    Maximum number of accepted steps (must be positive).
+    Maximum number of total steps (must be positive).
 )doc");
         obj.def("get_max_steps", &Integrator<DODE>::get_max_steps,
                 R"doc(Return the current maximum-steps limit.
@@ -876,34 +893,34 @@ n : int
 Returns
 -------
 int
-    Maximum number of accepted steps per integration call.
+    Maximum number of total steps (accepted + rejected) per integration call.
 )doc");
 
         obj.def_prop_rw(
             "event_tol", [](const Integrator<DODE> &self) { return self.get_event_tol(); },
             [](Integrator<DODE> &self, double v) { self.set_event_tol(v); },
-            R"doc(Absolute time tolerance for event root-finding (float, default ``1e-12``).
+            R"doc(Absolute time tolerance for event root-finding (float, default ``1e-6``).
 
-The bisection / secant loop that locates an event crossing stops when the
+The bisection / Newton loop that locates an event crossing stops when the
 bracketing interval width falls below this value.
 )doc");
         obj.def_prop_rw(
             "max_event_iters",
             [](const Integrator<DODE> &self) { return self.get_max_event_iters(); },
             [](Integrator<DODE> &self, int n) { self.set_max_event_iters(n); },
-            R"doc(Maximum iterations for event root-finding (int, default ``50``).
+            R"doc(Maximum iterations for event root-finding (int, default ``10``).
 
 If the root-finding loop has not converged within this many iterations and
 the interval has not reached :attr:`event_tol`, integration stops at the
 best current estimate of the event location.
 )doc");
         obj.def_rw("vectorize_batch_calls", &Integrator<DODE>::vectorize_batch_calls_,
-                   R"doc(Use vectorized (SuperScalar) evaluation for batch integration calls (bool, default ``True``).
+                   R"doc(Use SuperScalar evaluation for batch integration calls (bool, default ``True``).
 
 When ``True`` and :attr:`enable_vectorization` is also ``True``, batch
 methods pack multiple trajectories into SIMD lanes per call.  Disable
 to force scalar per-trajectory evaluation (useful for debugging or when
-the ODE is not vectorisable).
+the ODE is not vectorizable).
 )doc");
 
         // Controller + stats + HW-initdt API
@@ -967,6 +984,10 @@ ErrorNormType
         obj.def("get_naccept", &Integrator<DODE>::get_naccept,
                 R"doc(Return the number of accepted steps from the last integration call.
 
+For the single-trajectory :meth:`integrate_stm_parallel` with more than
+one thread, this reflects the main-thread segments only; per-worker
+counts are not aggregated.
+
 Returns
 -------
 int
@@ -974,6 +995,10 @@ int
 )doc");
         obj.def("get_nreject", &Integrator<DODE>::get_nreject,
                 R"doc(Return the number of rejected steps from the last integration call.
+
+For the single-trajectory :meth:`integrate_stm_parallel` with more than
+one thread, this reflects the main-thread segments only; per-worker
+counts are not aggregated.
 
 Returns
 -------
@@ -991,7 +1016,7 @@ available estimate.
 Returns
 -------
 int
-    Number of non-converged event localisations in the last call.
+    Number of non-converged event localizations in the last call.
 )doc");
 
         obj.def("set_auto_initial_dt", &Integrator<DODE>::set_auto_initial_dt,

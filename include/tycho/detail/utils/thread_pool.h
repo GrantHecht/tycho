@@ -549,9 +549,10 @@ ThreadPool &thread_pool();
 
 /// @brief Set the number of threads used for parallel work.
 ///
-/// @param n Thread count. `n <= 1` selects single-threaded mode (all work runs
-///          inline; the pool is never touched). `n > 1` resizes the pool to
-///          @p n threads.
+/// @param n Thread count. `n <= 1` (including 0/negative) selects
+///          single-threaded mode: work runs inline on the calling thread;
+///          the pool stays alive but is bypassed via `use_thread_pool()`.
+///          `n > 1` resizes the pool to @p n worker threads.
 void set_num_threads(int n);
 
 /// @brief Return the current thread count setting.
@@ -565,8 +566,8 @@ inline bool use_thread_pool() { return get_num_threads() > 1; }
 /// @brief Return true if `set_num_threads()` is currently mid-reset.
 ///
 /// Best-effort safety net: dispatch helpers throw if this returns true,
-/// catching the common misuse of calling `set_num_threads()` from a thread
-/// other than the one that initiated the configuration change.
+/// catching the misuse of calling a parallel dispatch helper concurrently
+/// while `set_num_threads()` is resizing the pool.
 bool pool_configuring();
 
 // ---------------------------------------------------------------------------
@@ -586,6 +587,8 @@ bool pool_configuring();
 ///
 /// Dispatches `nparts-1` blocks to the thread pool and runs the last block
 /// inline on the calling thread, then waits for all pool tasks to finish.
+/// `nparts` is first clamped to `count` (`nparts = std::min(nparts, count)`),
+/// so the single-call fallback also fires when `count == 1`.
 /// Falls back to a single `func(0, count)` call when `nparts <= 1` or the
 /// pool is inactive (`use_thread_pool()` is false).
 ///

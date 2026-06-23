@@ -1,4 +1,4 @@
-"""Contains miscilanaeous utilities"""
+"""Contains miscellaneous utilities"""
 
 from typing import overload
 
@@ -7,10 +7,12 @@ def get_core_count() -> int:
     """
     Return the number of physical CPU cores on the current machine.
 
-    Uses platform-specific APIs (e.g. ``sysconf`` on Linux/macOS,
-    ``GetSystemInfo`` on Windows) to query the physical core count.  Falls
-    back to ``std::thread::hardware_concurrency()`` when the platform query
-    is unavailable or fails.
+    Uses platform-specific APIs to query the physical core count:
+    ``/proc/cpuinfo`` on Linux, ``sysctlbyname("hw.physicalcpu")`` on macOS,
+    and ``GetLogicalProcessorInformation`` on Windows.  The result is capped
+    at ``std::thread::hardware_concurrency()``.  Falls back to
+    ``std::thread::hardware_concurrency()`` when the platform query is
+    unavailable or fails.
 
     Returns
     -------
@@ -29,14 +31,18 @@ def set_num_threads(n: int) -> None:
     Parameters
     ----------
     n : int
-        Thread count.  ``n <= 1`` selects single-threaded mode (all work
-        runs inline on the calling thread; the thread pool is not used).
-        ``n > 1`` sizes the pool to ``n`` worker threads.
+        Thread count.  ``n <= 1`` (including 0/negative) selects
+        single-threaded mode: work runs inline on the calling thread; the
+        pool stays alive but is bypassed.  ``n > 1`` resizes the pool to
+        ``n`` worker threads.
     """
 
 def get_num_threads() -> int:
     """
     Return the current process-global thread count.
+
+    The default before any :func:`set_num_threads` call is
+    ``std::thread::hardware_concurrency()``.
 
     Returns
     -------
@@ -58,9 +64,8 @@ class BumpAllocator:
     * **SuperScalar arena** — holds ``DefaultSuperScalar`` (SIMD-width
       ``double`` array) temporaries.
 
-    The default arena sizes are chosen automatically; use :meth:`resize` only
-    when profiling reveals arena overflow (fallback heap allocation) in tight
-    loops.
+    The default arena capacity is 64 elements per thread; the arena
+    self-tunes upward after overflow (use :meth:`resize` to pre-size).
     """
 
     @overload

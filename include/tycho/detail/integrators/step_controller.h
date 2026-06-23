@@ -25,12 +25,13 @@ namespace tycho::integrators {
 ///              qmin/qmax. dt_new preserves the sign of h (forward or
 ///              backward integration). There is no hard min/max step size
 ///              cap — the only backstop against runaway h is max_steps.
-///   q        — reciprocal of the raw step-growth factor (Julia convention:
-///              dt_new = dt / q). Exposed for diagnostics/tests.
+///   q        — reciprocal of the raw (pre-deadband) step-growth factor; dt_new = dt / q
+///              only when the deadband is inactive (i.e. q falls outside
+///              [qsteady_min_, qsteady_max_]). Exposed for diagnostics/tests.
 struct ControllerOutput {
     bool accepted; ///< Whether to accept the current step.
     double dt_new; ///< Proposed next step size (same sign as h).
-    double q;      ///< Reciprocal of the raw growth factor (Julia convention).
+    double q;      ///< Reciprocal of the raw (pre-deadband) growth factor (Julia convention).
 };
 
 /// Runtime selector for controller kind. User-facing enum.
