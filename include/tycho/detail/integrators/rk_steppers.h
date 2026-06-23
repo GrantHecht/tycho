@@ -435,7 +435,8 @@ template <class DODE, IVPAlg RKOp> struct RKStepper_Impl {
     /// @internal
     /// @brief Compile-time Butcher A[Stg][Elem] coefficient wrapped as a StaticScaleBase.
     template <int Stg, int Elem> struct ACoeff : StaticScaleBase<ACoeff<Stg, Elem>> {
-        static constexpr double value = RKCoeffs<RKOp>::A[Stg][Elem]; ///< @internal A[Stg][Elem] coefficient.
+        /// @internal A[Stg][Elem] Butcher coefficient value.
+        static constexpr double value = RKCoeffs<RKOp>::A[Stg][Elem];
     };
     /// @internal
     /// @brief Compile-time Butcher B[Elem] coefficient wrapped as a StaticScaleBase.
