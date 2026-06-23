@@ -70,8 +70,9 @@ the bracketed crossing locations.
 
 ## Integrator
 
-The ``Integrator`` class is constructed via ``ode.integrator(dt, alg=IVPAlg.DOPRI54)``
-on any ODE phase type (e.g. ``tychopy.optimal_control.ode_x``,
+The ``Integrator`` class is constructed by calling ``ode.integrator(dt)`` (which
+uses the default algorithm) — or ``ode.integrator(IVPAlg.DOPRI87, dt)`` to select
+a method — on any ODE phase type (e.g. ``tychopy.optimal_control.ode_x``,
 ``tychopy.optimal_control.ode_6``, etc.). The resulting object provides
 single-shot, dense, parallel, and state-transition-matrix integration of the
 bound ODE.

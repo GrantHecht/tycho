@@ -77,9 +77,10 @@ compares against the tolerance target.
 
 ## Events
 
-``EventHandler`` is the user-facing type for specifying a single
-zero-crossing event; ``EventPack`` is the scalar VectorFunction wrapper that
-the integrator evaluates at each step.
+``EventPack`` is the user-facing type for specifying a single zero-crossing
+event — an event-function VectorFunction (scalar output) together with a
+direction filter and a stop count. ``EventHandler`` is the engine that brackets
+and refines those crossings during integration.
 
 ```{eval-rst}
 .. doxygenstruct:: tycho::integrators::EventHandler
@@ -127,8 +128,8 @@ Runs multiple independent integrations in parallel using the thread pool.
 
 ### ``STMDriver``
 
-Computes state-transition matrices (Jacobians of integrated trajectories) via
-finite differences over the stepper output.
+Computes state-transition matrices (Jacobians of integrated trajectories) by
+composing the per-step analytic stepper Jacobians via the chain rule.
 
 ```{eval-rst}
 .. doxygenstruct:: tycho::integrators::STMDriver
