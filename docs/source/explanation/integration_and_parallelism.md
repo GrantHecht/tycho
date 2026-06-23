@@ -125,16 +125,19 @@ steps near the tolerance boundary.
 
 **`PI` (proportional-integral controller).** Incorporates the previous step's error
 as well, dampening oscillations:
-$q_{11} = \text{EEst}^{\beta_1}$ and $q = q_{11} / \text{errold}^{\beta_2}$,
+$q_{11} = \text{EEst}^{\beta_1}$ and
+$q = \text{clip}\!\left(q_{11} / (\gamma \cdot \text{errold}^{\beta_2})\right)$,
 where $\beta_1$ and $\beta_2$ are pre-scaled gains (the order factor is absorbed
-into the $\beta$ values, matching the Julia `OrdinaryDiffEq` convention). The PI
-controller is generally preferred over the pure I controller for smooth problems.
+into the $\beta$ values, matching the Julia `OrdinaryDiffEq` convention), $\gamma$
+is the safety factor, and the result is clipped to the allowed step-growth band.
+The PI controller is generally preferred over the pure I controller for smooth
+problems.
 
 **`PID` (proportional-integral-derivative controller with Söderlind limiter).** Uses
 a three-step error history and applies an $\arctan$-based limiter to the raw growth
 factor, preventing large $h$ changes even when the error history is very favorable.
 The accept condition is $\text{dt\_factor} \geq \text{accept\_safety}$ (default 0.81)
-rather than $\text{EEst} \leq 1$, making it slightly more aggressive on marginal
+rather than $\text{EEst} \leq 1$, which is slightly more permissive on marginal
 steps.
 
 All three controllers implement a *deadband*: when the proposed step-change factor
@@ -377,8 +380,9 @@ temporaries are thread-local and completely free of contention.
 The arena starts with a default capacity of 64 elements per thread. It
 *self-tunes*: if an evaluation overflows the arena (because the state is larger than
 expected), the overflow lands in a fallback heap block and the high-water mark is
-updated. On the next save/restore cycle — at the start of the next trajectory — the
-arena resizes itself to the observed high-water mark. After one warm-up trajectory the
+updated. When the arena next drains back to empty (on the `restore` that returns it
+to zero offset), it resizes itself to the observed high-water mark, so the following
+trajectory runs without reallocation. After one warm-up trajectory the
 arena is correctly sized and subsequent evaluations are allocation-free.
 
 For compile-time-sized VectorFunctions (where all matrix dimensions are known
