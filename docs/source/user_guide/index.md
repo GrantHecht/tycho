@@ -49,3 +49,10 @@ how_to/astro_dynamics_in_a_phase
 how_to/choosing_an_integrator
 how_to/threading_model
 ```
+
+```{toctree}
+:caption: Worked examples
+:maxdepth: 1
+
+examples
+```
