@@ -19,7 +19,7 @@ multi-trajectory or sensitivity-matrix workflows on top.
 ### ``IVPAlg`` — Runge-Kutta algorithm selector
 
 ```{eval-rst}
-.. doxygenenum:: tycho::integrators::IVPAlg
+.. doxygenenum:: tycho::IVPAlg
    :project: tycho
 ```
 

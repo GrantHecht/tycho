@@ -77,10 +77,13 @@ trajs = integ.integrate_dense_parallel(x0s, tfs, threads=utils.get_num_threads()
 
 Both methods release the GIL for the duration of the parallel work, so they are
 safe to call from a Python thread without blocking other threads. The `threads`
-argument controls how many tasks this call dispatches; it does not resize the
-global pool set by `set_num_threads`. You can therefore run a batch with a
-different thread count than the global default without affecting any concurrent
-work.
+argument sets how many blocks the batch is split into and dispatched onto the
+**global** pool — it does *not* create new threads or resize the pool. The actual
+concurrency is therefore bounded by the global pool size: if you have called
+`set_num_threads(1)` (single-threaded mode), parallel calls run serially
+regardless of the `threads` value, and a `threads` value larger than the pool
+size simply queues more blocks onto the same workers. Size the pool with
+`set_num_threads(n)` first to control how much parallelism these calls can use.
 
 A worked example that uses `integrate_dense_parallel` to fan out from a
 heteroclinic trajectory is `examples/python_examples/Heteroclinic.py`.
