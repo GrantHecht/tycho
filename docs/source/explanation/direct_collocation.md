@@ -4,7 +4,7 @@
 A **phase** is Tycho's representation of one optimal-control problem: find a
 trajectory that obeys some dynamics, satisfies the constraints you attach, and
 minimizes an objective. Where a
-{doc}`VectorFunction </user_guide/vectorfunctions>` describes *what* a quantity
+{doc}`VectorFunction </explanation/vector_function>` describes *what* a quantity
 is — the dynamics, a constraint, an objective — a phase describes *what to do
 with them*. This page is the practical picture: what a phase is made of, how you
 set one up, and what **direct collocation** does for you. The heavier
@@ -13,7 +13,7 @@ collocation node theory — lives in [Under the hood](#under-the-hood) at the en
 you can set up and solve phases without reading it.
 
 For a guided, runnable build see the
-{doc}`first-phase tutorial </user_guide/first_phase>`. For the complete API
+{doc}`first-phase tutorial </tutorials/basics/your_first_phase>`. For the complete API
 surface see the {doc}`Python reference </reference/python/optimal_control>` and
 the {doc}`C++ reference </reference/cpp/optimal_control>`.
 
@@ -24,7 +24,7 @@ A phase is built from two things you supply and a discretization it owns for you
 **The dynamics, as an ODE.** You give the equations of motion as an **ODE**: a
 VectorFunction of the packed argument $[x, t, u, p]$ (state, time, control, and
 optional static parameters) that returns the state derivative $\dot{x}$. Any of
-the {doc}`astrodynamics models </user_guide/astrodynamics>` can serve directly as
+the {doc}`astrodynamics models </explanation/astrodynamics>` can serve directly as
 an ODE, or you can compose your own.
 
 **A `Phase`, built from that ODE.** The phase owns the discretization (the mesh
@@ -168,7 +168,7 @@ iteration count and min/max segment counts, so it always terminates. A common,
 deliberate pattern is to *solve* (feasibility only) on the first coarse mesh and
 switch to full *optimize* once the mesh is fine enough to trust — cheap iterations
 early, accurate iterations late. For a step-by-step recipe see
-{doc}`How to refine a mesh </user_guide/how_to/mesh_refinement>`.
+{doc}`How to refine a mesh </how_to/mesh_refinement>`.
 
 The broader point is that mesh refinement is what makes the discrete answer a
 reliable surrogate for the continuous one: collocation produces a finite problem,
@@ -300,13 +300,13 @@ defects → sparse NLP → PSIOPT solve → mesh refinement. To go further:
 
 - **Tutorial.** For a guided, runnable build of a phase from an ODE through to a
   solved trajectory, start with the
-  {doc}`first-phase tutorial </user_guide/first_phase>`.
+  {doc}`first-phase tutorial </tutorials/basics/your_first_phase>`.
 - **Reference.** The complete API for phases, ODEs, transcription modes, control
   modes, and mesh settings is in the
   {doc}`Python reference </reference/python/optimal_control>` and the
   {doc}`C++ reference </reference/cpp/optimal_control>`.
 - **The dynamics layer.** Every defect, constraint, and objective in a phase is a
-  VectorFunction; the {doc}`VectorFunction model </user_guide/vectorfunctions>`
+  VectorFunction; the {doc}`VectorFunction model </explanation/vector_function>`
   explains the differentiable, symbolic machinery the transcription is built on.
 
 The two organizing ideas: a phase turns a continuous optimal-control problem into

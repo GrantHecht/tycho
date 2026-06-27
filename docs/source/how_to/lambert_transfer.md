@@ -10,7 +10,7 @@ handles both single-revolution and multi-revolution transfers.
 This recipe assumes you have departure and arrival position vectors in the same
 coordinate frame and units as `mu`.  For the conceptual background on Lambert's
 problem and the long-way vs. short-way distinction see
-{doc}`Astrodynamics in Tycho </user_guide/astrodynamics>`.
+{doc}`Astrodynamics in Tycho </explanation/astrodynamics>`.
 
 The C++ tabs show the equivalent `tycho::astro` calls — illustrative fragments
 that assume the headers and `using namespace` lines shown in the first tab,
@@ -114,7 +114,7 @@ single-revolution overload.
 The solver returns only the boundary velocities, but the *trajectory* is
 implied: propagate the departure state `[R1, V1]` forward over the time of
 flight and you trace out the actual transfer arc.  `propagate_cartesian`
-(see {doc}`How to propagate a Keplerian orbit analytically </user_guide/how_to/kepler_propagation>`)
+(see {doc}`How to propagate a Keplerian orbit analytically </how_to/kepler_propagation>`)
 samples the two-body motion at any intermediate time.  The figure below
 propagates each Lambert solution and plots the resulting arcs in the orbit
 plane.
@@ -223,9 +223,9 @@ code (0 = converged, 1 = not converged) that you should inspect.
 - {doc}`Python reference </reference/python/astrodynamics>` — complete
   signatures for `lambert_izzo` and `lambert_izzo_multirev`, including the
   batch overload for solving many problems simultaneously.
-- {doc}`Astrodynamics in Tycho </user_guide/astrodynamics>` — the conceptual
+- {doc}`Astrodynamics in Tycho </explanation/astrodynamics>` — the conceptual
   background on Lambert's problem, the long-way vs. short-way distinction, and
   multi-revolution solutions.
-- {doc}`How to propagate a Keplerian orbit analytically </user_guide/how_to/kepler_propagation>` —
+- {doc}`How to propagate a Keplerian orbit analytically </how_to/kepler_propagation>` —
   analytic propagation as a complement to the Lambert solver for building
   initial guesses.

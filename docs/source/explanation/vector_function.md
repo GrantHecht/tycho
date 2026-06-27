@@ -10,7 +10,7 @@ dispatch — lives in [Under the hood](#under-the-hood) at the end; you can use
 VectorFunctions productively without reading it.
 
 For a guided, hands-on build see the
-{doc}`first-VectorFunction tutorial </user_guide/first_vectorfunction>`; for the
+{doc}`first-VectorFunction tutorial </tutorials/basics/your_first_vectorfunction>`; for the
 complete API surface see the
 {doc}`Python reference </reference/python/vector_functions>` and
 {doc}`C++ reference </reference/cpp/vector_functions>`.
@@ -522,12 +522,12 @@ it, just another VectorFunction.
 
 - **Tutorial.** For a guided build from a single symbolic input to complete
   dynamics, start with the
-  {doc}`first-VectorFunction tutorial </user_guide/first_vectorfunction>`.
+  {doc}`first-VectorFunction tutorial </tutorials/basics/your_first_vectorfunction>`.
 - **Reference.** Every public class and free function, with full signatures, is
   in the {doc}`Python reference </reference/python/vector_functions>` and
   {doc}`C++ reference </reference/cpp/vector_functions>`.
 - **How-to guides.** When you know the concepts and just need the recipe for
-  adding a new dynamics model, see the {doc}`User Guide </user_guide/index>`.
+  adding a new dynamics model, see the {doc}`How-to guides </how_to/index>`.
 
 The two organizing ideas: a VectorFunction is a *differentiable, symbolic* map
 that carries its own derivatives, and it operates at two levels — a zero-overhead

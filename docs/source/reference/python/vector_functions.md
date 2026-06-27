@@ -16,9 +16,9 @@ $f : \mathbb{R}^{n} \to \mathbb{R}^{m}$. You build one by composing the
 {py:class}`~tychopy.vector_functions.Arguments` placeholder with the elementwise math functions,
 vector operations, and composition helpers documented here; the resulting
 object evaluates its primal, Jacobian, and Hessian on demand. For the
-conceptual model see {doc}`The VectorFunction model </user_guide/vectorfunctions>`;
+conceptual model see {doc}`The VectorFunction model </explanation/vector_function>`;
 for a hands-on introduction see the
-{doc}`first-VectorFunction tutorial </user_guide/first_vectorfunction>`.
+{doc}`first-VectorFunction tutorial </tutorials/basics/your_first_vectorfunction>`.
 
 ## Argument construction
 

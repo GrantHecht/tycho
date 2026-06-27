@@ -112,7 +112,7 @@ $(1, 2, 3)$.
 
 - {doc}`Your first Tycho program <first_program>` — the five-minute path from a
   working import to a runnable, self-differentiating dynamics model.
-- {doc}`The first-VectorFunction tutorial </user_guide/first_vectorfunction>`
+- {doc}`The first-VectorFunction tutorial </tutorials/basics/your_first_vectorfunction>`
   — build and evaluate VectorFunctions in depth, working up to real dynamics.
 - {doc}`Building from Source </contributing/building>` — wheels, the docs build,
   and every CMake option.

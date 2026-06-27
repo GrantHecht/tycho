@@ -39,17 +39,28 @@ Install Tycho into a conda environment, then write your first program — a
 self-differentiating dynamics model in a few lines.
 :::
 
-:::{grid-item-card} User Guide
-:link: user_guide/index
+:::{grid-item-card} Tutorials
+:link: tutorials/index
 :link-type: doc
-Concepts, hands-on tutorials, how-to recipes, and worked examples —
-everything to learn and use Tycho.
+Hands-on walkthroughs. Build and differentiate your first VectorFunction.
+:::
+
+:::{grid-item-card} How-to Guides
+:link: how_to/index
+:link-type: doc
+Short, problem-first recipes for common tasks — a growing collection.
 :::
 
 :::{grid-item-card} Reference
 :link: reference/index
 :link-type: doc
 Python and C++ API reference for the VectorFunction subsystem.
+:::
+
+:::{grid-item-card} Explanation
+:link: explanation/index
+:link-type: doc
+Concepts and theory, starting with the VectorFunction model.
 :::
 
 :::{grid-item-card} Contributing
@@ -65,7 +76,9 @@ Build from source, style guides, testing conventions.
 :maxdepth: 1
 
 getting_started/index
-user_guide/index
+tutorials/index
+how_to/index
 reference/index
+explanation/index
 contributing/index
 ```

@@ -4,7 +4,7 @@
 Tycho's astrodynamics subsystem gives you three orbital state representations,
 analytic two-body propagation, Lambert's problem, and a menu of dynamics models
 that drop straight in as the ODE of an optimal-control
-{doc}`Phase </user_guide/phases_and_collocation>`. This page is practical
+{doc}`Phase </explanation/direct_collocation>`. This page is practical
 orientation: what each piece is for and how to choose between them. For the full
 API surface see the {doc}`Python reference </reference/python/astrodynamics>` and
 the {doc}`C++ reference </reference/cpp/astrodynamics>`; for runnable walk-throughs
@@ -97,7 +97,7 @@ Tycho provides conversion VectorFunctions — `CartesianToClassic`,
 representation can express boundary conditions in another. They are differentiable
 with analytic Jacobians, so they compose into boundary-value constraints without
 breaking the optimizer's derivative chain. For worked conversions see
-{doc}`How to convert between element sets </user_guide/how_to/element_conversions>`.
+{doc}`How to convert between element sets </how_to/element_conversions>`.
 
 ## Propagation
 
@@ -122,7 +122,7 @@ Analytic propagation is useful in three contexts:
    `CentralShooting` phase around `KeplerPropagator`, letting a Keplerian arc
    participate in a multi-phase problem with full sensitivities.
 
-See {doc}`How to propagate a Kepler orbit </user_guide/how_to/kepler_propagation>`.
+See {doc}`How to propagate a Kepler orbit </how_to/kepler_propagation>`.
 
 ### Lambert's problem
 
@@ -139,7 +139,7 @@ flight `lambert_izzo_multirev` accepts a revolution count `Nrevs` and a
 
 Lambert's problem is the enabling computation for **pork-chop plots** and
 impulsive maneuver design, and a useful initial-guess generator for low-thrust
-problems. See {doc}`How to solve a Lambert transfer </user_guide/how_to/lambert_transfer>`.
+problems. See {doc}`How to solve a Lambert transfer </how_to/lambert_transfer>`.
 
 ## Dynamics models
 
@@ -149,7 +149,7 @@ $[\text{state}(6), \mathbf{a}(3)]$ (IR = 9) to the state derivative $\dot{x}$
 acceleration beyond central-body point-mass gravity. In an optimal-control
 problem this is usually the thrust control the optimizer chooses, but it can
 equally carry modeled perturbations (J2, drag, SRP) or their sum. This is exactly
-the ODE form a {doc}`Phase </user_guide/phases_and_collocation>` expects, and each
+the ODE form a {doc}`Phase </explanation/direct_collocation>` expects, and each
 model carries analytic Jacobian and Hessian implementations so PSIOPT receives
 exact derivatives.
 
@@ -255,8 +255,8 @@ collocation machinery (mesh refinement, control parameterization, Lagrange
 objectives) is available regardless of the model. A multi-phase trajectory can
 even mix models: a `CartesianDynamics` thrust arc, an `MEEDynamics` heliocentric
 leg, and a `CRTBPDynamics` capture, linked into one problem. See
-{doc}`How to use astrodynamics dynamics in a phase </user_guide/how_to/astro_dynamics_in_a_phase>`
-and the {doc}`low-thrust transfer tutorial </user_guide/low_thrust_transfer>`.
+{doc}`How to use astrodynamics dynamics in a phase </how_to/astro_dynamics_in_a_phase>`
+and the {doc}`low-thrust transfer tutorial </tutorials/astrodynamics/low_thrust_transfer>`.
 
 The three ideas to carry away: state representations differ in their singularity
 structure, and that choice decides how well the optimizer traverses

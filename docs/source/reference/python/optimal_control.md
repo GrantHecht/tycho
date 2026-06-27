@@ -20,9 +20,9 @@ an {py:class}`~tychopy.optimal_control.OptimalControlProblem`. The primary
 transcription method is direct collocation (the LGL and Trapezoidal
 {py:class}`~tychopy.optimal_control.TranscriptionModes`), but central shooting
 is also supported (``CentralShooting``). For the conceptual model see
-{doc}`Direct collocation in Tycho </user_guide/phases_and_collocation>`; for a
+{doc}`Direct collocation in Tycho </explanation/direct_collocation>`; for a
 hands-on introduction see the
-{doc}`Setting up a phase </user_guide/first_phase>`.
+{doc}`Setting up a phase </tutorials/basics/your_first_phase>`.
 
 ## ODE definition
 

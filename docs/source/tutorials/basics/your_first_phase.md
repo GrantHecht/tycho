@@ -3,7 +3,7 @@
 
 A **Phase** is the object that turns dynamics, constraints, and an objective into
 an optimal-control problem Tycho can solve. Where
-{doc}`your first VectorFunction </user_guide/first_vectorfunction>`
+{doc}`your first VectorFunction </tutorials/basics/your_first_vectorfunction>`
 covered *defining* dynamics, this tutorial builds on that foundation: you will
 wrap a VectorFunction in an ODE, build a `Phase`, pin its boundary conditions, add
 an objective, and **solve it with PSIOPT** — Tycho's interior-point optimizer.
@@ -16,7 +16,7 @@ the optimal travel time directly from the result.
 
 This is a hands-on, learning-oriented walkthrough. For the *why* behind the
 transcription — how a continuous problem becomes a finite-dimensional NLP — read
-{doc}`Direct collocation in Tycho </user_guide/phases_and_collocation>`. For the
+{doc}`Direct collocation in Tycho </explanation/direct_collocation>`. For the
 complete catalog of every phase method, see the
 {doc}`Python reference </reference/python/optimal_control>`.
 
@@ -362,9 +362,9 @@ cleanly converged collocation solution.
 
 ## Next steps
 
-- {doc}`Direct collocation in Tycho </user_guide/phases_and_collocation>` — how the
+- {doc}`Direct collocation in Tycho </explanation/direct_collocation>` — how the
   continuous problem becomes the NLP you just solved.
 - {doc}`Python reference </reference/python/optimal_control>` — the complete phase
   and ODE API, including every constraint and objective type.
-- {doc}`Your first VectorFunction </user_guide/first_vectorfunction>` —
+- {doc}`Your first VectorFunction </tutorials/basics/your_first_vectorfunction>` —
   the building blocks the dynamics above are made of.

@@ -12,7 +12,7 @@ problem setup and post-processing.
 This recipe assumes you have a working Python environment with `tychopy`
 installed and a Cartesian state or set of orbital elements in hand.  For the
 conceptual picture of why element sets differ see
-{doc}`Astrodynamics in Tycho </user_guide/astrodynamics>`.
+{doc}`Astrodynamics in Tycho </explanation/astrodynamics>`.
 
 The C++ tabs show the equivalent `tycho::astro` calls — illustrative fragments
 that assume the headers and `using namespace` lines shown in the first tab,
@@ -163,7 +163,7 @@ classes in the reference.
 - {doc}`Python reference </reference/python/astrodynamics>` — complete
   signatures for all conversion functions and the VectorFunction conversion
   classes.
-- {doc}`Astrodynamics in Tycho </user_guide/astrodynamics>` — the conceptual
+- {doc}`Astrodynamics in Tycho </explanation/astrodynamics>` — the conceptual
   picture of each element set's singularity structure and when to prefer each.
-- {doc}`How to use astrodynamics dynamics in a phase </user_guide/how_to/astro_dynamics_in_a_phase>` —
+- {doc}`How to use astrodynamics dynamics in a phase </how_to/astro_dynamics_in_a_phase>` —
   using MEE as the ODE representation in an optimal-control phase.

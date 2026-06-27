@@ -75,11 +75,11 @@ Tycho is built the same way.
 
 ## Next steps
 
-- {doc}`Your first VectorFunction </user_guide/first_vectorfunction>`
+- {doc}`Your first VectorFunction </tutorials/basics/your_first_vectorfunction>`
   — the same building blocks in depth, working up from a single scalar to full
   dynamics, including `compute_jacobian`, `adjointgradient`, and
   `adjointhessian`.
-- {doc}`The VectorFunction model </user_guide/vectorfunctions>` — the design
+- {doc}`The VectorFunction model </explanation/vector_function>` — the design
   behind what you just used.
-- {doc}`User Guide </user_guide/index>` — task-oriented recipes, including using
+- {doc}`How-to guides </how_to/index>` — task-oriented recipes, including using
   a VectorFunction inside a `Phase` and choosing an integrator.

@@ -11,8 +11,8 @@ conditions, computing reference arcs, and seeding Lambert solvers.
 This recipe assumes you have a starting state in one of the three element sets
 — Cartesian, classical, or MEE — and a gravitational parameter `mu`.  For the
 algorithm behind the propagators (universal-variable / Stumpff functions) see
-{doc}`Astrodynamics in Tycho </user_guide/astrodynamics>`.  For element-set
-conversions see {doc}`How to convert between orbital element sets </user_guide/how_to/element_conversions>`.
+{doc}`Astrodynamics in Tycho </explanation/astrodynamics>`.  For element-set
+conversions see {doc}`How to convert between orbital element sets </how_to/element_conversions>`.
 
 The C++ tabs show the equivalent `tycho::astro` calls — illustrative fragments
 that assume the headers and `using namespace` lines shown in the first tab,
@@ -157,8 +157,8 @@ same exceptions as the Python wrappers.
   signatures for `propagate_cartesian`, `propagate_classic`, and
   `propagate_modified`, plus the `KeplerPropagator` VectorFunction for
   embedding Keplerian arcs in expression graphs.
-- {doc}`Astrodynamics in Tycho </user_guide/astrodynamics>` — the
+- {doc}`Astrodynamics in Tycho </explanation/astrodynamics>` — the
   universal-variable algorithm and when analytic propagation is the right tool.
-- {doc}`How to convert between orbital element sets </user_guide/how_to/element_conversions>` —
+- {doc}`How to convert between orbital element sets </how_to/element_conversions>` —
   converting between Cartesian, classical, and MEE before and after
   propagation.

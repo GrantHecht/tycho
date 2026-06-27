@@ -10,7 +10,7 @@ lines.
   working import to a runnable VectorFunction with an automatic Jacobian.
 
 From there, head to the
-{doc}`first-VectorFunction tutorial </user_guide/first_vectorfunction>`
+{doc}`first-VectorFunction tutorial </tutorials/basics/your_first_vectorfunction>`
 to go deeper.
 
 ```{toctree}

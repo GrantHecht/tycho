@@ -11,8 +11,8 @@ concentrates, and re-solves until every interval is below a tolerance you set.
 
 This recipe assumes you already have a working {py:class}`~tychopy.optimal_control.PhaseInterface`
 with constraints and an objective attached. For the concepts behind
-collocation error see {doc}`Direct collocation in Tycho </user_guide/phases_and_collocation>`;
-for end-to-end phase setup see {doc}`Setting up a phase </user_guide/first_phase>`.
+collocation error see {doc}`Direct collocation in Tycho </explanation/direct_collocation>`;
+for end-to-end phase setup see {doc}`Setting up a phase </tutorials/basics/your_first_phase>`.
 
 The C++ tabs show the equivalent builder-API calls — illustrative fragments
 that assume a `phase` is already in scope, not standalone programs.
@@ -171,5 +171,5 @@ A complete worked example is
 
 - {doc}`Python reference </reference/python/optimal_control>` — the full
   `PhaseInterface` API, including every `set_mesh_*` setter.
-- {doc}`Direct collocation in Tycho </user_guide/phases_and_collocation>` — why
+- {doc}`Direct collocation in Tycho </explanation/direct_collocation>` — why
   collocation error arises and what the estimators measure.
