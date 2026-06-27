@@ -21,8 +21,12 @@ complete catalog of every phase method, see the
 {doc}`Python reference </reference/python/optimal_control>`.
 
 Every `{doctest}` block below (the ones showing `>>>` prompts) is executed as part
-of Tycho's test suite, so the results shown are real. Each step builds on the
-previous one; run them in order in a REPL or script to reproduce the example.
+of Tycho's test suite, so the results shown are real. The C++ equivalents appear
+alongside in tabs; those use the builder API and are illustrative fragments that
+share context across steps (faithful to
+`examples/cpp_examples/builder/brachistochrone/main.cpp`, but not run here). Each
+step builds on the previous one; run them in order in a REPL or script to
+reproduce the example.
 
 :::{note}
 Several phase-building methods (`add_boundary_value`, `add_lu_var_bound`,
@@ -60,6 +64,8 @@ control), pull out the symbolic pieces, assemble the right-hand side as a single
 VectorFunction with `vf.stack`, and hand it to `super().__init__` along with the
 state and control counts.
 
+::::{tab-set}
+:::{tab-item} Python
 ```{doctest}
 >>> class Brachistochrone(oc.ODEBase):
 ...     def __init__(self, g):
@@ -72,6 +78,29 @@ state and control counts.
 ...         ode = vf.stack([xdot, ydot, vdot])
 ...         super().__init__(ode, 3, 1)
 ```
+:::
+:::{tab-item} C++
+```cpp
+#include <tycho/tycho.h>
+using namespace tycho;
+using namespace tycho::vf;
+using namespace tycho::oc;
+
+double g = 9.81;
+// ODEBuilder(n_state, n_control); the lambda builds the right-hand side.
+auto ode = ODEBuilder(3, 1)
+               .define([g](auto &args) {
+                   auto v     = args.x_var(2);
+                   auto theta = args.u_var(0);
+                   return stack(sin(theta) * v,
+                                cos(theta) * v * (-1.0),
+                                g * cos(theta));
+               })
+               .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"t", 3}, {"theta", 4}})
+               .build();
+```
+:::
+::::
 
 `ODEArguments(3, 1)` lays the input out as $[x, y, v, t, \theta]$ — the three
 state variables, then time, then the one control. `args.x_vec()` is the state
@@ -93,12 +122,33 @@ state-and-time-and-control vector $[x, y, v, t, \theta]$ per sample, marching
 straight from the start point $(0, 10)$ toward the end point $(10, 5)$ over a
 unit time interval, with a constant guess angle of one radian.
 
+::::{tab-set}
+:::{tab-item} Python
 ```{doctest}
 >>> ts = np.linspace(0.0, 1.0, 100)
 >>> Xs = [[10.0 * t, 10.0 - 5.0 * t, g * t * np.cos(1.0), t, 1.0] for t in ts]
 >>> len(Xs), len(Xs[0])
 (100, 5)
 ```
+:::
+:::{tab-item} C++
+```cpp
+// The guess is a std::vector of [x, y, v, t, theta] rows.
+std::vector<Eigen::VectorXd> traj;
+traj.reserve(100);
+for (int i = 0; i < 100; ++i) {
+    const double s = static_cast<double>(i) / 99;
+    Eigen::VectorXd pt(5);
+    pt[0] = 10.0 * s;
+    pt[1] = 10.0 - 5.0 * s;
+    pt[2] = g * s * std::cos(1.0);
+    pt[3] = s;
+    pt[4] = 1.0;
+    traj.push_back(pt);
+}
+```
+:::
+::::
 
 Each row is the full input vector the ODE expects: state, then time, then control.
 
@@ -109,9 +159,18 @@ The first argument is the collocation scheme (`"LGL3"` — third-order
 Legendre–Gauss–Lobatto), the second is the initial guess, and the third is the
 number of mesh segments.
 
+::::{tab-set}
+:::{tab-item} Python
 ```{doctest}
 >>> phase = ode.phase("LGL3", Xs, 32)
 ```
+:::
+:::{tab-item} C++
+```cpp
+auto phase = ode.phase(TranscriptionModes::LGL3, traj, 32);
+```
+:::
+::::
 
 The phase now holds 32 segments of LGL3 collocation, seeded from our guess. It is
 not yet a well-posed problem — nothing pins where the trajectory starts or ends,
@@ -131,12 +190,26 @@ We pin the problem with three kinds of condition:
 Finally, the objective: minimize elapsed time. `add_delta_time_objective(1.0)`
 adds the phase's total time, scaled by `1.0`, to the cost.
 
+::::{tab-set}
+:::{tab-item} Python
 ```{doctest}
 >>> _ = phase.add_boundary_value("Front", range(0, 4), [0.0, 10.0, 0.0, 0.0])
 >>> _ = phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
 >>> _ = phase.add_boundary_value("Back", [0, 1], [10.0, 5.0])
 >>> _ = phase.add_delta_time_objective(1.0)
 ```
+:::
+:::{tab-item} C++
+```cpp
+phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "y", "v", "t"},
+                         Eigen::Vector4d(0.0, 10.0, 0.0, 0.0));
+phase.add_lu_var_bound(PhaseRegionFlags::Path, "theta", -0.1, 2.0);
+phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "y"},
+                         Eigen::Vector2d(10.0, 5.0));
+phase.add_delta_time_objective(1.0);
+```
+:::
+::::
 
 The problem is now fully posed: a fixed start, a fixed end position, a bounded
 control angle, and a minimum-arrival-time objective.
@@ -147,12 +220,22 @@ PSIOPT prints a detailed iteration log by default. For a clean run we turn its
 console output down via the `optimizer` handle, then call `optimize()`. The call
 returns a convergence flag; we keep it so we can confirm the solve succeeded.
 
+::::{tab-set}
+:::{tab-item} Python
 ```{doctest}
 >>> phase.optimizer.set_print_level(0)
 >>> flag = phase.optimize()
 >>> str(flag)
 'ConvergenceFlags.CONVERGED'
 ```
+:::
+:::{tab-item} C++
+```cpp
+phase.optimizer().set_print_level(0);
+auto flag = phase.optimize();   // or phase.solve_optimize() for a rough guess
+```
+:::
+::::
 
 `CONVERGED` means PSIOPT satisfied its KKT and feasibility tolerances — the
 trajectory in the phase is now the optimized one.
@@ -163,11 +246,21 @@ trajectory in the phase is now the optimized one.
 trajectory as a list of $[x, y, v, t, \theta]$ rows. The last row is the final
 collocation point, so its time component (slot 3) is the optimal travel time:
 
+::::{tab-set}
+:::{tab-item} Python
 ```{doctest}
 >>> Traj = phase.return_traj()
 >>> round(float(Traj[-1][3]), 4)
 1.8013
 ```
+:::
+:::{tab-item} C++
+```cpp
+auto Traj = phase.return_traj();
+double tf = Traj.back()[3];   // optimal travel time, ~1.8013 s
+```
+:::
+::::
 
 About **1.8013 seconds** — the known brachistochrone minimum for this geometry.
 The boundary conditions we imposed are honored exactly: the bead arrives at

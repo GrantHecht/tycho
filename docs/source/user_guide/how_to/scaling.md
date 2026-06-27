@@ -13,6 +13,9 @@ This recipe assumes you already have a phase set up — see
 conceptual picture see
 {doc}`Direct collocation in Tycho </user_guide/phases_and_collocation>`.
 
+The C++ tabs show the equivalent builder-API calls — illustrative fragments
+that assume a `phase` (or `ocp`) already in scope, not standalone programs.
+
 ## Pick a scaling mode
 
 The {py:class}`~tychopy.optimal_control.ScaleModes` enum has three values:
@@ -30,9 +33,21 @@ physical problem is to supply units *and* turn on auto-scaling.
 
 Turn auto-scaling on per phase (and on the OCP for a multi-phase problem):
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 phase.set_auto_scaling(True)
 ```
+:::
+:::{tab-item} C++
+```cpp
+using namespace tycho;
+using namespace tycho::oc;
+
+phase.set_auto_scaling(true);
+```
+:::
+::::
 
 With nothing else, the optimizer derives scales from the problem itself. The
 boolean is also the read/write attribute `phase.auto_scaling`. For a
@@ -40,9 +55,18 @@ multi-phase problem, the same call on the
 {py:class}`~tychopy.optimal_control.OptimalControlProblem` propagates to every
 phase:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 ocp.set_auto_scaling(True)        # second arg apply_to_phases defaults True
 ```
+:::
+:::{tab-item} C++
+```cpp
+ocp.set_auto_scaling(true);       // second arg applytophases defaults true
+```
+:::
+::::
 
 ## Supply per-variable units
 
@@ -52,26 +76,57 @@ non-dimensionalizes each variable). The cleanest way is by variable-group
 name, which requires that your ODE registered named groups (`Vgroups`) at
 construction:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 # Named units — order-independent, reads from the variable registry.
 phase.set_units(h=Lstar, v=Vstar, t=Tstar)
 ```
+:::
+:::{tab-item} C++
+```cpp
+// Named units — order-independent, reads from the variable registry.
+phase.set_units({{"h", Lstar}, {"v", Vstar}, {"t", Tstar}});
+```
+:::
+::::
 
 Names you did not mention default to a unit scale. You can also pass a full
 units vector in packed `[x, t, u, p]` order:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 phase.set_units([xstar, tstar, ustar])
 ```
+:::
+:::{tab-item} C++
+```cpp
+// A full units vector in packed [x, t, u, p] order (Eigen::VectorXd).
+phase.set_units(units_vec);
+```
+:::
+::::
 
 A convenience helper on the ODE builds that vector for you from named groups,
 so you can construct it once and reuse it across phases:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 units = ode.make_units(v=Vstar, h=Lstar, r=Lstar, rad=Lstar)
 aphase.set_units(units)
 dphase.set_units(units)
 ```
+:::
+:::{tab-item} C++
+```cpp
+auto units = ode.make_units({{"v", Vstar}, {"h", Lstar}, {"r", Lstar}, {"rad", Lstar}});
+aphase.set_units(units);
+dphase.set_units(units);
+```
+:::
+::::
 
 Supplying units and enabling auto-scaling is the usual combination: units fix
 the variable magnitudes from physics you know, and auto-scaling handles the
@@ -87,6 +142,8 @@ the bound/value methods. This gives you per-constraint flexibility — the
 global mode. Hand-scale a single constraint when its residual is naturally far
 from order one:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 # Heating-rate path bound: scale so the right-hand side is order 1.
 phase.add_upper_func_bound("Path", QFunc(), [0, 2, 6], Qlimit, 1.0 / Qlimit)
@@ -94,6 +151,20 @@ phase.add_upper_func_bound("Path", QFunc(), [0, 2, 6], Qlimit, 1.0 / Qlimit)
 # Opt one constraint out of auto-scaling entirely:
 phase.add_boundary_value("Back", "gamma", 0.0, auto_scale="none")
 ```
+:::
+:::{tab-item} C++
+```cpp
+// Heating-rate path bound: scale so the right-hand side is order 1.
+Eigen::VectorXi q_vars(3);
+q_vars << 0, 2, 6;
+phase.add_upper_func_bound(PhaseRegionFlags::Path, QFunc(), q_vars,
+                           Qlimit, 1.0 / Qlimit);
+
+// Opt one constraint out of auto-scaling entirely:
+phase.add_boundary_value(PhaseRegionFlags::Back, "gamma", 0.0, ScaleModes::NONE);
+```
+:::
+::::
 
 ## When to use NONE
 
