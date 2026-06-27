@@ -1,9 +1,11 @@
-(user-guide-examples)=
+(tutorials-examples)=
 
 # Worked examples
 
-This page collects complete, runnable optimal-control solves drawn straight
-from Tycho's example suite. Each one is a real problem — dynamics, phase setup,
+This gallery collects complete, runnable optimal-control programs — drawn
+straight from Tycho's example suite — to read and adapt for your own problems.
+Once you have the basics from the tutorials above, these show the patterns at
+work end to end. Each one is a real problem — dynamics, phase setup,
 constraints, an objective, and a solve — and each is curated to surface a
 different part of the library. The snippets below are faithful excerpts that
 show the *core formulation* in both Python and C++; imports, plotting, and
