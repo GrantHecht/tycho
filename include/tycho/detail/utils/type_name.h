@@ -28,6 +28,14 @@
 #include <cxxabi.h>
 #endif
 
+/// @brief Return the demangled C++ type name of @p T as a string.
+///
+/// Uses `abi::__cxa_demangle` on GCC/Clang to produce a human-readable name.
+/// On MSVC the raw `typeid` name is returned unchanged.  Appends `const`,
+/// `volatile`, `&`, or `&&` qualifiers as appropriate.
+///
+/// @tparam T  The type to query (may be a reference or cv-qualified type).
+/// @return  A human-readable string representation of @p T.
 template <class T> std::string type_name() {
     typedef typename std::remove_reference<T>::type TR;
     std::unique_ptr<char, void (*)(void *)> own(

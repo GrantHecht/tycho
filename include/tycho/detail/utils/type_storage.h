@@ -21,6 +21,19 @@
 
 namespace tycho::utils {
 
+/// @brief Type-erasing SBO (small-buffer-optimised) container with value semantics.
+///
+/// Stores any object derived from `C` either inline (if `sizeof(Model) <= SBO_CAP`
+/// and alignment is compatible) or on the heap. Inline storage uses `memcpy`-based
+/// move, so stored types must be trivially relocatable (no self-referential pointers).
+///
+/// `C` must provide `virtual void clone_into(TypeStorage<C, SBO_CAP>&) const` for
+/// copy construction and copy assignment. Each concrete Model implements this as
+/// `s.emplace<Model>(data_)`.
+///
+/// @tparam C       Abstract base class of the stored polymorphic object.
+/// @tparam SBO_CAP Inline buffer size in bytes (default 128). Objects larger than
+///                 this are allocated on the heap.
 template <typename C, std::size_t SBO_CAP = 128> class TypeStorage {
     static constexpr std::size_t SBO_ALIGN = alignof(std::max_align_t);
     enum class Kind : uint8_t { Empty, Inline, Heap };
@@ -44,10 +57,17 @@ template <typename C, std::size_t SBO_CAP = 128> class TypeStorage {
     }
 
   public:
+    /// @brief Construct an empty container.
     TypeStorage() noexcept = default;
 
-    // Construct a Model(obj) in the SBO buffer (if it fits) or on the heap.
-    // Model must derive from C and be constructible from T.
+    /// @brief Construct a `Model(obj)` in the SBO buffer (if it fits) or on the heap.
+    ///
+    /// `Model` must derive from `C` and be constructible from `T`. Inline storage
+    /// requires that `Model` is trivially relocatable (see class-level note).
+    ///
+    /// @tparam Model Concrete derived type to construct.
+    /// @tparam T     Type of the forwarded argument used to construct `Model`.
+    /// @param obj    Value moved into the new `Model` instance.
     template <typename Model, typename T> void emplace(T obj) {
         destroy();
         if constexpr (sizeof(Model) <= SBO_CAP && alignof(Model) <= SBO_ALIGN) {
@@ -76,18 +96,17 @@ template <typename C, std::size_t SBO_CAP = 128> class TypeStorage {
         }
     }
 
-    // Deep copy via virtual clone_into
+    /// @brief Deep-copy constructor — invokes `clone_into` on the stored object.
     TypeStorage(const TypeStorage &o) : kind_(Kind::Empty) {
         if (!o.empty()) {
             o.get().clone_into(*this);
         }
     }
 
-    // Move: memcpy for inline, pointer steal for heap.
-    // SAFETY: memcpy-move is valid because all stored Models are trivially
-    // relocatable (no self-referential pointers). See the comment in
-    // emplace(). If a non-relocatable Model is ever needed, replace this
-    // path with virtual move_into() dispatch.
+    /// @brief Move constructor — uses `memcpy` for inline storage, pointer steal for heap.
+    ///
+    /// Valid because all stored Models are trivially relocatable. See the note in
+    /// `emplace()`.
     TypeStorage(TypeStorage &&o) noexcept : kind_(Kind::Empty) {
         if (o.kind_ == Kind::Inline) {
             std::memcpy(buf_, o.buf_, SBO_CAP);
@@ -101,6 +120,8 @@ template <typename C, std::size_t SBO_CAP = 128> class TypeStorage {
         }
     }
 
+    /// @brief Copy-assignment operator — destroys current contents, then deep-copies via
+    /// `clone_into`.
     TypeStorage &operator=(const TypeStorage &o) {
         if (this != &o) {
             destroy();
@@ -111,6 +132,7 @@ template <typename C, std::size_t SBO_CAP = 128> class TypeStorage {
         return *this;
     }
 
+    /// @brief Move-assignment operator — destroys current contents, then steals from `o`.
     TypeStorage &operator=(TypeStorage &&o) noexcept {
         if (this != &o) {
             destroy();
@@ -130,8 +152,12 @@ template <typename C, std::size_t SBO_CAP = 128> class TypeStorage {
 
     ~TypeStorage() { destroy(); }
 
+    /// @brief Returns true if no object is currently stored.
     [[nodiscard]] bool empty() const noexcept { return kind_ == Kind::Empty; }
 
+    /// @brief Return a const reference to the stored object.
+    ///
+    /// Behaviour is undefined if `empty()` is true.
     const C &get() const noexcept {
         if (kind_ == Kind::Inline) {
             return *inline_ptr();
@@ -139,6 +165,9 @@ template <typename C, std::size_t SBO_CAP = 128> class TypeStorage {
         return *ptr_;
     }
 
+    /// @brief Return a mutable reference to the stored object.
+    ///
+    /// Behaviour is undefined if `empty()` is true.
     C &get() noexcept {
         if (kind_ == Kind::Inline) {
             return *inline_ptr();
@@ -146,6 +175,7 @@ template <typename C, std::size_t SBO_CAP = 128> class TypeStorage {
         return *ptr_;
     }
 
+    /// @brief Return a const pointer to the stored object, or `nullptr` if empty.
     const C *get_ptr() const noexcept {
         if (kind_ == Kind::Inline) {
             return inline_ptr();
@@ -153,6 +183,7 @@ template <typename C, std::size_t SBO_CAP = 128> class TypeStorage {
         return ptr_;
     }
 
+    /// @brief Return a mutable pointer to the stored object, or `nullptr` if empty.
     C *get_ptr() noexcept {
         if (kind_ == Kind::Inline) {
             return inline_ptr();
@@ -161,7 +192,8 @@ template <typename C, std::size_t SBO_CAP = 128> class TypeStorage {
     }
 };
 
-// Concept: C must support clone_into(TypeStorage<C,N>&) const
+/// @internal
+/// @brief Concept satisfied when `C` exposes `clone_into(TypeStorage<C,N>&) const`.
 template <typename C, std::size_t N>
 concept TypeStorageBase = requires(const C &c, TypeStorage<C, N> &s) { c.clone_into(s); };
 

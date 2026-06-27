@@ -22,27 +22,35 @@ namespace tycho::integrators {
 ///   Scalar — numeric type (double, SuperScalar, etc.)
 template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
 
-    using RKData = RKCoeffs<Alg>;
-    static constexpr int Stages = RKData::Stages;
+    using RKData = RKCoeffs<Alg>;                           ///< @internal Butcher tableau type.
+    static constexpr int Stages = RKData::Stages;           ///< @internal Number of main RK stages.
+    /// @internal
+    /// @brief Stages minus one (loop bound).
     static constexpr int Stgsm1 = Stages - 1;
 
     // k_vals_extra layout (matches the production RKCoeffs dense-output schema):
     //   [0]                 — f(xf)·h when !LastStageIsFxf (DOPRI87 / Vern*)
     //   [offset..offset+e]  — interpolation extra stages (BS5/Tsit5/Vern*)
     //   offset = LastStageIsFxf ? 0 : 1
+    /// @internal
+    /// @brief Index of first extra interp stage in k_vals_extra.
     static constexpr int ExtraOffset = RKData::LastStageIsFxf ? 0 : 1;
+    /// @internal
+    /// @brief Total extra stage slots allocated.
     static constexpr int ExtraCount = RKData::InterpStages + ExtraOffset;
 
-    using ODEState = typename DODE::template Input<Scalar>;
+    using ODEState = typename DODE::template Input<Scalar>;  ///< @internal Scalar-typed ODE state.
+    /// @internal
+    /// @brief Scalar-typed ODE derivative.
     using ODEDeriv = typename DODE::template Output<Scalar>;
 
     /// Snapshot of the FSAL cache for reject-rollback in adaptive drivers.
     /// AdaptiveDriver takes this before each step and restores on reject so
     /// the retry reads f(xi), not the unconditionally-overwritten f(xnext).
     struct FsalSnapshot {
-        ODEDeriv k;
-        bool valid;
-        bool fresh;
+        ODEDeriv k;   ///< @internal Cached f(xf) derivative.
+        bool valid;   ///< @internal Whether k may be used as k[0] for the next step.
+        bool fresh;   ///< @internal Whether k unambiguously holds f(xf) from the last step.
     };
 
     /// Seed f(xi) into the FSAL cache and mark it valid. Callers that
@@ -97,7 +105,11 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
         }
         return k_fsal_;
     }
+    /// @internal
+    /// @brief True if k_fsal_ may be used as k[0] for the next step.
     bool fsal_valid() const { return fsal_valid_; }
+    /// @internal
+    /// @brief True if k_fsal_ unambiguously holds f(xf) from the most recent step.
     bool peek_fresh() const { return peek_fresh_; }
 
   private:
@@ -283,6 +295,8 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
             utils::ArrayOfTempSpecs<ODEDeriv, ExtraCount>(ode.output_rows(), 1));
     }
 
+    /// @internal
+    /// @brief Returns the embedded error estimator order from the Butcher tableau.
     static constexpr int error_order() { return RKData::ErrorOrder; }
 };
 

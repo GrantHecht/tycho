@@ -31,8 +31,11 @@ using vf::GenericFunction;
 /// preserve brace-init call-site syntax (`{gf, 0, 1}`) across C++ callers and
 /// to let the nanobind tuple-based Python API pass through unchanged.
 namespace event_direction {
+/// @brief Falling-edge direction filter constant (-1).
 inline constexpr int Falling = -1;
+/// @brief Any-edge direction filter constant (0).
 inline constexpr int Any = 0;
+/// @brief Rising-edge direction filter constant (+1).
 inline constexpr int Rising = 1;
 } // namespace event_direction
 
@@ -51,16 +54,20 @@ inline constexpr int Rising = 1;
 /// structurally, so no integrate-entry re-validation is needed.
 class EventPack {
   public:
+    /// @brief The event-function VectorFunction (scalar output, any input size).
     GenericFunction<-1, 1> vf;
 
     EventPack() = default;
+    /// @brief Constructs an EventPack from function, direction filter, and stop count.
     EventPack(GenericFunction<-1, 1> vf_, int direction_arg, int stop_count_arg)
         : vf(std::move(vf_)) {
         this->set_direction(direction_arg);
         this->set_stop_count(stop_count_arg);
     }
 
+    /// @brief Returns the direction filter.
     int direction() const { return direction_; }
+    /// @brief Returns the stop count.
     int stop_count() const { return stop_count_; }
 
     /// Throws std::invalid_argument if `d` is not in {-1, 0, +1}.
@@ -86,8 +93,13 @@ class EventPack {
     int stop_count_ = 0;
 };
 
+/// @brief Internal helper that detects and refines event zero-crossings.
+///
+/// Provides static methods used by AdaptiveDriver and Integrator to detect
+/// zero-crossings in event VectorFunctions during adaptive integration.
 struct EventHandler {
 
+    /// @brief Alias for the integrators-namespace EventPack type.
     using EventPack = tycho::integrators::EventPack;
 
     /// Check for zero crossings between prev_vals and next_vals.

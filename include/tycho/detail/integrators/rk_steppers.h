@@ -44,29 +44,52 @@ using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;
 
+/// @brief One-step Runge-Kutta integrator implemented as a VectorFunction.
+///
+/// Maps a packed input `[x0; tf]` (ODE state at t0 concatenated with final time)
+/// to the propagated ODE state at tf using the Butcher tableau specified by RKOp.
+/// Used by AdaptiveDriver and Integrator to propagate a single step.
+///
+/// @tparam DODE ODE VectorFunction type (must expose IRC, XV, UV, PV, t_var(), etc.).
+/// @tparam RKOp IVPAlg selector choosing the Butcher tableau via RKCoeffs<RKOp>.
 template <class DODE, IVPAlg RKOp>
 struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::value, DODE::IRC> {
+    /// CRTP base type.
     using Base = VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::value, DODE::IRC>;
     VF_TYPE_ALIASES(Base);
 
+    /// @internal
+    /// @brief Scalar-typed ODE output.
     template <class Scalar> using ODEDeriv = typename DODE::template Output<Scalar>;
+    /// @internal
+    /// @brief Scalar-typed ODE input.
     template <class Scalar> using ODEState = typename DODE::template Input<Scalar>;
+    /// @internal
+    /// @brief Scalar-typed ODE Jacobian.
     template <class Scalar> using ODEJacobian = typename DODE::template Jacobian<Scalar>;
+    /// @internal
+    /// @brief Scalar-typed ODE Hessian.
     template <class Scalar> using ODEHessian = typename DODE::template Hessian<Scalar>;
 
+    /// @internal
+    /// @brief Enables SuperScalar dispatch for batch trajectories.
     static constexpr bool is_vectorizable = true;
 
-    using RKData = RKCoeffs<RKOp>;
-    static constexpr int Stages = RKData::Stages;
-    static constexpr int Stgsm1 = RKData::Stages - 1;
+    using RKData = RKCoeffs<RKOp>;                 ///< Butcher tableau data type for RKOp.
+    static constexpr int Stages = RKData::Stages;  ///< Number of stages in the selected tableau.
+    static constexpr int Stgsm1 = RKData::Stages - 1; ///< Stages minus one (used in stage loops).
 
-    DODE ode_;
+    DODE ode_; ///< @internal The underlying ODE VectorFunction.
 
+    /// @brief Default constructor; leaves ode_ uninitialized.
     RKStepper() {}
+    /// @brief Constructs from an ODE VectorFunction; sets I/O dimensions automatically.
     RKStepper(DODE ode) : ode_(ode) {
         this->set_io_rows(this->ode_.input_rows() + 1, this->ode_.input_rows());
     }
 
+    /// @internal
+    /// @brief Propagate ODE from x0 to tf via RKOp; writes final state into fx_.
     template <class InType, class OutType>
     inline void compute_impl(const Eigen::MatrixBase<InType> &x,
                              Eigen::MatrixBase<OutType> const &fx_) const {
@@ -111,6 +134,8 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
             TempSpec<ODEState<Scalar>>(this->ode_.input_rows(), 1));
     }
 
+    /// @internal
+    /// @brief Propagate ODE and compute the state-transition Jacobian via dense output.
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(const Eigen::MatrixBase<InType> &x,
                                       Eigen::MatrixBase<OutType> const &fx_,
@@ -199,6 +224,8 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
             ArrayOfTempSpecs<KXjacType, Stages>(this->ode_.output_rows(), this->input_rows()));
     }
 
+    /// @internal
+    /// @brief Propagate ODE, compute Jacobian, adjoint gradient, and adjoint Hessian.
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
     inline void compute_jacobian_adjointgradient_adjointhessian_impl(
@@ -353,26 +380,38 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
             TempSpec<Input<Scalar>>(this->input_rows(), 1));
     }
 
-    /// Required by SolverBase but unreachable — RKStepper is never added
-    /// as a constraint.
+    /// @brief Required by SolverBase; unreachable because RKStepper is never registered as a
+    /// constraint.
     void constraints(ConstEigenRef<Eigen::VectorXd> X, EigenRef<Eigen::VectorXd> FX,
                      const SolverIndexingData &data) const {};
+    /// @internal
+    /// @brief No-op; satisfies SolverBase interface — RKStepper is never registered as a
+    /// constraint.
     void constraints_adjointgradient(ConstEigenRef<Eigen::VectorXd> X,
                                      ConstEigenRef<Eigen::VectorXd> L, EigenRef<Eigen::VectorXd> FX,
                                      EigenRef<Eigen::VectorXd> AGX,
                                      const SolverIndexingData &data) const {};
+    /// @internal
+    /// @brief No-op; satisfies SolverBase interface — RKStepper is never registered as a
+    /// constraint.
     void constraints_jacobian(ConstEigenRef<Eigen::VectorXd> X, Eigen::Ref<Eigen::VectorXd> FX,
                               Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
                               Eigen::Ref<Eigen::VectorXi> KKTLocations,
                               Eigen::Ref<Eigen::VectorXi> KKTClashes,
                               std::vector<std::mutex> &KKTLocks,
                               const SolverIndexingData &data) const {}
+    /// @internal
+    /// @brief No-op; satisfies SolverBase interface — RKStepper is never registered as a
+    /// constraint.
     void constraints_jacobian_adjointgradient(
         ConstEigenRef<Eigen::VectorXd> X, ConstEigenRef<Eigen::VectorXd> L,
         Eigen::Ref<Eigen::VectorXd> FX, Eigen::Ref<Eigen::VectorXd> AGX,
         Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
         EigenRef<Eigen::VectorXi> KKTLocations, EigenRef<Eigen::VectorXi> KKTClashes,
         std::vector<std::mutex> &KKTLocks, const SolverIndexingData &data) const {}
+    /// @internal
+    /// @brief No-op; satisfies SolverBase interface — RKStepper is never registered as a
+    /// constraint.
     void constraints_jacobian_adjointgradient_adjointhessian(
         ConstEigenRef<Eigen::VectorXd> X, ConstEigenRef<Eigen::VectorXd> L,
         EigenRef<Eigen::VectorXd> FX, EigenRef<Eigen::VectorXd> AGX,
@@ -381,19 +420,34 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
         std::vector<std::mutex> &KKTLocks, const SolverIndexingData &data) const {}
 };
 
+/// @internal
+/// @brief Expression-template helper that builds the static (symbolic) RKStepper definition
+/// used by the collocation transcription layer (Phase / transcription). Not used in adaptive
+/// integration; AdaptiveDriver and Integrator use RKStepper directly.
 template <class DODE, IVPAlg RKOp> struct RKStepper_Impl {
+    /// @internal
+    /// @brief Builds the symbolic Runge-Kutta expression graph for the given ODE.
     static auto Definition(const DODE &ode) {
         auto ks0 = std::tuple{};
         return compute_xf<-1, decltype(ks0)>(ode, ks0);
     }
 
+    /// @internal
+    /// @brief Compile-time Butcher A[Stg][Elem] coefficient wrapped as a StaticScaleBase.
     template <int Stg, int Elem> struct ACoeff : StaticScaleBase<ACoeff<Stg, Elem>> {
+        /// @internal A[Stg][Elem] Butcher coefficient value.
         static constexpr double value = RKCoeffs<RKOp>::A[Stg][Elem];
     };
+    /// @internal
+    /// @brief Compile-time Butcher B[Elem] coefficient wrapped as a StaticScaleBase.
     template <int Elem> struct BCoeff : StaticScaleBase<BCoeff<Elem>> {
-        static constexpr double value = RKCoeffs<RKOp>::B[Elem];
+        static constexpr double value = RKCoeffs<RKOp>::B[Elem]; ///< @internal B[Elem] weight.
     };
 
+    /// @internal
+    /// @brief Recursively builds the stage chain up to and including stage Stg, then assembles
+    /// the final state sum and wraps it in a NestedCallAndAppendChain ready for Phase
+    /// transcription.
     template <int Stg, class Ks> static auto compute_xf(const DODE &ode, const Ks &ks) {
         constexpr int XV = DODE::XV;
         constexpr int UV = DODE::UV;
@@ -433,6 +487,8 @@ template <class DODE, IVPAlg RKOp> struct RKStepper_Impl {
         }
     }
 
+    /// @internal
+    /// @brief Assembles a full ODE input vector [x0, ti, u, p] from separate components.
     template <class Xtype, class Titype, class Utype, class Ptype>
     static auto make_state(const DODE &ode, const Xtype &x0, const Titype &ti, const Utype &u,
                            const Ptype &p) {
@@ -453,6 +509,8 @@ template <class DODE, IVPAlg RKOp> struct RKStepper_Impl {
         }
     }
 
+    /// @internal
+    /// @brief Accumulates the weighted k-sum for stage Stg using a compile-time Elem recursion.
     template <int Stg, int Elem, class Args>
     static auto kth_stage_sum(const DODE &ode, const Args &args) {
         if constexpr (Elem == Stg + 1) {
@@ -469,6 +527,9 @@ template <class DODE, IVPAlg RKOp> struct RKStepper_Impl {
         };
     }
 
+    /// @internal
+    /// @brief Tuple-accumulating variant of kth_stage_sum; collects sub-expressions into a tuple
+    /// for make_sum_tuple rather than returning a single sum expression directly.
     template <int Stg, int Elem, class Args, class Ks>
     static auto kth_stage_sum2(const DODE &ode, const Args &args, const Ks &ks) {
         if constexpr (Elem == Stg + 1) {
@@ -491,6 +552,9 @@ template <class DODE, IVPAlg RKOp> struct RKStepper_Impl {
         };
     }
 
+    /// @internal
+    /// @brief Accumulates the B-weighted final state sum xf = x0 + h * Σ B[i]*k[i] as an
+    /// expression tree using a compile-time Elem recursion.
     template <int Elem, class Args, class KF>
     static auto final_state_sum(const DODE &ode, const Args &args, const KF &kf) {
         if constexpr (Elem == RKCoeffs<RKOp>::Stages - 1) {

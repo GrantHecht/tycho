@@ -15,4 +15,6 @@ element_conversions
 kepler_propagation
 lambert_transfer
 astro_dynamics_in_a_phase
+choosing_an_integrator
+threading_model
 ```

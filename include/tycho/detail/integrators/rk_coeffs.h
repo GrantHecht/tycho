@@ -61,6 +61,11 @@ namespace tycho {
 // DOPRI54's adaptive stepper uses IVPAlg::DOPRI5 coefficients), and the
 // transcription paths use the *Trans variants; rk_steppers.h branches on
 // them. Passing a non-user-selectable value to set_method throws.
+/// @brief Runtime-selectable Runge-Kutta algorithm identifier.
+///
+/// User-selectable values map to specific Butcher tableaux via RKCoeffs<Alg>.
+/// Internal tags (RK4Classic, DOPRI5, *Trans) are template-dispatch-only and
+/// throw when passed to set_method().
 enum class IVPAlg {
     DOPRI54, ///< Dormand-Prince 5(4) — 7 stages, adaptive
     DOPRI87, ///< Dormand-Prince 8(7) — 13 stages, adaptive (default)
@@ -120,50 +125,82 @@ using tycho::IVPAlg;
 //
 // `long long` covers any denominator we encounter (up to 2^63 - 1); all
 // existing Verner/BS/Tsit5 denominators fit well within this range.
+/// @internal
+/// @brief Compile-time rational-to-double helper for Butcher tableau coefficients.
+/// @param n Numerator.
+/// @param d Denominator.
+/// @return `static_cast<double>(n) / static_cast<double>(d)` (IEEE 754 round-to-nearest).
 constexpr double rat(long long n, long long d) {
     return static_cast<double>(n) / static_cast<double>(d);
 }
 
+/// @internal
+/// @brief Primary template (unspecialised); specialisations hold the actual Butcher tableau
+/// data.
 template <IVPAlg opt> struct RKCoeffs {};
 
+/// @internal
+/// @brief Butcher tableau for RK4Classic (internal dispatch tag only, not runtime-selectable).
 template <> struct RKCoeffs<IVPAlg::RK4Classic> {
-    static constexpr int Stages = 4;
-    static constexpr int Order = 4;
+    static constexpr int Stages = 4;              ///< @internal Number of stages.
+    static constexpr int Order = 4;               ///< @internal Method order.
+    /// @internal
+    /// @brief Embedded error estimator order (0 = none).
     static constexpr int ErrorOrder = 0;
-    static constexpr bool FSAL = false;
-    static constexpr bool HasEmbedded = false;
-    static constexpr bool HasMidpoint = false; // fixed-step, no dense output
+    static constexpr bool FSAL = false;           ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = false;    ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = false;    ///< @internal Supports midpoint dense output.
 
     // Dense-output schema fields — all zero because HasMidpoint=false.
-    static constexpr int InterpStages = 0;
-    static constexpr bool LastStageIsFxf = false;
+    static constexpr int InterpStages = 0;        ///< @internal Extra interpolation stages.
+    static constexpr bool LastStageIsFxf = false; ///< @internal Last main stage equals f(xf).
+    /// @internal
+    /// @brief Total stages referenced by midpoint sum.
     static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
 
+    /// @internal
+    /// @brief Butcher A matrix (lower-triangular stage coefficients).
     static constexpr std::array<std::array<double, 3>, 3> A = {
         std::array<double, 3>{rat(1, 2), 0.0, 0.0}, std::array<double, 3>{0.0, rat(1, 2), 0.0},
         std::array<double, 3>{0.0, 0.0, 1.0}};
 
+    /// @internal
+    /// @brief Stage time fractions.
     static constexpr std::array<double, 3> C = {rat(1, 2), rat(1, 2), 1.0};
+    /// @internal
+    /// @brief Main quadrature weights.
     static constexpr std::array<double, 4> B = {rat(1, 6), rat(1, 3), rat(1, 3), rat(1, 6)};
+    /// @internal
+    /// @brief Embedded error weights (unused for this method).
     static constexpr std::array<double, 4> Bhat = {0, 0, 0, 0};
 };
 
+/// @internal
+/// @brief Butcher tableau for DOPRI54 (Dormand-Prince 5(4), user-selectable).
 template <> struct RKCoeffs<IVPAlg::DOPRI54> {
-    static constexpr int Stages = 7;
-    static constexpr int Order = 5;
-    static constexpr int ErrorOrder = 4;
-    static constexpr bool FSAL = true;
-    static constexpr bool HasEmbedded = true;
-    static constexpr bool HasMidpoint = true;
+    static constexpr int Stages = 7;           ///< @internal Number of stages.
+    static constexpr int Order = 5;            ///< @internal Method order.
+    static constexpr int ErrorOrder = 4;       ///< @internal Embedded error estimator order.
+    static constexpr bool FSAL = true;         ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = true;  ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = true;  ///< @internal Supports midpoint dense output.
 
     // Dense-output schema fields (no extra interpolation stages — DOPRI54
     // uses its own 5th-order interpolation polynomial over existing main stages).
+    /// @internal
+    /// @brief Extra interpolation stages.
     static constexpr int InterpStages = 0;
+    /// @internal
+    /// @brief Last main stage equals f(xf).
     static constexpr bool LastStageIsFxf = FSAL;
+    /// @internal
+    /// @brief Total stages referenced by midpoint sum.
     static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
 
     // Butcher tableau — matches Julia OrdinaryDiffEqLowOrderRK DP5ConstantCache
     // (generic T::Type variant with rational coefficients).
+    /// @internal
+    /// @brief Butcher A matrix.
     static constexpr std::array<std::array<double, 6>, 6> A = {
         std::array<double, 6>{rat(1, 5), 0, 0, 0, 0, 0},
         std::array<double, 6>{rat(3, 40), rat(9, 40), 0, 0, 0, 0},
@@ -175,34 +212,55 @@ template <> struct RKCoeffs<IVPAlg::DOPRI54> {
         std::array<double, 6>{rat(35, 384), 0.0, rat(500, 1113), rat(125, 192), rat(-2187, 6784),
                               rat(11, 84)}};
 
+    /// @internal
+    /// @brief Stage time fractions.
     static constexpr std::array<double, 6> C = {rat(1, 5), rat(3, 10), rat(4, 5),
                                                 rat(8, 9), 1.0,        1.0};
+    /// @internal
+    /// @brief Main quadrature weights.
     static constexpr std::array<double, 7> B = {
         rat(35, 384), 0.0, rat(500, 1113), rat(125, 192), rat(-2187, 6784), rat(11, 84), 0.0};
+    /// @internal
+    /// @brief Embedded error weights.
     static constexpr std::array<double, 7> Bhat = {
         rat(5179, 57600), 0.0,       rat(7571, 16695), rat(393, 640), rat(-92097, 339200),
         rat(187, 2100),   rat(1, 40)};
 
+    /// @internal
+    /// @brief Midpoint interpolation weights (2·b_i(0.5)).
     static constexpr std::array<double, BmidStages> Bmid = {
         0.2002686376600479, 0.0000000000000000,  0.7836643588368518, -0.0596492035318963,
         0.1178653667448159, -0.0899577761820872, 0.0478086164722679};
 };
 
+/// @internal
+/// @brief Butcher tableau for DOPRI5 (internal transcription dispatch tag; use DOPRI54 for
+/// runtime use).
 template <> struct RKCoeffs<IVPAlg::DOPRI5> {
-    static constexpr int Stages = 6;
-    static constexpr int Order = 5;
+    static constexpr int Stages = 6;           ///< @internal Number of stages.
+    static constexpr int Order = 5;            ///< @internal Method order.
+    /// @internal
+    /// @brief Embedded error estimator order (0 = none).
     static constexpr int ErrorOrder = 0;
-    static constexpr bool FSAL = false;
-    static constexpr bool HasEmbedded = false;
-    static constexpr bool HasMidpoint = false; // transcription-only, no dense output
+    static constexpr bool FSAL = false;        ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = false; ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = false; ///< @internal Supports midpoint dense output.
 
     // Dense-output schema fields — unused (HasMidpoint=false).
+    /// @internal
+    /// @brief Extra interpolation stages.
     static constexpr int InterpStages = 0;
+    /// @internal
+    /// @brief Last main stage equals f(xf).
     static constexpr bool LastStageIsFxf = false;
+    /// @internal
+    /// @brief Total stages referenced by midpoint sum.
     static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
 
     // 6-stage non-FSAL transcription companion for DOPRI54 — same first 6
     // stages as DOPRI54's A matrix with the FSAL-last row dropped.
+    /// @internal
+    /// @brief Butcher A matrix.
     static constexpr std::array<std::array<double, 5>, 5> A = {
         std::array<double, 5>{rat(1, 5), 0, 0, 0, 0},
         std::array<double, 5>{rat(3, 40), rat(9, 40), 0, 0, 0},
@@ -212,31 +270,47 @@ template <> struct RKCoeffs<IVPAlg::DOPRI5> {
         std::array<double, 5>{rat(9017, 3168), rat(-355, 33), rat(46732, 5247), rat(49, 176),
                               rat(-5103, 18656)}};
 
+    /// @internal
+    /// @brief Stage time fractions.
     static constexpr std::array<double, 5> C = {rat(1, 5), rat(3, 10), rat(4, 5), rat(8, 9), 1.0};
+    /// @internal
+    /// @brief Main quadrature weights.
     static constexpr std::array<double, 6> B = {
         rat(35, 384), 0.0, rat(500, 1113), rat(125, 192), rat(-2187, 6784), rat(11, 84)};
+    /// @internal
+    /// @brief Embedded error weights.
     static constexpr std::array<double, 6> Bhat = {rat(5179, 57600),    0.0,
                                                    rat(7571, 16695),    rat(393, 640),
                                                    rat(-92097, 339200), rat(187, 2100)};
 };
 
+/// @internal
+/// @brief Butcher tableau for DOPRI87 (Dormand-Prince 8(7), user-selectable).
 template <> struct RKCoeffs<IVPAlg::DOPRI87> {
-    static constexpr int Stages = 13;
-    static constexpr int Order = 8;
-    static constexpr int ErrorOrder = 7;
-    static constexpr bool FSAL = false;
-    static constexpr bool HasEmbedded = true;
-    static constexpr bool HasMidpoint = true;
+    static constexpr int Stages = 13;          ///< @internal Number of stages.
+    static constexpr int Order = 8;            ///< @internal Method order.
+    static constexpr int ErrorOrder = 7;       ///< @internal Embedded error estimator order.
+    static constexpr bool FSAL = false;        ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = true;  ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = true;  ///< @internal Supports midpoint dense output.
 
     // Dense-output schema fields — DOPRI87's last main stage is not f(xf),
     // so the midpoint branch must evaluate f(xf) as an extra k-value. No other
     // interpolation stages are needed.
+    /// @internal
+    /// @brief Extra interpolation stages.
     static constexpr int InterpStages = 0;
+    /// @internal
+    /// @brief Last main stage equals f(xf).
     static constexpr bool LastStageIsFxf = false;
+    /// @internal
+    /// @brief Total stages referenced by midpoint sum.
     static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
 
     // Butcher tableau — matches Julia OrdinaryDiffEqHighOrderRK DP8ConstantCache
     // (generic T::Type variant with rational coefficients).
+    /// @internal
+    /// @brief Butcher A matrix.
     static constexpr std::array<std::array<double, 12>, 12> A = {
         std::array<double, 12>{rat(1, 18), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
         std::array<double, 12>{rat(1, 48), rat(1, 16), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -272,12 +346,16 @@ template <> struct RKCoeffs<IVPAlg::DOPRI87> {
                                rat(248638103, 1413531060), 0},
     };
 
+    /// @internal
+    /// @brief Stage time fractions.
     static constexpr std::array<double, 12> C = {rat(1, 18),   rat(1, 12),
                                                  rat(1, 8),    rat(5, 16),
                                                  rat(3, 8),    rat(59, 400),
                                                  rat(93, 200), rat(5490023248, 9719169821),
                                                  rat(13, 20),  rat(1201146811, 1299019798),
                                                  1.0,          1.0};
+    /// @internal
+    /// @brief Main quadrature weights.
     static constexpr std::array<double, 13> B = {rat(14005451, 335480064),
                                                  0,
                                                  0,
@@ -291,6 +369,8 @@ template <> struct RKCoeffs<IVPAlg::DOPRI87> {
                                                  rat(118820643, 751138087),
                                                  rat(-528747749, 2220607170),
                                                  rat(1, 4)};
+    /// @internal
+    /// @brief Embedded error weights.
     static constexpr std::array<double, 13> Bhat = {rat(13451932, 455176623),
                                                     0,
                                                     0,
@@ -305,6 +385,8 @@ template <> struct RKCoeffs<IVPAlg::DOPRI87> {
                                                     rat(2, 45),
                                                     0};
 
+    /// @internal
+    /// @brief Midpoint interpolation weights (2·b_i(0.5)).
     static constexpr std::array<double, BmidStages> Bmid = {
         0.0820626072147879,  0.0000000000000000, 0.0000000000000000,  0.0000000000000000,
         0.0000000000000000,  0.1020112560398276, 0.4777861354824404,  0.6193740287992207,
@@ -312,22 +394,32 @@ template <> struct RKCoeffs<IVPAlg::DOPRI87> {
         0.0138169474640115,  -0.0276768086980947};
 };
 
+/// @internal
+/// @brief Butcher tableau for Tsit5 (Tsitouras 5(4), user-selectable).
 template <> struct RKCoeffs<IVPAlg::Tsit5> {
-    static constexpr int Stages = 7;
-    static constexpr int Order = 5;
-    static constexpr int ErrorOrder = 4;
-    static constexpr bool FSAL = true;
-    static constexpr bool HasEmbedded = true;
-    static constexpr bool HasMidpoint = true;
+    static constexpr int Stages = 7;           ///< @internal Number of stages.
+    static constexpr int Order = 5;            ///< @internal Method order.
+    static constexpr int ErrorOrder = 4;       ///< @internal Embedded error estimator order.
+    static constexpr bool FSAL = true;         ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = true;  ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = true;  ///< @internal Supports midpoint dense output.
 
     // Dense-output schema fields (Tsit5's own 4th-order interpolation
     // polynomial uses only the 7 main stages; no extras needed).
+    /// @internal
+    /// @brief Extra interpolation stages.
     static constexpr int InterpStages = 0;
+    /// @internal
+    /// @brief Last main stage equals f(xf).
     static constexpr bool LastStageIsFxf = FSAL;
+    /// @internal
+    /// @brief Total stages referenced by midpoint sum.
     static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
 
     // A: 6 rows (stages 2..7). Row i holds A[i+2, 0..i+1].
     // Source: OrdinaryDiffEqTsit5 Tsit5ConstantCacheActual (CompiledFloats variant)
+    /// @internal
+    /// @brief Butcher A matrix.
     static constexpr std::array<std::array<double, 6>, 6> A = {
         std::array<double, 6>{0.161, 0, 0, 0, 0, 0},
         std::array<double, 6>{-0.008480655492356989, 0.335480655492357, 0, 0, 0, 0},
@@ -340,9 +432,13 @@ template <> struct RKCoeffs<IVPAlg::Tsit5> {
         std::array<double, 6>{0.09646076681806523, 0.01, 0.4798896504144996, 1.379008574103742,
                               -3.290069515436081, 2.324710524099774}};
 
+    /// @internal
+    /// @brief Stage time fractions.
     static constexpr std::array<double, 6> C = {0.161, 0.327, 0.9, 0.9800255409045097, 1.0, 1.0};
 
     // B (5th-order weights): 7th row of A (FSAL structure) with b7 = 0.
+    /// @internal
+    /// @brief Main quadrature weights.
     static constexpr std::array<double, 7> B = {
         0.09646076681806523, 0.01, 0.4798896504144996, 1.379008574103742, -3.290069515436081,
         2.324710524099774,   0.0};
@@ -350,6 +446,8 @@ template <> struct RKCoeffs<IVPAlg::Tsit5> {
     // Bhat = B - btilde. btilde from tsit_tableaus.jl:
     // (-0.001780011052225777, -0.0008164344596567469, 0.007880878010261995,
     //  -0.1447110071732629, 0.5823571654525552, -0.45808210592918697, 0.015151515151515152)
+    /// @internal
+    /// @brief Embedded error weights.
     static constexpr std::array<double, 7> Bhat = {0.09646076681806523 - (-0.001780011052225777),
                                                    0.01 - (-0.0008164344596567469),
                                                    0.4798896504144996 - 0.007880878010261995,
@@ -363,38 +461,56 @@ template <> struct RKCoeffs<IVPAlg::Tsit5> {
     // Stepper::step's midpoint sum, yielding sol(Θ=0.5) exactly.
     // Derived via bench/julia_reference/src/compute_bmid.jl.
     // Sanity: Σ Bmid[i] = 1.0 (matches existing DOPRI54 Bmid convention).
+    /// @internal
+    /// @brief Midpoint interpolation weights (2·b_i(0.5)).
     static constexpr std::array<double, BmidStages> Bmid = {
         2.14824704601937561e-01,  2.27124999999999966e-02, 7.91218061120906202e-01,
         -6.89504287051870612e-01, 2.63237072991632992e+00, -2.03412170858730335e+00,
         6.25000000000000000e-02};
 };
 
+/// @internal
+/// @brief Butcher tableau for BS3 (Bogacki-Shampine 3(2), user-selectable).
 template <> struct RKCoeffs<IVPAlg::BS3> {
-    static constexpr int Stages = 4;
-    static constexpr int Order = 3;
-    static constexpr int ErrorOrder = 2;
-    static constexpr bool FSAL = true;
-    static constexpr bool HasEmbedded = true;
-    static constexpr bool HasMidpoint = true;
+    static constexpr int Stages = 4;           ///< @internal Number of stages.
+    static constexpr int Order = 3;            ///< @internal Method order.
+    static constexpr int ErrorOrder = 2;       ///< @internal Embedded error estimator order.
+    static constexpr bool FSAL = true;         ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = true;  ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = true;  ///< @internal Supports midpoint dense output.
 
     // Dense-output schema fields (BS3 falls back to Hermite cubic in Julia;
     // no extras needed).
+    /// @internal
+    /// @brief Extra interpolation stages.
     static constexpr int InterpStages = 0;
+    /// @internal
+    /// @brief Last main stage equals f(xf).
     static constexpr bool LastStageIsFxf = FSAL;
+    /// @internal
+    /// @brief Total stages referenced by midpoint sum.
     static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
 
     // A: 3 rows (stages 2..4). Row 3 (FSAL) equals b-vector.
     // Source: OrdinaryDiffEqLowOrderRK BS3ConstantCache (generic T::Type
     // variant with rational coefficients).
+    /// @internal
+    /// @brief Butcher A matrix.
     static constexpr std::array<std::array<double, 3>, 3> A = {
         std::array<double, 3>{rat(1, 2), 0, 0}, std::array<double, 3>{0, rat(3, 4), 0},
         std::array<double, 3>{rat(2, 9), rat(1, 3), rat(4, 9)}};
 
+    /// @internal
+    /// @brief Stage time fractions.
     static constexpr std::array<double, 3> C = {rat(1, 2), rat(3, 4), 1.0};
+    /// @internal
+    /// @brief Main quadrature weights.
     static constexpr std::array<double, 4> B = {rat(2, 9), rat(1, 3), rat(4, 9), 0.0};
 
     // Bhat = 2nd-order embedded weights from Bogacki-Shampine 1989 paper.
     // Equivalent to Julia's b + btilde where btilde = bhat - b = (5/72, -1/12, -1/9, 1/8).
+    /// @internal
+    /// @brief Embedded error weights.
     static constexpr std::array<double, 4> Bhat = {rat(7, 24), rat(1, 4), rat(1, 3), rat(1, 8)};
 
     // Bmid: BS3 has no dedicated interp polynomial in OrdinaryDiffEqLowOrderRK
@@ -410,32 +526,53 @@ template <> struct RKCoeffs<IVPAlg::BS3> {
     //     b_3(0.5) = B_3/2       = 2/9
     //     b_4(0.5) = B_4/2 - 1/8 = -1/8
     //   Σ b_i(0.5) = 1/2 (OK). Tycho stores 2·b_i(0.5): Σ = 1.0 (OK).
+    /// @internal
+    /// @brief Midpoint interpolation weights (2·b_i(0.5)).
     static constexpr std::array<double, BmidStages> Bmid = {rat(17, 36), rat(1, 3), rat(4, 9),
                                                             rat(-1, 4)};
 };
 
+/// @internal
+/// @brief Butcher tableau for BS3Trans (Bogacki-Shampine 3(2), transcription-only, no dense
+/// output).
 template <> struct RKCoeffs<IVPAlg::BS3Trans> {
-    static constexpr int Stages = 3;
-    static constexpr int Order = 3;
+    static constexpr int Stages = 3;           ///< @internal Number of stages.
+    static constexpr int Order = 3;            ///< @internal Method order.
+    /// @internal
+    /// @brief Embedded error estimator order (0 = none).
     static constexpr int ErrorOrder = 0;
-    static constexpr bool FSAL = false;
-    static constexpr bool HasEmbedded = false;
-    static constexpr bool HasMidpoint = false; // transcription-only, no dense output
+    static constexpr bool FSAL = false;        ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = false; ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = false; ///< @internal Supports midpoint dense output.
 
     // Dense-output schema fields — unused (HasMidpoint=false).
+    /// @internal
+    /// @brief Extra interpolation stages.
     static constexpr int InterpStages = 0;
+    /// @internal
+    /// @brief Last main stage equals f(xf).
     static constexpr bool LastStageIsFxf = false;
+    /// @internal
+    /// @brief Total stages referenced by midpoint sum.
     static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
 
     // A: 2 rows (stages 2..3), same as RKCoeffs<IVPAlg::BS3> rows 0..1
+    /// @internal
+    /// @brief Butcher A matrix.
     static constexpr std::array<std::array<double, 2>, 2> A = {std::array<double, 2>{rat(1, 2), 0},
                                                                std::array<double, 2>{0, rat(3, 4)}};
 
+    /// @internal
+    /// @brief Stage time fractions.
     static constexpr std::array<double, 2> C = {rat(1, 2), rat(3, 4)};
 
     // B = BS3's b-vector (without the FSAL trailing zero):
+    /// @internal
+    /// @brief Main quadrature weights.
     static constexpr std::array<double, 3> B = {rat(2, 9), rat(1, 3), rat(4, 9)};
-    static constexpr std::array<double, 3> Bhat = {0, 0, 0}; // unused
+    /// @internal
+    /// @brief Embedded error weights (unused).
+    static constexpr std::array<double, 3> Bhat = {0, 0, 0};
 };
 
 // Bogacki-Shampine 5(4) — 8-stage non-FSAL method with 3-stage lazy
@@ -448,22 +585,34 @@ template <> struct RKCoeffs<IVPAlg::BS3Trans> {
 // with rational coefficients). Interpolation extras from BS5Interp, poly
 // weights from BS5Interp_polyweights (CompiledFloats variant via Julia
 // compute_bmid_bs5.jl).
+/// @internal
+/// @brief Butcher tableau for BS5 (Bogacki-Shampine 5(4), user-selectable).
 template <> struct RKCoeffs<IVPAlg::BS5> {
-    static constexpr int Stages = 8;
-    static constexpr int Order = 5;
-    static constexpr int ErrorOrder = 4;
-    static constexpr bool FSAL = false; // B_8 = 0; not strict-FSAL
-    static constexpr bool HasEmbedded = true;
-    static constexpr bool HasMidpoint = true;
+    static constexpr int Stages = 8;           ///< @internal Number of stages.
+    static constexpr int Order = 5;            ///< @internal Method order.
+    static constexpr int ErrorOrder = 4;       ///< @internal Embedded error estimator order.
+    /// @internal
+    /// @brief First-same-as-last property (B_8=0; not strict-FSAL).
+    static constexpr bool FSAL = false;
+    static constexpr bool HasEmbedded = true;  ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = true;  ///< @internal Supports midpoint dense output.
 
     // Dense-output schema fields. BS5's perform_step evaluates k_8 at
     // (t+h, xf) so k_8 = f(xf); 3 additional stages (k_9, k_10, k_11) needed
     // for the BS5Interp polynomial's dense output.
+    /// @internal
+    /// @brief Extra interpolation stages.
     static constexpr int InterpStages = 3;
+    /// @internal
+    /// @brief Last main stage equals f(xf).
     static constexpr bool LastStageIsFxf = true;
-    static constexpr int BmidStages = Stages + InterpStages; // 11
+    /// @internal
+    /// @brief Total stages referenced by midpoint sum.
+    static constexpr int BmidStages = Stages + InterpStages;
 
     // A: 7 rows (stages 2..8). Row 6 equals BS5's b-vector (with a82 = 0).
+    /// @internal
+    /// @brief Butcher A matrix.
     static constexpr std::array<std::array<double, 7>, 7> A = {
         std::array<double, 7>{rat(1, 6), 0, 0, 0, 0, 0, 0},
         std::array<double, 7>{rat(2, 27), rat(4, 27), 0, 0, 0, 0, 0},
@@ -476,11 +625,15 @@ template <> struct RKCoeffs<IVPAlg::BS5> {
         std::array<double, 7>{rat(587, 8064), 0, rat(4440339, 15491840), rat(24353, 124800),
                               rat(387, 44800), rat(2152, 5985), rat(7267, 94080)}};
 
+    /// @internal
+    /// @brief Stage time fractions.
     static constexpr std::array<double, 7> C = {rat(1, 6), rat(2, 9), rat(3, 7), rat(2, 3),
                                                 rat(3, 4), 1.0,       1.0};
 
     // B: 8 elements. B_1..B_7 = row A[6]; B_8 = 0 (k_8 is computed for FSAL
     // reuse and dense output but not used in the u update).
+    /// @internal
+    /// @brief Main quadrature weights.
     static constexpr std::array<double, 8> B = {rat(587, 8064),         0.0,
                                                 rat(4440339, 15491840), rat(24353, 124800),
                                                 rat(387, 44800),        rat(2152, 5985),
@@ -488,6 +641,8 @@ template <> struct RKCoeffs<IVPAlg::BS5> {
 
     // Bhat = B - btilde. btilde values from BS5ConstantCache (utilde main
     // embedded-error weights); btilde_2 = 0 implicit.
+    /// @internal
+    /// @brief Embedded error weights.
     static constexpr std::array<double, 8> Bhat = {rat(587, 8064) - rat(-3817, 1959552),
                                                    0.0 - 0.0,
                                                    rat(4440339, 15491840) - rat(140181, 15491840),
@@ -500,6 +655,8 @@ template <> struct RKCoeffs<IVPAlg::BS5> {
     // Extra interpolation stages (k_9, k_10, k_11). ExtraA rows are
     // (Stages + InterpStages)=11 wide; unused entries zero.
     // From BS5Interp (rational T::Type variant) in low_order_rk_tableaus.jl.
+    /// @internal
+    /// @brief Extra interpolation stage coefficients.
     static constexpr std::array<std::array<double, 11>, 3> ExtraA = {
         // k_9 uses k_1..k_8:
         std::array<double, 11>{rat(455, 6144), 0, rat(10256301, 35409920), rat(2307361, 17971200),
@@ -519,6 +676,8 @@ template <> struct RKCoeffs<IVPAlg::BS5> {
                                rat(34872732407LL, 224610586200LL), rat(-2561897, 30105600),
                                rat(1, 10), rat(-1, 10), rat(-1403317093LL, 11371610250LL), 0}};
 
+    /// @internal
+    /// @brief Extra interpolation stage time fractions.
     static constexpr std::array<double, 3> ExtraC = {rat(1, 2), rat(5, 6), rat(1, 9)};
 
     // Bmid = 2·b_i(Θ=0.5) where b_i(Θ) is the BS5Interp polynomial
@@ -526,6 +685,8 @@ template <> struct RKCoeffs<IVPAlg::BS5> {
     // Layout: [0..7] main stages k_1..k_8; [8..10] extra stages k_9..k_11.
     // Bmid[1] = 0 (BS5's b_2 contribution is zero).
     // Sanity: Σ Bmid[i] ≈ 1.0 (FP-rounded).
+    /// @internal
+    /// @brief Midpoint interpolation weights (2·b_i(0.5)).
     static constexpr std::array<double, BmidStages> Bmid = {
         3.42702600730507845e-02, 0.00000000000000000e+00,  1.71102321961401849e-01,
         1.10413935309037481e-01, -5.24794697971777552e-03, -4.21488869254374676e-01,
@@ -533,20 +694,33 @@ template <> struct RKCoeffs<IVPAlg::BS5> {
         3.12151404332777549e-01, 4.06250000000000000e-01};
 };
 
+/// @internal
+/// @brief Butcher tableau for BS5Trans (Bogacki-Shampine 5(4), transcription-only, no dense
+/// output).
 template <> struct RKCoeffs<IVPAlg::BS5Trans> {
-    static constexpr int Stages = 7;
-    static constexpr int Order = 5;
+    static constexpr int Stages = 7;           ///< @internal Number of stages.
+    static constexpr int Order = 5;            ///< @internal Method order.
+    /// @internal
+    /// @brief Embedded error estimator order (0 = none).
     static constexpr int ErrorOrder = 0;
-    static constexpr bool FSAL = false;
-    static constexpr bool HasEmbedded = false;
-    static constexpr bool HasMidpoint = false; // transcription-only, no dense output
+    static constexpr bool FSAL = false;        ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = false; ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = false; ///< @internal Supports midpoint dense output.
 
     // Dense-output schema fields — unused (HasMidpoint=false).
+    /// @internal
+    /// @brief Extra interpolation stages.
     static constexpr int InterpStages = 0;
+    /// @internal
+    /// @brief Last main stage equals f(xf).
     static constexpr bool LastStageIsFxf = false;
+    /// @internal
+    /// @brief Total stages referenced by midpoint sum.
     static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
 
     // A: 6 rows (stages 2..7), same as RKCoeffs<IVPAlg::BS5> rows 0..5.
+    /// @internal
+    /// @brief Butcher A matrix.
     static constexpr std::array<std::array<double, 6>, 6> A = {
         std::array<double, 6>{rat(1, 6), 0, 0, 0, 0, 0},
         std::array<double, 6>{rat(2, 27), rat(4, 27), 0, 0, 0, 0},
@@ -557,15 +731,21 @@ template <> struct RKCoeffs<IVPAlg::BS5Trans> {
         std::array<double, 6>{rat(174197, 959244), rat(-30942, 79937), rat(8152137, 19744439),
                               rat(666106, 1039181), rat(-29421, 29068), rat(482048, 414219)}};
 
+    /// @internal
+    /// @brief Stage time fractions.
     static constexpr std::array<double, 6> C = {rat(1, 6), rat(2, 9), rat(3, 7),
                                                 rat(2, 3), rat(3, 4), 1.0};
 
     // B = BS5's a_{8,*} row (the implicit b-vector when B_8 = 0):
+    /// @internal
+    /// @brief Main quadrature weights.
     static constexpr std::array<double, 7> B = {rat(587, 8064),         0.0,
                                                 rat(4440339, 15491840), rat(24353, 124800),
                                                 rat(387, 44800),        rat(2152, 5985),
                                                 rat(7267, 94080)};
-    static constexpr std::array<double, 7> Bhat = {0, 0, 0, 0, 0, 0, 0}; // unused
+    /// @internal
+    /// @brief Embedded error weights (unused).
+    static constexpr std::array<double, 7> Bhat = {0, 0, 0, 0, 0, 0, 0};
 };
 
 // Verner 7(6) — 10-stage non-FSAL method with 6-stage lazy interpolant.
@@ -579,23 +759,33 @@ template <> struct RKCoeffs<IVPAlg::BS5Trans> {
 // Vern7InterpolationCoefficients (CompiledFloats Float64 literal variant,
 // because the generic T::Type variant uses BigInt rationals).
 // dofsal=false (matches Julia behavior — no FSAL reuse; k_1 computed fresh).
+/// @internal
+/// @brief Butcher tableau for Vern7 (Verner 7(6), user-selectable).
 template <> struct RKCoeffs<IVPAlg::Vern7> {
-    static constexpr int Stages = 10;
-    static constexpr int Order = 7;
-    static constexpr int ErrorOrder = 6;
-    static constexpr bool FSAL = false;
-    static constexpr bool HasEmbedded = true;
-    static constexpr bool HasMidpoint = true;
+    static constexpr int Stages = 10;          ///< @internal Number of stages.
+    static constexpr int Order = 7;            ///< @internal Method order.
+    static constexpr int ErrorOrder = 6;       ///< @internal Embedded error estimator order.
+    static constexpr bool FSAL = false;        ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = true;  ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = true;  ///< @internal Supports midpoint dense output.
 
     // Dense-output schema fields. The 6 extra stages (k_11..k_16) form the
     // Vern7Interp polynomial. f(xf) is evaluated separately in the midpoint
     // branch to correctly update the FSAL cache in Stepper::step.
+    /// @internal
+    /// @brief Extra interpolation stages.
     static constexpr int InterpStages = 6;
+    /// @internal
+    /// @brief Last main stage equals f(xf).
     static constexpr bool LastStageIsFxf = false;
-    static constexpr int BmidStages = Stages + InterpStages + 1; // 17
+    /// @internal
+    /// @brief Total stages referenced by midpoint sum.
+    static constexpr int BmidStages = Stages + InterpStages + 1;
 
     // A: 9 rows (stages 2..10). Row 8 is the Vern7 helper g10 which uses only
     // k_1, k_3..k_7 (a10_2 = a10_8 = a10_9 = 0).
+    /// @internal
+    /// @brief Butcher A matrix.
     static constexpr std::array<std::array<double, 9>, 9> A = {
         std::array<double, 9>{0.005, 0, 0, 0, 0, 0, 0, 0, 0},
         std::array<double, 9>{-1.07679012345679, 1.185679012345679, 0, 0, 0, 0, 0, 0, 0},
@@ -614,6 +804,8 @@ template <> struct RKCoeffs<IVPAlg::Vern7> {
         std::array<double, 9>{-45.030072034298676, 0, 187.3272437654589, -154.02882369350186,
                               18.56465306347536, -7.141809679295079, 1.3088085781613787, 0, 0}};
 
+    /// @internal
+    /// @brief Stage time fractions.
     static constexpr std::array<double, 9> C = {0.005,
                                                 0.10888888888888888,
                                                 0.16333333333333333,
@@ -625,6 +817,8 @@ template <> struct RKCoeffs<IVPAlg::Vern7> {
                                                 1.0};
 
     // B: 10 elements. B_1 = b1; B_4..B_9 = b4..b9; B_2 = B_3 = B_10 = 0.
+    /// @internal
+    /// @brief Main quadrature weights.
     static constexpr std::array<double, 10> B = {0.04715561848627222,
                                                  0,
                                                  0,
@@ -637,6 +831,8 @@ template <> struct RKCoeffs<IVPAlg::Vern7> {
                                                  0};
 
     // Bhat = B - btilde. Julia gives btilde for stages {1, 4..10}; btilde_{2,3} = 0.
+    /// @internal
+    /// @brief Embedded error weights.
     static constexpr std::array<double, 10> Bhat = {0.04715561848627222 - 0.002547011879931045,
                                                     0,
                                                     0,
@@ -652,6 +848,8 @@ template <> struct RKCoeffs<IVPAlg::Vern7> {
     // Columns 0..9 reference main k_1..k_10 (col 1, 2, 9 always 0 — Vern7's
     // extras skip k_2, k_3, k_10). Columns 10..15 reference prior extras
     // k_11..k_16.
+    /// @internal
+    /// @brief Extra interpolation stage coefficients.
     static constexpr std::array<std::array<double, 16>, 6> ExtraA = {
         // k_11:
         std::array<double, 16>{0.04715561848627222, 0, 0, 0.25750564298434153, 0.2621665397741262,
@@ -683,12 +881,16 @@ template <> struct RKCoeffs<IVPAlg::Vern7> {
                                -0.007401883149519145, 0, -0.006377932504865363,
                                -0.17325495908361865, -0.18228156777622026, 0, 0, 0}};
 
+    /// @internal
+    /// @brief Extra interpolation stage time fractions.
     static constexpr std::array<double, 6> ExtraC = {1.0, 0.29, 0.125, 0.25, 0.53, 0.79};
 
     // Bmid = 2·b_i(Θ=0.5) via Vern7Interp polynomial (CompiledFloats). Layout:
     // [0..9] main k_1..k_10 (indices 1, 2, 9 = 0); [10] f(xf) slot (=0; not in
     // poly); [11..16] extras k_11..k_16.
     // Derived via bench/julia_reference/src/compute_bmid_vern7.jl.
+    /// @internal
+    /// @brief Midpoint interpolation weights (2·b_i(0.5)).
     static constexpr std::array<double, BmidStages> Bmid = {1.01568172253994393e-01,
                                                             0,
                                                             0,
@@ -708,19 +910,31 @@ template <> struct RKCoeffs<IVPAlg::Vern7> {
                                                             -2.93970546066088634e-01};
 };
 
+/// @internal
+/// @brief Butcher tableau for Vern7Trans (Verner 7(6), transcription-only, no dense output).
 template <> struct RKCoeffs<IVPAlg::Vern7Trans> {
-    static constexpr int Stages = 9;
-    static constexpr int Order = 7;
+    static constexpr int Stages = 9;           ///< @internal Number of stages.
+    static constexpr int Order = 7;            ///< @internal Method order.
+    /// @internal
+    /// @brief Embedded error estimator order (0 = none).
     static constexpr int ErrorOrder = 0;
-    static constexpr bool FSAL = false;
-    static constexpr bool HasEmbedded = false;
-    static constexpr bool HasMidpoint = false;
+    static constexpr bool FSAL = false;        ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = false; ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = false; ///< @internal Supports midpoint dense output.
 
+    /// @internal
+    /// @brief Extra interpolation stages.
     static constexpr int InterpStages = 0;
+    /// @internal
+    /// @brief Last main stage equals f(xf).
     static constexpr bool LastStageIsFxf = false;
+    /// @internal
+    /// @brief Total stages referenced by midpoint sum.
     static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
 
     // A: 8 rows (stages 2..9), same as RKCoeffs<IVPAlg::Vern7> rows 0..7
+    /// @internal
+    /// @brief Butcher A matrix.
     static constexpr std::array<std::array<double, 8>, 8> A = {
         std::array<double, 8>{0.005, 0, 0, 0, 0, 0, 0, 0},
         std::array<double, 8>{-1.07679012345679, 1.185679012345679, 0, 0, 0, 0, 0, 0},
@@ -737,11 +951,15 @@ template <> struct RKCoeffs<IVPAlg::Vern7Trans> {
                               -4.3480228403929075, 2.0098622683770357, 0.3487490460338272,
                               -0.27143900510483127}};
 
+    /// @internal
+    /// @brief Stage time fractions.
     static constexpr std::array<double, 8> C = {
         0.005, 0.10888888888888888, 0.16333333333333333, 0.4555, 0.6095094489978381, 0.884, 0.925,
         1.0};
 
     // B = Vern7's b-vector truncated to 9 elements (drops trailing zero).
+    /// @internal
+    /// @brief Main quadrature weights.
     static constexpr std::array<double, 9> B = {0.04715561848627222,
                                                 0,
                                                 0,
@@ -751,7 +969,9 @@ template <> struct RKCoeffs<IVPAlg::Vern7Trans> {
                                                 0.4939969170032485,
                                                 -0.29430311714032503,
                                                 0.08131747232495111};
-    static constexpr std::array<double, 9> Bhat = {0, 0, 0, 0, 0, 0, 0, 0, 0}; // unused
+    /// @internal
+    /// @brief Embedded error weights (unused).
+    static constexpr std::array<double, 9> Bhat = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 };
 
 // Verner 8(7) — 13-stage non-FSAL method with 8-stage lazy interpolant.
@@ -762,20 +982,30 @@ template <> struct RKCoeffs<IVPAlg::Vern7Trans> {
 //
 // Source: OrdinaryDiffEqVerner Vern8Tableau / Vern8ExtraStages /
 // Vern8InterpolationCoefficients (CompiledFloats Float64 literal variant).
+/// @internal
+/// @brief Butcher tableau for Vern8 (Verner 8(7), user-selectable).
 template <> struct RKCoeffs<IVPAlg::Vern8> {
-    static constexpr int Stages = 13;
-    static constexpr int Order = 8;
-    static constexpr int ErrorOrder = 7;
-    static constexpr bool FSAL = false;
-    static constexpr bool HasEmbedded = true;
-    static constexpr bool HasMidpoint = true;
+    static constexpr int Stages = 13;          ///< @internal Number of stages.
+    static constexpr int Order = 8;            ///< @internal Method order.
+    static constexpr int ErrorOrder = 7;       ///< @internal Embedded error estimator order.
+    static constexpr bool FSAL = false;        ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = true;  ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = true;  ///< @internal Supports midpoint dense output.
 
+    /// @internal
+    /// @brief Extra interpolation stages.
     static constexpr int InterpStages = 8;
+    /// @internal
+    /// @brief Last main stage equals f(xf).
     static constexpr bool LastStageIsFxf = false;
-    static constexpr int BmidStages = Stages + InterpStages + 1; // 22
+    /// @internal
+    /// @brief Total stages referenced by midpoint sum.
+    static constexpr int BmidStages = Stages + InterpStages + 1;
 
     // A: 12 rows (stages 2..13). Row 11 is the g13 helper that uses only
     // k_1, k_4..k_10 (k_11, k_12 excluded).
+    /// @internal
+    /// @brief Butcher A matrix.
     static constexpr std::array<std::array<double, 12>, 12> A = {
         std::array<double, 12>{0.05, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
         std::array<double, 12>{-0.0069931640625, 0.1135556640625, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -804,11 +1034,15 @@ template <> struct RKCoeffs<IVPAlg::Vern8> {
                                8.43050498176491, 114.20100103783314, -0.9637271342145479,
                                -5.0348840888021895, 5.958130824002923, 0, 0}};
 
+    /// @internal
+    /// @brief Stage time fractions.
     static constexpr std::array<double, 12> C = {0.05,  0.1065625, 0.15984375, 0.39,
                                                  0.465, 0.155,     0.943,      0.901802041735857,
                                                  0.909, 0.94,      1.0,        1.0};
 
     // B: 13 elements. Only b1, b6..b12 nonzero; b2..b5 = b13 = 0.
+    /// @internal
+    /// @brief Main quadrature weights.
     static constexpr std::array<double, 13> B = {0.04427989419007951,
                                                  0,
                                                  0,
@@ -824,6 +1058,8 @@ template <> struct RKCoeffs<IVPAlg::Vern8> {
                                                  0};
 
     // Bhat = B - btilde. btilde{2..5} = 0; btilde{13} specified.
+    /// @internal
+    /// @brief Embedded error weights.
     static constexpr std::array<double, 13> Bhat = {0.04427989419007951 - (-3.272103901028138e-5),
                                                     0,
                                                     0,
@@ -841,6 +1077,8 @@ template <> struct RKCoeffs<IVPAlg::Vern8> {
     // ExtraA: 8 rows (k_14..k_21) × (13 + 8) = 21 cols. Cols 0..12 reference
     // main k_1..k_13 (most are zero — Julia's extras use k_1, k_6..k_12 only,
     // never k_13). Cols 13..20 reference prior extras k_14..k_21.
+    /// @internal
+    /// @brief Extra interpolation stage coefficients.
     static constexpr std::array<std::array<double, 21>, 8> ExtraA = {
         // k_14 (uses k_1, k_6..k_12):
         std::array<double, 21>{0.04427989419007951,
@@ -1019,10 +1257,14 @@ template <> struct RKCoeffs<IVPAlg::Vern8> {
                                0,
                                0}};
 
+    /// @internal
+    /// @brief Extra interpolation stage time fractions.
     static constexpr std::array<double, 8> ExtraC = {
         1.0, 0.3110177634953864, 0.1725, 0.7846, 0.37, 0.5, 0.7, 0.9};
 
     // Bmid via bench/julia_reference/src/compute_bmid_vern8.jl at Θ=0.5.
+    /// @internal
+    /// @brief Midpoint interpolation weights (2·b_i(0.5)).
     static constexpr std::array<double, BmidStages> Bmid = {8.84199315183124002e-02,
                                                             0,
                                                             0,
@@ -1047,19 +1289,31 @@ template <> struct RKCoeffs<IVPAlg::Vern8> {
                                                             -3.29232918972026667e-01};
 };
 
+/// @internal
+/// @brief Butcher tableau for Vern8Trans (Verner 8(7), transcription-only, no dense output).
 template <> struct RKCoeffs<IVPAlg::Vern8Trans> {
-    static constexpr int Stages = 12;
-    static constexpr int Order = 8;
+    static constexpr int Stages = 12;          ///< @internal Number of stages.
+    static constexpr int Order = 8;            ///< @internal Method order.
+    /// @internal
+    /// @brief Embedded error estimator order (0 = none).
     static constexpr int ErrorOrder = 0;
-    static constexpr bool FSAL = false;
-    static constexpr bool HasEmbedded = false;
-    static constexpr bool HasMidpoint = false;
+    static constexpr bool FSAL = false;        ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = false; ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = false; ///< @internal Supports midpoint dense output.
 
+    /// @internal
+    /// @brief Extra interpolation stages.
     static constexpr int InterpStages = 0;
+    /// @internal
+    /// @brief Last main stage equals f(xf).
     static constexpr bool LastStageIsFxf = false;
+    /// @internal
+    /// @brief Total stages referenced by midpoint sum.
     static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
 
     // A: 11 rows (stages 2..12), same as RKCoeffs<IVPAlg::Vern8> rows 0..10
+    /// @internal
+    /// @brief Butcher A matrix.
     static constexpr std::array<std::array<double, 11>, 11> A = {
         std::array<double, 11>{0.05, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
         std::array<double, 11>{-0.0069931640625, 0.1135556640625, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -1084,10 +1338,14 @@ template <> struct RKCoeffs<IVPAlg::Vern8Trans> {
                                9.139311332232058, 123.37594282840426, 4.62324437887458,
                                -3.3832777380682018, 4.527592100324618, -5.828495485811623}};
 
+    /// @internal
+    /// @brief Stage time fractions.
     static constexpr std::array<double, 11> C = {0.05,  0.1065625, 0.15984375, 0.39,
                                                  0.465, 0.155,     0.943,      0.901802041735857,
                                                  0.909, 0.94,      1.0};
 
+    /// @internal
+    /// @brief Main quadrature weights.
     static constexpr std::array<double, 12> B = {0.04427989419007951,
                                                  0,
                                                  0,
@@ -1100,6 +1358,8 @@ template <> struct RKCoeffs<IVPAlg::Vern8Trans> {
                                                  -31.738367786260277,
                                                  22.938283273988784,
                                                  -0.2361324633071542};
+    /// @internal
+    /// @brief Embedded error weights (unused).
     static constexpr std::array<double, 12> Bhat = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 };
 
@@ -1115,20 +1375,30 @@ template <> struct RKCoeffs<IVPAlg::Vern8Trans> {
 //
 // Source: OrdinaryDiffEqVerner Vern9Tableau / Vern9ExtraStages /
 // Vern9InterpolationCoefficients (CompiledFloats Float64 literal variant).
+/// @internal
+/// @brief Butcher tableau for Vern9 (Verner 9(8), user-selectable).
 template <> struct RKCoeffs<IVPAlg::Vern9> {
-    static constexpr int Stages = 16;
-    static constexpr int Order = 9;
-    static constexpr int ErrorOrder = 8;
-    static constexpr bool FSAL = false;
-    static constexpr bool HasEmbedded = true;
-    static constexpr bool HasMidpoint = true;
+    static constexpr int Stages = 16;          ///< @internal Number of stages.
+    static constexpr int Order = 9;            ///< @internal Method order.
+    static constexpr int ErrorOrder = 8;       ///< @internal Embedded error estimator order.
+    static constexpr bool FSAL = false;        ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = true;  ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = true;  ///< @internal Supports midpoint dense output.
 
+    /// @internal
+    /// @brief Extra interpolation stages.
     static constexpr int InterpStages = 10;
+    /// @internal
+    /// @brief Last main stage equals f(xf).
     static constexpr bool LastStageIsFxf = false;
-    static constexpr int BmidStages = Stages + InterpStages + 1; // 27
+    /// @internal
+    /// @brief Total stages referenced by midpoint sum.
+    static constexpr int BmidStages = Stages + InterpStages + 1;
 
     // A: 15 rows (stages 2..16). Row 14 (stage 16) uses k_1, k_6..k_13 only
     // (not k_14 — a_{16,14} = 0).
+    /// @internal
+    /// @brief Butcher A matrix.
     static constexpr std::array<std::array<double, 15>, 15> A = {
         std::array<double, 15>{0.03462, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
         std::array<double, 15>{-0.03893354388572875, 0.13595789452450918, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -1170,6 +1440,8 @@ template <> struct RKCoeffs<IVPAlg::Vern9> {
                                -4.865481358036369, -18.909803813543427, -34.26354448030452,
                                1.2647565216956427, 0, 0}};
 
+    /// @internal
+    /// @brief Stage time fractions.
     static constexpr std::array<double, 15> C = {0.03462,
                                                  0.09702435063878045,
                                                  0.14553652595817068,
@@ -1187,6 +1459,8 @@ template <> struct RKCoeffs<IVPAlg::Vern9> {
                                                  1.0};
 
     // B: 16 elements. Only b1, b8..b15 nonzero; b2..b7 = b16 = 0.
+    /// @internal
+    /// @brief Main quadrature weights.
     static constexpr std::array<double, 16> B = {0.014611976858423152,
                                                  0,
                                                  0,
@@ -1205,6 +1479,8 @@ template <> struct RKCoeffs<IVPAlg::Vern9> {
                                                  0};
 
     // Bhat = B - btilde. btilde values from Vern9Tableau: (btilde1, btilde8..btilde16).
+    /// @internal
+    /// @brief Embedded error weights.
     static constexpr std::array<double, 16> Bhat = {0.014611976858423152 - (-0.005357988290444578),
                                                     0,
                                                     0,
@@ -1226,6 +1502,8 @@ template <> struct RKCoeffs<IVPAlg::Vern9> {
     // Columns 0..15 reference main k_1..k_16; Julia's extras use only k_1,
     // k_8..k_15 (cols 0, 7..14). Cols 1..6 (k_2..k_7) and 15 (k_16) always 0.
     // Columns 16..25 reference prior extras k_17..k_26.
+    /// @internal
+    /// @brief Extra interpolation stage coefficients.
     static constexpr std::array<std::array<double, 26>, 10> ExtraA = {
         // k_17:
         std::array<double, 26>{0.014611976858423152,
@@ -1498,10 +1776,14 @@ template <> struct RKCoeffs<IVPAlg::Vern9> {
                                0,
                                0}};
 
+    /// @internal
+    /// @brief Extra interpolation stage time fractions.
     static constexpr std::array<double, 10> ExtraC = {
         1.0, 0.7404185470631561, 0.888, 0.696, 0.487, 0.025, 0.15, 0.32, 0.78, 0.96};
 
     // Bmid via bench/julia_reference/src/compute_bmid_vern9.jl at Θ=0.5.
+    /// @internal
+    /// @brief Midpoint interpolation weights (2·b_i(0.5)).
     static constexpr std::array<double, BmidStages> Bmid = {-1.91946461894023646e-02,
                                                             0,
                                                             0,
@@ -1531,19 +1813,31 @@ template <> struct RKCoeffs<IVPAlg::Vern9> {
                                                             -1.28409436778841979e-01};
 };
 
+/// @internal
+/// @brief Butcher tableau for Vern9Trans (Verner 9(8), transcription-only, no dense output).
 template <> struct RKCoeffs<IVPAlg::Vern9Trans> {
-    static constexpr int Stages = 15;
-    static constexpr int Order = 9;
+    static constexpr int Stages = 15;          ///< @internal Number of stages.
+    static constexpr int Order = 9;            ///< @internal Method order.
+    /// @internal
+    /// @brief Embedded error estimator order (0 = none).
     static constexpr int ErrorOrder = 0;
-    static constexpr bool FSAL = false;
-    static constexpr bool HasEmbedded = false;
-    static constexpr bool HasMidpoint = false;
+    static constexpr bool FSAL = false;        ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = false; ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = false; ///< @internal Supports midpoint dense output.
 
+    /// @internal
+    /// @brief Extra interpolation stages.
     static constexpr int InterpStages = 0;
+    /// @internal
+    /// @brief Last main stage equals f(xf).
     static constexpr bool LastStageIsFxf = false;
+    /// @internal
+    /// @brief Total stages referenced by midpoint sum.
     static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
 
     // A: 14 rows (stages 2..15), same as RKCoeffs<IVPAlg::Vern9> rows 0..13
+    /// @internal
+    /// @brief Butcher A matrix.
     static constexpr std::array<std::array<double, 14>, 14> A = {
         std::array<double, 14>{0.03462, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
         std::array<double, 14>{-0.03893354388572875, 0.13595789452450918, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -1581,6 +1875,8 @@ template <> struct RKCoeffs<IVPAlg::Vern9Trans> {
                                2.2429749091462368, 13.367893803828643, 14.396650486650687,
                                -0.79758133317768, 0.4409353709534278}};
 
+    /// @internal
+    /// @brief Stage time fractions.
     static constexpr std::array<double, 14> C = {0.03462,
                                                  0.09702435063878045,
                                                  0.14553652595817068,
@@ -1596,6 +1892,8 @@ template <> struct RKCoeffs<IVPAlg::Vern9Trans> {
                                                  0.9012,
                                                  1.0};
 
+    /// @internal
+    /// @brief Main quadrature weights.
     static constexpr std::array<double, 15> B = {0.014611976858423152,
                                                  0,
                                                  0,
@@ -1611,23 +1909,37 @@ template <> struct RKCoeffs<IVPAlg::Vern9Trans> {
                                                  0.058258715572158275,
                                                  0.13643174034822156,
                                                  0.030570139830827976};
+    /// @internal
+    /// @brief Embedded error weights (unused).
     static constexpr std::array<double, 15> Bhat = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 };
 
+/// @internal
+/// @brief Butcher tableau for Tsit5Trans (Tsitouras 5(4), transcription-only, no dense output).
 template <> struct RKCoeffs<IVPAlg::Tsit5Trans> {
-    static constexpr int Stages = 6;
-    static constexpr int Order = 5;
+    static constexpr int Stages = 6;           ///< @internal Number of stages.
+    static constexpr int Order = 5;            ///< @internal Method order.
+    /// @internal
+    /// @brief Embedded error estimator order (0 = none).
     static constexpr int ErrorOrder = 0;
-    static constexpr bool FSAL = false;
-    static constexpr bool HasEmbedded = false;
-    static constexpr bool HasMidpoint = false; // transcription-only, no dense output
+    static constexpr bool FSAL = false;        ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = false; ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = false; ///< @internal Supports midpoint dense output.
 
     // Dense-output schema fields — unused (HasMidpoint=false).
+    /// @internal
+    /// @brief Extra interpolation stages.
     static constexpr int InterpStages = 0;
+    /// @internal
+    /// @brief Last main stage equals f(xf).
     static constexpr bool LastStageIsFxf = false;
+    /// @internal
+    /// @brief Total stages referenced by midpoint sum.
     static constexpr int BmidStages = Stages + (LastStageIsFxf ? 0 : 1);
 
     // A: 5 rows (stages 2..6), same as RKCoeffs<IVPAlg::Tsit5> rows 0..4
+    /// @internal
+    /// @brief Butcher A matrix.
     static constexpr std::array<std::array<double, 5>, 5> A = {
         std::array<double, 5>{0.161, 0, 0, 0, 0},
         std::array<double, 5>{-0.008480655492356989, 0.335480655492357, 0, 0, 0},
@@ -1637,13 +1949,19 @@ template <> struct RKCoeffs<IVPAlg::Tsit5Trans> {
         std::array<double, 5>{5.86145544294642, -12.92096931784711, 8.159367898576159,
                               -0.071584973281401, -0.028269050394068383}};
 
+    /// @internal
+    /// @brief Stage time fractions.
     static constexpr std::array<double, 5> C = {0.161, 0.327, 0.9, 0.9800255409045097, 1.0};
 
     // B = Tsit5's row 7 of A (the b-vector via FSAL structure):
+    /// @internal
+    /// @brief Main quadrature weights.
     static constexpr std::array<double, 6> B = {0.09646076681806523, 0.01,
                                                 0.4798896504144996,  1.379008574103742,
                                                 -3.290069515436081,  2.324710524099774};
-    static constexpr std::array<double, 6> Bhat = {0, 0, 0, 0, 0, 0}; // unused
+    /// @internal
+    /// @brief Embedded error weights (unused).
+    static constexpr std::array<double, 6> Bhat = {0, 0, 0, 0, 0, 0};
 };
 
 // =============================================================================

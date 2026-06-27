@@ -46,11 +46,23 @@ namespace tycho::integrators {
 /// pre-step xdotis, so the retry sees the correct f(xi)).
 template <IVPAlg Alg, class DODE> class ParallelDriver {
   public:
+    /// @internal
+    /// @brief SIMD packet type for batch propagation.
     using SuperScalar = tycho::DefaultSuperScalar;
+    /// @internal
+    /// @brief Per-lane scalar ODE state.
     using ScalarState = typename DODE::template Input<double>;
+    /// @internal
+    /// @brief Per-lane scalar ODE derivative.
     using ScalarDeriv = typename DODE::template Output<double>;
+    /// @internal
+    /// @brief SIMD-packed ODE state.
     using SSState = typename DODE::template Input<SuperScalar>;
+    /// @internal
+    /// @brief SIMD-packed ODE derivative.
     using SSDeriv = typename DODE::template Output<SuperScalar>;
+    /// @internal
+    /// @brief Event specification type.
     using EventPack = typename EventHandler::EventPack;
 
     /// Per-lane output-side references and per-call storage flags. Groups
@@ -59,14 +71,32 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
     /// trajectories. Reduces the public batch signature from 17 positional
     /// args to 9. The caller owns every referent.
     struct IO {
+        /// @internal
+        /// @brief Per-lane accept counters.
         std::vector<int> &nacc;
+        /// @internal
+        /// @brief Per-lane reject counters.
         std::vector<int> &nrej;
+        /// @internal
+        /// @brief Event specs (shared across all lanes).
         const std::vector<EventPack> &events;
+        /// @internal
+        /// @brief Per-lane per-event crossing brackets.
         std::vector<std::vector<std::vector<Eigen::Vector2d>>> &eventtimes_s;
+        /// @internal
+        /// @brief Whether to record state trajectory per lane.
         bool storestates;
+        /// @internal
+        /// @brief Whether to record derivative trajectory per lane.
         bool storederivs;
+        /// @internal
+        /// @brief Whether to record midpoint states per step.
         bool storemidpoints;
+        /// @internal
+        /// @brief Per-lane state trajectories.
         std::vector<std::vector<ScalarState>> &states_s;
+        /// @internal
+        /// @brief Per-lane derivative trajectories.
         std::vector<std::vector<ScalarDeriv>> &derivs_s;
     };
 

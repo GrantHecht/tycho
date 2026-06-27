@@ -47,6 +47,22 @@ configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.astro-strict.in"
     "${DOCS_BUILD_DIR}/Doxyfile.astro-strict"
     @ONLY)
+# Strict, Integrators-subsystem-scoped Doxygen config: enforces full docstring
+# coverage (undocumented public symbol => hard failure) for the Integrators
+# subsystem. Consumed by the docs-build CI gate and by the local strict-check
+# command in docs/source/contributing.
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.integrators-strict.in"
+    "${DOCS_BUILD_DIR}/Doxyfile.integrators-strict"
+    @ONLY)
+# Strict, Utils-subsystem-scoped Doxygen config: enforces full docstring
+# coverage (undocumented public symbol => hard failure) for the Utilities
+# subsystem. Consumed by the docs-build CI gate and by the local strict-check
+# command in docs/source/contributing.
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.utils-strict.in"
+    "${DOCS_BUILD_DIR}/Doxyfile.utils-strict"
+    @ONLY)
 
 # 2) Doxygen XML target.
 file(GLOB_RECURSE _TYCHO_PUBLIC_HEADERS

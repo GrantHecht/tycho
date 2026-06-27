@@ -47,12 +47,17 @@ template <class Scalar> inline constexpr size_t align_up(size_t offset) {
     return (offset + A - 1) & ~(A - 1);
 }
 
-/// Bump stack allocator with SIMD-aligned buffer, save/restore semantics,
+/// @internal
+/// @brief Bump stack allocator with SIMD-aligned buffer, save/restore semantics,
 /// and high-water learning.
 template <class Scalar> struct BumpStack {
 
+    /// @internal
+    /// @brief Construct with an initial buffer of 64 elements.
     BumpStack() : BumpStack(64) {}
 
+    /// @internal
+    /// @brief Construct with an initial buffer of `init_size` elements.
     explicit BumpStack(size_t init_size) { resize(init_size); }
 
     ~BumpStack() { free_buffer(); }
@@ -60,14 +65,20 @@ template <class Scalar> struct BumpStack {
     BumpStack(const BumpStack &) = delete;
     BumpStack &operator=(const BumpStack &) = delete;
 
+    /// @internal
+    /// @brief Snapshot of the allocator state for save/restore.
     struct SavePoint {
-        size_t offset;
-        size_t overflow_count;
-        size_t cumulative_overflow;
+        size_t offset;           ///< @internal Current bump offset in elements.
+        size_t overflow_count;   ///< @internal Number of active overflow blocks.
+        size_t cumulative_overflow; ///< @internal Total elements in overflow blocks.
     };
 
+    /// @internal
+    /// @brief Capture the current allocator state.
     SavePoint save() const { return {offset_, overflow_.size(), cumulative_overflow_}; }
 
+    /// @internal
+    /// @brief Restore the allocator to a previously saved state.
     void restore(SavePoint sp) {
         offset_ = sp.offset;
         overflow_.resize(sp.overflow_count);
@@ -77,6 +88,8 @@ template <class Scalar> struct BumpStack {
         }
     }
 
+    /// @internal
+    /// @brief Allocate `n` elements; falls back to heap overflow if the arena is full.
     Scalar *allocate(size_t n) {
         size_t aligned = align_up<Scalar>(offset_);
         size_t end = aligned + n;
@@ -100,6 +113,9 @@ template <class Scalar> struct BumpStack {
         return blk.data();
     }
 
+    /// @internal
+    /// @brief Resize the arena to `new_cap` elements. Must be called with no active
+    /// allocations.
     void resize(size_t new_cap) {
         assert(offset_ == 0 && overflow_.empty() && "resize() while allocations active");
         free_buffer();
@@ -117,6 +133,8 @@ template <class Scalar> struct BumpStack {
         }
     }
 
+    /// @internal
+    /// @brief Return the current arena capacity in elements.
     size_t size() const { return capacity_; }
 
   private:
@@ -136,83 +154,156 @@ template <class Scalar> struct BumpStack {
     }
 };
 
+/// @internal
+/// @brief Compile-time row/column storage for TempSpec; fully static when both R and C >= 0.
 template <int R, int C> struct RCBase {
-    static constexpr int rows = R;
-    static constexpr int cols = C;
+    static constexpr int rows = R; ///< @internal Compile-time row count.
+    static constexpr int cols = C; ///< @internal Compile-time column count.
+    /// @internal
+    /// @brief Construct; runtime arguments are ignored when both dimensions are static.
     RCBase(int, int) {}
 };
+
+/// @internal
+/// @brief Partial specialisation: static rows, dynamic columns.
 template <int R> struct RCBase<R, -1> {
-    static constexpr int rows = R;
-    int cols;
+    static constexpr int rows = R; ///< @internal Compile-time row count.
+    int cols;                      ///< @internal Runtime column count.
+    /// @internal
+    /// @brief Construct with runtime column count.
     RCBase(int r, int c) : cols(c) {}
 };
+
+/// @internal
+/// @brief Partial specialisation: dynamic rows, static columns.
 template <int C> struct RCBase<-1, C> {
-    int rows;
-    static constexpr int cols = C;
+    int rows;                      ///< @internal Runtime row count.
+    static constexpr int cols = C; ///< @internal Compile-time column count.
+    /// @internal
+    /// @brief Construct with runtime row count.
     RCBase(int r, int c) : rows(r) {}
 };
+
+/// @internal
+/// @brief Fully-dynamic specialisation: both row and column counts are runtime values.
 template <> struct RCBase<-1, -1> {
-    int rows;
-    int cols;
+    int rows; ///< @internal Runtime row count.
+    int cols; ///< @internal Runtime column count.
+    /// @internal
+    /// @brief Construct with runtime row and column counts.
     RCBase(int r, int c) : rows(r), cols(c) {}
 };
 
+/// @internal
+/// @brief Tuple of default-constructed stack temporaries for fully compile-time-sized specs.
 template <class... TempSpecs> struct ExactTempPack {
+    /// @internal
+    /// @brief Stack-allocated temporaries.
     std::tuple<typename std::remove_cvref_t<TempSpecs>::ExactTempType...> data;
     ExactTempPack() {}
 };
 
 } // namespace detail
 
-/// Template type for specifying the type and size of temporary matrix that
-/// must be created by the allocator.
+/// @brief Descriptor for a single temporary matrix allocation by `BumpAllocator`.
+///
+/// Encodes the Eigen matrix type `T` together with its runtime dimensions (when
+/// either dimension is dynamic). Pass one or more `TempSpec` values to
+/// `BumpAllocator::allocate_run()`.
+///
+/// @tparam T Eigen matrix or array type whose dimensions are described.
 template <class T> struct TempSpec : detail::RCBase<T::RowsAtCompileTime, T::ColsAtCompileTime> {
+    /// @internal @brief RCBase specialisation.
     using Base = detail::RCBase<T::RowsAtCompileTime, T::ColsAtCompileTime>;
-    using ExactTempType = T;
-    using MatType = T;
-    using Scalar = typename T::Scalar;
+    using ExactTempType = T;               ///< @internal Exact Eigen type to instantiate.
+    using MatType = T;                     ///< @internal Underlying matrix type.
+    using Scalar = typename T::Scalar;     ///< @internal Scalar element type.
+    /// @internal @brief Compile-time row count (-1 if dynamic).
     static constexpr int RowsAtCompileTime = T::RowsAtCompileTime;
+    /// @internal @brief Compile-time column count (-1 if dynamic).
     static constexpr int ColsAtCompileTime = T::ColsAtCompileTime;
-    static constexpr bool IsConstantSize = (RowsAtCompileTime >= 0) && (ColsAtCompileTime >= 0);
-    static constexpr bool IsArray = false;
-    static constexpr bool IsTuple = false;
+    /// @internal @brief True when both dimensions are compile-time constants.
+    static constexpr bool IsConstantSize =
+        (RowsAtCompileTime >= 0) && (ColsAtCompileTime >= 0);
+    static constexpr bool IsArray = false; ///< @internal False for scalar TempSpec.
+    static constexpr bool IsTuple = false; ///< @internal False for scalar TempSpec.
 
+    /// @brief Construct with runtime row and column counts.
+    /// @param rows Number of rows (ignored for compile-time-sized types).
+    /// @param cols Number of columns (ignored for compile-time-sized types).
     TempSpec(int rows, int cols) : Base(rows, cols) {}
 };
 
-/// Template type for specifying a constant size array of TempSpecs that must
-/// be allocated.
+/// @brief Descriptor for a fixed-length array of identical temporary matrices.
+///
+/// Pass to `BumpAllocator::allocate_run()` to allocate `std::array<T, Size>` temporaries.
+///
+/// @tparam T    Eigen matrix or array type for each element.
+/// @tparam Size Number of elements in the array.
 template <class T, int Size> struct ArrayOfTempSpecs {
-    using Scalar = typename T::Scalar;
+    using Scalar = typename T::Scalar;     ///< @internal Scalar element type.
+    /// @internal @brief Exact `std::array` type to instantiate.
     using ExactTempType = std::array<T, Size>;
+    /// @internal @brief Underlying matrix type of each element.
     using MatType = T;
-    static constexpr int size = Size;
+    static constexpr int size = Size;      ///< @internal Number of array elements.
+    /// @internal @brief True when T has compile-time dimensions.
     static constexpr bool IsConstantSize = TempSpec<T>::IsConstantSize;
-    static constexpr bool IsArray = true;
-    static constexpr bool IsTuple = false;
-    TempSpec<T> tspec;
+    static constexpr bool IsArray = true;  ///< @internal True for ArrayOfTempSpecs.
+    static constexpr bool IsTuple = false; ///< @internal False for ArrayOfTempSpecs.
+    TempSpec<T> tspec;                     ///< @internal Descriptor for each element.
+    /// @brief Construct with runtime row and column counts for each element.
     ArrayOfTempSpecs(int rows, int cols) : tspec(rows, cols) {}
 };
 
-/// Template type for specifying a heterogeneous tuple of TempSpecs that must
-/// be allocated.
+/// @brief Descriptor for a heterogeneous tuple of temporary matrices.
+///
+/// Pass to `BumpAllocator::allocate_run()` to allocate `std::tuple<T...>` temporaries
+/// where each element may be a different Eigen type.
+///
+/// @tparam T... Eigen matrix or array types for each element.
 template <class... T> struct TupleOfTempSpecs {
-    using Scalar = typename std::remove_cvref_t<decltype(std::get<0>(std::tuple<T...>()))>::Scalar;
-    using ExactTempType = std::tuple<T...>;
+    /// @internal @brief Scalar type of the first element.
+    using Scalar =
+        typename std::remove_cvref_t<decltype(std::get<0>(std::tuple<T...>()))>::Scalar;
+    using ExactTempType = std::tuple<T...>; ///< @internal Exact `std::tuple` type to instantiate.
 
+    /// @internal @brief True when all elements have compile-time dimensions.
     static constexpr bool IsConstantSize = (... && TempSpec<T>::IsConstantSize);
-    static constexpr bool IsArray = false;
-    static constexpr bool IsTuple = true;
-    static constexpr int size = sizeof...(T);
+    static constexpr bool IsArray = false;    ///< @internal False for TupleOfTempSpecs.
+    static constexpr bool IsTuple = true;     ///< @internal True for TupleOfTempSpecs.
+    static constexpr int size = sizeof...(T); ///< @internal Number of tuple elements.
 
-    std::tuple<TempSpec<T>...> tspecs;
+    std::tuple<TempSpec<T>...> tspecs; ///< @internal Descriptors for each element.
+    /// @brief Construct from a tuple of per-element `TempSpec` descriptors.
+    /// @param tsp Tuple of `TempSpec<T>` descriptors, one per element type.
     TupleOfTempSpecs(std::tuple<TempSpec<T>...> tsp) : tspecs(tsp) {}
 };
 
+/// @brief Thread-local bump allocator for temporary Eigen matrices used in VectorFunction
+/// evaluation.
+///
+/// `allocate_run()` allocates one or more temporaries described by `TempSpec`,
+/// `ArrayOfTempSpecs`, or `TupleOfTempSpecs`, calls `f` with the allocated objects, and
+/// then releases the memory. When all dimensions are compile-time constants the allocations
+/// are placed on the real stack with zero arena overhead.
+///
+/// Call `resize()` at startup to pre-size the per-thread arenas and avoid reallocation
+/// during hot-path evaluation.
 struct BumpAllocator {
-    using ScalarStackType = detail::BumpStack<double>;
+    using ScalarStackType = detail::BumpStack<double>;         ///< @internal Scalar arena type.
+    /// @internal @brief SuperScalar arena type.
     using SuperScalarStackType = detail::BumpStack<tycho::DefaultSuperScalar>;
 
+    /// @brief Allocate temporaries and invoke `f` with them.
+    ///
+    /// When all specs have compile-time sizes, temporaries are stack-allocated and the
+    /// arena is bypassed entirely. Otherwise the thread-local bump arena is used.
+    ///
+    /// @tparam Func      Callable whose parameter types match the allocated temporaries.
+    /// @tparam TempSpecs Pack of `TempSpec`, `ArrayOfTempSpecs`, or `TupleOfTempSpecs`.
+    /// @param f       Callable to invoke with the allocated temporaries.
+    /// @param tspecs  Descriptors specifying the type and runtime size of each temporary.
     template <class Func, class... TempSpecs>
     static void allocate_run(Func &&f, const TempSpecs &...tspecs) {
         if constexpr ((... && std::remove_cvref_t<TempSpecs>::IsConstantSize)) {
@@ -223,12 +314,23 @@ struct BumpAllocator {
         }
     }
 
+    /// @brief Resize the per-thread scalar and super-scalar arenas independently.
+    /// @param sizeScalar     New capacity in `double` elements for the scalar arena.
+    /// @param sizeSuper      New capacity in `DefaultSuperScalar` elements for the
+    ///                       super-scalar arena.
     static void resize(int sizeScalar, int sizeSuper) {
         BumpAllocator::ScalarStack.resize(sizeScalar);
         BumpAllocator::SuperScalarStack.resize(sizeSuper);
     }
+
+    /// @brief Resize both per-thread arenas to the same element count.
+    /// @param size New capacity in elements for both arenas.
     static void resize(int size) { BumpAllocator::resize(size, size); }
+
+    /// @brief Return the current capacity of the per-thread scalar arena in elements.
     static int size_scalar() { return static_cast<int>(BumpAllocator::ScalarStack.size()); }
+
+    /// @brief Return the current capacity of the per-thread super-scalar arena in elements.
     static int size_super_scalar() {
         return static_cast<int>(BumpAllocator::SuperScalarStack.size());
     }

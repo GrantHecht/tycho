@@ -47,7 +47,15 @@
 namespace tycho::math {
 
 // Scalar overloads — forward to libm; Enzyme handles natively.
+
+/// @brief Enzyme-differentiable cosine of a scalar angle (forwards to `std::cos`).
+/// @param x Angle in radians.
+/// @return `cos(x)`. Lowers to `@llvm.cos.f64`, which Enzyme differentiates natively.
 inline double cos(double x) { return std::cos(x); }
+
+/// @brief Enzyme-differentiable sine of a scalar angle (forwards to `std::sin`).
+/// @param x Angle in radians.
+/// @return `sin(x)`. Lowers to `@llvm.sin.f64`, which Enzyme differentiates natively.
 inline double sin(double x) { return std::sin(x); }
 
 // SuperScalar overloads.  Scalar libm calls so Enzyme sees per-lane
@@ -58,6 +66,10 @@ inline double sin(double x) { return std::sin(x); }
 // activity analysis doesn't have to walk through Eigen's expression
 // templates.  Each call is small (W libm invocations) so the overhead is
 // trivial.
+/// @brief Per-lane cosine of a 2-wide SuperScalar pack, for Enzyme-differentiated code paths.
+/// @param x Pack of 2 angles in radians.
+/// @return Element-wise `cos(x)`, evaluated as 2 scalar `std::cos` calls so each lane lowers
+///         to `@llvm.cos.f64` (bithack-free; composes with `enzyme_width > 1`).
 inline TYCHO_NOINLINE Eigen::Array<double, 2, 1>
 cos(const Eigen::Array<double, 2, 1>& x) {
     Eigen::Array<double, 2, 1> y;
@@ -66,6 +78,10 @@ cos(const Eigen::Array<double, 2, 1>& x) {
     return y;
 }
 
+/// @brief Per-lane sine of a 2-wide SuperScalar pack, for Enzyme-differentiated code paths.
+/// @param x Pack of 2 angles in radians.
+/// @return Element-wise `sin(x)`, evaluated as 2 scalar `std::sin` calls so each lane lowers
+///         to `@llvm.sin.f64` (bithack-free; composes with `enzyme_width > 1`).
 inline TYCHO_NOINLINE Eigen::Array<double, 2, 1>
 sin(const Eigen::Array<double, 2, 1>& x) {
     Eigen::Array<double, 2, 1> y;
@@ -74,6 +90,10 @@ sin(const Eigen::Array<double, 2, 1>& x) {
     return y;
 }
 
+/// @brief Per-lane cosine of a 4-wide SuperScalar pack, for Enzyme-differentiated code paths.
+/// @param x Pack of 4 angles in radians.
+/// @return Element-wise `cos(x)`, evaluated as 4 scalar `std::cos` calls so each lane lowers
+///         to `@llvm.cos.f64` (bithack-free; composes with `enzyme_width > 1`).
 inline TYCHO_NOINLINE Eigen::Array<double, 4, 1>
 cos(const Eigen::Array<double, 4, 1>& x) {
     Eigen::Array<double, 4, 1> y;
@@ -84,6 +104,10 @@ cos(const Eigen::Array<double, 4, 1>& x) {
     return y;
 }
 
+/// @brief Per-lane sine of a 4-wide SuperScalar pack, for Enzyme-differentiated code paths.
+/// @param x Pack of 4 angles in radians.
+/// @return Element-wise `sin(x)`, evaluated as 4 scalar `std::sin` calls so each lane lowers
+///         to `@llvm.sin.f64` (bithack-free; composes with `enzyme_width > 1`).
 inline TYCHO_NOINLINE Eigen::Array<double, 4, 1>
 sin(const Eigen::Array<double, 4, 1>& x) {
     Eigen::Array<double, 4, 1> y;
@@ -94,6 +118,10 @@ sin(const Eigen::Array<double, 4, 1>& x) {
     return y;
 }
 
+/// @brief Per-lane cosine of an 8-wide SuperScalar pack, for Enzyme-differentiated code paths.
+/// @param x Pack of 8 angles in radians.
+/// @return Element-wise `cos(x)`, evaluated as 8 scalar `std::cos` calls so each lane lowers
+///         to `@llvm.cos.f64` (bithack-free; composes with `enzyme_width > 1`).
 inline TYCHO_NOINLINE Eigen::Array<double, 8, 1>
 cos(const Eigen::Array<double, 8, 1>& x) {
     Eigen::Array<double, 8, 1> y;
@@ -108,6 +136,10 @@ cos(const Eigen::Array<double, 8, 1>& x) {
     return y;
 }
 
+/// @brief Per-lane sine of an 8-wide SuperScalar pack, for Enzyme-differentiated code paths.
+/// @param x Pack of 8 angles in radians.
+/// @return Element-wise `sin(x)`, evaluated as 8 scalar `std::sin` calls so each lane lowers
+///         to `@llvm.sin.f64` (bithack-free; composes with `enzyme_width > 1`).
 inline TYCHO_NOINLINE Eigen::Array<double, 8, 1>
 sin(const Eigen::Array<double, 8, 1>& x) {
     Eigen::Array<double, 8, 1> y;

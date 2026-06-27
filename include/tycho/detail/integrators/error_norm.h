@@ -54,8 +54,8 @@ inline void check_state_finite_or_throw(const Eigen::MatrixBase<Derived> &v, dou
 /// RMS matches Julia's `ODE_DEFAULT_NORM`; MAX is the conservative L∞
 /// alternative for stiff problems.
 enum class ErrorNormType {
-    RMS,   ///< @brief Root-mean-square of per-component errors.
-    MAX    ///< @brief Maximum of per-component errors.
+    RMS,   ///< Root-mean-square of per-component errors.
+    MAX    ///< Maximum of per-component errors.
 };
 
 /// Compute element-wise scaled residuals per Julia's convention:

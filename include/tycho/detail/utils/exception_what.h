@@ -9,10 +9,15 @@
 
 namespace tycho::utils {
 
-/// Extract `what()` from a std::exception_ptr, returning "<non-std::exception>"
-/// when the captured exception does not derive from std::exception. Localises
-/// the rethrow-and-catch pattern so the surrounding code does not have to
-/// open a try/catch just to read a message.
+/// @brief Extract the `what()` message from a `std::exception_ptr`.
+///
+/// Returns `"<non-std::exception>"` when the captured exception does not
+/// derive from `std::exception`, and `"<no exception>"` when @p p is empty.
+/// Localises the rethrow-and-catch pattern so surrounding code does not have
+/// to open a try/catch just to read an exception message.
+///
+/// @param p  The exception pointer to inspect (may be null).
+/// @return  The exception message string, or a placeholder if unavailable.
 inline std::string exception_what(std::exception_ptr p) {
     if (!p) {
         return "<no exception>";

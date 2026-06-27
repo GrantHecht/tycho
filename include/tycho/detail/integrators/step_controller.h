@@ -15,7 +15,8 @@
 
 namespace tycho::integrators {
 
-/// Result of one controller step decision.
+/// @internal
+/// @brief Result of one controller step decision; used only by internal adaptive-driver logic.
 ///
 /// Fields:
 ///   accepted — whether the current step should be accepted.
@@ -24,19 +25,20 @@ namespace tycho::integrators {
 ///              qmin/qmax. dt_new preserves the sign of h (forward or
 ///              backward integration). There is no hard min/max step size
 ///              cap — the only backstop against runaway h is max_steps.
-///   q        — reciprocal of the raw step-growth factor (Julia convention:
-///              dt_new = dt / q). Exposed for diagnostics/tests.
+///   q        — reciprocal of the raw (pre-deadband) step-growth factor; dt_new = dt / q
+///              only when the deadband is inactive (i.e. q falls outside
+///              [qsteady_min_, qsteady_max_]). Exposed for diagnostics/tests.
 struct ControllerOutput {
-    bool accepted;
-    double dt_new;
-    double q;
+    bool accepted; ///< Whether to accept the current step.
+    double dt_new; ///< Proposed next step size (same sign as h).
+    double q;      ///< Reciprocal of the raw (pre-deadband) growth factor (Julia convention).
 };
 
 /// Runtime selector for controller kind. User-facing enum.
 enum class IVPController {
-    I,   // Standard integral controller (Julia: IController)
-    PI,  // Proportional-integral controller (Julia: PIController)
-    PID, // Proportional-integral-derivative controller (Julia: PIDController)
+    I,   ///< Standard integral controller (Julia: IController)
+    PI,  ///< Proportional-integral controller (Julia: PIController)
+    PID, ///< Proportional-integral-derivative controller (Julia: PIDController)
 };
 
 namespace detail {
@@ -77,16 +79,18 @@ struct ControllerTestAccess;
 ///
 /// Matches OrdinaryDiffEqCore.jl `IController`.
 struct IController {
-    double gamma_ = 0.9;
-    double qmin_ = 1.0 / 5.0;
-    double qmax_ = 10.0;
-    double qmax_first_step_ = 10000.0;
-    double qsteady_min_ = 1.0;
-    double qsteady_max_ = 1.0;
+    double gamma_ = 0.9;            ///< @internal Safety factor.
+    double qmin_ = 1.0 / 5.0;      ///< @internal Minimum step-growth factor (min dt_new/dt).
+    double qmax_ = 10.0;            ///< @internal Maximum step-growth factor.
+    double qmax_first_step_ = 10000.0; ///< @internal Maximum growth on the very first step.
+    double qsteady_min_ = 1.0;      ///< @internal Lower deadband bound (q in [min,max] → q=1).
+    double qsteady_max_ = 1.0;      ///< @internal Upper deadband bound.
 
     /// Last-computed clipped growth factor (Julia convention: dt_new = dt / qold).
     double qold() const noexcept { return qold_; }
 
+    /// @internal
+    /// @brief Throw std::invalid_argument if any gain is out of range.
     void validate() const {
         if (!(gamma_ > 0.0 && gamma_ <= 1.0))
             throw std::invalid_argument(
@@ -105,6 +109,8 @@ struct IController {
                 "IController", "qsteady_min_", "be <= qsteady_max_", qsteady_min_));
     }
 
+    /// @internal
+    /// @brief Compute step decision and update qold_.
     ControllerOutput update(double h, double err_norm, int order, int naccept) {
         double eff_qmax = (naccept == 0) ? qmax_first_step_ : qmax_;
         double q;
@@ -127,6 +133,8 @@ struct IController {
         return {accepted, h / q_applied, q};
     }
 
+    /// @internal
+    /// @brief Reset controller history to first-step state.
     void reset() { qold_ = 1.0; }
 
   private:
@@ -151,21 +159,23 @@ struct IController {
 ///
 /// Matches OrdinaryDiffEqCore.jl `PIController`.
 struct PIController {
-    double beta1_ = 7.0 / 50.0;
-    double beta2_ = 2.0 / 25.0;
-    double gamma_ = 0.9;
-    double qmin_ = 1.0 / 5.0;
-    double qmax_ = 10.0;
-    double qmax_first_step_ = 10000.0;
-    double qsteady_min_ = 1.0;
-    double qsteady_max_ = 1.0;
-    double qoldinit_ = 1.0e-4;
+    double beta1_ = 7.0 / 50.0;        ///< @internal Proportional gain (pre-scaled by order).
+    double beta2_ = 2.0 / 25.0;        ///< @internal Integral gain (pre-scaled by order).
+    double gamma_ = 0.9;               ///< @internal Safety factor.
+    double qmin_ = 1.0 / 5.0;         ///< @internal Minimum step-growth factor.
+    double qmax_ = 10.0;               ///< @internal Maximum step-growth factor.
+    double qmax_first_step_ = 10000.0; ///< @internal Maximum growth on the first step.
+    double qsteady_min_ = 1.0;         ///< @internal Lower deadband bound.
+    double qsteady_max_ = 1.0;         ///< @internal Upper deadband bound.
+    double qoldinit_ = 1.0e-4;         ///< @internal Initial errold value (clamping floor).
 
     /// Cached previous-step error norm (clamped to qoldinit_ on accept).
     double errold() const noexcept { return errold_; }
     /// Cached EEst^beta1_ from the most recent update.
     double q11() const noexcept { return q11_; }
 
+    /// @internal
+    /// @brief Throw std::invalid_argument if any gain is out of range.
     void validate() const {
         if (!(beta1_ >= 0.0))
             throw std::invalid_argument(
@@ -193,6 +203,8 @@ struct PIController {
                 detail::controller_invariant_msg("PIController", "qoldinit_", "be > 0", qoldinit_));
     }
 
+    /// @internal
+    /// @brief Compute step decision and update errold_ / q11_.
     ControllerOutput update(double h, double err_norm, int /*order*/, int naccept) {
         double eff_qmax = (naccept == 0) ? qmax_first_step_ : qmax_;
         double q;
@@ -218,6 +230,8 @@ struct PIController {
         return {false, h / q_reject, q_reject};
     }
 
+    /// @internal
+    /// @brief Reset errold_ and q11_ to first-step values.
     void reset() {
         errold_ = qoldinit_;
         q11_ = 1.0;
@@ -248,18 +262,20 @@ struct PIController {
 ///
 /// Matches OrdinaryDiffEqCore.jl `PIDController`.
 struct PIDController {
-    double beta1_ = 1.0;
-    double beta2_ = 0.0;
-    double beta3_ = 0.0;
-    double accept_safety_ = 0.81;
-    double qsteady_min_ = 1.0;
-    double qsteady_max_ = 1.0;
+    double beta1_ = 1.0;           ///< @internal Proportional gain coefficient.
+    double beta2_ = 0.0;           ///< @internal Integral gain coefficient.
+    double beta3_ = 0.0;           ///< @internal Derivative gain coefficient.
+    double accept_safety_ = 0.81;  ///< @internal Minimum dt_factor to accept a step.
+    double qsteady_min_ = 1.0;     ///< @internal Lower deadband bound.
+    double qsteady_max_ = 1.0;     ///< @internal Upper deadband bound.
 
     /// Error history (ε₁..ε₃ where ε_i = 1/EEst_i), accessible by index.
     const std::array<double, 3> &err() const noexcept { return err_; }
     /// Last-computed (limited) dt_factor; diagnostic only.
     double qold() const noexcept { return qold_; }
 
+    /// @internal
+    /// @brief Throw std::invalid_argument if any gain is out of range.
     void validate() const {
         if (!(beta1_ >= 0.0))
             throw std::invalid_argument(
@@ -278,8 +294,12 @@ struct PIDController {
                 "PIDController", "qsteady_min_", "be <= qsteady_max_", qsteady_min_));
     }
 
+    /// @internal
+    /// @brief Söderlind limiter: maps raw dt_factor to a smooth bounded value.
     static double default_limiter(double x) { return 1.0 + std::atan(x - 1.0); }
 
+    /// @internal
+    /// @brief Compute step decision via PID law and update error history.
     ControllerOutput update(double h, double err_norm, int order, int /*naccept*/) {
         constexpr double eps_min = 2.220446049250313e-16; // eps(Float64)
         double eest = std::max(err_norm, eps_min);
@@ -307,6 +327,8 @@ struct PIDController {
         return {false, h * dt_factor, 1.0 / dt_factor};
     }
 
+    /// @internal
+    /// @brief Reset error history and qold_ to first-step values.
     void reset() {
         err_ = {1.0, 1.0, 1.0};
         qold_ = 1.0;
@@ -320,13 +342,24 @@ struct PIDController {
 
 namespace detail {
 
-/// Test-only mutable access to controller internal state. Not for production.
+/// @internal
+/// @brief Test-only mutable access to controller internal state. Not for production.
 /// Returns references so tests can inject crafted state via assignment.
 struct ControllerTestAccess {
+    /// @internal
+    /// @brief Mutable access to IController::qold_.
     static double &qold(IController &c) noexcept { return c.qold_; }
+    /// @internal
+    /// @brief Mutable access to PIController::errold_.
     static double &errold(PIController &c) noexcept { return c.errold_; }
+    /// @internal
+    /// @brief Mutable access to PIController::q11_.
     static double &q11(PIController &c) noexcept { return c.q11_; }
+    /// @internal
+    /// @brief Mutable access to PIDController::err_.
     static std::array<double, 3> &err(PIDController &c) noexcept { return c.err_; }
+    /// @internal
+    /// @brief Mutable access to PIDController::qold_.
     static double &qold(PIDController &c) noexcept { return c.qold_; }
 };
 

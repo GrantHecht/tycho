@@ -21,16 +21,15 @@ SOFTWARE.
 
 namespace tycho::utils {
 
+/// @brief Simple wall-clock timer with start/stop/reset semantics.
+///
+/// Wraps `std::chrono::steady_clock`. Elapsed time accumulates across multiple
+/// start/stop cycles. Retrieve it via `count<duration_t>()`.
 class Timer {
 
   public:
-    /**
-     * Constructor.
-     *
-     * @param   start
-     *          If true, the timer is started just after construction.
-     *          Otherwise, it will not be automatically started.
-     */
+    /// @brief Construct a timer, optionally starting it immediately.
+    /// @param start If true, the timer begins running immediately after construction.
     Timer(bool start = false)
         : started_(false), paused_(false), reference_(std::chrono::steady_clock::now()),
           accumulated_(std::chrono::duration<long double>(0)) {
@@ -39,9 +38,9 @@ class Timer {
         }
     }
 
-    /**
-     * Start/resume the timer.
-     */
+    /// @brief Start or resume the timer.
+    ///
+    /// Has no effect if the timer is already running.
     void start() {
         if (!started_) {
             started_ = true;
@@ -54,9 +53,10 @@ class Timer {
         }
     }
 
-    /**
-     * Stop/pause the timer.
-     */
+    /// @brief Stop (pause) the timer.
+    ///
+    /// Accumulates elapsed time since the last `start()`. Has no effect if the
+    /// timer is not running.
     void stop() {
         if (started_ && !paused_) {
             std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
@@ -67,9 +67,9 @@ class Timer {
         }
     }
 
-    /**
-     * Reset the timer.
-     */
+    /// @brief Reset the timer to the initial stopped state.
+    ///
+    /// Clears all accumulated time. Has no effect if the timer has never been started.
     void reset() {
         if (started_) {
             started_ = false;
@@ -79,16 +79,12 @@ class Timer {
         }
     }
 
-    /**
-     * Return the elapsed time.
-     *
-     * @param   duration_t
-     *          The duration type used to return the time elapsed. If not
-     *          specified, it returns the time as represented by
-     *          std::chrono::milliseconds.
-     *
-     * @return  The elapsed time.
-     */
+    /// @brief Return the elapsed time in the requested duration unit.
+    ///
+    /// @tparam duration_t `std::chrono` duration type for the return value;
+    ///         defaults to `std::chrono::milliseconds`.
+    /// @return Elapsed time as `duration_t::rep`. Returns 0 if the timer has
+    ///         never been started.
     template <class duration_t = std::chrono::milliseconds> typename duration_t::rep count() const {
         if (started_) {
             if (paused_) {

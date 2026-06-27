@@ -1,0 +1,51 @@
+# =============================================================================
+# Strict, subsystem-scoped Doxygen configuration for the Integrators layer.
+#
+# Configured by CMake into <build-dir>/docs/Doxyfile.integrators-strict
+# alongside the main Doxyfile. Unlike the permissive base config (which hides
+# undocumented entities), this one UN-hides them and treats any undocumented
+# public symbol — or any doc error — as a hard failure. It is the enforcement
+# gate for the Integrators docstring coverage required by the docs plan.
+#
+# It inherits everything from the generated base Doxyfile, then overrides the
+# input scope and the warning discipline.
+# =============================================================================
+@INCLUDE = @CMAKE_CURRENT_BINARY_DIR@/Doxyfile
+
+# Scope: the Integrators umbrella header + every transitively-owned detail header.
+INPUT                  = @PROJECT_SOURCE_DIR@/include/tycho/integrators.h \
+                         @PROJECT_SOURCE_DIR@/include/tycho/detail/integrators
+OUTPUT_DIRECTORY       = @CMAKE_CURRENT_BINARY_DIR@/doxygen-integrators-strict
+
+# Coverage enforcement: surface undocumented entities instead of hiding them,
+# then fail on the first missing docstring or doc error.
+HIDE_UNDOC_MEMBERS     = NO
+HIDE_UNDOC_CLASSES     = NO
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_AS_ERROR          = FAIL_ON_WARNINGS
+WARN_LOGFILE           = @CMAKE_CURRENT_BINARY_DIR@/doxygen-integrators-strict/warnings.log
+
+# Count @internal-documented helpers as covered. Implementation-detail symbols
+# (RKStepper_Impl, raw tableau specializations, extern template boilerplate)
+# carry a docstring whose body is wrapped in @internal ... @endinternal so the
+# PUBLISHED docs (base Doxyfile, INTERNAL_DOCS=NO) hide them. For the COVERAGE
+# check we must treat those as documented — otherwise a fully-documented
+# internal helper would read as undocumented. The XML produced here is used
+# only for the gate, never published, so surfacing internals here is harmless.
+INTERNAL_DOCS          = YES
+ENABLED_SECTIONS       = internal
+
+# Inheritance-graph node budget. The deep template hierarchy of the VectorFunction
+# CRTP base classes can exceed Doxygen's default DOT_GRAPH_MAX_NODES of 50.
+# Under WARN_AS_ERROR=FAIL_ON_WARNINGS those "too many nodes" messages are
+# promoted to hard errors and fail the gate, even though every symbol is
+# documented. Raise the budget so legitimate coverage is not blocked by graph size.
+DOT_GRAPH_MAX_NODES    = 120
+
+# Exclusions:
+#   - VF_TYPE_ALIASES is a boilerplate CRTP type-alias macro re-exported by
+#     every expression type; expand it away so it is not counted as an
+#     undocumented member of each struct.
+EXCLUDE_SYMBOLS       += Avoid::*
+PREDEFINED            += VF_TYPE_ALIASES(x)=

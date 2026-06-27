@@ -24,9 +24,61 @@ using namespace tycho::astro;
 using namespace tycho::utils;
 
 void TychoBind<BumpAllocator>::build(nb::module_ &m) {
-    auto obj = nb::class_<BumpAllocator>(m, "BumpAllocator");
-    obj.def_static("resize", nb::overload_cast<int>(&BumpAllocator::resize));
-    obj.def_static("resize", nb::overload_cast<int, int>(&BumpAllocator::resize));
-    obj.def_static("size_scalar", &BumpAllocator::size_scalar);
-    obj.def_static("size_super_scalar", &BumpAllocator::size_super_scalar);
+    auto obj = nb::class_<BumpAllocator>(m, "BumpAllocator",
+                                         R"doc(Per-thread bump allocator for ODE evaluation temporaries.
+
+Tycho's ODE and VectorFunction evaluation stack uses thread-local
+SIMD-aligned arena buffers to avoid heap allocation in inner loops.
+This class exposes the management interface for those arenas.
+
+There are two per-thread arenas:
+
+* **Scalar arena** — holds ``double`` temporaries.
+* **SuperScalar arena** — holds ``DefaultSuperScalar`` (SIMD-width
+  ``double`` array) temporaries.
+
+The default arena capacity is 64 elements per thread; the arena
+self-tunes upward after overflow (use :meth:`resize` to pre-size).
+)doc");
+    obj.def_static("resize", nb::overload_cast<int>(&BumpAllocator::resize),
+                   R"doc(Resize both per-thread arenas to the same element count.
+
+Must be called with no active allocations (i.e., outside any ODE or
+VectorFunction evaluation call).
+
+Parameters
+----------
+size : int
+    New capacity in elements for both the scalar and super-scalar arenas.
+)doc");
+    obj.def_static("resize", nb::overload_cast<int, int>(&BumpAllocator::resize),
+                   R"doc(Resize the scalar and super-scalar arenas independently.
+
+Must be called with no active allocations (i.e., outside any ODE or
+VectorFunction evaluation call).
+
+Parameters
+----------
+size_scalar : int
+    New capacity in ``double`` elements for the scalar arena.
+size_super_scalar : int
+    New capacity in ``DefaultSuperScalar`` elements for the
+    super-scalar arena.
+)doc");
+    obj.def_static("size_scalar", &BumpAllocator::size_scalar,
+                   R"doc(Return the current capacity of the per-thread scalar arena.
+
+Returns
+-------
+int
+    Capacity in ``double`` elements.
+)doc");
+    obj.def_static("size_super_scalar", &BumpAllocator::size_super_scalar,
+                   R"doc(Return the current capacity of the per-thread super-scalar arena.
+
+Returns
+-------
+int
+    Capacity in ``DefaultSuperScalar`` elements.
+)doc");
 }

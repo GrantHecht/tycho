@@ -21,5 +21,8 @@
 #include "tycho/detail/integrators/integrator.h"
 
 namespace tycho::integrators {
+/// @internal
+/// @brief Explicit instantiation declaration for Integrator<Kepler>;
+/// the definition lives in src/integrators/extern_template_instantiations.cpp.
 extern template struct Integrator<tycho::astro::Kepler>;
 } // namespace tycho::integrators

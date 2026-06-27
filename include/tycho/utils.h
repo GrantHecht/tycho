@@ -1,6 +1,6 @@
+/// @file
+/// @brief Utilities umbrella — thread pool, type storage, sizing helpers, and math functions.
 #pragma once
-
-// Tycho — Thread pool, type storage, sizing helpers, math functions
 
 #include "tycho/detail/utils/type_storage.h"
 #include "tycho/detail/utils/sizing_helpers.h"

@@ -15,10 +15,13 @@
 #pragma once
 namespace tycho::utils {
 
-/// <summary>
-/// Attempts to calculate number of physical CPU cores
-/// </summary>
-/// <returns></returns>
+/// @brief Return the number of physical CPU cores on the current machine.
+///
+/// Uses platform-specific APIs (e.g. `sysconf`, `GetSystemInfo`) to query the
+/// physical core count. Falls back to `std::thread::hardware_concurrency()`
+/// when the platform query is unavailable or fails.
+///
+/// @return The physical core count, or 1 if detection fails.
 int get_core_count();
 
 } // namespace tycho::utils
