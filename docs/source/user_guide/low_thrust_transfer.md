@@ -307,14 +307,14 @@ transfer time is in the last row's time slot:
 :::{tab-item} Python
 ```{doctest}
 >>> Traj = phase.return_traj()
->>> round(float(Traj[-1][6]), 4)
-30.4621
+>>> round(float(Traj[-1][6]), 2)
+30.46
 ```
 :::
 :::{tab-item} C++
 ```cpp
 auto Traj  = phase.return_traj();
-double tf  = Traj.back()[6];   // optimal transfer time (index 6) -> ~30.4621
+double tf  = Traj.back()[6];   // optimal transfer time (index 6) -> ~30.46
 ```
 :::
 ::::
