@@ -10,7 +10,7 @@ everything here runs with `tychopy.astro` alone.
 
 For the *why* behind each representation — singularities, optimizer
 conditioning, when to prefer one over another — read
-{doc}`Astrodynamics in Tycho </explanation/astrodynamics>`. For the full API
+{doc}`Astrodynamics in Tycho </user_guide/astrodynamics>`. For the full API
 listing see the {doc}`Python reference </reference/python/astrodynamics>`.
 
 Every `{doctest}` block below (the ones showing `>>>` prompts) is executed as
@@ -229,9 +229,9 @@ True
 
 ## Next steps
 
-- {doc}`Low-thrust orbit transfer </tutorials/astrodynamics/low_thrust_transfer>` —
+- {doc}`Low-thrust orbit transfer </user_guide/low_thrust_transfer>` —
   use MEE dynamics and PSIOPT to design a minimum-fuel orbit transfer.
-- {doc}`Astrodynamics in Tycho </explanation/astrodynamics>` — the conceptual
+- {doc}`Astrodynamics in Tycho </user_guide/astrodynamics>` — the conceptual
   model behind every component used above.
 - {doc}`Python reference </reference/python/astrodynamics>` — the complete API,
   including `propagate_classic`, Lambert solvers, and the dynamics VectorFunctions.

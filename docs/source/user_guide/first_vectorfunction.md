@@ -11,7 +11,7 @@ itself** — its Jacobian and Hessian are computed automatically.
 
 This is a hands-on, learning-oriented walkthrough. For the *why* behind the
 design — CRTP, expression templates, vectorization — read
-{doc}`The VectorFunction model </explanation/vector_function>`. For the complete
+{doc}`The VectorFunction model </user_guide/vectorfunctions>`. For the complete
 catalog of every type and function, see the
 {doc}`Python </reference/python/vector_functions>` and
 {doc}`C++ </reference/cpp/vector_functions>` references.
@@ -465,9 +465,9 @@ derivatives:
 
 ## Next steps
 
-- {doc}`The VectorFunction model </explanation/vector_function>` — the concepts
+- {doc}`The VectorFunction model </user_guide/vectorfunctions>` — the concepts
   and design behind what you just used.
 - {doc}`Python reference </reference/python/vector_functions>` and
   {doc}`C++ reference </reference/cpp/vector_functions>` — the complete API.
-- {doc}`How-to guides </how_to/index>` — task-oriented recipes, including
+- {doc}`User Guide </user_guide/index>` — task-oriented recipes, including
   authoring a custom dynamics model and using a VectorFunction in a `Phase`.

@@ -8,9 +8,9 @@ single problem so the optimizer solves all segments simultaneously while
 enforcing continuity across the boundaries.
 
 This recipe assumes you can already build and solve a single phase — see
-{doc}`Setting up a phase </tutorials/basics/your_first_phase>`. For the
+{doc}`Setting up a phase </user_guide/first_phase>`. For the
 concepts behind transcription and linking see
-{doc}`Direct collocation in Tycho </explanation/direct_collocation>`.
+{doc}`Direct collocation in Tycho </user_guide/phases_and_collocation>`.
 
 ## Build the phases
 
@@ -114,5 +114,5 @@ descent phase, shares an ODE parameter across the seam, and maximizes range.
 
 - {doc}`Python reference </reference/python/optimal_control>` — the full
   `OptimalControlProblem` API, including every link-constraint variant.
-- {doc}`Direct collocation in Tycho </explanation/direct_collocation>` — how
+- {doc}`Direct collocation in Tycho </user_guide/phases_and_collocation>` — how
   phases are transcribed and assembled into one NLP.

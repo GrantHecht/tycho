@@ -4,7 +4,7 @@
 Tycho's astrodynamics subsystem provides three orbital state representations,
 analytic two-body propagation, Lambert's problem, and a set of dynamics models
 that can be used directly as the ODE of an optimal-control
-{doc}`Phase </explanation/direct_collocation>`. This page explains the
+{doc}`Phase </user_guide/phases_and_collocation>`. This page explains the
 conceptual model behind each of these components and the reasoning that guides
 when to use each one.
 
@@ -221,9 +221,9 @@ acceleration* — every acceleration on the spacecraft beyond central-body
 point-mass gravity. In an optimal-control problem this is usually the thrust
 control the optimizer chooses, but it can equally carry modeled perturbations
 (J2, atmospheric drag, solar-radiation pressure), or their sum (see
-{doc}`How to use astrodynamics dynamics in a phase </how_to/astro_dynamics_in_a_phase>`).
+{doc}`How to use astrodynamics dynamics in a phase </user_guide/how_to/astro_dynamics_in_a_phase>`).
 This is exactly the ODE form that a `Phase` expects: the
-{doc}`direct collocation </explanation/direct_collocation>` transcription
+{doc}`direct collocation </user_guide/phases_and_collocation>` transcription
 enforces the defect $\dot{\tilde{x}} = f(\tilde{x}, u)$ at every collocation
 point, where $f$ is the dynamics VectorFunction. Each model carries analytic
 Jacobian and Hessian implementations, so PSIOPT receives exact first- and
@@ -363,7 +363,7 @@ Every component described in this page — state representation, propagator,
 dynamics model — connects at a single interface: the `Phase`.
 
 A dynamics model such as `MEEDynamics` or `CartesianDynamics` is a
-{doc}`VectorFunction </explanation/vector_function>` of the packed
+{doc}`VectorFunction </user_guide/vectorfunctions>` of the packed
 $[\text{state}(6), \mathbf{a}(3)]$ input returning $\dot{x}$. Passing it to
 a `Phase` as the ODE registers the dynamics with the collocation layer:
 
@@ -384,7 +384,7 @@ ode = MEEDynamicsODE(1.0)              # mu = 1 (non-dimensional)
 phase = ode.phase("LGL3", traj_guess, 30)   # 30 LGL3 segments from an initial guess
 ```
 
-The {doc}`low-thrust transfer tutorial </tutorials/astrodynamics/low_thrust_transfer>`
+The {doc}`low-thrust transfer tutorial </user_guide/low_thrust_transfer>`
 walks through this composition end to end with a runnable solve.
 
 Once a `Phase` holds a dynamics model, the transcription builds defect
@@ -400,7 +400,7 @@ orbit to a high-energy departure might use a `CartesianDynamics` phase for the
 initial thrust arc (where Cartesian coordinates are well-conditioned), an
 `MEEDynamics` phase for the long low-thrust heliocentric leg, and a
 `CRTBPDynamics` phase for capture into a libration-point orbit. The
-{doc}`direct collocation explanation </explanation/direct_collocation>` covers
+{doc}`direct collocation explanation </user_guide/phases_and_collocation>` covers
 how phases are linked and how the NLP is assembled from multiple phase blocks.
 
 For a full API listing of the astrodynamics subsystem — conversion functions,

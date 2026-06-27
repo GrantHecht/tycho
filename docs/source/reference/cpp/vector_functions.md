@@ -11,7 +11,7 @@ differentiable map $f : \mathbb{R}^{n} \to \mathbb{R}^{m}$. Concrete
 functions are built by composing {cpp:struct}`tycho::vf::Arguments` with the
 operator DSL and the expression types below; the resulting type evaluates
 its primal, Jacobian, and Hessian according to its derivative mode. For the
-conceptual model see {doc}`The VectorFunction model </explanation/vector_function>`.
+conceptual model see {doc}`The VectorFunction model </user_guide/vectorfunctions>`.
 
 ## Core types
 

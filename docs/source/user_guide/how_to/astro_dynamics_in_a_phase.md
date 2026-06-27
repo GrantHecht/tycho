@@ -23,9 +23,9 @@ two.  This recipe shows the pattern for MEE dynamics and notes how to adapt it
 for Cartesian and CR3BP dynamics.
 
 This recipe assumes you can already build and solve a basic phase — see
-{doc}`Setting up a phase </tutorials/basics/your_first_phase>`.  For the
+{doc}`Setting up a phase </user_guide/first_phase>`.  For the
 conceptual background on the MEE dynamics model and the RSW control frame see
-{doc}`Astrodynamics in Tycho </explanation/astrodynamics>`.
+{doc}`Astrodynamics in Tycho </user_guide/astrodynamics>`.
 
 ## 1. Define the ODE wrapper
 
@@ -174,16 +174,16 @@ way; they all sum into the single acceleration input.
 
 A complete worked example is `examples/python_examples/SimpleLowThrust.py`,
 which uses Cartesian dynamics to optimize a low-thrust orbit-raising transfer,
-and {doc}`the low-thrust transfer tutorial </tutorials/astrodynamics/low_thrust_transfer>`,
+and {doc}`the low-thrust transfer tutorial </user_guide/low_thrust_transfer>`,
 which walks through the MEE composition end to end with a solved phase.
 
 ## See also
 
 - {doc}`Python reference </reference/python/astrodynamics>` — `modified_dynamics`,
   `cartesian_dynamics`, `crtbp_dynamics`, `j2_cartesian`, and `non_ideal_solar_sail`.
-- {doc}`Low-thrust orbit transfer tutorial </tutorials/astrodynamics/low_thrust_transfer>` —
+- {doc}`Low-thrust orbit transfer tutorial </user_guide/low_thrust_transfer>` —
   the complete MEE ODE wrapper pattern with a full solved phase.
-- {doc}`Astrodynamics in Tycho </explanation/astrodynamics>` — conceptual
+- {doc}`Astrodynamics in Tycho </user_guide/astrodynamics>` — conceptual
   background on all three dynamics models and the RSW control frame.
-- {doc}`Direct collocation in Tycho </explanation/direct_collocation>` —
+- {doc}`Direct collocation in Tycho </user_guide/phases_and_collocation>` —
   how the phase transcription turns the ODE into defect constraints.

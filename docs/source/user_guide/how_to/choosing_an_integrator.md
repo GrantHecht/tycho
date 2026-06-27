@@ -11,7 +11,7 @@ algorithm to use for a given task.
 This recipe assumes you have a defined ODE — a class that inherits from
 {py:class}`~tychopy.optimal_control.ODEBase` or one of the built-in dynamics
 models. For the conceptual background on adaptive stepping and the error-control
-loop see {doc}`Integration and parallelism </explanation/integration_and_parallelism>`.
+loop see {doc}`Integration and parallelism </user_guide/how_to/threading_model>`.
 
 ## Construct an integrator
 
@@ -150,9 +150,9 @@ which uses `ode.integrator(dt)` with the default `DOPRI87` algorithm and
 - {doc}`Python reference </reference/python/integrators>` — the full
   `Integrator` API, including STM propagation, event detection, and
   vectorized batch methods.
-- {doc}`Integration and parallelism </explanation/integration_and_parallelism>` —
+- {doc}`Integration and parallelism </user_guide/how_to/threading_model>` —
   conceptual background on adaptive step-size control, dense output, and the
   error norm loop.
-- {doc}`Threading model </how_to/threading_model>` — how to distribute many
+- {doc}`Threading model </user_guide/how_to/threading_model>` — how to distribute many
   independent integrations across worker threads with `integrate_parallel` and
   `integrate_dense_parallel`.

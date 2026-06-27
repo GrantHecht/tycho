@@ -11,9 +11,9 @@ configure the optimizer's NLP partition count without conflating it with the
 linear-solver thread count.
 
 This recipe assumes you have already constructed an integrator — see
-{doc}`Choosing an integrator </how_to/choosing_an_integrator>`. For the
+{doc}`Choosing an integrator </user_guide/how_to/choosing_an_integrator>`. For the
 conceptual overview of Tycho's threading architecture see
-{doc}`Integration and parallelism </explanation/integration_and_parallelism>`.
+{doc}`Integration and parallelism </user_guide/how_to/threading_model>`.
 
 ## Query and set the thread count
 
@@ -150,8 +150,8 @@ utils.set_num_threads(allocated)
   `utils.get_num_threads`, `utils.get_core_count`, and `BumpAllocator`.
 - {doc}`Python reference </reference/python/integrators>` — `integrate_parallel`,
   `integrate_dense_parallel`, `integrate_stm_parallel`, and all batch methods.
-- {doc}`Integration and parallelism </explanation/integration_and_parallelism>` —
+- {doc}`Integration and parallelism </user_guide/how_to/threading_model>` —
   conceptual background on the thread pool, SuperScalar vectorization, and when
   parallelism helps.
-- {doc}`Choosing an integrator </how_to/choosing_an_integrator>` — how to pick
+- {doc}`Choosing an integrator </user_guide/how_to/choosing_an_integrator>` — how to pick
   an algorithm and configure tolerances before running a parallel batch.

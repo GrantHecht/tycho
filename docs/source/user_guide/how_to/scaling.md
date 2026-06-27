@@ -9,9 +9,9 @@ every constraint residual to a comparable order of magnitude so the optimizer
 sees a well-conditioned problem.
 
 This recipe assumes you already have a phase set up — see
-{doc}`Setting up a phase </tutorials/basics/your_first_phase>`. For the
+{doc}`Setting up a phase </user_guide/first_phase>`. For the
 conceptual picture see
-{doc}`Direct collocation in Tycho </explanation/direct_collocation>`.
+{doc}`Direct collocation in Tycho </user_guide/phases_and_collocation>`.
 
 ## Pick a scaling mode
 
@@ -113,5 +113,5 @@ the vector and named forms of `set_units`.
 - {doc}`Python reference </reference/python/optimal_control>` — `ScaleModes`,
   `set_units`, `set_auto_scaling`, and the per-constraint `auto_scale`/`scale`
   arguments.
-- {doc}`Direct collocation in Tycho </explanation/direct_collocation>` — how
+- {doc}`Direct collocation in Tycho </user_guide/phases_and_collocation>` — how
   the transcribed NLP is assembled and why conditioning matters.

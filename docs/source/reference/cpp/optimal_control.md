@@ -14,7 +14,7 @@ several phases optionally linked inside an
 {cpp:class}`tycho::OptimalControlProblem`. The primary transcription method is
 direct collocation (the LGL and Trapezoidal schemes), but central shooting
 (`CentralShooting`) is also supported. For the conceptual model see
-{doc}`Direct collocation in Tycho </explanation/direct_collocation>`.
+{doc}`Direct collocation in Tycho </user_guide/phases_and_collocation>`.
 
 ## Core ODE types
 

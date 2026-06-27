@@ -9,7 +9,7 @@ explains *what* a VectorFunction is, *why* it is designed the way it is, and
 full API surface see the {doc}`Python reference </reference/python/vector_functions>`
 and {doc}`C++ reference </reference/cpp/vector_functions>`, and for a step-by-step
 build see the
-{doc}`first-VectorFunction tutorial </tutorials/basics/your_first_vectorfunction>`.
+{doc}`first-VectorFunction tutorial </user_guide/first_vectorfunction>`.
 
 ## What a VectorFunction is
 
@@ -501,9 +501,9 @@ This page covered the model. To put it to work:
   free function, with signatures and notes.
 - **Tutorial.** For a guided build that works up from a single symbolic input to
   complete dynamics expressions, start with the
-  {doc}`first-VectorFunction tutorial </tutorials/basics/your_first_vectorfunction>`.
+  {doc}`first-VectorFunction tutorial </user_guide/first_vectorfunction>`.
 - **How-to guides.** When you already know the concepts and just need the recipe
-  for adding a new dynamics model, see the {doc}`How-to guides </how_to/index>`.
+  for adding a new dynamics model, see the {doc}`User Guide </user_guide/index>`.
 
 The two organizing ideas of this page are these: a VectorFunction is a
 *differentiable, symbolic* map that carries its own derivatives, and it operates

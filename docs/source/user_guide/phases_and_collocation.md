@@ -2,7 +2,7 @@
 # Direct collocation in Tycho
 
 A **phase** is Tycho's discretization of one continuous optimal-control problem.
-Where a {doc}`VectorFunction </explanation/vector_function>` describes *what* a
+Where a {doc}`VectorFunction </user_guide/vectorfunctions>` describes *what* a
 quantity is — the dynamics, a constraint, an objective — a phase describes *what
 to do with them*: find a trajectory that obeys the dynamics, satisfies the
 constraints, and minimizes the objective. This page explains the conceptual
@@ -15,7 +15,7 @@ continuous one.
 It is conceptual rather than exhaustive. For the full API surface see the
 {doc}`Python reference </reference/python/optimal_control>` and the
 {doc}`C++ reference </reference/cpp/optimal_control>`; for a guided build, the
-{doc}`Tutorials </tutorials/index>`.
+{doc}`User Guide </user_guide/index>`.
 
 ## The problem a phase solves
 
@@ -179,7 +179,7 @@ the Mayer term is a plain function of the boundary nodes.
 This finite NLP is the bridge to the solver. Crucially, it is **sparse and
 structured**: each defect block touches only the few nodes of its own interval,
 and each VectorFunction tracks the input domain it actually reads (see the
-{doc}`VectorFunction model </explanation/vector_function>`). The Jacobian of the
+{doc}`VectorFunction model </user_guide/vectorfunctions>`). The Jacobian of the
 whole discretized system is therefore mostly zeros, with a banded, near-block
 structure that the sparse solver exploits directly. The transcription does not
 just produce *an* NLP — it produces one whose sparsity pattern mirrors the
@@ -297,10 +297,10 @@ and defects → sparse NLP → PSIOPT solve → mesh refinement. To go further:
   {doc}`Python reference </reference/python/optimal_control>` and the
   {doc}`C++ reference </reference/cpp/optimal_control>`.
 - **The dynamics layer.** Every defect, constraint, and objective in a phase is a
-  VectorFunction; the {doc}`VectorFunction model </explanation/vector_function>`
+  VectorFunction; the {doc}`VectorFunction model </user_guide/vectorfunctions>`
   explains the differentiable, symbolic machinery the transcription is built on.
 - **Tutorials.** For a guided, runnable build of a phase from an ODE through to a
-  solved trajectory, see the {doc}`Tutorials </tutorials/index>`.
+  solved trajectory, see the {doc}`User Guide </user_guide/index>`.
 
 The two organizing ideas of this page are these: a
 phase turns a continuous optimal-control problem into a sparse, differentiable

@@ -7,16 +7,16 @@ the MEE dynamics model, set up a {py:class}`~tychopy.optimal_control.PhaseInterf
 solve it with PSIOPT, and read the result.
 
 It assumes you have worked through both
-{doc}`Setting up a phase </tutorials/basics/your_first_phase>` (the
+{doc}`Setting up a phase </user_guide/first_phase>` (the
 optimal-control tutorial) and
-{doc}`Orbits and elements </tutorials/astrodynamics/orbits_and_elements>` (the
+{doc}`Orbits and elements </user_guide/orbits_and_elements>` (the
 first astrodynamics tutorial). The phase and optimizer machinery is the same as
 before; the only new ingredient is that the ODE comes from
 {py:func}`~tychopy.astro.modified_dynamics` instead of being written by hand.
 
 For the conceptual background on MEE and why it is the preferred element set for
 low-thrust problems, read
-{doc}`Astrodynamics in Tycho </explanation/astrodynamics>`.
+{doc}`Astrodynamics in Tycho </user_guide/astrodynamics>`.
 
 Every `{doctest}` block below is executed as part of Tycho's test suite.
 
@@ -334,7 +334,7 @@ principle dictates that the maximum control magnitude is optimal at every point.
 
 ## Next steps
 
-- {doc}`Astrodynamics in Tycho </explanation/astrodynamics>` — the conceptual
+- {doc}`Astrodynamics in Tycho </user_guide/astrodynamics>` — the conceptual
   background on MEE, the RSW frame, and when each element set is preferable.
 - {doc}`Python reference </reference/python/astrodynamics>` — the full listing
   of dynamics models and conversion VectorFunctions.

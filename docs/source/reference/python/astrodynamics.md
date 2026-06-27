@@ -13,9 +13,9 @@ models ({py:func}`~tychopy.astro.cartesian_dynamics`,
 use as the ODE of a {py:class}`~tychopy.optimal_control.PhaseInterface`.
 
 For the conceptual model — state representations, propagation, and the dynamics
-models as phase ODEs — see {doc}`Astrodynamics in Tycho </explanation/astrodynamics>`.
+models as phase ODEs — see {doc}`Astrodynamics in Tycho </user_guide/astrodynamics>`.
 
-For hands-on examples see the {doc}`astrodynamics tutorials </tutorials/astrodynamics/index>`.
+For hands-on examples see the {doc}`User Guide </user_guide/index>`.
 
 ```{eval-rst}
 .. currentmodule:: tychopy.astro
