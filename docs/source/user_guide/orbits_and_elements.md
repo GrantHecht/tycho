@@ -14,8 +14,10 @@ conditioning, when to prefer one over another — read
 listing see the {doc}`Python reference </reference/python/astrodynamics>`.
 
 Every `{doctest}` block below (the ones showing `>>>` prompts) is executed as
-part of Tycho's test suite, so the results shown are real. Run them in order in
-a REPL or script to follow along.
+part of Tycho's test suite, so the results shown are real. The C++ equivalents
+appear alongside in tabs; those are illustrative `tycho::astro` fragments that
+assume the headers and `using namespace` lines shown in the first tab (not run
+here). Run the Python blocks in order in a REPL or script to follow along.
 
 :::{note}
 All results are displayed with `.round(n).tolist()` to keep the output
@@ -42,6 +44,8 @@ semi-major axis 6778 km (roughly 400 km altitude), eccentricity 0.01,
 inclination 51.6°, RAAN 45°, argument of perigee 60°, mean anomaly 30° — and
 convert to Cartesian with `classic_to_cartesian`. All angles are in radians.
 
+::::{tab-set}
+:::{tab-item} Python
 ```{doctest}
 >>> mu = 398600.4418   # km^3/s^2, Earth gravitational parameter
 >>> classic = np.array([
@@ -56,6 +60,25 @@ convert to Cartesian with `classic_to_cartesian`. All angles are in radians.
 >>> rv.round(6).tolist()
 [-2999.19312, 2903.129203, 5265.737532, -5.452292, -5.48671, -0.030706]
 ```
+:::
+:::{tab-item} C++
+```cpp
+#include <tycho/tycho.h>
+using namespace tycho;
+using namespace tycho::astro;
+
+double mu = 398600.4418;   // km^3/s^2, Earth gravitational parameter
+
+// Classical elements [a, e, i, Omega, omega, M] — angles in radians.
+Vector6<double> classic;
+classic << 6778.0, 0.01, 51.6 * M_PI / 180.0,
+           45.0 * M_PI / 180.0, 60.0 * M_PI / 180.0, 30.0 * M_PI / 180.0;
+
+Vector6<double> rv = classic_to_cartesian(classic, mu);
+// rv -> [-2999.19312, 2903.129203, 5265.737532, -5.452292, -5.48671, -0.030706]
+```
+:::
+::::
 
 The state is now a NumPy array of position (km) and velocity (km/s) in the
 Earth-centered inertial (ECI) frame. The orbit is slightly eccentric and
@@ -69,11 +92,21 @@ orientation from the spacecraft's position along the orbit. `cartesian_to_classi
 inverts the conversion exactly: for a non-singular orbit the round-trip
 recovers the original elements to floating-point precision.
 
+::::{tab-set}
+:::{tab-item} Python
 ```{doctest}
 >>> classic_rt = astro.cartesian_to_classic(rv, mu)
 >>> classic_rt.round(6).tolist()
 [6778.0, 0.01, 0.90059, 0.785398, 1.047198, 0.523599]
 ```
+:::
+:::{tab-item} C++
+```cpp
+Vector6<double> classic_rt = cartesian_to_classic(rv, mu);
+// classic_rt -> [6778.0, 0.01, 0.90059, 0.785398, 1.047198, 0.523599]
+```
+:::
+::::
 
 These are the same values we started from (to six decimal places):
 
@@ -97,11 +130,21 @@ retaining only the retrograde-equatorial singularity at exactly $i = 180°$.
 
 `cartesian_to_modified` converts the Cartesian state directly to MEE:
 
+::::{tab-set}
+:::{tab-item} Python
 ```{doctest}
 >>> mee = astro.cartesian_to_modified(rv, mu)
 >>> mee.round(6).tolist()
 [6777.3222, -0.002588, 0.009659, 0.341829, 0.341829, 2.366304]
 ```
+:::
+:::{tab-item} C++
+```cpp
+Vector6<double> mee = cartesian_to_modified(rv, mu);
+// mee -> [6777.3222, -0.002588, 0.009659, 0.341829, 0.341829, 2.366304]
+```
+:::
+::::
 
 The six components are:
 
@@ -123,6 +166,8 @@ choice for low-thrust trajectory optimization.
 
 The inverse, `modified_to_cartesian`, recovers the Cartesian state exactly:
 
+::::{tab-set}
+:::{tab-item} Python
 ```{doctest}
 >>> rv_rt = astro.modified_to_cartesian(mee, mu)
 >>> rv_rt.round(6).tolist()
@@ -130,6 +175,14 @@ The inverse, `modified_to_cartesian`, recovers the Cartesian state exactly:
 >>> np.allclose(rv, rv_rt, atol=1e-6)
 True
 ```
+:::
+:::{tab-item} C++
+```cpp
+Vector6<double> rv_rt = modified_to_cartesian(mee, mu);
+// rv_rt matches rv to floating-point precision.
+```
+:::
+::::
 
 ## 4. Analytic propagation
 
@@ -140,12 +193,23 @@ elliptic, parabolic, and hyperbolic orbits in a single unified path.
 
 `propagate_cartesian(RV, dt, mu)` advances the Cartesian state by `dt` seconds:
 
+::::{tab-set}
+:::{tab-item} Python
 ```{doctest}
 >>> dt = 1800.0   # 30 minutes
 >>> rv_prop = astro.propagate_cartesian(rv, dt, mu)
 >>> rv_prop.round(6).tolist()
 [-2917.200988, -5671.568494, -2457.29995, 5.416957, -0.535366, -5.310345]
 ```
+:::
+:::{tab-item} C++
+```cpp
+double dt = 1800.0;   // 30 minutes
+Vector6<double> rv_prop = propagate_cartesian(rv, dt, mu);
+// rv_prop -> [-2917.200988, -5671.568494, -2457.29995, 5.416957, -0.535366, -5.310345]
+```
+:::
+::::
 
 After 30 minutes the spacecraft has moved roughly 5000 km along its orbit.
 The orbital energy is conserved: the semi-major axis is unchanged (the orbit
@@ -156,11 +220,21 @@ five shape and orientation elements $[p, f, g, h, k]$ are constants of the
 motion; only the true longitude $L$ changes. The propagator updates $L$
 via the mean anomaly and the Kepler equation, then returns the new MEE state:
 
+::::{tab-set}
+:::{tab-item} Python
 ```{doctest}
 >>> mee_prop = astro.propagate_modified(mee, dt, mu)
 >>> mee_prop.round(6).tolist()
 [6777.3222, -0.002588, 0.009659, 0.341829, 0.341829, 4.403587]
 ```
+:::
+:::{tab-item} C++
+```cpp
+Vector6<double> mee_prop = propagate_modified(mee, dt, mu);
+// mee_prop -> [6777.3222, -0.002588, 0.009659, 0.341829, 0.341829, 4.403587]
+```
+:::
+::::
 
 The first five elements are identical to the initial values — exactly the
 expected behavior for an unperturbed orbit. Only $L$ has advanced. Converting

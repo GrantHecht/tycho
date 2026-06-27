@@ -18,7 +18,11 @@ For the conceptual background on MEE and why it is the preferred element set for
 low-thrust problems, read
 {doc}`Astrodynamics in Tycho </user_guide/astrodynamics>`.
 
-Every `{doctest}` block below is executed as part of Tycho's test suite.
+Every `{doctest}` block below is executed as part of Tycho's test suite. The
+C++ equivalents appear alongside in tabs; those are illustrative builder-API
+fragments that assume the headers and `using namespace` lines shown in the
+first tab (not run here). C++ does not subclass `ODEBase` — it assembles the
+right-hand side as an expression and wraps it with the `ODE(...)` builder.
 
 :::{note}
 Return values of `phase.add_*` calls are integer constraint handles.  We assign
@@ -71,6 +75,8 @@ $[\text{state}(6), t, \text{control}(3)]$ layout, we use
 control sub-vectors, stack them into a nine-element input, and compose it with
 the dynamics.
 
+::::{tab-set}
+:::{tab-item} Python
 ```{doctest}
 >>> class MEETransfer(oc.ODEBase):
 ...     def __init__(self, mu):
@@ -81,6 +87,29 @@ the dynamics.
 ...         ode_rhs = astro.modified_dynamics(mu)(ode_input)
 ...         super().__init__(ode_rhs, 6, 3)
 ```
+:::
+:::{tab-item} C++
+```cpp
+#include <tycho/tycho.h>
+using namespace tycho;
+using namespace tycho::vf;
+using namespace tycho::oc;
+
+// ODEArguments(6, 3, 0): full layout [p, f, g, h, k, L, t, ur, ut, un].
+auto args  = ODEArguments(6, 3, 0);
+auto state = args.head<6>();   // MEE state [p, f, g, h, k, L]
+auto u     = args.tail<3>();   // RSW thrust [ur, ut, un]
+
+// MEEDynamics is the C++ name for modified_dynamics (IR=9, OR=6).
+auto mee_dyn = astro::MEEDynamics(mu);
+auto ode_rhs = GenericFunction<-1, -1>(mee_dyn.eval(stack(state, u)));
+auto ode     = ODE(ode_rhs, 6, 3)
+                   .var_group("state", 0, 6)
+                   .var_names({{"t", 6}})
+                   .var_group("u", 7, 3);
+```
+:::
+::::
 
 `oc.ODEArguments(6, 3)` lays out the full ten-element ODE input
 $[p, f, g, h, k, L, t, u_r, u_t, u_n]$.  `args.x_vec()` selects the six MEE
@@ -109,11 +138,24 @@ second and third arguments provide a VectorFunction that reads the MEE state
 (indices 0–5 of the trajectory vector) and returns the constant control
 $[0, a_{\max}, 0]$.
 
+::::{tab-set}
+:::{tab-item} Python
 ```{doctest}
 >>> u_prograde = vf.ConstantVector(6, np.array([0.0, acc_max, 0.0]))
 >>> integ = ode.integrator(0.001, u_prograde, range(0, 6))
 >>> integ.adaptive = True
 ```
+:::
+:::{tab-item} C++
+```cpp
+// Constant prograde thrust via the IntegratorBuilder constant-control overload.
+// Adaptive step-size control is the integrator default (matching the Python
+// integ.adaptive = True above); the builder exposes no separate toggle.
+Eigen::Vector3d u_const(0.0, acc_max, 0.0);
+auto integ = ode.integrator().step(0.001).control(u_const).build();
+```
+:::
+::::
 
 We integrate from the initial MEE state over eighteen time units to build a
 multi-revolution spiral as the starting shape. The guess does not need to reach
@@ -121,18 +163,40 @@ the target exactly — it only has to be a reasonable spiral; the optimizer
 stretches and refines it to hit $p_f$. Each row of the trajectory vector is
 $[p, f, g, h, k, L, t, u_r, u_t, u_n]$.
 
+::::{tab-set}
+:::{tab-item} Python
 ```{doctest}
 >>> X0 = np.array([p0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, acc_max, 0.0])
 >>> TrajIG = integ.integrate_dense(X0, 18.0, 200)
 >>> len(TrajIG), len(TrajIG[0])
 (200, 10)
 ```
+:::
+:::{tab-item} C++
+```cpp
+Eigen::VectorXd X0(10);
+X0.setZero();
+X0[0] = p0;        // initial semi-latus rectum
+X0[8] = acc_max;   // ut
+auto TrajIG = integ.integrate_dense(X0, 18.0, 200);   // 200 rows of 10 elements
+```
+:::
+::::
 
 ## 3. Build the phase
 
+::::{tab-set}
+:::{tab-item} Python
 ```{doctest}
 >>> phase = ode.phase("LGL3", TrajIG, 90)
 ```
+:::
+:::{tab-item} C++
+```cpp
+auto phase = ode.phase(TranscriptionModes::LGL3, TrajIG, 90);
+```
+:::
+::::
 
 90 LGL3 segments over a ~30-unit transfer — about 0.34 time units per segment
 — gives enough mesh resolution to resolve the several-revolution spiral.
@@ -141,43 +205,97 @@ $[p, f, g, h, k, L, t, u_r, u_t, u_n]$.
 
 We pin the front of the trajectory to the initial state at $t = 0$:
 
+::::{tab-set}
+:::{tab-item} Python
 ```{doctest}
 >>> _ = phase.add_boundary_value("Front", range(0, 7), list(mee0) + [0.0])
 ```
+:::
+:::{tab-item} C++
+```cpp
+Eigen::VectorXi front_vars(7);
+front_vars << 0, 1, 2, 3, 4, 5, 6;
+Eigen::VectorXd front_val(7);
+front_val << p0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;   // [mee0, t = 0]
+phase.add_boundary_value(PhaseRegionFlags::Front, front_vars, front_val);
+```
+:::
+::::
 
 For the back we fix the five shape elements $[p, f, g, h, k]$ of the target
 circular equatorial orbit, leaving $L$ (the true longitude at arrival) free.
 The optimizer is free to arrive anywhere on the target orbit.
 
+::::{tab-set}
+:::{tab-item} Python
 ```{doctest}
 >>> _ = phase.add_boundary_value("Back", [0, 1, 2, 3, 4],
 ...                               [pf, 0.0, 0.0, 0.0, 0.0])
 ```
+:::
+:::{tab-item} C++
+```cpp
+Eigen::VectorXi back_vars(5);
+back_vars << 0, 1, 2, 3, 4;
+Eigen::VectorXd back_val(5);
+back_val << pf, 0.0, 0.0, 0.0, 0.0;
+phase.add_boundary_value(PhaseRegionFlags::Back, back_vars, back_val);
+```
+:::
+::::
 
 The control magnitude must not exceed $a_{\max}$.  Indices 7, 8, 9 of the
 trajectory vector are the RSW controls $[u_r, u_t, u_n]$:
 
+::::{tab-set}
+:::{tab-item} Python
 ```{doctest}
 >>> _ = phase.add_lu_norm_bound("Path", [7, 8, 9], 0.0001, acc_max, 1.0)
 ```
+:::
+:::{tab-item} C++
+```cpp
+phase.add_lu_norm_bound(PhaseRegionFlags::Path, {"u"}, 0.0001, acc_max, 1.0);
+```
+:::
+::::
 
 Finally, minimize total transfer time:
 
+::::{tab-set}
+:::{tab-item} Python
 ```{doctest}
 >>> _ = phase.add_delta_time_objective(1.0)
 ```
+:::
+:::{tab-item} C++
+```cpp
+phase.add_delta_time_objective(1.0);
+```
+:::
+::::
 
 ## 5. Solve
 
 PSIOPT's console output goes directly to the terminal and does not appear here;
 silence it with `set_print_level(0)` to keep the environment clean:
 
+::::{tab-set}
+:::{tab-item} Python
 ```{doctest}
 >>> phase.optimizer.set_print_level(0)
 >>> flag = phase.optimize()
 >>> str(flag)
 'ConvergenceFlags.CONVERGED'
 ```
+:::
+:::{tab-item} C++
+```cpp
+phase.optimizer().set_print_level(0);
+auto flag = phase.optimize();   // -> PSIOPT::ConvergenceFlags::CONVERGED
+```
+:::
+::::
 
 ## 6. Read the result
 
@@ -185,11 +303,21 @@ The trajectory is returned as a list of rows, each containing
 $[p, f, g, h, k, L, t, u_r, u_t, u_n]$.  Index 6 is time, so the optimal
 transfer time is in the last row's time slot:
 
+::::{tab-set}
+:::{tab-item} Python
 ```{doctest}
 >>> Traj = phase.return_traj()
 >>> round(float(Traj[-1][6]), 4)
 30.4621
 ```
+:::
+:::{tab-item} C++
+```cpp
+auto Traj  = phase.return_traj();
+double tf  = Traj.back()[6];   // optimal transfer time (index 6) -> ~30.4621
+```
+:::
+::::
 
 About **30.5 time units** to double the orbit — roughly three full revolutions
 of continuous thrust, compared with the fraction of a revolution a high-thrust

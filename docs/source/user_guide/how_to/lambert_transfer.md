@@ -12,11 +12,17 @@ coordinate frame and units as `mu`.  For the conceptual background on Lambert's
 problem and the long-way vs. short-way distinction see
 {doc}`Astrodynamics in Tycho </user_guide/astrodynamics>`.
 
+The C++ tabs show the equivalent `tycho::astro` calls — illustrative fragments
+that assume the headers and `using namespace` lines shown in the first tab,
+not standalone programs.
+
 ## Single-revolution transfer
 
 `lambert_izzo` returns a tuple `(V1, V2)` of NumPy arrays of shape `(3,)` —
 the departure and arrival velocity vectors:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 import numpy as np
 from tychopy import astro
@@ -33,6 +39,28 @@ V1_sw, V2_sw = astro.lambert_izzo(R1, R2, dt, mu, longway=False)
 # Long-way transfer (transfer angle > 180°)
 V1_lw, V2_lw = astro.lambert_izzo(R1, R2, dt, mu, longway=True)
 ```
+:::
+:::{tab-item} C++
+```cpp
+#include <tycho/tycho.h>
+using namespace tycho;
+using namespace tycho::astro;
+
+double mu = 3.986004418e5;   // km^3/s^2 (Earth)
+
+Vector3<double> R1(6778.0, 0.0, 0.0);    // departure position, km
+Vector3<double> R2(0.0, 10000.0, 0.0);   // arrival position, km
+double dt = 3823.4;                       // time of flight, s
+
+// lambert_izzo returns std::array<Vector3<double>, 2> = {V1, V2}.
+// Short-way transfer (transfer angle < 180 deg)
+auto [V1_sw, V2_sw] = lambert_izzo(R1, R2, dt, mu, /*longway=*/false);
+
+// Long-way transfer (transfer angle > 180 deg)
+auto [V1_lw, V2_lw] = lambert_izzo(R1, R2, dt, mu, /*longway=*/true);
+```
+:::
+::::
 
 The `longway` flag selects between the two single-revolution solutions.
 `False` is the short-way transfer (traversing the shorter arc between the
@@ -48,6 +76,8 @@ more full revolutions before arriving, additional solution families exist.
 `lambert_izzo`) adds `Nrevs` (the number of complete revolutions) and
 `rightbranch` (which of the two branches for that revolution count):
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 dt_multirev = 4 * np.pi * np.sqrt(((6778.0 + 10000.0) / 2)**3 / mu)
 
@@ -58,6 +88,20 @@ V1_mr, V2_mr = astro.lambert_izzo_multirev(
     rightbranch=False,
 )
 ```
+:::
+:::{tab-item} C++
+```cpp
+double dt_multirev =
+    4.0 * M_PI * std::sqrt(std::pow((6778.0 + 10000.0) / 2.0, 3) / mu);
+
+// In C++ the multi-revolution variant is the 7-argument overload of
+// lambert_izzo: (R1, R2, dt, mu, longway, Nrevs, rightbranch).
+auto [V1_mr, V2_mr] =
+    lambert_izzo(R1, R2, dt_multirev, mu, /*longway=*/false,
+                 /*Nrevs=*/1, /*rightbranch=*/false);
+```
+:::
+::::
 
 For a given `Nrevs ≥ 1` there are in general two solution branches (two
 distinct orbits that complete exactly `Nrevs` revolutions in the requested
@@ -139,11 +183,22 @@ The returned `V1` and `V2` are inertial velocity vectors at the departure and
 arrival points respectively.  The $\Delta v$ of the maneuver at departure is
 `V1 - v_sc` where `v_sc` is the spacecraft's pre-maneuver velocity:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 # Departure delta-v (km/s)
 v_sc_departure = np.array([0.0, 7.669, 0.0])   # circular LEO velocity
 dv1 = np.linalg.norm(V1_sw - v_sc_departure)
 ```
+:::
+:::{tab-item} C++
+```cpp
+// Departure delta-v (km/s)
+Vector3<double> v_sc_departure(0.0, 7.669, 0.0);   // circular LEO velocity
+double dv1 = (V1_sw - v_sc_departure).norm();
+```
+:::
+::::
 
 To use the Lambert arc as an initial guess for an optimal-control phase,
 construct a piecewise-linear or analytically propagated trajectory from `R1`
