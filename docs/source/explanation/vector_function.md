@@ -143,7 +143,8 @@ A handful of patterns underlie the whole DSL:
   a longer vector; all pieces must share the same input dimension.
 - **Math and vector operators.** Elementwise math (`sin`, `exp`, …), norms,
   normalizations, dot, and cross products are all first-class and analytically
-  differentiated — see the catalog below.
+  differentiated — the families are summarized below and listed in full in the
+  {doc}`Python reference </reference/python/vector_functions>`.
 
 Because each piece returns a function with full derivative support, a deeply
 composed expression differentiates itself end to end with no extra work. This is
@@ -152,84 +153,16 @@ passed through layers, and Tycho keeps the derivatives consistent at each one.
 
 ## The operator catalog
 
-The operators below are the building blocks you compose with. The one-line
-descriptions give the *meaning*; for full signatures, overloads, and per-operand
-dimension rules see the
-{doc}`Python reference </reference/python/vector_functions>`. In the tables, $f$
-and $g$ are VectorFunctions evaluated at the same input $x$; $r$, $a$, $b$, $c$
-denote vector-valued operands.
-
-### Elementwise math
-
-Each takes a scalar VectorFunction (output dimension 1) and returns a new scalar
-VectorFunction, chaining the inner Jacobian through the known derivative of the
-operation.
-
-| Python name | Computes |
-| --- | --- |
-| `sin` | $\sin f$ |
-| `cos` | $\cos f$ |
-| `tan` | $\tan f$ |
-| `sinh` | $\sinh f$ |
-| `cosh` | $\cosh f$ |
-| `tanh` | $\tanh f$ |
-| `arcsin` | $\arcsin f$ |
-| `arccos` | $\arccos f$ |
-| `arctan` | $\arctan f$ |
-| `arcsinh` | $\operatorname{arcsinh} f$ |
-| `arccosh` | $\operatorname{arccosh} f$ |
-| `arctanh` | $\operatorname{arctanh} f$ |
-| `arctan2` | Two-argument arctangent $\operatorname{atan2}(y, x)$, matching `numpy.arctan2` |
-| `exp` | $e^{f}$ |
-| `log` | Natural logarithm $\ln f$ |
-| `sqrt` | $\sqrt{f}$ |
-| `squared` | $f^2$ |
-| `pow` | $f^{p}$ for a constant exponent $p$ |
-| `abs` | $\lvert f\rvert$ |
-| `sign` | $\operatorname{sign}(f)$ (locally constant; derivative is zero) |
-
-### Vector operations
-
-Operations over vector-valued functions: norms, normalizations, the
-inner / cross / elementwise products, and matrix and quaternion products.
-`normalize` is an alias of `normalized`.
-
-| Python name | Computes |
-| --- | --- |
-| `norm` | $\lVert r\rVert$ |
-| `squared_norm` | $\lVert r\rVert^2$ |
-| `cubed_norm` | $\lVert r\rVert^3$ |
-| `inverse_norm` | $1/\lVert r\rVert$ |
-| `inverse_squared_norm` | $1/\lVert r\rVert^2$ |
-| `inverse_cubed_norm` | $1/\lVert r\rVert^3$ |
-| `inverse_four_norm` | $1/\lVert r\rVert^4$ |
-| `normalize` | $r/\lVert r\rVert$ (alias of `normalized`) |
-| `normalized` | $r/\lVert r\rVert$ |
-| `normalized_power2` | $r/\lVert r\rVert^2$ |
-| `normalized_power3` | $r/\lVert r\rVert^3$ (the two-body gravity term) |
-| `normalized_power4` | $r/\lVert r\rVert^4$ |
-| `normalized_power5` | $r/\lVert r\rVert^5$ |
-| `dot` | Inner product $a \cdot b$ |
-| `cross` | 3-vector cross product $a \times b$ |
-| `doublecross` | Iterated cross product $(a \times b) \times c$ |
-| `cwise_product` | Elementwise product $a \odot b$ |
-| `cwise_quotient` | Elementwise quotient $a / b$ |
-| `matmul` | Matrix product $M_1\, M_2$ (or $M\,v$) of matrix-valued functions |
-| `quat_product` | Hamilton product $q_1 \otimes q_2$ of two scalar-last unit quaternions (4-vectors) |
-| `quat_rotate` | Rotate a 3-vector by a scalar-last unit quaternion, $q \otimes (v,0) \otimes q^{-1}$ |
-
-### Composition and reduction
-
-Helpers that combine several functions into one, or reduce a function's outputs.
-
-| Python name | Meaning |
-| --- | --- |
-| `stack` | Concatenate the outputs of several functions vertically into one longer vector |
-| `stack_scalar` | `stack` restricted to scalar-output (dimension-1) functions |
-| `sum` | Elementwise sum of several equal-output functions |
-| `sum_scalar` | `sum` restricted to scalar-output functions |
-| `sum_elems` | Sum several scalar segment functions into a single scalar (optionally weighted) |
-| `ifelse` | Select between two branches by a predicate; differentiates the active branch (piecewise differentiable) |
+The operators fall into three families: **elementwise math** (`sin`, `exp`,
+`sqrt`, …), which lift a scalar function through a known derivative;
+**vector operations** (norms, normalizations, dot/cross/elementwise products,
+matrix and quaternion products), which act on vector-valued operands; and
+**composition and reduction** helpers (`stack`, `sum`, `ifelse`, …), which combine
+or collapse whole functions. Each returns a fully differentiable VectorFunction,
+so they nest freely. For the complete catalog — every operator name, its one-line
+meaning, and its full signature — see the operator tables in the
+{doc}`Python reference </reference/python/vector_functions>`. This page explains
+*that* operators compose; the reference lists *which* operators exist.
 
 (vf-authoring)=
 ## Authoring a custom primitive (C++)
