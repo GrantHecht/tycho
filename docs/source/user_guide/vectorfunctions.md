@@ -155,10 +155,9 @@ passed through layers, and Tycho keeps the derivatives consistent at each one.
 The operators below are the building blocks you compose with. The one-line
 descriptions give the *meaning*; for full signatures, overloads, and per-operand
 dimension rules see the
-{doc}`Python reference </reference/python/vector_functions>` (and its
-{ref}`vectorfunctions-python` anchor). In the tables, $f$ and $g$ are
-VectorFunctions evaluated at the same input $x$; bold $r$, $a$, $b$, $c$ denote
-vector-valued operands.
+{doc}`Python reference </reference/python/vector_functions>`. In the tables, $f$
+and $g$ are VectorFunctions evaluated at the same input $x$; $r$, $a$, $b$, $c$
+denote vector-valued operands.
 
 ### Elementwise math
 
@@ -191,8 +190,9 @@ operation.
 
 ### Vector operations
 
-Operations over vector-valued functions: norms, normalizations, and the
-inner / cross / elementwise products. `normalize` is an alias of `normalized`.
+Operations over vector-valued functions: norms, normalizations, the
+inner / cross / elementwise products, and matrix and quaternion products.
+`normalize` is an alias of `normalized`.
 
 | Python name | Computes |
 | --- | --- |
@@ -222,7 +222,7 @@ inner / cross / elementwise products. `normalize` is an alias of `normalized`.
 
 Helpers that combine several functions into one, or reduce a function's outputs.
 
-| Python name | Computes |
+| Python name | Meaning |
 | --- | --- |
 | `stack` | Concatenate the outputs of several functions vertically into one longer vector |
 | `stack_scalar` | `stack` restricted to scalar-output (dimension-1) functions |
