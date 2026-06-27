@@ -548,6 +548,8 @@ main6
 main8
 /references
 *.svg
+# ...but track committed docs assets (logo, brand marks) under the Sphinx _static dir
+!docs/source/_static/*.svg
 
 # Python example plot outputs (keep .gitkeep, ignore generated files)
 examples/python_examples/Plots/**

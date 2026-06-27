@@ -199,8 +199,22 @@ html_theme = "pydata_sphinx_theme"
 html_title = "Tycho"
 html_static_path = [str(Path(_DOCS_SOURCE_DIR) / "_static")]
 html_css_files = ["custom.css"]
+# Icon-only mark for the browser tab. The wordmark logo (which embeds "Tycho")
+# is set as the navbar brand below, so html_title is used only for the HTML
+# <title> and accessibility text, not rendered alongside the logo.
+# Absolute path: the docs build runs ``sphinx -c <build-dir>`` so html_favicon
+# (resolved against the config dir) must point at the source _static directly.
+html_favicon = str(Path(_DOCS_SOURCE_DIR) / "_static" / "tycho_transfer_icononly_light.svg")
 
 html_theme_options = {
+    # Navbar brand: outlined-path SVG wordmark, light/dark variants. The font
+    # (Poppins-Medium) is baked in as paths, so no webfont is required. pydata
+    # checks existence relative to the source dir and renders ``_static/<name>``.
+    "logo": {
+        "image_light": "_static/tycho_transfer_named_horizontal_light.svg",
+        "image_dark": "_static/tycho_transfer_named_horizontal_dark.svg",
+        "alt_text": "Tycho documentation — home",
+    },
     "github_url": "https://github.com/GrantHecht/tycho",
     "use_edit_page_button": True,
     "show_toc_level": 2,

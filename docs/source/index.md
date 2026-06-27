@@ -4,11 +4,21 @@ sd_hide_title: true
 
 # Tycho
 
-```{div} sd-text-center sd-fs-3 sd-font-weight-bold sd-pt-3
-Tycho
+```{image} _static/tycho_transfer_named_stacked_light.svg
+:alt: Tycho
+:width: 200px
+:align: center
+:class: only-light sd-pt-3
 ```
 
-```{div} sd-text-center sd-fs-5 sd-text-muted
+```{image} _static/tycho_transfer_named_stacked_dark.svg
+:alt: Tycho
+:width: 200px
+:align: center
+:class: only-dark sd-pt-3
+```
+
+```{div} sd-text-center sd-fs-5 sd-text-muted sd-pt-3
 Trajectory design and optimal control in C++ and Python
 ```
 
