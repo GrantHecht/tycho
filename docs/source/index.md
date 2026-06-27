@@ -25,7 +25,8 @@ solved with the built-in **PSIOPT** interior-point solver.
 :::{grid-item-card} Getting Started
 :link: getting_started/index
 :link-type: doc
-Install Tycho into a conda environment and verify your setup.
+Install Tycho into a conda environment, then write your first program — a
+self-differentiating dynamics model in a few lines.
 :::
 
 :::{grid-item-card} Tutorials
