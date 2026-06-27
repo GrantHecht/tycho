@@ -11,9 +11,29 @@ configure the optimizer's NLP partition count without conflating it with the
 linear-solver thread count.
 
 This recipe assumes you have already constructed an integrator — see
-{doc}`Choosing an integrator </user_guide/how_to/choosing_an_integrator>`. For the
-conceptual overview of Tycho's threading architecture see
-{doc}`Integration and parallelism </user_guide/how_to/threading_model>`.
+{doc}`Choosing an integrator </user_guide/how_to/choosing_an_integrator>`.
+
+## How it works
+
+A few facts about the threading model explain the behavior of the calls below:
+
+- **One process-global pool.** Tycho owns a single work-stealing thread pool,
+  created lazily the first time parallel work is requested and sized to the
+  machine's hardware concurrency. Every parallel operation — batch integration,
+  the optimizer's Jacobian partitions, internal dispatch — draws from this same
+  pool. Resizing it with `set_num_threads(n)` changes the budget for *all*
+  parallel work at once, which is why it is meant to be called once at startup.
+- **Parallelism pays off in batches, not single runs.** Distributing work to the
+  pool has overhead. A single short integration or a single small solve will not
+  recover that cost — the win comes when you have many independent units of work
+  (a grid of initial conditions, a Monte-Carlo sweep, a manifold fan-out), where
+  each worker stays busy on its own trajectory with no shared mutable state.
+- **Threads and SIMD are different axes.** The thread pool spreads *separate*
+  trajectories across cores. Orthogonally, Tycho's SuperScalar (SIMD)
+  vectorization packs several trajectories' arithmetic into one wide instruction
+  inside a single worker — the batched state-transition-matrix paths use this.
+  The two compose, and SIMD is automatic where the dynamics support it; there is
+  no knob to set.
 
 ## Query and set the thread count
 
@@ -150,8 +170,5 @@ utils.set_num_threads(allocated)
   `utils.get_num_threads`, `utils.get_core_count`, and `BumpAllocator`.
 - {doc}`Python reference </reference/python/integrators>` — `integrate_parallel`,
   `integrate_dense_parallel`, `integrate_stm_parallel`, and all batch methods.
-- {doc}`Integration and parallelism </user_guide/how_to/threading_model>` —
-  conceptual background on the thread pool, SuperScalar vectorization, and when
-  parallelism helps.
 - {doc}`Choosing an integrator </user_guide/how_to/choosing_an_integrator>` — how to pick
   an algorithm and configure tolerances before running a parallel batch.
