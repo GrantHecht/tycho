@@ -194,6 +194,15 @@ html[data-theme="dark"] .bd-content img.plot-directive {
   padding-left: 0.6rem;
 }
 
+/* -- Code blocks wear the same steel keyline as API signatures. For a
+ * code-first DSL the snippets are the hero artifact, so tie them into the same
+ * visual family — one quiet steel stroke down the left edge. ---------------- */
+.bd-content div.highlight {
+  border-left: 3px solid var(--tycho-steel-500);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
 /* -- Quality floor --------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .bd-content .sd-card {
