@@ -95,7 +95,7 @@ typically every state plus time:
 ::::{tab-set}
 :::{tab-item} Python
 ```python
-# States 0..4 and time continuous across the ascent/descent seam.
+# States 0-3 and time (index 4) continuous across the ascent/descent seam.
 ocp.add_forward_link_equal_con(aphase, dphase, range(0, 5))
 ```
 :::

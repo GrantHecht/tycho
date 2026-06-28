@@ -102,7 +102,7 @@ phase.add_boundary_value("Back", range(0, 6), Xf)
 phase.add_delta_time_objective(1.0)
 
 phase.optimize()              # PSIOPT
-traj = phase.return_traj()    # reaches r=2 in ~18.26 time units
+traj = phase.return_traj()    # time-optimal spiral out to the r=2 orbit
 ```
 
 ```{eval-rst}

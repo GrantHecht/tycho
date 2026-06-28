@@ -11,7 +11,7 @@ algorithm to use for a given task.
 This recipe assumes you have a defined ODE — a class that inherits from
 {py:class}`~tychopy.optimal_control.ODEBase` or one of the built-in dynamics
 models. For the conceptual background on adaptive stepping and the error-control
-loop see {doc}`Integration and parallelism </how_to/threading_model>`.
+loop see {doc}`Propagating an ODE </tutorials/basics/propagating_an_ode>`.
 
 The code on this page consists of illustrative fragments — both the Python and
 C++ snippets assume an `ode` is already in scope (the C++ tabs also assume the
@@ -253,7 +253,7 @@ which uses `ode.integrator(dt)` with the default `DOPRI87` algorithm and
 - {doc}`Python reference </reference/python/integrators>` — the full
   `Integrator` API, including STM propagation, event detection, and
   vectorized batch methods.
-- {doc}`Integration and parallelism </how_to/threading_model>` —
+- {doc}`Propagating an ODE </tutorials/basics/propagating_an_ode>` —
   conceptual background on adaptive step-size control, dense output, and the
   error norm loop.
 - {doc}`Threading model </how_to/threading_model>` — how to distribute many
