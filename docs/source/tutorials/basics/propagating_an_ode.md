@@ -200,12 +200,36 @@ step grid (omit the count) and watch how little the energy moves:
 True
 ```
 
+Plotting that energy error against time tells the whole story at a glance — on a
+log axis it sits far below a one-part-in-a-billion reference for the entire swing:
+
+```python
+import matplotlib.pyplot as plt
+
+t = [float(r[2]) for r in dense]
+drift = np.abs(E - E[0])
+
+fig, ax = plt.subplots(figsize=(7, 3.4))
+ax.semilogy(t[1:], drift[1:])
+ax.axhline(1e-9, color="C3", ls="--", lw=1, label=r"$10^{-9}$ reference")
+ax.set(xlabel="time [s]", ylabel=r"energy error $|E(t) - E_0|$",
+       title="Energy drift over the propagation")
+ax.legend()
+fig.tight_layout()
+plt.show()
+```
+
+```{eval-rst}
+.. plot:: _plots/pendulum_energy_drift.py
+```
+
 Over the entire 5-second swing the energy holds to better than one part in a
-billion — the integrator is faithfully reproducing the true dynamics, not slowly
-leaking accuracy. That fidelity is exactly what the tolerances buy: loosen
-`set_abs_tol` for faster, rougher scans, or tighten it (and add `set_rel_tol`)
-when you need still more. The full set of knobs — per-component tolerances, the
-step-size controller, the error norm — is covered in the
+billion — every accepted step sits orders of magnitude below the reference line.
+The integrator is faithfully reproducing the true dynamics, not slowly leaking
+accuracy. That fidelity is exactly what the tolerances buy: loosen `set_abs_tol`
+for faster, rougher scans, or tighten it (and add `set_rel_tol`) when you need
+still more. The full set of knobs — per-component tolerances, the step-size
+controller, the error norm — is covered in the
 {doc}`integrator how-to </how_to/choosing_an_integrator>`.
 
 ## 6. Choose a different algorithm
@@ -251,36 +275,7 @@ plt.show()
 ```
 
 ```{eval-rst}
-.. plot::
-
-   import numpy as np
-   import matplotlib.pyplot as plt
-   from tychopy import vector_functions as vf
-   from tychopy import optimal_control as oc
-
-   class Pendulum(oc.ODEBase):
-       def __init__(self, g, L):
-           args = oc.ODEArguments(2, 0)
-           theta, omega = args.x_vec().tolist()
-           ode = vf.stack([omega, -(g / L) * vf.sin(theta)])
-           super().__init__(ode, 2, 0)
-
-   g, L = 9.81, 1.0
-   ode = Pendulum(g, L)
-   integ = ode.integrator(0.01)
-   x0 = np.array([1.0, 0.0, 0.0])
-   T = np.array(integ.integrate_dense(x0, 5.0, 400))
-
-   fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9, 3.6))
-   ax1.plot(T[:, 2], T[:, 0])
-   ax1.set(xlabel="time [s]", ylabel=r"angle $\theta$ [rad]", title="Pendulum swing")
-   ax1.grid(True, alpha=0.3)
-
-   ax2.plot(T[:, 0], T[:, 1], color="C1")
-   ax2.set(xlabel=r"$\theta$ [rad]", ylabel=r"$\omega$ [rad/s]", title="Phase portrait")
-   ax2.grid(True, alpha=0.3)
-
-   fig.tight_layout()
+.. plot:: _plots/pendulum_swing.py
 ```
 
 The angle traces a clean, slightly non-sinusoidal oscillation (the large initial
