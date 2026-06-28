@@ -5,6 +5,30 @@
  * everything around it stays quiet. See the brand tokens below.
  */
 
+/* -- Self-hosted brand face (Poppins, the wordmark's font; SIL OFL 1.1, see
+ * notices/poppins-OFL.txt). Latin subset, used for headings only. ---------- */
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("fonts/poppins-latin-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("fonts/poppins-latin-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("fonts/poppins-latin-700.woff2") format("woff2");
+}
+
 /* -- Brand tokens ---------------------------------------------------------- */
 :root {
   --tycho-navy-900: #0e1426; /* deepest space */
@@ -89,7 +113,9 @@ html[data-theme="dark"] {
 
   --pst-color-primary: var(--tycho-amber-500);
   --pst-color-primary-highlight: var(--tycho-amber-400);
-  --pst-color-link: var(--tycho-amber-500);
+  /* Body links stay a calm steel-periwinkle so link-dense pages don't glow;
+   * amber is reserved for hover/active, keeping the brand on interaction. */
+  --pst-color-link: #9db4e8;
   --pst-color-link-hover: var(--tycho-amber-400);
   --pst-color-secondary: var(--tycho-steel-300);
   --pst-color-accent: var(--tycho-amber-500);
@@ -143,11 +169,39 @@ html[data-theme="dark"] .bd-content .sd-card-title .sd-octicon {
   color: var(--tycho-amber-500);
 }
 
+/* -- Landing hero: ambient concentric orbits with a single amber 'spacecraft
+ * on a transfer arc' behind the logo. One small amber accent; the rings are
+ * faint steel that read on both light and dark. ------------------------------ */
+.tycho-hero {
+  position: relative;
+  padding: 1.25rem 1rem 0.5rem;
+  background-image: radial-gradient(
+      ellipse 60% 65% at 50% 34%,
+      rgba(92, 106, 143, 0.1),
+      transparent 70%
+    ),
+    url("tycho_hero_orbits.svg");
+  background-repeat: no-repeat, no-repeat;
+  background-position: center, center 28%;
+  background-size: cover, min(660px, 92%) auto;
+}
+
 /* -- Landing page: keep the lead paragraph from running the full width. ---- */
 .tycho-lead {
   max-width: 46rem;
   margin-left: auto;
   margin-right: auto;
+}
+
+/* -- Reference pages: a calm steel keyline on API signatures ties the
+ * dense autodoc/Breathe blocks to the brand without adding more amber. ----- */
+.bd-article dl.py > dt.sig,
+.bd-article dl.cpp > dt.sig,
+.bd-article dl.c > dt.sig,
+.bd-article dl.cpp > dt.sig-object,
+.bd-article dl.py > dt.sig-object {
+  border-left: 3px solid var(--tycho-steel-500);
+  padding-left: 0.6rem;
 }
 
 /* -- Quality floor --------------------------------------------------------- */
