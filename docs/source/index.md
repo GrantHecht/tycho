@@ -118,36 +118,48 @@ start from the {doc}`first-phase tutorial </tutorials/basics/your_first_phase>`.
 ## Key features
 
 ::::{grid} 1 2 2 3
-:gutter: 3
-:class-container: sd-pt-2
+:gutter: 4
+:class-container: sd-pt-2 tycho-features
 
-:::{grid-item-card} {octicon}`pulse;1.4em;sd-mr-1` Self-differentiating dynamics
+:::{grid-item}
+{octicon}`pulse;1.3em;tycho-feature-icon` **Self-differentiating dynamics**
+
 Define dynamics, constraints, and objectives as composable **VectorFunctions**.
 Exact Jacobians and Hessians are produced automatically — no finite differences,
 no hand-coded derivatives.
 :::
 
-:::{grid-item-card} {octicon}`graph;1.4em;sd-mr-1` Direct collocation
+:::{grid-item}
+{octicon}`graph;1.3em;tycho-feature-icon` **Direct collocation**
+
 High-order Legendre–Gauss–Lobatto transcription turns continuous optimal-control
 problems into sparse NLPs, with adaptive mesh refinement to certify the result.
 :::
 
-:::{grid-item-card} {octicon}`zap;1.4em;sd-mr-1` PSIOPT optimizer
+:::{grid-item}
+{octicon}`zap;1.3em;tycho-feature-icon` **PSIOPT optimizer**
+
 A bundled, high-performance sparse interior-point solver built for the large,
 structured nonlinear programs that trajectory optimization produces.
 :::
 
-:::{grid-item-card} {octicon}`rocket;1.4em;sd-mr-1` Astrodynamics-ready
+:::{grid-item}
+{octicon}`rocket;1.3em;tycho-feature-icon` **Astrodynamics-ready**
+
 Built-in dynamical models, reference frames, ephemeris access, and Lambert /
 Kepler tooling make space-trajectory design a first-class use case.
 :::
 
-:::{grid-item-card} {octicon}`link;1.4em;sd-mr-1` Multi-phase problems
+:::{grid-item}
+{octicon}`link;1.3em;tycho-feature-icon` **Multi-phase problems**
+
 Link phases for staged launches, flybys, and coast arcs — arbitrarily complex
 scenarios are assembled into a single NLP and solved together.
 :::
 
-:::{grid-item-card} {octicon}`code-square;1.4em;sd-mr-1` C++ and Python
+:::{grid-item}
+{octicon}`code-square;1.3em;tycho-feature-icon` **C++ and Python**
+
 A modern C++20 core with a first-class Python API. Prototype interactively in
 Python; deploy the identical models in compiled C++.
 :::

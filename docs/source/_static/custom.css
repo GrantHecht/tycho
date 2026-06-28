@@ -171,6 +171,24 @@ html[data-theme="dark"] .bd-content .sd-card-title .sd-octicon {
   margin-right: auto;
 }
 
+/* -- Landing "Key features": borderless blocks, not cards. Features are
+ * claims; the "Explore the documentation" cards below are destinations. Giving
+ * the two sections different shapes keeps the page from reading as the same
+ * 3×2 grid twice. An amber glyph leads each claim. ------------------------- */
+.tycho-features .sd-octicon.tycho-feature-icon {
+  color: var(--tycho-amber-700);
+  margin-right: 0.45rem;
+  vertical-align: -0.13em;
+}
+
+html[data-theme="dark"] .tycho-features .sd-octicon.tycho-feature-icon {
+  color: var(--tycho-amber-500);
+}
+
+.tycho-features .sd-col > * {
+  padding-right: 0.5rem;
+}
+
 /* -- Figures: dissolve into the page on both themes. ----------------------- *
  * Documentation figures (the matplotlib ``plot`` directive) are rendered with a
  * transparent background and theme-agnostic steel text / amber-and-steel data
