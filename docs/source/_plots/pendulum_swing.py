@@ -8,8 +8,11 @@ is a build asset, not a documentation page.
 import matplotlib.pyplot as plt
 import numpy as np
 
+import _brand  # sibling module; the plot directive puts _plots/ on sys.path
 from tychopy import optimal_control as oc
 from tychopy import vector_functions as vf
+
+_brand.apply()
 
 
 class Pendulum(oc.ODEBase):
@@ -27,12 +30,12 @@ x0 = np.array([1.0, 0.0, 0.0])
 T = np.array(integ.integrate_dense(x0, 5.0, 400))
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9, 3.6))
-ax1.plot(T[:, 2], T[:, 0])
+ax1.plot(T[:, 2], T[:, 0], color=_brand.AMBER, lw=2)
 ax1.set(xlabel="time [s]", ylabel=r"angle $\theta$ [rad]", title="Pendulum swing")
-ax1.grid(True, alpha=0.3)
+ax1.grid(True)
 
-ax2.plot(T[:, 0], T[:, 1], color="C1")
+ax2.plot(T[:, 0], T[:, 1], color=_brand.STEEL, lw=2)
 ax2.set(xlabel=r"$\theta$ [rad]", ylabel=r"$\omega$ [rad/s]", title="Phase portrait")
-ax2.grid(True, alpha=0.3)
+ax2.grid(True)
 
 fig.tight_layout()

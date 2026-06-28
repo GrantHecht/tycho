@@ -8,8 +8,11 @@ is a build asset, not a documentation page.
 import matplotlib.pyplot as plt
 import numpy as np
 
+import _brand  # sibling module; the plot directive puts _plots/ on sys.path
 from tychopy import optimal_control as oc
 from tychopy import vector_functions as vf
+
+_brand.apply()
 
 
 class Pendulum(oc.ODEBase):
@@ -29,13 +32,13 @@ E = 0.5 * dense[:, 1] ** 2 + (g / L) * (1.0 - np.cos(dense[:, 0]))
 drift = np.abs(E - E[0])
 
 fig, ax = plt.subplots(figsize=(7, 3.4))
-ax.semilogy(dense[1:, 2], drift[1:])
-ax.axhline(1e-9, color="C3", ls="--", lw=1, label=r"$10^{-9}$ reference")
+ax.semilogy(dense[1:, 2], drift[1:], color=_brand.AMBER, lw=2)
+ax.axhline(1e-9, color=_brand.STEEL, ls="--", lw=1, label=r"$10^{-9}$ reference")
 ax.set(
     xlabel="time [s]",
     ylabel=r"energy error $|E(t) - E_0|$",
     title="Energy drift over the propagation",
 )
-ax.grid(True, which="both", alpha=0.3)
+ax.grid(True, which="both")
 ax.legend()
 fig.tight_layout()

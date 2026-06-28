@@ -171,6 +171,18 @@ html[data-theme="dark"] .bd-content .sd-card-title .sd-octicon {
   margin-right: auto;
 }
 
+/* -- Figures: dissolve into the page on both themes. ----------------------- *
+ * Documentation figures (the matplotlib ``plot`` directive) are rendered with a
+ * transparent background and theme-agnostic steel text / amber-and-steel data
+ * (see _plots/_brand.py), so they read on white and on deep navy alike. Override
+ * the theme's default white image backing — meant for legacy opaque figures —
+ * so ours show the page through instead of floating in a white panel in dark
+ * mode. Higher specificity than the theme's
+ * ``[data-theme=dark] .bd-content img:not(...)`` rule. */
+html[data-theme="dark"] .bd-content img.plot-directive {
+  background-color: transparent;
+}
+
 /* -- Reference pages: a calm steel keyline on API signatures ties the
  * dense autodoc/Breathe blocks to the brand without adding more amber. ----- */
 .bd-article dl.py > dt.sig,
