@@ -279,8 +279,8 @@ phase.add_delta_time_objective(1.0);
 
 PSIOPT's console output goes directly to the terminal and does not appear here.
 Print levels run from most verbose (`0`, the default — prints the full iteration
-table) to fully silent (`3`); pass `set_print_level(3)` to keep the environment
-clean:
+table) through progressively terser `1` and `2` to fully silent (`3`); pass
+`set_print_level(3)` to keep the environment clean:
 
 ::::{tab-set}
 :::{tab-item} Python

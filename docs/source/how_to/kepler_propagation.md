@@ -146,11 +146,12 @@ except ValueError as e:
 
 This block is Python-only because the `ValueError`/`RuntimeError` raised here
 are Python-binding semantics; the underlying C++ surface signals the same
-conditions *differently*. `propagate_cartesian` NaN-poisons its result on
-non-convergence (it does not throw), so a C++ caller detects failure with
-`result.allFinite()`; `propagate_classic` and `propagate_modified` throw
-`std::invalid_argument` on `mu <= 0`. Do not assume the C++ functions raise the
-same exceptions as the Python wrappers.
+conditions *differently*. All three C++ functions throw `std::invalid_argument`
+on invalid inputs such as `mu <= 0`. The difference is the *non-convergence*
+path: `propagate_cartesian` NaN-poisons its result rather than throwing (so a
+C++ caller detects a failed solve with `result.allFinite()`), whereas the
+element propagators have no iterative solve to diverge. Do not assume the C++
+functions raise the same exceptions as the Python wrappers.
 
 ## See also
 
