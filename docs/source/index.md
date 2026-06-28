@@ -67,13 +67,6 @@ as a self-differentiating VectorFunction, transcribe them onto a collocation
 mesh, bound the thrust, pin the orbits, and let PSIOPT do the rest. Exact
 Jacobians and Hessians are generated for you.
 
-::::{grid} 1 1 2 2
-:gutter: 3
-:class-container: sd-pt-2
-
-:::{grid-item}
-:columns: 12 12 5 5
-
 ```python
 import numpy as np
 import tychopy as typy
@@ -111,18 +104,10 @@ phase.add_delta_time_objective(1.0)
 phase.optimize()              # PSIOPT
 traj = phase.return_traj()    # reaches r=2 in ~18.26 time units
 ```
-:::
-
-:::{grid-item}
-:columns: 12 12 7 7
-:child-align: center
 
 ```{eval-rst}
 .. plot:: _plots/landing_low_thrust.py
 ```
-:::
-
-::::
 
 ```{div} sd-text-center sd-pt-1 sd-pb-2
 See the full write-up in the
