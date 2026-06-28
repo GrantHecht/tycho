@@ -20,6 +20,12 @@ the matching C++ builder-API source.
   constraint together with an integral control-effort objective.
 - **{doc}`Goddard rocket <goddard_rocket>`** — multi-phase linkage and a
   nonlinear equality *path constraint* defining a singular arc.
+- **{doc}`Multi-phase cannonball <multi_phase_cannon>`** — ODE parameters,
+  multi-phase parameter linking, and an event-detection initial guess.
+- **{doc}`Simple low-thrust transfer <simple_low_thrust>`** — astrodynamics
+  orbit-raising with a vector-norm control bound.
+- **{doc}`Minimum time to climb <min_time_to_climb>`** — interpolated table
+  data (`InterpTable1D`/`InterpTable2D`) with adaptive mesh refinement.
 
 ```{toctree}
 :maxdepth: 1
@@ -27,10 +33,7 @@ the matching C++ builder-API source.
 brachistochrone
 bryson_denham
 goddard_rocket
+multi_phase_cannon
+simple_low_thrust
+min_time_to_climb
 ```
-
-:::{note}
-This gallery is being expanded. Further worked examples (multi-phase cannonball,
-low-thrust transfer, and table-interpolated minimum-time-to-climb) are added in
-a follow-on task.
-:::
