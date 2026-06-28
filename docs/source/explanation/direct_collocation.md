@@ -1,16 +1,21 @@
 (explanation-direct-collocation)=
 # Direct collocation in Tycho
 
-A **phase** is Tycho's representation of one optimal-control problem: find a
-trajectory that obeys some dynamics, satisfies the constraints you attach, and
-minimizes an objective. Where a
+A **phase** is Tycho's representation of one continuous trajectory segment: some
+dynamics to obey, constraints to satisfy, and an objective to minimize. A single
+phase can be a complete optimal-control problem in its own right — but it is also
+a *building block*. Many real trajectories are not one smooth arc but several
+arcs that differ in dynamics or constraints — a staged launch, a coast between two
+burns, an ascent followed by a descent — and Tycho models those as **several
+phases linked together** and solved as a single problem. Where a
 {doc}`VectorFunction </explanation/vector_function>` describes *what* a quantity
 is — the dynamics, a constraint, an objective — a phase describes *what to do
-with them*. This page is the practical picture: what a phase is made of, how you
-set one up, and what **direct collocation** does for you. The heavier
-mathematics — the optimal-control problem in full, the defect equations, the
-collocation node theory — lives in [Under the hood](#under-the-hood) at the end;
-you can set up and solve phases without reading it.
+with them*. This page is the practical picture: what a phase is made of, how
+phases combine into larger problems, and what **direct collocation** does for you.
+The heavier mathematics — the optimal-control problem in full, the defect
+equations, the collocation node theory — lives in
+[Under the hood](#under-the-hood) at the end; you can set up and solve phases
+without reading it.
 
 For a guided, runnable build see the
 {doc}`first-phase tutorial </tutorials/basics/your_first_phase>`. For the complete API
@@ -31,7 +36,9 @@ an ODE, or you can compose your own.
 and transcription order), holds the constraints and objective you attach, and
 drives the solve. The typical flow is: define the ODE, create a phase from it
 with a transcription mode and an initial mesh, attach the boundary values, path
-constraints, and objective, then call `solve` or `optimize`.
+constraints, and objective, then call `solve` or `optimize` — when the phase is a
+standalone problem. (When it is one segment of a linked problem the solve call
+moves up to the `OptimalControlProblem`, as the next section explains.)
 
 Everything you attach to a phase — a boundary value, a path constraint, an
 integral objective — is itself a VectorFunction, evaluated over some region of
@@ -49,6 +56,41 @@ fixed inputs, and may enter the dynamics, the constraints, and the objective. Th
 related *link parameters* on an
 {py:class}`~tychopy.optimal_control.OptimalControlProblem` play the same role but
 are shared across several phases.
+
+## One problem, one or many phases
+
+A single phase is enough when the whole trajectory is one continuous arc governed
+by one set of dynamics. Often it is not. A launch vehicle sheds a stage and its
+mass and thrust jump; a spacecraft coasts ballistically between two powered burns;
+a trajectory crosses from one gravitational regime into another. Each of these is
+a sequence of segments that differ in their dynamics, their constraints, or their
+control structure — and forcing them into a single phase would mean one ODE and
+one mesh trying to capture dynamics that genuinely differ across the segments,
+which a single ODE VectorFunction cannot express.
+
+Tycho's answer is to model each segment as its own phase and bind them with an
+{py:class}`~tychopy.optimal_control.OptimalControlProblem` (OCP). You build the
+phases independently — each with its own ODE, transcription, mesh, and the
+constraints and objective that belong to *that* segment — register them with the
+OCP, and add **link constraints** that stitch the segments together. The most
+common seam is a *forward link*: it forces the state and time at the **back** of
+one phase to equal those at the **front** of the next, so the trajectory is
+continuous across the boundary even though the dynamics on either side differ.
+Other link types share a parameter across phases, couple non-adjacent phases, or
+add an objective term that depends on variables drawn from two phases at once.
+
+The essential point for understanding the method is that **an OCP is not solved
+phase by phase**. The transcription concatenates the decision variables of *every*
+phase, unions all of their defect, boundary, and path constraints, adds the link
+constraints as further equality blocks, and hands the optimizer one combined NLP.
+Every phase and every seam moves together in a single solve, so the optimizer can
+trade off across boundaries — shortening one segment to lengthen another, shifting
+a shared parameter to benefit the trajectory as a whole. A single phase is simply
+the degenerate case of this picture with one segment and no seams; everything
+below about transcription, control parameterization, and mesh refinement applies
+per-phase whether you have one phase or twenty. For the step-by-step mechanics of
+assembling and linking phases see
+{doc}`How to link multiple phases </how_to/multi_phase_linkage>`.
 
 ## What direct collocation does for you
 
@@ -273,6 +315,15 @@ a plain function of the boundary nodes. The transcription does not just produce
 *an* NLP — it produces one whose sparsity pattern mirrors the locality of the
 dynamics.
 
+When several phases are linked in an `OptimalControlProblem`, this same mapping is
+applied to each phase and the results are stacked: the decision vector is the
+concatenation of every phase's decision vector (plus any shared link parameters),
+and the constraint set is the union of every phase's constraints together with the
+link-constraint blocks that couple them. The link constraints are sparse too — a
+forward link touches only the back nodes of one phase and the front nodes of the
+next — so the combined multi-phase NLP keeps the same banded, locality-preserving
+structure as a single phase, just with a few extra coupling blocks at the seams.
+
 ### Solving with PSIOPT
 
 The transcribed NLP is handed to **PSIOPT**, Tycho's bundled sparse interior-point
@@ -291,7 +342,9 @@ parameters, line searches, the KKT factorization, convergence flags — are a to
 of their own. For understanding a phase, the essential contract is:
 **transcription produces a sparse, differentiable NLP; PSIOPT solves it.** A phase
 can run PSIOPT in *solve* mode (drive constraints to feasibility) or *optimize*
-mode (feasibility plus minimizing the objective).
+mode (feasibility plus minimizing the objective). An `OptimalControlProblem`
+exposes the same two modes and runs them on the single combined system, so every
+linked phase converges together rather than in isolation.
 
 ## Where to go next
 
@@ -305,13 +358,17 @@ defects → sparse NLP → PSIOPT solve → mesh refinement. To go further:
   modes, and mesh settings is in the
   {doc}`Python reference </reference/python/optimal_control>` and the
   {doc}`C++ reference </reference/cpp/optimal_control>`.
+- **Multiple phases.** When a trajectory needs more than one segment, link the
+  phases into one problem with
+  {doc}`How to link multiple phases </how_to/multi_phase_linkage>`.
 - **The dynamics layer.** Every defect, constraint, and objective in a phase is a
   VectorFunction; the {doc}`VectorFunction model </explanation/vector_function>`
   explains the differentiable, symbolic machinery the transcription is built on.
 
-The two organizing ideas: a phase turns a continuous optimal-control problem into
-a sparse, differentiable NLP by enforcing the dynamics as **defect constraints**
-on a collocation mesh, and **mesh refinement** iterates that discretization until
-the discrete solution faithfully represents the continuous trajectory.
+The two organizing ideas: a phase — or an `OptimalControlProblem` of linked
+phases — turns a continuous optimal-control problem into a sparse, differentiable
+NLP by enforcing the dynamics as **defect constraints** on a collocation mesh, and
+**mesh refinement** iterates that discretization until the discrete solution
+faithfully represents the continuous trajectory.
 </content>
 </invoke>
