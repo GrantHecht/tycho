@@ -12,22 +12,49 @@ Each page shows the whole program: imports, the ODE definition, the initial
 guess, the phase (or multi-phase) setup, the solve, and a solution plot — plus
 the matching C++ builder-API source.
 
-## In this gallery
+::::{grid} 1 2 2 3
+:gutter: 3
 
-- **{doc}`Brachistochrone <brachistochrone>`** — single-phase basics, free
-  final time, a control path bound.
-- **{doc}`Bryson–Denham problem <bryson_denham>`** — a hard state path
-  constraint together with an integral control-effort objective.
-- **{doc}`Goddard rocket <goddard_rocket>`** — multi-phase linkage and a
-  nonlinear equality *path constraint* defining a singular arc.
-- **{doc}`Multi-phase cannonball <multi_phase_cannon>`** — ODE parameters,
-  multi-phase parameter linking, and an event-detection initial guess.
-- **{doc}`Simple low-thrust transfer <simple_low_thrust>`** — astrodynamics
-  orbit-raising with a vector-norm control bound.
-- **{doc}`Minimum time to climb <min_time_to_climb>`** — interpolated table
-  data (`InterpTable1D`/`InterpTable2D`) with adaptive mesh refinement.
+:::{grid-item-card} Brachistochrone
+:link: brachistochrone
+:link-type: doc
+Single-phase basics — free final time and a control path bound.
+:::
+
+:::{grid-item-card} Bryson–Denham
+:link: bryson_denham
+:link-type: doc
+A hard state path constraint with an integral control-effort objective.
+:::
+
+:::{grid-item-card} Goddard rocket
+:link: goddard_rocket
+:link-type: doc
+Multi-phase linkage and a nonlinear path constraint defining a singular arc.
+:::
+
+:::{grid-item-card} Multi-phase cannonball
+:link: multi_phase_cannon
+:link-type: doc
+ODE parameters, parameter linking across phases, and an event-detected guess.
+:::
+
+:::{grid-item-card} Simple low-thrust transfer
+:link: simple_low_thrust
+:link-type: doc
+Astrodynamics orbit-raising with a vector-norm control bound.
+:::
+
+:::{grid-item-card} Minimum time to climb
+:link: min_time_to_climb
+:link-type: doc
+Interpolated table data (`InterpTable1D`/`2D`) with adaptive mesh refinement.
+:::
+
+::::
 
 ```{toctree}
+:hidden:
 :maxdepth: 1
 
 brachistochrone
