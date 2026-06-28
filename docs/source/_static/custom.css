@@ -1,3 +1,15 @@
-/* docs/source/_static/custom.css — Tycho theme overrides.
- * Reserved for future use; intentionally empty.
- */
+/* docs/source/_static/custom.css — Tycho theme overrides. */
+
+/* Landing page: keep the lead paragraph from running the full content width. */
+.tycho-lead {
+    max-width: 46rem;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Landing page: tint the octicon that leads each feature/nav card title so the
+ * grids read as a scannable set of icons rather than plain headings. */
+.bd-content .sd-card-title .sd-octicon {
+    color: var(--pst-color-primary);
+    vertical-align: -0.15em;
+}
