@@ -1,9 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 380" fill="none" role="presentation" aria-hidden="true">
-  <g stroke="rgba(120,138,173,0.16)" stroke-width="1.4">
-    <circle cx="380" cy="190" r="60"/>
-    <circle cx="380" cy="190" r="110"/>
-    <circle cx="380" cy="190" r="160"/>
-    <ellipse cx="380" cy="190" rx="135" ry="108" stroke-dasharray="4 7"/>
+  <g stroke="rgba(120,138,173,0.10)" stroke-width="1.3">
+    <circle cx="380" cy="190" r="120"/>
+    <circle cx="380" cy="190" r="170"/>
+    <ellipse cx="380" cy="190" rx="145" ry="118" stroke-dasharray="3 8"/>
   </g>
-  <circle cx="515" cy="190" r="5" fill="rgba(217,149,42,0.55)"/>
+  <circle cx="525" cy="190" r="4.5" fill="rgba(217,149,42,0.5)"/>
 </svg>

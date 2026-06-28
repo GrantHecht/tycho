@@ -98,12 +98,6 @@ html[data-theme="light"] {
   --sd-color-secondary-text: #ffffff;
 }
 
-/* Amber "burn" flourish on link hover — decorative underline only, so link
- * text keeps its accessible navy color. */
-html[data-theme="light"] .bd-article a:hover {
-  text-decoration-color: var(--tycho-amber-700);
-}
-
 /* -- Dark theme (deep-space navy — where the identity sings) --------------- */
 html[data-theme="dark"] {
   /* navy fills; the theme's own light "on-*" text colors sit on top. */
@@ -111,12 +105,13 @@ html[data-theme="dark"] {
   --pst-color-surface: var(--tycho-navy-800);
   --pst-color-on-surface: #e7ecf6;
 
-  --pst-color-primary: var(--tycho-amber-500);
-  --pst-color-primary-highlight: var(--tycho-amber-400);
-  /* Body links stay a calm steel-periwinkle so link-dense pages don't glow;
-   * amber is reserved for hover/active, keeping the brand on interaction. */
+  /* Links AND nav (sidebar active-trail, TOC, hover) stay a calm steel-
+   * periwinkle so link- and nav-dense pages never glow amber. Amber lives only
+   * in buttons, card icons, the heading keyline, and the hero accent. */
+  --pst-color-primary: #9db4e8;
+  --pst-color-primary-highlight: #c2d2f2;
   --pst-color-link: #9db4e8;
-  --pst-color-link-hover: var(--tycho-amber-400);
+  --pst-color-link-hover: #c6d4f2;
   --pst-color-secondary: var(--tycho-steel-300);
   --pst-color-accent: var(--tycho-amber-500);
   --pst-color-text-base: #c4cde2;
@@ -176,14 +171,14 @@ html[data-theme="dark"] .bd-content .sd-card-title .sd-octicon {
   position: relative;
   padding: 1.25rem 1rem 0.5rem;
   background-image: radial-gradient(
-      ellipse 60% 65% at 50% 34%,
-      rgba(92, 106, 143, 0.1),
-      transparent 70%
+      ellipse 58% 60% at 50% 42%,
+      rgba(92, 106, 143, 0.07),
+      transparent 72%
     ),
     url("tycho_hero_orbits.svg");
   background-repeat: no-repeat, no-repeat;
-  background-position: center, center 28%;
-  background-size: cover, min(660px, 92%) auto;
+  background-position: center, center 78%;
+  background-size: cover, min(600px, 86%) auto;
 }
 
 /* -- Landing page: keep the lead paragraph from running the full width. ---- */
