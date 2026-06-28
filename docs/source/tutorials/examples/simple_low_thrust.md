@@ -103,17 +103,17 @@ norm-bounded integrator initial guess.
    IG = np.array(TrajIG).T
 
    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(11, 4.5))
-   ax0.plot(IG[0], IG[1], color="0.7", ls="--", label="initial guess")
-   ax0.plot(T[0], T[1], color="C0", label="time-optimal")
-   ax0.scatter([X0[0]], [X0[1]], color="k", zorder=5, label="start")
-   ax0.scatter([Xf[0]], [Xf[1]], color="r", zorder=5, label="target")
+   ax0.plot(IG[0], IG[1], color=_brand.STEEL, ls="--", label="initial guess")
+   ax0.plot(T[0], T[1], color=_brand.AMBER, label="time-optimal")
+   ax0.scatter([X0[0]], [X0[1]], color=_brand.STEEL_DARK, zorder=5, label="start")
+   ax0.scatter([Xf[0]], [Xf[1]], color=_brand.AMBER_BRIGHT, zorder=5, label="target")
    ax0.set(xlabel="x", ylabel="y", title="Low-thrust spiral transfer")
    ax0.axis("equal")
    ax0.grid(True)
    ax0.legend()
 
    umag = (T[7] ** 2 + T[8] ** 2 + T[9] ** 2) ** 0.5
-   ax1.plot(T[6], umag, color="C1")
+   ax1.plot(T[6], umag, color=_brand.AMBER)
    ax1.set(xlabel="t (ND)", ylabel="|u|", title="Control magnitude")
    ax1.grid(True)
 

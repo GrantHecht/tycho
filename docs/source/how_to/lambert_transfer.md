@@ -153,20 +153,21 @@ arriving:
 
    fig, (axL, axR) = plt.subplots(1, 2, figsize=(9, 4.5))
    for ax in (axL, axR):
-       ax.plot(0, 0, marker="*", color="#e6a817", ms=15, mec="k", mew=0.5, zorder=3)
-       ax.plot(*R1[:2], "ko", ms=6, zorder=4)
-       ax.plot(*R2[:2], "ks", ms=6, zorder=4)
+       ax.plot(0, 0, marker="*", color=_brand.AMBER_BRIGHT, ms=15,
+               mec=_brand.STEEL_DARK, mew=0.5, zorder=3)
+       ax.plot(*R1[:2], "o", ms=6, color=_brand.STEEL_DARK, zorder=4)
+       ax.plot(*R2[:2], "s", ms=6, color=_brand.STEEL_DARK, zorder=4)
        ax.annotate("R1", R1[:2], textcoords="offset points", xytext=(8, -4))
        ax.annotate("R2", R2[:2], textcoords="offset points", xytext=(8, 4))
        ax.set_aspect("equal")
        ax.set(xlabel="x [km]", ylabel="y [km]")
 
-   axL.plot(sw[:, 0], sw[:, 1], color="C0", lw=1.8, label="short way")
-   axL.plot(lw[:, 0], lw[:, 1], color="C3", lw=1.8, label="long way")
+   axL.plot(sw[:, 0], sw[:, 1], color=_brand.AMBER, lw=1.8, label="short way")
+   axL.plot(lw[:, 0], lw[:, 1], color=_brand.STEEL, lw=1.8, label="long way")
    axL.set_title("Single-revolution transfers")
    axL.legend(fontsize=8, loc="lower left")
 
-   axR.plot(mr[:, 0], mr[:, 1], color="C2", lw=1.5, label="Nrevs=1, rightbranch=False")
+   axR.plot(mr[:, 0], mr[:, 1], color=_brand.AMBER, lw=1.5, label="Nrevs=1, rightbranch=False")
    axR.set_title("Multi-revolution transfer")
    axR.legend(fontsize=8, loc="lower left")
 

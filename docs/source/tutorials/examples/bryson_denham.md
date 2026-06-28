@@ -63,7 +63,7 @@ together with an integral control-effort objective (`add_integral_objective`).
    axs[0].plot(TT[2], TT[0])
    axs[1].plot(TT[2], TT[1])
    axs[2].plot(TT[2], TT[3])
-   axs[0].axhline(1 / 9, color="0.6", ls="--", lw=0.8, label="state bound")
+   axs[0].axhline(1 / 9, color=_brand.STEEL_DARK, ls="--", lw=0.8, label="state bound")
    axs[0].set_ylabel("x")
    axs[1].set_ylabel("v")
    axs[2].set_ylabel("u")

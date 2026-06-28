@@ -333,7 +333,7 @@ plt.show()
    ax1.set(xlabel="x", ylabel="y", title="Brachistochrone path")
    ax1.grid(True, alpha=0.3)
 
-   ax2.plot(T[:, 3], np.degrees(T[:, 4]), "-o", ms=3, color="C1")
+   ax2.plot(T[:, 3], np.degrees(T[:, 4]), "-o", ms=3, color=_brand.STEEL)
    ax2.set(xlabel="time [s]", ylabel=r"control $\theta$ [deg]", title="Optimal control")
    ax2.grid(True, alpha=0.3)
 

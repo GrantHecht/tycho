@@ -152,8 +152,8 @@ integrating to apogee and then to ground contact.
    AT = np.array(Ascent).T
    DT = np.array(Descent).T
    fig, ax = plt.subplots(figsize=(8.0, 5.0))
-   ax.plot(AT[3], AT[2], color="r", label="Ascent")
-   ax.plot(DT[3], DT[2], color="b", label="Descent")
+   ax.plot(AT[3], AT[2], color=_brand.AMBER, label="Ascent")
+   ax.plot(DT[3], DT[2], color=_brand.STEEL, label="Descent")
    ax.set_xlabel("Down range (m)")
    ax.set_ylabel("Altitude (m)")
    ax.set_title("Multi-phase cannonball: max-range trajectory")

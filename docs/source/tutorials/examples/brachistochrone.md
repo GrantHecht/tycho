@@ -70,11 +70,11 @@ values.
    Traj = np.array(phase.return_traj()).T
 
    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(11, 4.0))
-   ax0.plot(Traj[0], Traj[1], color="C0")
+   ax0.plot(Traj[0], Traj[1], color=_brand.AMBER)
    ax0.set(xlabel="x", ylabel="y", title="Brachistochrone path")
    ax0.grid(True)
 
-   ax1.plot(Traj[3], Traj[4], color="C1")
+   ax1.plot(Traj[3], Traj[4], color=_brand.STEEL)
    ax1.set(xlabel="t [s]", ylabel="theta [rad]", title="Wire-angle control")
    ax1.grid(True)
 

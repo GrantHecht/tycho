@@ -274,9 +274,9 @@ True
 
    fig = plt.figure(figsize=(6, 5))
    ax = fig.add_subplot(111, projection="3d")
-   ax.plot(states[:, 0], states[:, 1], states[:, 2], lw=1.5, color="C0")
-   ax.scatter([0], [0], [0], s=60, color="C3", zorder=5, label="Earth center")
-   ax.scatter([rv0[0]], [rv0[1]], [rv0[2]], s=40, color="C1", zorder=5,
+   ax.plot(states[:, 0], states[:, 1], states[:, 2], lw=1.5, color=_brand.AMBER)
+   ax.scatter([0], [0], [0], s=60, color=_brand.STEEL_DARK, zorder=5, label="Earth center")
+   ax.scatter([rv0[0]], [rv0[1]], [rv0[2]], s=40, color=_brand.AMBER_BRIGHT, zorder=5,
               label="Initial state")
    ax.set_xlabel("X [km]")
    ax.set_ylabel("Y [km]")

@@ -1,5 +1,6 @@
 # Configured by CMake; usable directly by sphinx-build with fallback defaults
 # when CMake variables are not yet substituted.
+import sys
 from pathlib import Path
 
 
@@ -40,6 +41,19 @@ plot_include_source = False
 # Resolve to absolute paths so Sphinx finds _templates/_static whether
 # conf.py is loaded from the source tree or the CMake build dir.
 _DOCS_SOURCE_DIR = _resolve("@DOCS_SOURCE_DIR@", str(Path(__file__).parent.resolve()))
+
+# Brand every matplotlib figure. Put _plots/ on sys.path so any plot block can
+# ``import _brand``, and run the shared style before each figure: transparent
+# background + steel text/grid + amber-and-steel data (see _plots/_brand.py).
+# This brands inline ``.. plot::`` blocks and file-based scripts alike, and the
+# ``_brand`` module is then in scope inside each block for per-artist colors.
+sys.path.insert(0, str(Path(_DOCS_SOURCE_DIR) / "_plots"))
+plot_pre_code = (
+    "import numpy as np\n"
+    "from matplotlib import pyplot as plt\n"
+    "import _brand\n"
+    "_brand.apply()\n"
+)
 
 templates_path = [str(Path(_DOCS_SOURCE_DIR) / "_templates")]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
