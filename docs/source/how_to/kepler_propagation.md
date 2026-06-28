@@ -14,9 +14,10 @@ algorithm behind the propagators (universal-variable / Stumpff functions) see
 {doc}`Astrodynamics in Tycho </explanation/astrodynamics>`.  For element-set
 conversions see {doc}`How to convert between orbital element sets </how_to/element_conversions>`.
 
-The C++ tabs show the equivalent `tycho::astro` calls — illustrative fragments
-that assume the headers and `using namespace` lines shown in the first tab,
-not standalone programs.
+The code on this page consists of illustrative fragments — both the Python and
+C++ snippets assume the surrounding setup shown in the first tab of each section
+(the C++ tabs also assume the headers and `using namespace` lines) and are meant
+to be read in order, not as standalone programs.
 
 ## Choose an element set
 

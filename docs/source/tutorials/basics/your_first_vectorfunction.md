@@ -339,6 +339,8 @@ the analytic Jacobian and Hessian against a finite-difference sweep:
 
 ```python
 from tychopy.vector_functions import FDDerivChecker
+
+# f is the scalar function f = sin(x)*y + z**2 defined earlier on this page.
 FDDerivChecker(f, [1.0, 2.0, 3.0])   # prints an abs/rel error table
 ```
 

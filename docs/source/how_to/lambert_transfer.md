@@ -12,9 +12,10 @@ coordinate frame and units as `mu`.  For the conceptual background on Lambert's
 problem and the long-way vs. short-way distinction see
 {doc}`Astrodynamics in Tycho </explanation/astrodynamics>`.
 
-The C++ tabs show the equivalent `tycho::astro` calls — illustrative fragments
-that assume the headers and `using namespace` lines shown in the first tab,
-not standalone programs.
+The code on this page consists of illustrative fragments — both the Python and
+C++ snippets assume the surrounding setup shown in the first tab of each section
+(the C++ tabs also assume the headers and `using namespace` lines) and are meant
+to be read in order, not as standalone programs.
 
 ## Single-revolution transfer
 

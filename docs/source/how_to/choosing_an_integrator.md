@@ -13,9 +13,10 @@ This recipe assumes you have a defined ODE — a class that inherits from
 models. For the conceptual background on adaptive stepping and the error-control
 loop see {doc}`Integration and parallelism </how_to/threading_model>`.
 
-The C++ tabs show the equivalent builder-API calls — illustrative fragments that
-assume an `ode` already in scope plus the headers and `using namespace` lines
-shown in the first tab, not standalone programs.
+The code on this page consists of illustrative fragments — both the Python and
+C++ snippets assume an `ode` is already in scope (the C++ tabs also assume the
+headers and `using namespace` lines shown in the first tab) and are meant to be
+read in order, not as standalone programs.
 
 ## Construct an integrator
 

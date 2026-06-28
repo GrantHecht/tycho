@@ -14,8 +14,9 @@ with constraints and an objective attached. For the concepts behind
 collocation error see {doc}`Direct collocation in Tycho </explanation/direct_collocation>`;
 for end-to-end phase setup see {doc}`Setting up a phase </tutorials/basics/your_first_phase>`.
 
-The C++ tabs show the equivalent builder-API calls — illustrative fragments
-that assume a `phase` is already in scope, not standalone programs.
+The code on this page consists of illustrative fragments — both the Python and
+C++ snippets assume a `phase` is already in scope and are meant to be read in
+order, not as standalone programs.
 
 ## Enable adaptive refinement
 

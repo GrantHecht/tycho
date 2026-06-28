@@ -55,7 +55,7 @@ x, y, z = args.tolist()
 
 f = vf.sin(x) * y + z**2   # builds an expression; nothing is evaluated yet
 
-f.compute([1.0, 2.0, 3.0])   # sin(1)*2 + 9  ->  ~10.683
+f.compute([1.0, 2.0, 3.0])   # sin(1)*2 + 9  ->  array([~10.683]) (a 1-element ndarray)
 f.jacobian([1.0, 2.0, 3.0])  # 1 x 3 Jacobian
 ```
 :::
@@ -242,8 +242,8 @@ derives from it. The user-facing base is
 
 ```cpp
 template <class Derived, int IR, int OR,
-          DenseDerivativeMode Jm = Analytic,
-          DenseDerivativeMode Hm = Analytic>
+          DenseDerivativeMode Jm = DenseDerivativeMode::Analytic,
+          DenseDerivativeMode Hm = DenseDerivativeMode::Analytic>
 struct VectorFunction;
 ```
 

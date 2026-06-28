@@ -199,7 +199,7 @@ VectorFunction's outputs.
 | `stack_scalar` | `stack` restricted to scalar-output (dimension-1) functions |
 | `sum` | Elementwise sum of several equal-output functions |
 | `sum_scalar` | `sum` restricted to scalar-output functions |
-| `sum_elems` | Sum several scalar segment functions into a single scalar (optionally weighted) |
+| `sum_elems` | Sum several scalar element functions (from integer indexing) into a single scalar (optionally weighted) |
 | `ifelse` | Select between two branches by a predicate; differentiates the active branch (piecewise differentiable) |
 
 ```{eval-rst}

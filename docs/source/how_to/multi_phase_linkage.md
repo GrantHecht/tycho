@@ -144,6 +144,9 @@ selected variables from a region of `phase0` and a region of `phase1` (and,
 optionally, the shared link-parameter vector). Use it for costs that span a
 seam — for example penalizing a mismatch or rewarding a combined quantity:
 
+The block below is illustrative pseudocode: `func` is your link-objective
+VectorFunction and `v0`/`v1` are the linked variable indices — supply your own.
+
 ```python
 # func reads v0 from the Back of phase0 and v1 from the Front of phase1.
 ocp.add_link_objective(func, aphase, "Back", v0, dphase, "Front", v1)
