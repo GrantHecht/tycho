@@ -61,43 +61,73 @@ API reference
 
 ## Tycho at a glance
 
-From dynamics to a solved, optimal trajectory in one short script. Define the
-equations of motion as a self-differentiating VectorFunction, transcribe them
-onto a collocation mesh, pin the boundary conditions, and let PSIOPT do the rest
-— exact Jacobians and Hessians are generated for you.
+A low-thrust spacecraft spiralling from one circular orbit to another in minimum
+time — defined, transcribed, and solved in one short script. Write the dynamics
+as a self-differentiating VectorFunction, transcribe them onto a collocation
+mesh, bound the thrust, pin the orbits, and let PSIOPT do the rest. Exact
+Jacobians and Hessians are generated for you.
+
+::::{grid} 1 1 2 2
+:gutter: 3
+:class-container: sd-pt-2
+
+:::{grid-item}
+:columns: 12 12 5 5
 
 ```python
 import numpy as np
-from tychopy import vector_functions as vf
-from tychopy import optimal_control as oc
+import tychopy as typy
 
-# 1. Dynamics as a self-differentiating VectorFunction (the brachistochrone)
-class Brachistochrone(oc.ODEBase):
-    def __init__(self, g=9.81):
-        args = oc.ODEArguments(3, 1)
-        x, y, v = args.x_vec().tolist()
-        theta = args.u_var(0)
-        super().__init__(
-            vf.stack([v * vf.sin(theta), -v * vf.cos(theta), g * vf.cos(theta)]),
-            3, 1,
-        )
+vf = typy.vector_functions
+oc = typy.optimal_control
+Args = vf.Arguments
 
-# 2. Transcribe onto a collocation mesh, pin the endpoints, minimize the time
-ode = Brachistochrone()
-guess = [[10 * t, 10 - 5 * t, 0.0, t, 1.0] for t in np.linspace(0, 1, 100)]
-phase = ode.phase("LGL3", guess, 32)
-phase.add_boundary_value("Front", range(0, 4), [0.0, 10.0, 0.0, 0.0])
-phase.add_boundary_value("Back", [0, 1], [10.0, 5.0])
+# Dynamics: two-body gravity + bounded thrust
+class LowThrust(oc.ODEBase):
+    def __init__(self, mu=1.0, acc=0.02):
+        a = oc.ODEArguments(6, 3)
+        r, v, u = a.head3(), a.segment3(3), a.tail3()
+        accel = r.normalized_power3() * (-mu) + u * acc
+        super().__init__(vf.stack([v, accel]), 6, 3)
+
+ode = LowThrust(mu=1.0)
+
+# Circular start (r=1) and target (r=2) states
+X0 = np.zeros(7); X0[0], X0[4] = 1.0, 1.0
+Xf = np.zeros(6); Xf[0], Xf[4] = 2.0, np.sqrt(0.5)
+
+# Spiral guess from a tangential-thrust propagation
+XIG = np.zeros(10); XIG[:7] = X0
+integ = ode.integrator(0.01, Args(3).normalized() * 0.8, [3, 4, 5])
+guess = integ.integrate_dense(XIG, 6.4 * np.pi, 100)
+
+# Transcribe, bound |thrust|<=1, minimize transfer time
+phase = ode.phase("LGL3", guess, 256)
+phase.add_boundary_value("Front", range(0, 7), X0)
+phase.add_lu_norm_bound("Path", [7, 8, 9], 0.001, 1, 1.0)
+phase.add_boundary_value("Back", range(0, 6), Xf)
 phase.add_delta_time_objective(1.0)
 
-# 3. Solve with PSIOPT
-phase.optimize()
-traj = phase.return_traj()       # optimal travel time ≈ 1.8013 s
+phase.optimize()              # PSIOPT
+traj = phase.return_traj()    # reaches r=2 in ~18.26 time units
 ```
+:::
+
+:::{grid-item}
+:columns: 12 12 7 7
+:child-align: center
+
+```{eval-rst}
+.. plot:: _plots/landing_low_thrust.py
+```
+:::
+
+::::
 
 ```{div} sd-text-center sd-pt-1 sd-pb-2
-Walk through this example line by line in the
-{doc}`first-phase tutorial </tutorials/basics/your_first_phase>`.
+See the full write-up in the
+{doc}`low-thrust worked example </tutorials/examples/simple_low_thrust>`, or
+start from the {doc}`first-phase tutorial </tutorials/basics/your_first_phase>`.
 ```
 
 ## Key features
