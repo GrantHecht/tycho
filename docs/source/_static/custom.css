@@ -164,23 +164,6 @@ html[data-theme="dark"] .bd-content .sd-card-title .sd-octicon {
   color: var(--tycho-amber-500);
 }
 
-/* -- Landing hero: ambient concentric orbits with a single amber 'spacecraft
- * on a transfer arc' behind the logo. One small amber accent; the rings are
- * faint steel that read on both light and dark. ------------------------------ */
-.tycho-hero {
-  position: relative;
-  padding: 1.25rem 1rem 0.5rem;
-  background-image: radial-gradient(
-      ellipse 58% 60% at 50% 42%,
-      rgba(92, 106, 143, 0.07),
-      transparent 72%
-    ),
-    url("tycho_hero_orbits.svg");
-  background-repeat: no-repeat, no-repeat;
-  background-position: center, center 78%;
-  background-size: cover, min(600px, 86%) auto;
-}
-
 /* -- Landing page: keep the lead paragraph from running the full width. ---- */
 .tycho-lead {
   max-width: 46rem;

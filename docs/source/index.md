@@ -4,8 +4,6 @@ sd_hide_title: true
 
 # Tycho
 
-:::::{div} tycho-hero
-
 ```{image} _static/tycho_transfer_named_stacked_light.svg
 :alt: Tycho
 :width: 220px
@@ -58,8 +56,6 @@ API reference
 ```
 
 ::::
-
-:::::
 
 ---
 
