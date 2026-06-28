@@ -1,3 +1,232 @@
-/* docs/source/_static/custom.css — Tycho theme overrides.
- * Reserved for future use; intentionally empty.
+/* docs/source/_static/custom.css — Tycho visual identity.
+ *
+ * Palette and type are derived from the Tycho logo mark: deep-space navy, a warm
+ * amber "transfer burn" accent, and steel-blue. The amber is the one bold note;
+ * everything around it stays quiet. See the brand tokens below.
  */
+
+/* -- Self-hosted brand face (Poppins, the wordmark's font; SIL OFL 1.1, see
+ * notices/poppins-OFL.txt). Latin subset, used for headings only. ---------- */
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("fonts/poppins-latin-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("fonts/poppins-latin-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("fonts/poppins-latin-700.woff2") format("woff2");
+}
+
+/* -- Brand tokens ---------------------------------------------------------- */
+:root {
+  --tycho-navy-900: #0e1426; /* deepest space */
+  --tycho-navy-800: #15213d; /* surfaces / heading ink */
+  --tycho-navy-700: #1f2f52;
+  --tycho-steel-500: #5c6a8f;
+  --tycho-steel-300: #a4afc8;
+  --tycho-paper-100: #eef2fb;
+  --tycho-amber-400: #f8c766;
+  --tycho-amber-500: #f0b441; /* burn — bright (dark mode) */
+  --tycho-amber-600: #e6a23c;
+  --tycho-amber-700: #d9952a; /* burn — strong (light mode UI) */
+  --tycho-amber-800: #b9781d;
+  --tycho-link-light: #2f4f8a; /* accessible navy-blue for body links */
+  --tycho-link-light-strong: #1c356e;
+}
+
+/* -- Typography ------------------------------------------------------------ *
+ * Headings adopt Poppins (the logo's wordmark face) with a graceful fallback;
+ * code adopts a developer-mono stack. Body text keeps the readable system
+ * stack the theme ships. */
+html {
+  --pst-font-family-heading: "Poppins", "Inter", -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --pst-font-family-monospace: "JetBrains Mono", "Fira Code", "Cascadia Code",
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+.bd-article h1,
+.bd-article h2,
+.bd-article h3,
+.bd-article h4,
+h1.bd-title,
+.navbar-brand {
+  font-family: var(--pst-font-family-heading);
+  letter-spacing: -0.015em;
+}
+
+.bd-article h1 {
+  font-weight: 600;
+}
+
+/* Heading ink: navy in light mode, paper in dark. (pydata 0.17 does not consume
+ * --pst-color-heading, so set the heading color directly.) */
+html[data-theme="light"] .bd-article :is(h1, h2, h3, h4) {
+  color: var(--tycho-navy-800);
+}
+
+html[data-theme="dark"] .bd-article :is(h1, h2, h3, h4) {
+  color: var(--tycho-paper-100);
+}
+
+/* -- Light theme ----------------------------------------------------------- */
+html[data-theme="light"] {
+  --pst-color-primary: var(--tycho-link-light);
+  --pst-color-primary-highlight: var(--tycho-link-light-strong);
+  --pst-color-link: var(--tycho-link-light);
+  --pst-color-link-hover: var(--tycho-link-light-strong);
+  --pst-color-secondary: var(--tycho-steel-500);
+  --pst-color-accent: var(--tycho-amber-700);
+
+  /* sphinx-design buttons & accents: amber call-to-action on navy text. */
+  --sd-color-primary: var(--tycho-amber-600);
+  --sd-color-primary-text: var(--tycho-navy-800);
+  --sd-color-primary-highlight: var(--tycho-amber-700);
+  --sd-color-secondary: #43507a;
+  --sd-color-secondary-text: #ffffff;
+}
+
+/* -- Dark theme (deep-space navy — where the identity sings) --------------- */
+html[data-theme="dark"] {
+  /* navy fills; the theme's own light "on-*" text colors sit on top. */
+  --pst-color-background: var(--tycho-navy-900);
+  --pst-color-surface: var(--tycho-navy-800);
+  --pst-color-on-surface: #e7ecf6;
+
+  /* Links AND nav (sidebar active-trail, TOC, hover) stay a calm steel-
+   * periwinkle so link- and nav-dense pages never glow amber. Amber lives only
+   * in buttons, card icons, the heading keyline, and the hero accent. */
+  --pst-color-primary: #9db4e8;
+  --pst-color-primary-highlight: #c2d2f2;
+  --pst-color-link: #9db4e8;
+  --pst-color-link-hover: #c6d4f2;
+  --pst-color-secondary: var(--tycho-steel-300);
+  --pst-color-accent: var(--tycho-amber-500);
+  --pst-color-text-base: #c4cde2;
+  --pst-color-border: #29375c;
+  --pst-color-border-muted: #202c4b;
+
+  --sd-color-primary: var(--tycho-amber-500);
+  --sd-color-primary-text: var(--tycho-navy-800);
+  --sd-color-primary-highlight: var(--tycho-amber-400);
+  --sd-color-secondary: #33406a;
+  --sd-color-secondary-text: #eef2fb;
+  --sd-color-card-background: var(--tycho-navy-800);
+}
+
+/* -- Section-heading keyline: a short amber tick under each H2, echoing a
+ * transfer arc reduced to a single accent stroke. ------------------------- */
+.bd-article h2 {
+  padding-bottom: 0.35rem;
+}
+
+.bd-article h2::after {
+  content: "";
+  display: block;
+  width: 2.25rem;
+  height: 2px;
+  margin-top: 0.4rem;
+  border-radius: 1px;
+  background: var(--tycho-amber-600);
+}
+
+/* -- Cards: quiet by default, amber edge + lift on hover ------------------- */
+.bd-content .sd-card {
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s
+      ease;
+}
+
+.bd-content .sd-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 0.5rem 1.5rem rgba(14, 20, 38, 0.14);
+  border-color: var(--tycho-amber-600);
+}
+
+/* Lead each feature / nav card title with an amber-tinted icon glyph. */
+.bd-content .sd-card-title .sd-octicon {
+  color: var(--tycho-amber-700);
+  vertical-align: -0.15em;
+}
+
+html[data-theme="dark"] .bd-content .sd-card-title .sd-octicon {
+  color: var(--tycho-amber-500);
+}
+
+/* -- Landing page: keep the lead paragraph from running the full width. ---- */
+.tycho-lead {
+  max-width: 46rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* -- Landing "Key features": borderless blocks, not cards. Features are
+ * claims; the "Explore the documentation" cards below are destinations. Giving
+ * the two sections different shapes keeps the page from reading as the same
+ * 3×2 grid twice. An amber glyph leads each claim. ------------------------- */
+.tycho-features .sd-octicon.tycho-feature-icon {
+  color: var(--tycho-amber-700);
+  margin-right: 0.45rem;
+  vertical-align: -0.13em;
+}
+
+html[data-theme="dark"] .tycho-features .sd-octicon.tycho-feature-icon {
+  color: var(--tycho-amber-500);
+}
+
+.tycho-features .sd-col > * {
+  padding-right: 0.5rem;
+}
+
+/* -- Figures: dissolve into the page on both themes. ----------------------- *
+ * Documentation figures (the matplotlib ``plot`` directive) are rendered with a
+ * transparent background and theme-agnostic steel text / amber-and-steel data
+ * (see _plots/_brand.py), so they read on white and on deep navy alike. Override
+ * the theme's default white image backing — meant for legacy opaque figures —
+ * so ours show the page through instead of floating in a white panel in dark
+ * mode. Higher specificity than the theme's
+ * ``[data-theme=dark] .bd-content img:not(...)`` rule. */
+html[data-theme="dark"] .bd-content img.plot-directive {
+  background-color: transparent;
+}
+
+/* -- Reference pages: a calm steel keyline on API signatures ties the
+ * dense autodoc/Breathe blocks to the brand without adding more amber. ----- */
+.bd-article dl.py > dt.sig,
+.bd-article dl.cpp > dt.sig,
+.bd-article dl.c > dt.sig,
+.bd-article dl.cpp > dt.sig-object,
+.bd-article dl.py > dt.sig-object {
+  border-left: 3px solid var(--tycho-steel-500);
+  padding-left: 0.6rem;
+}
+
+/* -- Code blocks wear the same steel keyline as API signatures. For a
+ * code-first DSL the snippets are the hero artifact, so tie them into the same
+ * visual family — one quiet steel stroke down the left edge. ---------------- */
+.bd-content div.highlight {
+  border-left: 3px solid var(--tycho-steel-500);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+/* -- Quality floor --------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .bd-content .sd-card {
+    transition: none;
+  }
+  .bd-content .sd-card:hover {
+    transform: none;
+  }
+}

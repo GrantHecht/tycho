@@ -27,8 +27,15 @@ This recipe assumes you can already build and solve a basic phase — see
 conceptual background on the MEE dynamics model and the RSW control frame see
 {doc}`Astrodynamics in Tycho </explanation/astrodynamics>`.
 
+The C++ tabs show the equivalent builder-API calls — illustrative fragments
+that assume the headers and `using namespace` lines shown in the first tab,
+not standalone programs. C++ does not subclass `ODEBase`; it assembles the
+right-hand side as an expression and wraps it with the `ODE(...)` builder.
+
 ## 1. Define the ODE wrapper
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 import numpy as np
 from tychopy import astro
@@ -46,6 +53,33 @@ class MEEDynamicsODE(oc.ODEBase):
         rhs = astro.modified_dynamics(mu)(vf.stack([state, control]))
         super().__init__(rhs, 6, 3)
 ```
+:::
+:::{tab-item} C++
+```cpp
+#include <tycho/tycho.h>
+using namespace tycho;
+using namespace tycho::vf;
+using namespace tycho::oc;
+
+double mu = 1.0;   // normalized gravitational parameter
+
+// ODEArguments(6, 3, 0): 6 state vars, 3 controls, 0 static params.
+// Full layout: [p, f, g, h, k, L, t, ur, ut, un] (10 elements).
+auto args  = ODEArguments(6, 3, 0);
+auto state = args.head<6>();   // [p, f, g, h, k, L]  (indices 0-5)
+auto u     = args.tail<3>();   // [ur, ut, un]        (indices 7-9)
+
+// MEEDynamics is the C++ name for the MEE equations of motion (IR=9, OR=6).
+// .eval(stack(state, u)) builds the 9-element input, skipping time at index 6.
+auto dyn      = astro::MEEDynamics(mu);
+auto ode_expr = GenericFunction<-1, -1>(dyn.eval(stack(state, u)));
+auto ode      = ODE(ode_expr, 6, 3)
+                    .var_group("state", 0, 6)
+                    .var_names({{"t", 6}})
+                    .var_group("u", 7, 3);
+```
+:::
+::::
 
 `oc.ODEArguments(6, 3)` declares the ODE as having 6 state variables and 3
 control variables.  `args.x_vec()` returns a VectorFunction selector for the
@@ -70,6 +104,8 @@ ode = MEEDynamicsODE(mu)
 trajectory-varying control.  Here a constant along-track thrust provides a
 rough initial guess for an orbit-raising transfer:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 acc_max = 0.01                                          # max thrust acceleration
 u_const = vf.ConstantVector(6, np.array([0.0, acc_max, 0.0]))
@@ -83,12 +119,36 @@ X0 = np.array([1.0, 0.0, 0.0, 0.0, 0.0, 0.0,   # MEE state
 
 TrajIG = integ.integrate_dense(X0, 9.0, 200)    # 200 points over 9 time units
 ```
+:::
+:::{tab-item} C++
+```cpp
+double acc_max = 0.01;   // max thrust acceleration
+
+// Constant along-track thrust as the initial-guess control law (the
+// IntegratorBuilder constant-control overload). Adaptive step-size control is
+// the integrator default (matching the Python integ.adaptive = True); the
+// builder exposes no separate toggle.
+Eigen::Vector3d u_const(0.0, acc_max, 0.0);
+auto integ = ode.integrator().step(0.001).control(u_const).build();
+
+// Initial MEE state padded to the full [state, t, control] layout.
+Eigen::VectorXd X0(10);
+X0.setZero();
+X0[0] = 1.0;          // circular equatorial orbit at p = 1
+X0[8] = acc_max;      // ut
+
+auto TrajIG = integ.integrate_dense(X0, 9.0, 200);   // 200 points over 9 time units
+```
+:::
+::::
 
 Each row of `TrajIG` has the layout `[p, f, g, h, k, L, t, ur, ut, un]` —
 the same 10-element layout the phase expects.
 
 ## 3. Build the phase and add constraints
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 phase = ode.phase("LGL3", TrajIG, 50)   # 50 LGL3 segments
 
@@ -108,17 +168,60 @@ _ = phase.add_lu_norm_bound("Path", [7, 8, 9], 0.0001, acc_max, 1.0)
 # Minimize total transfer time
 _ = phase.add_delta_time_objective(1.0)
 ```
+:::
+:::{tab-item} C++
+```cpp
+auto phase = ode.phase(TranscriptionModes::LGL3, TrajIG, 50);   // 50 LGL3 segments
+
+double pf = 1.2;   // target semi-latus rectum
+
+// Pin the initial state and time at the front [p, f, g, h, k, L, t].
+Eigen::VectorXi front_vars(7);
+front_vars << 0, 1, 2, 3, 4, 5, 6;
+Eigen::VectorXd front_val(7);
+front_val << 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
+phase.add_boundary_value(PhaseRegionFlags::Front, front_vars, front_val);
+
+// Fix the target orbit shape at the back; leave true longitude L (index 5) free.
+Eigen::VectorXi back_vars(5);
+back_vars << 0, 1, 2, 3, 4;
+Eigen::VectorXd back_val(5);
+back_val << pf, 0.0, 0.0, 0.0, 0.0;
+phase.add_boundary_value(PhaseRegionFlags::Back, back_vars, back_val);
+
+// Bound the thrust magnitude along the whole trajectory.
+phase.add_lu_norm_bound(PhaseRegionFlags::Path, {"u"}, 0.0001, acc_max, 1.0);
+
+// Minimize total transfer time.
+phase.add_delta_time_objective(1.0);
+```
+:::
+::::
 
 ## 4. Solve and read the result
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
-phase.optimizer.set_print_level(0)
+phase.optimizer.set_print_level(3)
 flag = phase.optimize()
 
 Traj = phase.return_traj()
 tf   = Traj[-1][6]   # time is at index 6 of each trajectory row
 p_f  = Traj[-1][0]   # semi-latus rectum at arrival
 ```
+:::
+:::{tab-item} C++
+```cpp
+phase.optimizer().set_print_level(3);
+auto flag = phase.optimize();
+
+auto Traj  = phase.return_traj();
+double tf  = Traj.back()[6];   // time is at index 6 of each trajectory row
+double p_f = Traj.back()[0];   // semi-latus rectum at arrival
+```
+:::
+::::
 
 ## Adapting to other dynamics models
 
@@ -126,6 +229,8 @@ The same pattern works for `cartesian_dynamics` and `crtbp_dynamics` — both
 have the same IR = 9, OR = 6 interface with input layout `[state(6), a(3)]`
 and no time slot.  Substitute the appropriate factory function:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 class CartesianODE(oc.ODEBase):
     def __init__(self, mu):
@@ -140,6 +245,27 @@ class CRTBPODE(oc.ODEBase):
         rhs = astro.crtbp_dynamics(mass_ratio)(vf.stack([args.x_vec(), args.u_vec()]))
         super().__init__(rhs, 6, 3)
 ```
+:::
+:::{tab-item} C++
+```cpp
+// Cartesian two-body dynamics — same [state(6), a(3)] interface (IR=9, OR=6).
+auto cart_dyn = astro::CartesianDynamics(mu);
+auto cart_rhs = GenericFunction<-1, -1>(cart_dyn.eval(stack(state, u)));
+auto cart_ode = ODE(cart_rhs, 6, 3)
+                    .var_group("state", 0, 6)
+                    .var_names({{"t", 6}})
+                    .var_group("u", 7, 3);
+
+// CR3BP dynamics — constructed with the CR3BP mass ratio, not a grav. parameter.
+auto crtbp_dyn = astro::CRTBPDynamics(mass_ratio);
+auto crtbp_rhs = GenericFunction<-1, -1>(crtbp_dyn.eval(stack(state, u)));
+auto crtbp_ode = ODE(crtbp_rhs, 6, 3)
+                     .var_group("state", 0, 6)
+                     .var_names({{"t", 6}})
+                     .var_group("u", 7, 3);
+```
+:::
+::::
 
 For `crtbp_dynamics` the `mu` argument is the CR3BP **mass ratio**
 $\mu = m_2 / (m_1 + m_2) \in (0, 1)$, not a gravitational parameter.
@@ -151,6 +277,8 @@ Build the perturbing acceleration as a VectorFunction of the state and feed it
 into the acceleration input — on its own, or summed with a thrust control.  For
 example, to fly the orbit-raising transfer above under J2:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 class J2CartesianODE(oc.ODEBase):
     def __init__(self, mu, J2, Rb, north_pole):
@@ -167,6 +295,27 @@ class J2CartesianODE(oc.ODEBase):
         rhs = astro.cartesian_dynamics(mu)(vf.stack([state, total_accel]))
         super().__init__(rhs, 6, 3)
 ```
+:::
+:::{tab-item} C++
+```cpp
+// J2Cartesian takes [rx, ry, rz, nx, ny, nz] (position + pole direction)
+// and returns the J2 acceleration in the same inertial frame as the state.
+// Constant<-1, 3> builds a constant whose input arity matches the phase input.
+Eigen::Vector3d north_pole(0.0, 0.0, 1.0);
+auto north  = Constant<-1, 3>(args.input_rows(), north_pole);
+auto j2_acc = astro::J2Cartesian(mu, J2, Rb).eval(stack(state.head<3>(), north));
+
+// Total non-two-body acceleration = thrust control + J2 perturbation.
+auto total_accel = u + j2_acc;
+auto j2_rhs = GenericFunction<-1, -1>(
+    astro::CartesianDynamics(mu).eval(stack(state, total_accel)));
+auto j2_ode = ODE(j2_rhs, 6, 3)
+                  .var_group("state", 0, 6)
+                  .var_names({{"t", 6}})
+                  .var_group("u", 7, 3);
+```
+:::
+::::
 
 Drop the `control` term for J2 with no thrust (a perturbed ballistic
 propagation), or add further terms — drag, solar-radiation pressure — the same

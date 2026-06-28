@@ -1,4 +1,9 @@
-# Tycho
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/source/_static/tycho_transfer_named_horizontal_dark.svg">
+    <img alt="Tycho" src="docs/source/_static/tycho_transfer_named_horizontal_light.svg" width="380">
+  </picture>
+</p>
 
 Tycho is a modular, extensible library for trajectory design and optimal control.
 It uses a custom implementation of vector math formalisms to enable rapid 

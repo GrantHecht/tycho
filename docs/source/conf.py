@@ -1,5 +1,6 @@
 # Configured by CMake; usable directly by sphinx-build with fallback defaults
 # when CMake variables are not yet substituted.
+import sys
 from pathlib import Path
 
 
@@ -40,6 +41,19 @@ plot_include_source = False
 # Resolve to absolute paths so Sphinx finds _templates/_static whether
 # conf.py is loaded from the source tree or the CMake build dir.
 _DOCS_SOURCE_DIR = _resolve("@DOCS_SOURCE_DIR@", str(Path(__file__).parent.resolve()))
+
+# Brand every matplotlib figure. Put _plots/ on sys.path so any plot block can
+# ``import _brand``, and run the shared style before each figure: transparent
+# background + steel text/grid + amber-and-steel data (see _plots/_brand.py).
+# This brands inline ``.. plot::`` blocks and file-based scripts alike, and the
+# ``_brand`` module is then in scope inside each block for per-artist colors.
+sys.path.insert(0, str(Path(_DOCS_SOURCE_DIR) / "_plots"))
+plot_pre_code = (
+    "import numpy as np\n"
+    "from matplotlib import pyplot as plt\n"
+    "import _brand\n"
+    "_brand.apply()\n"
+)
 
 templates_path = [str(Path(_DOCS_SOURCE_DIR) / "_templates")]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
@@ -199,8 +213,22 @@ html_theme = "pydata_sphinx_theme"
 html_title = "Tycho"
 html_static_path = [str(Path(_DOCS_SOURCE_DIR) / "_static")]
 html_css_files = ["custom.css"]
+# Icon-only mark for the browser tab. The wordmark logo (which embeds "Tycho")
+# is set as the navbar brand below, so html_title is used only for the HTML
+# <title> and accessibility text, not rendered alongside the logo.
+# Absolute path: the docs build runs ``sphinx -c <build-dir>`` so html_favicon
+# (resolved against the config dir) must point at the source _static directly.
+html_favicon = str(Path(_DOCS_SOURCE_DIR) / "_static" / "tycho_transfer_icononly_light.svg")
 
 html_theme_options = {
+    # Navbar brand: outlined-path SVG wordmark, light/dark variants. The font
+    # (Poppins-Medium) is baked in as paths, so no webfont is required. pydata
+    # checks existence relative to the source dir and renders ``_static/<name>``.
+    "logo": {
+        "image_light": "_static/tycho_transfer_named_horizontal_light.svg",
+        "image_dark": "_static/tycho_transfer_named_horizontal_dark.svg",
+        "alt_text": "Tycho documentation — home",
+    },
     "github_url": "https://github.com/GrantHecht/tycho",
     "use_edit_page_button": True,
     "show_toc_level": 2,

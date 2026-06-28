@@ -14,12 +14,19 @@ installed and a Cartesian state or set of orbital elements in hand.  For the
 conceptual picture of why element sets differ see
 {doc}`Astrodynamics in Tycho </explanation/astrodynamics>`.
 
+The code on this page consists of illustrative fragments — both the Python and
+C++ snippets assume the surrounding setup shown in the first tab of each section
+(the C++ tabs also assume the headers and `using namespace` lines) and are meant
+to be read in order, not as standalone programs.
+
 ## Cartesian ↔ classical elements
 
 `cartesian_to_classic` returns `[a, e, i, Ω, ω, M]` where the sixth element
 is the **mean anomaly** M.  If you need the **true anomaly** ν instead, call
 `cartesian_to_classic_true`:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 import numpy as np
 from tychopy import astro
@@ -42,6 +49,30 @@ classic_back = astro.cartesian_to_classic(rv, mu)
 # Cartesian -> classical: true anomaly convention
 classic_true = astro.cartesian_to_classic_true(rv, mu)
 ```
+:::
+:::{tab-item} C++
+```cpp
+#include <tycho/tycho.h>
+using namespace tycho;
+using namespace tycho::astro;
+
+double mu = 3.986004418e5;   // km^3/s^2 (Earth)
+
+// An inclined, eccentric orbit [a, e, i, Omega, omega, M]
+Vector6<double> classic;
+classic << 8000.0, 0.10, 28.5 * M_PI / 180.0,
+           90.0 * M_PI / 180.0, 30.0 * M_PI / 180.0, 45.0 * M_PI / 180.0;
+
+Vector6<double> rv = classic_to_cartesian(classic, mu);
+
+// Cartesian -> classical: mean anomaly convention
+Vector6<double> classic_back = cartesian_to_classic(rv, mu);
+
+// Cartesian -> classical: true anomaly convention
+Vector6<double> classic_true = cartesian_to_classic_true(rv, mu);
+```
+:::
+::::
 
 **Singularity warning.** Near circular orbits ($e \approx 0$) ω becomes
 undefined; near equatorial orbits ($i \approx 0$ or $i \approx \pi$) Ω
@@ -55,12 +86,24 @@ conditions, use MEE instead.
 longitude** (not mean anomaly).  The conversion is a direct closed-form
 algebraic map — no Kepler-equation iteration:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 mee = astro.cartesian_to_modified(rv, mu)
 
 # Invert back to Cartesian
 rv_back = astro.modified_to_cartesian(mee, mu)
 ```
+:::
+:::{tab-item} C++
+```cpp
+Vector6<double> mee = cartesian_to_modified(rv, mu);
+
+// Invert back to Cartesian
+Vector6<double> rv_back = modified_to_cartesian(mee, mu);
+```
+:::
+::::
 
 MEE is well-defined for all orbits except exactly retrograde equatorial
 ($i = 180°$), where $\tan(i/2) \to \infty$ and the $h$, $k$ components
@@ -72,12 +115,24 @@ supported.
 `classic_to_modified` converts `[a, e, i, Ω, ω, M]` directly to MEE; `mu`
 is accepted for API symmetry but is not used in the algebraic mapping:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 mee = astro.classic_to_modified(classic, mu)
 
 # Recover classical elements (mean anomaly)
 classic_back = astro.modified_to_classic(mee, mu)
 ```
+:::
+:::{tab-item} C++
+```cpp
+Vector6<double> mee = classic_to_modified(classic, mu);
+
+// Recover classical elements (mean anomaly)
+Vector6<double> classic_back = modified_to_classic(mee, mu);
+```
+:::
+::::
 
 Because `classic_to_modified` first solves Kepler's equation to extract the
 true anomaly, it inherits the classical-element singularities: passing a

@@ -14,6 +14,11 @@ algorithm behind the propagators (universal-variable / Stumpff functions) see
 {doc}`Astrodynamics in Tycho </explanation/astrodynamics>`.  For element-set
 conversions see {doc}`How to convert between orbital element sets </how_to/element_conversions>`.
 
+The code on this page consists of illustrative fragments — both the Python and
+C++ snippets assume the surrounding setup shown in the first tab of each section
+(the C++ tabs also assume the headers and `using namespace` lines) and are meant
+to be read in order, not as standalone programs.
+
 ## Choose an element set
 
 All three propagators round-trip through the same universal-variable kernel,
@@ -28,6 +33,8 @@ you are already working in:
 
 ## Propagate a Cartesian state
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 import numpy as np
 from tychopy import astro
@@ -41,6 +48,24 @@ rv0 = np.array([-6534.7, 801.3, 3548.0,
 dt = 3600.0   # propagate forward one hour (s)
 rv1 = astro.propagate_cartesian(rv0, dt, mu)
 ```
+:::
+:::{tab-item} C++
+```cpp
+#include <tycho/tycho.h>
+using namespace tycho;
+using namespace tycho::astro;
+
+double mu = 3.986004418e5;   // km^3/s^2 (Earth)
+
+// Initial Cartesian state [rx, ry, rz, vx, vy, vz]
+Vector6<double> rv0;
+rv0 << -6534.7, 801.3, 3548.0, -1.208, -7.408, 0.658;
+
+double dt = 3600.0;          // propagate forward one hour (s)
+Vector6<double> rv1 = propagate_cartesian(rv0, dt, mu);
+```
+:::
+::::
 
 ## Propagate classical elements
 
@@ -49,6 +74,8 @@ all other elements are constants of the motion.  `propagate_classic` exploits
 this by updating M directly ($M_\text{new} = M + n \cdot \Delta t$, where
 $n = \sqrt{\mu / |a|^3}$) without a full Cartesian round-trip:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 # Classical elements [a, e, i, Omega, omega, M] — all angles in radians
 classic0 = np.array([8000.0, 0.10,
@@ -58,6 +85,19 @@ classic0 = np.array([8000.0, 0.10,
 classic1 = astro.propagate_classic(classic0, dt, mu)
 # Elements 0–4 unchanged; element 5 (M) advanced by n*dt.
 ```
+:::
+:::{tab-item} C++
+```cpp
+// Classical elements [a, e, i, Omega, omega, M] — all angles in radians
+Vector6<double> classic0;
+classic0 << 8000.0, 0.10, 28.5 * M_PI / 180.0,
+            90.0 * M_PI / 180.0, 30.0 * M_PI / 180.0, 45.0 * M_PI / 180.0;
+
+Vector6<double> classic1 = propagate_classic(classic0, dt, mu);
+// Elements 0-4 unchanged; element 5 (M) advanced by n*dt.
+```
+:::
+::::
 
 **Classical singularities apply.** Near-circular ($e \approx 0$) or
 near-equatorial ($i \approx 0$) orbits may have ill-conditioned ω or Ω in
@@ -71,10 +111,20 @@ for such orbits.
 converts back.  Use it when your state is already in MEE to avoid the extra
 conversion step:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 mee0 = astro.cartesian_to_modified(rv0, mu)
 mee1 = astro.propagate_modified(mee0, dt, mu)
 ```
+:::
+:::{tab-item} C++
+```cpp
+Vector6<double> mee0 = cartesian_to_modified(rv0, mu);
+Vector6<double> mee1 = propagate_modified(mee0, dt, mu);
+```
+:::
+::::
 
 ## Error conditions
 
@@ -89,10 +139,18 @@ that `mu` is positive.
 ```python
 # ValueError: mu must be positive
 try:
-    astro.propagate_cartesian(rv0, dt, mu=-1.0)
+    astro.propagate_cartesian(rv0, dt, -1.0)   # mu is positional-only
 except ValueError as e:
     print(e)
 ```
+
+This block is Python-only because the `ValueError`/`RuntimeError` raised here
+are Python-binding semantics; the underlying C++ surface signals the same
+conditions *differently*. `propagate_cartesian` NaN-poisons its result on
+non-convergence (it does not throw), so a C++ caller detects failure with
+`result.allFinite()`; `propagate_classic` and `propagate_modified` throw
+`std::invalid_argument` on `mu <= 0`. Do not assume the C++ functions raise the
+same exceptions as the Python wrappers.
 
 ## See also
 

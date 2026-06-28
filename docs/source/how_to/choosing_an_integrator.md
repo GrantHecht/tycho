@@ -11,20 +11,44 @@ algorithm to use for a given task.
 This recipe assumes you have a defined ODE — a class that inherits from
 {py:class}`~tychopy.optimal_control.ODEBase` or one of the built-in dynamics
 models. For the conceptual background on adaptive stepping and the error-control
-loop see {doc}`Integration and parallelism </explanation/integration_and_parallelism>`.
+loop see {doc}`Integration and parallelism </how_to/threading_model>`.
+
+The code on this page consists of illustrative fragments — both the Python and
+C++ snippets assume an `ode` is already in scope (the C++ tabs also assume the
+headers and `using namespace` lines shown in the first tab) and are meant to be
+read in order, not as standalone programs.
 
 ## Construct an integrator
 
 Call `ode.integrator(dt)` to get an integrator with the default algorithm
-(`DOPRI87`) and a nominal initial step size of `dt`:
+(`DOPRI87`) and a nominal initial step size of `dt`. In C++ the integrator is
+built with the fluent builder: `ode.integrator().step(dt).build()`:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 integ = ode.integrator(0.01)
 ```
+:::
+:::{tab-item} C++
+```cpp
+#include <tycho/tycho.h>
+using namespace tycho;
+using namespace tycho::integrators;
+
+auto integ = ode.integrator().step(0.01).build();
+```
+:::
+::::
 
 To select a different algorithm, pass it as the **first** positional argument,
-before `dt`. Both an enum value and a string are accepted:
+before `dt`. Both an enum value and a string are accepted. In C++ the algorithm
+is an `IVPAlg` enumerator passed to the builder's `.method()` — there is no
+string overload (the controller and error-norm setters below likewise take
+enums, not strings):
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 from tychopy import optimal_control as oc
 
@@ -34,6 +58,14 @@ integ = ode.integrator(oc.IVPAlg.DOPRI54, 0.01)
 # Equivalent string form
 integ = ode.integrator("DOPRI54", 0.01)
 ```
+:::
+:::{tab-item} C++
+```cpp
+// Enum form — set the method on the builder, before .build().
+auto integ = ode.integrator().method(IVPAlg::DOPRI54).step(0.01).build();
+```
+:::
+::::
 
 The method-first, step-second order is fixed — there is no `alg=` keyword
 argument. The accepted string names are `"DOPRI54"` / `"DP54"`, `"DOPRI87"` /
@@ -43,23 +75,50 @@ argument. The accepted string names are `"DOPRI54"` / `"DP54"`, `"DOPRI87"` /
 
 `integrate` returns the final state-and-time vector at `tf`:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 xf = integ.integrate(x0, tf)
 ```
+:::
+:::{tab-item} C++
+```cpp
+auto xf = integ.integrate(x0, tf);
+```
+:::
+::::
 
 `integrate_dense` returns the full trajectory. Without a count argument it
 returns one state vector per accepted adaptive step:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 traj = integ.integrate_dense(x0, tf)
 ```
+:::
+:::{tab-item} C++
+```cpp
+auto traj = integ.integrate_dense(x0, tf);
+```
+:::
+::::
 
 With an integer `n` it returns exactly `n` evenly-spaced states evaluated on
 the polynomial dense-output interpolant:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 traj = integ.integrate_dense(x0, tf, 200)
 ```
+:::
+:::{tab-item} C++
+```cpp
+auto traj = integ.integrate_dense(x0, tf, 200);
+```
+:::
+::::
 
 Each element of `traj` is an array with the same layout as the ODE input:
 `[state..., t]`.
@@ -73,6 +132,8 @@ orbit-mechanics initial-guess generation. Loosen the absolute tolerance for fast
 rough scans; tighten it (and/or add a relative tolerance) when you need higher
 accuracy:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 integ.set_abs_tol(1.0e-9)   # uniform absolute tolerance for all states
 integ.set_rel_tol(1.0e-9)   # uniform relative tolerance
@@ -81,16 +142,40 @@ integ.set_rel_tol(1.0e-9)   # uniform relative tolerance
 import numpy as np
 integ.set_abs_tols(np.array([1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9]))  # one per state component (excludes time)
 ```
+:::
+:::{tab-item} C++
+```cpp
+integ.set_abs_tol(1.0e-9);   // uniform absolute tolerance for all states
+integ.set_rel_tol(1.0e-9);   // uniform relative tolerance
+
+// Per-component variant — one entry per state component (excludes time).
+Eigen::VectorXd abs_tols(6);
+abs_tols << 1e-9, 1e-9, 1e-9, 1e-9, 1e-9, 1e-9;
+integ.set_abs_tols(abs_tols);
+```
+:::
+::::
 
 Setting `integ.adaptive = False` switches to a fixed step size equal to
-`integ.def_step_size`. Use fixed-step mode only when you have a specific reason
+`integ.def_step_size` (the same field the C++ `set_initial_step_size` sets).
+Use fixed-step mode only when you have a specific reason
 to control the step size directly — e.g. comparing trajectories at identical
 discrete times, or bit-reproducible integration for testing:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 integ.adaptive = False
 integ.def_step_size = 0.001
 ```
+:::
+:::{tab-item} C++
+```cpp
+integ.adaptive_ = false;             // fixed-step mode (public member)
+integ.set_initial_step_size(0.001);  // fixed step size
+```
+:::
+::::
 
 ## Tune the step-size controller
 
@@ -99,9 +184,18 @@ step size between accepted steps.
 
 The **controller** selects the feedback scheme:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 integ.set_controller("PI")   # I, PI, or PID
 ```
+:::
+:::{tab-item} C++
+```cpp
+integ.set_controller(IVPController::PI);   // I, PI, or PID
+```
+:::
+::::
 
 The default controller is algorithm-dependent: `DOPRI87` (the default algorithm)
 uses the basic `I` controller; the other methods default to `PI`. `PI`
@@ -112,9 +206,18 @@ a further derivative term for very smooth problems at tight tolerances.
 The **error norm** determines how per-component errors are combined into the
 scalar that drives the controller:
 
+::::{tab-set}
+:::{tab-item} Python
 ```python
 integ.set_error_norm("RMS")   # RMS (root-mean-square) or MAX
 ```
+:::
+:::{tab-item} C++
+```cpp
+integ.set_error_norm(ErrorNormType::RMS);   // RMS (root-mean-square) or MAX
+```
+:::
+::::
 
 `RMS` is the default. `MAX` can be useful when one state component is the
 binding constraint and you need that component's error to stay below tolerance
@@ -150,7 +253,7 @@ which uses `ode.integrator(dt)` with the default `DOPRI87` algorithm and
 - {doc}`Python reference </reference/python/integrators>` — the full
   `Integrator` API, including STM propagation, event detection, and
   vectorized batch methods.
-- {doc}`Integration and parallelism </explanation/integration_and_parallelism>` —
+- {doc}`Integration and parallelism </how_to/threading_model>` —
   conceptual background on adaptive step-size control, dense output, and the
   error norm loop.
 - {doc}`Threading model </how_to/threading_model>` — how to distribute many
