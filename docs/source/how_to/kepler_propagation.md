@@ -138,7 +138,7 @@ that `mu` is positive.
 ```python
 # ValueError: mu must be positive
 try:
-    astro.propagate_cartesian(rv0, dt, mu=-1.0)
+    astro.propagate_cartesian(rv0, dt, -1.0)   # mu is positional-only
 except ValueError as e:
     print(e)
 ```

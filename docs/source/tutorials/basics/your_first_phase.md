@@ -223,7 +223,7 @@ returns a convergence flag; we keep it so we can confirm the solve succeeded.
 ::::{tab-set}
 :::{tab-item} Python
 ```{doctest}
->>> phase.optimizer.set_print_level(0)
+>>> phase.optimizer.set_print_level(3)
 >>> flag = phase.optimize()
 >>> str(flag)
 'ConvergenceFlags.CONVERGED'
@@ -231,7 +231,7 @@ returns a convergence flag; we keep it so we can confirm the solve succeeded.
 :::
 :::{tab-item} C++
 ```cpp
-phase.optimizer().set_print_level(0);
+phase.optimizer().set_print_level(3);
 auto flag = phase.optimize();   // or phase.solve_optimize() for a rough guess
 ```
 :::
@@ -324,7 +324,7 @@ plt.show()
    phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
    phase.add_boundary_value("Back", [0, 1], [10.0, 5.0])
    phase.add_delta_time_objective(1.0)
-   phase.optimizer.set_print_level(0)
+   phase.optimizer.set_print_level(3)
    phase.optimize()
    T = np.array(phase.return_traj())
 

@@ -89,8 +89,8 @@ graze equatorial inclination without pathological Jacobians.
 - **Classical** — when the orbit is well away from circular and equatorial and you
   want boundary conditions expressed in orbital geometry.
 - **MEE** — low-thrust transfers, especially those that cross or approach zero
-  eccentricity or inclination. `MEEDynamics` is the standard choice for
-  orbit-raising and orbit-transfer problems.
+  eccentricity or inclination. `modified_dynamics` (C++ `MEEDynamics`) is the
+  standard choice for orbit-raising and orbit-transfer problems.
 
 Tycho provides conversion VectorFunctions — `CartesianToClassic`,
 `CartesianToMEE`, `ModifiedToCartesian` — so a trajectory optimized in one
@@ -109,8 +109,9 @@ closed form. Tycho exposes this through `propagate_cartesian`,
 `propagate_classic`, and `propagate_modified`, which share a single
 **universal-variable** algorithm (Stumpff functions) that stays well-behaved
 across elliptic, parabolic, and hyperbolic regimes without separate cases. The
-`KeplerPropagator` VectorFunction takes an initial state and a time-of-flight and
-returns the propagated state with exact analytic Jacobian and Hessian.
+`tychopy.astro.kepler.KeplerPropagator` VectorFunction takes an initial state
+and a time-of-flight and returns the propagated state with exact analytic
+Jacobian and Hessian.
 
 Analytic propagation is useful in three contexts:
 
@@ -153,10 +154,11 @@ the ODE form a {doc}`Phase </explanation/direct_collocation>` expects, and each
 model carries analytic Jacobian and Hessian implementations so PSIOPT receives
 exact derivatives.
 
-### CartesianDynamics
+### cartesian_dynamics
 
-`CartesianDynamics` is the two-body equations of motion in Cartesian coordinates,
-with input $[r_x, r_y, r_z, v_x, v_y, v_z, a_x, a_y, a_z]$:
+`cartesian_dynamics` (C++ `CartesianDynamics`) is the two-body equations of
+motion in Cartesian coordinates, with input
+$[r_x, r_y, r_z, v_x, v_y, v_z, a_x, a_y, a_z]$:
 
 $$
 \begin{pmatrix} \dot{\mathbf{r}} \\ \dot{\mathbf{v}} \end{pmatrix}
@@ -169,9 +171,9 @@ the thrust control in a low-thrust problem, plus any state-dependent
 perturbations. Use it where the state is naturally Cartesian: high-thrust or
 impulsive transfers, short-arc maneuvers, or CR3BP problems.
 
-### MEEDynamics
+### modified_dynamics
 
-`MEEDynamics` is the two-body equations of motion in Modified Equinoctial
+`modified_dynamics` (C++ `MEEDynamics`) is the two-body equations of motion in Modified Equinoctial
 Elements (the Gauss variation-of-parameters form), with the non-two-body
 acceleration given in the **RSW frame** — input $[p, f, g, h, k, L, u_r, u_t,
 u_n]$:
@@ -187,11 +189,11 @@ sensitivity to each force direction is transparent: for near-circular orbits,
 along-track thrust changes the orbit size most efficiently, out-of-plane thrust
 changes inclination, and radial thrust mostly rotates the apse line. The absence
 of $e = 0$ and $i = 0$ singularities plus this control parameterization make
-`MEEDynamics` the standard choice for orbit-transfer and orbit-raising problems.
+`modified_dynamics` the standard choice for orbit-transfer and orbit-raising problems.
 
-### CRTBPDynamics
+### crtbp_dynamics
 
-`CRTBPDynamics` implements the Circular Restricted Three-Body Problem in the
+`crtbp_dynamics` (C++ `CRTBPDynamics`) implements the Circular Restricted Three-Body Problem in the
 synodic (rotating) frame: a spacecraft of negligible mass under the gravity of two
 primaries rotating about their common center of mass. Its parameter $\mu$ is the
 **mass ratio** $\mu = m_2/(m_1 + m_2) \in (0,1)$ — not a gravitational parameter;
@@ -203,7 +205,7 @@ centrifugal pseudo-forces of the rotating frame.
 The CR3BP admits a conserved quantity, the Jacobi constant $C_J$, computable from
 the state alone and useful as a constraint or verification check. Periodic orbits
 (Lyapunov, halo, and others) are the primary interest in libration-point mission
-design, and `CRTBPDynamics` is the model used for them.
+design, and `crtbp_dynamics` is the model used for them.
 
 ### Perturbation and force terms
 
@@ -212,16 +214,17 @@ VectorFunctions that add into the equations of motion:
 
 - **J2 zonal harmonic (`j2_cartesian`)** — the dominant non-spherical
   perturbation for planet-orbit trajectories, causing secular precession of RAAN
-  and argument of perigee. `J2Cartesian` takes the position and a (not
-  necessarily normalized) north-pole direction (IR = 6) and returns the J2
-  acceleration. Add it to the gravity term in `CartesianDynamics` for a perturbed
-  model.
+  and argument of perigee. `j2_cartesian` (C++ `J2Cartesian`) takes the position
+  and a (not necessarily normalized) north-pole direction (IR = 6) and returns
+  the J2 acceleration. Add it to the gravity term in `cartesian_dynamics` for a
+  perturbed model.
 - **Solar sail (`non_ideal_solar_sail`)** — the thrust from solar radiation
-  pressure on a flat reflective sail. `NonIdealSolarSail` takes position and sail
+  pressure on a flat reflective sail. `non_ideal_solar_sail` (C++
+  `NonIdealSolarSail`) takes position and sail
   normal (IR = 6) and returns the acceleration, parameterized by lightness number
   $\beta$ and optical efficiencies. The sail normal is typically the control.
 - **Thrust** — for low-thrust problems the control acceleration in
-  `CartesianDynamics` and `MEEDynamics` acts directly as thrust per unit mass.
+  `cartesian_dynamics` and `modified_dynamics` acts directly as thrust per unit mass.
   Adding a magnitude constraint ($\|\mathbf{u}\| \le a_{\max}$) and an objective on
   cumulative effort recovers the standard minimum-fuel / minimum-time formulation.
   `SimpleLowThrust.py` and `DionysusLowThrust.py` illustrate the pattern.
@@ -245,6 +248,8 @@ class MEEDynamicsODE(oc.ODEBase):
         super().__init__(rhs, 6, 3)
 
 ode = MEEDynamicsODE(1.0)              # mu = 1 (non-dimensional)
+# traj_guess: a user-supplied initial guess — a list of [state, t, control]
+# rows, e.g. from a coast propagation or a coarse integration sweep.
 phase = ode.phase("LGL3", traj_guess, 30)   # 30 LGL3 segments from an initial guess
 ```
 
@@ -253,8 +258,8 @@ from it at every node, boundary and path constraints can be attached in whatever
 coordinates are convenient, and PSIOPT solves the resulting NLP — the full
 collocation machinery (mesh refinement, control parameterization, Lagrange
 objectives) is available regardless of the model. A multi-phase trajectory can
-even mix models: a `CartesianDynamics` thrust arc, an `MEEDynamics` heliocentric
-leg, and a `CRTBPDynamics` capture, linked into one problem. See
+even mix models: a `cartesian_dynamics` thrust arc, a `modified_dynamics` heliocentric
+leg, and a `crtbp_dynamics` capture, linked into one problem. See
 {doc}`How to use astrodynamics dynamics in a phase </how_to/astro_dynamics_in_a_phase>`
 and the {doc}`low-thrust transfer tutorial </tutorials/astrodynamics/low_thrust_transfer>`.
 

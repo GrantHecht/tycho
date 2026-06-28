@@ -112,6 +112,11 @@ then call `integrate_parallel`:
 import numpy as np
 from tychopy import utils
 
+# Representative initial condition. The integrator's input vector is the ODE
+# state (6 dynamical components here) followed by the initial-time slot, so it
+# has length 7 — which is why the perturbation below draws randn(7).
+x0_base = np.array([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0])
+
 x0s = [x0_base + np.random.randn(7) * 1e-4 for _ in range(500)]
 tfs  = np.full(500, 10.0)
 
@@ -222,6 +227,10 @@ utils.set_num_threads(utils.get_core_count())
 
 # Generate initial guesses in parallel
 trajs = integ.integrate_dense_parallel(x0s, tfs, threads=utils.get_num_threads())
+
+# Pick the most promising sweep result as the optimizer's initial guess
+# (here just the first; in practice you would score the trajectories).
+best_idx = 0
 
 # Build and solve the phase — the optimizer uses the same global pool
 phase = ode.phase("LGL3", trajs[best_idx], 50)

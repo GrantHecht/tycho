@@ -203,7 +203,7 @@ phase.add_delta_time_objective(1.0);
 ::::{tab-set}
 :::{tab-item} Python
 ```python
-phase.optimizer.set_print_level(0)
+phase.optimizer.set_print_level(3)
 flag = phase.optimize()
 
 Traj = phase.return_traj()
@@ -213,7 +213,7 @@ p_f  = Traj[-1][0]   # semi-latus rectum at arrival
 :::
 :::{tab-item} C++
 ```cpp
-phase.optimizer().set_print_level(0);
+phase.optimizer().set_print_level(3);
 auto flag = phase.optimize();
 
 auto Traj  = phase.return_traj();

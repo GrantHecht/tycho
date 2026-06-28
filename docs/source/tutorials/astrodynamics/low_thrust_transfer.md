@@ -277,13 +277,15 @@ phase.add_delta_time_objective(1.0);
 
 ## 5. Solve
 
-PSIOPT's console output goes directly to the terminal and does not appear here;
-silence it with `set_print_level(0)` to keep the environment clean:
+PSIOPT's console output goes directly to the terminal and does not appear here.
+Print levels run from most verbose (`0`, the default — prints the full iteration
+table) to fully silent (`3`); pass `set_print_level(3)` to keep the environment
+clean:
 
 ::::{tab-set}
 :::{tab-item} Python
 ```{doctest}
->>> phase.optimizer.set_print_level(0)
+>>> phase.optimizer.set_print_level(3)
 >>> flag = phase.optimize()
 >>> str(flag)
 'ConvergenceFlags.CONVERGED'
@@ -291,7 +293,7 @@ silence it with `set_print_level(0)` to keep the environment clean:
 :::
 :::{tab-item} C++
 ```cpp
-phase.optimizer().set_print_level(0);
+phase.optimizer().set_print_level(3);
 auto flag = phase.optimize();   // -> PSIOPT::ConvergenceFlags::CONVERGED
 ```
 :::
@@ -406,7 +408,7 @@ plt.show()
    phase.add_boundary_value("Back", [0, 1, 2, 3, 4], [pf, 0.0, 0.0, 0.0, 0.0])
    phase.add_lu_norm_bound("Path", [7, 8, 9], 0.0001, acc_max, 1.0)
    phase.add_delta_time_objective(1.0)
-   phase.optimizer.set_print_level(0)
+   phase.optimizer.set_print_level(3)
    phase.optimize()
    T = np.array(phase.return_traj())
 
