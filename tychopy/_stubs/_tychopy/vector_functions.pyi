@@ -7775,80 +7775,16 @@ def normalize(arg: numpy.ndarray, /) -> numpy.ndarray:
     """
 
 @overload
-def normalize(arg: Arguments, /) -> object:
-    """
-    Unit-vector direction of a vector-valued VectorFunction.
-
-    Alias for :func:`normalized`.
-
-    Parameters
-    ----------
-    fun : VectorFunction
-        Vector-valued VectorFunction to normalise.
-
-    Returns
-    -------
-    VectorFunction
-        Vector VectorFunction with the same output dimension as *fun*, evaluating
-        ``fun(x) / ||fun(x)||_2``.
-    """
+def normalize(arg: Arguments, /) -> object: ...
 
 @overload
-def normalize(arg: Segment, /) -> object:
-    """
-    Unit-vector direction of a vector-valued VectorFunction.
-
-    Alias for :func:`normalized`.
-
-    Parameters
-    ----------
-    fun : VectorFunction
-        Vector-valued VectorFunction to normalise.
-
-    Returns
-    -------
-    VectorFunction
-        Vector VectorFunction with the same output dimension as *fun*, evaluating
-        ``fun(x) / ||fun(x)||_2``.
-    """
+def normalize(arg: Segment, /) -> object: ...
 
 @overload
-def normalize(arg: Segment2, /) -> object:
-    """
-    Unit-vector direction of a vector-valued VectorFunction.
-
-    Alias for :func:`normalized`.
-
-    Parameters
-    ----------
-    fun : VectorFunction
-        Vector-valued VectorFunction to normalise.
-
-    Returns
-    -------
-    VectorFunction
-        Vector VectorFunction with the same output dimension as *fun*, evaluating
-        ``fun(x) / ||fun(x)||_2``.
-    """
+def normalize(arg: Segment2, /) -> object: ...
 
 @overload
-def normalize(arg: Segment3, /) -> object:
-    """
-    Unit-vector direction of a vector-valued VectorFunction.
-
-    Alias for :func:`normalized`.
-
-    Parameters
-    ----------
-    fun : VectorFunction
-        Vector-valued VectorFunction to normalise.
-
-    Returns
-    -------
-    VectorFunction
-        Vector VectorFunction with the same output dimension as *fun*, evaluating
-        ``fun(x) / ||fun(x)||_2``.
-    """
+def normalize(arg: Segment3, /) -> object: ...
 
 @overload
 def normalize(arg: VectorFunction, /) -> object:
@@ -7889,72 +7825,16 @@ def normalized(arg: numpy.ndarray, /) -> numpy.ndarray:
     """
 
 @overload
-def normalized(arg: Arguments, /) -> object:
-    """
-    Unit-vector direction of a vector-valued VectorFunction.
-
-    Parameters
-    ----------
-    fun : VectorFunction
-        Vector-valued VectorFunction to normalise.
-
-    Returns
-    -------
-    VectorFunction
-        Vector VectorFunction with the same output dimension as *fun*, evaluating
-        ``fun(x) / ||fun(x)||_2``.
-    """
+def normalized(arg: Arguments, /) -> object: ...
 
 @overload
-def normalized(arg: Segment, /) -> object:
-    """
-    Unit-vector direction of a vector-valued VectorFunction.
-
-    Parameters
-    ----------
-    fun : VectorFunction
-        Vector-valued VectorFunction to normalise.
-
-    Returns
-    -------
-    VectorFunction
-        Vector VectorFunction with the same output dimension as *fun*, evaluating
-        ``fun(x) / ||fun(x)||_2``.
-    """
+def normalized(arg: Segment, /) -> object: ...
 
 @overload
-def normalized(arg: Segment2, /) -> object:
-    """
-    Unit-vector direction of a vector-valued VectorFunction.
-
-    Parameters
-    ----------
-    fun : VectorFunction
-        Vector-valued VectorFunction to normalise.
-
-    Returns
-    -------
-    VectorFunction
-        Vector VectorFunction with the same output dimension as *fun*, evaluating
-        ``fun(x) / ||fun(x)||_2``.
-    """
+def normalized(arg: Segment2, /) -> object: ...
 
 @overload
-def normalized(arg: Segment3, /) -> object:
-    """
-    Unit-vector direction of a vector-valued VectorFunction.
-
-    Parameters
-    ----------
-    fun : VectorFunction
-        Vector-valued VectorFunction to normalise.
-
-    Returns
-    -------
-    VectorFunction
-        Vector VectorFunction with the same output dimension as *fun*, evaluating
-        ``fun(x) / ||fun(x)||_2``.
-    """
+def normalized(arg: Segment3, /) -> object: ...
 
 @overload
 def normalized(arg: VectorFunction, /) -> object:
@@ -7974,7 +7854,19 @@ def normalized(arg: VectorFunction, /) -> object:
     """
 
 @overload
-def norm(arg: Arguments, /) -> object:
+def norm(arg: Arguments, /) -> object: ...
+
+@overload
+def norm(arg: Segment, /) -> object: ...
+
+@overload
+def norm(arg: Segment2, /) -> object: ...
+
+@overload
+def norm(arg: Segment3, /) -> object: ...
+
+@overload
+def norm(arg: VectorFunction, /) -> object:
     """
     Euclidean (L2) norm of a vector-valued VectorFunction.
 
@@ -7990,19 +7882,19 @@ def norm(arg: Arguments, /) -> object:
     """
 
 @overload
-def norm(arg: Segment, /) -> object: ...
+def squared_norm(arg: Arguments, /) -> object: ...
 
 @overload
-def norm(arg: Segment2, /) -> object: ...
+def squared_norm(arg: Segment, /) -> object: ...
 
 @overload
-def norm(arg: Segment3, /) -> object: ...
+def squared_norm(arg: Segment2, /) -> object: ...
 
 @overload
-def norm(arg: VectorFunction, /) -> object: ...
+def squared_norm(arg: Segment3, /) -> object: ...
 
 @overload
-def squared_norm(arg: Arguments, /) -> object:
+def squared_norm(arg: VectorFunction, /) -> object:
     """
     Squared Euclidean norm of a vector-valued VectorFunction.
 
@@ -8018,19 +7910,19 @@ def squared_norm(arg: Arguments, /) -> object:
     """
 
 @overload
-def squared_norm(arg: Segment, /) -> object: ...
+def cubed_norm(arg: Arguments, /) -> object: ...
 
 @overload
-def squared_norm(arg: Segment2, /) -> object: ...
+def cubed_norm(arg: Segment, /) -> object: ...
 
 @overload
-def squared_norm(arg: Segment3, /) -> object: ...
+def cubed_norm(arg: Segment2, /) -> object: ...
 
 @overload
-def squared_norm(arg: VectorFunction, /) -> object: ...
+def cubed_norm(arg: Segment3, /) -> object: ...
 
 @overload
-def cubed_norm(arg: Arguments, /) -> object:
+def cubed_norm(arg: VectorFunction, /) -> object:
     """
     Euclidean norm raised to the third power of a vector-valued VectorFunction.
 
@@ -8046,19 +7938,19 @@ def cubed_norm(arg: Arguments, /) -> object:
     """
 
 @overload
-def cubed_norm(arg: Segment, /) -> object: ...
+def inverse_norm(arg: Arguments, /) -> object: ...
 
 @overload
-def cubed_norm(arg: Segment2, /) -> object: ...
+def inverse_norm(arg: Segment, /) -> object: ...
 
 @overload
-def cubed_norm(arg: Segment3, /) -> object: ...
+def inverse_norm(arg: Segment2, /) -> object: ...
 
 @overload
-def cubed_norm(arg: VectorFunction, /) -> object: ...
+def inverse_norm(arg: Segment3, /) -> object: ...
 
 @overload
-def inverse_norm(arg: Arguments, /) -> object:
+def inverse_norm(arg: VectorFunction, /) -> object:
     """
     Reciprocal Euclidean norm of a vector-valued VectorFunction.
 
@@ -8074,19 +7966,19 @@ def inverse_norm(arg: Arguments, /) -> object:
     """
 
 @overload
-def inverse_norm(arg: Segment, /) -> object: ...
+def inverse_squared_norm(arg: Arguments, /) -> object: ...
 
 @overload
-def inverse_norm(arg: Segment2, /) -> object: ...
+def inverse_squared_norm(arg: Segment, /) -> object: ...
 
 @overload
-def inverse_norm(arg: Segment3, /) -> object: ...
+def inverse_squared_norm(arg: Segment2, /) -> object: ...
 
 @overload
-def inverse_norm(arg: VectorFunction, /) -> object: ...
+def inverse_squared_norm(arg: Segment3, /) -> object: ...
 
 @overload
-def inverse_squared_norm(arg: Arguments, /) -> object:
+def inverse_squared_norm(arg: VectorFunction, /) -> object:
     """
     Reciprocal squared Euclidean norm of a vector-valued VectorFunction.
 
@@ -8102,19 +7994,19 @@ def inverse_squared_norm(arg: Arguments, /) -> object:
     """
 
 @overload
-def inverse_squared_norm(arg: Segment, /) -> object: ...
+def inverse_cubed_norm(arg: Arguments, /) -> object: ...
 
 @overload
-def inverse_squared_norm(arg: Segment2, /) -> object: ...
+def inverse_cubed_norm(arg: Segment, /) -> object: ...
 
 @overload
-def inverse_squared_norm(arg: Segment3, /) -> object: ...
+def inverse_cubed_norm(arg: Segment2, /) -> object: ...
 
 @overload
-def inverse_squared_norm(arg: VectorFunction, /) -> object: ...
+def inverse_cubed_norm(arg: Segment3, /) -> object: ...
 
 @overload
-def inverse_cubed_norm(arg: Arguments, /) -> object:
+def inverse_cubed_norm(arg: VectorFunction, /) -> object:
     """
     Reciprocal cubed Euclidean norm of a vector-valued VectorFunction.
 
@@ -8130,19 +8022,19 @@ def inverse_cubed_norm(arg: Arguments, /) -> object:
     """
 
 @overload
-def inverse_cubed_norm(arg: Segment, /) -> object: ...
+def inverse_four_norm(arg: Arguments, /) -> object: ...
 
 @overload
-def inverse_cubed_norm(arg: Segment2, /) -> object: ...
+def inverse_four_norm(arg: Segment, /) -> object: ...
 
 @overload
-def inverse_cubed_norm(arg: Segment3, /) -> object: ...
+def inverse_four_norm(arg: Segment2, /) -> object: ...
 
 @overload
-def inverse_cubed_norm(arg: VectorFunction, /) -> object: ...
+def inverse_four_norm(arg: Segment3, /) -> object: ...
 
 @overload
-def inverse_four_norm(arg: Arguments, /) -> object:
+def inverse_four_norm(arg: VectorFunction, /) -> object:
     """
     Reciprocal fourth-power Euclidean norm of a vector-valued VectorFunction.
 
@@ -8158,19 +8050,19 @@ def inverse_four_norm(arg: Arguments, /) -> object:
     """
 
 @overload
-def inverse_four_norm(arg: Segment, /) -> object: ...
+def normalized_power2(arg: Arguments, /) -> object: ...
 
 @overload
-def inverse_four_norm(arg: Segment2, /) -> object: ...
+def normalized_power2(arg: Segment, /) -> object: ...
 
 @overload
-def inverse_four_norm(arg: Segment3, /) -> object: ...
+def normalized_power2(arg: Segment2, /) -> object: ...
 
 @overload
-def inverse_four_norm(arg: VectorFunction, /) -> object: ...
+def normalized_power2(arg: Segment3, /) -> object: ...
 
 @overload
-def normalized_power2(arg: Arguments, /) -> object:
+def normalized_power2(arg: VectorFunction, /) -> object:
     """
     Vector divided by the squared norm of a vector-valued VectorFunction.
 
@@ -8186,19 +8078,19 @@ def normalized_power2(arg: Arguments, /) -> object:
     """
 
 @overload
-def normalized_power2(arg: Segment, /) -> object: ...
+def normalized_power3(arg: Arguments, /) -> object: ...
 
 @overload
-def normalized_power2(arg: Segment2, /) -> object: ...
+def normalized_power3(arg: Segment, /) -> object: ...
 
 @overload
-def normalized_power2(arg: Segment3, /) -> object: ...
+def normalized_power3(arg: Segment2, /) -> object: ...
 
 @overload
-def normalized_power2(arg: VectorFunction, /) -> object: ...
+def normalized_power3(arg: Segment3, /) -> object: ...
 
 @overload
-def normalized_power3(arg: Arguments, /) -> object:
+def normalized_power3(arg: VectorFunction, /) -> object:
     """
     Vector divided by the cubed norm of a vector-valued VectorFunction.
 
@@ -8214,19 +8106,19 @@ def normalized_power3(arg: Arguments, /) -> object:
     """
 
 @overload
-def normalized_power3(arg: Segment, /) -> object: ...
+def normalized_power4(arg: Arguments, /) -> object: ...
 
 @overload
-def normalized_power3(arg: Segment2, /) -> object: ...
+def normalized_power4(arg: Segment, /) -> object: ...
 
 @overload
-def normalized_power3(arg: Segment3, /) -> object: ...
+def normalized_power4(arg: Segment2, /) -> object: ...
 
 @overload
-def normalized_power3(arg: VectorFunction, /) -> object: ...
+def normalized_power4(arg: Segment3, /) -> object: ...
 
 @overload
-def normalized_power4(arg: Arguments, /) -> object:
+def normalized_power4(arg: VectorFunction, /) -> object:
     """
     Vector divided by the fourth-power norm of a vector-valued VectorFunction.
 
@@ -8242,19 +8134,19 @@ def normalized_power4(arg: Arguments, /) -> object:
     """
 
 @overload
-def normalized_power4(arg: Segment, /) -> object: ...
+def normalized_power5(arg: Arguments, /) -> object: ...
 
 @overload
-def normalized_power4(arg: Segment2, /) -> object: ...
+def normalized_power5(arg: Segment, /) -> object: ...
 
 @overload
-def normalized_power4(arg: Segment3, /) -> object: ...
+def normalized_power5(arg: Segment2, /) -> object: ...
 
 @overload
-def normalized_power4(arg: VectorFunction, /) -> object: ...
+def normalized_power5(arg: Segment3, /) -> object: ...
 
 @overload
-def normalized_power5(arg: Arguments, /) -> object:
+def normalized_power5(arg: VectorFunction, /) -> object:
     """
     Vector divided by the fifth-power norm of a vector-valued VectorFunction.
 
@@ -8268,18 +8160,6 @@ def normalized_power5(arg: Arguments, /) -> object:
     VectorFunction
         Vector VectorFunction evaluating ``fun(x) / ||fun(x)||_2^5``.
     """
-
-@overload
-def normalized_power5(arg: Segment, /) -> object: ...
-
-@overload
-def normalized_power5(arg: Segment2, /) -> object: ...
-
-@overload
-def normalized_power5(arg: Segment3, /) -> object: ...
-
-@overload
-def normalized_power5(arg: VectorFunction, /) -> object: ...
 
 @overload
 def cross(arg0: Segment3, arg1: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], /) -> object:
@@ -8735,7 +8615,10 @@ def quat_rotate(arg0: VectorFunction, arg1: Segment, /) -> VectorFunction: ...
 def quat_rotate(arg0: VectorFunction, arg1: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], /) -> VectorFunction: ...
 
 @overload
-def sin(arg: Element, /) -> object:
+def sin(arg: Element, /) -> object: ...
+
+@overload
+def sin(arg: ScalarFunction, /) -> object:
     """
     Elementwise sine of a scalar VectorFunction (argument in radians).
 
@@ -8758,10 +8641,10 @@ def sin(arg: Element, /) -> object:
     """
 
 @overload
-def sin(arg: ScalarFunction, /) -> object: ...
+def cos(arg: Element, /) -> object: ...
 
 @overload
-def cos(arg: Element, /) -> object:
+def cos(arg: ScalarFunction, /) -> object:
     """
     Elementwise cosine of a scalar VectorFunction (argument in radians).
 
@@ -8777,10 +8660,10 @@ def cos(arg: Element, /) -> object:
     """
 
 @overload
-def cos(arg: ScalarFunction, /) -> object: ...
+def tan(arg: Element, /) -> object: ...
 
 @overload
-def tan(arg: Element, /) -> object:
+def tan(arg: ScalarFunction, /) -> object:
     """
     Elementwise tangent of a scalar VectorFunction (argument in radians).
 
@@ -8796,10 +8679,10 @@ def tan(arg: Element, /) -> object:
     """
 
 @overload
-def tan(arg: ScalarFunction, /) -> object: ...
+def sqrt(arg: Element, /) -> object: ...
 
 @overload
-def sqrt(arg: Element, /) -> object:
+def sqrt(arg: ScalarFunction, /) -> object:
     """
     Elementwise square root of a scalar VectorFunction.
 
@@ -8816,10 +8699,10 @@ def sqrt(arg: Element, /) -> object:
     """
 
 @overload
-def sqrt(arg: ScalarFunction, /) -> object: ...
+def exp(arg: Element, /) -> object: ...
 
 @overload
-def exp(arg: Element, /) -> object:
+def exp(arg: ScalarFunction, /) -> object:
     """
     Elementwise natural exponential of a scalar VectorFunction.
 
@@ -8835,10 +8718,10 @@ def exp(arg: Element, /) -> object:
     """
 
 @overload
-def exp(arg: ScalarFunction, /) -> object: ...
+def log(arg: Element, /) -> object: ...
 
 @overload
-def log(arg: Element, /) -> object:
+def log(arg: ScalarFunction, /) -> object:
     """
     Elementwise natural logarithm of a scalar VectorFunction.
 
@@ -8855,10 +8738,10 @@ def log(arg: Element, /) -> object:
     """
 
 @overload
-def log(arg: ScalarFunction, /) -> object: ...
+def squared(arg: Element, /) -> object: ...
 
 @overload
-def squared(arg: Element, /) -> object:
+def squared(arg: ScalarFunction, /) -> object:
     """
     Elementwise square of a scalar VectorFunction.
 
@@ -8874,10 +8757,10 @@ def squared(arg: Element, /) -> object:
     """
 
 @overload
-def squared(arg: ScalarFunction, /) -> object: ...
+def arcsin(arg: Element, /) -> object: ...
 
 @overload
-def arcsin(arg: Element, /) -> object:
+def arcsin(arg: ScalarFunction, /) -> object:
     """
     Elementwise arcsine of a scalar VectorFunction.
 
@@ -8895,10 +8778,10 @@ def arcsin(arg: Element, /) -> object:
     """
 
 @overload
-def arcsin(arg: ScalarFunction, /) -> object: ...
+def arccos(arg: Element, /) -> object: ...
 
 @overload
-def arccos(arg: Element, /) -> object:
+def arccos(arg: ScalarFunction, /) -> object:
     """
     Elementwise arccosine of a scalar VectorFunction.
 
@@ -8916,10 +8799,10 @@ def arccos(arg: Element, /) -> object:
     """
 
 @overload
-def arccos(arg: ScalarFunction, /) -> object: ...
+def arctan(arg: Element, /) -> object: ...
 
 @overload
-def arctan(arg: Element, /) -> object:
+def arctan(arg: ScalarFunction, /) -> object:
     """
     Elementwise arctangent of a scalar VectorFunction.
 
@@ -8936,10 +8819,10 @@ def arctan(arg: Element, /) -> object:
     """
 
 @overload
-def arctan(arg: ScalarFunction, /) -> object: ...
+def sinh(arg: Element, /) -> object: ...
 
 @overload
-def sinh(arg: Element, /) -> object:
+def sinh(arg: ScalarFunction, /) -> object:
     """
     Elementwise hyperbolic sine of a scalar VectorFunction.
 
@@ -8955,10 +8838,10 @@ def sinh(arg: Element, /) -> object:
     """
 
 @overload
-def sinh(arg: ScalarFunction, /) -> object: ...
+def cosh(arg: Element, /) -> object: ...
 
 @overload
-def cosh(arg: Element, /) -> object:
+def cosh(arg: ScalarFunction, /) -> object:
     """
     Elementwise hyperbolic cosine of a scalar VectorFunction.
 
@@ -8974,10 +8857,10 @@ def cosh(arg: Element, /) -> object:
     """
 
 @overload
-def cosh(arg: ScalarFunction, /) -> object: ...
+def tanh(arg: Element, /) -> object: ...
 
 @overload
-def tanh(arg: Element, /) -> object:
+def tanh(arg: ScalarFunction, /) -> object:
     """
     Elementwise hyperbolic tangent of a scalar VectorFunction.
 
@@ -8993,10 +8876,10 @@ def tanh(arg: Element, /) -> object:
     """
 
 @overload
-def tanh(arg: ScalarFunction, /) -> object: ...
+def pow(arg0: Element, arg1: float, /) -> object: ...
 
 @overload
-def pow(arg0: Element, arg1: float, /) -> object:
+def pow(arg0: ScalarFunction, arg1: float, /) -> object:
     """
     Raise a scalar VectorFunction to a real power.
 
@@ -9023,10 +8906,10 @@ def pow(arg0: Element, arg1: float, /) -> object:
     """
 
 @overload
-def pow(arg0: ScalarFunction, arg1: float, /) -> object: ...
+def arcsinh(arg: Element, /) -> object: ...
 
 @overload
-def arcsinh(arg: Element, /) -> object:
+def arcsinh(arg: ScalarFunction, /) -> object:
     """
     Elementwise inverse hyperbolic sine of a scalar VectorFunction.
 
@@ -9042,10 +8925,10 @@ def arcsinh(arg: Element, /) -> object:
     """
 
 @overload
-def arcsinh(arg: ScalarFunction, /) -> object: ...
+def arccosh(arg: Element, /) -> object: ...
 
 @overload
-def arccosh(arg: Element, /) -> object:
+def arccosh(arg: ScalarFunction, /) -> object:
     """
     Elementwise inverse hyperbolic cosine of a scalar VectorFunction.
 
@@ -9062,10 +8945,10 @@ def arccosh(arg: Element, /) -> object:
     """
 
 @overload
-def arccosh(arg: ScalarFunction, /) -> object: ...
+def arctanh(arg: Element, /) -> object: ...
 
 @overload
-def arctanh(arg: Element, /) -> object:
+def arctanh(arg: ScalarFunction, /) -> object:
     """
     Elementwise inverse hyperbolic tangent of a scalar VectorFunction.
 
@@ -9082,10 +8965,10 @@ def arctanh(arg: Element, /) -> object:
     """
 
 @overload
-def arctanh(arg: ScalarFunction, /) -> object: ...
+def sign(arg: Element, /) -> object: ...
 
 @overload
-def sign(arg: Element, /) -> object:
+def sign(arg: ScalarFunction, /) -> object:
     """
     Elementwise sign of a scalar VectorFunction.
 
@@ -9105,10 +8988,10 @@ def sign(arg: Element, /) -> object:
     """
 
 @overload
-def sign(arg: ScalarFunction, /) -> object: ...
+def abs(arg: Element, /) -> object: ...
 
 @overload
-def abs(arg: Element, /) -> object:
+def abs(arg: ScalarFunction, /) -> object:
     """
     Elementwise absolute value of a scalar VectorFunction.
 
@@ -9122,9 +9005,6 @@ def abs(arg: Element, /) -> object:
     VectorFunction
         A new scalar VectorFunction evaluating ``|fun(x)|``.
     """
-
-@overload
-def abs(arg: ScalarFunction, /) -> object: ...
 
 @overload
 def ifelse(arg0: Conditional, arg1: ScalarFunction, arg2: ScalarFunction, /) -> ScalarFunction:
