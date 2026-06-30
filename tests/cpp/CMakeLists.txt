@@ -81,6 +81,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     vector_functions/test_cheb_table.cpp
     vector_functions/test_cheb_function_vf.cpp
     vector_functions/test_cheb_nd_index.cpp
+    vector_functions/test_cheb_nd.cpp
     vector_functions/test_vf_value_lock.cpp
     vector_functions/test_vf_matrix_view_errors.cpp
     vector_functions/test_vf_quat_rotate.cpp
@@ -204,13 +205,15 @@ set_source_files_properties(
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
 
-# test_cheb_table.cpp / test_cheb_function_vf.cpp / test_cheb_nd_index.cpp:
-# keep standalone to avoid shifting unity batch boundaries that would otherwise
-# pull conflicting anonymous-namespace symbols into the same unity TU.
+# test_cheb_table.cpp / test_cheb_function_vf.cpp / test_cheb_nd_index.cpp /
+# test_cheb_nd.cpp: keep standalone to avoid shifting unity batch boundaries
+# that would otherwise pull conflicting anonymous-namespace symbols into the
+# same unity TU.
 set_source_files_properties(
     vector_functions/test_cheb_table.cpp
     vector_functions/test_cheb_function_vf.cpp
     vector_functions/test_cheb_nd_index.cpp
+    vector_functions/test_cheb_nd.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
 
