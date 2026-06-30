@@ -41,6 +41,7 @@
 #include "tycho/detail/optimal_control/core/ode_sizes.h"
 #include "tycho/detail/optimal_control/core/optimal_control_flags.h"
 #include "tycho/detail/optimal_control/core/state_function.h"
+#include "tycho/detail/optimal_control/interp/cheb_table.h"
 #include "tycho/detail/optimal_control/interp/interp_table_1d.h"
 #include "tycho/detail/optimal_control/interp/interp_table_2d.h"
 #include "tycho/detail/optimal_control/interp/interp_table_3d.h"
