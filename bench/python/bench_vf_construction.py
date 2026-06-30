@@ -8,9 +8,16 @@ workload that nanobind 2.13.0's ``nb::pooled()`` instance recycling targets — 
 C++ ``bench/cpp`` suite does not exercise the binding layer, so this is the
 Python-path "ruler" for that change.
 
-Reports, per workload: objects/sec (throughput), peak Python allocation
-(``tracemalloc``) and peak process RSS (``getrusage``). Run the same command on a
-pooled-OFF and pooled-ON build and diff the output.
+Reports, per workload: throughput as *counted construction ops/sec* — a stable
+per-build proxy, NOT a literal count of every allocated object (leaf ``Arguments``
+/ ``Segment`` constructions are deliberately excluded; see the per-workload
+``ops`` comments). The proxy is identical across builds, so the pooled-OFF vs pooled-ON
+*ratio* is exact; absolute numbers are only comparable within a single workload,
+not across workloads. Also reports per-workload peak live Python allocation
+(``tracemalloc``), measured in a SEPARATE untimed pass so allocation tracing never
+perturbs the timing, plus a single whole-process peak RSS at the end (POSIX only).
+
+Run the same command on a pooled-OFF and pooled-ON build and diff the output.
 
 Usage:
     python bench/python/bench_vf_construction.py [--reps N] [--inner M] [--json]
@@ -24,10 +31,14 @@ from __future__ import annotations
 import argparse
 import gc
 import json
-import resource
 import sys
 import time
 import tracemalloc
+
+try:
+    import resource  # POSIX-only; RSS reporting is skipped without it (e.g. Windows)
+except ImportError:
+    resource = None
 
 from tychopy import vector_functions as vf
 
@@ -35,8 +46,11 @@ Args = vf.Arguments
 
 
 # --------------------------------------------------------------------------- #
-# Workloads. Each returns the number of GenericFunction-producing operations it
-# performs per call, so throughput can be reported in constructed-objects/sec.
+# Workloads. Each returns a count of constructed-VectorFunction operations it
+# performs per call (a stable per-build proxy for throughput — NOT every allocated
+# object; leaf Arguments/Segment constructions are excluded for the reasons noted
+# per workload). Because the proxy is identical pooled-OFF and pooled-ON, it
+# cancels in the ratio; only within-workload comparisons are meaningful.
 # --------------------------------------------------------------------------- #
 def w_synthetic_chain(inner: int) -> int:
     """Tight loop of ephemeral wrappers: the pooling sweet spot.
@@ -48,11 +62,11 @@ def w_synthetic_chain(inner: int) -> int:
     V = X.tail(3)
     ops = 0
     for _ in range(inner):
-        a = R.normalized()          # 1
-        b = (a + R).norm()          # 2 (add) + 1 (norm) = ops below
-        c = R.cross(V).normalized() # cross + normalized
+        a = R.normalized()  # normalized: 1
+        b = (a + R).norm()  # add: 1, norm: 1
+        c = R.cross(V).normalized()  # cross: 1, normalized: 1
         del a, b, c
-        ops += 5
+        ops += 5  # 1 + (1 + 1) + (1 + 1)
     return ops
 
 
@@ -71,7 +85,9 @@ def w_rtn_tree(inner: int) -> int:
         That = Nhat.cross(R).normalized()
         s = vf.stack(Rhat, That, Nhat)
         del R, V, Rhat, Nhat, That, s
-        ops += 8  # 2 segments + 3 cross/normalized pairs-ish + stack
+        # 2 segments + 1 normalized (Rhat) + 2*(cross + normalized) + stack = 8.
+        # The Args(6) leaf is not counted (see module-level note).
+        ops += 8
     return ops
 
 
@@ -87,10 +103,13 @@ def w_deep_sum(inner: int) -> int:
         elems = X.tolist()
         acc = elems[0] * elems[0]
         for e in elems[1:]:
-            acc = acc + e * e        # 2 ops per term
-        r = vf.sqrt(acc)             # scalar -> scalar
+            acc = acc + e * e  # 2 ops per term: square (e*e) + add
+        r = vf.sqrt(acc)  # scalar -> scalar
         del X, elems, acc, r
-        ops += 1 + 2 * 7 + 1
+        # square(1) + (n-1) terms * 2 + sqrt(1). The Args(8) leaf and the n
+        # tolist() elements are not counted (see module-level note).
+        n = 8
+        ops += 1 + 2 * (n - 1) + 1
     return ops
 
 
@@ -106,21 +125,31 @@ def run_one(fn, inner: int, reps: int) -> dict:
     fn(min(inner, 64))
     gc.collect()
 
+    # Timing pass: tracemalloc OFF. Allocation tracing adds ~20% per-allocation
+    # overhead that scales with allocation count — exactly the quantity pooling
+    # reduces — so it must not run during timing or it attenuates the delta.
     best = float("inf")
     ops_per_call = 0
-    tracemalloc.start()
     for _ in range(reps):
         gc.collect()
         gc.disable()
-        t0 = time.perf_counter()
-        ops_per_call = fn(inner)
-        t1 = time.perf_counter()
-        gc.enable()
+        try:
+            t0 = time.perf_counter()
+            ops_per_call = fn(inner)
+            t1 = time.perf_counter()
+        finally:
+            gc.enable()  # survive a workload exception without leaving GC off
         best = min(best, t1 - t0)
-    _, peak_py = tracemalloc.get_traced_memory()
-    tracemalloc.stop()
 
-    peak_rss_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    # Memory pass: separate, untimed, with tracemalloc ON. peak_py is the peak
+    # *simultaneously live* Python allocation — a per-workload neutrality check.
+    tracemalloc.start()
+    try:
+        fn(inner)
+        _, peak_py = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+
     objs = ops_per_call
     return {
         "best_s": best,
@@ -128,8 +157,20 @@ def run_one(fn, inner: int, reps: int) -> dict:
         "objs_per_s": objs / best if best > 0 else 0.0,
         "ns_per_obj": (best / objs * 1e9) if objs else 0.0,
         "peak_py_bytes": peak_py,
-        "peak_rss_kb": peak_rss_kb,
     }
+
+
+def peak_rss_mb() -> float | None:
+    """Whole-process peak RSS in MB, or None if unavailable (non-POSIX).
+
+    ``ru_maxrss`` is in kilobytes on Linux but bytes on macOS/BSD; normalize.
+    This is a process-lifetime high-water mark, not per-workload.
+    """
+    if resource is None:
+        return None
+    rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    scale = 1 if sys.platform == "darwin" else 1024  # bytes vs KiB
+    return rss * scale / 1e6
 
 
 def main(argv: list[str]) -> int:
@@ -140,22 +181,47 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--filter", default="")
     args = ap.parse_args(argv)
 
+    if args.reps < 1 or args.inner < 1:
+        print("error: --reps and --inner must be >= 1", file=sys.stderr)
+        return 2
+
     results = {}
     for name, fn in WORKLOADS.items():
         if args.filter and args.filter not in name:
             continue
         results[name] = run_one(fn, args.inner, args.reps)
 
+    if not results:
+        print(
+            f"error: --filter '{args.filter}' matched no workload; "
+            f"available: {', '.join(WORKLOADS)}",
+            file=sys.stderr,
+        )
+        return 2
+
+    proc_rss = peak_rss_mb()
     if args.json:
-        print(json.dumps({"inner": args.inner, "reps": args.reps, "results": results}))
+        print(
+            json.dumps(
+                {
+                    "inner": args.inner,
+                    "reps": args.reps,
+                    "proc_peak_rss_mb": proc_rss,
+                    "results": results,
+                }
+            )
+        )
         return 0
 
     print(f"VF construction benchmark  (inner={args.inner}, reps={args.reps})")
-    print(f"{'workload':<18} {'objs/s':>14} {'ns/obj':>10} "
-          f"{'peak_py_MB':>11} {'peak_rss_MB':>12}")
+    print(f"{'workload':<18} {'ops/s':>14} {'ns/op':>10} {'peak_py_MB':>11}")
     for name, r in results.items():
-        print(f"{name:<18} {r['objs_per_s']:>14,.0f} {r['ns_per_obj']:>10.1f} "
-              f"{r['peak_py_bytes'] / 1e6:>11.2f} {r['peak_rss_kb'] / 1024:>12.1f}")
+        print(
+            f"{name:<18} {r['objs_per_s']:>14,.0f} {r['ns_per_obj']:>10.1f} "
+            f"{r['peak_py_bytes'] / 1e6:>11.3f}"
+        )
+    rss_str = "n/a (non-POSIX)" if proc_rss is None else f"{proc_rss:.1f} MB"
+    print(f"\nwhole-process peak RSS: {rss_str}")
     return 0
 
 
