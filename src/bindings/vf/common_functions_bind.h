@@ -137,7 +137,7 @@ list of Element or Segment
 // ──────────────────────────────────────────────────────────────────────────────────────
 template <int IR, int OR> struct TychoBind<Constant<IR, OR>> {
     static void build(nb::module_ &m, const char *name) {
-        auto obj = nb::class_<Constant<IR, OR>>(m, name,
+        auto obj = nb::class_<Constant<IR, OR>>(m, name, nb::pooled(128),
             R"doc(A VectorFunction that always returns the same fixed output vector.
 
 Regardless of the input, ``Constant`` evaluates to a compile-time or
@@ -311,7 +311,7 @@ total_input_rows : int
 // ─────────────────────────────────────────────────────────────────────────────────────
 template <int IR_OR> struct TychoBind<Arguments<IR_OR>> {
     static void build(nb::module_ &m, const char *name) {
-        auto obj = nb::class_<Arguments<IR_OR>>(m, name,
+        auto obj = nb::class_<Arguments<IR_OR>>(m, name, nb::pooled(128),
             R"doc(The identity VectorFunction — the symbolic input vector for building expressions.
 
 ``Arguments(n)`` is the identity map on ``n``-dimensional inputs: it returns
@@ -390,7 +390,7 @@ ScalarFunction
 // ───────────────────────────────────────────────────────────────────────────────────────
 template <int IR, int OR, int ST> struct TychoBind<Segment<IR, OR, ST>> {
     static void build(nb::module_ &m, const char *name) {
-        auto obj = nb::class_<Segment<IR, OR, ST>>(m, name,
+        auto obj = nb::class_<Segment<IR, OR, ST>>(m, name, nb::pooled(128),
             R"doc(A contiguous sub-vector view of a VectorFunction's input.
 
 ``Segment(input_rows, output_rows, start)`` extracts ``output_rows``

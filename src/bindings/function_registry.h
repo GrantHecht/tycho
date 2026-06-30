@@ -70,6 +70,7 @@ struct FunctionRegistry {
           solmod(m.def_submodule("solvers", "SubModule Containing PSIOPT,NLP, and Solver Flags")),
           extmod(m.def_submodule("extensions", "User Defined Extensions")),
           vfuncx(nb::class_<VectorFunctionalX>(this->vfmod, "VectorFunction",
+              nb::pooled(128),
               R"doc(The central symbolic, differentiable vector-to-vector map in Tycho.
 
 A ``VectorFunction`` represents a differentiable mapping
@@ -81,6 +82,7 @@ indexing and operating on ``Arguments`` objects; the result is
 implicitly convertible to ``VectorFunction`` for use in phase APIs.
 )doc")),
           sfuncx(nb::class_<ScalarFunctionalX>(this->vfmod, "ScalarFunction",
+              nb::pooled(128),
               R"doc(A VectorFunction specialization whose output is a single scalar value.
 
 ``ScalarFunction`` is a ``VectorFunction`` with exactly one output row
