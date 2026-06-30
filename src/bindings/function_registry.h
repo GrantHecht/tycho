@@ -69,6 +69,12 @@ struct FunctionRegistry {
                               "SubModule Containing Optimal Control ODEs, Phases, and Utilities")),
           solmod(m.def_submodule("solvers", "SubModule Containing PSIOPT,NLP, and Solver Flags")),
           extmod(m.def_submodule("extensions", "User Defined Extensions")),
+          // nb::pooled: recycle these nanobind-owned instances (LIFO pool, cap
+          // 128) — they are constructed/discarded en masse while building VF
+          // expressions. Safe only because these types use default ownership;
+          // pooling an intrusive-refcounted type is a hard fail() at
+          // registration. Same rationale for the Constant/Arguments/Segment
+          // leaves in common_functions_bind.h. See commit history for benchmarks.
           vfuncx(nb::class_<VectorFunctionalX>(this->vfmod, "VectorFunction",
               nb::pooled(128),
               R"doc(The central symbolic, differentiable vector-to-vector map in Tycho.
