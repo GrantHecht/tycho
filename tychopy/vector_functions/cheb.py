@@ -100,6 +100,9 @@ def cheb_adaptive(callable_fn, lb, ub, rtol=1e-12, order0=8, max_order=512, nthr
     table, vals = _build(callable_fn, lb, ub, order, nthreads)
     while order < max_order:
         tail = np.max(table.coeff_tail_norm())
+        # scale from the current (possibly under-resolved) samples. An
+        # under-estimate only makes the convergence test stricter (more
+        # doubling), never looser, so it can't cause premature convergence.
         scale = max(np.max(np.abs(vals)), 1.0)
         if tail <= rtol * scale:
             return table

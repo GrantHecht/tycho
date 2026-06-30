@@ -40,7 +40,11 @@ struct ChebTable {
                                    ///< coefficients (1 row of zeros when order_==1).
     int olen_ = 0;                 ///< Output dimension.
 
-    // Map physical t -> xi in [-1,1]; clamp to guard round-off at the ends.
+    // Map physical t -> xi in [-1,1]. Queries outside [lb_, ub_] are CLAMPED to
+    // the nearest endpoint (no extrapolation): a global Chebyshev polynomial
+    // diverges catastrophically outside its domain, so clamping is deliberate.
+    // This differs from InterpTable1D, which extrapolates. Also guards end
+    // round-off.
     double to_xi(double t) const {
         double xi = (2.0 * t - lb_ - ub_) / (ub_ - lb_);
         return std::clamp(xi, -1.0, 1.0);
@@ -216,6 +220,13 @@ struct ChebTable {
 /// (the independent variable) and vector output (one component per channel).
 /// Analytic Jacobian and Hessian are provided via the precomputed Chebyshev
 /// derivative-series stored in the @ref ChebTable; see @ref ChebTable::eval_impl.
+///
+/// @tparam IR  Compile-time input dimension. Currently only @c IR==-1 (dynamic,
+///             scalar input) is ever instantiated; the parameter exists to
+///             anticipate a future N-D generalization. NOTE: unlike
+///             @ref InterpFunction1D whose template parameter is the @e output
+///             dimension, @c ChebFunction's parameter is the @e input dimension
+///             (output rows are always dynamic, -1).
 template <int IR>
 struct ChebFunction
     : VectorFunction<ChebFunction<IR>, IR, -1, DenseDerivativeMode::Analytic,
