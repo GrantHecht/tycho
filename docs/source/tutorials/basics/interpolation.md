@@ -99,6 +99,14 @@ channels:
 'VectorFunction'
 ```
 
+The plot below shows both interpolants built from the same 8-point sample of a
+wiggly function. The cubic spline tracks the underlying curve closely between nodes;
+the piecewise linear interpolant hugs the straight chords between them.
+
+```{eval-rst}
+.. plot:: _plots/interp_cubic_vs_linear.py
+```
+
 :::{tip}
 Outside the sample grid, `InterpTable1D` **extrapolates** along the boundary
 polynomial. That is convenient near the edges but grows without bound far from the
@@ -125,6 +133,14 @@ output, as used below.
 >>> field = vf.InterpTable2D(xs, ys, z)
 >>> bool(abs(float(np.asarray(field(0.5, 1.0))) - np.sin(0.5) * np.cos(1.0)) < 1e-4)
 True
+```
+
+The filled contour below evaluates the interpolated field $z(x,y)=\sin(x)\cos(y)$
+on a dense grid, showing that the table reproduces the smooth spatial variation with
+high fidelity.
+
+```{eval-rst}
+.. plot:: _plots/interp_field_2d.py
 ```
 
 Like the 1-D table, a 2-D table composes into a VectorFunction when called on
@@ -176,6 +192,15 @@ converges:
 True
 ```
 
+The plot below makes this concrete: an order-18 equispaced polynomial fit to the
+Runge function exhibits violent Runge oscillations near the edges, while a
+`ChebTable` of the same order — using Chebyshev nodes instead — tracks the
+function accurately everywhere.
+
+```{eval-rst}
+.. plot:: _plots/interp_runge_chebyshev.py
+```
+
 ### Analytic derivatives
 
 Like the 1-D table, `ChebTable` reports value plus derivatives — but here the
@@ -201,6 +226,16 @@ is shaped `(output_dim, order + 1)`:
 True
 ```
 
+For a smooth function the convergence gap between the two methods is dramatic: the
+semilogy plot below compares the maximum interpolation error on $f(x) = e^{\sin(3x)}$
+over $[0, 2]$ as the number of samples $N$ grows. The cubic spline error falls as a
+power law (algebraic convergence); the Chebyshev error plunges to the floating-point
+noise floor in just a handful of additional nodes (spectral convergence).
+
+```{eval-rst}
+.. plot:: _plots/interp_convergence.py
+```
+
 ### Clamping and composition
 
 Unlike `InterpTable1D`, a `ChebTable` **clamps** out-of-domain queries to the
@@ -210,6 +245,16 @@ at `ub`:
 ```{doctest}
 >>> bool(float(rt.eval(2.0)[0]) == float(rt.eval(1.0)[0]))
 True
+```
+
+The plot below makes the contrast visible: the `ChebTable` is evaluated on an
+extended range $[-0.3,\,1.3]$ (built on $[0,1]$) and holds flat at the endpoint
+values past each edge. A degree-11 global polynomial fit to the same samples (using
+numpy) shows what unrestricted extrapolation looks like — it diverges rapidly away
+from the training domain.
+
+```{eval-rst}
+.. plot:: _plots/interp_clamp_vs_extrapolate.py
 ```
 
 A `ChebTable` composes into a VectorFunction the same way the other tables do —
