@@ -624,10 +624,10 @@ if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dep/pocketfft/pocketfft_hdronly.h")
         "Run: git submodule update --init dep/pocketfft")
 endif()
 include_directories(dep/pocketfft)
-# Tycho manages its own threading (CTPL/PSIOPT); DCT-I runs on small 1-D
-# arrays, so disable pocketfft's internal multithreading. Also trims
-# <mutex>/<thread>/<atomic> from every TU that includes the header.
-add_compile_definitions(POCKETFFT_NO_MULTITHREADING)
+# pocketfft threading: construction-time DCT-I is safe to run multithreaded
+# (pocketfft threads only run during interpolant construction, never during
+# solve-time evaluation). Thread count is exposed via ChebTable::from_values
+# nthreads parameter (default 1). No global compile-time disable needed.
 
 # fmt is used by core libraries (utils) so it must always be available.
 add_subdirectory(dep/fmt)

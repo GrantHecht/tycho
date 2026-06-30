@@ -85,3 +85,22 @@ TEST_F(ChebTableTest, MultiChannel) {
         EXPECT_NEAR(v[1], Tk(5, t), 1e-10);
     }
 }
+
+// Negative nthreads is rejected (guards against casting to a huge size_t);
+// nthreads == 0 ("auto / all cores") is allowed and matches nthreads == 1.
+TEST_F(ChebTableTest, NThreadsValidation) {
+    const int n = 4;
+    const double lb = -1.0, ub = 1.0;
+    auto pts = oc::ChebTable::cheb_points(n, lb, ub);
+    oc::ChebTable::MatType vals(1, n + 1);
+    for (int j = 0; j <= n; ++j) vals(0, j) = Tk(3, pts[j]);
+
+    EXPECT_THROW(oc::ChebTable::from_values(vals, lb, ub, n, /*nthreads=*/-1),
+                 std::invalid_argument);
+
+    // nthreads == 0 (auto) must not throw and must produce identical coefficients.
+    auto tab1 = oc::ChebTable::from_values(vals, lb, ub, n, /*nthreads=*/1);
+    auto tab0 = oc::ChebTable::from_values(vals, lb, ub, n, /*nthreads=*/0);
+    for (double t : {-0.6, 0.2, 0.75})
+        EXPECT_NEAR(tab0.eval(t)[0], tab1.eval(t)[0], 1e-14) << "t=" << t;
+}
