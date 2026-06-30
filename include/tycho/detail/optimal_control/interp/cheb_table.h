@@ -20,36 +20,62 @@ using vf::VecRef;
 using vf::VectorFunction;
 
 /// @ingroup optimal_control
-/// @brief 1-D Chebyshev (2nd-kind / DCT-I) interpolant data class.
+/// @brief Rank-generic Chebyshev (2nd-kind / DCT-I) interpolant data class.
 ///
-/// Stores Chebyshev-T coefficients per output channel and evaluates via
-/// Clenshaw recurrence with analytic first/second derivatives.  Built from
-/// values sampled at the 2nd-kind nodes returned by @ref cheb_points.
+/// Stores Chebyshev-T coefficients per output channel in a flat row-major
+/// tensor layout.  For dimension @c dim_==1, the class reproduces the exact
+/// Phase-1 1-D behaviour: @ref from_values (olen×(n+1) overload), @ref eval(double),
+/// @ref eval_deriv1, @ref eval_deriv2, and @ref coeff_tail_norm all behave
+/// identically to the Phase-1 implementation.
+///
+/// **Storage layout (generic):**
+/// Coefficient data is stored as flat `Eigen::MatrixXd` of shape `(tsize, olen)`
+/// where `tsize = ∏(orderᵢ+1)` and rows are row-major multi-indices over the
+/// grid axes (last axis fastest).  `value_` holds the value coefficients;
+/// `grad_[j]` holds the first-derivative coefficients along axis @c j (zero-
+/// extended to the same tsize); `hess_[hess_index(j,k,dim_)]` holds the
+/// mixed-derivative coefficients (upper triangle, `j≤k`), also zero-extended.
+///
 /// Derivative-series coefficients are precomputed once in @ref from_values
 /// so that @ref eval_impl performs no per-call allocation.
-/// Structured for a future N-D generalization; this phase is 1-D only.
 struct ChebTable {
     using MatType = Eigen::Matrix<double, -1, -1>;
 
   private:
-    int order_ = 0;               ///< Polynomial order n (node count = n+1).
-    double lb_ = -1.0, ub_ = 1.0; ///< Domain.
-    MatType coeffs_;               ///< (order_+1) x olen_ Chebyshev coefficients.
-    MatType dcoeffs_;              ///< order_ x olen_ first-derivative series coefficients.
-    MatType d2coeffs_;             ///< max(order_-1, 1) x olen_ second-derivative series
-                                   ///< coefficients (1 row of zeros when order_==1).
-    int olen_ = 0;                 ///< Output dimension.
+    // -------------------------------------------------------------------------
+    // Rank-generic members (Task 0)
+    // -------------------------------------------------------------------------
+    int dim_ = 1;                      ///< Number of input dimensions.
+    std::vector<int> orders_;          ///< Polynomial order per axis n_d.
+    Eigen::VectorXd lb_, ub_;          ///< Domain bounds, length dim_.
+    std::vector<int> shape_;           ///< Grid shape: shape_[d] = orders_[d] + 1.
+    std::vector<long> strides_;        ///< Row-major strides over shape_.
+    long tsize_ = 1;                   ///< Total grid size = prod(shape_).
+    int olen_ = 0;                     ///< Output dimension.
+
+    MatType value_;                    ///< tsize_ × olen_: value Chebyshev coefficients.
+    std::vector<MatType> grad_;        ///< dim_ tensors (G_j = D_j value_), each tsize_ × olen_.
+    std::vector<MatType> hess_;        ///< dim_*(dim_+1)/2 tensors (H_jk, j≤k), tsize_ × olen_.
+
+    // -------------------------------------------------------------------------
+    // 1-D domain helpers (unchanged from Phase 1; used only for dim_==1 path).
+    // A per-axis N-D analog of this mapping is added in a later task, so these
+    // 1-D helpers coexist with the N-D path rather than being replaced.
+    // -------------------------------------------------------------------------
 
     // Map physical t -> xi in [-1,1]. Queries outside [lb_, ub_] are CLAMPED to
     // the nearest endpoint (no extrapolation): a global Chebyshev polynomial
     // diverges catastrophically outside its domain, so clamping is deliberate.
-    // This differs from InterpTable1D, which extrapolates. Also guards end
-    // round-off.
+    // This differs from InterpTable1D, which extrapolates. Also guards end round-off.
     double to_xi(double t) const {
-        double xi = (2.0 * t - lb_ - ub_) / (ub_ - lb_);
+        double xi = (2.0 * t - lb_[0] - ub_[0]) / (ub_[0] - lb_[0]);
         return std::clamp(xi, -1.0, 1.0);
     }
-    double half_span() const { return 0.5 * (ub_ - lb_); }
+    double half_span() const { return 0.5 * (ub_[0] - lb_[0]); }
+
+    // -------------------------------------------------------------------------
+    // Static helpers (reused by both 1-D and N-D paths)
+    // -------------------------------------------------------------------------
 
     // Clenshaw eval of sum_{k=0}^{order} c[k] T_k(xi), c = coeffs column slice.
     static double clenshaw(const Eigen::Ref<const Eigen::VectorXd> &c, int order, double xi) {
@@ -77,9 +103,57 @@ struct ChebTable {
   public:
     ChebTable() {}
 
-    int input_dim() const { return 1; }
+    // -------------------------------------------------------------------------
+    // Public static index helpers (Task 0)
+    // -------------------------------------------------------------------------
+
+    /// @brief Compute row-major strides for the given shape vector.
+    /// Stride for axis d = product of shape[d+1..D-1]; last axis stride = 1.
+    static std::vector<long> row_major_strides(const std::vector<int> &shape) {
+        std::vector<long> s(shape.size());
+        long acc = 1;
+        for (int d = int(shape.size()) - 1; d >= 0; --d) {
+            s[d] = acc;
+            acc *= shape[d];
+        }
+        return s;
+    }
+
+    /// @brief Compute flat row-major index from a multi-index and precomputed strides.
+    static long flat_index(const std::vector<int> &mi, const std::vector<long> &strides) {
+        long f = 0;
+        for (size_t d = 0; d < mi.size(); ++d) f += long(mi[d]) * strides[d];
+        return f;
+    }
+
+    /// @brief Recover the multi-index from a flat row-major index.
+    static void unflatten(long flat, const std::vector<int> &shape,
+                          const std::vector<long> &strides, std::vector<int> &mi) {
+        mi.assign(shape.size(), 0);
+        for (size_t d = 0; d < shape.size(); ++d) {
+            mi[d] = int(flat / strides[d]);
+            flat %= strides[d];
+        }
+    }
+
+    /// @brief Index into the packed upper-triangle Hessian tensor array (j≤k).
+    /// For j > k the arguments are swapped (symmetric). Returns the 0-based index.
+    static int hess_index(int j, int k, int dim) {
+        if (j > k) std::swap(j, k);
+        return j * dim - (j * (j - 1)) / 2 + (k - j);
+    }
+
+    // -------------------------------------------------------------------------
+    // Accessors
+    // -------------------------------------------------------------------------
+    int input_dim() const { return dim_; }
     int output_dim() const { return olen_; }
-    int order() const { return order_; }
+    int order() const { return orders_.empty() ? 0 : orders_[0]; }
+    const std::vector<int> &orders() const { return orders_; }
+
+    // -------------------------------------------------------------------------
+    // 1-D node generation (unchanged Phase-1 API)
+    // -------------------------------------------------------------------------
 
     /// @brief 2nd-kind node coordinates on [lb,ub], j=0..n (t_0=ub .. t_n=lb).
     static Eigen::VectorXd cheb_points(int n, double lb, double ub) {
@@ -91,11 +165,16 @@ struct ChebTable {
         return t;
     }
 
-    /// @brief Build coefficients from grid values (olen x (n+1)) via DCT-I.
+    // -------------------------------------------------------------------------
+    // 1-D from_values (Phase-1 API, re-homed onto generic members)
+    // -------------------------------------------------------------------------
+
+    /// @brief Build coefficients from grid values (olen × (n+1)) via DCT-I.
     ///
     /// Derivative-series coefficients (first and second order) are precomputed
-    /// here and stored as members, so @ref eval_impl incurs no per-call
-    /// allocation or recurrence work during solve-time evaluation.
+    /// here and stored in @c grad_[0] and @c hess_[0] (zero-extended to tsize
+    /// rows), so that @ref eval_impl incurs no per-call allocation during
+    /// solve-time evaluation.
     ///
     /// @param grid_values  Row-major matrix of shape (olen, order+1).
     /// @param lb           Lower bound of the physical domain.
@@ -116,11 +195,22 @@ struct ChebTable {
             throw std::invalid_argument("ChebTable: nthreads must be >= 0 (0 = auto)");
 
         ChebTable out;
-        out.order_ = order;
-        out.lb_ = lb;
-        out.ub_ = ub;
+
+        // Set rank-generic members for dim==1
+        out.dim_ = 1;
+        out.orders_ = {order};
+        out.lb_.resize(1);
+        out.lb_[0] = lb;
+        out.ub_.resize(1);
+        out.ub_[0] = ub;
+        out.shape_ = {order + 1};
+        out.strides_ = row_major_strides(out.shape_);
+        out.tsize_ = order + 1;
         out.olen_ = int(grid_values.rows());
-        out.coeffs_.resize(order + 1, out.olen_);
+
+        // Build value_ (tsize × olen) via DCT-I.
+        // Phase-1 stored coeffs_ as (order+1) × olen_; value_ has the same layout.
+        out.value_.resize(out.tsize_, out.olen_);
 
         const size_t N1 = size_t(order) + 1;
         const pocketfft::shape_t shape{N1};
@@ -132,60 +222,70 @@ struct ChebTable {
             for (size_t j = 0; j < N1; ++j) in[j] = grid_values(c, ptrdiff_t(j));
             pocketfft::dct(shape, stride, stride, axes, /*type=*/1, in.data(), yk.data(),
                            /*fct=*/1.0, /*ortho=*/false, size_t(nthreads));
-            for (int k = 0; k <= order; ++k) out.coeffs_(k, c) = yk[size_t(k)] / double(order);
-            out.coeffs_(0, c) *= 0.5;      // halve endpoint coefficients
-            out.coeffs_(order, c) *= 0.5;
+            for (int k = 0; k <= order; ++k) out.value_(k, c) = yk[size_t(k)] / double(order);
+            out.value_(0, c) *= 0.5;
+            out.value_(order, c) *= 0.5;
         }
 
-        // Precompute derivative-series coefficients once — eliminates per-call
-        // recurrence and allocation in eval_impl.
-        // dcoeffs_:  order rows × olen columns  (d/dxi series; order >= 1 guaranteed above)
-        // d2coeffs_: max(order-1, 1) rows × olen columns  (d²/dxi² series;
-        //            1 row of zeros when order == 1)
-        out.dcoeffs_.resize(std::max(order, 1), out.olen_);
+        // Precompute derivative-series coefficients (zero-extended to tsize rows).
+        // grad_[0]: tsize rows (= order+1), first-derivative series in rows [0..order-1],
+        //           row [order] is zero.
+        // hess_[0]: tsize rows, second-derivative series in rows [0..order-2],
+        //           rows [order-1..order] are zero.
+        out.grad_.resize(1);
+        out.grad_[0] = MatType::Zero(out.tsize_, out.olen_);
         for (int c = 0; c < out.olen_; ++c) {
-            Eigen::VectorXd g1 = deriv_coeffs_from(out.coeffs_.col(c), order);
-            out.dcoeffs_.col(c) = g1;
+            Eigen::VectorXd g1 = deriv_coeffs_from(out.value_.col(c), order);
+            // g1 has length max(order,1) = order; fill rows [0..order-1]
+            for (int k = 0; k < int(g1.size()); ++k) out.grad_[0](k, c) = g1[k];
         }
 
-        const int d2rows = std::max(order - 1, 1);
-        out.d2coeffs_.resize(d2rows, out.olen_);
+        out.hess_.resize(1);
+        out.hess_[0] = MatType::Zero(out.tsize_, out.olen_);
         if (order >= 2) {
             for (int c = 0; c < out.olen_; ++c) {
-                Eigen::VectorXd g2 = deriv_coeffs_from(out.dcoeffs_.col(c), order - 1);
-                out.d2coeffs_.col(c) = g2;
+                // Differentiate the first-derivative series again. deriv_coeffs_from
+                // reads only indices 1..(order-1) of its input, so the zero-extension
+                // row at index `order` in grad_[0] is never touched — no slicing needed.
+                Eigen::VectorXd g2 = deriv_coeffs_from(out.grad_[0].col(c), order - 1);
+                // g2 has length max(order-1,1) = order-1; fill rows [0..order-2]
+                for (int k = 0; k < int(g2.size()); ++k) out.hess_[0](k, c) = g2[k];
             }
-        } else {
-            // order == 1: second derivative is identically zero
-            out.d2coeffs_.setZero();
         }
+        // order == 1: second derivative is identically zero — hess_[0] stays all-zero.
 
         return out;
     }
 
+    // -------------------------------------------------------------------------
+    // Evaluation (1-D path re-expressed to read value_/grad_[0]/hess_[0])
+    // -------------------------------------------------------------------------
+
     /// @brief Per-output norm of the trailing-half coefficients (adaptive convergence loop).
     Eigen::VectorXd coeff_tail_norm() const {
         Eigen::VectorXd tn(olen_);
-        const int lo = (order_ + 1) / 2;
+        const int n = orders_[0];
+        const int lo = (n + 1) / 2;
         for (int c = 0; c < olen_; ++c)
-            tn[c] = coeffs_.col(c).segment(lo, order_ + 1 - lo).norm();
+            tn[c] = value_.col(c).segment(lo, n + 1 - lo).norm();
         return tn;
     }
 
     /// @internal
     /// Unified writer: deriv=0 value only; 1 adds dv; 2 adds d2v. Pure double.
-    /// Derivative-series columns are stored members — no per-call allocation.
+    /// Reads value_/grad_[0]/hess_[0] — no per-call allocation.
     /// @endinternal
     template <class VType>
     void eval_impl(double t, int deriv, VType &v, VType &dv, VType &d2v) const {
         const double xi = to_xi(t), h = half_span();
+        const int order = orders_[0];
         for (int c = 0; c < olen_; ++c) {
-            v[c] = clenshaw(coeffs_.col(c), order_, xi);
+            v[c] = clenshaw(value_.col(c), order, xi);
             if (deriv >= 1) {
-                dv[c] = (order_ >= 1 ? clenshaw(dcoeffs_.col(c), order_ - 1, xi) : 0.0) / h;
+                dv[c] = (order >= 1 ? clenshaw(grad_[0].col(c), order - 1, xi) : 0.0) / h;
                 if (deriv >= 2) {
                     d2v[c] =
-                        (order_ >= 2 ? clenshaw(d2coeffs_.col(c), order_ - 2, xi) : 0.0) / (h * h);
+                        (order >= 2 ? clenshaw(hess_[0].col(c), order - 2, xi) : 0.0) / (h * h);
                 }
             }
         }
