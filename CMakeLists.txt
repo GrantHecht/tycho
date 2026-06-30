@@ -617,6 +617,17 @@ else()
     message(STATUS "Using bundled Eigen from dep/eigen")
 endif()
 include_directories(dep/fmt/include)
+# pocketfft (header-only, BSD-3) — provides DCT-I for Chebyshev interpolation.
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dep/pocketfft/pocketfft_hdronly.h")
+    message(FATAL_ERROR
+        "Bundled pocketfft not found at dep/pocketfft/. "
+        "Run: git submodule update --init dep/pocketfft")
+endif()
+include_directories(dep/pocketfft)
+# Tycho manages its own threading (CTPL/PSIOPT); DCT-I runs on small 1-D
+# arrays, so disable pocketfft's internal multithreading. Also trims
+# <mutex>/<thread>/<atomic> from every TU that includes the header.
+add_compile_definitions(POCKETFFT_NO_MULTITHREADING)
 
 # fmt is used by core libraries (utils) so it must always be available.
 add_subdirectory(dep/fmt)
