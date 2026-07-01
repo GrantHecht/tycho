@@ -431,8 +431,9 @@ struct ChebTable {
     /// @param nthreads  Thread count for pocketfft DCT calls; 0 = auto.
     ///
     /// Applies the 1-D DCT-I coefficient transform separably along each axis
-    /// using @ref coeffs_along_axis.  @c grad_ and @c hess_ are left empty
-    /// (Task 2 / Task 3 fill them).
+    /// using @ref coeffs_along_axis.  All three precomputed tensors are filled:
+    /// @c value_ (DCT-I coefficients), @c grad_[j] = D_j value_ (gradient tensors),
+    /// and @c hess_[hess_index(j,k,D)] = D_k D_j value_ (upper-triangle Hessian tensors).
     static ChebTable from_values(const MatType &grid_values_flat, const Eigen::VectorXd &lb,
                                  const Eigen::VectorXd &ub, const std::vector<int> &orders,
                                  int nthreads = 1) {
@@ -467,7 +468,13 @@ struct ChebTable {
         out.grad_.resize(D);
         for (int j = 0; j < D; ++j)
             out.grad_[j] = deriv_along_axis(out.value_, out.shape_, out.strides_, j);
-        // hess_ is left empty; Task 3 populates it.
+        // Precompute Hessian tensors H_jk = D_k G_j (upper triangle, j<=k).
+        // Differentiating grad_[j] along axis k gives D_k D_j value_ = H_jk.
+        out.hess_.resize(D * (D + 1) / 2);
+        for (int j = 0; j < D; ++j)
+            for (int k = j; k < D; ++k)
+                out.hess_[hess_index(j, k, D)] =
+                    deriv_along_axis(out.grad_[j], out.shape_, out.strides_, k);
         return out;
     }
 
@@ -541,6 +548,34 @@ struct ChebTable {
         return J;
     }
 
+    /// @brief Evaluate the analytic Hessian at a physical point @c x (N-D).
+    ///
+    /// Returns a vector of @c olen symmetric @c (dim_×dim_) Hessian matrices,
+    /// one per output channel.  Entry @c H[c](j,k) = ∂²f_c/∂x_j∂x_k.
+    ///
+    /// Reads the precomputed Hessian tensors @c hess_[hess_index(j,k,dim_)]
+    /// (upper triangle, populated by the N-D @ref from_values overload) and
+    /// applies the chain-rule factors @c hinv[j]*hinv[k] = 4/((ub_[j]-lb_[j])*(ub_[k]-lb_[k])).
+    ///
+    /// @pre @c hess_ must be non-empty (constructed via the N-D @ref from_values overload).
+    std::vector<Eigen::MatrixXd> eval_hessian(const Eigen::VectorXd &x) const {
+        Eigen::VectorXd xi, hinv;
+        compute_xi_hinv(x, xi, hinv);
+        std::vector<Eigen::MatrixXd> H(olen_, Eigen::MatrixXd::Zero(dim_, dim_));
+        for (int j = 0; j < dim_; ++j) {
+            for (int k = j; k < dim_; ++k) {
+                Eigen::VectorXd hv =
+                    clenshaw_nd(hess_[hess_index(j, k, dim_)], shape_, xi, olen_) *
+                    (hinv[j] * hinv[k]);
+                for (int c = 0; c < olen_; ++c) {
+                    H[c](j, k) = hv[c];
+                    H[c](k, j) = hv[c];
+                }
+            }
+        }
+        return H;
+    }
+
     /// @brief Evaluate value and first derivative at t. Returns (value, deriv1).
     std::tuple<Eigen::VectorXd, Eigen::VectorXd> eval_deriv1(double t) const {
         Eigen::VectorXd v(olen_), dv(olen_);
@@ -557,19 +592,21 @@ struct ChebTable {
 };
 
 /// @ingroup optimal_control
-/// @brief VectorFunction wrapper over a 1-D ChebTable (analytic derivatives).
+/// @brief VectorFunction wrapper over a ChebTable (analytic value, Jacobian, and Hessian).
 ///
-/// Wraps a shared @ref ChebTable as a CRTP VectorFunction with scalar input
-/// (the independent variable) and vector output (one component per channel).
-/// Analytic Jacobian and Hessian are provided via the precomputed Chebyshev
-/// derivative-series stored in the @ref ChebTable; see @ref ChebTable::eval_impl.
+/// Wraps a shared @ref ChebTable as a CRTP VectorFunction.  For 1-D input
+/// (@c IR==1 or @c IR==-1 with a 1-D table) the wrapper delegates to
+/// @ref ChebTable::eval_impl for all three compute methods, reproducing the
+/// exact Phase-1 behaviour.  For N-D input (N≥2) it delegates to
+/// @ref ChebTable::eval, @ref ChebTable::eval_jacobian, and
+/// @ref ChebTable::eval_hessian using the precomputed gradient / Hessian tensors.
 ///
-/// @tparam IR  Compile-time input dimension. Currently only @c IR==-1 (dynamic,
-///             scalar input) is ever instantiated; the parameter exists to
-///             anticipate a future N-D generalization. NOTE: unlike
-///             @ref InterpFunction1D whose template parameter is the @e output
-///             dimension, @c ChebFunction's parameter is the @e input dimension
-///             (output rows are always dynamic, -1).
+/// @tparam IR  Compile-time input dimension.  May be any positive integer or
+///             @c -1 (fully dynamic).  The output dimension is always dynamic
+///             (@c -1) — it is determined at runtime from @c tab->output_dim().
+///             NOTE: unlike @ref InterpFunction1D whose template parameter is the
+///             @e output dimension, @c ChebFunction's parameter is the
+///             @e input dimension.
 template <int IR>
 struct ChebFunction
     : VectorFunction<ChebFunction<IR>, IR, -1, DenseDerivativeMode::Analytic,
@@ -582,46 +619,66 @@ struct ChebFunction
 
     ChebFunction() {}
     explicit ChebFunction(std::shared_ptr<ChebTable> tab_) : tab(tab_) {
-        this->set_io_rows(1, tab->output_dim());
+        this->set_io_rows(tab_->input_dim(), tab_->output_dim());
     }
 
     /// @internal
-    /// Evaluate value; delegates to ChebTable::eval_impl(deriv=0).
+    /// Evaluate value.
+    /// 1-D path: delegates to ChebTable::eval_impl(deriv=0) (no allocation).
+    /// N-D path: delegates to ChebTable::eval(VectorXd).
     /// @endinternal
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
-        typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
-        auto Impl = [&](auto &v) {
-            this->tab->eval_impl(double(x[0]), 0, v, v, v);
-            fx = v;
-        };
-        tycho::utils::BumpAllocator::allocate_run(
-            Impl, TempSpec<Output<Scalar>>(this->output_rows(), 1));
+        if (this->tab->input_dim() == 1) {
+            typedef typename InType::Scalar Scalar;
+            auto Impl = [&](auto &v) {
+                this->tab->eval_impl(double(x[0]), 0, v, v, v);
+                fx = v;
+            };
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, TempSpec<Output<Scalar>>(this->output_rows(), 1));
+        } else {
+            Eigen::VectorXd xd(x.size());
+            for (int i = 0; i < x.size(); ++i) xd[i] = double(x[i]);
+            fx = this->tab->eval(xd);
+        }
     }
 
     /// @internal
-    /// Evaluate value and Jacobian; delegates to ChebTable::eval_impl(deriv=1).
+    /// Evaluate value and Jacobian.
+    /// 1-D path: delegates to ChebTable::eval_impl(deriv=1).
+    /// N-D path: delegates to ChebTable::eval + ChebTable::eval_jacobian.
     /// @endinternal
     template <class InType, class OutType, class JacType>
     inline void compute_jacobian_impl(CVecRef<InType> x, CVecRef<OutType> fx_,
                                       CMatRef<JacType> jx_) const {
-        typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         MatRef<JacType> jx = jx_.const_cast_derived();
-        auto Impl = [&](auto &v, auto &dv) {
-            this->tab->eval_impl(double(x[0]), 1, v, dv, v);
-            fx = v;
-            jx = dv;
-        };
-        tycho::utils::BumpAllocator::allocate_run(
-            Impl, TempSpec<Output<Scalar>>(this->output_rows(), 1),
-            TempSpec<Output<Scalar>>(this->output_rows(), 1));
+        if (this->tab->input_dim() == 1) {
+            typedef typename InType::Scalar Scalar;
+            auto Impl = [&](auto &v, auto &dv) {
+                this->tab->eval_impl(double(x[0]), 1, v, dv, v);
+                fx = v;
+                jx = dv;
+            };
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, TempSpec<Output<Scalar>>(this->output_rows(), 1),
+                TempSpec<Output<Scalar>>(this->output_rows(), 1));
+        } else {
+            Eigen::VectorXd xd(x.size());
+            for (int i = 0; i < x.size(); ++i) xd[i] = double(x[i]);
+            fx = this->tab->eval(xd);
+            jx = this->tab->eval_jacobian(xd);
+        }
     }
 
     /// @internal
-    /// Evaluate value, Jacobian, adjoint gradient, and adjoint Hessian;
-    /// delegates to ChebTable::eval_impl(deriv=2).
+    /// Evaluate value, Jacobian, adjoint gradient, and adjoint Hessian.
+    /// 1-D path: delegates to ChebTable::eval_impl(deriv=2).
+    /// N-D path: delegates to ChebTable::eval_jacobian + ChebTable::eval_hessian.
+    ///   adjgrad[j] = J^T[:,j] . adjvars
+    ///   adjhess(j,k) = sum_c adjvars[c] * H[c](j,k)
     /// @endinternal
     template <class InType, class OutType, class JacType, class AdjGradType, class AdjHessType,
               class AdjVarType>
@@ -629,22 +686,41 @@ struct ChebFunction
         CVecRef<InType> x, CVecRef<OutType> fx_, CMatRef<JacType> jx_,
         CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
         CVecRef<AdjVarType> adjvars) const {
-        typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
         MatRef<JacType> jx = jx_.const_cast_derived();
         VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
         MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
-        auto Impl = [&](auto &v, auto &dv, auto &d2v) {
-            this->tab->eval_impl(double(x[0]), 2, v, dv, d2v);
-            fx = v;
-            jx = dv;
-            adjgrad[0] = dv.dot(adjvars);
-            adjhess(0, 0) = d2v.dot(adjvars);
-        };
-        tycho::utils::BumpAllocator::allocate_run(
-            Impl, TempSpec<Output<Scalar>>(this->output_rows(), 1),
-            TempSpec<Output<Scalar>>(this->output_rows(), 1),
-            TempSpec<Output<Scalar>>(this->output_rows(), 1));
+        if (this->tab->input_dim() == 1) {
+            typedef typename InType::Scalar Scalar;
+            auto Impl = [&](auto &v, auto &dv, auto &d2v) {
+                this->tab->eval_impl(double(x[0]), 2, v, dv, d2v);
+                fx = v;
+                jx = dv;
+                adjgrad[0] = dv.dot(adjvars);
+                adjhess(0, 0) = d2v.dot(adjvars);
+            };
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, TempSpec<Output<Scalar>>(this->output_rows(), 1),
+                TempSpec<Output<Scalar>>(this->output_rows(), 1),
+                TempSpec<Output<Scalar>>(this->output_rows(), 1));
+        } else {
+            // N-D path
+            Eigen::VectorXd xd(x.size());
+            for (int i = 0; i < x.size(); ++i) xd[i] = double(x[i]);
+            // Value (needed for fx output)
+            fx = this->tab->eval(xd);
+            // Jacobian
+            Eigen::MatrixXd J = this->tab->eval_jacobian(xd);
+            jx = J;
+            // Adjoint gradient: g[j] = J[:,j]^T . adjvars = sum_c J(c,j)*adjvars[c]
+            adjgrad = J.transpose() * adjvars;
+            // Adjoint Hessian: H_adj(j,k) = sum_c adjvars[c] * H[c](j,k)
+            auto Hv = this->tab->eval_hessian(xd);
+            adjhess.setZero();
+            const int olen = this->tab->output_dim();
+            for (int c = 0; c < olen; ++c)
+                adjhess += adjvars[c] * Hv[c];
+        }
     }
 };
 
