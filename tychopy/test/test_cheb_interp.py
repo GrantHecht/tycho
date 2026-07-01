@@ -110,3 +110,219 @@ def test_nthreads_zero_smoke():
     tab0 = cheb_from_function(f, lb, ub, n, nthreads=0)
     for t in np.linspace(-0.9, 0.9, 11):
         assert abs(tab0.eval(float(t))[0] - tab1.eval(float(t))[0]) < 1e-14
+
+
+# ---------------------------------------------------------------------------
+# N-D tests
+# ---------------------------------------------------------------------------
+
+
+def test_nd_cheb_points_2d():
+    """N-D cheb_points returns per-axis node arrays of correct shape."""
+    orders = [6, 8]
+    lb = np.array([0.0, -1.0])
+    ub = np.array([2.0, 1.0])
+    nodes = vf.ChebTable.cheb_points(orders, lb, ub)
+    assert len(nodes) == 2
+    assert nodes[0].shape == (7,)
+    assert nodes[1].shape == (9,)
+    # bounds: nodes should be in [lb, ub]
+    assert nodes[0].min() >= 0.0 - 1e-12 and nodes[0].max() <= 2.0 + 1e-12
+    assert nodes[1].min() >= -1.0 - 1e-12 and nodes[1].max() <= 1.0 + 1e-12
+
+
+def test_nd_from_values_2d():
+    """N-D from_values builds a table that reproduces grid values at nodes."""
+    orders = [8, 8]
+    lb = np.array([-1.0, -1.0])
+    ub = np.array([1.0, 1.0])
+    nodes = vf.ChebTable.cheb_points(orders, lb, ub)
+    nx, ny = len(nodes[0]), len(nodes[1])
+    # f(x,y) = sin(x)*cos(y)
+    vals = np.zeros((nx * ny, 1))
+    for i, x in enumerate(nodes[0]):
+        for j, y in enumerate(nodes[1]):
+            vals[i * ny + j, 0] = np.sin(x) * np.cos(y)
+    tab = vf.ChebTable.from_values(vals, lb, ub, orders)
+    assert tab.input_dim == 2
+    assert tab.output_dim == 1
+    # check round-trip at nodes
+    for i, x in enumerate(nodes[0]):
+        for j, y in enumerate(nodes[1]):
+            v = tab.eval(np.array([x, y]))
+            assert abs(v[0] - np.sin(x) * np.cos(y)) < 1e-10
+
+
+def test_nd_from_function_2d_accuracy():
+    """cheb_from_function N-D: f(x,y)=sin(x)*cos(y) accurate to 1e-8 at off-grid points."""
+
+    def f(xy):
+        return np.array([np.sin(xy[0]) * np.cos(xy[1])])
+
+    lb = np.array([-1.0, -1.0])
+    ub = np.array([1.0, 1.0])
+    orders = [12, 12]
+    tab = cheb_from_function(f, lb, ub, orders)
+    assert tab.input_dim == 2
+    assert tab.output_dim == 1
+    rng = np.random.default_rng(42)
+    test_pts = rng.uniform([-1.0, -1.0], [1.0, 1.0], (20, 2))
+    for xy in test_pts:
+        v = tab.eval(xy)
+        expected = np.sin(xy[0]) * np.cos(xy[1])
+        assert abs(v[0] - expected) < 1e-8, f"error at {xy}: {abs(v[0] - expected)}"
+
+
+def test_nd_from_function_3d_accuracy():
+    """cheb_from_function N-D 3D: f(x,y,z)=exp(-x^2)*sin(y)*cos(z)."""
+
+    def f(xyz):
+        return np.array([np.exp(-(xyz[0] ** 2)) * np.sin(xyz[1]) * np.cos(xyz[2])])
+
+    lb = np.array([-1.0, -1.0, -1.0])
+    ub = np.array([1.0, 1.0, 1.0])
+    orders = [14, 14, 14]
+    tab = cheb_from_function(f, lb, ub, orders)
+    assert tab.input_dim == 3
+    rng = np.random.default_rng(7)
+    test_pts = rng.uniform([-0.9, -0.9, -0.9], [0.9, 0.9, 0.9], (10, 3))
+    for xyz in test_pts:
+        v = tab.eval(xyz)
+        expected = np.exp(-(xyz[0] ** 2)) * np.sin(xyz[1]) * np.cos(xyz[2])
+        assert abs(v[0] - expected) < 1e-8, f"error at {xyz}: {abs(v[0] - expected)}"
+
+
+def test_nd_compose_2arg():
+    """N-D compose: tab(args[0], args[1]) builds a VF matching tab.eval."""
+
+    def f(xy):
+        return np.array([np.sin(xy[0]) * np.cos(xy[1]), xy[0] + xy[1]])
+
+    lb = np.array([-1.0, -1.0])
+    ub = np.array([1.0, 1.0])
+    orders = [10, 10]
+    tab = cheb_from_function(f, lb, ub, orders)
+    assert tab.output_dim == 2
+
+    args = Args(2)
+    g = tab(args[0], args[1])
+
+    for xy in [np.array([0.3, -0.4]), np.array([-0.7, 0.6]), np.array([0.1, 0.2])]:
+        out = np.array(g.compute(xy))
+        ref = tab.eval(xy)
+        assert np.allclose(out, ref, atol=1e-12), f"mismatch at {xy}: {out} vs {ref}"
+
+
+def test_nd_compose_3arg():
+    """N-D compose: tab(args[0], args[1], args[2]) builds a VF matching tab.eval."""
+
+    def f(xyz):
+        return np.array([np.sin(xyz[0]) * np.cos(xyz[1]) + 0.1 * xyz[2]])
+
+    lb = np.array([-1.0, -1.0, -1.0])
+    ub = np.array([1.0, 1.0, 1.0])
+    orders = [8, 8, 8]
+    tab = cheb_from_function(f, lb, ub, orders)
+    assert tab.output_dim == 1
+
+    args = Args(3)
+    g = tab(args[0], args[1], args[2])
+
+    for xyz in [np.array([0.3, -0.4, 0.1]), np.array([-0.5, 0.6, -0.2])]:
+        out = np.array(g.compute(xyz))
+        ref = tab.eval(xyz)
+        assert np.allclose(out, ref, atol=1e-12), f"mismatch at {xyz}: {out} vs {ref}"
+
+
+def test_nd_vf_method():
+    """tab.vf() returns a VectorFunction for a 2-D table."""
+
+    def f(xy):
+        return np.array([np.sin(xy[0]) * np.cos(xy[1])])
+
+    lb = np.array([-1.0, -1.0])
+    ub = np.array([1.0, 1.0])
+    orders = [10, 10]
+    tab = cheb_from_function(f, lb, ub, orders)
+    g = tab.vf()
+    for xy in [np.array([0.3, -0.4]), np.array([0.0, 0.0])]:
+        out = np.array(g.compute(xy))
+        ref = tab.eval(xy)
+        assert np.allclose(out, ref, atol=1e-12)
+
+
+def test_nd_adaptive_2d():
+    """cheb_adaptive N-D converges for f(x,y)=sin(3x)*cos(2y)."""
+
+    def f(xy):
+        return np.array([np.sin(3 * xy[0]) * np.cos(2 * xy[1])])
+
+    lb = np.array([-1.0, -1.0])
+    ub = np.array([1.0, 1.0])
+    tab = cheb_adaptive(f, lb, ub, rtol=1e-10)
+    rng = np.random.default_rng(99)
+    test_pts = rng.uniform([-0.9, -0.9], [0.9, 0.9], (15, 2))
+    for xy in test_pts:
+        v = tab.eval(xy)
+        expected = np.sin(3 * xy[0]) * np.cos(2 * xy[1])
+        assert abs(v[0] - expected) < 1e-8, f"error {abs(v[0] - expected)} at {xy}"
+
+
+def test_nd_adaptive_terminates_mixed_convergence():
+    """N-D adaptive must TERMINATE even when one axis cannot converge within
+    a low max_order while another converges quickly (regression: infinite loop).
+
+    Axis 0 is low-frequency (converges fast); axis 1 is very high-frequency so
+    it hits max_order without converging.  The call simply returning proves the
+    loop terminates rather than spinning forever."""
+
+    def f(xy):
+        # low-frequency in x, very high-frequency in y (won't converge at low order)
+        return np.array([np.sin(0.5 * xy[0]) * np.cos(40.0 * xy[1])])
+
+    lb = np.array([-1.0, -1.0])
+    ub = np.array([1.0, 1.0])
+    # Small max_order so axis 1 cannot converge; axis 0 converges early.
+    tab = cheb_adaptive(f, lb, ub, rtol=1e-12, order0=8, max_order=16)
+    # Reaching this line at all proves no hang.
+    assert tab.input_dim == 2
+    assert tab.output_dim == 1
+
+
+def test_nd_from_function_multichannel_2d():
+    """N-D from_function works with multichannel output."""
+
+    def f(xy):
+        return np.array([np.sin(xy[0]), np.cos(xy[1]), xy[0] * xy[1]])
+
+    lb = np.array([0.0, 0.0])
+    ub = np.array([1.0, 1.0])
+    orders = [10, 10]
+    tab = cheb_from_function(f, lb, ub, orders)
+    assert tab.output_dim == 3
+    assert tab.input_dim == 2
+    for xy in [np.array([0.3, 0.7]), np.array([0.5, 0.5])]:
+        v = tab.eval(xy)
+        assert abs(v[0] - np.sin(xy[0])) < 1e-9
+        assert abs(v[1] - np.cos(xy[1])) < 1e-9
+        assert abs(v[2] - xy[0] * xy[1]) < 1e-9
+
+
+def test_1d_behavior_preserved():
+    """Confirm all 1-D ChebTable functionality is unaffected by N-D changes."""
+    n, lb, ub = 20, -1.0, 1.0
+    pts = vf.ChebTable.cheb_points(n, lb, ub)
+    assert pts.shape == (n + 1,)
+    vals = np.sin(pts).reshape(1, -1)
+    tab = vf.ChebTable.from_values(vals, lb, ub, n)
+    assert tab.order == n
+    assert tab.output_dim == 1
+    for t in np.linspace(-0.9, 0.9, 9):
+        assert abs(tab.eval(float(t))[0] - np.sin(t)) < 1e-10
+    v, dv = tab.eval_deriv1(0.5)
+    assert abs(v[0] - np.sin(0.5)) < 1e-9
+    assert abs(dv[0] - np.cos(0.5)) < 1e-7
+    args = Args(1)
+    g = tab(args[0])
+    out = g.compute([0.3])
+    assert abs(out[0] - np.sin(0.3)) < 1e-10
