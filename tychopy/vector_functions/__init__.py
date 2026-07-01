@@ -76,6 +76,7 @@ tan = _tychopy.vector_functions.tan
 tanh = _tychopy.vector_functions.tanh
 
 
+from .cheb import ChebConvergenceWarning as ChebConvergenceWarning
 from .cheb import cheb_adaptive as cheb_adaptive
 from .cheb import cheb_from_function as cheb_from_function
 from .Extensions.DerivChecker import FDDerivChecker

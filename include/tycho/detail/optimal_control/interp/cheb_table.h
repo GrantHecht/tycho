@@ -4,11 +4,12 @@
 
 #pragma once
 #include "tycho/detail/vf/core/vector_function.h"
-#include <pocketfft_hdronly.h>
 #include <Eigen/Dense>
 #include <cmath>
 #include <numbers>
+#include <pocketfft_hdronly.h>
 #include <stdexcept>
+#include <string>
 
 namespace tycho::oc {
 
@@ -19,14 +20,18 @@ using vf::MatRef;
 using vf::VecRef;
 using vf::VectorFunction;
 
+template <int IR> struct ChebFunction; // forward decl (befriended by ChebTable)
+
 /// @ingroup optimal_control
 /// @brief Rank-generic Chebyshev (2nd-kind / DCT-I) interpolant data class.
 ///
-/// Stores Chebyshev-T coefficients per output channel in a flat row-major
-/// tensor layout.  For dimension @c dim_==1, the class reproduces the exact
-/// Phase-1 1-D behaviour: @ref from_values (olen×(n+1) overload), @ref eval(double),
-/// @ref eval_deriv1, @ref eval_deriv2, and @ref coeff_tail_norm all behave
-/// identically to the Phase-1 implementation.
+/// Holds Chebyshev-T coefficients and evaluates them numerically; it is not
+/// itself a VectorFunction — wrap it in @ref ChebFunction (or call the binding's
+/// `.vf()`) to obtain one.  Coefficients are stored per output channel in a flat
+/// row-major tensor layout.  The @c dim_==1 case exposes the scalar-input API
+/// (@ref from_values(olen×(n+1) overload), @ref eval(double), @ref eval_deriv1,
+/// @ref eval_deriv2, @ref coeff_tail_norm) and is API- and result-compatible with
+/// the original 1-D-only implementation.
 ///
 /// **Storage layout (generic):**
 /// Coefficient data is stored as flat `Eigen::MatrixXd` of shape `(tsize, olen)`
@@ -41,21 +46,35 @@ using vf::VectorFunction;
 struct ChebTable {
     using MatType = Eigen::Matrix<double, -1, -1>;
 
+    // ChebFunction drives the zero-allocation solve-time eval path and needs
+    // access to the private coefficient tensors + raw eval helpers.
+    template <int IR> friend struct ChebFunction;
+
+    /// @brief Per-axis behaviour for queries that fall outside @c [lb_[d], ub_[d]].
+    /// @c Clamp (default) snaps the query to the nearest endpoint (a global
+    /// Chebyshev polynomial diverges outside its domain, so extrapolation is never
+    /// desired). @c Periodic wraps the query modulo the axis span back into the
+    /// domain — intended for angle-like / invariant-manifold axes; the sampled
+    /// function must satisfy @c f(lb)≈f(ub) on that axis for the interpolant to be
+    /// continuous across the seam.
+    enum class OutOfDomain { Clamp, Periodic };
+
   private:
     // -------------------------------------------------------------------------
-    // Rank-generic members (Task 0)
+    // Rank-generic members
     // -------------------------------------------------------------------------
-    int dim_ = 1;                      ///< Number of input dimensions.
-    std::vector<int> orders_;          ///< Polynomial order per axis n_d.
-    Eigen::VectorXd lb_, ub_;          ///< Domain bounds, length dim_.
-    std::vector<int> shape_;           ///< Grid shape: shape_[d] = orders_[d] + 1.
-    std::vector<long> strides_;        ///< Row-major strides over shape_.
-    long tsize_ = 1;                   ///< Total grid size = prod(shape_).
-    int olen_ = 0;                     ///< Output dimension.
+    int dim_ = 1;                  ///< Number of input dimensions.
+    std::vector<int> orders_;      ///< Polynomial order per axis n_d.
+    Eigen::VectorXd lb_, ub_;      ///< Domain bounds, length dim_.
+    std::vector<OutOfDomain> oob_; ///< Per-axis out-of-domain policy, length dim_.
+    std::vector<int> shape_;       ///< Grid shape: shape_[d] = orders_[d] + 1.
+    std::vector<long> strides_;    ///< Row-major strides over shape_.
+    long tsize_ = 1;               ///< Total grid size = prod(shape_).
+    int olen_ = 0;                 ///< Output dimension.
 
-    MatType value_;                    ///< tsize_ × olen_: value Chebyshev coefficients.
-    std::vector<MatType> grad_;        ///< dim_ tensors (G_j = D_j value_), each tsize_ × olen_.
-    std::vector<MatType> hess_;        ///< dim_*(dim_+1)/2 tensors (H_jk, j≤k), tsize_ × olen_.
+    MatType value_;             ///< tsize_ × olen_: value Chebyshev coefficients.
+    std::vector<MatType> grad_; ///< dim_ tensors (G_j = D_j value_), each tsize_ × olen_.
+    std::vector<MatType> hess_; ///< dim_*(dim_+1)/2 tensors (H_jk, j≤k), tsize_ × olen_.
 
     // -------------------------------------------------------------------------
     // 1-D domain helpers (unchanged from Phase 1; used only for dim_==1 path).
@@ -63,14 +82,27 @@ struct ChebTable {
     // 1-D helpers coexist with the N-D path rather than being replaced.
     // -------------------------------------------------------------------------
 
-    // Map physical t -> xi in [-1,1]. Queries outside [lb_, ub_] are CLAMPED to
-    // the nearest endpoint (no extrapolation): a global Chebyshev polynomial
-    // diverges catastrophically outside its domain, so clamping is deliberate.
-    // This differs from InterpTable1D, which extrapolates. Also guards end round-off.
-    double to_xi(double t) const {
-        double xi = (2.0 * t - lb_[0] - ub_[0]) / (ub_[0] - lb_[0]);
+    // Map physical x -> xi in [-1,1] for axis d, honoring the per-axis
+    // out-of-domain policy. Clamp (default): queries outside [lb_[d], ub_[d]]
+    // snap to the nearest endpoint (no extrapolation) — a global Chebyshev
+    // polynomial diverges catastrophically outside its domain, so clamping is
+    // deliberate. This differs from InterpTable1D, which extrapolates. Periodic:
+    // wrap the query modulo the axis span back into the domain before mapping.
+    // The trailing clamp also guards endpoint round-off in both cases.
+    double axis_xi(int d, double x) const {
+        const double span = ub_[d] - lb_[d];
+        double t = x;
+        if (oob_[d] == OutOfDomain::Periodic) {
+            double u = std::fmod(x - lb_[d], span);
+            if (u < 0.0)
+                u += span; // fmod keeps the sign of the dividend
+            t = lb_[d] + u;
+        }
+        double xi = (2.0 * t - lb_[d] - ub_[d]) / span;
         return std::clamp(xi, -1.0, 1.0);
     }
+    // 1-D convenience wrapper (axis 0).
+    double to_xi(double t) const { return axis_xi(0, t); }
     double half_span() const { return 0.5 * (ub_[0] - lb_[0]); }
 
     // -------------------------------------------------------------------------
@@ -91,12 +123,15 @@ struct ChebTable {
     // Derivative-series coefficients g[0..order-1] for d/dxi of c[0..order].
     // Returns a vector of length max(order, 1).
     static Eigen::VectorXd deriv_coeffs_from(const Eigen::Ref<const Eigen::VectorXd> &c,
-                                              int order) {
+                                             int order) {
         Eigen::VectorXd g = Eigen::VectorXd::Zero(std::max(order, 1));
         Eigen::VectorXd gp = Eigen::VectorXd::Zero(order + 2);
-        for (int k = order; k >= 1; --k) gp[k - 1] = gp[k + 1] + 2.0 * double(k) * c[k];
-        for (int k = 0; k < order; ++k) g[k] = gp[k];
-        if (order >= 1) g[0] *= 0.5;  // convert prime-convention T_0 term
+        for (int k = order; k >= 1; --k)
+            gp[k - 1] = gp[k + 1] + 2.0 * double(k) * c[k];
+        for (int k = 0; k < order; ++k)
+            g[k] = gp[k];
+        if (order >= 1)
+            g[0] *= 0.5; // convert prime-convention T_0 term
         return g;
     }
 
@@ -104,7 +139,7 @@ struct ChebTable {
     ChebTable() {}
 
     // -------------------------------------------------------------------------
-    // Public static index helpers (Task 0)
+    // Public static index helpers (row-major flat tensor layout)
     // -------------------------------------------------------------------------
 
     /// @brief Compute row-major strides for the given shape vector.
@@ -122,7 +157,8 @@ struct ChebTable {
     /// @brief Compute flat row-major index from a multi-index and precomputed strides.
     static long flat_index(const std::vector<int> &mi, const std::vector<long> &strides) {
         long f = 0;
-        for (size_t d = 0; d < mi.size(); ++d) f += long(mi[d]) * strides[d];
+        for (size_t d = 0; d < mi.size(); ++d)
+            f += long(mi[d]) * strides[d];
         return f;
     }
 
@@ -139,7 +175,8 @@ struct ChebTable {
     /// @brief Index into the packed upper-triangle Hessian tensor array (j≤k).
     /// For j > k the arguments are swapped (symmetric). Returns the 0-based index.
     static int hess_index(int j, int k, int dim) {
-        if (j > k) std::swap(j, k);
+        if (j > k)
+            std::swap(j, k);
         return j * dim - (j * (j - 1)) / 2 + (k - j);
     }
 
@@ -150,8 +187,55 @@ struct ChebTable {
     int output_dim() const { return olen_; }
     int order() const { return orders_.empty() ? 0 : orders_[0]; }
     const std::vector<int> &orders() const { return orders_; }
+    /// @brief Per-axis lower domain bounds (length dim_).
+    const Eigen::VectorXd &lb() const { return lb_; }
+    /// @brief Per-axis upper domain bounds (length dim_).
+    const Eigen::VectorXd &ub() const { return ub_; }
+    /// @brief Per-axis out-of-domain policy (length dim_).
+    const std::vector<OutOfDomain> &out_of_domain() const { return oob_; }
+
+    /// @brief True iff every coordinate of @c x lies within @c [lb_[d], ub_[d]].
+    /// Useful for callers that want to guard against out-of-domain queries
+    /// (which otherwise clamp, or wrap on Periodic axes) before evaluating.
+    bool contains(const Eigen::VectorXd &x) const {
+        require_dim(int(x.size()));
+        for (int d = 0; d < dim_; ++d)
+            if (x[d] < lb_[d] || x[d] > ub_[d])
+                return false;
+        return true;
+    }
+    /// @brief 1-D convenience overload of @ref contains.
+    bool contains(double t) const {
+        require_scalar();
+        return t >= lb_[0] && t <= ub_[0];
+    }
 
   private:
+    // -------------------------------------------------------------------------
+    // Query-shape guards (release builds disable Eigen bounds asserts, so a
+    // wrong-rank query would otherwise read out of bounds and return garbage).
+    // -------------------------------------------------------------------------
+    void require_populated() const {
+        if (orders_.empty())
+            throw std::invalid_argument(
+                "ChebTable: table is empty (default-constructed); build one via from_values");
+    }
+    void require_dim(int qsize) const {
+        require_populated();
+        if (qsize != dim_)
+            throw std::invalid_argument("ChebTable: query dimension " + std::to_string(qsize) +
+                                        " does not match table input dimension " +
+                                        std::to_string(dim_));
+    }
+    void require_scalar() const {
+        require_populated();
+        if (dim_ != 1)
+            throw std::invalid_argument(
+                "ChebTable: scalar eval requires a 1-D table; this table is " +
+                std::to_string(dim_) + "-dimensional — pass a length-" + std::to_string(dim_) +
+                " array");
+    }
+
     // -------------------------------------------------------------------------
     // N-D building blocks (private — not part of the public API)
     // -------------------------------------------------------------------------
@@ -169,7 +253,7 @@ struct ChebTable {
     ///   @code (start / stride) % shape[ax] == 0 @endcode.
     static void coeffs_along_axis(MatType &tens, const std::vector<int> &shape,
                                   const std::vector<long> &strides, int ax, int nthreads) {
-        const int n = shape[ax] - 1;                // polynomial order along this axis
+        const int n = shape[ax] - 1; // polynomial order along this axis
         const long stride = strides[ax];
         const long tsize = tens.rows();
         const int olen = int(tens.cols());
@@ -181,12 +265,15 @@ struct ChebTable {
         // Iterate over all lines along `ax`.  A flat index is the start of a
         // line iff its `ax`-coordinate is 0: (start / stride) % shape[ax] == 0.
         for (long start = 0; start < tsize; ++start) {
-            if ((start / stride) % long(shape[ax]) != 0) continue;  // not a line start
+            if ((start / stride) % long(shape[ax]) != 0)
+                continue; // not a line start
             for (int c = 0; c < olen; ++c) {
-                for (int k = 0; k <= n; ++k) in[size_t(k)] = tens(start + long(k) * stride, c);
+                for (int k = 0; k <= n; ++k)
+                    in[size_t(k)] = tens(start + long(k) * stride, c);
                 pocketfft::dct(pshape, pstride, pstride, axes, /*type=*/1, in.data(), yk.data(),
                                /*fct=*/1.0, /*ortho=*/false, size_t(nthreads));
-                for (int k = 0; k <= n; ++k) tens(start + long(k) * stride, c) = yk[size_t(k)] / double(n);
+                for (int k = 0; k <= n; ++k)
+                    tens(start + long(k) * stride, c) = yk[size_t(k)] / double(n);
                 tens(start, c) *= 0.5;
                 tens(start + long(n) * stride, c) *= 0.5;
             }
@@ -202,15 +289,17 @@ struct ChebTable {
     static MatType deriv_along_axis(const MatType &coef, const std::vector<int> &shape,
                                     const std::vector<long> &strides, int ax) {
         MatType out = MatType::Zero(coef.rows(), coef.cols());
-        const int n = shape[ax] - 1;          // order along this axis
+        const int n = shape[ax] - 1; // order along this axis
         const long stride = strides[ax];
         const int olen = int(coef.cols());
         Eigen::VectorXd line(n + 1);
         for (long start = 0; start < coef.rows(); ++start) {
-            if ((start / stride) % long(shape[ax]) != 0) continue;  // not a line start
+            if ((start / stride) % long(shape[ax]) != 0)
+                continue; // not a line start
             for (int c = 0; c < olen; ++c) {
-                for (int k = 0; k <= n; ++k) line[k] = coef(start + long(k) * stride, c);
-                Eigen::VectorXd g = deriv_coeffs_from(line, n);  // length max(n,1)
+                for (int k = 0; k <= n; ++k)
+                    line[k] = coef(start + long(k) * stride, c);
+                Eigen::VectorXd g = deriv_coeffs_from(line, n); // length max(n,1)
                 for (int k = 0; k < int(g.size()); ++k)
                     out(start + long(k) * stride, c) = g[k];
                 // entries k=g.size()..n stay zero (zero-extension)
@@ -222,72 +311,85 @@ struct ChebTable {
     /// @brief Compute per-axis normalised coordinates @c xi and inverse half-spans
     /// @c hinv from a physical point @c x.
     ///
-    /// For axis @c d:
-    ///   @c xi[d] = clamp((2*x[d] - lb_[d] - ub_[d]) / (ub_[d] - lb_[d]), -1, 1)
-    ///   @c hinv[d] = 2 / (ub_[d] - lb_[d])
+    /// For axis @c d, @c xi[d] is produced by @ref axis_xi (which applies the
+    /// per-axis @ref OutOfDomain policy), and @c hinv[d] = 2 / (ub_[d] - lb_[d])
+    /// is the physical→normalised chain-rule factor.  The @c Periodic wrap is a
+    /// translation, so it does not change @c hinv.
     ///
-    /// Used by both @ref eval(const Eigen::VectorXd&) and @ref eval_jacobian to
-    /// avoid duplicating the per-axis mapping logic.
+    /// Used by @ref eval(const Eigen::VectorXd&), @ref eval_jacobian, and
+    /// @ref eval_hessian to avoid duplicating the per-axis mapping logic.
+    ///
+    /// The @c _raw overload writes into caller-provided length-@c dim_ buffers so
+    /// the zero-allocation @ref ChebFunction solve-time path can supply arena
+    /// scratch instead of allocating Eigen vectors.
+    void compute_xi_hinv_raw(const double *x, double *xi, double *hinv) const {
+        for (int d = 0; d < dim_; ++d) {
+            hinv[d] = 2.0 / (ub_[d] - lb_[d]);
+            xi[d] = axis_xi(d, x[d]);
+        }
+    }
     void compute_xi_hinv(const Eigen::VectorXd &x, Eigen::VectorXd &xi,
                          Eigen::VectorXd &hinv) const {
         xi.resize(dim_);
         hinv.resize(dim_);
-        for (int d = 0; d < dim_; ++d) {
-            double span = ub_[d] - lb_[d];
-            hinv[d] = 2.0 / span;
-            double t = (2.0 * x[d] - lb_[d] - ub_[d]) / span;
-            xi[d] = std::clamp(t, -1.0, 1.0);
-        }
+        compute_xi_hinv_raw(x.data(), xi.data(), hinv.data());
     }
 
-    /// @brief Tensor Clenshaw: evaluate a flat coefficient tensor at a point @c xi.
+    /// @brief Tensor Clenshaw: evaluate a flat coefficient tensor at @c xi into
+    /// caller-provided scratch/output, allocation-free.
     ///
-    /// Contracts axes one at a time (always contracts the current axis 0 first),
-    /// reusing the 1-D Clenshaw recurrence.  After contracting all D axes the
-    /// result is a length-@c olen vector.
+    /// Contracts axes one at a time (always the current axis 0 first), reusing the
+    /// 1-D Clenshaw recurrence.  Because every coefficient tensor shares this
+    /// table's @c shape_/@c strides_, and @c strides_[ax] equals the stride of the
+    /// first remaining axis at contraction step @c ax (both are ∏shape_[ax+1..]),
+    /// no per-axis stride recomputation or shape copy is needed.
     ///
-    /// @param coef   Flat coefficient matrix of shape @c (tsize, olen).
-    /// @param shape  Grid shape (size D, shape[d] = order_d + 1).
-    /// @param xi     Normalized evaluation point in [-1,1]^D (length D).
-    /// @param olen   Number of output channels (= @c coef.cols()).
-    static Eigen::VectorXd clenshaw_nd(const MatType &coef, const std::vector<int> &shape,
-                                       const Eigen::VectorXd &xi, int olen) {
-        const int D = int(shape.size());
-        std::vector<int> shp = shape;
-        // Working buffer per channel: indexed [channel][flat_in_remaining_tensor].
-        std::vector<std::vector<double>> cur(olen);
-        for (int c = 0; c < olen; ++c) {
-            cur[c].resize(coef.rows());
-            for (long r = 0; r < coef.rows(); ++r) cur[c][r] = coef(r, c);
-        }
-        for (int ax = 0; ax < D; ++ax) {
-            // Contract the current axis 0 (order = shp[0]-1).
-            const int n = shp[0] - 1;
-            // Strides for the *current* (partially contracted) tensor.
-            std::vector<long> strides = row_major_strides(shp);
-            // stride0 = product of remaining axes sizes = number of lines.
-            const long stride0 = strides[0];
-            const long outer = stride0;  // number of lines == stride[0]
+    /// Each output channel keeps its data packed at the front of its own
+    /// @c tsize_-sized slot in the ping-pong buffers (@c cur/@c next), so both
+    /// buffers must have length @c olen_*tsize_.
+    ///
+    /// @param coef  Flat coefficient matrix of shape @c (tsize_, olen_).
+    /// @param xi    Normalized evaluation point in [-1,1]^D (length @c dim_).
+    /// @param cur   Scratch buffer, length @c olen_*tsize_ (overwritten).
+    /// @param next  Scratch buffer, length @c olen_*tsize_ (overwritten).
+    /// @param out   Output buffer, length @c olen_.
+    void eval_tensor_into(const MatType &coef, const double *xi, double *cur, double *next,
+                          double *out) const {
+        for (int c = 0; c < olen_; ++c)
+            for (long r = 0; r < tsize_; ++r)
+                cur[long(c) * tsize_ + r] = coef(r, c);
+        double *a = cur, *b = next;
+        for (int ax = 0; ax < dim_; ++ax) {
+            const int n = shape_[ax] - 1;
+            const long stride0 = strides_[ax]; // == number of lines (outer)
             const double xi_ax = xi[ax];
-            for (int c = 0; c < olen; ++c) {
-                std::vector<double> next(outer);
-                for (long line = 0; line < outer; ++line) {
-                    // Clenshaw along this line (k = n down to 1, then combine with k=0).
+            for (int c = 0; c < olen_; ++c) {
+                const double *cc = a + long(c) * tsize_;
+                double *nc = b + long(c) * tsize_;
+                for (long line = 0; line < stride0; ++line) {
                     double b1 = 0.0, b2 = 0.0;
                     for (int k = n; k >= 1; --k) {
-                        double bk = 2.0 * xi_ax * b1 - b2 + cur[c][line + long(k) * stride0];
+                        double bk = 2.0 * xi_ax * b1 - b2 + cc[line + long(k) * stride0];
                         b2 = b1;
                         b1 = bk;
                     }
-                    next[line] = cur[c][line] + xi_ax * b1 - b2;
+                    nc[line] = cc[line] + xi_ax * b1 - b2;
                 }
-                cur[c].swap(next);
             }
-            shp.erase(shp.begin());  // drop the contracted axis
+            std::swap(a, b);
         }
-        Eigen::VectorXd v(olen);
-        for (int c = 0; c < olen; ++c) v[c] = cur[c][0];
-        return v;
+        for (int c = 0; c < olen_; ++c)
+            out[c] = a[long(c) * tsize_];
+    }
+
+    /// @brief Allocating convenience wrapper around @ref eval_tensor_into for the
+    /// public (non-solve-time) eval methods.  Allocates its own scratch + result.
+    Eigen::VectorXd clenshaw_nd(const MatType &coef, const Eigen::VectorXd &xi) const {
+        std::vector<double> cur(size_t(olen_) * size_t(tsize_));
+        std::vector<double> next(size_t(olen_) * size_t(tsize_));
+        Eigen::VectorXd out(olen_);
+        eval_tensor_into(coef, xi.data(), cur.data(), next.data(), out.data());
+        return out;
     }
 
   public:
@@ -297,7 +399,8 @@ struct ChebTable {
 
     /// @brief 2nd-kind node coordinates on [lb,ub], j=0..n (t_0=ub .. t_n=lb).
     static Eigen::VectorXd cheb_points(int n, double lb, double ub) {
-        if (n < 1) throw std::invalid_argument("ChebTable: order must be >= 1");
+        if (n < 1)
+            throw std::invalid_argument("ChebTable: order must be >= 1");
         const double m = 0.5 * (lb + ub), h = 0.5 * (ub - lb);
         Eigen::VectorXd t(n + 1);
         for (int j = 0; j <= n; ++j)
@@ -325,12 +428,15 @@ struct ChebTable {
     ///                     construction is safe because pocketfft threads run
     ///                     only during interpolant construction, never during
     ///                     evaluation or solve-time hot paths.
+    /// @param oob          Out-of-domain policy for the single axis (default Clamp).
     static ChebTable from_values(const MatType &grid_values, double lb, double ub, int order,
-                                 int nthreads = 1) {
-        if (order < 1) throw std::invalid_argument("ChebTable: order must be >= 1");
+                                 int nthreads = 1, OutOfDomain oob = OutOfDomain::Clamp) {
+        if (order < 1)
+            throw std::invalid_argument("ChebTable: order must be >= 1");
         if (grid_values.cols() != order + 1)
             throw std::invalid_argument("ChebTable: grid_values must have order+1 columns");
-        if (ub <= lb) throw std::invalid_argument("ChebTable: require ub > lb");
+        if (ub <= lb)
+            throw std::invalid_argument("ChebTable: require ub > lb");
         if (nthreads < 0)
             throw std::invalid_argument("ChebTable: nthreads must be >= 0 (0 = auto)");
 
@@ -343,6 +449,7 @@ struct ChebTable {
         out.lb_[0] = lb;
         out.ub_.resize(1);
         out.ub_[0] = ub;
+        out.oob_ = {oob};
         out.shape_ = {order + 1};
         out.strides_ = row_major_strides(out.shape_);
         out.tsize_ = order + 1;
@@ -359,10 +466,12 @@ struct ChebTable {
 
         std::vector<double> in(N1), yk(N1);
         for (int c = 0; c < out.olen_; ++c) {
-            for (size_t j = 0; j < N1; ++j) in[j] = grid_values(c, ptrdiff_t(j));
+            for (size_t j = 0; j < N1; ++j)
+                in[j] = grid_values(c, ptrdiff_t(j));
             pocketfft::dct(shape, stride, stride, axes, /*type=*/1, in.data(), yk.data(),
                            /*fct=*/1.0, /*ortho=*/false, size_t(nthreads));
-            for (int k = 0; k <= order; ++k) out.value_(k, c) = yk[size_t(k)] / double(order);
+            for (int k = 0; k <= order; ++k)
+                out.value_(k, c) = yk[size_t(k)] / double(order);
             out.value_(0, c) *= 0.5;
             out.value_(order, c) *= 0.5;
         }
@@ -377,7 +486,8 @@ struct ChebTable {
         for (int c = 0; c < out.olen_; ++c) {
             Eigen::VectorXd g1 = deriv_coeffs_from(out.value_.col(c), order);
             // g1 has length max(order,1) = order; fill rows [0..order-1]
-            for (int k = 0; k < int(g1.size()); ++k) out.grad_[0](k, c) = g1[k];
+            for (int k = 0; k < int(g1.size()); ++k)
+                out.grad_[0](k, c) = g1[k];
         }
 
         out.hess_.resize(1);
@@ -389,7 +499,8 @@ struct ChebTable {
                 // row at index `order` in grad_[0] is never touched — no slicing needed.
                 Eigen::VectorXd g2 = deriv_coeffs_from(out.grad_[0].col(c), order - 1);
                 // g2 has length max(order-1,1) = order-1; fill rows [0..order-2]
-                for (int k = 0; k < int(g2.size()); ++k) out.hess_[0](k, c) = g2[k];
+                for (int k = 0; k < int(g2.size()); ++k)
+                    out.hess_[0](k, c) = g2[k];
             }
         }
         // order == 1: second derivative is identically zero — hess_[0] stays all-zero.
@@ -398,7 +509,7 @@ struct ChebTable {
     }
 
     // -------------------------------------------------------------------------
-    // N-D node generation (Task 1)
+    // N-D node generation
     // -------------------------------------------------------------------------
 
     /// @brief Per-axis Chebyshev node vectors for a tensor-product grid.
@@ -410,12 +521,13 @@ struct ChebTable {
                                                     const Eigen::VectorXd &lb,
                                                     const Eigen::VectorXd &ub) {
         std::vector<Eigen::VectorXd> out(orders.size());
-        for (size_t d = 0; d < orders.size(); ++d) out[d] = cheb_points(orders[d], lb[d], ub[d]);
+        for (size_t d = 0; d < orders.size(); ++d)
+            out[d] = cheb_points(orders[d], lb[d], ub[d]);
         return out;
     }
 
     // -------------------------------------------------------------------------
-    // N-D construction (Task 1)
+    // N-D construction
     // -------------------------------------------------------------------------
 
     /// @brief Build an N-D interpolant from a flat grid-value matrix via
@@ -429,6 +541,8 @@ struct ChebTable {
     /// @param ub      Upper bounds per axis (length D).
     /// @param orders  Polynomial order per axis (length D); each entry ≥ 1.
     /// @param nthreads  Thread count for pocketfft DCT calls; 0 = auto.
+    /// @param oob     Per-axis out-of-domain policy (length D, or empty for
+    ///                all-Clamp default).
     ///
     /// Applies the 1-D DCT-I coefficient transform separably along each axis
     /// using @ref coeffs_along_axis.  All three precomputed tensors are filled:
@@ -436,23 +550,31 @@ struct ChebTable {
     /// and @c hess_[hess_index(j,k,D)] = D_k D_j value_ (upper-triangle Hessian tensors).
     static ChebTable from_values(const MatType &grid_values_flat, const Eigen::VectorXd &lb,
                                  const Eigen::VectorXd &ub, const std::vector<int> &orders,
-                                 int nthreads = 1) {
+                                 int nthreads = 1, std::vector<OutOfDomain> oob = {}) {
         const int D = int(orders.size());
-        if (D < 1) throw std::invalid_argument("ChebTable: need >=1 axis");
+        if (D < 1)
+            throw std::invalid_argument("ChebTable: need >=1 axis");
         if (lb.size() != D || ub.size() != D)
             throw std::invalid_argument("ChebTable: lb/ub length must match orders");
         if (nthreads < 0)
             throw std::invalid_argument("ChebTable: nthreads must be >= 0 (0 = auto)");
+        if (oob.empty())
+            oob.assign(D, OutOfDomain::Clamp);
+        else if (int(oob.size()) != D)
+            throw std::invalid_argument("ChebTable: out_of_domain length must match orders");
         ChebTable out;
         out.dim_ = D;
         out.orders_ = orders;
         out.lb_ = lb;
         out.ub_ = ub;
+        out.oob_ = std::move(oob);
         out.shape_.resize(D);
         long tsize = 1;
         for (int d = 0; d < D; ++d) {
-            if (orders[d] < 1) throw std::invalid_argument("ChebTable: each order >= 1");
-            if (ub[d] <= lb[d]) throw std::invalid_argument("ChebTable: require ub > lb per axis");
+            if (orders[d] < 1)
+                throw std::invalid_argument("ChebTable: each order >= 1");
+            if (ub[d] <= lb[d])
+                throw std::invalid_argument("ChebTable: require ub > lb per axis");
             out.shape_[d] = orders[d] + 1;
             tsize *= out.shape_[d];
         }
@@ -461,7 +583,7 @@ struct ChebTable {
         if (grid_values_flat.rows() != tsize)
             throw std::invalid_argument("ChebTable: grid_values rows must equal prod(order+1)");
         out.olen_ = int(grid_values_flat.cols());
-        out.value_ = grid_values_flat;  // copy; DCT applied in place below
+        out.value_ = grid_values_flat; // copy; DCT applied in place below
         for (int ax = 0; ax < D; ++ax)
             coeffs_along_axis(out.value_, out.shape_, out.strides_, ax, nthreads);
         // Precompute gradient tensors G_j = D_j value_ (zero-extended, same shape).
@@ -521,6 +643,7 @@ struct ChebTable {
 
     /// @brief Evaluate all output channels at physical coordinate t (1-D).
     Eigen::VectorXd eval(double t) const {
+        require_scalar();
         Eigen::VectorXd v(olen_);
         eval_impl(t, 0, v, v, v);
         return v;
@@ -528,13 +651,14 @@ struct ChebTable {
 
     /// @brief Evaluate all output channels at a physical point @c x (N-D).
     ///
-    /// Each coordinate @c x[d] is clamped to @c [lb_[d], ub_[d]] before
-    /// mapping to the normalised domain (no extrapolation).  Uses
-    /// @ref clenshaw_nd internally.
+    /// Each coordinate @c x[d] is mapped to the normalised domain per the axis's
+    /// @ref OutOfDomain policy (Clamp by default, Periodic wraps) before
+    /// evaluation.  Uses @ref clenshaw_nd internally.
     Eigen::VectorXd eval(const Eigen::VectorXd &x) const {
+        require_dim(int(x.size()));
         Eigen::VectorXd xi, hinv;
         compute_xi_hinv(x, xi, hinv);
-        return clenshaw_nd(value_, shape_, xi, olen_);
+        return clenshaw_nd(value_, xi);
     }
 
     /// @brief Evaluate the analytic Jacobian at a physical point @c x (N-D).
@@ -547,11 +671,12 @@ struct ChebTable {
     ///
     /// @pre @c grad_ must be non-empty (constructed via the N-D @ref from_values overload).
     Eigen::MatrixXd eval_jacobian(const Eigen::VectorXd &x) const {
+        require_dim(int(x.size()));
         Eigen::VectorXd xi, hinv;
         compute_xi_hinv(x, xi, hinv);
         Eigen::MatrixXd J(olen_, dim_);
         for (int j = 0; j < dim_; ++j)
-            J.col(j) = clenshaw_nd(grad_[j], shape_, xi, olen_) * hinv[j];
+            J.col(j) = clenshaw_nd(grad_[j], xi) * hinv[j];
         return J;
     }
 
@@ -566,14 +691,14 @@ struct ChebTable {
     ///
     /// @pre @c hess_ must be non-empty (constructed via the N-D @ref from_values overload).
     std::vector<Eigen::MatrixXd> eval_hessian(const Eigen::VectorXd &x) const {
+        require_dim(int(x.size()));
         Eigen::VectorXd xi, hinv;
         compute_xi_hinv(x, xi, hinv);
         std::vector<Eigen::MatrixXd> H(olen_, Eigen::MatrixXd::Zero(dim_, dim_));
         for (int j = 0; j < dim_; ++j) {
             for (int k = j; k < dim_; ++k) {
                 Eigen::VectorXd hv =
-                    clenshaw_nd(hess_[hess_index(j, k, dim_)], shape_, xi, olen_) *
-                    (hinv[j] * hinv[k]);
+                    clenshaw_nd(hess_[hess_index(j, k, dim_)], xi) * (hinv[j] * hinv[k]);
                 for (int c = 0; c < olen_; ++c) {
                     H[c](j, k) = hv[c];
                     H[c](k, j) = hv[c];
@@ -585,6 +710,7 @@ struct ChebTable {
 
     /// @brief Evaluate value and first derivative at t. Returns (value, deriv1).
     std::tuple<Eigen::VectorXd, Eigen::VectorXd> eval_deriv1(double t) const {
+        require_scalar();
         Eigen::VectorXd v(olen_), dv(olen_);
         eval_impl(t, 1, v, dv, dv);
         return {v, dv};
@@ -592,6 +718,7 @@ struct ChebTable {
 
     /// @brief Evaluate value, first, and second derivative at t.
     std::tuple<Eigen::VectorXd, Eigen::VectorXd, Eigen::VectorXd> eval_deriv2(double t) const {
+        require_scalar();
         Eigen::VectorXd v(olen_), dv(olen_), d2v(olen_);
         eval_impl(t, 2, v, dv, d2v);
         return {v, dv, d2v};
@@ -603,8 +730,8 @@ struct ChebTable {
 ///
 /// Wraps a shared @ref ChebTable as a CRTP VectorFunction.  For 1-D input
 /// (@c IR==1 or @c IR==-1 with a 1-D table) the wrapper delegates to
-/// @ref ChebTable::eval_impl for all three compute methods, reproducing the
-/// exact Phase-1 behaviour.  For N-D input (N≥2) it delegates to
+/// @ref ChebTable::eval_impl for all three compute methods (allocation-free).
+/// For N-D input (N≥2) it delegates to
 /// @ref ChebTable::eval, @ref ChebTable::eval_jacobian, and
 /// @ref ChebTable::eval_hessian using the precomputed gradient / Hessian tensors.
 ///
@@ -615,9 +742,8 @@ struct ChebTable {
 ///             @e output dimension, @c ChebFunction's parameter is the
 ///             @e input dimension.
 template <int IR>
-struct ChebFunction
-    : VectorFunction<ChebFunction<IR>, IR, -1, DenseDerivativeMode::Analytic,
-                     DenseDerivativeMode::Analytic> {
+struct ChebFunction : VectorFunction<ChebFunction<IR>, IR, -1, DenseDerivativeMode::Analytic,
+                                     DenseDerivativeMode::Analytic> {
     using Base = VectorFunction<ChebFunction<IR>, IR, -1, DenseDerivativeMode::Analytic,
                                 DenseDerivativeMode::Analytic>;
     VF_TYPE_ALIASES(Base);
@@ -626,6 +752,18 @@ struct ChebFunction
 
     ChebFunction() {}
     explicit ChebFunction(std::shared_ptr<ChebTable> tab_) : tab(tab_) {
+        if (!tab_)
+            throw std::invalid_argument("ChebFunction: null ChebTable");
+        // set_input_rows is a compile-time no-op when IR >= 0 (fixed input dim),
+        // so a fixed IR that disagrees with the table's runtime input dim would
+        // otherwise be silently accepted. Reject it here.
+        if constexpr (IR >= 0) {
+            if (tab_->input_dim() != IR)
+                throw std::invalid_argument("ChebFunction<IR>: compile-time IR (" +
+                                            std::to_string(IR) +
+                                            ") does not match table input dimension (" +
+                                            std::to_string(tab_->input_dim()) + ")");
+        }
         this->set_io_rows(tab_->input_dim(), tab_->output_dim());
     }
 
@@ -646,9 +784,25 @@ struct ChebFunction
             tycho::utils::BumpAllocator::allocate_run(
                 Impl, TempSpec<Output<Scalar>>(this->output_rows(), 1));
         } else {
-            Eigen::VectorXd xd(x.size());
-            for (int i = 0; i < x.size(); ++i) xd[i] = double(x[i]);
-            fx = this->tab->eval(xd);
+            // N-D path: allocation-free tensor-Clenshaw over arena scratch.
+            const int D = this->tab->dim_;
+            const int olen = this->tab->olen_;
+            const int buf = int(long(olen) * this->tab->tsize_);
+            auto Impl = [&](auto &xd, auto &xi, auto &hinv, auto &cur, auto &next, auto &out) {
+                for (int i = 0; i < D; ++i)
+                    xd[i] = double(x[i]);
+                this->tab->compute_xi_hinv_raw(xd.data(), xi.data(), hinv.data());
+                this->tab->eval_tensor_into(this->tab->value_, xi.data(), cur.data(), next.data(),
+                                            out.data());
+                fx = out;
+            };
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, tycho::utils::TempSpec<Eigen::VectorXd>(D, 1),
+                tycho::utils::TempSpec<Eigen::VectorXd>(D, 1),
+                tycho::utils::TempSpec<Eigen::VectorXd>(D, 1),
+                tycho::utils::TempSpec<Eigen::VectorXd>(buf, 1),
+                tycho::utils::TempSpec<Eigen::VectorXd>(buf, 1),
+                tycho::utils::TempSpec<Eigen::VectorXd>(olen, 1));
         }
     }
 
@@ -673,10 +827,31 @@ struct ChebFunction
                 Impl, TempSpec<Output<Scalar>>(this->output_rows(), 1),
                 TempSpec<Output<Scalar>>(this->output_rows(), 1));
         } else {
-            Eigen::VectorXd xd(x.size());
-            for (int i = 0; i < x.size(); ++i) xd[i] = double(x[i]);
-            fx = this->tab->eval(xd);
-            jx = this->tab->eval_jacobian(xd);
+            // N-D path: value + analytic Jacobian, allocation-free over arena scratch.
+            const int D = this->tab->dim_;
+            const int olen = this->tab->olen_;
+            const int buf = int(long(olen) * this->tab->tsize_);
+            auto Impl = [&](auto &xd, auto &xi, auto &hinv, auto &cur, auto &next, auto &col) {
+                for (int i = 0; i < D; ++i)
+                    xd[i] = double(x[i]);
+                this->tab->compute_xi_hinv_raw(xd.data(), xi.data(), hinv.data());
+                this->tab->eval_tensor_into(this->tab->value_, xi.data(), cur.data(), next.data(),
+                                            col.data());
+                fx = col;
+                for (int j = 0; j < D; ++j) {
+                    this->tab->eval_tensor_into(this->tab->grad_[j], xi.data(), cur.data(),
+                                                next.data(), col.data());
+                    for (int c = 0; c < olen; ++c)
+                        jx(c, j) = col[c] * hinv[j];
+                }
+            };
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, tycho::utils::TempSpec<Eigen::VectorXd>(D, 1),
+                tycho::utils::TempSpec<Eigen::VectorXd>(D, 1),
+                tycho::utils::TempSpec<Eigen::VectorXd>(D, 1),
+                tycho::utils::TempSpec<Eigen::VectorXd>(buf, 1),
+                tycho::utils::TempSpec<Eigen::VectorXd>(buf, 1),
+                tycho::utils::TempSpec<Eigen::VectorXd>(olen, 1));
         }
     }
 
@@ -711,24 +886,56 @@ struct ChebFunction
                 TempSpec<Output<Scalar>>(this->output_rows(), 1),
                 TempSpec<Output<Scalar>>(this->output_rows(), 1));
         } else {
-            // N-D path
-            Eigen::VectorXd xd(x.size());
-            for (int i = 0; i < x.size(); ++i) xd[i] = double(x[i]);
-            // Value (needed for fx output)
-            fx = this->tab->eval(xd);
-            // Jacobian
-            Eigen::MatrixXd J = this->tab->eval_jacobian(xd);
-            jx = J;
-            // Adjoint gradient: g[j] = J[:,j]^T . adjvars = sum_c J(c,j)*adjvars[c]
-            adjgrad = J.transpose() * adjvars;
-            // Adjoint Hessian: H_adj(j,k) = sum_c adjvars[c] * H[c](j,k)
-            auto Hv = this->tab->eval_hessian(xd);
-            adjhess.setZero();
-            const int olen = this->tab->output_dim();
-            for (int c = 0; c < olen; ++c)
-                adjhess += adjvars[c] * Hv[c];
+            // N-D path: value, Jacobian, adjoint gradient + adjoint Hessian, all
+            // allocation-free by contracting the precomputed tensors over arena scratch.
+            const int D = this->tab->dim_;
+            const int olen = this->tab->olen_;
+            const int buf = int(long(olen) * this->tab->tsize_);
+            auto Impl = [&](auto &xd, auto &xi, auto &hinv, auto &cur, auto &next, auto &col) {
+                for (int i = 0; i < D; ++i)
+                    xd[i] = double(x[i]);
+                this->tab->compute_xi_hinv_raw(xd.data(), xi.data(), hinv.data());
+                // Value.
+                this->tab->eval_tensor_into(this->tab->value_, xi.data(), cur.data(), next.data(),
+                                            col.data());
+                fx = col;
+                // Jacobian column j = hinv[j] * D_j value; adjgrad[j] = J[:,j] . adjvars.
+                for (int j = 0; j < D; ++j) {
+                    this->tab->eval_tensor_into(this->tab->grad_[j], xi.data(), cur.data(),
+                                                next.data(), col.data());
+                    double g = 0.0;
+                    for (int c = 0; c < olen; ++c) {
+                        double v = col[c] * hinv[j];
+                        jx(c, j) = v;
+                        g += v * adjvars[c];
+                    }
+                    adjgrad[j] = g;
+                }
+                // Adjoint Hessian(j,k) = sum_c adjvars[c] * hinv[j]*hinv[k] * D_k D_j value_c.
+                adjhess.setZero();
+                for (int j = 0; j < D; ++j) {
+                    for (int k = j; k < D; ++k) {
+                        this->tab->eval_tensor_into(
+                            this->tab->hess_[ChebTable::hess_index(j, k, D)], xi.data(), cur.data(),
+                            next.data(), col.data());
+                        const double f = hinv[j] * hinv[k];
+                        double h = 0.0;
+                        for (int c = 0; c < olen; ++c)
+                            h += adjvars[c] * col[c] * f;
+                        adjhess(j, k) = h;
+                        adjhess(k, j) = h;
+                    }
+                }
+            };
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, tycho::utils::TempSpec<Eigen::VectorXd>(D, 1),
+                tycho::utils::TempSpec<Eigen::VectorXd>(D, 1),
+                tycho::utils::TempSpec<Eigen::VectorXd>(D, 1),
+                tycho::utils::TempSpec<Eigen::VectorXd>(buf, 1),
+                tycho::utils::TempSpec<Eigen::VectorXd>(buf, 1),
+                tycho::utils::TempSpec<Eigen::VectorXd>(olen, 1));
         }
     }
 };
 
-}  // namespace tycho::oc
+} // namespace tycho::oc

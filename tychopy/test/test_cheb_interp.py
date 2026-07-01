@@ -1,7 +1,14 @@
+import warnings
+
 import numpy as np
+import pytest
 
 import tychopy.vector_functions as vf
-from tychopy.vector_functions import cheb_adaptive, cheb_from_function
+from tychopy.vector_functions import (
+    ChebConvergenceWarning,
+    cheb_adaptive,
+    cheb_from_function,
+)
 
 Args = vf.Arguments
 
@@ -326,3 +333,105 @@ def test_1d_behavior_preserved():
     g = tab(args[0])
     out = g.compute([0.3])
     assert abs(out[0] - np.sin(0.3)) < 1e-10
+
+
+# ---------------------------------------------------------------------------
+# Review-response coverage
+# ---------------------------------------------------------------------------
+
+
+def test_binding_eval_deriv2():
+    """ChebTable.eval_deriv2 returns analytic first + second derivatives."""
+    lb, ub, n = 0.0, 6.0, 30
+    pts = vf.ChebTable.cheb_points(n, lb, ub)
+    vals = np.sin(0.7 * pts).reshape(1, -1)
+    tab = vf.ChebTable.from_values(vals, lb, ub, n)
+    for t in [0.5, 2.9, 5.2]:
+        v, dv, d2 = tab.eval_deriv2(float(t))
+        assert abs(v[0] - np.sin(0.7 * t)) < 1e-9
+        assert abs(dv[0] - 0.7 * np.cos(0.7 * t)) < 1e-7
+        assert abs(d2[0] - (-0.49 * np.sin(0.7 * t))) < 1e-5
+
+
+def test_bounds_and_contains():
+    """lb/ub properties and contains() predicate (1-D scalar and N-D array)."""
+    tab = cheb_from_function(np.sin, -2.0, 3.0, 12)
+    assert tab.lb == pytest.approx(-2.0)
+    assert tab.ub == pytest.approx(3.0)
+    assert tab.contains(0.0)
+    assert not tab.contains(4.0)
+
+    tab2 = cheb_from_function(
+        lambda x: np.sin(x[0]) * x[1], [-1.0, 0.0], [1.0, 2.0], [6, 4]
+    )
+    np.testing.assert_allclose(tab2.lb, [-1.0, 0.0])
+    np.testing.assert_allclose(tab2.ub, [1.0, 2.0])
+    assert tab2.contains(np.array([0.0, 1.0]))
+    assert not tab2.contains(np.array([0.0, 3.0]))
+
+
+def test_nan_sample_rejected_1d():
+    """A callable returning NaN raises ValueError instead of poisoning the table."""
+
+    def f(t):
+        return np.nan if t > 0.5 else t
+
+    with pytest.raises(ValueError):
+        cheb_from_function(f, 0.0, 1.0, 8)
+
+
+def test_nan_sample_rejected_nd():
+    def f(x):
+        return np.inf if x[0] > 0.0 else x[0] + x[1]
+
+    with pytest.raises(ValueError):
+        cheb_from_function(f, [-1.0, -1.0], [1.0, 1.0], [4, 4])
+
+
+def test_scalar_eval_on_nd_table_raises():
+    tab = cheb_from_function(lambda x: x[0] + x[1], [0.0, 0.0], [1.0, 1.0], [4, 4])
+    with pytest.raises(ValueError):
+        tab.eval(0.5)
+
+
+def test_wrong_length_query_raises():
+    tab = cheb_from_function(lambda x: x[0] + x[1], [0.0, 0.0], [1.0, 1.0], [4, 4])
+    with pytest.raises(ValueError):
+        tab.eval(np.array([0.1, 0.2, 0.3]))
+
+
+def test_nonconvergence_warns_1d():
+    """A discontinuous function cannot converge; cheb_adaptive warns and returns best-effort."""
+
+    def step(t):
+        return 1.0 if t > 0.0 else -1.0
+
+    with pytest.warns(ChebConvergenceWarning):
+        tab = cheb_adaptive(step, -1.0, 1.0, rtol=1e-12, order0=8, max_order=32)
+    assert tab.order <= 32  # returned a usable (best-effort) table
+
+
+def test_converged_1d_does_not_warn():
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # any warning becomes an error
+        cheb_adaptive(lambda t: np.cos(1.3 * t), -2.0, 2.0, rtol=1e-11)
+
+
+def test_periodic_wrap_1d():
+    """Periodic policy wraps out-of-domain queries modulo the span."""
+    lb, ub = 0.0, 2.0 * np.pi
+    tab = cheb_from_function(np.cos, lb, ub, 24, periodic=True)
+    t = 1.3
+    assert tab.eval(t + 2.0 * (ub - lb))[0] == pytest.approx(tab.eval(t)[0], abs=1e-10)
+    assert tab.eval(t + (ub - lb))[0] == pytest.approx(np.cos(t), abs=1e-9)
+
+
+def test_periodic_per_axis_nd():
+    lb = [0.0, -1.0]
+    ub = [2.0 * np.pi, 1.0]
+    tab = cheb_from_function(
+        lambda x: np.cos(x[0]) * x[1], lb, ub, [20, 3], periodic=[True, False]
+    )
+    q = np.array([1.1, 0.4])
+    qw = np.array([1.1 + (ub[0] - lb[0]), 0.4])
+    assert tab.eval(qw)[0] == pytest.approx(tab.eval(q)[0], abs=1e-9)
