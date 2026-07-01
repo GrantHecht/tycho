@@ -272,6 +272,59 @@ The `nthreads` argument on the constructors and `from_values` parallelizes the
 has no effect on later evaluation, which is always serial per call.
 :::
 
+### N-D tensor-product Chebyshev tables
+
+`ChebTable` extends naturally to **N-D tensor-product** interpolation.
+The construction API is the same — pass array-like `lb`/`ub` and a tuple of
+per-axis orders to `cheb_from_function`:
+
+```{doctest}
+>>> import numpy as np
+>>> from tychopy.vector_functions import cheb_from_function
+>>> f2d = lambda x: np.sin(x[0]) * np.cos(x[1])
+>>> tab2d = cheb_from_function(f2d, [0.0, 0.0], [np.pi, np.pi], (12, 12))
+>>> tab2d.input_dim
+2
+>>> tab2d.orders
+[12, 12]
+```
+
+Evaluate via `eval(x)` with a length-D array:
+
+```{doctest}
+>>> x = np.array([1.0, 0.5])
+>>> bool(abs(float(tab2d.eval(x)[0]) - np.sin(1.0) * np.cos(0.5)) < 1e-8)
+True
+```
+
+Compose into a VectorFunction with `tab(a[0], a[1])` (2-D) or
+`tab(a[0], a[1], a[2])` (3-D):
+
+```{doctest}
+>>> from tychopy.vector_functions import Arguments
+>>> a = Arguments(3)
+>>> composed2d = tab2d(a[0], a[1])
+>>> composed2d.input_rows(), composed2d.output_rows()
+(3, 1)
+```
+
+The composed VectorFunction carries the full analytic Jacobian and Hessian of
+the spectral fit — no finite differences are used. Both 2-D and 3-D `__call__`
+overloads are available; for any higher dimension, or to pass the full input
+vector directly, use `.vf()`:
+
+```{doctest}
+>>> vf2d = tab2d.vf()
+>>> vf2d.input_rows(), vf2d.output_rows()
+(2, 1)
+```
+
+:::{note}
+The value array for N-D `from_values` is shaped `(tsize, olen)` in
+**row-major** (axis-0-outer) order, where `tsize = prod(order+1)` per axis.
+`cheb_from_function` handles this layout automatically when `lb` is a sequence.
+:::
+
 ## Trajectory interpolation: `LGLInterpTable` / `InterpFunction`
 
 The tables above interpolate data you tabulate yourself. To interpolate a **solved

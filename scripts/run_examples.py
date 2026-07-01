@@ -77,8 +77,9 @@ ALL_EXAMPLES = [
     "Zermelo.py",
     # CentralShooting transcription showcase (no basemap dependency).
     "BettsLowThrustCentralShooting.py",
-    # Chebyshev interpolation integration test (no optional deps).
+    # Chebyshev interpolation integration tests (no optional deps).
     "ChebyshevInterp.py",
+    "ChebyshevInterpND.py",
     # Basemap examples
     "BettsLowThrust.py",
     "Delta3Launch.py",
