@@ -151,8 +151,9 @@ struct ChebTable {
     int order() const { return orders_.empty() ? 0 : orders_[0]; }
     const std::vector<int> &orders() const { return orders_; }
 
+  private:
     // -------------------------------------------------------------------------
-    // N-D private building blocks (Task 1)
+    // N-D building blocks (private — not part of the public API)
     // -------------------------------------------------------------------------
 
     /// @brief Apply the 1-D DCT-I coefficient transform along one axis of a
@@ -192,6 +193,104 @@ struct ChebTable {
         }
     }
 
+    /// @brief Return a copy of @c coef differentiated along axis @c ax.
+    ///
+    /// Applies @ref deriv_coeffs_from to each line along @c ax (same line-start
+    /// iteration as @ref coeffs_along_axis) and zero-extends the result to the
+    /// same shape as the input (the derivative T-series is shorter; the trailing
+    /// entries are left at zero).
+    static MatType deriv_along_axis(const MatType &coef, const std::vector<int> &shape,
+                                    const std::vector<long> &strides, int ax) {
+        MatType out = MatType::Zero(coef.rows(), coef.cols());
+        const int n = shape[ax] - 1;          // order along this axis
+        const long stride = strides[ax];
+        const int olen = int(coef.cols());
+        Eigen::VectorXd line(n + 1);
+        for (long start = 0; start < coef.rows(); ++start) {
+            if ((start / stride) % long(shape[ax]) != 0) continue;  // not a line start
+            for (int c = 0; c < olen; ++c) {
+                for (int k = 0; k <= n; ++k) line[k] = coef(start + long(k) * stride, c);
+                Eigen::VectorXd g = deriv_coeffs_from(line, n);  // length max(n,1)
+                for (int k = 0; k < int(g.size()); ++k)
+                    out(start + long(k) * stride, c) = g[k];
+                // entries k=g.size()..n stay zero (zero-extension)
+            }
+        }
+        return out;
+    }
+
+    /// @brief Compute per-axis normalised coordinates @c xi and inverse half-spans
+    /// @c hinv from a physical point @c x.
+    ///
+    /// For axis @c d:
+    ///   @c xi[d] = clamp((2*x[d] - lb_[d] - ub_[d]) / (ub_[d] - lb_[d]), -1, 1)
+    ///   @c hinv[d] = 2 / (ub_[d] - lb_[d])
+    ///
+    /// Used by both @ref eval(const Eigen::VectorXd&) and @ref eval_jacobian to
+    /// avoid duplicating the per-axis mapping logic.
+    void compute_xi_hinv(const Eigen::VectorXd &x, Eigen::VectorXd &xi,
+                         Eigen::VectorXd &hinv) const {
+        xi.resize(dim_);
+        hinv.resize(dim_);
+        for (int d = 0; d < dim_; ++d) {
+            double span = ub_[d] - lb_[d];
+            hinv[d] = 2.0 / span;
+            double t = (2.0 * x[d] - lb_[d] - ub_[d]) / span;
+            xi[d] = std::clamp(t, -1.0, 1.0);
+        }
+    }
+
+    /// @brief Tensor Clenshaw: evaluate a flat coefficient tensor at a point @c xi.
+    ///
+    /// Contracts axes one at a time (always contracts the current axis 0 first),
+    /// reusing the 1-D Clenshaw recurrence.  After contracting all D axes the
+    /// result is a length-@c olen vector.
+    ///
+    /// @param coef   Flat coefficient matrix of shape @c (tsize, olen).
+    /// @param shape  Grid shape (size D, shape[d] = order_d + 1).
+    /// @param xi     Normalized evaluation point in [-1,1]^D (length D).
+    /// @param olen   Number of output channels (= @c coef.cols()).
+    static Eigen::VectorXd clenshaw_nd(const MatType &coef, const std::vector<int> &shape,
+                                       const Eigen::VectorXd &xi, int olen) {
+        const int D = int(shape.size());
+        std::vector<int> shp = shape;
+        // Working buffer per channel: indexed [channel][flat_in_remaining_tensor].
+        std::vector<std::vector<double>> cur(olen);
+        for (int c = 0; c < olen; ++c) {
+            cur[c].resize(coef.rows());
+            for (long r = 0; r < coef.rows(); ++r) cur[c][r] = coef(r, c);
+        }
+        for (int ax = 0; ax < D; ++ax) {
+            // Contract the current axis 0 (order = shp[0]-1).
+            const int n = shp[0] - 1;
+            // Strides for the *current* (partially contracted) tensor.
+            std::vector<long> strides = row_major_strides(shp);
+            // stride0 = product of remaining axes sizes = number of lines.
+            const long stride0 = strides[0];
+            const long outer = stride0;  // number of lines == stride[0]
+            const double xi_ax = xi[ax];
+            for (int c = 0; c < olen; ++c) {
+                std::vector<double> next(outer);
+                for (long line = 0; line < outer; ++line) {
+                    // Clenshaw along this line (k = n down to 1, then combine with k=0).
+                    double b1 = 0.0, b2 = 0.0;
+                    for (int k = n; k >= 1; --k) {
+                        double bk = 2.0 * xi_ax * b1 - b2 + cur[c][line + long(k) * stride0];
+                        b2 = b1;
+                        b1 = bk;
+                    }
+                    next[line] = cur[c][line] + xi_ax * b1 - b2;
+                }
+                cur[c].swap(next);
+            }
+            shp.erase(shp.begin());  // drop the contracted axis
+        }
+        Eigen::VectorXd v(olen);
+        for (int c = 0; c < olen; ++c) v[c] = cur[c][0];
+        return v;
+    }
+
+  public:
     // -------------------------------------------------------------------------
     // 1-D node generation (unchanged Phase-1 API)
     // -------------------------------------------------------------------------
@@ -341,7 +440,8 @@ struct ChebTable {
         if (D < 1) throw std::invalid_argument("ChebTable: need >=1 axis");
         if (lb.size() != D || ub.size() != D)
             throw std::invalid_argument("ChebTable: lb/ub length must match orders");
-        if (nthreads < 0) throw std::invalid_argument("ChebTable: nthreads >= 0 (0=auto)");
+        if (nthreads < 0)
+            throw std::invalid_argument("ChebTable: nthreads must be >= 0 (0 = auto)");
         ChebTable out;
         out.dim_ = D;
         out.orders_ = orders;
@@ -363,62 +463,12 @@ struct ChebTable {
         out.value_ = grid_values_flat;  // copy; DCT applied in place below
         for (int ax = 0; ax < D; ++ax)
             coeffs_along_axis(out.value_, out.shape_, out.strides_, ax, nthreads);
-        // grad_ and hess_ are left empty; Tasks 2/3 populate them.
+        // Precompute gradient tensors G_j = D_j value_ (zero-extended, same shape).
+        out.grad_.resize(D);
+        for (int j = 0; j < D; ++j)
+            out.grad_[j] = deriv_along_axis(out.value_, out.shape_, out.strides_, j);
+        // hess_ is left empty; Task 3 populates it.
         return out;
-    }
-
-    // -------------------------------------------------------------------------
-    // N-D evaluation helpers (Task 1)
-    // -------------------------------------------------------------------------
-
-    /// @brief Tensor Clenshaw: evaluate a flat coefficient tensor at a point @c xi.
-    ///
-    /// Contracts axes one at a time (always contracts the current axis 0 first),
-    /// reusing the 1-D Clenshaw recurrence.  After contracting all D axes the
-    /// result is a length-@c olen vector.
-    ///
-    /// @param coef   Flat coefficient matrix of shape @c (tsize, olen).
-    /// @param shape  Grid shape (size D, shape[d] = order_d + 1).
-    /// @param xi     Normalized evaluation point in [-1,1]^D (length D).
-    /// @param olen   Number of output channels (= @c coef.cols()).
-    static Eigen::VectorXd clenshaw_nd(const MatType &coef, const std::vector<int> &shape,
-                                       const Eigen::VectorXd &xi, int olen) {
-        const int D = int(shape.size());
-        std::vector<int> shp = shape;
-        // Working buffer per channel: indexed [channel][flat_in_remaining_tensor].
-        std::vector<std::vector<double>> cur(olen);
-        for (int c = 0; c < olen; ++c) {
-            cur[c].resize(coef.rows());
-            for (long r = 0; r < coef.rows(); ++r) cur[c][r] = coef(r, c);
-        }
-        for (int ax = 0; ax < D; ++ax) {
-            // Contract the current axis 0 (order = shp[0]-1).
-            const int n = shp[0] - 1;
-            // Strides for the *current* (partially contracted) tensor.
-            std::vector<long> strides = row_major_strides(shp);
-            // stride0 = product of remaining axes sizes = number of lines.
-            const long stride0 = strides[0];
-            const long outer = stride0;  // number of lines == stride[0]
-            const double xi_ax = xi[ax];
-            for (int c = 0; c < olen; ++c) {
-                std::vector<double> next(outer);
-                for (long line = 0; line < outer; ++line) {
-                    // Clenshaw along this line (k = n down to 1, then combine with k=0).
-                    double b1 = 0.0, b2 = 0.0;
-                    for (int k = n; k >= 1; --k) {
-                        double bk = 2.0 * xi_ax * b1 - b2 + cur[c][line + long(k) * stride0];
-                        b2 = b1;
-                        b1 = bk;
-                    }
-                    next[line] = cur[c][line] + xi_ax * b1 - b2;
-                }
-                cur[c].swap(next);
-            }
-            shp.erase(shp.begin());  // drop the contracted axis
-        }
-        Eigen::VectorXd v(olen);
-        for (int c = 0; c < olen; ++c) v[c] = cur[c][0];
-        return v;
     }
 
     // -------------------------------------------------------------------------
@@ -468,12 +518,27 @@ struct ChebTable {
     /// mapping to the normalised domain (no extrapolation).  Uses
     /// @ref clenshaw_nd internally.
     Eigen::VectorXd eval(const Eigen::VectorXd &x) const {
-        Eigen::VectorXd xi(dim_);
-        for (int d = 0; d < dim_; ++d) {
-            double t = (2.0 * x[d] - lb_[d] - ub_[d]) / (ub_[d] - lb_[d]);
-            xi[d] = std::clamp(t, -1.0, 1.0);
-        }
+        Eigen::VectorXd xi, hinv;
+        compute_xi_hinv(x, xi, hinv);
         return clenshaw_nd(value_, shape_, xi, olen_);
+    }
+
+    /// @brief Evaluate the analytic Jacobian at a physical point @c x (N-D).
+    ///
+    /// Returns an @c (olen × dim_) matrix where column @c j is the partial
+    /// derivative of all output channels with respect to input @c x[j].
+    /// Reads the precomputed gradient tensors @c grad_[j] (populated by the
+    /// N-D @ref from_values overload); the chain-rule factor @c hinv[j] = 2/(ub_[j]-lb_[j])
+    /// accounts for the change of variables from physical to normalised coordinates.
+    ///
+    /// @pre @c grad_ must be non-empty (constructed via the N-D @ref from_values overload).
+    Eigen::MatrixXd eval_jacobian(const Eigen::VectorXd &x) const {
+        Eigen::VectorXd xi, hinv;
+        compute_xi_hinv(x, xi, hinv);
+        Eigen::MatrixXd J(olen_, dim_);
+        for (int j = 0; j < dim_; ++j)
+            J.col(j) = clenshaw_nd(grad_[j], shape_, xi, olen_) * hinv[j];
+        return J;
     }
 
     /// @brief Evaluate value and first derivative at t. Returns (value, deriv1).
