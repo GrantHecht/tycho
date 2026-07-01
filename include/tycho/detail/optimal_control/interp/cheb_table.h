@@ -482,8 +482,15 @@ struct ChebTable {
     // Evaluation (1-D path re-expressed to read value_/grad_[0]/hess_[0])
     // -------------------------------------------------------------------------
 
-    /// @brief Per-output norm of the trailing-half coefficients (adaptive convergence loop).
+    /// @brief Per-output norm of the trailing-half Chebyshev coefficients along the
+    /// single axis (1-D adaptive-convergence indicator).
+    /// @pre 1-D table only. N-D adaptivity refines each axis via marginal 1-D tables
+    /// (see the Python `cheb_adaptive` N-D path); calling this on an N-D table throws
+    /// rather than silently returning an axis-0-only value.
     Eigen::VectorXd coeff_tail_norm() const {
+        if (dim_ != 1)
+            throw std::invalid_argument(
+                "ChebTable::coeff_tail_norm is 1-D only; N-D adaptivity uses per-axis marginals");
         Eigen::VectorXd tn(olen_);
         const int n = orders_[0];
         const int lo = (n + 1) / 2;

@@ -401,3 +401,21 @@ TEST_F(ChebNdTest, HessianVsFD_3D_NonUnit) {
                             << "H(" << a << "," << b << ") at " << x << "," << y << "," << z;
             }
 }
+
+// coeff_tail_norm is a 1-D-only convergence indicator (it reads axis 0). On an
+// N-D table it would silently return an axis-0-only value, so it must throw
+// rather than mislead (N-D adaptivity uses per-axis marginal 1-D tables).
+TEST_F(ChebNdTest, CoeffTailNormThrowsForND) {
+    std::vector<int> orders{4, 4};
+    Eigen::VectorXd lb(2), ub(2);
+    lb << -1, -1;
+    ub << 1, 1;
+    auto nodes = oc::ChebTable::cheb_points(orders, lb, ub);
+    const int nx = orders[0] + 1, ny = orders[1] + 1;
+    oc::ChebTable::MatType vals(nx * ny, 1);
+    for (int i = 0; i < nx; ++i)
+        for (int j = 0; j < ny; ++j)
+            vals(i * ny + j, 0) = Tk(2, nodes[0][i]) * Tk(2, nodes[1][j]);
+    auto tab = oc::ChebTable::from_values(vals, lb, ub, orders);
+    EXPECT_THROW((void)tab.coeff_tail_norm(), std::invalid_argument);
+}
