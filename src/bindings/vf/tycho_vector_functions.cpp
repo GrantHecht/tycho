@@ -77,12 +77,14 @@ undefined behavior at evaluation time.
 #include "tycho/detail/optimal_control/interp/interp_table_2d.h"
 #include "tycho/detail/optimal_control/interp/interp_table_3d.h"
 #include "tycho/detail/optimal_control/interp/interp_table_4d.h"
+#include "tycho/detail/optimal_control/interp/cheb_table.h"
 #include "utils/fmtlib.h"
 
-// Out-of-class definitions for InterpTable binding functions.
-// Included here after all InterpTable headers so all types are complete.
+// Out-of-class definitions for InterpTable and ChebTable binding functions.
+// Included here after all headers so all types are complete.
 #ifdef TYCHO_PYTHON_BINDINGS
 #include "interp_table_bind.h"
+#include "cheb_interp_bind.h"
 #endif
 
 namespace tycho {
@@ -147,6 +149,7 @@ void tycho::vector_functions_build(FunctionRegistry &reg, nb::module_ &m) {
     InterpTable2DBuild(mod);
     InterpTable3DBuild(mod);
     InterpTable4DBuild(mod);
+    ChebInterpBuild(mod);
 
     mod.def("scalar_dynamic_stack_test", [](const std::vector<GenericFunction<-1, 1>> &funcs) {
         return GenericFunction<-1, -1>(DynamicStackedOutputs<GenericFunction<-1, 1>>{funcs});

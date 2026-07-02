@@ -13960,6 +13960,424 @@ class InterpTable4D:
             4-in, 1-out VectorFunction backed by this table.
         """
 
+class ChebTable:
+    """
+    Chebyshev (2nd-kind / DCT-I) interpolant data class — 1-D and N-D.
+
+    Holds Chebyshev coefficients of one or more output channels and evaluates them
+    numerically via Clenshaw recurrence with analytic first and second derivatives.
+    This is the interpolant *data* — it is not itself a VectorFunction.  Build from
+    values sampled at :py:meth:`cheb_points`, then obtain a VectorFunction with
+    :py:meth:`vf` or a ``__call__`` compose overload for use in optimal-control problems.
+
+    Derivative-series coefficients are precomputed once at construction time, so
+    solve-time evaluation incurs no per-call allocation or derivative-coefficient
+    recomputation (the Clenshaw recurrence itself still runs on every evaluation).
+    """
+
+    class OutOfDomain(enum.Enum):
+        """
+        Per-axis behaviour for queries outside ``[lb, ub]``.
+
+        ``Clamp`` (default) snaps the query to the nearest endpoint (a global Chebyshev
+        polynomial diverges outside its domain, so extrapolation is never desired).
+        ``Periodic`` wraps the query modulo the axis span back into the domain — for
+        angle-like / invariant-manifold axes; the sampled function must satisfy
+        ``f(lb) ~= f(ub)`` on that axis for the interpolant to be continuous.
+        """
+
+        Clamp = 0
+
+        Periodic = 1
+
+    @overload
+    @staticmethod
+    def cheb_points(order: int, lb: float, ub: float) -> numpy.ndarray:
+        """
+        Return the order+1 second-kind Chebyshev nodes on [lb, ub] (1-D).
+
+        The nodes are ordered so that ``t[0] = ub`` and ``t[order] = lb`` (i.e. the
+        cosine mapping places the first node at the right endpoint).  Pass the returned
+        array to :py:meth:`from_values` to build a :py:class:`ChebTable`.
+
+        Parameters
+        ----------
+        order : int
+            Polynomial order ``n >= 1``.  The returned array has ``n+1`` elements.
+        lb : float
+            Lower bound of the physical domain.
+        ub : float
+            Upper bound of the physical domain.  Must satisfy ``ub > lb``.
+
+        Returns
+        -------
+        numpy.ndarray, shape (order+1,)
+            Second-kind Chebyshev node coordinates on ``[lb, ub]``.
+        """
+
+    @overload
+    @staticmethod
+    def cheb_points(orders: Sequence[int], lb: numpy.ndarray, ub: numpy.ndarray) -> list:
+        """
+        Return per-axis Chebyshev nodes for an N-D tensor-product grid.
+
+        Parameters
+        ----------
+        orders : list[int]
+            Per-axis polynomial orders; axis ``d`` has ``orders[d]+1`` nodes.
+        lb : array_like, shape (D,)
+            Per-axis lower bounds.
+        ub : array_like, shape (D,)
+            Per-axis upper bounds.  Must satisfy ``ub[d] > lb[d]`` for all d.
+
+        Returns
+        -------
+        list of numpy.ndarray
+            ``orders[d]+1`` node coordinates for each axis d.
+        """
+
+    @overload
+    @staticmethod
+    def from_values(grid_values: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], lb: float, ub: float, order: int, nthreads: int = 1, out_of_domain: OutOfDomain = OutOfDomain.Clamp) -> ChebTable:
+        """
+        Build a ChebTable from values sampled at the Chebyshev nodes (1-D).
+
+        The values must be sampled at the ``order+1`` nodes returned by
+        :py:meth:`cheb_points`.  Coefficients are computed via a DCT-I transform
+        (pocketfft) and derivative-series coefficients are precomputed immediately,
+        so subsequent evaluation calls incur no per-call allocation.
+
+        Parameters
+        ----------
+        grid_values : array_like, shape (order+1, olen)
+            Sampled values.  Row ``j`` holds all output channels at Chebyshev node ``j``
+            (in the order returned by :py:meth:`cheb_points`); column ``c`` is output
+            channel ``c``.  This matches the N-D :py:meth:`from_values` ``(tsize, olen)``
+            convention (here ``tsize = order+1``).
+        lb : float
+            Lower bound of the physical domain.
+        ub : float
+            Upper bound of the physical domain.  Must satisfy ``ub > lb``.
+        order : int
+            Polynomial order ``n >= 1``.
+        nthreads : int, optional
+            Thread count forwarded to pocketfft for the DCT-I transform.  Defaults
+            to 1; pass 0 to use all available cores.  Negative values raise
+            ``ValueError``.
+        out_of_domain : ChebTable.OutOfDomain, optional
+            Behaviour for queries outside ``[lb, ub]``.  ``Clamp`` (default) snaps to
+            the nearest endpoint; ``Periodic`` wraps modulo the span (see
+            :py:class:`ChebTable.OutOfDomain`).
+
+        Returns
+        -------
+        ChebTable
+            Constructed interpolant ready for evaluation or composition.
+        """
+
+    @overload
+    @staticmethod
+    def from_values(grid_values_flat: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='F')], lb: numpy.ndarray, ub: numpy.ndarray, orders: Sequence[int], nthreads: int = 1, out_of_domain: Sequence[OutOfDomain] = []) -> ChebTable:
+        """
+        Build a ChebTable from values on an N-D tensor-product Chebyshev grid.
+
+        Parameters
+        ----------
+        grid_values_flat : array_like, shape (tsize, olen)
+            Flattened grid values in row-major (axis-0-outer) order, where
+            ``tsize = prod(orders[d]+1)``.  Columns are output channels.
+            Obtain the grid from :py:meth:`cheb_points` and flatten row-major.
+        lb : array_like, shape (D,)
+            Per-axis lower bounds.
+        ub : array_like, shape (D,)
+            Per-axis upper bounds.
+        orders : list[int]
+            Per-axis polynomial orders.
+        nthreads : int, optional
+            Thread count for the DCT-I transforms.  Defaults to 1.
+        out_of_domain : list[ChebTable.OutOfDomain], optional
+            Per-axis out-of-domain policy (length D).  Empty (default) means ``Clamp``
+            on every axis.  Use ``Periodic`` on an axis to wrap queries modulo its span.
+
+        Returns
+        -------
+        ChebTable
+            N-D Chebyshev interpolant ready for evaluation or composition.
+        """
+
+    @overload
+    def eval(self, t: float) -> numpy.ndarray:
+        """
+        Evaluate all output channels at scalar coordinate t (1-D).
+
+        Parameters
+        ----------
+        t : float
+            Query coordinate.  Values outside ``[lb, ub]`` are clamped to the
+            nearest endpoint (or wrapped, if the axis policy is Periodic); no
+            extrapolation error is raised.  A non-finite (NaN/Inf) query is not
+            rejected and propagates to a NaN result — guard with :py:meth:`contains`
+            if needed.  Requires a 1-D table — calling this on an N-D table raises
+            ``ValueError`` (pass a length-D array instead).
+
+        Returns
+        -------
+        numpy.ndarray, shape (olen,)
+            Interpolated channel values at ``t``.
+        """
+
+    @overload
+    def eval(self, x: numpy.ndarray) -> numpy.ndarray:
+        """
+        Evaluate all output channels at a physical point x (N-D).
+
+        Parameters
+        ----------
+        x : array_like, shape (D,)
+            Query coordinates.  Each coordinate is mapped into its axis interval per
+            that axis's out-of-domain policy (clamped by default; wrapped if Periodic).
+            A non-finite (NaN/Inf) coordinate propagates to a NaN result — guard with
+            :py:meth:`contains` if needed.  Its length must equal ``input_dim`` or a
+            ``ValueError`` is raised.
+
+        Returns
+        -------
+        numpy.ndarray, shape (olen,)
+            Interpolated channel values at ``x``.
+        """
+
+    @overload
+    def __call__(self, t: float) -> numpy.ndarray:
+        """
+        Evaluate all output channels at scalar coordinate t (numeric call).
+
+        Equivalent to :py:meth:`eval`.
+        """
+
+    @overload
+    def __call__(self, arg: ScalarFunction, /) -> VectorFunction:
+        """
+        Compose the table with a scalar VectorFunction to produce a new VectorFunction.
+
+        Parameters
+        ----------
+        t : VectorFunction (scalar output)
+            Scalar-output VectorFunction whose result is used as the query coordinate.
+
+        Returns
+        -------
+        VectorFunction
+            VectorFunction evaluating all channels at ``t(x)``.  Output size equals
+            ``output_dim`` at runtime.
+        """
+
+    @overload
+    def __call__(self, arg: Element, /) -> VectorFunction:
+        """
+        Compose the table with a scalar Segment to produce a new VectorFunction.
+
+        Parameters
+        ----------
+        t : Segment (scalar output)
+            Scalar-output ``Segment`` (a single element of a state/control vector)
+            whose value is used as the query coordinate.
+
+        Returns
+        -------
+        VectorFunction
+            VectorFunction evaluating all channels at the segment value.  Output size
+            equals ``output_dim`` at runtime.
+        """
+
+    @overload
+    def __call__(self, arg0: ScalarFunction, arg1: ScalarFunction, /) -> VectorFunction:
+        """
+        Compose the table with two scalar VectorFunctions (2-D input).
+
+        Parameters
+        ----------
+        x : VectorFunction (scalar output)
+            VectorFunction providing the first coordinate.
+        y : VectorFunction (scalar output)
+            VectorFunction providing the second coordinate.
+
+        Returns
+        -------
+        VectorFunction
+            VectorFunction evaluating all channels at ``(x(v), y(v))``.
+        """
+
+    @overload
+    def __call__(self, arg0: Element, arg1: Element, /) -> VectorFunction:
+        """
+        Compose the table with two scalar Segments (2-D input).
+
+        Parameters
+        ----------
+        x : Segment (scalar output)
+        y : Segment (scalar output)
+
+        Returns
+        -------
+        VectorFunction
+            VectorFunction evaluating all channels at the two segment values.
+        """
+
+    @overload
+    def __call__(self, arg0: ScalarFunction, arg1: ScalarFunction, arg2: ScalarFunction, /) -> VectorFunction:
+        """
+        Compose the table with three scalar VectorFunctions (3-D input).
+
+        Parameters
+        ----------
+        x : VectorFunction (scalar output)
+        y : VectorFunction (scalar output)
+        z : VectorFunction (scalar output)
+
+        Returns
+        -------
+        VectorFunction
+            VectorFunction evaluating all channels at ``(x(v), y(v), z(v))``.
+        """
+
+    @overload
+    def __call__(self, arg0: Element, arg1: Element, arg2: Element, /) -> VectorFunction:
+        """
+        Compose the table with three scalar Segments (3-D input).
+
+        Parameters
+        ----------
+        x : Segment (scalar output)
+        y : Segment (scalar output)
+        z : Segment (scalar output)
+
+        Returns
+        -------
+        VectorFunction
+            VectorFunction evaluating all channels at the three segment values.
+        """
+
+    def eval_deriv1(self, t: float) -> tuple[numpy.ndarray, numpy.ndarray]:
+        """
+        Evaluate value and first derivative at t.
+
+        Requires a 1-D table; calling this on an N-D table raises ``ValueError``.
+
+        Parameters
+        ----------
+        t : float
+            Query coordinate.  Outside ``[lb, ub]`` under Clamp the value is the flat
+            endpoint constant and ``deriv1`` is ``0`` (consistent with that constant);
+            on a Periodic axis the query wraps into the domain first.
+
+        Returns
+        -------
+        tuple[numpy.ndarray, numpy.ndarray]
+            ``(value, deriv1)`` where both arrays have shape ``(olen,)``.
+            ``deriv1`` contains ``df/dt`` for each output channel.
+        """
+
+    def eval_deriv2(self, t: float) -> tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]:
+        """
+        Evaluate value, first derivative, and second derivative at t.
+
+        Requires a 1-D table; calling this on an N-D table raises ``ValueError``.
+
+        Parameters
+        ----------
+        t : float
+            Query coordinate.  Outside ``[lb, ub]`` under Clamp both derivatives are
+            ``0`` (the value is a flat endpoint constant); on a Periodic axis the query
+            wraps into the domain first.
+
+        Returns
+        -------
+        tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]
+            ``(value, deriv1, deriv2)`` where all arrays have shape ``(olen,)``.
+            ``deriv1`` contains ``df/dt`` and ``deriv2`` contains ``d²f/dt²`` for
+            each output channel.
+        """
+
+    def coeff_tail_norm(self) -> numpy.ndarray:
+        """
+        Per-channel norm of the trailing-half Chebyshev coefficients (1-D).
+
+        Requires a 1-D table; calling this on an N-D table raises ``ValueError``
+        (N-D adaptivity refines each axis via per-axis marginal 1-D tables).
+
+        Returns the L2 norm of the upper half of the coefficient series for each
+        output channel.  Used by the adaptive construction loop
+        (:py:func:`cheb_adaptive`) as a convergence indicator: when this norm is
+        small relative to the function scale the series has converged.
+
+        Returns
+        -------
+        numpy.ndarray, shape (olen,)
+            Tail norms; one entry per output channel.
+        """
+
+    @property
+    def output_dim(self) -> int:
+        """Number of output channels (olen)."""
+
+    @property
+    def input_dim(self) -> int:
+        """Number of input dimensions (1 for 1-D tables, D for N-D)."""
+
+    @property
+    def order(self) -> int:
+        """
+        Polynomial order n of a 1-D table (``orders[0]``).  Raises
+        ``ValueError`` on N-D tables — use :py:attr:`orders` instead.
+        """
+
+    @property
+    def orders(self) -> list:
+        """Per-axis polynomial orders as a list of int."""
+
+    @property
+    def lb(self) -> object:
+        """Lower domain bound(s): a float for 1-D tables, an ndarray for N-D."""
+
+    @property
+    def ub(self) -> object:
+        """Upper domain bound(s): a float for 1-D tables, an ndarray for N-D."""
+
+    @property
+    def out_of_domain(self) -> list:
+        """Per-axis out-of-domain policy as a list of ChebTable.OutOfDomain."""
+
+    @overload
+    def contains(self, t: float) -> bool:
+        """
+        True iff scalar ``t`` lies within ``[lb, ub]`` (1-D tables).
+
+        Lets callers guard against out-of-domain queries (which otherwise clamp, or wrap
+        on Periodic axes) before evaluating.
+        """
+
+    @overload
+    def contains(self, x: numpy.ndarray) -> bool:
+        """
+        True iff every coordinate of ``x`` lies within ``[lb, ub]`` (N-D tables).
+        """
+
+    def in_domain(self, x: numpy.ndarray) -> bool:
+        """Alias of :py:meth:`contains` for an array query."""
+
+    def vf(self) -> VectorFunction:
+        """
+        Return a VectorFunction backed by this table (any dimension).
+
+        For a 1-D table, takes a single-element input.
+        For an N-D table, takes an N-element input vector.
+
+        Returns
+        -------
+        VectorFunction
+            input_dim-in, ``output_dim``-out VectorFunction backed by this table.
+        """
+
 def scalar_dynamic_stack_test(arg: Sequence[ScalarFunction], /) -> VectorFunction:
     """
     Internal testing helper: stack a list of scalar functions into a VectorFunction.

@@ -7,3 +7,7 @@
 [submodule "dep/nanobind"]
 	path = dep/nanobind
 	url = https://github.com/wjakob/nanobind
+[submodule "dep/pocketfft"]
+	path = dep/pocketfft
+	url = https://github.com/mreineck/pocketfft.git
+	branch = cpp
