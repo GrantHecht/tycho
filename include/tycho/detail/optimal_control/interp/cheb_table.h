@@ -6,6 +6,7 @@
 #include "tycho/detail/vf/core/vector_function.h"
 #include <Eigen/Dense>
 #include <cmath>
+#include <limits>
 #include <numbers>
 #include <pocketfft_hdronly.h>
 #include <stdexcept>
@@ -89,6 +90,9 @@ struct ChebTable {
     // deliberate. This differs from InterpTable1D, which extrapolates. Periodic:
     // wrap the query modulo the axis span back into the domain before mapping.
     // The trailing clamp also guards endpoint round-off in both cases.
+    // Note: a non-finite (NaN/Inf) query is not rejected here — it propagates to
+    // a NaN output. Construction rejects non-finite samples; eval-time callers
+    // that need a guard should use contains() first.
     double axis_xi(int d, double x) const {
         const double span = ub_[d] - lb_[d];
         double t = x;
@@ -104,6 +108,19 @@ struct ChebTable {
     // 1-D convenience wrapper (axis 0).
     double to_xi(double t) const { return axis_xi(0, t); }
     double half_span() const { return 0.5 * (ub_[0] - lb_[0]); }
+
+    // Derivative scale factor for axis d at physical coordinate x: 1.0 when the
+    // query is in-domain (or the axis is Periodic — Periodic wraps in-domain, so
+    // derivatives are always valid), 0.0 when the query is strictly outside
+    // [lb_[d], ub_[d]] under Clamp. Outside the domain the Clamp value is a flat
+    // constant, so its derivative is zero; this keeps the analytic Jacobian /
+    // Hessian consistent with eval() there. The boundary itself counts as
+    // in-domain (the one-sided endpoint slope is retained).
+    double axis_deriv_scale(int d, double x) const {
+        if (oob_[d] == OutOfDomain::Periodic)
+            return 1.0;
+        return (x < lb_[d] || x > ub_[d]) ? 0.0 : 1.0;
+    }
 
     // -------------------------------------------------------------------------
     // Static helpers (reused by both 1-D and N-D paths)
@@ -185,7 +202,12 @@ struct ChebTable {
     // -------------------------------------------------------------------------
     int input_dim() const { return dim_; }
     int output_dim() const { return olen_; }
-    int order() const { return orders_.empty() ? 0 : orders_[0]; }
+    /// @brief Polynomial order of a 1-D table. Throws on N-D tables (query
+    /// per-axis orders via @ref orders instead), mirroring @ref coeff_tail_norm.
+    int order() const {
+        require_scalar();
+        return orders_[0];
+    }
     const std::vector<int> &orders() const { return orders_; }
     /// @brief Per-axis lower domain bounds (length dim_).
     const Eigen::VectorXd &lb() const { return lb_; }
@@ -234,6 +256,23 @@ struct ChebTable {
                 "ChebTable: scalar eval requires a 1-D table; this table is " +
                 std::to_string(dim_) + "-dimensional — pass a length-" + std::to_string(dim_) +
                 " array");
+    }
+
+    // Establish the grid-layout invariant (dim_/orders_/shape_/strides_/tsize_)
+    // from per-axis orders in one place, so these interdependent fields are
+    // derived from a single source of truth and cannot desync between the 1-D
+    // and N-D from_values paths. Does not validate orders (callers check).
+    void set_grid_layout(const std::vector<int> &orders) {
+        dim_ = int(orders.size());
+        orders_ = orders;
+        shape_.resize(dim_);
+        long ts = 1;
+        for (int d = 0; d < dim_; ++d) {
+            shape_[d] = orders[d] + 1;
+            ts *= shape_[d];
+        }
+        strides_ = row_major_strides(shape_);
+        tsize_ = ts;
     }
 
     // -------------------------------------------------------------------------
@@ -313,8 +352,10 @@ struct ChebTable {
     ///
     /// For axis @c d, @c xi[d] is produced by @ref axis_xi (which applies the
     /// per-axis @ref OutOfDomain policy), and @c hinv[d] = 2 / (ub_[d] - lb_[d])
-    /// is the physical→normalised chain-rule factor.  The @c Periodic wrap is a
-    /// translation, so it does not change @c hinv.
+    /// is the physical→normalised chain-rule factor, multiplied by the
+    /// @ref axis_deriv_scale mask (0 outside the Clamp domain so derivatives stay
+    /// consistent with the flat clamped value; 1 in-domain and for Periodic axes,
+    /// whose wrap is a pure translation that does not change @c hinv).
     ///
     /// Used by @ref eval(const Eigen::VectorXd&), @ref eval_jacobian, and
     /// @ref eval_hessian to avoid duplicating the per-axis mapping logic.
@@ -324,7 +365,11 @@ struct ChebTable {
     /// scratch instead of allocating Eigen vectors.
     void compute_xi_hinv_raw(const double *x, double *xi, double *hinv) const {
         for (int d = 0; d < dim_; ++d) {
-            hinv[d] = 2.0 / (ub_[d] - lb_[d]);
+            // Fold the out-of-domain derivative mask into hinv: since the Jacobian
+            // uses hinv[j] linearly and the Hessian uses hinv[j]*hinv[k], zeroing
+            // hinv[d] for a clamped axis zeros every derivative involving axis d,
+            // matching the flat clamped value. The value path uses only xi.
+            hinv[d] = (2.0 / (ub_[d] - lb_[d])) * axis_deriv_scale(d, x[d]);
             xi[d] = axis_xi(d, x[d]);
         }
     }
@@ -412,14 +457,17 @@ struct ChebTable {
     // 1-D from_values (Phase-1 API, re-homed onto generic members)
     // -------------------------------------------------------------------------
 
-    /// @brief Build coefficients from grid values (olen × (n+1)) via DCT-I.
+    /// @brief Build coefficients from grid values ((n+1) × olen) via DCT-I.
     ///
     /// Derivative-series coefficients (first and second order) are precomputed
     /// here and stored in @c grad_[0] and @c hess_[0] (zero-extended to tsize
     /// rows), so that @ref eval_impl incurs no per-call allocation during
     /// solve-time evaluation.
     ///
-    /// @param grid_values  Row-major matrix of shape (olen, order+1).
+    /// @param grid_values  Matrix of shape (order+1, olen): row @c j is the value
+    ///   at node @c j (all output channels), column @c c is output channel @c c.
+    ///   This matches the N-D overload's @c (tsize, olen) convention (here
+    ///   @c tsize = order+1) so both ranks share one node-major orientation.
     /// @param lb           Lower bound of the physical domain.
     /// @param ub           Upper bound of the physical domain.
     /// @param order        Polynomial order n; the table uses n+1 nodes.
@@ -433,8 +481,8 @@ struct ChebTable {
                                  int nthreads = 1, OutOfDomain oob = OutOfDomain::Clamp) {
         if (order < 1)
             throw std::invalid_argument("ChebTable: order must be >= 1");
-        if (grid_values.cols() != order + 1)
-            throw std::invalid_argument("ChebTable: grid_values must have order+1 columns");
+        if (grid_values.rows() != order + 1)
+            throw std::invalid_argument("ChebTable: grid_values must have order+1 rows");
         if (ub <= lb)
             throw std::invalid_argument("ChebTable: require ub > lb");
         if (nthreads < 0)
@@ -442,21 +490,16 @@ struct ChebTable {
 
         ChebTable out;
 
-        // Set rank-generic members for dim==1
-        out.dim_ = 1;
-        out.orders_ = {order};
+        // Set rank-generic layout members (dim_/orders_/shape_/strides_/tsize_).
+        out.set_grid_layout({order});
         out.lb_.resize(1);
         out.lb_[0] = lb;
         out.ub_.resize(1);
         out.ub_[0] = ub;
         out.oob_ = {oob};
-        out.shape_ = {order + 1};
-        out.strides_ = row_major_strides(out.shape_);
-        out.tsize_ = order + 1;
-        out.olen_ = int(grid_values.rows());
+        out.olen_ = int(grid_values.cols());
 
-        // Build value_ (tsize × olen) via DCT-I.
-        // Phase-1 stored coeffs_ as (order+1) × olen_; value_ has the same layout.
+        // Build value_ (tsize × olen) via DCT-I; grid_values is already (tsize, olen).
         out.value_.resize(out.tsize_, out.olen_);
 
         const size_t N1 = size_t(order) + 1;
@@ -467,7 +510,7 @@ struct ChebTable {
         std::vector<double> in(N1), yk(N1);
         for (int c = 0; c < out.olen_; ++c) {
             for (size_t j = 0; j < N1; ++j)
-                in[j] = grid_values(c, ptrdiff_t(j));
+                in[j] = grid_values(ptrdiff_t(j), c);
             pocketfft::dct(shape, stride, stride, axes, /*type=*/1, in.data(), yk.data(),
                            /*fct=*/1.0, /*ortho=*/false, size_t(nthreads));
             for (int k = 0; k <= order; ++k)
@@ -520,6 +563,8 @@ struct ChebTable {
     static std::vector<Eigen::VectorXd> cheb_points(const std::vector<int> &orders,
                                                     const Eigen::VectorXd &lb,
                                                     const Eigen::VectorXd &ub) {
+        if (lb.size() != Eigen::Index(orders.size()) || ub.size() != Eigen::Index(orders.size()))
+            throw std::invalid_argument("ChebTable::cheb_points: lb/ub length must match orders");
         std::vector<Eigen::VectorXd> out(orders.size());
         for (size_t d = 0; d < orders.size(); ++d)
             out[d] = cheb_points(orders[d], lb[d], ub[d]);
@@ -562,27 +607,27 @@ struct ChebTable {
             oob.assign(D, OutOfDomain::Clamp);
         else if (int(oob.size()) != D)
             throw std::invalid_argument("ChebTable: out_of_domain length must match orders");
-        ChebTable out;
-        out.dim_ = D;
-        out.orders_ = orders;
-        out.lb_ = lb;
-        out.ub_ = ub;
-        out.oob_ = std::move(oob);
-        out.shape_.resize(D);
-        long tsize = 1;
         for (int d = 0; d < D; ++d) {
             if (orders[d] < 1)
                 throw std::invalid_argument("ChebTable: each order >= 1");
             if (ub[d] <= lb[d])
                 throw std::invalid_argument("ChebTable: require ub > lb per axis");
-            out.shape_[d] = orders[d] + 1;
-            tsize *= out.shape_[d];
         }
-        out.strides_ = row_major_strides(out.shape_);
-        out.tsize_ = tsize;
-        if (grid_values_flat.rows() != tsize)
+        ChebTable out;
+        out.set_grid_layout(orders); // dim_/orders_/shape_/strides_/tsize_
+        out.lb_ = lb;
+        out.ub_ = ub;
+        out.oob_ = std::move(oob);
+        if (grid_values_flat.rows() != out.tsize_)
             throw std::invalid_argument("ChebTable: grid_values rows must equal prod(order+1)");
         out.olen_ = int(grid_values_flat.cols());
+        // Guard the solve-time scratch-buffer index type: ChebFunction's arena
+        // (TempSpec) sizes are int, and eval scratch is olen*tsize doubles. Reject
+        // tables whose product would overflow int rather than silently truncate.
+        if (long(out.olen_) * out.tsize_ > long(std::numeric_limits<int>::max()))
+            throw std::invalid_argument(
+                "ChebTable: table too large — olen*prod(order+1) exceeds the int "
+                "scratch-buffer limit");
         out.value_ = grid_values_flat; // copy; DCT applied in place below
         for (int ax = 0; ax < D; ++ax)
             coeffs_along_axis(out.value_, out.shape_, out.strides_, ax, nthreads);
@@ -629,13 +674,17 @@ struct ChebTable {
     void eval_impl(double t, int deriv, VType &v, VType &dv, VType &d2v) const {
         const double xi = to_xi(t), h = half_span();
         const int order = orders_[0];
+        // Zero the derivative outside the domain (Clamp value is flat there); a
+        // 0/1 factor, so applying it once also zeroes the second derivative.
+        const double dscale = (deriv >= 1) ? axis_deriv_scale(0, t) : 1.0;
         for (int c = 0; c < olen_; ++c) {
             v[c] = clenshaw(value_.col(c), order, xi);
             if (deriv >= 1) {
-                dv[c] = (order >= 1 ? clenshaw(grad_[0].col(c), order - 1, xi) : 0.0) / h;
+                dv[c] = dscale * (order >= 1 ? clenshaw(grad_[0].col(c), order - 1, xi) : 0.0) / h;
                 if (deriv >= 2) {
-                    d2v[c] =
-                        (order >= 2 ? clenshaw(hess_[0].col(c), order - 2, xi) : 0.0) / (h * h);
+                    d2v[c] = dscale *
+                             (order >= 2 ? clenshaw(hess_[0].col(c), order - 2, xi) : 0.0) /
+                             (h * h);
                 }
             }
         }

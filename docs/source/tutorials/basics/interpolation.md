@@ -216,11 +216,12 @@ True
 
 If you already have function values at the Chebyshev nodes (in descending node
 order, matching `cheb_points`), build the table with `from_values`. The value array
-is shaped `(output_dim, order + 1)`:
+is shaped `(order + 1, output_dim)` — row `j` holds all output channels at node `j`
+(the same node-major `(tsize, olen)` orientation the N-D overload uses):
 
 ```{doctest}
 >>> pts = vf.ChebTable.cheb_points(16, 0.0, np.pi)
->>> vals = np.sin(pts).reshape(1, -1)        # shape (1, 17)
+>>> vals = np.sin(pts).reshape(-1, 1)        # shape (17, 1)
 >>> ct2 = vf.ChebTable.from_values(vals, 0.0, np.pi, 16)
 >>> bool(abs(float(ct2.eval(np.pi / 2)[0]) - 1.0) < 1e-9)
 True

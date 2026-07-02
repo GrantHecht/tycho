@@ -26,7 +26,8 @@ values sampled at :py:meth:`cheb_points`, then obtain a VectorFunction with
 :py:meth:`vf` or a ``__call__`` compose overload for use in optimal-control problems.
 
 Derivative-series coefficients are precomputed once at construction time, so
-solve-time evaluation incurs no per-call allocation or recurrence work.
+solve-time evaluation incurs no per-call allocation or derivative-coefficient
+recomputation (the Clenshaw recurrence itself still runs on every evaluation).
 )doc");
 
     // ---- Out-of-domain policy enum (nested: ChebTable.OutOfDomain) ----
@@ -97,7 +98,7 @@ list of numpy.ndarray
     ``orders[d]+1`` node coordinates for each axis d.
 )doc");
 
-    // ---- 1-D from_values(grid_values olen×(n+1), lb, ub, order, nthreads) ----
+    // ---- 1-D from_values(grid_values (n+1)×olen, lb, ub, order, nthreads) ----
     obj.def_static(
         "from_values",
         [](const MatType &grid_values, double lb, double ub, int order, int nthreads,
@@ -115,9 +116,11 @@ so subsequent evaluation calls incur no per-call allocation.
 
 Parameters
 ----------
-grid_values : array_like, shape (olen, order+1)
-    Sampled values.  Rows are output channels; columns correspond to the
-    ``order+1`` Chebyshev nodes in the order returned by :py:meth:`cheb_points`.
+grid_values : array_like, shape (order+1, olen)
+    Sampled values.  Row ``j`` holds all output channels at Chebyshev node ``j``
+    (in the order returned by :py:meth:`cheb_points`); column ``c`` is output
+    channel ``c``.  This matches the N-D :py:meth:`from_values` ``(tsize, olen)``
+    convention (here ``tsize = order+1``).
 lb : float
     Lower bound of the physical domain.
 ub : float
@@ -186,8 +189,10 @@ Parameters
 t : float
     Query coordinate.  Values outside ``[lb, ub]`` are clamped to the
     nearest endpoint (or wrapped, if the axis policy is Periodic); no
-    extrapolation error is raised.  Requires a 1-D table — calling this on an
-    N-D table raises ``ValueError`` (pass a length-D array instead).
+    extrapolation error is raised.  A non-finite (NaN/Inf) query is not
+    rejected and propagates to a NaN result — guard with :py:meth:`contains`
+    if needed.  Requires a 1-D table — calling this on an N-D table raises
+    ``ValueError`` (pass a length-D array instead).
 
 Returns
 -------
@@ -206,7 +211,9 @@ Parameters
 x : array_like, shape (D,)
     Query coordinates.  Each coordinate is mapped into its axis interval per
     that axis's out-of-domain policy (clamped by default; wrapped if Periodic).
-    Its length must equal ``input_dim`` or a ``ValueError`` is raised.
+    A non-finite (NaN/Inf) coordinate propagates to a NaN result — guard with
+    :py:meth:`contains` if needed.  Its length must equal ``input_dim`` or a
+    ``ValueError`` is raised.
 
 Returns
 -------
@@ -226,10 +233,14 @@ Equivalent to :py:meth:`eval`.
     obj.def("eval_deriv1", &ChebTable::eval_deriv1, nb::arg("t"),
             R"doc(Evaluate value and first derivative at t.
 
+Requires a 1-D table; calling this on an N-D table raises ``ValueError``.
+
 Parameters
 ----------
 t : float
-    Query coordinate within or clamped to ``[lb, ub]``.
+    Query coordinate.  Outside ``[lb, ub]`` under Clamp the value is the flat
+    endpoint constant and ``deriv1`` is ``0`` (consistent with that constant);
+    on a Periodic axis the query wraps into the domain first.
 
 Returns
 -------
@@ -241,10 +252,14 @@ tuple[numpy.ndarray, numpy.ndarray]
     obj.def("eval_deriv2", &ChebTable::eval_deriv2, nb::arg("t"),
             R"doc(Evaluate value, first derivative, and second derivative at t.
 
+Requires a 1-D table; calling this on an N-D table raises ``ValueError``.
+
 Parameters
 ----------
 t : float
-    Query coordinate within or clamped to ``[lb, ub]``.
+    Query coordinate.  Outside ``[lb, ub]`` under Clamp both derivatives are
+    ``0`` (the value is a flat endpoint constant); on a Periodic axis the query
+    wraps into the domain first.
 
 Returns
 -------
@@ -256,6 +271,9 @@ tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]
 
     obj.def("coeff_tail_norm", &ChebTable::coeff_tail_norm,
             R"doc(Per-channel norm of the trailing-half Chebyshev coefficients (1-D).
+
+Requires a 1-D table; calling this on an N-D table raises ``ValueError``
+(N-D adaptivity refines each axis via per-axis marginal 1-D tables).
 
 Returns the L2 norm of the upper half of the coefficient series for each
 output channel.  Used by the adaptive construction loop
@@ -273,7 +291,8 @@ numpy.ndarray, shape (olen,)
     obj.def_prop_ro("input_dim", &ChebTable::input_dim,
                     R"doc(Number of input dimensions (1 for 1-D tables, D for N-D).)doc");
     obj.def_prop_ro("order", &ChebTable::order,
-                    R"doc(Polynomial order n for 1-D tables (orders()[0]).)doc");
+                    R"doc(Polynomial order n of a 1-D table (``orders[0]``).  Raises
+``ValueError`` on N-D tables — use :py:attr:`orders` instead.)doc");
     obj.def_prop_ro(
         "orders",
         [](const ChebTable &self) -> nb::list {
@@ -332,6 +351,9 @@ on Periodic axes) before evaluating.
     obj.def(
         "__call__",
         [](std::shared_ptr<ChebTable> &self, const GenericFunction<-1, 1> &t) {
+            if (self->input_dim() != 1)
+                throw std::invalid_argument("ChebTable.__call__: composing with 1 argument "
+                                            "requires a 1-D table (input_dim == 1)");
             return GenericFunction<-1, -1>(ChebFunction<-1>(self).eval(t));
         },
         R"doc(Compose the table with a scalar VectorFunction to produce a new VectorFunction.
@@ -352,6 +374,9 @@ VectorFunction
     obj.def(
         "__call__",
         [](std::shared_ptr<ChebTable> &self, const Segment<-1, 1, -1> &t) {
+            if (self->input_dim() != 1)
+                throw std::invalid_argument("ChebTable.__call__: composing with 1 argument "
+                                            "requires a 1-D table (input_dim == 1)");
             return GenericFunction<-1, -1>(ChebFunction<-1>(self).eval(t));
         },
         R"doc(Compose the table with a scalar Segment to produce a new VectorFunction.
@@ -376,6 +401,9 @@ VectorFunction
         "__call__",
         [](std::shared_ptr<ChebTable> &self, const GenericFunction<-1, 1> &x,
            const GenericFunction<-1, 1> &y) {
+            if (self->input_dim() != 2)
+                throw std::invalid_argument("ChebTable.__call__: composing with 2 arguments "
+                                            "requires a 2-D table (input_dim == 2)");
             return GenericFunction<-1, -1>(ChebFunction<-1>(self).eval(stack(x, y)));
         },
         R"doc(Compose the table with two scalar VectorFunctions (2-D input).
@@ -398,6 +426,9 @@ VectorFunction
         "__call__",
         [](std::shared_ptr<ChebTable> &self, const Segment<-1, 1, -1> &x,
            const Segment<-1, 1, -1> &y) {
+            if (self->input_dim() != 2)
+                throw std::invalid_argument("ChebTable.__call__: composing with 2 arguments "
+                                            "requires a 2-D table (input_dim == 2)");
             return GenericFunction<-1, -1>(ChebFunction<-1>(self).eval(stack(x, y)));
         },
         R"doc(Compose the table with two scalar Segments (2-D input).
@@ -418,6 +449,9 @@ VectorFunction
         "__call__",
         [](std::shared_ptr<ChebTable> &self, const GenericFunction<-1, 1> &x,
            const GenericFunction<-1, 1> &y, const GenericFunction<-1, 1> &z) {
+            if (self->input_dim() != 3)
+                throw std::invalid_argument("ChebTable.__call__: composing with 3 arguments "
+                                            "requires a 3-D table (input_dim == 3)");
             return GenericFunction<-1, -1>(ChebFunction<-1>(self).eval(stack(x, y, z)));
         },
         R"doc(Compose the table with three scalar VectorFunctions (3-D input).
@@ -439,6 +473,9 @@ VectorFunction
         "__call__",
         [](std::shared_ptr<ChebTable> &self, const Segment<-1, 1, -1> &x,
            const Segment<-1, 1, -1> &y, const Segment<-1, 1, -1> &z) {
+            if (self->input_dim() != 3)
+                throw std::invalid_argument("ChebTable.__call__: composing with 3 arguments "
+                                            "requires a 3-D table (input_dim == 3)");
             return GenericFunction<-1, -1>(ChebFunction<-1>(self).eval(stack(x, y, z)));
         },
         R"doc(Compose the table with three scalar Segments (3-D input).

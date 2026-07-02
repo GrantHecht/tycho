@@ -58,11 +58,16 @@ def _is_nd(lb):
 
 
 def _sample_1d(callable_fn, lb, ub, order):
-    """Evaluate callable_fn at the order+1 Chebyshev nodes; return (olen, order+1) array."""
+    """Evaluate callable_fn at the order+1 Chebyshev nodes; return (order+1, olen) array.
+
+    Row ``j`` holds all output channels at node ``j``; this node-major layout
+    matches the ``(tsize, olen)`` convention that ``ChebTable.from_values`` expects
+    for both 1-D and N-D tables.
+    """
     pts = _vf.ChebTable.cheb_points(order, lb, ub)
     cols = [np.atleast_1d(np.asarray(callable_fn(float(t)), dtype=float)) for t in pts]
     olen = cols[0].size
-    vals = np.empty((olen, order + 1), dtype=float)
+    vals = np.empty((order + 1, olen), dtype=float)
     for j, c in enumerate(cols):
         if c.size != olen:
             raise ValueError("cheb sampler: inconsistent output size across nodes")
@@ -70,7 +75,7 @@ def _sample_1d(callable_fn, lb, ub, order):
             raise ValueError(
                 f"cheb sampler: callable returned a non-finite value at t={float(pts[j])!r}"
             )
-        vals[:, j] = c
+        vals[j, :] = c
     return vals
 
 
@@ -431,9 +436,11 @@ def _cheb_adaptive_nd(
             ChebConvergenceWarning,
             stacklevel=2,
         )
-    else:
-        # All axes' marginals converged — verify the assembled field didn't get
-        # fooled by cross-axis coupling.
-        _warn_if_residual_exceeds(callable_fn, table, lb_arr, ub_arr)
+
+    # Always verify the assembled field against the callable: the per-axis marginal
+    # test can be fooled by strong cross-axis coupling, and a table that was also
+    # order-capped is the most likely to be under-resolved — so run this net
+    # unconditionally, not only when every axis' marginal reported convergence.
+    _warn_if_residual_exceeds(callable_fn, table, lb_arr, ub_arr)
 
     return table

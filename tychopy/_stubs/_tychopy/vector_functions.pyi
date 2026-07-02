@@ -13971,7 +13971,8 @@ class ChebTable:
     :py:meth:`vf` or a ``__call__`` compose overload for use in optimal-control problems.
 
     Derivative-series coefficients are precomputed once at construction time, so
-    solve-time evaluation incurs no per-call allocation or recurrence work.
+    solve-time evaluation incurs no per-call allocation or derivative-coefficient
+    recomputation (the Clenshaw recurrence itself still runs on every evaluation).
     """
 
     class OutOfDomain(enum.Enum):
@@ -14048,9 +14049,11 @@ class ChebTable:
 
         Parameters
         ----------
-        grid_values : array_like, shape (olen, order+1)
-            Sampled values.  Rows are output channels; columns correspond to the
-            ``order+1`` Chebyshev nodes in the order returned by :py:meth:`cheb_points`.
+        grid_values : array_like, shape (order+1, olen)
+            Sampled values.  Row ``j`` holds all output channels at Chebyshev node ``j``
+            (in the order returned by :py:meth:`cheb_points`); column ``c`` is output
+            channel ``c``.  This matches the N-D :py:meth:`from_values` ``(tsize, olen)``
+            convention (here ``tsize = order+1``).
         lb : float
             Lower bound of the physical domain.
         ub : float
@@ -14112,8 +14115,10 @@ class ChebTable:
         t : float
             Query coordinate.  Values outside ``[lb, ub]`` are clamped to the
             nearest endpoint (or wrapped, if the axis policy is Periodic); no
-            extrapolation error is raised.  Requires a 1-D table — calling this on an
-            N-D table raises ``ValueError`` (pass a length-D array instead).
+            extrapolation error is raised.  A non-finite (NaN/Inf) query is not
+            rejected and propagates to a NaN result — guard with :py:meth:`contains`
+            if needed.  Requires a 1-D table — calling this on an N-D table raises
+            ``ValueError`` (pass a length-D array instead).
 
         Returns
         -------
@@ -14131,7 +14136,9 @@ class ChebTable:
         x : array_like, shape (D,)
             Query coordinates.  Each coordinate is mapped into its axis interval per
             that axis's out-of-domain policy (clamped by default; wrapped if Periodic).
-            Its length must equal ``input_dim`` or a ``ValueError`` is raised.
+            A non-finite (NaN/Inf) coordinate propagates to a NaN result — guard with
+            :py:meth:`contains` if needed.  Its length must equal ``input_dim`` or a
+            ``ValueError`` is raised.
 
         Returns
         -------
@@ -14254,10 +14261,14 @@ class ChebTable:
         """
         Evaluate value and first derivative at t.
 
+        Requires a 1-D table; calling this on an N-D table raises ``ValueError``.
+
         Parameters
         ----------
         t : float
-            Query coordinate within or clamped to ``[lb, ub]``.
+            Query coordinate.  Outside ``[lb, ub]`` under Clamp the value is the flat
+            endpoint constant and ``deriv1`` is ``0`` (consistent with that constant);
+            on a Periodic axis the query wraps into the domain first.
 
         Returns
         -------
@@ -14270,10 +14281,14 @@ class ChebTable:
         """
         Evaluate value, first derivative, and second derivative at t.
 
+        Requires a 1-D table; calling this on an N-D table raises ``ValueError``.
+
         Parameters
         ----------
         t : float
-            Query coordinate within or clamped to ``[lb, ub]``.
+            Query coordinate.  Outside ``[lb, ub]`` under Clamp both derivatives are
+            ``0`` (the value is a flat endpoint constant); on a Periodic axis the query
+            wraps into the domain first.
 
         Returns
         -------
@@ -14286,6 +14301,9 @@ class ChebTable:
     def coeff_tail_norm(self) -> numpy.ndarray:
         """
         Per-channel norm of the trailing-half Chebyshev coefficients (1-D).
+
+        Requires a 1-D table; calling this on an N-D table raises ``ValueError``
+        (N-D adaptivity refines each axis via per-axis marginal 1-D tables).
 
         Returns the L2 norm of the upper half of the coefficient series for each
         output channel.  Used by the adaptive construction loop
@@ -14308,7 +14326,10 @@ class ChebTable:
 
     @property
     def order(self) -> int:
-        """Polynomial order n for 1-D tables (orders()[0])."""
+        """
+        Polynomial order n of a 1-D table (``orders[0]``).  Raises
+        ``ValueError`` on N-D tables — use :py:attr:`orders` instead.
+        """
 
     @property
     def orders(self) -> list:

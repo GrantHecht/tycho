@@ -16,7 +16,7 @@ Args = vf.Arguments
 def test_from_values_roundtrip():
     n, lb, ub = 24, 0.0, 6.0
     pts = vf.ChebTable.cheb_points(n, lb, ub)
-    vals = (np.sin(0.7 * pts) + 0.3 * pts).reshape(1, -1)
+    vals = (np.sin(0.7 * pts) + 0.3 * pts).reshape(-1, 1)
     tab = vf.ChebTable.from_values(vals, lb, ub, n)
     for t in pts:
         assert abs(tab.eval(float(t))[0] - (np.sin(0.7 * t) + 0.3 * t)) < 1e-11
@@ -289,9 +289,11 @@ def test_nd_adaptive_terminates_mixed_convergence():
 
     lb = np.array([-1.0, -1.0])
     ub = np.array([1.0, 1.0])
-    # Small max_order so axis 1 cannot converge; axis 0 converges early.
-    tab = cheb_adaptive(f, lb, ub, rtol=1e-12, order0=8, max_order=16)
-    # Reaching this line at all proves no hang.
+    # Small max_order so axis 1 cannot converge; axis 0 converges early.  The
+    # capped axis must raise ChebConvergenceWarning (and reaching this line at
+    # all proves the loop terminates rather than hanging).
+    with pytest.warns(ChebConvergenceWarning):
+        tab = cheb_adaptive(f, lb, ub, rtol=1e-12, order0=8, max_order=16)
     assert tab.input_dim == 2
     assert tab.output_dim == 1
 
@@ -320,7 +322,7 @@ def test_1d_behavior_preserved():
     n, lb, ub = 20, -1.0, 1.0
     pts = vf.ChebTable.cheb_points(n, lb, ub)
     assert pts.shape == (n + 1,)
-    vals = np.sin(pts).reshape(1, -1)
+    vals = np.sin(pts).reshape(-1, 1)
     tab = vf.ChebTable.from_values(vals, lb, ub, n)
     assert tab.order == n
     assert tab.output_dim == 1
@@ -344,7 +346,7 @@ def test_binding_eval_deriv2():
     """ChebTable.eval_deriv2 returns analytic first + second derivatives."""
     lb, ub, n = 0.0, 6.0, 30
     pts = vf.ChebTable.cheb_points(n, lb, ub)
-    vals = np.sin(0.7 * pts).reshape(1, -1)
+    vals = np.sin(0.7 * pts).reshape(-1, 1)
     tab = vf.ChebTable.from_values(vals, lb, ub, n)
     for t in [0.5, 2.9, 5.2]:
         v, dv, d2 = tab.eval_deriv2(float(t))
@@ -435,3 +437,49 @@ def test_periodic_per_axis_nd():
     q = np.array([1.1, 0.4])
     qw = np.array([1.1 + (ub[0] - lb[0]), 0.4])
     assert tab.eval(qw)[0] == pytest.approx(tab.eval(q)[0], abs=1e-9)
+
+
+def test_residual_net_warns_on_underresolved_coupling():
+    """The N-D coupling-residual net warns when a strongly coupled function is
+    under-resolved (the per-axis marginal test cannot see cross-axis coupling)."""
+    from tychopy.vector_functions.cheb import _warn_if_residual_exceeds
+
+    def f(xy):
+        return np.array([np.sin(8.0 * xy[0] * xy[1])])
+
+    lb = np.array([-1.0, -1.0])
+    ub = np.array([1.0, 1.0])
+    # Order 6 is far too low to resolve sin(8*x*y) -> large pointwise residual.
+    tab = cheb_from_function(f, lb, ub, [6, 6])
+    with pytest.warns(ChebConvergenceWarning):
+        _warn_if_residual_exceeds(f, tab, lb, ub)
+
+
+def test_residual_net_silent_when_resolved():
+    """The residual net must NOT warn on a well-resolved separable field."""
+    from tychopy.vector_functions.cheb import _warn_if_residual_exceeds
+
+    def f(xy):
+        return np.array([np.sin(2.0 * xy[0]) * np.cos(2.0 * xy[1])])
+
+    lb = np.array([-1.0, -1.0])
+    ub = np.array([1.0, 1.0])
+    tab = cheb_from_function(f, lb, ub, [24, 24])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", ChebConvergenceWarning)
+        _warn_if_residual_exceeds(f, tab, lb, ub)  # must not raise
+
+
+def test_clamp_derivative_zero_outside_1d():
+    """Under Clamp the value is flat outside [lb, ub], so eval_deriv1/2 return 0
+    there; the boundary retains the (nonzero) one-sided endpoint slope."""
+    tab = cheb_from_function(lambda t: np.sin(0.7 * t), 0.0, 2.0, 20)
+    for t in (2.0 + 3.0, 0.0 - 3.0):
+        v, dv = tab.eval_deriv1(t)
+        v2, dv2, d2 = tab.eval_deriv2(t)
+        assert dv[0] == pytest.approx(0.0, abs=1e-13)
+        assert dv2[0] == pytest.approx(0.0, abs=1e-13)
+        assert d2[0] == pytest.approx(0.0, abs=1e-13)
+    # Boundary keeps the endpoint slope (nonzero).
+    _, dv_b = tab.eval_deriv1(2.0)
+    assert abs(dv_b[0]) > 1e-6

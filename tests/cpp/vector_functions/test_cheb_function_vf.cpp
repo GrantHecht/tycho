@@ -1,7 +1,7 @@
 #include "test_utils.h"
+#include <cmath>
 #include <gtest/gtest.h>
 #include <tycho/tycho.h>
-#include <cmath>
 
 using namespace tycho;
 using namespace TychoTest;
@@ -10,8 +10,9 @@ class ChebFunctionTest : public VectorFunctionFixture {};
 
 static std::shared_ptr<oc::ChebTable> make_table(int n, double lb, double ub) {
     auto pts = oc::ChebTable::cheb_points(n, lb, ub);
-    oc::ChebTable::MatType vals(1, n + 1);
-    for (int j = 0; j <= n; ++j) vals(0, j) = std::sin(0.7 * pts[j]) + 0.3 * pts[j];
+    oc::ChebTable::MatType vals(n + 1, 1);
+    for (int j = 0; j <= n; ++j)
+        vals(j, 0) = std::sin(0.7 * pts[j]) + 0.3 * pts[j];
     return std::make_shared<oc::ChebTable>(oc::ChebTable::from_values(vals, lb, ub, n));
 }
 

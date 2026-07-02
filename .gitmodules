@@ -10,3 +10,4 @@
 [submodule "dep/pocketfft"]
 	path = dep/pocketfft
 	url = https://github.com/mreineck/pocketfft.git
+	branch = cpp
