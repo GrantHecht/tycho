@@ -228,10 +228,13 @@ struct LGLInterpTable {
     }
     /// @brief Default constructor; produces an empty, unconfigured table.
     LGLInterpTable() {}
-    /// @brief Return a (non-owning) shared pointer to this table.
-    /// @return Shared pointer aliasing this table.
+    /// @brief Return a non-owning shared pointer aliasing this table.
+    ///
+    /// The returned pointer shares no ownership (use_count() == 0) and never
+    /// deletes the table. It must not outlive the table it aliases.
+    /// @return Non-owning shared pointer aliasing this table.
     std::shared_ptr<LGLInterpTable> get_table_ptr() {
-        return std::shared_ptr<LGLInterpTable>(this);
+        return std::shared_ptr<LGLInterpTable>(std::shared_ptr<LGLInterpTable>(), this);
     }
     /// @brief Set the interpolation method and load the corresponding polynomial weights.
     /// @param m  Transcription mode.

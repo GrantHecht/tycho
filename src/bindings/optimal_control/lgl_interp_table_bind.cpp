@@ -119,11 +119,12 @@ xtudat : list of numpy.ndarray
     Derivatives are computed from the bound ODE (or by finite difference if
     the table was constructed without one).
 )doc");
-    obj.def("get_table_ptr", &LGLInterpTable::get_table_ptr,
+    obj.def("get_table_ptr", &LGLInterpTable::get_table_ptr, nb::keep_alive<0, 1>(),
             R"doc(Return a non-owning shared pointer aliasing this table.
 
 Used internally so that phase components (e.g. interpolation functions)
-can hold a reference to the table without taking ownership of it.
+can hold a reference to the table without taking ownership of it. The
+returned object keeps the source table alive for its own lifetime.
 
 Returns
 -------
