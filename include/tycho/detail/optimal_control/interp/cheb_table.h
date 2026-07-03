@@ -30,7 +30,7 @@ template <int IR> struct ChebFunction; // forward decl (befriended by ChebTable)
 /// itself a VectorFunction — wrap it in @ref ChebFunction (or call the binding's
 /// `.vf()`) to obtain one.  Coefficients are stored per output channel in a flat
 /// row-major tensor layout.  The @c dim_==1 case exposes the scalar-input API
-/// (@ref from_values(olen×(n+1) overload), @ref eval(double), @ref eval_deriv1,
+/// (the 1-D @ref from_values overload, @c eval(double), @ref eval_deriv1,
 /// @ref eval_deriv2, @ref coeff_tail_norm) and is API- and result-compatible with
 /// the original 1-D-only implementation.
 ///
@@ -45,6 +45,7 @@ template <int IR> struct ChebFunction; // forward decl (befriended by ChebTable)
 /// Derivative-series coefficients are precomputed once in @ref from_values
 /// so that @ref eval_impl performs no per-call allocation.
 struct ChebTable {
+    /// @brief Dense dynamic-size matrix type backing every coefficient tensor.
     using MatType = Eigen::Matrix<double, -1, -1>;
 
     // ChebFunction drives the zero-allocation solve-time eval path and needs
@@ -200,7 +201,9 @@ struct ChebTable {
     // -------------------------------------------------------------------------
     // Accessors
     // -------------------------------------------------------------------------
+    /// @brief Number of input dimensions (1 for a 1-D table, D for an N-D table).
     int input_dim() const { return dim_; }
+    /// @brief Number of output channels (@c olen).
     int output_dim() const { return olen_; }
     /// @brief Polynomial order of a 1-D table. Throws on N-D tables (query
     /// per-axis orders via @ref orders instead), mirroring @ref coeff_tail_norm.
@@ -208,6 +211,7 @@ struct ChebTable {
         require_scalar();
         return orders_[0];
     }
+    /// @brief Per-axis polynomial orders (length @c input_dim()).
     const std::vector<int> &orders() const { return orders_; }
     /// @brief Per-axis lower domain bounds (length dim_).
     const Eigen::VectorXd &lb() const { return lb_; }
@@ -321,8 +325,8 @@ struct ChebTable {
 
     /// @brief Return a copy of @c coef differentiated along axis @c ax.
     ///
-    /// Applies @ref deriv_coeffs_from to each line along @c ax (same line-start
-    /// iteration as @ref coeffs_along_axis) and zero-extends the result to the
+    /// Applies @c deriv_coeffs_from to each line along @c ax (same line-start
+    /// iteration as @c coeffs_along_axis) and zero-extends the result to the
     /// same shape as the input (the derivative T-series is shorter; the trailing
     /// entries are left at zero).
     static MatType deriv_along_axis(const MatType &coef, const std::vector<int> &shape,
@@ -350,14 +354,14 @@ struct ChebTable {
     /// @brief Compute per-axis normalised coordinates @c xi and inverse half-spans
     /// @c hinv from a physical point @c x.
     ///
-    /// For axis @c d, @c xi[d] is produced by @ref axis_xi (which applies the
+    /// For axis @c d, @c xi[d] is produced by @c axis_xi (which applies the
     /// per-axis @ref OutOfDomain policy), and @c hinv[d] = 2 / (ub_[d] - lb_[d])
     /// is the physical→normalised chain-rule factor, multiplied by the
-    /// @ref axis_deriv_scale mask (0 outside the Clamp domain so derivatives stay
+    /// @c axis_deriv_scale mask (0 outside the Clamp domain so derivatives stay
     /// consistent with the flat clamped value; 1 in-domain and for Periodic axes,
     /// whose wrap is a pure translation that does not change @c hinv).
     ///
-    /// Used by @ref eval(const Eigen::VectorXd&), @ref eval_jacobian, and
+    /// Used by the N-D @c eval overload, @ref eval_jacobian, and
     /// @ref eval_hessian to avoid duplicating the per-axis mapping logic.
     ///
     /// The @c _raw overload writes into caller-provided length-@c dim_ buffers so
@@ -427,7 +431,7 @@ struct ChebTable {
             out[c] = a[long(c) * tsize_];
     }
 
-    /// @brief Allocating convenience wrapper around @ref eval_tensor_into for the
+    /// @brief Allocating convenience wrapper around @c eval_tensor_into for the
     /// public (non-solve-time) eval methods.  Allocates its own scratch + result.
     Eigen::VectorXd clenshaw_nd(const MatType &coef, const Eigen::VectorXd &xi) const {
         std::vector<double> cur(size_t(olen_) * size_t(tsize_));
@@ -590,7 +594,7 @@ struct ChebTable {
     ///                all-Clamp default).
     ///
     /// Applies the 1-D DCT-I coefficient transform separably along each axis
-    /// using @ref coeffs_along_axis.  All three precomputed tensors are filled:
+    /// using @c coeffs_along_axis.  All three precomputed tensors are filled:
     /// @c value_ (DCT-I coefficients), @c grad_[j] = D_j value_ (gradient tensors),
     /// and @c hess_[hess_index(j,k,D)] = D_k D_j value_ (upper-triangle Hessian tensors).
     static ChebTable from_values(const MatType &grid_values_flat, const Eigen::VectorXd &lb,
@@ -702,7 +706,7 @@ struct ChebTable {
     ///
     /// Each coordinate @c x[d] is mapped to the normalised domain per the axis's
     /// @ref OutOfDomain policy (Clamp by default, Periodic wraps) before
-    /// evaluation.  Uses @ref clenshaw_nd internally.
+    /// evaluation.  Uses @c clenshaw_nd internally.
     Eigen::VectorXd eval(const Eigen::VectorXd &x) const {
         require_dim(int(x.size()));
         Eigen::VectorXd xi, hinv;
@@ -793,13 +797,17 @@ struct ChebTable {
 template <int IR>
 struct ChebFunction : VectorFunction<ChebFunction<IR>, IR, -1, DenseDerivativeMode::Analytic,
                                      DenseDerivativeMode::Analytic> {
+    /// @brief CRTP VectorFunction base for this @c ChebFunction specialization.
     using Base = VectorFunction<ChebFunction<IR>, IR, -1, DenseDerivativeMode::Analytic,
                                 DenseDerivativeMode::Analytic>;
     VF_TYPE_ALIASES(Base);
 
     std::shared_ptr<ChebTable> tab; ///< Shared interpolant data (precomputed coefficients).
 
+    /// @brief Default-construct an empty wrapper (null @c tab); assign a table before use.
     ChebFunction() {}
+    /// @brief Construct a VectorFunction backed by @c tab_ (must be non-null; for a
+    /// fixed @c IR it must match the table's input dimension).
     explicit ChebFunction(std::shared_ptr<ChebTable> tab_) : tab(tab_) {
         if (!tab_)
             throw std::invalid_argument("ChebFunction: null ChebTable");
