@@ -218,3 +218,17 @@ TEST(BumpAllocatorTest, ThrowInsideAllocateRunRestoresArena) {
         TempSpec<VType>(10, 1));
     EXPECT_EQ(first_ptr, second_ptr) << "Arena offset leaked by throwing allocate_run";
 }
+
+TEST(BumpAllocatorTest, LearnedGrowAppliedAtNextRunEntry) {
+    // The learned high-water grow is deferred out of restore() (which must be
+    // non-throwing so it can run in RestoreGuard's destructor on the
+    // exception-unwind path) to the next allocate_run entry, where a
+    // bad_alloc from resize() can propagate normally.
+    BumpAllocator::resize(4);
+    using VType = Eigen::VectorXd;
+    BumpAllocator::allocate_run([](auto &v) { EXPECT_EQ(v.rows(), 64); },
+                                TempSpec<VType>(64, 1)); // overflows; learns high-water
+    BumpAllocator::allocate_run([](auto &v) {}, TempSpec<VType>(1, 1)); // entry applies grow
+    EXPECT_GE(BumpAllocator::size_scalar(), 64u);
+    BumpAllocator::resize(256);
+}
