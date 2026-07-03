@@ -190,3 +190,31 @@ TEST(BumpAllocatorTest, VFComputeAfterResize) {
     n.compute(x, fx);
     EXPECT_NEAR(fx[0], 5.0, 1e-12);
 }
+
+TEST(BumpAllocatorTest, ThrowInsideAllocateRunRestoresArena) {
+    // A throw traversing allocate_run must not leak the bumped arena region:
+    // a skipped restore permanently bumps the thread's offset, sending every
+    // later allocation down the heap-overflow path.
+    BumpAllocator::resize(256);
+    using VType = Eigen::VectorXd;
+
+    // Baseline arena position via pointer identity (same idiom as
+    // SaveRestoreExactState above).
+    double *first_ptr = nullptr;
+    BumpAllocator::allocate_run([&](auto &v) { first_ptr = v.data(); }, TempSpec<VType>(10, 1));
+
+    struct Boom {};
+    EXPECT_THROW(BumpAllocator::allocate_run([](auto &v) { throw Boom{}; }, TempSpec<VType>(10, 1)),
+                 Boom);
+
+    // Pre-fix: the bumped offset is never restored -> next run allocates
+    // further into the arena and hands out a different pointer.
+    double *second_ptr = nullptr;
+    BumpAllocator::allocate_run(
+        [&](auto &v) {
+            second_ptr = v.data();
+            EXPECT_EQ(v.rows(), 10);
+        },
+        TempSpec<VType>(10, 1));
+    EXPECT_EQ(first_ptr, second_ptr) << "Arena offset leaked by throwing allocate_run";
+}

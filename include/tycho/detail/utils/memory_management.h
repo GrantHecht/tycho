@@ -424,12 +424,18 @@ struct BumpAllocator {
         size_t blksize = BumpAllocator::count_blocksize_aligned(tspecs...);
 
         auto sp = stack.save();
-        Scalar *data = stack.allocate(blksize);
+        // Restore on scope exit even if f throws: a skipped restore permanently
+        // leaks the arena region on this thread (every later allocate takes the
+        // heap-overflow path) and violates resize()'s empty-arena precondition.
+        struct RestoreGuard {
+            std::remove_reference_t<decltype(stack)> &s;
+            std::remove_cvref_t<decltype(sp)> p;
+            ~RestoreGuard() { s.restore(p); }
+        } guard{stack, sp};
 
+        Scalar *data = stack.allocate(blksize);
         auto Temps = BumpAllocator::make_temps(data, tspecs...);
         std::apply(f, Temps);
-
-        stack.restore(sp);
     }
 
     template <class Function, std::size_t... Indices>
