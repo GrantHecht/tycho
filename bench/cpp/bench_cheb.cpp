@@ -27,8 +27,9 @@ namespace {
 static tycho::oc::ChebTable make_cheb_1d(int order) {
     const double lb = 0.0, ub = 6.283185307179586;
     Eigen::VectorXd pts = tycho::oc::ChebTable::cheb_points(order, lb, ub);
-    tycho::oc::ChebTable::MatType vals(1, order + 1);
-    for (int k = 0; k <= order; ++k) vals(0, k) = std::sin(3.0 * pts[k]);
+    tycho::oc::ChebTable::MatType vals(order + 1, 1);
+    for (int k = 0; k <= order; ++k)
+        vals(k, 0) = std::sin(3.0 * pts[k]);
     return tycho::oc::ChebTable::from_values(vals, lb, ub, order);
 }
 
