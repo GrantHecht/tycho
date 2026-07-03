@@ -46,15 +46,19 @@ template <class T, class GenFunc, class Args> struct JetInvoker {
 
 #ifndef USE_ACCELERATE_SPARSE
 /// Pins MKL to 1 thread on the current thread for the guard's lifetime and
-/// reverts to the process-global setting on destruction. The thread-local
-/// value overrides mkl_set_num_threads(); leaving it set after a Jet job
-/// that ran on the caller (pool-disabled fallback) would silently
-/// single-thread every subsequent Pardiso factorization on that thread.
+/// restores the previous thread-local setting on destruction (0 = revert to
+/// the process-global value). The thread-local value overrides
+/// mkl_set_num_threads(); leaving it set after a Jet job that ran on the
+/// caller (pool-disabled fallback) would silently single-thread every
+/// subsequent Pardiso factorization on that thread.
 struct MklLocalPinGuard {
-    MklLocalPinGuard() { mkl_set_num_threads_local(1); }
-    ~MklLocalPinGuard() { mkl_set_num_threads_local(0); }
+    MklLocalPinGuard() : prev_(mkl_set_num_threads_local(1)) {}
+    ~MklLocalPinGuard() { mkl_set_num_threads_local(prev_); }
     MklLocalPinGuard(const MklLocalPinGuard &) = delete;
     MklLocalPinGuard &operator=(const MklLocalPinGuard &) = delete;
+
+  private:
+    int prev_;
 };
 #endif
 } // namespace detail
@@ -157,10 +161,12 @@ struct Jet {
 
         auto Job = [&](int i) {
 #ifdef USE_ACCELERATE_SPARSE
-            // Per-thread single-threaded mode (uses BLASSetThreading on
-            // macOS 15+, env var fallback on older systems). Process-global,
-            // but PSIOPT re-applies accelerate_set_num_threads(qp_threads_)
-            // on every solve — no reset needed.
+            // Per-thread single-threaded mode (BLASSetThreading is
+            // thread-local on macOS 15+; env-var fallback on older systems
+            // is inert after the first BLAS call). Like the MKL pin, this
+            // would leak into reused solves on this thread — PSIOPT
+            // re-applies its qp_threads_ setting at every solve entry
+            // (run_phase_sequence) to heal any leftover pin.
             accelerate_set_num_threads(1);
 #else
             detail::MklLocalPinGuard mkl_pin;
