@@ -363,6 +363,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
                 if constexpr (DODE::UV == 0 && DODE::PV == 0) {
                     TrapezoidalDefects<decltype(ode_t)> trap(ode_t);
                     trap.enable_vectorization_ = this->enable_vectorization_;
+                    trap.enable_hessian_sparsity_ = this->enable_hessian_sparsity_;
                     this->dynamics_func_index_ =
                         this->indexer_.add_equality(trap, PhaseRegionFlags::DefectPath, StateT,
                                                     OParT, empty, ThreadingFlags::ByApplication);
@@ -371,7 +372,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
 
                     auto trap = TrapezoidalDefects<BlockedODE>(BlockedODE(ode_t));
                     trap.enable_vectorization_ = this->enable_vectorization_;
-                    // trap.enable_hessian_sparsity_ = this->enable_hessian_sparsity_;
+                    trap.enable_hessian_sparsity_ = this->enable_hessian_sparsity_;
                     this->dynamics_func_index_ =
                         this->indexer_.add_equality(trap, PhaseRegionFlags::BlockDefectPath, StateT,
                                                     OParT, empty, ThreadingFlags::ByApplication);
@@ -380,6 +381,7 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
             } else {
                 TrapezoidalDefects<decltype(ode_t)> trap(ode_t);
                 trap.enable_vectorization_ = this->enable_vectorization_;
+                trap.enable_hessian_sparsity_ = this->enable_hessian_sparsity_;
                 this->dynamics_func_index_ =
                     this->indexer_.add_equality(trap, PhaseRegionFlags::DefectPath, StateT, OParT,
                                                 empty, ThreadingFlags::ByApplication);

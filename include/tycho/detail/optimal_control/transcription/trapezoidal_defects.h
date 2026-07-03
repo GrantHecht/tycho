@@ -163,7 +163,7 @@ struct TrapezoidalDefects
     /// @param col  Hessian column index.
     /// @return True if the element may be nonzero (always true unless sparsity is enabled).
     /// @endinternal
-    inline bool hessian_elem_is_non_zero(int row, int col) const {
+    inline bool hessian_elem_is_nonzero(int row, int col) const {
         if (this->enable_hessian_sparsity_) {
             return bool(this->nz_locs_(row, col));
         } else {

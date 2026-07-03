@@ -144,6 +144,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     optimal_control/test_ocp_direct_link.cpp
     optimal_control/test_ocp_phase_lifetime.cpp
     optimal_control/test_lgl_table_ptr.cpp
+    optimal_control/test_trapezoidal_hessian_sparsity.cpp
 
     # Solvers
     solvers/test_psiopt_convergence.cpp
