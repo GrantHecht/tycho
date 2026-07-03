@@ -43,6 +43,20 @@ namespace detail {
 template <class T, class GenFunc, class Args> struct JetInvoker {
     static std::shared_ptr<T> invoke(const GenFunc &gf, const Args &args) { return gf(args); }
 };
+
+#ifndef USE_ACCELERATE_SPARSE
+/// Pins MKL to 1 thread on the current thread for the guard's lifetime and
+/// reverts to the process-global setting on destruction. The thread-local
+/// value overrides mkl_set_num_threads(); leaving it set after a Jet job
+/// that ran on the caller (pool-disabled fallback) would silently
+/// single-thread every subsequent Pardiso factorization on that thread.
+struct MklLocalPinGuard {
+    MklLocalPinGuard() { mkl_set_num_threads_local(1); }
+    ~MklLocalPinGuard() { mkl_set_num_threads_local(0); }
+    MklLocalPinGuard(const MklLocalPinGuard &) = delete;
+    MklLocalPinGuard &operator=(const MklLocalPinGuard &) = delete;
+};
+#endif
 } // namespace detail
 
 struct Jet {
@@ -144,10 +158,12 @@ struct Jet {
         auto Job = [&](int i) {
 #ifdef USE_ACCELERATE_SPARSE
             // Per-thread single-threaded mode (uses BLASSetThreading on
-            // macOS 15+, env var fallback on older systems)
+            // macOS 15+, env var fallback on older systems). Process-global,
+            // but PSIOPT re-applies accelerate_set_num_threads(qp_threads_)
+            // on every solve — no reset needed.
             accelerate_set_num_threads(1);
 #else
-            mkl_set_num_threads_local(1);
+            detail::MklLocalPinGuard mkl_pin;
 #endif
 
             int gfidx = genfidxes[i];

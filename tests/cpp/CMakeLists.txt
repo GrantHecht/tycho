@@ -150,6 +150,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     solvers/test_solver_interfaces.cpp
     solvers/test_jet_batch.cpp
     solvers/test_nlp_structure.cpp
+    solvers/test_jet_mkl_guard.cpp
 )
 
 #-------------------------------------------------------------------------------
