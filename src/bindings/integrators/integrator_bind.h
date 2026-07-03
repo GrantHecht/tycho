@@ -219,7 +219,7 @@ template <class DODE> struct TychoBind<Integrator<DODE>> {
         obj.def("integrate",
                 (IntegRet (Integrator<DODE>::*)(const ODEStateD &, double) const) &
                     Integrator<DODE>::integrate,
-                nb::arg("xt0_up"), nb::arg("tf"),
+                nb::arg("xt0_up"), nb::arg("tf"), nb::call_guard<nb::gil_scoped_release>(),
                 R"doc(Integrate from an initial condition to a final time.
 
 Parameters
@@ -241,6 +241,7 @@ numpy.ndarray
                                                      const std::vector<EventPack> &) const) &
                     Integrator<DODE>::integrate,
                 nb::arg("xt0_up"), nb::arg("tf"), nb::arg("events"),
+                nb::call_guard<nb::gil_scoped_release>(),
                 R"doc(Integrate from an initial condition to a final time, stopping at events.
 
 Each element of ``events`` is an :class:`EventPack` (or a 3-tuple
@@ -386,7 +387,7 @@ list of tuple
         obj.def("integrate_dense",
                 (DenseRet (Integrator<DODE>::*)(const ODEStateD &, double) const) &
                     Integrator<DODE>::integrate_dense,
-                nb::arg("xt0_up"), nb::arg("tf"),
+                nb::arg("xt0_up"), nb::arg("tf"), nb::call_guard<nb::gil_scoped_release>(),
                 R"doc(Integrate and return the full trajectory.
 
 Each element of the returned list is the ODE state-and-time vector at one
@@ -410,6 +411,7 @@ list of numpy.ndarray
                 (DenseRet (Integrator<DODE>::*)(const ODEStateD &, double, int) const) &
                     Integrator<DODE>::integrate_dense,
                 nb::arg("xt0_up"), nb::arg("tf"), nb::arg("n"),
+                nb::call_guard<nb::gil_scoped_release>(),
                 R"doc(Integrate and return the trajectory at ``n`` evenly-spaced output times.
 
 The integrator takes adaptive steps internally; the dense output (polynomial
@@ -480,8 +482,8 @@ list of numpy.ndarray
                 (DenseEventRet (Integrator<DODE>::*)(const ODEStateD &, double,
                                                      const std::vector<EventPack> &, bool) const) &
                     Integrator<DODE>::integrate_dense,
-                nb::arg("xt0_up"), nb::arg("tf"), nb::arg("events"),
-                nb::arg("alloutput") = false,
+                nb::arg("xt0_up"), nb::arg("tf"), nb::arg("events"), nb::arg("alloutput") = false,
+                nb::call_guard<nb::gil_scoped_release>(),
                 R"doc(Integrate with dense output and event detection.
 
 Parameters
@@ -510,6 +512,7 @@ tuple
                                                      const std::vector<EventPack> &) const) &
                     Integrator<DODE>::integrate_dense,
                 nb::arg("xt0_up"), nb::arg("tf"), nb::arg("nstates"), nb::arg("events"),
+                nb::call_guard<nb::gil_scoped_release>(),
                 R"doc(Integrate with ``nstates`` evenly-spaced output states and event detection.
 
 Parameters
@@ -641,7 +644,7 @@ list of tuple
         obj.def("integrate_stm",
                 (STMRet (Integrator<DODE>::*)(const ODEStateD &, double) const) &
                     Integrator<DODE>::integrate_stm,
-                nb::arg("xt0_up"), nb::arg("tf"),
+                nb::arg("xt0_up"), nb::arg("tf"), nb::call_guard<nb::gil_scoped_release>(),
                 R"doc(Integrate a single trajectory and return the state-transition matrix (STM).
 
 Parameters
@@ -662,6 +665,7 @@ tuple
                                                    const std::vector<EventPack> &) const) &
                     Integrator<DODE>::integrate_stm,
                 nb::arg("xt0_up"), nb::arg("tf"), nb::arg("events"),
+                nb::call_guard<nb::gil_scoped_release>(),
                 R"doc(Integrate a single trajectory with STM and event detection.
 
 Parameters

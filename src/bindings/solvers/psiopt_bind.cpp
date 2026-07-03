@@ -61,9 +61,10 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     obj.def(nb::init<std::shared_ptr<NonLinearProgram>>());
     obj.def(nb::init<>());
 
-    obj.def("optimize", &PSIOPT::optimize, "");
-    obj.def("solve_optimize", &PSIOPT::solve_optimize, "");
-    obj.def("solve", &PSIOPT::solve, "");
+    obj.def("optimize", &PSIOPT::optimize, nb::call_guard<nb::gil_scoped_release>(), "");
+    obj.def("solve_optimize", &PSIOPT::solve_optimize, nb::call_guard<nb::gil_scoped_release>(),
+            "");
+    obj.def("solve", &PSIOPT::solve, nb::call_guard<nb::gil_scoped_release>(), "");
 
     BIND_SETTINGS_VALIDATED(obj, "max_iters", max_iters_, set_max_iters, "");
     BIND_SETTINGS_VALIDATED(obj, "max_acc_iters", max_acc_iters_, set_max_acc_iters, "");
