@@ -617,6 +617,17 @@ else()
     message(STATUS "Using bundled Eigen from dep/eigen")
 endif()
 include_directories(dep/fmt/include)
+# pocketfft (header-only, BSD-3) — provides DCT-I for Chebyshev interpolation.
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dep/pocketfft/pocketfft_hdronly.h")
+    message(FATAL_ERROR
+        "Bundled pocketfft not found at dep/pocketfft/. "
+        "Run: git submodule update --init dep/pocketfft")
+endif()
+include_directories(dep/pocketfft)
+# pocketfft threading: construction-time DCT-I is safe to run multithreaded
+# (pocketfft threads only run during interpolant construction, never during
+# solve-time evaluation). Thread count is exposed via ChebTable::from_values
+# nthreads parameter (default 1). No global compile-time disable needed.
 
 # fmt is used by core libraries (utils) so it must always be available.
 add_subdirectory(dep/fmt)

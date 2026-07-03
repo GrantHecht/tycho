@@ -26,6 +26,7 @@ target_compile_options(pch_bench PRIVATE ${COMPILE_FLAGS})
 
 add_executable(bench_all
     bench_init.cpp
+    bench_cheb.cpp
     kepler/bench_kepler.cpp
     vector_functions/bench_vector_functions.cpp
     type_erasure/bench_type_erasure.cpp

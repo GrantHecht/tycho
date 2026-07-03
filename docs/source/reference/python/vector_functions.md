@@ -259,6 +259,16 @@ dimensions.
 
 .. autoclass:: InterpTable4D
    :members:
+
+.. autoclass:: ChebTable
+   :members:
+
+.. autofunction:: cheb_from_function
+
+.. autofunction:: cheb_adaptive
+
+.. autoexception:: ChebConvergenceWarning
+   :members:
 ```
 
 ## Python-authored functions
