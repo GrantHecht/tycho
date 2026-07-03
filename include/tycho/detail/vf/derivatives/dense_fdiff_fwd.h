@@ -129,7 +129,7 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::FDiff
     /// @brief Default Hessian FD step.
     ///
     /// When the gradient being differenced is itself finite-differenced
-    /// (nested forward-over-forward, i.e. @p JMode is also an FD mode), an
+    /// (nested FD, i.e. @p JMode is also an FD mode — forward or central), an
     /// eps^(1/3)-scale step (5e-6) is the standard choice — differencing an
     /// already-noisy FD gradient with too fine a step amplifies that noise.
     /// Otherwise (an analytic or Enzyme Jacobian feeding the Hessian FD), the
