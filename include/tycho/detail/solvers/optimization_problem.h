@@ -66,7 +66,9 @@ struct OptimizationProblem : OptimizationProblemBase {
     std::vector<FuncIndexHolder<ConstraintInterface>> user_inequalities_;
     std::vector<FuncIndexHolder<ObjectiveInterface>> user_objectives_;
 
-    OptimizationProblem() { this->set_num_partitions(1, 1); }
+    // Defaults (partitions, QP threads) come from the base ctor's
+    // init_partitions(), matching Phase/OCP behavior.
+    OptimizationProblem() = default;
     virtual ~OptimizationProblem() = default;
 
     ///////////////////////////////////////////////////////////////////////////////////////////

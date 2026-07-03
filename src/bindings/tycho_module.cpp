@@ -13,8 +13,6 @@
 //   - Migrated to tycho:: sub-namespaces (PR #35)
 // =============================================================================
 
-#include <signal.h>
-
 #include "astro/tycho_astro.h"
 #include "optimal_control/tycho_optimal_control.h"
 #include "pch.h"
@@ -138,20 +136,12 @@ void SoftwareInfo() {
                "  fmt      :MIT | Copyright (c) 2012 - present, Victor Zverovich \n");
 }
 
-void signal_callback(int sig) {
-    fmt::print(fmt::fg(fmt::color::red),
-               "Interrupt signal [{0}] received, terminating program.\n\n\n\n\n\n\n\n", sig);
-    exit(sig);
-}
-
 int main() {
     using std::cin;
     using std::cout;
     using std::endl;
 
     tycho::utils::enable_color_console();
-
-    signal(SIGINT, signal_callback);
 
     SoftwareInfo();
 
@@ -161,8 +151,6 @@ int main() {
 NB_MODULE(_tychopy, m) {
 
     tycho::utils::enable_color_console(); // This only does something on windows
-
-    signal(SIGINT, signal_callback);
 
     m.doc() = "Tycho"; // optional module docstring
     m.def("py_main", &main);

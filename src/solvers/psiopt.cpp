@@ -1587,6 +1587,17 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
     this->result_.reset_accumulators();
     settings_.validate();
 
+    // Re-apply the QP threading setting on every solve entry, not just in
+    // set_nlp() (which only runs on transcribe): a single-thread pin left on
+    // this thread by another component (e.g. Jet's per-job pin — thread-local
+    // BLASSetThreading on macOS 15+) must not silently single-thread reused
+    // solves.
+#ifdef USE_ACCELERATE_SPARSE
+    accelerate_set_num_threads(settings_.qp_threads_);
+#else
+    mkl_set_num_threads(settings_.qp_threads_);
+#endif
+
     if (settings_.print_level_ == 0)
         print_stats();
     if (settings_.print_level_ < 2) {

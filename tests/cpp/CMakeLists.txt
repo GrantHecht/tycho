@@ -128,6 +128,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     integrators/test_zero_interval.cpp
     integrators/test_event_refinement_coverage.cpp
     integrators/test_fsal_reset_after_throw.cpp
+    integrators/test_stm_batch_adjoint_seed.cpp
 
     # OptimalControl
     optimal_control/test_phase_construction.cpp
@@ -142,12 +143,14 @@ set(TYCHO_TEST_HEAVY_SOURCES
     optimal_control/test_sub_variables.cpp
     optimal_control/test_ocp_direct_link.cpp
     optimal_control/test_ocp_phase_lifetime.cpp
+    optimal_control/test_lgl_table_ptr.cpp
 
     # Solvers
     solvers/test_psiopt_convergence.cpp
     solvers/test_solver_interfaces.cpp
     solvers/test_jet_batch.cpp
     solvers/test_nlp_structure.cpp
+    solvers/test_jet_mkl_guard.cpp
 )
 
 #-------------------------------------------------------------------------------

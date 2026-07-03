@@ -277,7 +277,11 @@ struct STMDriver {
 
             for (int v = 0; v < vmax; ++v) {
                 int idx = idxs[n * vsize + v];
-                for (int j = 0; j < ode.output_rows(); ++j) {
+                // Seed the FULL adjoint (x, t, u, p) — `output_rows` here is the
+                // stepper's output size (== ode.input_rows() at all call sites),
+                // matching both the scalar path (`stepper_adjvars = lf`) and the
+                // tail-fusion extraction below.
+                for (int j = 0; j < output_rows; ++j) {
                     stepper_adjvars_ss[j][v] = lf_s[idx][j];
                 }
             }

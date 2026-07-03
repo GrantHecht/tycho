@@ -78,11 +78,21 @@ template <class Scalar> struct BumpStack {
     SavePoint save() const { return {offset_, overflow_.size(), cumulative_overflow_}; }
 
     /// @internal
-    /// @brief Restore the allocator to a previously saved state.
-    void restore(SavePoint sp) {
+    /// @brief Restore the allocator to a previously saved state. Non-throwing
+    /// (only shrinks bookkeeping) so it can run in a destructor on the
+    /// exception-unwind path; the learned-capacity grow that used to live
+    /// here is deferred to grow_if_learned().
+    void restore(SavePoint sp) noexcept {
         offset_ = sp.offset;
         overflow_.resize(sp.overflow_count);
         cumulative_overflow_ = sp.cumulative_overflow;
+    }
+
+    /// @internal
+    /// @brief Grow the arena to the learned high-water mark if it is empty.
+    /// Called at allocate_run entry — normal control flow, where a bad_alloc
+    /// from resize() can propagate instead of terminating in a destructor.
+    void grow_if_learned() {
         if (offset_ == 0 && overflow_.empty() && high_water_ > capacity_) {
             resize(high_water_);
         }
@@ -421,15 +431,22 @@ struct BumpAllocator {
             typename std::remove_cvref_t<decltype(std::get<0>(std::tuple{tspecs...}))>::Scalar;
 
         auto &stack = BumpAllocator::get_stack<Scalar>();
+        stack.grow_if_learned();
         size_t blksize = BumpAllocator::count_blocksize_aligned(tspecs...);
 
         auto sp = stack.save();
-        Scalar *data = stack.allocate(blksize);
+        // Restore on scope exit even if f throws: a skipped restore permanently
+        // leaks the arena region on this thread (every later allocate takes the
+        // heap-overflow path) and violates resize()'s empty-arena precondition.
+        struct RestoreGuard {
+            std::remove_reference_t<decltype(stack)> &s;
+            std::remove_cvref_t<decltype(sp)> p;
+            ~RestoreGuard() { s.restore(p); }
+        } guard{stack, sp};
 
+        Scalar *data = stack.allocate(blksize);
         auto Temps = BumpAllocator::make_temps(data, tspecs...);
         std::apply(f, Temps);
-
-        stack.restore(sp);
     }
 
     template <class Function, std::size_t... Indices>
