@@ -55,18 +55,25 @@ def runs_concurrently(fn):
 
 
 class TestGilRelease(unittest.TestCase):
-    def test_single_trajectory_integrate_releases_gil(self):
+    def test_single_trajectory_integrate_family_releases_gil(self):
         ode = SHO_Ode()
         integ = ode.integrator(IVPAlg.DOPRI87, 1e-3)
         integ.set_abs_tol(1e-13)
         integ.set_rel_tol(1e-13)
         x0 = np.array([1.0, 0.0, 0.0])
-        # ~50 calls guarantees the worker wakes during at least one release.
-        self.assertTrue(
-            runs_concurrently(lambda: [integ.integrate(x0, 50.0) for _ in range(50)])
-        )
+        # Enough calls per case that the worker wakes during a release.
+        cases = {
+            "integrate": lambda: [integ.integrate(x0, 50.0) for _ in range(50)],
+            "integrate_dense": lambda: [
+                integ.integrate_dense(x0, 50.0) for _ in range(20)
+            ],
+            "integrate_stm": lambda: [integ.integrate_stm(x0, 50.0) for _ in range(20)],
+        }
+        for name, fn in cases.items():
+            with self.subTest(method=name):
+                self.assertTrue(runs_concurrently(fn), name)
 
-    def test_direct_psiopt_solve_releases_gil(self):
+    def test_direct_psiopt_family_releases_gil(self):
         def rosen_obj(xy=Args(2)):
             x, y = xy[0], xy[1]
             return (1 - x) ** 2 + 100 * (y - x**2) ** 2
@@ -78,9 +85,16 @@ class TestGilRelease(unittest.TestCase):
         prob.optimizer.print_level = 3
         prob.optimize()  # transcribe + first solve (already guarded path)
         x0 = np.array([-1.0, -1.0])
-        self.assertTrue(
-            runs_concurrently(lambda: [prob.optimizer.solve(x0) for _ in range(20)])
-        )
+        cases = {
+            "solve": lambda: [prob.optimizer.solve(x0) for _ in range(20)],
+            "optimize": lambda: [prob.optimizer.optimize(x0) for _ in range(10)],
+            "solve_optimize": lambda: [
+                prob.optimizer.solve_optimize(x0) for _ in range(10)
+            ],
+        }
+        for name, fn in cases.items():
+            with self.subTest(method=name):
+                self.assertTrue(runs_concurrently(fn), name)
 
 
 if __name__ == "__main__":

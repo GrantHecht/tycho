@@ -1,10 +1,18 @@
 ///////////////////////////////////////////////////////////////////////////////
 // Batch STM adjoint seeding tests
 //
-// Regression: the batch (SuperScalar) STM path must seed the FULL adjoint,
-// including time/control/parameter slots (INTEGRATORS_REVIEW 1.1).
-// Pre-fix the seed loop ran to ode.output_rows() (= x_vars), silently
-// zeroing adjoint components in [x_vars, input_rows) — batch-only.
+// Contract test: scalar and batch (SuperScalar) integrate_stm2 must agree,
+// including with nonzero adjoint components in the time/control/parameter
+// slots [x_vars, input_rows).
+//
+// Context (INTEGRATORS_REVIEW 1.1, consequence refuted): the batch seed loop
+// used to run to ode.output_rows() (= x_vars), zeroing the t/u/p adjoint
+// slots — an inconsistency with the scalar path, fixed for cross-path
+// hygiene, but provably unobservable in (J, H): the stepper's t/u/p output
+// rows are exact input copies (zero Hessian) and their adjoints never couple
+// back into the x-slot chain. This test passes on both pre- and post-fix
+// code; it guards the agreement contract in case a stepper output row ever
+// becomes nonlinear in its inputs (e.g. table-driven controls).
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "integrator_test_utils.h"
@@ -20,9 +28,10 @@ TEST_F(IntegratorTest, BatchStm2AdjointSeedMatchesScalar) {
 
     using OState = Integrator<SHO>::IntegRet;
 
-    // N > SuperScalar width to cover full packs + remainder; varied tfs
-    // exercise the heterogeneous-length tail-fusion path.
-    const int N = 5;
+    // N = width + 1 covers one full pack plus a remainder lane on any SIMD
+    // width (4 on AVX2, 8 on AVX-512); varied tfs exercise the
+    // heterogeneous-length tail-fusion path.
+    constexpr int N = tycho::DefaultSuperScalar::SizeAtCompileTime + 1;
     std::vector<OState> x0s(N), lfs(N);
     Eigen::VectorXd tfs(N);
     for (int i = 0; i < N; ++i) {
@@ -31,7 +40,7 @@ TEST_F(IntegratorTest, BatchStm2AdjointSeedMatchesScalar) {
         x0s[i] = x0;
         tfs[i] = 1.0 + 0.25 * i;
         OState lf;
-        lf << 0.7 + 0.1 * i, -0.4, 1.3;  // lf[t_var] nonzero — the bug's blind spot
+        lf << 0.7 + 0.1 * i, -0.4, 1.3; // lf[t_var] nonzero — the slot the batch seed zeroed
         lfs[i] = lf;
     }
 

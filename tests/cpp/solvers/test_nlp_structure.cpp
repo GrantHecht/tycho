@@ -35,6 +35,12 @@ TEST_F(SolverTest, NLPSparsityNonEmpty) {
 // set_num_partitions(1, 1), giving direct-NLP users 1 QP thread while
 // Phase/OCP got min(TYCHO_DEFAULT_QP_THREADS, cores). (CODEBASE_REVIEW 1.3)
 TEST(OptimizationProblemDefaults, MatchesBaseInitPartitions) {
+    // On a single-threaded host the base defaults collapse to the same 1/1
+    // the old override produced — the assertions below would pass either way.
+    if (OptimizationProblemBase::default_num_partitions() <= 1 &&
+        std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count()) <= 1)
+        GTEST_SKIP() << "single-threaded host: defaults indistinguishable from the old override";
+
     OptimizationProblem prob;
     EXPECT_EQ(prob.num_partitions_, OptimizationProblemBase::default_num_partitions());
     EXPECT_EQ(prob.optimizer_->settings().qp_threads_,
