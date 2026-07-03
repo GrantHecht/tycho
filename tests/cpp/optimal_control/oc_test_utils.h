@@ -28,7 +28,9 @@ class OptimalControlTest : public VectorFunctionFixture {};
 // Helper: build a standard Brachistochrone phase
 ///////////////////////////////////////////////////////////////////////////////
 
-inline std::shared_ptr<ODEPhase<BrachODE>> make_brach_phase(int n_pts = 100, int n_defects = 32) {
+inline std::shared_ptr<ODEPhase<BrachODE>>
+make_brach_phase(int n_pts = 100, int n_defects = 32,
+                 TranscriptionModes mode = TranscriptionModes::LGL3) {
     constexpr double g = 9.81;
     constexpr double x0 = 0.0, y0 = 10.0, v0 = 0.0, t0 = 0.0;
     constexpr double xf = 10.0, yf = 5.0;
@@ -48,8 +50,7 @@ inline std::shared_ptr<ODEPhase<BrachODE>> make_brach_phase(int n_pts = 100, int
     }
 
     BrachODE ode(g);
-    auto phase =
-        std::make_shared<ODEPhase<BrachODE>>(ode, TranscriptionModes::LGL3, traj, n_defects);
+    auto phase = std::make_shared<ODEPhase<BrachODE>>(ode, mode, traj, n_defects);
 
     // Front boundary
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(4, 0, 3);
