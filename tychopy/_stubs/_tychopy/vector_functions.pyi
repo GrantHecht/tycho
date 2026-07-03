@@ -10520,12 +10520,12 @@ class PyVectorFunction:
     jstepsize : float, optional
         Forward finite-difference step size for Jacobian approximation (default 1e-6).
     hstepsize : float, optional
-        Forward finite-difference step size for Hessian approximation (default 1e-4).
+        Forward finite-difference step size for Hessian approximation (default 5e-6).
     args : tuple, optional
         Extra positional arguments forwarded to ``func`` after the input vector.
     """
 
-    def __init__(self, i_rows: int, o_rows: int, func: object, jstepsize: float = 1e-06, hstepsize: float = 0.0001, args: tuple = ()) -> None:
+    def __init__(self, i_rows: int, o_rows: int, func: object, jstepsize: float = 1e-06, hstepsize: float = 5e-06, args: tuple = ()) -> None:
         """
         Wrap a Python callable as a VectorFunction using finite-difference derivatives.
 
@@ -10548,7 +10548,7 @@ class PyVectorFunction:
         jstepsize : float, optional
             Finite-difference step size used for Jacobian approximation (default 1e-6).
         hstepsize : float, optional
-            Finite-difference step size used for Hessian approximation (default 1e-4).
+            Finite-difference step size used for Hessian approximation (default 5e-6).
         args : tuple, optional
             Extra positional arguments forwarded to ``func`` after the input vector.
         """
@@ -10892,12 +10892,12 @@ class PyScalarFunction:
     jstepsize : float, optional
         Forward finite-difference step size for Jacobian approximation (default 1e-6).
     hstepsize : float, optional
-        Forward finite-difference step size for Hessian approximation (default 1e-4).
+        Forward finite-difference step size for Hessian approximation (default 5e-6).
     args : tuple, optional
         Extra positional arguments forwarded to ``func`` after the input vector.
     """
 
-    def __init__(self, i_rows: int, func: object, jstepsize: float = 1e-06, hstepsize: float = 0.0001, args: tuple = ()) -> None:
+    def __init__(self, i_rows: int, func: object, jstepsize: float = 1e-06, hstepsize: float = 5e-06, args: tuple = ()) -> None:
         """
         Scalar-output variant: ``o_rows`` is fixed to 1 and may be omitted.
 
@@ -10910,7 +10910,7 @@ class PyScalarFunction:
         jstepsize : float, optional
             Forward finite-difference step size for Jacobian approximation (default 1e-6).
         hstepsize : float, optional
-            Forward finite-difference step size for Hessian approximation (default 1e-4).
+            Forward finite-difference step size for Hessian approximation (default 5e-6).
         args : tuple, optional
             Extra positional arguments forwarded to ``func`` after the input vector.
         """

@@ -94,6 +94,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     vector_functions/test_cwise_jacobian_stress.cpp
     vector_functions/test_mixed_size_ops.cpp
     vector_functions/test_vf_concepts.cpp
+    vector_functions/test_vf_fd_modes.cpp
 
     # Astro
     astro/test_kepler_conversions.cpp
@@ -232,6 +233,15 @@ set_source_files_properties(
 set_source_files_properties(
     astro/test_kepler_lcd.cpp
     astro/test_kepler_ift.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)
+
+# test_vf_fd_modes.cpp: keep standalone so its insertion does not shift later
+# unity batch boundaries — several downstream test files (integrator/astro)
+# rely on the existing boundary positions to keep same-named anonymous-
+# namespace helpers out of the same unity TU (see notes above).
+set_source_files_properties(
+    vector_functions/test_vf_fd_modes.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
 

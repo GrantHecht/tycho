@@ -154,7 +154,7 @@ func : callable
 jstepsize : float, optional
     Forward finite-difference step size for Jacobian approximation (default 1e-6).
 hstepsize : float, optional
-    Forward finite-difference step size for Hessian approximation (default 1e-4).
+    Forward finite-difference step size for Hessian approximation (default 5e-6).
 args : tuple, optional
     Extra positional arguments forwarded to ``func`` after the input vector.
 )doc");
@@ -162,7 +162,7 @@ args : tuple, optional
         if constexpr (ORR != 1) {
             obj.def(nb::init<int, int, nb::object, double, double, nb::tuple>(), nb::arg("i_rows"),
                     nb::arg("o_rows"), nb::arg("func"), nb::arg("jstepsize") = 1.0e-6,
-                    nb::arg("hstepsize") = 1.0e-4, nb::arg("args") = nb::tuple(),
+                    nb::arg("hstepsize") = 5.0e-6, nb::arg("args") = nb::tuple(),
                     R"doc(Wrap a Python callable as a VectorFunction using finite-difference derivatives.
 
 The callable is invoked with a 1-D NumPy array of length ``i_rows`` (plus any
@@ -184,13 +184,13 @@ func : callable
 jstepsize : float, optional
     Finite-difference step size used for Jacobian approximation (default 1e-6).
 hstepsize : float, optional
-    Finite-difference step size used for Hessian approximation (default 1e-4).
+    Finite-difference step size used for Hessian approximation (default 5e-6).
 args : tuple, optional
     Extra positional arguments forwarded to ``func`` after the input vector.
 )doc");
         } else {
             obj.def(nb::init<int, nb::object, double, double, nb::tuple>(), nb::arg("i_rows"),
-                    nb::arg("func"), nb::arg("jstepsize") = 1.0e-6, nb::arg("hstepsize") = 1.0e-4,
+                    nb::arg("func"), nb::arg("jstepsize") = 1.0e-6, nb::arg("hstepsize") = 5.0e-6,
                     nb::arg("args") = nb::tuple(),
                     R"doc(Scalar-output variant: ``o_rows`` is fixed to 1 and may be omitted.
 
@@ -203,7 +203,7 @@ func : callable
 jstepsize : float, optional
     Forward finite-difference step size for Jacobian approximation (default 1e-6).
 hstepsize : float, optional
-    Forward finite-difference step size for Hessian approximation (default 1e-4).
+    Forward finite-difference step size for Hessian approximation (default 5e-6).
 args : tuple, optional
     Extra positional arguments forwarded to ``func`` after the input vector.
 )doc");

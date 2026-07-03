@@ -146,31 +146,6 @@ struct StaticODE_DerivModeWrapper
         this->set_pvars(inner_.p_vars());
         this->set_idxs(inner_.get_idxs());
         this->set_io_rows(inner_.input_rows(), inner_.output_rows());
-        // Re-initialize FD step-size vectors now that IO rows are known.
-        // The FD base constructor ran before set_io_rows, so for dynamic-size
-        // inner ODEs (IRC == -1) the step vectors were initialized to length 0.
-        // For compile-time-sized ODEs this is a no-op that reassigns same-length vectors.
-        if constexpr (Jm == DenseDerivativeMode::FDiffFwd) {
-            this->set_jac_fd_steps(1.0e-7);
-        } else if constexpr (Jm == DenseDerivativeMode::FDiffCentArray) {
-            this->set_jac_fd_steps(1.0e-5);
-        }
-        if constexpr (Hm == DenseDerivativeMode::FDiffFwd) {
-            this->set_hess_fd_steps(1.0e-7);
-        } else if constexpr (Hm == DenseDerivativeMode::FDiffCentArray) {
-            this->set_hess_fd_steps(1.0e-5);
-        }
-        // Other modes (Analytic, EnzymeAD) don't use FD step vectors;
-        // add new FD-like modes here with an if constexpr branch calling
-        // set_jac_fd_steps / set_hess_fd_steps.
-        static_assert(Jm == DenseDerivativeMode::Analytic || Jm == DenseDerivativeMode::FDiffFwd ||
-                          Jm == DenseDerivativeMode::FDiffCentArray ||
-                          Jm == DenseDerivativeMode::EnzymeAD,
-                      "Unhandled Jacobian derivative mode — check FD step reinitialization");
-        static_assert(Hm == DenseDerivativeMode::Analytic || Hm == DenseDerivativeMode::FDiffFwd ||
-                          Hm == DenseDerivativeMode::FDiffCentArray ||
-                          Hm == DenseDerivativeMode::EnzymeAD,
-                      "Unhandled Hessian derivative mode — check FD step reinitialization");
     }
 
     /// @brief Access the wrapped inner ODE.

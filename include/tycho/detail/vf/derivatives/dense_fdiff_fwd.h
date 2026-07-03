@@ -15,6 +15,7 @@
 #pragma once
 
 #include "tycho/detail/vf/derivatives/dense_derivatives.h"
+#include "tycho/detail/vf/derivatives/fd_step_utils.h"
 
 namespace tycho::vf {
 
@@ -34,8 +35,26 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::FDiffFwd>
     using Base = DenseFunctionBase<Derived, IR, OR>;
     VF_TYPE_ALIASES(Base)
 
-    /// @brief Constructs the mode with a default Jacobian step size of 1e-7.
-    DenseFirstDerivatives() { this->set_jac_fd_steps(1.0e-7); }
+    /// @brief Default forward-difference Jacobian step (relative; see compute_jacobian_impl).
+    static constexpr double kDefaultJacStep = 1.0e-7;
+
+    /// @brief Constructs the mode with the default Jacobian step size.
+    DenseFirstDerivatives() { this->set_jac_fd_steps(kDefaultJacStep); }
+
+    /// @brief Set I/O rows and keep the FD step vector sized to the input count.
+    ///
+    /// The mode constructor runs before a dynamic-size function knows its
+    /// sizes, so the step vector starts empty; re-applying the default here
+    /// removes the old requirement that every dynamic-size wrapper manually
+    /// re-set the steps after set_io_rows.
+    /// @param inputrows   Number of input rows.
+    /// @param outputrows  Number of output rows.
+    void set_io_rows(int inputrows, int outputrows) {
+        Base::set_io_rows(inputrows, outputrows);
+        if (this->jac_fd_steps.size() != inputrows) {
+            this->set_jac_fd_steps(kDefaultJacStep);
+        }
+    }
 
     /// @brief Sets a per-input-dimension Jacobian finite-difference step size.
     /// @param steps  Step size for each input dimension.
@@ -70,10 +89,13 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::FDiffFwd>
         Output<Scalar> fi(this->output_rows());
         fi.setZero();
         for (int i = 0; i < this->input_rows(); i++) {
-            xi[i] += this->jac_fd_steps[i];
+            const Scalar h = Scalar(this->jac_fd_steps[i]) * detail::fd_step_scale(x[i]);
+            xi[i] += h;
+            // Realized step (x+h)-x absorbs the rounding of the perturbed point.
+            const Scalar hr = xi[i] - x[i];
             this->derived().compute(xi, fi);
 
-            jx.col(i) = (fi - fx) / Scalar(this->jac_fd_steps[i]);
+            jx.col(i) = (fi - fx) / hr;
 
             fi.setZero();
             xi[i] = x[i];
@@ -104,8 +126,37 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::FDiff
     using Base = DenseFirstDerivatives<Derived, IR, OR, JMode>;
     VF_TYPE_ALIASES(Base)
 
-    /// @brief Constructs the mode with a default Hessian step size of 1e-7.
-    DenseSecondDerivatives() { this->set_hess_fd_steps(1.0e-7); }
+    /// @brief Default Hessian FD step.
+    ///
+    /// When the gradient being differenced is itself finite-differenced
+    /// (nested forward-over-forward, i.e. @p JMode is also an FD mode), an
+    /// eps^(1/3)-scale step (5e-6) is the standard choice — differencing an
+    /// already-noisy FD gradient with too fine a step amplifies that noise.
+    /// Otherwise (an analytic or Enzyme Jacobian feeding the Hessian FD), the
+    /// finer sqrt-eps-scale step (1e-7) is appropriate.
+    static constexpr double kDefaultHessStep =
+        (JMode == DenseDerivativeMode::FDiffFwd || JMode == DenseDerivativeMode::FDiffCentArray)
+            ? 5.0e-6
+            : 1.0e-7;
+
+    /// @brief Constructs the mode with the default Hessian step size.
+    DenseSecondDerivatives() { this->set_hess_fd_steps(kDefaultHessStep); }
+
+    /// @brief Set I/O rows and keep the Hessian FD step vector sized to the input count.
+    ///
+    /// Chains to @ref Base::set_io_rows (the first-derivative layer), which
+    /// re-applies its own Jacobian step default; this layer additionally
+    /// re-applies the Hessian step default so dynamic-size functions never
+    /// read a stale (or empty) Hessian step vector.
+    /// @param inputrows   Number of input rows.
+    /// @param outputrows  Number of output rows.
+    void set_io_rows(int inputrows, int outputrows) {
+        Base::set_io_rows(inputrows, outputrows);
+        if (this->hess_fd_steps.size() != inputrows) {
+            this->set_hess_fd_steps(kDefaultHessStep);
+        }
+    }
+
     using Base::adjointhessian;
     /// @brief Sets a per-input-dimension Hessian finite-difference step size.
     /// @param steps  Step size for each input dimension.
@@ -140,20 +191,15 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::FDiff
 
         Input<Scalar> xi = x;
         for (int i = 0; i < this->input_rows(); i++) {
-            // if (this->VariableTypes[i] == VarTypes::Linear) {
-            if (false) {
-                for (int j = 0; j < this->input_rows(); j++) {
-                    adjhess(j, i) = Scalar(0.0);
-                }
-            } else {
-                xi[i] += this->hess_fd_steps[i];
-                this->adjointgradient(xi, agi, adjvars);
-                for (int j = 0; j < this->input_rows(); j++) {
-                    adjhess(j, i) = (agi[j] - ag[j]) / Scalar(this->hess_fd_steps[i]);
-                }
-                agi.setZero();
-                xi[i] = x[i];
+            const Scalar h = Scalar(this->hess_fd_steps[i]) * detail::fd_step_scale(x[i]);
+            xi[i] += h;
+            const Scalar hr = xi[i] - x[i];
+            this->adjointgradient(xi, agi, adjvars);
+            for (int j = 0; j < this->input_rows(); j++) {
+                adjhess(j, i) = (agi[j] - ag[j]) / hr;
             }
+            agi.setZero();
+            xi[i] = x[i];
         }
         adjhess = (adjhess + adjhess.transpose()).eval() * Scalar(0.5);
     }
