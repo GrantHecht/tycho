@@ -310,7 +310,7 @@ numpy.ndarray, shape (olen,)
                 return nb::cast(self.lb()[0]);
             return nb::cast(self.lb());
         },
-        R"doc(Lower domain bound(s): a float for 1-D tables, an ndarray for N-D.)doc");
+        R"doc(Lower domain bounds, as a float for a 1-D table or an ndarray for N-D.)doc");
     obj.def_prop_ro(
         "ub",
         [](const ChebTable &self) -> nb::object {
@@ -318,7 +318,7 @@ numpy.ndarray, shape (olen,)
                 return nb::cast(self.ub()[0]);
             return nb::cast(self.ub());
         },
-        R"doc(Upper domain bound(s): a float for 1-D tables, an ndarray for N-D.)doc");
+        R"doc(Upper domain bounds, as a float for a 1-D table or an ndarray for N-D.)doc");
     obj.def_prop_ro(
         "out_of_domain",
         [](const ChebTable &self) -> nb::list {

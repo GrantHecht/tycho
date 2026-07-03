@@ -14337,11 +14337,11 @@ class ChebTable:
 
     @property
     def lb(self) -> object:
-        """Lower domain bound(s): a float for 1-D tables, an ndarray for N-D."""
+        """Lower domain bounds, as a float for a 1-D table or an ndarray for N-D."""
 
     @property
     def ub(self) -> object:
-        """Upper domain bound(s): a float for 1-D tables, an ndarray for N-D."""
+        """Upper domain bounds, as a float for a 1-D table or an ndarray for N-D."""
 
     @property
     def out_of_domain(self) -> list:

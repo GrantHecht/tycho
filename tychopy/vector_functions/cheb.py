@@ -164,6 +164,7 @@ def cheb_from_function(callable_fn, lb, ub, order, nthreads=1, periodic=None):
         - 1-D: ``f(t) -> scalar or array_like`` evaluated at ``order+1`` nodes.
         - N-D: ``f(x) -> scalar or array_like`` where x is a length-D array,
           evaluated at all tensor-product grid points.
+
         Non-finite (NaN/Inf) samples raise ``ValueError`` naming the offending node.
     lb : float or array_like, shape (D,)
         Lower bound(s) of the interpolation domain.

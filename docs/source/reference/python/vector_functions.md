@@ -266,6 +266,9 @@ dimensions.
 .. autofunction:: cheb_from_function
 
 .. autofunction:: cheb_adaptive
+
+.. autoexception:: ChebConvergenceWarning
+   :members:
 ```
 
 ## Python-authored functions
