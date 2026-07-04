@@ -90,6 +90,21 @@ template <int IR> struct GenericComparative {
     /// @return Input-row count.
     int input_rows() const { return storage.get().input_rows(); }
 
+    /// @brief Runtime read-set: conservatively the full input range.
+    ///
+    /// The wrapped predicate's structure (and therefore its true read-set) is
+    /// erased behind @ref ConditionalBase, which has no `input_domain()` in its
+    /// virtual interface — so this reports the full `[0, input_rows())` range,
+    /// which is always a safe (if not maximally sparse) over-approximation for
+    /// any caller unioning domains (e.g. IfElseFunction, VF_REVIEW 1.11).
+    /// @return The full input-row range as a single-column domain matrix.
+    [[nodiscard]] DomainMatrix input_domain() const {
+        DomainMatrix d(2, 1);
+        d(0, 0) = 0;
+        d(1, 0) = this->input_rows();
+        return d;
+    }
+
     /// @brief Evaluate the wrapped predicate at @p x.
     /// @tparam InTypeT  Eigen expression type of the input vector.
     /// @param x  Input vector.
