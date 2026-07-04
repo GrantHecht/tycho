@@ -90,9 +90,14 @@ Eigen::MatrixXd fd_adjoint_hessian(Func &f, const Eigen::VectorXd &x, const Eige
 }
 
 /// Assert the function's adjoint Hessian matches the FD reference.
+///
+/// The reference is a central difference of the *analytic* Jacobian (via
+/// compute_jacobian), so this checks the adjoint Hessian against
+/// FD-of-analytic-Jacobian — it assumes the Jacobian is separately validated
+/// (e.g. by verify_jacobian_fd). @p eps tunes the FD step for badly-scaled inputs.
 template <class Func>
 void verify_adjoint_hessian_fd(Func &f, const Eigen::VectorXd &x, const Eigen::VectorXd &lm,
-                               double tol = 1e-4) {
+                               double tol = 1e-4, double eps = 1e-6) {
     const int n = static_cast<int>(x.size());
     const int m = f.output_rows();
     Eigen::VectorXd fx(m), gx(n);
@@ -102,7 +107,7 @@ void verify_adjoint_hessian_fd(Func &f, const Eigen::VectorXd &x, const Eigen::V
     jx.setZero();
     hx.setZero();
     f.compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, gx, hx, lm);
-    const Eigen::MatrixXd href = fd_adjoint_hessian(f, x, lm);
+    const Eigen::MatrixXd href = fd_adjoint_hessian(f, x, lm, eps);
     EXPECT_LT((hx - href).norm() / std::max(1.0, href.norm()), tol)
         << "analytic:\n" << hx << "\nfd:\n" << href;
 }

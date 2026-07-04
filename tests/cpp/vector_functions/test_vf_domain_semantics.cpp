@@ -67,11 +67,14 @@ TEST_F(VFDomainSemantics, DynamicCwiseSumTwoBlockDomain) {
 ///////////////////////////////////////////////////////////////////////////////
 // Dot-product adjoint Hessian with a dynamic (fully-erased) left operand.
 //
-// Exercises FunctionDotProduct_Impl's Func1::InputIsDynamic branch, whose
-// sds==0 cross term was missing the * adjvars[0] scaling applied by both
-// sibling (dynamic-loop and static-constexpr) branches, plus the JType1
-// typo that aliased Func2's Jacobian type for a buffer func1.compute_jacobian
-// fills.
+// Covers FunctionDotProduct_Impl's Func1::InputIsDynamic adjoint-Hessian path
+// (the reachable sds>=1 branch) against an FD reference. Note: this does NOT
+// discriminate the two latent consistency fixes shipped alongside it — the
+// sds==0 cross-term * adjvars[0] scaling and the JType1->Func1 typedef — both
+// of which are inert on any reachable-with-nonzero-contribution input (the
+// sds==0 branch requires an input-independent func1, whose cross term is zero;
+// the typo is inert when both operands share a Jacobian storage type). Those
+// two are validated by inspection; this test guards the surrounding path.
 ///////////////////////////////////////////////////////////////////////////////
 
 TEST_F(VFDomainSemantics, DynamicDotProductAdjointHessian) {
