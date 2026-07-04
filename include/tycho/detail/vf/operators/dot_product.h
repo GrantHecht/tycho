@@ -184,7 +184,7 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
             const int irows = this->func1.input_rows();
 
             using FType1 = typename Func1::template Output<Scalar>;
-            using JType1 = typename Func2::template Jacobian<Scalar>;
+            using JType1 = typename Func1::template Jacobian<Scalar>;
 
             using FType2 = typename Func2::template Output<Scalar>;
             using JType2 = typename Func2::template Jacobian<Scalar>;
@@ -285,7 +285,7 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
                 if constexpr (Func1::InputIsDynamic) {
                     const int sds = this->func1.sub_domains.cols();
                     if (sds == 0) {
-                        adjhess += hx2 + hx2.transpose();
+                        adjhess += (hx2 + hx2.transpose()) * adjvars[0];
                     } else {
                         for (int i = 0; i < sds; i++) {
                             int start = this->func1.sub_domains(0, i);
@@ -322,7 +322,7 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
             const int irows = this->func1.input_rows();
 
             using FType1 = typename Func1::template Output<Scalar>;
-            using JType1 = typename Func2::template Jacobian<Scalar>;
+            using JType1 = typename Func1::template Jacobian<Scalar>;
 
             using FType2 = typename Func2::template Output<Scalar>;
             using JType2 = typename Func2::template Jacobian<Scalar>;

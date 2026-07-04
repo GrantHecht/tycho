@@ -95,6 +95,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     vector_functions/test_mixed_size_ops.cpp
     vector_functions/test_vf_concepts.cpp
     vector_functions/test_vf_fd_modes.cpp
+    vector_functions/test_vf_domain_semantics.cpp
 
     # Astro
     astro/test_kepler_conversions.cpp
@@ -242,6 +243,13 @@ set_source_files_properties(
 # namespace helpers out of the same unity TU (see notes above).
 set_source_files_properties(
     vector_functions/test_vf_fd_modes.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)
+
+# test_vf_domain_semantics.cpp: keep standalone for the same reason as
+# test_vf_fd_modes.cpp above — avoid shifting later unity batch boundaries.
+set_source_files_properties(
+    vector_functions/test_vf_domain_semantics.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
 

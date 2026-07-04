@@ -160,7 +160,7 @@ void right_jacobian_product_dynamic_impl(const DomainMatrix &sub_domains,
     const int sds = sub_domains.cols();
 
     if (sds == 0) {
-        // right_jacobian_product_impl(target_, left, right, assign, aliased);
+        right_jacobian_product_impl(target_, left, right, assign, aliased);
     } else {
         const Eigen::MatrixBase<Right> &right_ref(right.derived());
         Eigen::MatrixBase<Target> &target_ref(target_.const_cast_derived());
@@ -379,7 +379,7 @@ void accumulate_matrix_dynamic_domain_impl(const DomainMatrix &sub_domains,
                                            Assignment assign) {
     int sds = sub_domains.cols();
     if (sds == 0) {
-        // accumulate_impl(target_, right, assign);
+        accumulate_impl(target_, right, assign);
     } else {
         const Eigen::MatrixBase<JacType> &right_ref(right.derived());
         Eigen::MatrixBase<Target> &target_ref(target_.const_cast_derived());
@@ -414,7 +414,7 @@ void accumulate_symetric_matrix_dynamic_domain_impl(const DomainMatrix &sub_doma
     Eigen::MatrixBase<Target> &target_ref(target_.const_cast_derived());
 
     if (sds == 0) {
-        // accumulate_impl(target_, right, assign);
+        accumulate_impl(target_, right, assign);
     } else if (sds == 1) {
 
         int Start1 = sub_domains(0, 0);
@@ -469,7 +469,7 @@ void accumulate_vector_dynamic_domain_impl(const DomainMatrix &sub_domains,
                                            Assignment assign) {
     int sds = sub_domains.cols();
     if (sds == 0) {
-        // accumulate_impl(target_, right, assign);
+        accumulate_impl(target_, right, assign);
     } else {
         const Eigen::MatrixBase<JacType> &right_ref(right.derived());
         Eigen::MatrixBase<Target> &target_ref(target_.const_cast_derived());
