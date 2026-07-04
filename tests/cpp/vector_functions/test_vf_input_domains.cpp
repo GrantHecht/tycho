@@ -38,22 +38,29 @@ class VFInputDomains : public VectorFunctionFixture {};
 ///////////////////////////////////////////////////////////////////////////////
 
 TEST_F(VFInputDomains, ConditionalStatementDomainIsUnionOfOperands) {
-    auto args = Arguments<3>();
-    auto lhs = args.coeff<2>(); // reads column 2 only
-    auto rhs = args.coeff<0>(); // reads column 0 only
+    // Dynamic (IRC=-1) Arguments so each operand's coeff(i) reports a real
+    // narrow sub-domain ({i,1}) rather than the trivial full [0,IR) block a
+    // static Arguments would give — otherwise a "return lhs only" bug would
+    // still cover both columns and the union wouldn't be discriminated.
+    auto args = Arguments<-1>(3);
+    auto lhs = args.coeff(2); // reads column 2 only
+    auto rhs = args.coeff(0); // reads column 0 only
 
     ConditionalStatement cond(lhs, ConditionalFlags::GreaterThanFlag, rhs);
     DomainMatrix dmn = cond.input_domain();
 
-    bool covers_col0 = false, covers_col2 = false;
+    bool covers_col0 = false, covers_col2 = false, covers_col1 = false;
     for (int i = 0; i < dmn.cols(); i++) {
         if (dmn(0, i) <= 0 && 0 < dmn(0, i) + dmn(1, i))
             covers_col0 = true;
+        if (dmn(0, i) <= 1 && 1 < dmn(0, i) + dmn(1, i))
+            covers_col1 = true;
         if (dmn(0, i) <= 2 && 2 < dmn(0, i) + dmn(1, i))
             covers_col2 = true;
     }
-    EXPECT_TRUE(covers_col0);
-    EXPECT_TRUE(covers_col2);
+    EXPECT_TRUE(covers_col0); // rhs operand — fails if union drops rhs
+    EXPECT_TRUE(covers_col2); // lhs operand — fails if union drops lhs
+    EXPECT_FALSE(covers_col1); // neither operand reads col 1 — union must not invent it
 }
 
 TEST_F(VFInputDomains, ConstantConditionalDomainIsEmpty) {
