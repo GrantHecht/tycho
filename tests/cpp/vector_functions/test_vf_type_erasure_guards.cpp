@@ -86,3 +86,22 @@ TEST_F(VFTypeErasureGuards, DefaultComparativeInputRowsThrows) {
     GenericComparative<-1> c;
     EXPECT_THROW(c.input_rows(), std::runtime_error);
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// GenericConditional storage.get() guards (generic_conditional.h input_rows() /
+// compute()). Same defect class as GenericComparative above: a default-
+// constructed GenericConditional holds an empty TypeStorage. GenericConditional
+// is the TestFunc behind the Python ifelse() DSL, so it is user-reachable.
+///////////////////////////////////////////////////////////////////////////////
+
+TEST_F(VFTypeErasureGuards, DefaultConditionalThrowsOnUse) {
+    GenericConditional<-1> c; // empty — never assigned a predicate
+    Eigen::VectorXd x(2);
+    x.setZero();
+    EXPECT_THROW(c.compute(x), std::runtime_error);
+}
+
+TEST_F(VFTypeErasureGuards, DefaultConditionalInputRowsThrows) {
+    GenericConditional<-1> c;
+    EXPECT_THROW(c.input_rows(), std::runtime_error);
+}

@@ -87,7 +87,13 @@ template <int IR> struct GenericConditional {
 
     /// @brief Number of input rows the wrapped predicate accepts.
     /// @return Input-row count.
-    int input_rows() const { return storage.get().input_rows(); }
+    int input_rows() const {
+        if (storage.empty()) {
+            throw std::runtime_error(
+                "GenericConditional is empty (default-constructed); assign a predicate before use");
+        }
+        return storage.get().input_rows();
+    }
 
     /// @brief Runtime read-set: conservatively the full input range.
     ///
@@ -113,6 +119,10 @@ template <int IR> struct GenericConditional {
     /// @param x  Input vector.
     /// @return Boolean result of the predicate.
     template <class InTypeT> bool compute(const Eigen::MatrixBase<InTypeT> &x) const {
+        if (storage.empty()) {
+            throw std::runtime_error(
+                "GenericConditional is empty (default-constructed); assign a predicate before use");
+        }
         InType xt(x.derived());
         return storage.get().compute(xt);
     }
