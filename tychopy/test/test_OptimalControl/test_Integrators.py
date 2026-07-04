@@ -347,7 +347,7 @@ class test_Integrators(unittest.TestCase):
         integ.set_abs_tol(1.0e-13)
         integ.adaptive = True
 
-        integ.event_tol = 1.0e-10
+        integ.event_residual_tol = 1.0e-10
         integ.max_event_iters = 12
 
         Xf, EventLocs1 = integ.integrate(X0t0, tf, Events)
@@ -375,7 +375,9 @@ class test_Integrators(unittest.TestCase):
                 )
 
                 self.assertLess(
-                    Fxerr, integ.event_tol, "Event root error exceeds tolerance"
+                    Fxerr,
+                    integ.event_residual_tol,
+                    "Event root error exceeds tolerance",
                 )
 
     def test_BatchCalls1(self):
@@ -426,7 +428,7 @@ class test_Integrators(unittest.TestCase):
     def test_EventRefinementFailureReturnsNone(self):
         """Pin the nanobind translation of std::optional<ODEState> to
         Optional[np.ndarray] on the Python surface. Force an event
-        refinement to fail via an impossibly tight event_tol, then assert
+        refinement to fail via an impossibly tight event_residual_tol, then assert
         the corresponding EventLocs slot is literally `None` (not a
         zero-array, not a silent drop) — the residual check in
         EventHandler::refine_one produces std::nullopt, which the binding
@@ -459,7 +461,7 @@ class test_Integrators(unittest.TestCase):
         # |f(tevent)| <= 1e-300 since FP residuals bottom out at ~1e-16.
         # The residual check in EventHandler::refine_one then emits
         # std::nullopt for every refinement.
-        integ.event_tol = 1.0e-300
+        integ.event_residual_tol = 1.0e-300
         integ.max_event_iters = 4
 
         Xf, EventLocs = integ.integrate(X0, tf, Events)
@@ -584,19 +586,20 @@ class TestBindingValidators(unittest.TestCase):
         ode = LorenzODE(10.0, 28.0, 8.0 / 3.0)
         return ode.integrator(0.01)
 
-    def test_event_tol_rejects_nonpositive(self):
+    def test_event_tols_reject_nonpositive(self):
         integ = self._make()
-        with self.assertRaises(ValueError):
-            integ.event_tol = -1.0
-        with self.assertRaises(ValueError):
-            integ.event_tol = 0.0
-        with self.assertRaises(ValueError):
-            integ.event_tol = float("nan")
-        with self.assertRaises(ValueError):
-            integ.event_tol = float("inf")
-        # Positive round-trips cleanly.
-        integ.event_tol = 1e-9
-        self.assertEqual(integ.event_tol, 1e-9)
+        for name in ("event_residual_tol", "event_abscissa_tol"):
+            with self.assertRaises(ValueError):
+                setattr(integ, name, -1.0)
+            with self.assertRaises(ValueError):
+                setattr(integ, name, 0.0)
+            with self.assertRaises(ValueError):
+                setattr(integ, name, float("nan"))
+            with self.assertRaises(ValueError):
+                setattr(integ, name, float("inf"))
+            # Positive round-trips cleanly.
+            setattr(integ, name, 1e-9)
+            self.assertEqual(getattr(integ, name), 1e-9)
 
     def test_max_event_iters_rejects_below_one(self):
         integ = self._make()

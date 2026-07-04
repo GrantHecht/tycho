@@ -393,6 +393,7 @@ set(TYCHO_METHOD_TEST_SOURCES
     integrators/test_stm_all_methods.cpp
     integrators/test_event_directions.cpp
     integrators/test_event_boundary_crossing.cpp
+    integrators/test_event_tol_split.cpp
 )
 tycho_add_test_executable(tycho_method_tests TYCHO_METHOD_TEST_SOURCES)
 target_include_directories(tycho_method_tests PRIVATE

@@ -509,7 +509,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     // there is no hard min/max on dt, only a hard cap on iterations.
     int max_steps_ = 1'000'000; ///< @internal Hard cap on total steps before throwing.
     bool adaptive_ = true; ///< @internal Whether adaptive step-size control is active.
-    double event_tol_ = 1.0e-6; ///< @internal Event-crossing refinement tolerance.
+    double event_residual_tol_ = 1.0e-6; ///< @internal Event residual tol (units of f).
+    double event_abscissa_tol_ = 1.0e-6; ///< @internal Event abscissa tol (units of t).
     int max_event_iters_ = 10; ///< @internal Max Newton iterations per event refinement.
     /// @internal
     /// @brief Whether batch calls use the vectorized driver.
@@ -875,18 +876,32 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// @brief Returns the maximum per-step growth ratio.
     double get_max_step_change() const { return this->max_step_change_; }
 
-    /// Bisect/Newton tolerance for event-crossing refinement. Must be
-    /// strictly positive — zero or negative would make the refinement
-    /// loop either never terminate or exit on the first iteration.
-    void set_event_tol(double v) {
-        if (!(v > 0.0) || !std::isfinite(v)) {
-            throw std::invalid_argument("event_tol must be finite and > 0; got " +
+    /// Residual (f-units) tolerance for event-crossing refinement: Newton
+    /// accepts a root when |f(tevent)| <= event_residual_tol. Scale it to the
+    /// magnitude of your event function — a large-scale event (|f| ~ 1e8) needs
+    /// a correspondingly larger residual tol to refine at all. Must be > 0.
+    void set_event_residual_tol(double v) {
+        if (!(std::isfinite(v) && v > 0.0)) {
+            throw std::invalid_argument("event_residual_tol must be finite and > 0; got " +
                                         std::to_string(v));
         }
-        this->event_tol_ = v;
+        this->event_residual_tol_ = v;
     }
-    /// @brief Returns the event-crossing refinement tolerance.
-    double get_event_tol() const { return this->event_tol_; }
+    /// @brief Returns the event residual (f-units) refinement tolerance.
+    double get_event_residual_tol() const { return this->event_residual_tol_; }
+
+    /// Abscissa (t-units) tolerance for event-crossing refinement: bisection
+    /// narrows the [tlow, thigh] bracket until its half-width is below this (or
+    /// the machine-precision floor). Governs located-time precision. Must be > 0.
+    void set_event_abscissa_tol(double v) {
+        if (!(std::isfinite(v) && v > 0.0)) {
+            throw std::invalid_argument("event_abscissa_tol must be finite and > 0; got " +
+                                        std::to_string(v));
+        }
+        this->event_abscissa_tol_ = v;
+    }
+    /// @brief Returns the event abscissa (t-units) refinement tolerance.
+    double get_event_abscissa_tol() const { return this->event_abscissa_tol_; }
 
     /// Max Newton iterations for event refinement. Must be >= 1 — zero
     /// silently skips the Newton polish, leaving only the two-iter
@@ -961,7 +976,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         this->controller_variant_ = src.controller_variant_;
         this->error_norm_type_ = src.error_norm_type_;
         this->max_step_change_ = src.max_step_change_;
-        this->event_tol_ = src.event_tol_;
+        this->event_residual_tol_ = src.event_residual_tol_;
+        this->event_abscissa_tol_ = src.event_abscissa_tol_;
         this->max_event_iters_ = src.max_event_iters_;
         this->use_hairer_wanner_initdt_ = src.use_hairer_wanner_initdt_;
         this->def_step_size_ = src.def_step_size_;
@@ -1364,7 +1380,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         n_failed_event_refinements = 0;
         return EventHandler::refine_events<ODEState<double>>(
             tab, events, eventtimes, this->ode_.input_rows(), this->max_event_iters_,
-            this->event_tol_, n_failed_event_refinements);
+            this->event_residual_tol_, this->event_abscissa_tol_, n_failed_event_refinements);
     }
 
     /// Refine bracketed event crossings and publish the failure count to

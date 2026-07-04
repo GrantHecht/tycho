@@ -50,7 +50,8 @@ TEST(CopySettingsFromTest, AllFieldsRoundTripAcrossDifferentDODE) {
     src.vectorize_batch_calls_ = false;
     src.error_norm_type_ = ErrorNormType::MAX;
     src.max_step_change_ = 3.75;
-    src.event_tol_ = 1.234e-7;
+    src.event_residual_tol_ = 1.234e-7;
+    src.event_abscissa_tol_ = 5.678e-9;
     src.max_event_iters_ = 37;
     src.use_hairer_wanner_initdt_ = false;
     src.def_step_size_ = 0.123456;
@@ -77,7 +78,8 @@ TEST(CopySettingsFromTest, AllFieldsRoundTripAcrossDifferentDODE) {
     tgt.adaptive_ = true;
     tgt.set_max_steps(100);
     tgt.max_step_change_ = 10.0;
-    tgt.event_tol_ = 1.0e-12;
+    tgt.event_residual_tol_ = 1.0e-12;
+    tgt.event_abscissa_tol_ = 2.0e-12;
     tgt.max_event_iters_ = 5;
     tgt.use_hairer_wanner_initdt_ = true;
     tgt.def_step_size_ = 0.05;
@@ -102,7 +104,8 @@ TEST(CopySettingsFromTest, AllFieldsRoundTripAcrossDifferentDODE) {
     EXPECT_EQ(tgt.get_method(), src.get_method());
     EXPECT_EQ(tgt.error_norm_type_, src.error_norm_type_);
     EXPECT_DOUBLE_EQ(tgt.max_step_change_, src.max_step_change_);
-    EXPECT_DOUBLE_EQ(tgt.event_tol_, src.event_tol_);
+    EXPECT_DOUBLE_EQ(tgt.event_residual_tol_, src.event_residual_tol_);
+    EXPECT_DOUBLE_EQ(tgt.event_abscissa_tol_, src.event_abscissa_tol_);
     EXPECT_EQ(tgt.max_event_iters_, src.max_event_iters_);
     EXPECT_EQ(tgt.use_hairer_wanner_initdt_, src.use_hairer_wanner_initdt_);
     EXPECT_DOUBLE_EQ(tgt.def_step_size_, src.def_step_size_);

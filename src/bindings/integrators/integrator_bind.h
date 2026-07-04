@@ -901,12 +901,24 @@ int
 )doc");
 
         obj.def_prop_rw(
-            "event_tol", [](const Integrator<DODE> &self) { return self.get_event_tol(); },
-            [](Integrator<DODE> &self, double v) { self.set_event_tol(v); },
-            R"doc(Absolute time tolerance for event root-finding (float, default ``1e-6``).
+            "event_residual_tol",
+            [](const Integrator<DODE> &self) { return self.get_event_residual_tol(); },
+            [](Integrator<DODE> &self, double v) { self.set_event_residual_tol(v); },
+            R"doc(Residual (f-units) tolerance for event-crossing refinement (float, default ``1e-6``).
 
-The bisection / Newton loop that locates an event crossing stops when the
-bracketing interval width falls below this value.
+Newton accepts an event root when ``|f(tevent)| <= event_residual_tol``.  Scale
+it to the magnitude of your event function -- a large-scale event (``|f| ~ 1e8``)
+needs a correspondingly larger residual tol to refine at all.  Must be > 0.
+)doc");
+        obj.def_prop_rw(
+            "event_abscissa_tol",
+            [](const Integrator<DODE> &self) { return self.get_event_abscissa_tol(); },
+            [](Integrator<DODE> &self, double v) { self.set_event_abscissa_tol(v); },
+            R"doc(Abscissa (t-units) tolerance for event-crossing refinement (float, default ``1e-6``).
+
+The bisection loop narrows the ``[tlow, thigh]`` bracket until its half-width
+falls below this value (or the machine-precision floor).  Governs located-time
+precision.  Must be > 0.
 )doc");
         obj.def_prop_rw(
             "max_event_iters",
@@ -915,8 +927,8 @@ bracketing interval width falls below this value.
             R"doc(Maximum iterations for event root-finding (int, default ``10``).
 
 If the root-finding loop has not converged within this many iterations and
-the interval has not reached :attr:`event_tol`, integration stops at the
-best current estimate of the event location.
+the interval has not reached :attr:`event_abscissa_tol`, integration stops at
+the best current estimate of the event location.
 )doc");
         obj.def_rw("vectorize_batch_calls", &Integrator<DODE>::vectorize_batch_calls_,
                    R"doc(Use SuperScalar evaluation for batch integration calls (bool, default ``True``).
@@ -1014,8 +1026,8 @@ int
                 R"doc(Return the number of events that failed to converge in the last call.
 
 An event "fails" when the root-finding loop reaches :attr:`max_event_iters`
-without meeting :attr:`event_tol`.  The integrator continues from the best
-available estimate.
+without meeting :attr:`event_residual_tol`.  The integrator continues from the
+best available estimate.
 
 Returns
 -------

@@ -320,8 +320,8 @@ TEST_F(EventRefinementCoverageTest, JacobianZero_TriggersSentinelToNullopt) {
 
 // The counter is reset at the start of each find_events call — a second
 // event-bearing integration must not accumulate state from the first. Force
-// a non-zero failure count via an impossibly tight event_tol so a stuck-at-
-// zero counter cannot silently pass.
+// a non-zero failure count via an impossibly tight event_residual_tol so a
+// stuck-at-zero counter cannot silently pass.
 TEST_F(EventRefinementCoverageTest, ResetPerCall_SecondCallIndependent) {
     astro::Kepler kep(kErcMu);
     Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI54, 10.0);
@@ -329,7 +329,7 @@ TEST_F(EventRefinementCoverageTest, ResetPerCall_SecondCallIndependent) {
     integ.set_rel_tol(1e-13);
     // 1e-300 is unattainable: FP residuals bottom out at ~1e-16, so every
     // refinement fails the residual check and emits std::nullopt.
-    integ.set_event_tol(1.0e-300);
+    integ.set_event_residual_tol(1.0e-300);
     integ.set_max_event_iters(4);
 
     auto x0 = erc_eccentric_x0();
@@ -351,6 +351,6 @@ TEST_F(EventRefinementCoverageTest, ResetPerCall_SecondCallIndependent) {
     // failure mode, full reset in between. A stuck-at-zero counter would
     // pass EXPECT_EQ(0, 0) trivially; the >0 floor blocks that.
     EXPECT_GT(after_first, 0)
-        << "Impossibly-tight event_tol must produce at least one nullopt.";
+        << "Impossibly-tight event_residual_tol must produce at least one nullopt.";
     EXPECT_EQ(after_first, after_second);
 }
