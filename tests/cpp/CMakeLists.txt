@@ -98,6 +98,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     vector_functions/test_vf_fd_modes.cpp
     vector_functions/test_vf_domain_semantics.cpp
     vector_functions/test_vf_vector_products_hessian.cpp
+    vector_functions/test_summation_overlap.cpp
 
     # Astro
     astro/test_kepler_conversions.cpp
@@ -260,6 +261,15 @@ set_source_files_properties(
 # later unity batch boundaries.
 set_source_files_properties(
     vector_functions/test_vf_vector_products_hessian.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)
+
+# test_summation_overlap.cpp: keep standalone for the same reason as
+# test_vf_fd_modes.cpp / test_vf_domain_semantics.cpp above — avoid shifting
+# later unity batch boundaries. Also isolates the summation.h edit (VF_REVIEW
+# 1.10) so iterating on this test doesn't force a full unity-batch rebuild.
+set_source_files_properties(
+    vector_functions/test_summation_overlap.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
 
