@@ -86,6 +86,13 @@ template <class D0, class... Ds> constexpr bool domain_pack_provably_overlaps() 
 /// or their overlap cannot be proven at compile time (runtime-start segments).
 /// Gates the sum-of-segments fast paths: only a *provable* overlap of concrete
 /// compile-time ranges disables the fast path.
+///
+/// @note The predicate is intentionally broader than the strict double-count
+/// condition: it routes ANY provable overlap to Base, including partial overlap
+/// with distinct starts that the fast path would in fact compute correctly. This
+/// is a deliberate conservative choice — Base is always correct, so the only cost
+/// of an over-broad gate is a small perf pessimization on those (rare) mixed-start
+/// partially-overlapping sums, never a wrong result.
 template <class... Doms>
 inline constexpr bool segments_domains_disjoint_v = !domain_pack_provably_overlaps<Doms...>();
 } // namespace detail
