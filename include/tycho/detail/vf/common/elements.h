@@ -118,8 +118,9 @@ struct Elements : VectorFunction<Elements<IR, EL1, ELS...>, IR, 1 + sizeof...(EL
             fx[i] = x[ele.value];
             jx(i, ele.value) = 1.0;
             // += (not =): duplicate indices must sum J^T·λ contributions.
-            // adjgrad is pre-zeroed by the dispatch layer; jx above uses = only
-            // because its duplicate columns land in distinct rows and never collide.
+            // Requires adjgrad zeroed by the caller before entry (see the @param
+            // contract above); jx above uses = only because its duplicate columns
+            // land in distinct rows and never collide.
             adjgrad[ele.value] += adjvars[i];
         });
     }

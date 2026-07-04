@@ -1465,14 +1465,13 @@ include/tycho/detail/vf/
         cwise_product.h           Element-wise function product
         matrix_function.h         ColMatrix, RowMatrix, matrix operations
         arc_tan2.h                ArcTan2 function
-        cross_product.h           CrossProduct
         dot_product.h             DotProduct
         function_vector_sums.h    FunctionVectorSum variants
         matrix_inverse.h          MatrixInverse
         matrix_product.h          MatrixProduct
         root_finder.h             RootFinder
         sign_function.h           SignFunction
-        vector_products.h         element-wise vector products
+        vector_products.h         element-wise vector products; also houses CrossProduct/FunctionCrossProduct
         vector_scalar_function_division.h  VF / scalar
         vector_scalar_function_product.h   VF * scalar
     scaling/
