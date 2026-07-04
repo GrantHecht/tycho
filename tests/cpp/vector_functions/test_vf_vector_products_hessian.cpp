@@ -43,6 +43,9 @@ TEST_F(VFVectorProductsHessian, ImagProductAdjointHessianMatchesFD) {
 
     Eigen::VectorXd x = deterministic_random_vector(4, 41, 0.5, 2.0);
     Eigen::VectorXd lm = deterministic_random_vector(2, 42, -1.0, 1.0);
+    // verify_adjoint_hessian_fd differences the analytic Jacobian, so validate
+    // the Jacobian independently first (sibling-suite convention).
+    verify_jacobian_fd(prod, x, 1e-5);
     verify_adjoint_hessian_fd(prod, x, lm, 1e-4);
 }
 
@@ -59,6 +62,7 @@ TEST_F(VFVectorProductsHessian, CrossProductAdjointHessianStillCorrect) {
 
     Eigen::VectorXd x6 = deterministic_random_vector(6, 43, 0.5, 2.0);
     Eigen::VectorXd lm3 = deterministic_random_vector(3, 44, -1.0, 1.0);
+    verify_jacobian_fd(cp, x6, 1e-5);
     verify_adjoint_hessian_fd(cp, x6, lm3, 1e-4);
 }
 
@@ -75,6 +79,7 @@ TEST_F(VFVectorProductsHessian, QuatProductAdjointHessianStillCorrect) {
 
     Eigen::VectorXd x8 = deterministic_random_vector(8, 45, 0.5, 2.0);
     Eigen::VectorXd lm4 = deterministic_random_vector(4, 46, -1.0, 1.0);
+    verify_jacobian_fd(qp, x8, 1e-5);
     verify_adjoint_hessian_fd(qp, x8, lm4, 1e-4);
 }
 
