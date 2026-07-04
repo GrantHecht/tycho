@@ -100,6 +100,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     vector_functions/test_vf_vector_products_hessian.cpp
     vector_functions/test_summation_overlap.cpp
     vector_functions/test_vf_input_domains.cpp
+    vector_functions/test_parsed_input.cpp
 
     # Astro
     astro/test_kepler_conversions.cpp
@@ -281,6 +282,17 @@ set_source_files_properties(
 # doesn't force a full unity-batch rebuild.
 set_source_files_properties(
     vector_functions/test_vf_input_domains.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)
+
+# test_parsed_input.cpp: keep standalone for the same reason as the other
+# entries above -- avoid shifting later unity batch boundaries. Also isolates
+# the parsed_input.h edit (VF_REVIEW 1.12: varlocs_ bounds validation +
+# duplicate-index accumulation) so iterating on this test doesn't force a
+# full unity-batch rebuild. parsed_input.h is reached transitively via
+# common_functions.h, which is a heavy include.
+set_source_files_properties(
+    vector_functions/test_parsed_input.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
 
