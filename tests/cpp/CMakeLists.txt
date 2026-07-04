@@ -101,6 +101,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     vector_functions/test_summation_overlap.cpp
     vector_functions/test_vf_input_domains.cpp
     vector_functions/test_parsed_input.cpp
+    vector_functions/test_vf_type_erasure_guards.cpp
 
     # Astro
     astro/test_kepler_conversions.cpp
@@ -293,6 +294,16 @@ set_source_files_properties(
 # common_functions.h, which is a heavy include.
 set_source_files_properties(
     vector_functions/test_parsed_input.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)
+
+# test_vf_type_erasure_guards.cpp: keep standalone for the same reason as the
+# other entries above -- avoid shifting later unity batch boundaries. Also
+# isolates the conditional.h / gf_type_erasure.h / generic_comparative.h /
+# generic_function.h edits (VF_REVIEW 1.13, 1.14) so iterating on this test
+# doesn't force a full unity-batch rebuild.
+set_source_files_properties(
+    vector_functions/test_vf_type_erasure_guards.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
 

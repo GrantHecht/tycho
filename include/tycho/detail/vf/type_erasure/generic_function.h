@@ -26,6 +26,9 @@
 #include "tycho/detail/vf/core/dense_function_base.h"
 #include "tycho/detail/vf/type_erasure/gf_type_erasure.h"
 
+#include <fmt/format.h>
+#include <stdexcept>
+
 namespace tycho::vf {
 
 /// @brief Type-erased VectorFunction holding any compatible function of the same size.
@@ -74,7 +77,9 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     /// @tparam T  A dense VectorFunction that is not an Eigen expression type.
     /// @param t   Function to wrap and store.
     template <DenseVectorFunction T>
-        requires(!std::derived_from<std::decay_t<T>, Eigen::EigenBase<std::decay_t<T>>>)
+        requires(!std::derived_from<std::decay_t<T>, Eigen::EigenBase<std::decay_t<T>>> &&
+                 (IR == -1 || std::decay_t<T>::IRC == -1 || std::decay_t<T>::IRC == IR) &&
+                 (OR == -1 || std::decay_t<T>::ORC == -1 || std::decay_t<T>::ORC == OR))
     GenericFunction(const T &t) {
         func_.emplace(t);
         this->cachedata();
@@ -114,7 +119,29 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     }
 
     /// @brief Refresh cached IO sizes, input domain, and linearity from the stored function.
+    ///
+    /// For a fixed-size GenericFunction<IR,OR>, the erasing constructor's compile-time
+    /// constraint cannot reject a mismatched *dynamically*-sized source (a source with
+    /// IRC/ORC == -1 always passes it, since its true size is only known at runtime) — so
+    /// the actual sizes are re-checked here, where the stored function's runtime
+    /// input_rows()/output_rows() are available.
+    /// @throws std::invalid_argument if the stored function's runtime size does not match
+    ///   this GenericFunction's fixed IR/OR.
     void cachedata() {
+        if constexpr (IR > 0) {
+            if (this->func_.get().input_rows() != IR) {
+                throw std::invalid_argument(
+                    fmt::format("GenericFunction<{},{}>: stored function has {} input rows", IR,
+                                OR, this->func_.get().input_rows()));
+            }
+        }
+        if constexpr (OR > 0) {
+            if (this->func_.get().output_rows() != OR) {
+                throw std::invalid_argument(
+                    fmt::format("GenericFunction<{},{}>: stored function has {} output rows", IR,
+                                OR, this->func_.get().output_rows()));
+            }
+        }
         this->set_io_rows(this->func_.get().input_rows(), this->func_.get().output_rows());
         this->set_input_domain(this->input_rows(), {this->func_.get().input_domain()});
         this->is_linear_ = this->func_.get().is_linear();

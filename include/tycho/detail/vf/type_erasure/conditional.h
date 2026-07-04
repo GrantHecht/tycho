@@ -144,12 +144,17 @@ template <class LHS, class RHS> struct ConditionalStatement {
         DomainMatrix l = this->lhs_.input_domain();
         DomainMatrix r = this->rhs_.input_domain();
         DomainMatrix out(2, l.cols() + r.cols());
-        out << l, r;
+        // Eigen's comma-initializer (`out << l, r;`) asserts when either block is
+        // 2x0 (a zero-read operand, e.g. ConstantConditional). Block-assign each
+        // side instead so empty blocks are handled cleanly.
+        out.leftCols(l.cols()) = l;
+        out.rightCols(r.cols()) = r;
         return out;
     }
 
   protected:
-    ConditionalFlags flag_;  ///< @brief Comparison/logical operator applied.
+    ConditionalFlags flag_ =
+        ConditionalFlags::LessThanFlag; ///< @brief Comparison/logical operator applied.
     LHS lhs_;                ///< @brief Left-hand operand.
     RHS rhs_;                ///< @brief Right-hand operand.
     int input_rows_val_ = 0; ///< @brief Cached input-row count.
@@ -189,7 +194,7 @@ struct ConstantConditional {
     [[nodiscard]] DomainMatrix input_domain() const { return DomainMatrix(2, 0); }
 
   protected:
-    bool value_;             ///< @brief Constant boolean result.
+    bool value_ = false;     ///< @brief Constant boolean result.
     int input_rows_val_ = 0; ///< @brief Reported input-row count.
 };
 

@@ -88,7 +88,16 @@ template <int IR> struct GenericComparative {
 
     /// @brief Number of input rows the wrapped predicate accepts.
     /// @return Input-row count.
-    int input_rows() const { return storage.get().input_rows(); }
+    /// @throws std::runtime_error if this GenericComparative is empty (default-constructed
+    ///   and never assigned a predicate).
+    int input_rows() const {
+        if (storage.empty()) {
+            throw std::runtime_error(
+                "GenericComparative is empty (default-constructed); assign a predicate before "
+                "use");
+        }
+        return storage.get().input_rows();
+    }
 
     /// @brief Runtime read-set: conservatively the full input range.
     ///
@@ -109,7 +118,14 @@ template <int IR> struct GenericComparative {
     /// @tparam InTypeT  Eigen expression type of the input vector.
     /// @param x  Input vector.
     /// @return Boolean result of the predicate.
+    /// @throws std::runtime_error if this GenericComparative is empty (default-constructed
+    ///   and never assigned a predicate).
     template <class InTypeT> bool compute(const Eigen::MatrixBase<InTypeT> &x) const {
+        if (storage.empty()) {
+            throw std::runtime_error(
+                "GenericComparative is empty (default-constructed); assign a predicate before "
+                "use");
+        }
         InType xt(x.derived());
         return storage.get().compute(xt);
     }
