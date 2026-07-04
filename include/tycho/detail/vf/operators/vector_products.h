@@ -571,7 +571,6 @@ struct FunctionVectorProduct_Impl
 
         Eigen::Matrix<Scalar, Vsize, Vsize> pm1;
         Eigen::Matrix<Scalar, Vsize, Vsize> pm2;
-        Eigen::Matrix<Scalar, Vsize, Vsize> lpm1;
         Eigen::Matrix<Scalar, Vsize, Vsize> lpm2;
 
         /// @cond INTERNAL
@@ -583,11 +582,17 @@ struct FunctionVectorProduct_Impl
             this->fillprodmatrix(fx1, pm2, fsign2);
 
             this->fillprodmatrix(adjt, lpm2, fsign1);
-            this->fillprodmatrix(adjt, lpm1, fsign2);
 
             if constexpr (Vsize == 4) {
                 lpm2.diagonal().template head<3>() *= Scalar(-1.0);
                 lpm2.row(3).template head<3>() *= Scalar(-1.0);
+            }
+            if constexpr (Vsize == 2) {
+                // VF_REVIEW 1.3: the cross term needs [[l0,l1],[l1,-l0]] but
+                // fillprodmatrix produced the complex-mult matrix
+                // [[l0,-l1],[l1,l0]]; negating column 1 fixes it (analogous to
+                // the quaternion sign patch above).
+                lpm2.col(1) *= Scalar(-1.0);
             }
 
             fx = this->vecprodimpl(Scalar(1.0), fx1, fx2);
