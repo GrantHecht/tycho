@@ -131,8 +131,21 @@ struct EventHandler {
             int dir = events[j].direction();
             double vprod = vprev * vnext;
 
-            if (vprod < 0.0) {
-                if ((dir > 0 && vnext > 0) || (dir < 0 && vnext < 0) || dir == 0) {
+            // A crossing is either a strict sign flip across the interior
+            // (vprod < 0) OR the next endpoint sitting exactly on zero while
+            // the previous value was nonzero (INTEGRATORS_REVIEW §1.2). The
+            // vprev != 0 guard means the *following* step (which sees
+            // vprev == 0 at this same endpoint) does not double-count.
+            bool crossing = (vprod < 0.0) || (vnext == 0.0 && vprev != 0.0);
+            if (crossing) {
+                // Classify direction by the approach: rising if the value came
+                // up to/through zero (vnext > 0, or vnext == 0 from below),
+                // falling if it came down. This makes the endpoint-zero case
+                // filter correctly under Rising/Falling instead of being
+                // silently dropped by the old `vnext > 0` / `vnext < 0` test.
+                bool rising = (vnext > 0.0) || (vnext == 0.0 && vprev < 0.0);
+                bool falling = (vnext < 0.0) || (vnext == 0.0 && vprev > 0.0);
+                if ((dir > 0 && rising) || (dir < 0 && falling) || dir == 0) {
                     Eigen::Vector2d times;
                     times[0] = t_prev;
                     times[1] = xnext[t_var];
@@ -271,7 +284,7 @@ struct EventHandler {
                 auto refine_one = [&](double tig_candidate, double lo,
                                       double hi) -> std::optional<double> {
                     double tevent = newton(tig_candidate);
-                    if (!(tevent > lo && tevent < hi)) {
+                    if (!(tevent >= lo && tevent <= hi)) {
                         return std::nullopt;
                     }
                     x[0] = tevent;
