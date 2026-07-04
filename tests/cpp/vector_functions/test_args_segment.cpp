@@ -56,3 +56,49 @@ TEST_F(CommonFunctionsTest, SegmentJacobian) {
     expected(1, 2) = 1.0;
     verify_jacobian_analytical(seg, x, expected);
 }
+
+// VF_REVIEW 3.2: Segment_Impl::accumulate_jacobian/accumulate_gradient used to
+// silently drop ScaledDirectAssignment/ScaledPlusEqualsAssignment (empty
+// `else {}`). These tags aren't produced anywhere by the expression DSL
+// today, so exercise them directly against the low-level accumulate API to
+// pin down the now-implemented scaled-accumulate math.
+TEST_F(CommonFunctionsTest, SegmentAccumulateJacobianScaled) {
+    auto args = Arguments<6>();
+    auto seg = args.template segment<3, 2>(); // OR=3, ST=2, IR=6
+
+    Eigen::MatrixXd right = Eigen::MatrixXd::Zero(3, 6);
+    right(0, 2) = 1.0;
+    right(1, 3) = 2.0;
+    right(2, 4) = 3.0;
+
+    const double scale = 5.0;
+    Eigen::MatrixXd target = Eigen::MatrixXd::Zero(3, 6);
+    seg.accumulate_jacobian(target, right, ScaledDirectAssignment<double>(scale));
+
+    Eigen::MatrixXd expected = scale * right;
+    EXPECT_TRUE(target.isApprox(expected));
+
+    // ScaledPlusEqualsAssignment should add on top of the existing contents.
+    seg.accumulate_jacobian(target, right, ScaledPlusEqualsAssignment<double>(scale));
+    EXPECT_TRUE(target.isApprox(2.0 * expected));
+}
+
+TEST_F(CommonFunctionsTest, SegmentAccumulateGradientScaled) {
+    auto args = Arguments<6>();
+    auto seg = args.template segment<3, 2>(); // OR=3, ST=2, IR=6
+
+    Eigen::VectorXd right(6);
+    right << 10.0, 20.0, 30.0, 40.0, 50.0, 60.0;
+
+    const double scale = -2.0;
+    Eigen::VectorXd target = Eigen::VectorXd::Zero(6);
+    seg.accumulate_gradient(target, right, ScaledDirectAssignment<double>(scale));
+
+    Eigen::VectorXd expected = Eigen::VectorXd::Zero(6);
+    expected.segment(2, 3) = scale * right.segment(2, 3);
+    EXPECT_TRUE(target.isApprox(expected));
+
+    // ScaledPlusEqualsAssignment should add on top of the existing contents.
+    seg.accumulate_gradient(target, right, ScaledPlusEqualsAssignment<double>(scale));
+    EXPECT_TRUE(target.isApprox(2.0 * expected));
+}

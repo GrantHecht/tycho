@@ -19,6 +19,10 @@
 #include "tycho/detail/vf/derivatives/detect_diagonal.h"
 #include "tycho/detail/vf/type_erasure/conditional.h"
 
+#include <fmt/format.h>
+
+#include <stdexcept>
+
 namespace tycho::vf {
 
 /// @internal
@@ -119,9 +123,15 @@ struct Is_ScaledSegment<StaticScaled<Segment<IR, OR, ST>, VALUE>> : std::true_ty
 /// @endinternal
 template <int ST> struct SegStartHolder {
     static constexpr int seg_start_ = ST; ///< @brief Compile-time segment start index.
-    /// @brief No-op: the start index is fixed at compile time.
-    /// @param st  Ignored.
-    void set_seg_start(int st) {};
+    /// @brief Validate a runtime start index against the compile-time value.
+    /// @param st  Candidate runtime start; must equal @p ST.
+    /// @throws std::invalid_argument if @p st contradicts the compile-time start.
+    void set_seg_start(int st) {
+        if (st != ST) {
+            throw std::invalid_argument(
+                fmt::format("Segment: runtime start {} contradicts compile-time start {}", st, ST));
+        }
+    }
 };
 /// @internal
 /// @brief Runtime-start specialization of @ref SegStartHolder (`ST == -1`).
@@ -290,7 +300,7 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
                        .diagonal();
 
             if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
-                if constexpr (Is_EigenDiagonalMatrix<typename std::remove_const_reference<
+                if constexpr (Is_EigenDiagonalMatrix<typename tycho::utils::remove_const_reference<
                                   decltype(left.derived())>::type>::value) {
                     target.template middleCols<OR>(this->seg_start_, this->output_rows())
                         .diagonal() = left.derived().diagonal().cwiseProduct(diag);
@@ -304,7 +314,7 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
                 }
 
             } else if constexpr (std::is_same<Assignment, PlusEqualsAssignment>::value) {
-                if constexpr (Is_EigenDiagonalMatrix<typename std::remove_const_reference<
+                if constexpr (Is_EigenDiagonalMatrix<typename tycho::utils::remove_const_reference<
                                   decltype(left.derived())>::type>::value) {
                     target.template middleCols<OR>(this->seg_start_, this->output_rows())
                         .diagonal() += left.derived().diagonal().cwiseProduct(diag);
@@ -319,7 +329,7 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
 
             } else if constexpr (std::is_same<Assignment, MinusEqualsAssignment>::value) {
 
-                if constexpr (Is_EigenDiagonalMatrix<typename std::remove_const_reference<
+                if constexpr (Is_EigenDiagonalMatrix<typename tycho::utils::remove_const_reference<
                                   decltype(left.derived())>::type>::value) {
                     target.template middleCols<OR>(this->seg_start_, this->output_rows())
                         .diagonal() -= left.derived().diagonal().cwiseProduct(diag);
@@ -333,16 +343,23 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
                 }
 
             } else if constexpr (std::is_same<Assignment, ScaledDirectAssignment<Scalar>>::value) {
-                target.template middleCols<OR>(this->seg_start_, this->output_rows()).noalias() =
-                    assign.value * left.derived() * diag.asDiagonal();
+                if constexpr (Aliased)
+                    target.template middleCols<OR>(this->seg_start_, this->output_rows()) =
+                        assign.value * left.derived() * diag.asDiagonal();
+                else
+                    target.template middleCols<OR>(this->seg_start_, this->output_rows())
+                        .noalias() = assign.value * left.derived() * diag.asDiagonal();
             } else if constexpr (std::is_same<Assignment,
                                               ScaledPlusEqualsAssignment<Scalar>>::value) {
-                target.template middleCols<OR>(this->seg_start_, this->output_rows()).noalias() +=
-                    assign.value * left.derived() * diag.asDiagonal();
+                if constexpr (Aliased)
+                    target.template middleCols<OR>(this->seg_start_, this->output_rows()) +=
+                        assign.value * left.derived() * diag.asDiagonal();
+                else
+                    target.template middleCols<OR>(this->seg_start_, this->output_rows())
+                        .noalias() += assign.value * left.derived() * diag.asDiagonal();
             } else {
-                std::cout << "right_jacobian_product has not been implemented for: " << this->name
-                          << std::endl
-                          << std::endl;
+                static_assert(detail::dependent_false<Assignment>::value,
+                              "Segment right_jacobian_product: unhandled Assignment policy");
             }
         };
 
@@ -387,7 +404,7 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
                                         this->output_rows())
                 .noalias() = left.derived() * diag;
         } else if constexpr (std::is_same<Assignment, PlusEqualsAssignment>::value) {
-            if constexpr (Is_EigenDiagonalMatrix<typename std::remove_const_reference<
+            if constexpr (Is_EigenDiagonalMatrix<typename tycho::utils::remove_const_reference<
                               decltype(left.derived())>::type>::value) {
                 target
                     .template block<OR, OR>(this->seg_start_, this->seg_start_, this->output_rows(),
@@ -416,9 +433,8 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
                                         this->output_rows())
                 .noalias() += assign.value * left.derived() * diag;
         } else {
-            std::cout << "symetric_jacobian_product has not been implemented for: " << this->name
-                      << std::endl
-                      << std::endl;
+            static_assert(detail::dependent_false<Assignment>::value,
+                          "Segment symetric_jacobian_product: unhandled Assignment policy");
         }
     }
 
@@ -435,6 +451,7 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
     inline void accumulate_jacobian(CMatRef<Target> target_, CEigRef<JacType> right,
                                     Assignment assign) const {
         MatRef<Target> target = target_.const_cast_derived();
+        typedef typename Target::Scalar Scalar;
         if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
             target.template middleCols<OR>(this->seg_start_, this->output_rows()).diagonal() =
                 right.derived()
@@ -450,7 +467,19 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
                 right.derived()
                     .template middleCols<OR>(this->seg_start_, this->output_rows())
                     .diagonal();
+        } else if constexpr (std::is_same<Assignment, ScaledDirectAssignment<Scalar>>::value) {
+            target.template middleCols<OR>(this->seg_start_, this->output_rows()).diagonal() =
+                assign.value * right.derived()
+                                   .template middleCols<OR>(this->seg_start_, this->output_rows())
+                                   .diagonal();
+        } else if constexpr (std::is_same<Assignment, ScaledPlusEqualsAssignment<Scalar>>::value) {
+            target.template middleCols<OR>(this->seg_start_, this->output_rows()).diagonal() +=
+                assign.value * right.derived()
+                                   .template middleCols<OR>(this->seg_start_, this->output_rows())
+                                   .diagonal();
         } else {
+            static_assert(detail::dependent_false<Assignment>::value,
+                          "Segment accumulate_jacobian: unhandled Assignment policy");
         }
     }
     /// @internal
@@ -466,6 +495,7 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
     inline void accumulate_gradient(CMatRef<Target> target_, CEigRef<JacType> right,
                                     Assignment assign) const {
         MatRef<Target> target = target_.const_cast_derived();
+        typedef typename Target::Scalar Scalar;
         if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
             target.template segment<OR>(this->seg_start_, this->output_rows()) =
                 right.derived().template segment<OR>(this->seg_start_, this->output_rows());
@@ -475,7 +505,17 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
         } else if constexpr (std::is_same<Assignment, MinusEqualsAssignment>::value) {
             target.template segment<OR>(this->seg_start_, this->output_rows()) -=
                 right.derived().template segment<OR>(this->seg_start_, this->output_rows());
+        } else if constexpr (std::is_same<Assignment, ScaledDirectAssignment<Scalar>>::value) {
+            target.template segment<OR>(this->seg_start_, this->output_rows()) =
+                assign.value *
+                right.derived().template segment<OR>(this->seg_start_, this->output_rows());
+        } else if constexpr (std::is_same<Assignment, ScaledPlusEqualsAssignment<Scalar>>::value) {
+            target.template segment<OR>(this->seg_start_, this->output_rows()) +=
+                assign.value *
+                right.derived().template segment<OR>(this->seg_start_, this->output_rows());
         } else {
+            static_assert(detail::dependent_false<Assignment>::value,
+                          "Segment accumulate_gradient: unhandled Assignment policy");
         }
     }
     /// @internal

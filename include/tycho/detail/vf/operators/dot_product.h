@@ -72,21 +72,18 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
     FunctionDotProduct_Impl(Func1 f1, Func2 f2) : func1(std::move(f1)), func2(std::move(f2)) {
         int irtemp = std::max(this->func1.input_rows(), this->func2.input_rows());
         if (this->func1.output_rows() != this->func2.output_rows()) {
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Math Error in FunctionDotProduct/.dot method !!!\n"
-                       "Output Size of Func1 (ORows = {0:}) does not match Output Size of Func2 "
-                       "(ORows = {1:}).\n",
-                       this->func1.output_rows(), this->func2.output_rows());
-
-            throw std::invalid_argument("");
+            throw std::invalid_argument(fmt::format(
+                "Math Error in FunctionDotProduct/.dot method !!!\n"
+                "Output Size of Func1 (ORows = {0:}) does not match Output Size of Func2 "
+                "(ORows = {1:}).\n",
+                this->func1.output_rows(), this->func2.output_rows()));
         }
         if (this->func1.input_rows() != this->func2.input_rows()) {
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Math Error in FunctionDotProduct/.dot method !!!\n"
-                       "Input Size of Func1 (IRows = {0:}) does not match Input Size of Func2 "
-                       "(IRows = {1:}).\n",
-                       this->func1.input_rows(), this->func2.input_rows());
-            throw std::invalid_argument("");
+            throw std::invalid_argument(fmt::format(
+                "Math Error in FunctionDotProduct/.dot method !!!\n"
+                "Input Size of Func1 (IRows = {0:}) does not match Input Size of Func2 "
+                "(IRows = {1:}).\n",
+                this->func1.input_rows(), this->func2.input_rows()));
         }
 
         this->set_io_rows(irtemp, 1);
@@ -184,7 +181,7 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
             const int irows = this->func1.input_rows();
 
             using FType1 = typename Func1::template Output<Scalar>;
-            using JType1 = typename Func2::template Jacobian<Scalar>;
+            using JType1 = typename Func1::template Jacobian<Scalar>;
 
             using FType2 = typename Func2::template Output<Scalar>;
             using JType2 = typename Func2::template Jacobian<Scalar>;
@@ -285,7 +282,7 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
                 if constexpr (Func1::InputIsDynamic) {
                     const int sds = this->func1.sub_domains.cols();
                     if (sds == 0) {
-                        adjhess += hx2 + hx2.transpose();
+                        adjhess += (hx2 + hx2.transpose()) * adjvars[0];
                     } else {
                         for (int i = 0; i < sds; i++) {
                             int start = this->func1.sub_domains(0, i);
@@ -322,7 +319,7 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
             const int irows = this->func1.input_rows();
 
             using FType1 = typename Func1::template Output<Scalar>;
-            using JType1 = typename Func2::template Jacobian<Scalar>;
+            using JType1 = typename Func1::template Jacobian<Scalar>;
 
             using FType2 = typename Func2::template Output<Scalar>;
             using JType2 = typename Func2::template Jacobian<Scalar>;

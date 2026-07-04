@@ -397,13 +397,12 @@ struct NestedFunction_Impl<Derived, OuterFunc, Segment<IR, OR, ST>>
         this->set_seg_start(ifunc.seg_start_);
 
         if (ifunc.output_rows() != this->outer_func_.input_rows()) {
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Math Error in NestedFunction/.eval method !!!\n"
-                       "Output Size of InnerFunction (ORows = {0:}) does not match Input Size of "
-                       "OuterFunction "
-                       "(IRows = {1:}).\n",
-                       ifunc.output_rows(), this->outer_func_.input_rows());
-            throw std::invalid_argument("");
+            throw std::invalid_argument(fmt::format(
+                "Math Error in NestedFunction/.eval method !!!\n"
+                "Output Size of InnerFunction (ORows = {0:}) does not match Input Size of "
+                "OuterFunction "
+                "(IRows = {1:}).\n",
+                ifunc.output_rows(), this->outer_func_.input_rows()));
         }
 
         this->set_io_rows(ifunc.input_rows(), this->outer_func_.output_rows());

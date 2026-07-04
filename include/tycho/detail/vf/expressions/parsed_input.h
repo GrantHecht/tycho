@@ -16,6 +16,9 @@
 
 #include "tycho/detail/vf/core/vector_function.h"
 
+#include <fmt/format.h>
+#include <stdexcept>
+
 namespace tycho::vf {
 
 /// @brief Adapts a function to read its inputs from selected positions of a larger vector.
@@ -54,6 +57,24 @@ struct ParsedInput
     /// @param irr    Number of input rows of the outer (gathered-from) vector.
     ParsedInput(Func f, const typename Func::template Input<int> &vlocs, int irr)
         : func_(std::move(f)), varlocs_(vlocs) {
+        if (varlocs_.size() == 0) {
+            throw std::invalid_argument("ParsedInput: variable-location vector is empty");
+        }
+        if (varlocs_.size() != this->func_.input_rows()) {
+            throw std::invalid_argument(
+                fmt::format("ParsedInput: variable-location vector has {} entries but the wrapped "
+                            "function takes {} inputs",
+                            varlocs_.size(), this->func_.input_rows()));
+        }
+        for (int i = 0; i < varlocs_.size(); i++) {
+            if (varlocs_[i] < 0 || varlocs_[i] >= irr) {
+                throw std::invalid_argument(
+                    fmt::format("ParsedInput: variable location {} (entry {}) is outside the outer "
+                                "input range [0, {})",
+                                varlocs_[i], i, irr));
+            }
+        }
+
         this->set_io_rows(irr, this->func_.output_rows());
 
         this->contiguous_ = true;
@@ -112,7 +133,7 @@ struct ParsedInput
             }
             this->func_.compute_jacobian(xin, fx_, jxin);
             for (int i = 0; i < this->func_.input_rows(); i++) {
-                jx.col(this->varlocs_[i]) = jxin.col(i);
+                jx.col(this->varlocs_[i]) += jxin.col(i);
             }
         }
     }
@@ -173,12 +194,12 @@ struct ParsedInput
                                                                         adjvars);
 
             for (int i = 0; i < this->func_.input_rows(); i++) {
-                jx.col(this->varlocs_[i]) = jxin.col(i);
-                adjgrad[this->varlocs_[i]] = gxin[i];
+                jx.col(this->varlocs_[i]) += jxin.col(i);
+                adjgrad[this->varlocs_[i]] += gxin[i];
             }
             for (int i = 0; i < this->func_.input_rows(); i++) {
                 for (int j = 0; j < this->func_.input_rows(); j++) {
-                    adjhess(this->varlocs_[j], this->varlocs_[i]) = hxin(j, i);
+                    adjhess(this->varlocs_[j], this->varlocs_[i]) += hxin(j, i);
                 }
             }
         }

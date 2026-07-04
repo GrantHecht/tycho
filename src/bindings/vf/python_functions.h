@@ -152,9 +152,11 @@ o_rows : int
 func : callable
     Python function ``f(x, *args) -> array_like`` implementing the VectorFunction.
 jstepsize : float, optional
-    Forward finite-difference step size for Jacobian approximation (default 1e-6).
+    Relative forward finite-difference step for Jacobian approximation (default 1e-6).
+    The effective step for input ``i`` is ``jstepsize * max(1, |x_i|)``.
 hstepsize : float, optional
-    Forward finite-difference step size for Hessian approximation (default 1e-4).
+    Relative forward finite-difference step for Hessian approximation (default 5e-6).
+    The effective step for input ``i`` is ``hstepsize * max(1, |x_i|)``.
 args : tuple, optional
     Extra positional arguments forwarded to ``func`` after the input vector.
 )doc");
@@ -162,7 +164,7 @@ args : tuple, optional
         if constexpr (ORR != 1) {
             obj.def(nb::init<int, int, nb::object, double, double, nb::tuple>(), nb::arg("i_rows"),
                     nb::arg("o_rows"), nb::arg("func"), nb::arg("jstepsize") = 1.0e-6,
-                    nb::arg("hstepsize") = 1.0e-4, nb::arg("args") = nb::tuple(),
+                    nb::arg("hstepsize") = 5.0e-6, nb::arg("args") = nb::tuple(),
                     R"doc(Wrap a Python callable as a VectorFunction using finite-difference derivatives.
 
 The callable is invoked with a 1-D NumPy array of length ``i_rows`` (plus any
@@ -182,15 +184,17 @@ o_rows : int
 func : callable
     Python function ``f(x, *args) -> array_like`` implementing the VectorFunction.
 jstepsize : float, optional
-    Finite-difference step size used for Jacobian approximation (default 1e-6).
+    Relative finite-difference step used for Jacobian approximation (default 1e-6).
+    The effective step for input ``i`` is ``jstepsize * max(1, |x_i|)``.
 hstepsize : float, optional
-    Finite-difference step size used for Hessian approximation (default 1e-4).
+    Relative finite-difference step used for Hessian approximation (default 5e-6).
+    The effective step for input ``i`` is ``hstepsize * max(1, |x_i|)``.
 args : tuple, optional
     Extra positional arguments forwarded to ``func`` after the input vector.
 )doc");
         } else {
             obj.def(nb::init<int, nb::object, double, double, nb::tuple>(), nb::arg("i_rows"),
-                    nb::arg("func"), nb::arg("jstepsize") = 1.0e-6, nb::arg("hstepsize") = 1.0e-4,
+                    nb::arg("func"), nb::arg("jstepsize") = 1.0e-6, nb::arg("hstepsize") = 5.0e-6,
                     nb::arg("args") = nb::tuple(),
                     R"doc(Scalar-output variant: ``o_rows`` is fixed to 1 and may be omitted.
 
@@ -201,9 +205,11 @@ i_rows : int
 func : callable
     Python function ``f(x, *args) -> float`` implementing the scalar VectorFunction.
 jstepsize : float, optional
-    Forward finite-difference step size for Jacobian approximation (default 1e-6).
+    Relative forward finite-difference step for Jacobian approximation (default 1e-6).
+    The effective step for input ``i`` is ``jstepsize * max(1, |x_i|)``.
 hstepsize : float, optional
-    Forward finite-difference step size for Hessian approximation (default 1e-4).
+    Relative forward finite-difference step for Hessian approximation (default 5e-6).
+    The effective step for input ``i`` is ``hstepsize * max(1, |x_i|)``.
 args : tuple, optional
     Extra positional arguments forwarded to ``func`` after the input vector.
 )doc");
@@ -257,9 +263,11 @@ func : int
     Integer address of a C function with signature
     ``void(double*, double*, int, int)``.
 jstepsize : float, optional
-    Forward finite-difference step size for Jacobian approximation (default 1e-6).
+    Relative forward finite-difference step for Jacobian approximation (default 1e-6).
+    The effective step for input ``i`` is ``jstepsize * max(1, |x_i|)``.
 hstepsize : float, optional
-    Forward finite-difference step size for Hessian approximation (default 1e-6).
+    Relative forward finite-difference step for Hessian approximation (default 1e-6).
+    The effective step for input ``i`` is ``hstepsize * max(1, |x_i|)``.
 )doc");
         obj.def(nb::init<int, int, const typename NumbaVectorFunction<IRR, ORR>::FType &, double,
                          double>(),
@@ -283,9 +291,11 @@ func : int
     Integer address of a C function with signature
     ``void(double*, double*, int, int)``.
 jstepsize : float
-    Finite-difference step size used for Jacobian approximation.
+    Relative finite-difference step used for Jacobian approximation.
+    The effective step for input ``i`` is ``jstepsize * max(1, |x_i|)``.
 hstepsize : float
-    Finite-difference step size used for Hessian approximation.
+    Relative finite-difference step used for Hessian approximation.
+    The effective step for input ``i`` is ``hstepsize * max(1, |x_i|)``.
 )doc");
         obj.def(nb::init<int, int, const typename NumbaVectorFunction<IRR, ORR>::FType &>());
 

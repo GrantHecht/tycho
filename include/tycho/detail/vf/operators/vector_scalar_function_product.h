@@ -172,11 +172,6 @@ struct VectorScalarFunctionProduct_Impl
         auto Impl = [&](auto &jxs, auto &gxs, auto &hxs, auto &adjtemp) {
             Vector1<Scalar> fxs;
             adjtemp = adjvars;
-            if constexpr (ScalFunc::is_linear_function && false) {
-                this->scalarfunc.compute(x, fxs);
-                adjtemp *= fxs[0];
-                fxs[0] = 0;
-            }
 
             this->vectorfunc.compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, adjgrad,
                                                                              adjhess, adjtemp);
@@ -187,12 +182,7 @@ struct VectorScalarFunctionProduct_Impl
             this->scalarfunc.compute_jacobian_adjointgradient_adjointhessian(x, fxs, jxs, gxs, hxs,
                                                                              ls);
 
-            if constexpr (ScalFunc::is_linear_function &&
-                          false) { // This is dangerous, might divide by zeros
-                this->vectorfunc.scale_gradient(adjgrad, Scalar(1.0 / fxs[0]));
-            } else {
-                this->vectorfunc.scale_hessian(adjhess, fxs[0]);
-            }
+            this->vectorfunc.scale_hessian(adjhess, fxs[0]);
 
             this->scalarfunc.accumulate_hessian(adjhess, hxs, PlusEqualsAssignment());
 

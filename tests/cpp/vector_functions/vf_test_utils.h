@@ -65,4 +65,51 @@ void verify_gf_jacobian_fd(Func &f, const Eigen::VectorXd &x, double tol = 1e-5)
                 << "GF Jacobian mismatch at (" << i << "," << j << ")";
 }
 
+/// Central-difference reference for the adjoint Hessian: d/dx of J(x)^T lm.
+template <class Func>
+Eigen::MatrixXd fd_adjoint_hessian(Func &f, const Eigen::VectorXd &x, const Eigen::VectorXd &lm,
+                                   double eps = 1e-6) {
+    const int n = static_cast<int>(x.size());
+    const int m = f.output_rows();
+    auto grad = [&](const Eigen::VectorXd &xp) {
+        Eigen::VectorXd fx(m);
+        Eigen::MatrixXd jx(m, n);
+        fx.setZero();
+        jx.setZero();
+        f.compute_jacobian(xp, fx, jx);
+        return Eigen::VectorXd(jx.transpose() * lm);
+    };
+    Eigen::MatrixXd h(n, n);
+    for (int i = 0; i < n; i++) {
+        Eigen::VectorXd xp = x, xm = x;
+        xp[i] += eps;
+        xm[i] -= eps;
+        h.col(i) = (grad(xp) - grad(xm)) / (2.0 * eps);
+    }
+    return 0.5 * (h + h.transpose());
+}
+
+/// Assert the function's adjoint Hessian matches the FD reference.
+///
+/// The reference is a central difference of the *analytic* Jacobian (via
+/// compute_jacobian), so this checks the adjoint Hessian against
+/// FD-of-analytic-Jacobian — it assumes the Jacobian is separately validated
+/// (e.g. by verify_jacobian_fd). @p eps tunes the FD step for badly-scaled inputs.
+template <class Func>
+void verify_adjoint_hessian_fd(Func &f, const Eigen::VectorXd &x, const Eigen::VectorXd &lm,
+                               double tol = 1e-4, double eps = 1e-6) {
+    const int n = static_cast<int>(x.size());
+    const int m = f.output_rows();
+    Eigen::VectorXd fx(m), gx(n);
+    Eigen::MatrixXd jx(m, n), hx(n, n);
+    fx.setZero();
+    gx.setZero();
+    jx.setZero();
+    hx.setZero();
+    f.compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, gx, hx, lm);
+    const Eigen::MatrixXd href = fd_adjoint_hessian(f, x, lm, eps);
+    EXPECT_LT((hx - href).norm() / std::max(1.0, href.norm()), tol)
+        << "analytic:\n" << hx << "\nfd:\n" << href;
+}
+
 } // namespace TychoTest

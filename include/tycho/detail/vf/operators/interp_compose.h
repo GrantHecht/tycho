@@ -38,6 +38,13 @@ auto interp_scalar(const std::shared_ptr<oc::InterpTable1D> &table,
                    const DenseFunctionBase<Func, IR, OR> &input) {
     detail::require_interp_table(table,
                                  "vf::interp_scalar: InterpTable1D pointer must not be null");
+    if (table->vlen_ != 1) {
+        throw std::invalid_argument(
+            fmt::format("vf::interp_scalar: table stores {}-dimensional values; interp_scalar "
+                        "requires a scalar-valued table (vlen == 1). Use vf::interp for "
+                        "vector-valued tables.",
+                        table->vlen_));
+    }
     return GenericFunction<-1, 1>(oc::InterpFunction1D<1>(table).eval(input.derived()));
 }
 

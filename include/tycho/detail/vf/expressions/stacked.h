@@ -127,6 +127,8 @@ RetType make_dynamic_stack(const std::vector<FuncType> &funcs) {
     int size = funcs.size();
     RetType stacked;
     if (size == 0) {
+        throw std::invalid_argument(
+            "make_dynamic_stack: cannot construct a stack from an empty vector of functions");
     } else if (size == 1) {
         stacked = funcs[0];
     } else if (size == 2) {
@@ -203,12 +205,11 @@ struct StackTwoOutputs_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func2::
         this->set_io_rows(irtemp, this->func1.output_rows() + this->func2.output_rows());
 
         if (this->func1.input_rows() != this->func2.input_rows()) {
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Math Error in StackOutputs/vf.stack method !!!\n"
-                       "Input Size of Func1 (IRows = {0:}) does not match Input Size of Func2 "
-                       "(IRows = {1:}).\n",
-                       this->func1.input_rows(), this->func2.input_rows());
-            throw std::invalid_argument("");
+            throw std::invalid_argument(fmt::format(
+                "Math Error in StackOutputs/vf.stack method !!!\n"
+                "Input Size of Func1 (IRows = {0:}) does not match Input Size of Func2 "
+                "(IRows = {1:}).\n",
+                this->func1.input_rows(), this->func2.input_rows()));
         }
 
         this->set_input_domain(this->input_rows(), {func1.input_domain(), func2.input_domain()});
@@ -525,10 +526,9 @@ struct DynamicStackedOutputs : VectorFunction<DynamicStackedOutputs<Func>, Func:
                 this->_linear = false;
 
             if (func.input_rows() != irtemp) {
-                fmt::print(fmt::fg(fmt::color::red),
-                           "Math Error in StackOutputs/vf.stack method !!!\n"
-                           "Input Size of all Functions must match.\n");
-                throw std::invalid_argument("");
+                throw std::invalid_argument(
+                    "Math Error in StackOutputs/vf.stack method !!!\n"
+                    "Input Size of all Functions must match.\n");
             }
         }
 

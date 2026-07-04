@@ -53,9 +53,14 @@ namespace tycho::vf {
 /// @return One derivative per input sample.
 template <class VectorType>
 std::vector<VectorType> FDiffData(const std::vector<VectorType> &BL, int axis, bool inctime) {
+    const int n = static_cast<int>(BL.size());
+    if (n < 5) {
+        throw std::invalid_argument(fmt::format(
+            "FDiffData: need >=5 samples for the boundary/interior stencils, got {}", n));
+    }
     std::vector<VectorType> BLDot = BL;
     double h = BL[1][axis] - BL[0][axis];
-    for (int i = 0; i < BL.size(); i++) {
+    for (int i = 0; i < n; i++) {
         if (!inctime) {
             BLDot[i].resize(axis);
         }
@@ -63,8 +68,8 @@ std::vector<VectorType> FDiffData(const std::vector<VectorType> &BL, int axis, b
             BLDot[i].head(axis) = ((1.0 / 3.0) * BL[i + 3].head(axis) - 1.5 * BL[i + 2].head(axis) +
                                    3.0 * BL[i + 1].head(axis) - (11.0 / 6) * BL[i].head(axis)) *
                                   (1.0 / h);
-        } else if (i > (BL.size() - 3)) {
-            BLDot[i].head(axis) = (BL[i].head(6) - BL[i - 1].head(axis)) * (1.0 / h);
+        } else if (i > (n - 3)) {
+            BLDot[i].head(axis) = (BL[i].head(axis) - BL[i - 1].head(axis)) * (1.0 / h);
         } else {
             BLDot[i].head(axis) =
                 ((-1.0 / 12) * BL[i + 2].head(axis) + (2.0 / 3.0) * BL[i + 1].head(axis) +
@@ -132,12 +137,15 @@ template <class DType> struct FDDerivArbitrary {
         const int fb_sten_size = acc + ord;
 
         if (length < fb_sten_size) {
-            std::cout << "ERROR: Requested accuracy too high for given data" << std::endl;
+            throw std::invalid_argument(fmt::format(
+                "FDDerivArbitrary::deriv_at: requested accuracy too high for given data "
+                "(need >= {} samples, have {})",
+                fb_sten_size, length));
         }
 
         if (i < 0 || i > length - 1) {
-            std::cout << "ERROR: Index out of bounds" << std::endl;
-            return;
+            throw std::out_of_range(fmt::format(
+                "FDDerivArbitrary::deriv_at: index {} out of bounds [0, {})", i, length));
         }
 
         Scalar t0 = data[i][axis];
@@ -202,7 +210,7 @@ template <class DType> struct FDDerivArbitrary {
     template <class DerivType>
     inline DerivType deriv_at(const int i, const int Order, const int Accuracy) const {
         DerivType dout(this->data[0].size());
-        this->deriv_at<DType>(i, dout, Order, Accuracy);
+        this->template deriv_at<DerivType>(i, dout, Order, Accuracy);
         dout[axis] = this->data[i][axis];
         return dout;
     }

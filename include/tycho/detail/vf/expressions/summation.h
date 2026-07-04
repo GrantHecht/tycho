@@ -16,7 +16,85 @@
 
 #include "tycho/detail/vf/core/vector_function.h"
 
+#include <cstddef>
+
 namespace tycho::vf {
+
+namespace detail {
+// -----------------------------------------------------------------------------
+// Compile-time segment-disjointness gate for the sum-of-segments fast paths.
+//
+// The fast paths write both/all operands' contributions through ONE combined
+// Jacobian temp; each segment operand reads the diagonal of its own column block
+// and applies it in full, so operands that share a column range double-count it
+// (e.g. a*x.head(3) + b*x.head(3) -> 2(a+b)). We must fall back to the correct
+// base path when ranges overlap.
+//
+// The disjointness must be decided from the COMPILE-TIME `INPUT_DOMAIN`, not the
+// runtime `input_domain()`: for a statically-sized VectorFunction the runtime
+// `input_domain()` always reports the whole `[0, IR)` block (DomainHolder<IR>),
+// so it cannot distinguish segment sub-ranges. `INPUT_DOMAIN::sub_domains` holds
+// the actual `{start, size}` ranges, with `start == -1` for a runtime-start
+// segment (unknown at compile time).
+// -----------------------------------------------------------------------------
+
+/// @brief Whether two half-open intervals `[s1,s1+z1)` and `[s2,s2+z2)`
+/// *provably* overlap.
+///
+/// The negative-start guard is defensive: `SingleDomain` now widens a
+/// runtime-start segment's descriptor to the full range `[0, IR)` (see
+/// function_domains.h), so a runtime-start operand arrives here as `{0, IR}` and
+/// overlaps everything — i.e. runtime-start segment sums are (correctly) reported
+/// as non-disjoint and routed to the base path, which handles both the shared-
+/// column double-count and the runtime offset correctly. A raw negative start no
+/// longer reaches this function from a `SingleDomain` leaf; the guard remains
+/// only so a stray unknown range is treated as non-provable rather than indexed.
+constexpr bool intervals_provably_overlap(int s1, int z1, int s2, int z2) {
+    if (s1 < 0 || s2 < 0) {
+        return false;
+    }
+    return s1 < s2 + z2 && s2 < s1 + z1;
+}
+
+/// @brief Whether any sub-domain interval of @p DomA provably overlaps any of
+/// @p DomB (both are `INPUT_DOMAIN` types exposing a constexpr `sub_domains`).
+template <class DomA, class DomB> constexpr bool domains_provably_overlap() {
+    for (std::size_t i = 0; i < DomA::sub_domains.size(); i++) {
+        for (std::size_t j = 0; j < DomB::sub_domains.size(); j++) {
+            if (intervals_provably_overlap(DomA::sub_domains[i][0], DomA::sub_domains[i][1],
+                                           DomB::sub_domains[j][0], DomB::sub_domains[j][1])) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// @brief Whether any *pair* among the given `INPUT_DOMAIN` types provably
+/// overlaps.
+template <class D0, class... Ds> constexpr bool domain_pack_provably_overlaps() {
+    if constexpr (sizeof...(Ds) == 0) {
+        return false;
+    } else {
+        return (domains_provably_overlap<D0, Ds>() || ...) ||
+               domain_pack_provably_overlaps<Ds...>();
+    }
+}
+
+/// @brief True when the operands' segment ranges are provably pairwise disjoint,
+/// or their overlap cannot be proven at compile time (runtime-start segments).
+/// Gates the sum-of-segments fast paths: only a *provable* overlap of concrete
+/// compile-time ranges disables the fast path.
+///
+/// @note The predicate is intentionally broader than the strict double-count
+/// condition: it routes ANY provable overlap to Base, including partial overlap
+/// with distinct starts that the fast path would in fact compute correctly. This
+/// is a deliberate conservative choice — Base is always correct, so the only cost
+/// of an over-broad gate is a small perf pessimization on those (rare) mixed-start
+/// partially-overlapping sums, never a wrong result.
+template <class... Doms>
+inline constexpr bool segments_domains_disjoint_v = !domain_pack_provably_overlaps<Doms...>();
+} // namespace detail
 
 /// @internal
 /// @brief Forward declaration of the two-function sum/difference implementation.
@@ -253,6 +331,17 @@ struct TwoFunctionSum_Impl
     Func1 func1; ///< @brief First addend.
     Func2 func2; ///< @brief Second addend (subtrahend if @p DoDifference).
 
+    /// @brief True when the two operands' segment ranges are provably disjoint
+    /// (or cannot be proven to overlap at compile time). Gates the
+    /// sum-of-segments fast paths — overlapping/identical ranges would
+    /// double-count through the shared combined Jacobian temp. Unused when
+    /// neither fast path applies. Computed from the compile-time `INPUT_DOMAIN`
+    /// because a static-size function's runtime `input_domain()` always spans
+    /// the whole `[0, IR)` block and cannot distinguish sub-ranges.
+    static constexpr bool segments_disjoint_ =
+        detail::segments_domains_disjoint_v<typename Func1::INPUT_DOMAIN,
+                                            typename Func2::INPUT_DOMAIN>;
+
     static constexpr bool func1_is_segment =
         Is_Segment<Func1>::value ||
         Is_ScaledSegment<Func1>::value; ///< @brief True if @p Func1 is a (scaled) segment.
@@ -472,7 +561,11 @@ struct TwoFunctionSum_Impl
     inline void right_jacobian_product(CMatRef<Target> target_, CEigRef<Left> left,
                                        CEigRef<Right> right, Assignment assign,
                                        std::bool_constant<Aliased> aliased) const {
-        if constexpr (is_sum_of_segments) {
+        if constexpr (is_sum_of_segments && !segments_disjoint_) {
+            // Overlapping/identical segment ranges would double-count through the
+            // shared combined Jacobian temp — use the correct base path.
+            Base::right_jacobian_product(target_, left, right, assign, aliased);
+        } else if constexpr (is_sum_of_segments) {
             this->func1.right_jacobian_product(target_, left, right, assign, aliased);
             if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
                 if constexpr (Aliased) {
@@ -489,7 +582,9 @@ struct TwoFunctionSum_Impl
                 this->func2.right_jacobian_product(target_, left, right, assign, aliased);
             }
         } else if constexpr (func1_is_sumordiff && func2_is_segment) {
-            if constexpr (Func1::is_sum_of_segments) {
+            if constexpr (Func1::is_sum_of_segments && !segments_disjoint_) {
+                Base::right_jacobian_product(target_, left, right, assign, aliased);
+            } else if constexpr (Func1::is_sum_of_segments) {
                 this->func1.right_jacobian_product(target_, left, right, assign, aliased);
                 if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
                     if constexpr (Aliased) {
@@ -521,7 +616,10 @@ struct TwoFunctionSum_Impl
     template <class Target, class JacType, class Assignment>
     inline void accumulate_jacobian(CMatRef<Target> target_, CMatRef<JacType> right,
                                     Assignment assign) const {
-        if constexpr (is_sum_of_segments) {
+        if constexpr (is_sum_of_segments && !segments_disjoint_) {
+            // Overlapping/identical segment ranges would double-count.
+            Base::accumulate_jacobian(target_, right, assign);
+        } else if constexpr (is_sum_of_segments) {
             this->func1.accumulate_jacobian(target_, right, assign);
             if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
                 this->func2.accumulate_jacobian(target_, right, PlusEqualsAssignment());
@@ -565,6 +663,18 @@ struct MultiFunctionSum_Impl
     Func1 func1;                ///< @brief First addend.
     Func2 func2;                ///< @brief Second addend.
     std::tuple<Funcs...> funcs; ///< @brief Remaining addends.
+
+    /// @brief True when all segment addends' ranges are provably pairwise
+    /// disjoint (or cannot be proven to overlap at compile time). Gates the
+    /// all-segments fast path — overlapping/identical ranges would double-count
+    /// through the shared combined Jacobian temp. Unused when the fast path does
+    /// not apply. Computed from the compile-time `INPUT_DOMAIN` because a
+    /// static-size function's runtime `input_domain()` always spans the whole
+    /// `[0, IR)` block and cannot distinguish sub-ranges.
+    static constexpr bool segments_disjoint_ =
+        detail::segments_domains_disjoint_v<typename Func1::INPUT_DOMAIN,
+                                            typename Func2::INPUT_DOMAIN,
+                                            typename Funcs::INPUT_DOMAIN...>;
 
     static constexpr bool is_linear_function =
         SZ_PROD<int(Func1::is_linear_function), int(Func2::is_linear_function),
@@ -868,7 +978,11 @@ struct MultiFunctionSum_Impl
     inline void right_jacobian_product(CMatRef<Target> target_, CEigRef<Left> left,
                                        CEigRef<Right> right, Assignment assign,
                                        std::bool_constant<Aliased> aliased) const {
-        if constexpr (IsSumofSegments) {
+        if constexpr (IsSumofSegments && !segments_disjoint_) {
+            // Overlapping/identical segment ranges would double-count through the
+            // shared combined Jacobian temp — use the correct base path.
+            Base::right_jacobian_product(target_, left, right, assign, aliased);
+        } else if constexpr (IsSumofSegments) {
             this->func1.right_jacobian_product(target_, left, right, assign, aliased);
             if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
                 if constexpr (Aliased) {

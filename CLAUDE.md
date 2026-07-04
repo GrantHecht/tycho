@@ -621,6 +621,34 @@ cd build && ninja -j<N> tycho_tests tycho_tests_light
 ctest --output-on-failure
 ```
 
+### Fast iteration: isolated correctness probes
+
+Touching a widely-included header (`function_domains.h`, `common_functions.h`,
+`dense_function_base.h`, …) invalidates dozens of unity TUs (8-12 GB each, all
+pulling `tycho.h`), so `ninja tycho_tests` takes 20-40 min. To verify a
+**correctness property of a VectorFunction expression** (Jacobian/Hessian vs
+finite differences, domain behavior, an operator's math) while iterating, don't
+pay for that — the VF library is header-only templates, so a standalone
+single-TU probe compiles in **~4 seconds**:
+
+```bash
+conda activate tycho
+$CXX -std=c++20 -O2 -I include -I dep/eigen -I dep/fmt/include probe.cpp -o probe
+```
+
+Inside `probe.cpp`: `#include <tycho/vector_functions.h>`, build the expression,
+compute the analytic Jacobian/Hessian, and compare to a central-difference FD
+reference. A/B the same probe against a patched vs unpatched header for instant
+red/green.
+
+- **Compile without `-DNDEBUG`** so Eigen's runtime asserts fire — this catches
+  index/OOB bugs (e.g. `middleCols(-1, …)`) that are **silent in the project's
+  Release/NDEBUG build**.
+- This is for **fast iteration and diagnosis, not a replacement for the gate**:
+  link/ODR/binding/integration issues and build-flag-gated paths (Enzyme,
+  SuperScalar) still need the real build. Always run the full `ninja all` +
+  `ctest` before committing a change to a core header.
+
 ### Python examples (integration tests)
 
 The 32 Python example scripts under `examples/python_examples/` serve as the **integration

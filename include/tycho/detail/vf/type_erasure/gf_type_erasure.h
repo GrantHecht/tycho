@@ -25,6 +25,7 @@
 
 #include <concepts>
 #include <memory>
+#include <stdexcept>
 #include <type_traits>
 #include <utility>
 
@@ -615,9 +616,19 @@ template <int IR, int OR> class GFStorage {
     /// @endinternal
     [[nodiscard]] bool empty() const noexcept { return !ptr_; }
 
-    /// @internal @brief Access the stored erased interface by reference. @return Reference to the
-    /// model. @endinternal
-    Concept &get() const noexcept { return *ptr_; }
+    /// @internal
+    /// @brief Access the stored erased interface by reference.
+    /// @return Reference to the model.
+    /// @throws std::runtime_error if this GFStorage is empty (default-constructed
+    ///   and never assigned a function) — dereferencing would otherwise be UB.
+    /// @endinternal
+    Concept &get() const {
+        if (!ptr_) {
+            throw std::runtime_error(
+                "GenericFunction is empty (default-constructed); assign a function before use");
+        }
+        return *ptr_;
+    }
     /// @internal @brief Access the stored erased interface by pointer. @return Pointer to the model
     /// (or null). @endinternal
     Concept *get_ptr() const noexcept { return ptr_.get(); }

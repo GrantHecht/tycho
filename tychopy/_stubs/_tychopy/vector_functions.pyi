@@ -10518,14 +10518,16 @@ class PyVectorFunction:
     func : callable
         Python function ``f(x, *args) -> array_like`` implementing the VectorFunction.
     jstepsize : float, optional
-        Forward finite-difference step size for Jacobian approximation (default 1e-6).
+        Relative forward finite-difference step for Jacobian approximation (default 1e-6).
+        The effective step for input ``i`` is ``jstepsize * max(1, |x_i|)``.
     hstepsize : float, optional
-        Forward finite-difference step size for Hessian approximation (default 1e-4).
+        Relative forward finite-difference step for Hessian approximation (default 5e-6).
+        The effective step for input ``i`` is ``hstepsize * max(1, |x_i|)``.
     args : tuple, optional
         Extra positional arguments forwarded to ``func`` after the input vector.
     """
 
-    def __init__(self, i_rows: int, o_rows: int, func: object, jstepsize: float = 1e-06, hstepsize: float = 0.0001, args: tuple = ()) -> None:
+    def __init__(self, i_rows: int, o_rows: int, func: object, jstepsize: float = 1e-06, hstepsize: float = 5e-06, args: tuple = ()) -> None:
         """
         Wrap a Python callable as a VectorFunction using finite-difference derivatives.
 
@@ -10546,9 +10548,11 @@ class PyVectorFunction:
         func : callable
             Python function ``f(x, *args) -> array_like`` implementing the VectorFunction.
         jstepsize : float, optional
-            Finite-difference step size used for Jacobian approximation (default 1e-6).
+            Relative finite-difference step used for Jacobian approximation (default 1e-6).
+            The effective step for input ``i`` is ``jstepsize * max(1, |x_i|)``.
         hstepsize : float, optional
-            Finite-difference step size used for Hessian approximation (default 1e-4).
+            Relative finite-difference step used for Hessian approximation (default 5e-6).
+            The effective step for input ``i`` is ``hstepsize * max(1, |x_i|)``.
         args : tuple, optional
             Extra positional arguments forwarded to ``func`` after the input vector.
         """
@@ -10890,14 +10894,16 @@ class PyScalarFunction:
     func : callable
         Python function ``f(x, *args) -> array_like`` implementing the VectorFunction.
     jstepsize : float, optional
-        Forward finite-difference step size for Jacobian approximation (default 1e-6).
+        Relative forward finite-difference step for Jacobian approximation (default 1e-6).
+        The effective step for input ``i`` is ``jstepsize * max(1, |x_i|)``.
     hstepsize : float, optional
-        Forward finite-difference step size for Hessian approximation (default 1e-4).
+        Relative forward finite-difference step for Hessian approximation (default 5e-6).
+        The effective step for input ``i`` is ``hstepsize * max(1, |x_i|)``.
     args : tuple, optional
         Extra positional arguments forwarded to ``func`` after the input vector.
     """
 
-    def __init__(self, i_rows: int, func: object, jstepsize: float = 1e-06, hstepsize: float = 0.0001, args: tuple = ()) -> None:
+    def __init__(self, i_rows: int, func: object, jstepsize: float = 1e-06, hstepsize: float = 5e-06, args: tuple = ()) -> None:
         """
         Scalar-output variant: ``o_rows`` is fixed to 1 and may be omitted.
 
@@ -10908,9 +10914,11 @@ class PyScalarFunction:
         func : callable
             Python function ``f(x, *args) -> float`` implementing the scalar VectorFunction.
         jstepsize : float, optional
-            Forward finite-difference step size for Jacobian approximation (default 1e-6).
+            Relative forward finite-difference step for Jacobian approximation (default 1e-6).
+            The effective step for input ``i`` is ``jstepsize * max(1, |x_i|)``.
         hstepsize : float, optional
-            Forward finite-difference step size for Hessian approximation (default 1e-4).
+            Relative forward finite-difference step for Hessian approximation (default 5e-6).
+            The effective step for input ``i`` is ``hstepsize * max(1, |x_i|)``.
         args : tuple, optional
             Extra positional arguments forwarded to ``func`` after the input vector.
         """
@@ -11268,9 +11276,11 @@ class NumbaVectorFunction:
         Integer address of a C function with signature
         ``void(double*, double*, int, int)``.
     jstepsize : float, optional
-        Forward finite-difference step size for Jacobian approximation (default 1e-6).
+        Relative forward finite-difference step for Jacobian approximation (default 1e-6).
+        The effective step for input ``i`` is ``jstepsize * max(1, |x_i|)``.
     hstepsize : float, optional
-        Forward finite-difference step size for Hessian approximation (default 1e-6).
+        Relative forward finite-difference step for Hessian approximation (default 1e-6).
+        The effective step for input ``i`` is ``hstepsize * max(1, |x_i|)``.
     """
 
     @overload
@@ -11296,9 +11306,11 @@ class NumbaVectorFunction:
             Integer address of a C function with signature
             ``void(double*, double*, int, int)``.
         jstepsize : float
-            Finite-difference step size used for Jacobian approximation.
+            Relative finite-difference step used for Jacobian approximation.
+            The effective step for input ``i`` is ``jstepsize * max(1, |x_i|)``.
         hstepsize : float
-            Finite-difference step size used for Hessian approximation.
+            Relative finite-difference step used for Hessian approximation.
+            The effective step for input ``i`` is ``hstepsize * max(1, |x_i|)``.
         """
 
     @overload
@@ -11644,9 +11656,11 @@ class NumbaScalarFunction:
         Integer address of a C function with signature
         ``void(double*, double*, int, int)``.
     jstepsize : float, optional
-        Forward finite-difference step size for Jacobian approximation (default 1e-6).
+        Relative forward finite-difference step for Jacobian approximation (default 1e-6).
+        The effective step for input ``i`` is ``jstepsize * max(1, |x_i|)``.
     hstepsize : float, optional
-        Forward finite-difference step size for Hessian approximation (default 1e-6).
+        Relative forward finite-difference step for Hessian approximation (default 1e-6).
+        The effective step for input ``i`` is ``hstepsize * max(1, |x_i|)``.
     """
 
     @overload
@@ -11672,9 +11686,11 @@ class NumbaScalarFunction:
             Integer address of a C function with signature
             ``void(double*, double*, int, int)``.
         jstepsize : float
-            Finite-difference step size used for Jacobian approximation.
+            Relative finite-difference step used for Jacobian approximation.
+            The effective step for input ``i`` is ``jstepsize * max(1, |x_i|)``.
         hstepsize : float
-            Finite-difference step size used for Hessian approximation.
+            Relative finite-difference step used for Hessian approximation.
+            The effective step for input ``i`` is ``hstepsize * max(1, |x_i|)``.
         """
 
     @overload

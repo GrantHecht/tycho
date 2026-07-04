@@ -48,8 +48,13 @@ struct NestedCallAndAppendChain2
 
     std::tuple<InnerFuncs...> inner_funcs_; ///< @brief Remaining inner functions, in order.
 
-    /// @brief Input-domain descriptor inherited from the first inner function.
-    using INPUT_DOMAIN = typename InnerFunc1::INPUT_DOMAIN;
+    // Note: no compile-time INPUT_DOMAIN override here (inherits Base's default
+    // SingleDomain<IRC, 0, IRC>, i.e. "reads everything"). A prior version declared
+    // `INPUT_DOMAIN = InnerFunc1::INPUT_DOMAIN`, which is too narrow: the assembled
+    // chain vector is consumed by OuterFunc, which reads the head inputs directly
+    // (not just through InnerFunc1's declared domain) alongside every stage's
+    // appended output. The full-domain default is always conservative-correct
+    // (VF_REVIEW 1.11).
 
     static constexpr bool is_vectorizable =
         InnerFunc1::is_vectorizable &&
@@ -448,13 +453,38 @@ struct NestedCallAndAppendChain
 
     std::tuple<InnerFuncs...> inner_funcs_; ///< @brief Remaining inner functions, in order.
 
-    /// @brief Input-domain descriptor inherited from the first inner function.
-    using INPUT_DOMAIN = typename InnerFunc1::INPUT_DOMAIN;
+    // Note: no compile-time INPUT_DOMAIN override here (inherits Base's default
+    // SingleDomain<IRC, 0, IRC>, i.e. "reads everything"). A prior version declared
+    // `INPUT_DOMAIN = InnerFunc1::INPUT_DOMAIN`, which is too narrow: the assembled
+    // chain vector is consumed by OuterFunc, which reads the head inputs directly
+    // (not just through InnerFunc1's declared domain) alongside every stage's
+    // appended output. The full-domain default is always conservative-correct
+    // (VF_REVIEW 1.11).
 
     static constexpr bool ReverseAlg =
         false; ///< @brief Hessian-assembly mode tag; fixed to false (forward assembly) here.
     static constexpr int SizeInnerFuncs =
         sizeof...(InnerFuncs); ///< @brief Count of inner functions beyond the first.
+
+    // VF_REVIEW 1.15: unlike NestedCallAndAppendChain2, no constructor here calls
+    // set_io_rows/set_input_domain — every stage relies purely on the compile-time
+    // IRC/ORC of OuterFunc, InnerFunc1, and InnerFuncs.... compute_impl and its
+    // Jacobian/Hessian siblings repeatedly call fixed-size-only Eigen accessors
+    // (e.g. `xchain.template head<Base::IRC>()` with no runtime size argument),
+    // which are ill-formed once any of these sizes is Dynamic (-1). Fail fast at
+    // compile time rather than instantiating a silently-broken dynamic chain; use
+    // NestedCallAndAppendChain2 (bump-allocated, set_io_rows-aware) or a plain
+    // NestedFunction composition for dynamic sizes.
+    static_assert(InnerFunc1::IRC > 0 && InnerFunc1::ORC > 0 && OuterFunc::IRC > 0 &&
+                      OuterFunc::ORC > 0 && ((InnerFuncs::IRC > 0) && ... && true) &&
+                      ((InnerFuncs::ORC > 0) && ... && true),
+                  "NestedCallAndAppendChain requires compile-time (static) sizes for every stage "
+                  "(OuterFunc, InnerFunc1, and all InnerFuncs...): no constructor calls "
+                  "set_io_rows/set_input_domain, and compute_impl/compute_jacobian_impl/"
+                  "compute_jacobian_adjointgradient_adjointhessian_impl use fixed-size-only Eigen "
+                  "accessors (e.g. head<N>()/segment<N>() without a runtime size argument) that "
+                  "are ill-formed for a Dynamic (-1) N. Use NestedCallAndAppendChain2 or a plain "
+                  "NestedFunction composition for dynamic sizes.");
 
     /// @brief Default-construct an empty chain.
     NestedCallAndAppendChain() {}

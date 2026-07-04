@@ -45,6 +45,26 @@ TEST_F(CommonFunctionsTest, ElementsJacobian) {
     verify_jacobian_analytical(elems, x, expected);
 }
 
+TEST_F(CommonFunctionsTest, ElementsDuplicateIndexAdjoint) {
+    // VF_REVIEW 1.6: duplicate indices must SUM adjoint contributions
+    // (J^T lm), not keep only the last.
+    //
+    // Note: verify_adjoint_consistency() drives compute_adjointgradient(),
+    // whose default (Analytic-mode) implementation forms the Jacobian via
+    // compute_jacobian_impl() and contracts adjgrad = J^T * adjvars via a
+    // dense matrix product (jacobian_x_adjoint) -- that path already sums
+    // duplicate-column contributions correctly and never touches the buggy
+    // compute_jacobian_adjointgradient_adjointhessian_impl(). Only
+    // compute_jacobian_adjointgradient_adjointhessian() dispatches straight
+    // to that impl (Analytic Hessian mode), so verify_hessian_consistency()
+    // (which drives that combined entry point and also checks gx == J^T lm)
+    // is the helper that actually exercises the duplicate-index bug.
+    Elements<4, 3, 3> f;
+    Eigen::VectorXd x = deterministic_random_vector(4, 11, 1.0, 5.0);
+    Eigen::VectorXd lm = deterministic_random_vector(2, 12, -1.0, 1.0);
+    verify_hessian_consistency(f, x, lm);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // CwiseSum
 ///////////////////////////////////////////////////////////////////////////////

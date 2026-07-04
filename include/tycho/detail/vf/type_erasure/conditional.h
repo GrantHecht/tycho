@@ -136,8 +136,25 @@ template <class LHS, class RHS> struct ConditionalStatement {
     /// @return Input-row count.
     int input_rows() const { return this->input_rows_val_; }
 
+    /// @brief Runtime read-set: the concatenated {start,size} columns of both
+    /// operands' domains (a parent's `set_input_domain` normalizes overlaps
+    /// when it registers this as one of several candidate domains).
+    /// @return Domain matrix covering everything either operand reads.
+    [[nodiscard]] DomainMatrix input_domain() const {
+        DomainMatrix l = this->lhs_.input_domain();
+        DomainMatrix r = this->rhs_.input_domain();
+        DomainMatrix out(2, l.cols() + r.cols());
+        // Eigen's comma-initializer (`out << l, r;`) asserts when either block is
+        // 2x0 (a zero-read operand, e.g. ConstantConditional). Block-assign each
+        // side instead so empty blocks are handled cleanly.
+        out.leftCols(l.cols()) = l;
+        out.rightCols(r.cols()) = r;
+        return out;
+    }
+
   protected:
-    ConditionalFlags flag_;  ///< @brief Comparison/logical operator applied.
+    ConditionalFlags flag_ =
+        ConditionalFlags::LessThanFlag; ///< @brief Comparison/logical operator applied.
     LHS lhs_;                ///< @brief Left-hand operand.
     RHS rhs_;                ///< @brief Right-hand operand.
     int input_rows_val_ = 0; ///< @brief Cached input-row count.
@@ -172,8 +189,12 @@ struct ConstantConditional {
     /// @return Input-row count.
     int input_rows() const { return this->input_rows_val_; }
 
+    /// @brief Runtime read-set: empty (a constant reads no inputs).
+    /// @return An empty (2x0) domain matrix.
+    [[nodiscard]] DomainMatrix input_domain() const { return DomainMatrix(2, 0); }
+
   protected:
-    bool value_;             ///< @brief Constant boolean result.
+    bool value_ = false;     ///< @brief Constant boolean result.
     int input_rows_val_ = 0; ///< @brief Reported input-row count.
 };
 
@@ -195,10 +216,15 @@ struct IfElseFunction : VectorFunction<IfElseFunction<TestFunc, TrueFunc, FalseF
     using Base = VectorFunction<IfElseFunction<TestFunc, TrueFunc, FalseFunc>,
                                 SZ_MAX<TrueFunc::IRC, FalseFunc::IRC>::value,
                                 SZ_MAX<TrueFunc::ORC, FalseFunc::ORC>::value>;
-    /// @brief Composite input domain (union of the two branches' domains).
-    using INPUT_DOMAIN = CompositeDomain<Base::IRC, typename TrueFunc::INPUT_DOMAIN,
-                                         typename FalseFunc::INPUT_DOMAIN>;
-
+    // Note: no compile-time INPUT_DOMAIN override here (inherits Base's default
+    // SingleDomain<IRC, 0, IRC>, i.e. "reads everything"). A prior version declared
+    // `INPUT_DOMAIN = CompositeDomain<..., TrueFunc::INPUT_DOMAIN, FalseFunc::INPUT_DOMAIN>`,
+    // which unioned only the two branches and silently dropped the test predicate's
+    // read-set — a predicate reading a column neither branch reads would then be
+    // missed by domain-aware sparse Jacobian/Hessian assembly. The full-domain
+    // default is always conservative-correct; the runtime union below (used for
+    // dynamically-sized IfElseFunctions, via DomainHolder<-1>) does include the
+    // predicate (VF_REVIEW 1.11).
     VF_TYPE_ALIASES(Base);
     static constexpr bool is_vectorizable =
         false; ///< @brief Branch selection precludes SIMD lanes.
@@ -219,7 +245,8 @@ struct IfElseFunction : VectorFunction<IfElseFunction<TestFunc, TrueFunc, FalseF
         this->set_io_rows(this->true_func_.input_rows(), this->true_func_.output_rows());
 
         this->set_input_domain(this->input_rows(),
-                               {this->true_func_.input_domain(), this->false_func_.input_domain()});
+                               {this->test_func_.input_domain(), this->true_func_.input_domain(),
+                                this->false_func_.input_domain()});
         if (this->true_func_.output_rows() != this->false_func_.output_rows()) {
             throw std::invalid_argument("True and false functions in conditional statement must "
                                         "have same number of outputrows.");

@@ -607,6 +607,7 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
         if constexpr (std::is_same<JScalar, AScalar>::value) {
             adjgrad.noalias() = (adjvars.transpose() * jx_).transpose();
         } else {
+            adjgrad.setZero();
             for (int i = 0; i < this->input_rows(); i++) {
                 for (int j = 0; j < this->output_rows(); j++) {
                     adjgrad[i] += adjvars[j] * jx_(j, i);

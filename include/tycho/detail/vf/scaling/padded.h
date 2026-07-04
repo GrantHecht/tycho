@@ -18,6 +18,10 @@
 
 #include "tycho/detail/vf/core/vector_function.h"
 
+#include <fmt/format.h>
+
+#include <stdexcept>
+
 namespace tycho::vf {
 
 /// @internal
@@ -33,9 +37,15 @@ template <int St> struct UpperPadHolder {
     /// @endinternal
     static constexpr int u_pad_ = St;
     /// @internal
-    /// @brief Constructs from a runtime pad value (ignored in this template).
+    /// @brief Validates a runtime pad value against the compile-time value.
+    /// @throws std::invalid_argument if @p st contradicts the compile-time pad.
     /// @endinternal
-    UpperPadHolder(int st) {};
+    UpperPadHolder(int st) {
+        if (st != St) {
+            throw std::invalid_argument(fmt::format(
+                "PaddedOutput: runtime upper pad {} contradicts compile-time pad {}", st, St));
+        }
+    };
     /// @internal
     /// @brief Default-constructs the holder.
     /// @endinternal

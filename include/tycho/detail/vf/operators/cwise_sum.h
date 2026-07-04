@@ -145,14 +145,15 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
                 fx[0] = fxv.sum();
 
                 if constexpr (Func::InputIsDynamic) {
-                    if (this->sub_domains.size() == 0) {
+                    const int sds = this->sub_domains.cols();
+                    if (sds == 0) {
                         jx = jxv.colwise().sum();
                     } else {
-                        for (int i = 0; i < this->sub_domains.size(); i++) {
-                            int start = this->sub_domains(i, 0);
-                            int size = this->sub_domains(i, 1);
+                        for (int i = 0; i < sds; i++) {
+                            int start = this->sub_domains(0, i);
+                            int size = this->sub_domains(1, i);
                             jx.middleCols(start, size) =
-                                jxv.middleCols(start, size).colwise().sum().transpose();
+                                jxv.middleCols(start, size).colwise().sum();
                         }
                     }
                 } else {
@@ -165,7 +166,7 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
                             constexpr int start = Func::INPUT_DOMAIN::sub_domains[i.value][0];
                             constexpr int size = Func::INPUT_DOMAIN::sub_domains[i.value][1];
                             jx.middleCols(start, size) =
-                                jxv.middleCols(start, size).colwise().sum().transpose();
+                                jxv.middleCols(start, size).colwise().sum();
                         });
                 }
             };
@@ -222,14 +223,15 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
                 fx[0] = fxv.sum();
 
                 if constexpr (Func::InputIsDynamic) {
-                    if (this->sub_domains.size() == 0) {
+                    const int sds = this->sub_domains.cols();
+                    if (sds == 0) {
                         jx = jxv.colwise().sum();
                     } else {
-                        for (int i = 0; i < this->sub_domains.size(); i++) {
-                            int start = this->sub_domains(i, 0);
-                            int size = this->sub_domains(i, 1);
+                        for (int i = 0; i < sds; i++) {
+                            int start = this->sub_domains(0, i);
+                            int size = this->sub_domains(1, i);
                             jx.middleCols(start, size) =
-                                jxv.middleCols(start, size).colwise().sum().transpose();
+                                jxv.middleCols(start, size).colwise().sum();
                         }
                     }
                 } else {
@@ -240,7 +242,7 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
                             constexpr int start = Func::INPUT_DOMAIN::sub_domains[i.value][0];
                             constexpr int size = Func::INPUT_DOMAIN::sub_domains[i.value][1];
                             jx.middleCols(start, size) =
-                                jxv.middleCols(start, size).colwise().sum().transpose();
+                                jxv.middleCols(start, size).colwise().sum();
                         });
                 }
             };

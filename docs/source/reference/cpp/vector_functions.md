@@ -121,9 +121,6 @@ contiguous sub-vectors from it.
 
 .. doxygenstruct:: tycho::vf::Constant
    :project: tycho
-
-.. doxygenstruct:: tycho::vf::Value
-   :project: tycho
 ```
 
 ## Elementwise math expressions

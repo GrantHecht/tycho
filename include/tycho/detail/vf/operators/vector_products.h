@@ -249,31 +249,23 @@ struct FunctionVectorProduct_Impl
                                {this->func1.input_domain(), this->func2.input_domain()});
 
         if (this->func1.output_rows() != Vsize) {
-
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Math Error in FunctionVectorProduct (VectorSize = {1:}) !!!\n"
-                       "Output Size of Func1 (ORows = {0:})  must equal {1:}.\n",
-                       this->func1.output_rows(), Vsize);
-            throw std::invalid_argument("");
+            throw std::invalid_argument(
+                fmt::format("Math Error in FunctionVectorProduct (VectorSize = {1:}) !!!\n"
+                            "Output Size of Func1 (ORows = {0:})  must equal {1:}.\n",
+                            this->func1.output_rows(), Vsize));
         }
         if (this->func2.output_rows() != Vsize) {
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Math Error in FunctionVectorProduct (VectorSize = {1:}) !!!\n"
-                       "Output Size of Func2 (ORows = {0:})  must equal {1:}.\n",
-                       this->func2.output_rows(), Vsize);
-            throw std::invalid_argument("");
+            throw std::invalid_argument(
+                fmt::format("Math Error in FunctionVectorProduct (VectorSize = {1:}) !!!\n"
+                            "Output Size of Func2 (ORows = {0:})  must equal {1:}.\n",
+                            this->func2.output_rows(), Vsize));
         }
         if (this->func1.input_rows() != this->func2.input_rows()) {
-
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Math Error in FunctionVectorProduct (VectorSize = {2:}) !!!\n"
-                       "Input Size of Func1 (IRows = {0:}) does not match Input Size of Func2 "
-                       "(IRows = {1:}).\n",
-                       this->func1.input_rows(), this->func2.input_rows(), Vsize);
-            throw std::invalid_argument("");
-
-            // throw std::invalid_argument("Functions 1,2 in vector product must have same numer of
-            // input rows");
+            throw std::invalid_argument(fmt::format(
+                "Math Error in FunctionVectorProduct (VectorSize = {2:}) !!!\n"
+                "Input Size of Func1 (IRows = {0:}) does not match Input Size of Func2 "
+                "(IRows = {1:}).\n",
+                this->func1.input_rows(), this->func2.input_rows(), Vsize));
         }
     }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -432,6 +424,7 @@ struct FunctionVectorProduct_Impl
         } else if constexpr (Vsize == 4) {
             return this->quatprodimpl(sign, x1, x2);
         } else {
+            static_assert(detail::dependent_false<T1>::value, "vecprodimpl: Vsize must be 2/3/4");
         }
     }
 
@@ -455,6 +448,8 @@ struct FunctionVectorProduct_Impl
         } else if constexpr (Vsize == 4) {
             return this->fillquatprodmatrix(x, m_, sign);
         } else {
+            static_assert(detail::dependent_false<Source>::value,
+                          "fillprodmatrix: Vsize must be 2/3/4");
         }
     }
 
@@ -571,7 +566,6 @@ struct FunctionVectorProduct_Impl
 
         Eigen::Matrix<Scalar, Vsize, Vsize> pm1;
         Eigen::Matrix<Scalar, Vsize, Vsize> pm2;
-        Eigen::Matrix<Scalar, Vsize, Vsize> lpm1;
         Eigen::Matrix<Scalar, Vsize, Vsize> lpm2;
 
         /// @cond INTERNAL
@@ -583,11 +577,17 @@ struct FunctionVectorProduct_Impl
             this->fillprodmatrix(fx1, pm2, fsign2);
 
             this->fillprodmatrix(adjt, lpm2, fsign1);
-            this->fillprodmatrix(adjt, lpm1, fsign2);
 
             if constexpr (Vsize == 4) {
                 lpm2.diagonal().template head<3>() *= Scalar(-1.0);
                 lpm2.row(3).template head<3>() *= Scalar(-1.0);
+            }
+            if constexpr (Vsize == 2) {
+                // VF_REVIEW 1.3: the cross term needs [[l0,l1],[l1,-l0]] but
+                // fillprodmatrix produced the complex-mult matrix
+                // [[l0,-l1],[l1,l0]]; negating column 1 fixes it (analogous to
+                // the quaternion sign patch above).
+                lpm2.col(1) *= Scalar(-1.0);
             }
 
             fx = this->vecprodimpl(Scalar(1.0), fx1, fx2);

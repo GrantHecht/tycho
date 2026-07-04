@@ -15,6 +15,7 @@
 #pragma once
 
 #include "tycho/detail/vf/derivatives/dense_derivatives.h"
+#include "tycho/detail/vf/derivatives/fd_step_utils.h"
 
 namespace tycho::vf {
 
@@ -35,8 +36,26 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::FDiffCentArra
     using Base = DenseFunctionBase<Derived, IR, OR>;
     VF_TYPE_ALIASES(Base)
 
-    /// @brief Constructs the mode with a default Jacobian step size of 1e-5.
-    DenseFirstDerivatives() { this->set_jac_fd_steps(1.0e-5); }
+    /// @brief Default central-difference Jacobian step (relative; see compute_jacobian_impl).
+    static constexpr double kDefaultJacStep = 1.0e-5;
+
+    /// @brief Constructs the mode with the default Jacobian step size.
+    DenseFirstDerivatives() { this->set_jac_fd_steps(kDefaultJacStep); }
+
+    /// @brief Set I/O rows and keep the FD step vector sized to the input count.
+    ///
+    /// The mode constructor runs before a dynamic-size function knows its
+    /// sizes, so the step vector starts empty; re-applying the default here
+    /// removes the old requirement that every dynamic-size wrapper manually
+    /// re-set the steps after set_io_rows.
+    /// @param inputrows   Number of input rows.
+    /// @param outputrows  Number of output rows.
+    void set_io_rows(int inputrows, int outputrows) {
+        Base::set_io_rows(inputrows, outputrows);
+        if (this->jac_fd_steps.size() != inputrows) {
+            this->set_jac_fd_steps(kDefaultJacStep);
+        }
+    }
 
     /// @brief Sets a per-input-dimension Jacobian finite-difference step size.
     /// @param steps  Step size for each input dimension.
@@ -67,16 +86,16 @@ struct DenseFirstDerivatives<Derived, IR, OR, DenseDerivativeMode::FDiffCentArra
         MatRef<JacType> jx = jx_.const_cast_derived();
 
         this->derived().compute(x, fx_);
-        using ScalArray = Eigen::Array<Scalar, 2, 1>;
         Input<Eigen::Array<Scalar, 2, 1>> xi = x.template cast<Eigen::Array<Scalar, 2, 1>>();
         Output<Eigen::Array<Scalar, 2, 1>> fi(this->output_rows());
         fi.setZero();
         for (int i = 0; i < this->input_rows(); i++) {
-            xi[i][0] += this->jac_fd_steps[i];
-            xi[i][1] -= this->jac_fd_steps[i];
+            const Scalar h = Scalar(this->jac_fd_steps[i]) * detail::fd_step_scale(x[i]);
+            xi[i][0] += h;
+            xi[i][1] -= h;
             this->derived().compute(xi, fi);
             for (int j = 0; j < this->output_rows(); j++) {
-                jx(j, i) = (fi[j][0] - fi[j][1]) / (2.0 * jac_fd_steps[i]);
+                jx(j, i) = (fi[j][0] - fi[j][1]) / (xi[i][0] - xi[i][1]);
             }
             fi.setZero();
             xi[i] = x[i];

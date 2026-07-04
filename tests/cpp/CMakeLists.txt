@@ -49,6 +49,7 @@ set(TYCHO_TEST_LIGHT_SOURCES
     optimal_control/test_ode_sizes.cpp
     integrators/test_step_controller.cpp
     integrators/test_rk_tableau_consistency.cpp
+    vector_functions/test_fd_coeffs.cpp
 )
 
 set(TYCHO_TEST_HEAVY_SOURCES
@@ -94,6 +95,13 @@ set(TYCHO_TEST_HEAVY_SOURCES
     vector_functions/test_cwise_jacobian_stress.cpp
     vector_functions/test_mixed_size_ops.cpp
     vector_functions/test_vf_concepts.cpp
+    vector_functions/test_vf_fd_modes.cpp
+    vector_functions/test_vf_domain_semantics.cpp
+    vector_functions/test_vf_vector_products_hessian.cpp
+    vector_functions/test_summation_overlap.cpp
+    vector_functions/test_vf_input_domains.cpp
+    vector_functions/test_parsed_input.cpp
+    vector_functions/test_vf_type_erasure_guards.cpp
 
     # Astro
     astro/test_kepler_conversions.cpp
@@ -144,6 +152,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     optimal_control/test_ocp_direct_link.cpp
     optimal_control/test_ocp_phase_lifetime.cpp
     optimal_control/test_lgl_table_ptr.cpp
+    optimal_control/test_trapezoidal_hessian_sparsity.cpp
 
     # Solvers
     solvers/test_psiopt_convergence.cpp
@@ -231,6 +240,70 @@ set_source_files_properties(
 set_source_files_properties(
     astro/test_kepler_lcd.cpp
     astro/test_kepler_ift.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)
+
+# test_vf_fd_modes.cpp: keep standalone so its insertion does not shift later
+# unity batch boundaries — several downstream test files (integrator/astro)
+# rely on the existing boundary positions to keep same-named anonymous-
+# namespace helpers out of the same unity TU (see notes above).
+set_source_files_properties(
+    vector_functions/test_vf_fd_modes.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)
+
+# test_vf_domain_semantics.cpp: keep standalone for the same reason as
+# test_vf_fd_modes.cpp above — avoid shifting later unity batch boundaries.
+set_source_files_properties(
+    vector_functions/test_vf_domain_semantics.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)
+
+# test_vf_vector_products_hessian.cpp: keep standalone for the same reason as
+# test_vf_fd_modes.cpp / test_vf_domain_semantics.cpp above — avoid shifting
+# later unity batch boundaries.
+set_source_files_properties(
+    vector_functions/test_vf_vector_products_hessian.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)
+
+# test_summation_overlap.cpp: keep standalone for the same reason as
+# test_vf_fd_modes.cpp / test_vf_domain_semantics.cpp above — avoid shifting
+# later unity batch boundaries. Also isolates the summation.h edit (VF_REVIEW
+# 1.10) so iterating on this test doesn't force a full unity-batch rebuild.
+set_source_files_properties(
+    vector_functions/test_summation_overlap.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)
+
+# test_vf_input_domains.cpp: keep standalone for the same reason as the other
+# entries above — avoid shifting later unity batch boundaries. Also isolates
+# the conditional.h / generic_comparative.h / generic_conditional.h /
+# call_and_append.h edits (VF_REVIEW 1.11, 1.15) so iterating on this test
+# doesn't force a full unity-batch rebuild.
+set_source_files_properties(
+    vector_functions/test_vf_input_domains.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)
+
+# test_parsed_input.cpp: keep standalone for the same reason as the other
+# entries above -- avoid shifting later unity batch boundaries. Also isolates
+# the parsed_input.h edit (VF_REVIEW 1.12: varlocs_ bounds validation +
+# duplicate-index accumulation) so iterating on this test doesn't force a
+# full unity-batch rebuild. parsed_input.h is reached transitively via
+# common_functions.h, which is a heavy include.
+set_source_files_properties(
+    vector_functions/test_parsed_input.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)
+
+# test_vf_type_erasure_guards.cpp: keep standalone for the same reason as the
+# other entries above -- avoid shifting later unity batch boundaries. Also
+# isolates the conditional.h / gf_type_erasure.h / generic_comparative.h /
+# generic_function.h edits (VF_REVIEW 1.13, 1.14) so iterating on this test
+# doesn't force a full unity-batch rebuild.
+set_source_files_properties(
+    vector_functions/test_vf_type_erasure_guards.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
 

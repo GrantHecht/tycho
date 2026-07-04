@@ -87,13 +87,42 @@ template <int IR> struct GenericConditional {
 
     /// @brief Number of input rows the wrapped predicate accepts.
     /// @return Input-row count.
-    int input_rows() const { return storage.get().input_rows(); }
+    int input_rows() const {
+        if (storage.empty()) {
+            throw std::runtime_error(
+                "GenericConditional is empty (default-constructed); assign a predicate before use");
+        }
+        return storage.get().input_rows();
+    }
+
+    /// @brief Runtime read-set: conservatively the full input range.
+    ///
+    /// The wrapped predicate's structure (and therefore its true read-set) is
+    /// erased behind @ref ConditionalBase, which has no `input_domain()` in its
+    /// virtual interface — so this reports the full `[0, input_rows())` range,
+    /// which is always a safe (if not maximally sparse) over-approximation for
+    /// any caller unioning domains. GenericConditional is the TestFunc type
+    /// behind the Python-facing `ifelse()` DSL and behind AND/OR combinations
+    /// (`ConditionalStatement<GenericConditional<IR>, GenericConditional<IR>>`),
+    /// so both IfElseFunction's runtime domain union and ConditionalStatement's
+    /// own `input_domain()` depend on this (VF_REVIEW 1.11).
+    /// @return The full input-row range as a single-column domain matrix.
+    [[nodiscard]] DomainMatrix input_domain() const {
+        DomainMatrix d(2, 1);
+        d(0, 0) = 0;
+        d(1, 0) = this->input_rows();
+        return d;
+    }
 
     /// @brief Evaluate the wrapped predicate at @p x.
     /// @tparam InTypeT  Eigen expression type of the input vector.
     /// @param x  Input vector.
     /// @return Boolean result of the predicate.
     template <class InTypeT> bool compute(const Eigen::MatrixBase<InTypeT> &x) const {
+        if (storage.empty()) {
+            throw std::runtime_error(
+                "GenericConditional is empty (default-constructed); assign a predicate before use");
+        }
         InType xt(x.derived());
         return storage.get().compute(xt);
     }

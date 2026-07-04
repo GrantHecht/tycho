@@ -3486,7 +3486,8 @@ class LGLInterpTable:
         Return a non-owning shared pointer aliasing this table.
 
         Used internally so that phase components (e.g. interpolation functions)
-        can hold a reference to the table without taking ownership of it.
+        can hold a reference to the table without taking ownership of it. The
+        returned object keeps the source table alive for its own lifetime.
 
         Returns
         -------

@@ -17,6 +17,8 @@
 #pragma once
 #include "tycho/detail/vf/scaling/io_scaled.h"
 #include "tycho/vector_functions.h"
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -62,7 +64,18 @@ namespace tycho::vf {
 /// @return Per-row output scale factors (length `func.output_rows()`).
 template <class Func>
 Eigen::VectorXd calc_jacobian_row_scales(const Func &func, const Eigen::VectorXd &input_scales,
-                                         std::vector<Eigen::VectorXd> &test_inputs) {
+                                         const std::vector<Eigen::VectorXd> &test_inputs) {
+
+    if (test_inputs.empty()) {
+        throw std::invalid_argument("calc_jacobian_row_scales: test_inputs is empty");
+    }
+    for (const auto &ti : test_inputs) {
+        if (ti.size() != func.input_rows()) {
+            throw std::invalid_argument(
+                fmt::format("calc_jacobian_row_scales: test input has {} rows, function takes {}",
+                            ti.size(), func.input_rows()));
+        }
+    }
 
     Eigen::MatrixXd rownorms(func.output_rows(), test_inputs.size());
     Eigen::VectorXd output_scales(func.output_rows());
