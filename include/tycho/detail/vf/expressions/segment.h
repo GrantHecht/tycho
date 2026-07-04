@@ -333,16 +333,23 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
                 }
 
             } else if constexpr (std::is_same<Assignment, ScaledDirectAssignment<Scalar>>::value) {
-                target.template middleCols<OR>(this->seg_start_, this->output_rows()).noalias() =
-                    assign.value * left.derived() * diag.asDiagonal();
+                if constexpr (Aliased)
+                    target.template middleCols<OR>(this->seg_start_, this->output_rows()) =
+                        assign.value * left.derived() * diag.asDiagonal();
+                else
+                    target.template middleCols<OR>(this->seg_start_, this->output_rows())
+                        .noalias() = assign.value * left.derived() * diag.asDiagonal();
             } else if constexpr (std::is_same<Assignment,
                                               ScaledPlusEqualsAssignment<Scalar>>::value) {
-                target.template middleCols<OR>(this->seg_start_, this->output_rows()).noalias() +=
-                    assign.value * left.derived() * diag.asDiagonal();
+                if constexpr (Aliased)
+                    target.template middleCols<OR>(this->seg_start_, this->output_rows()) +=
+                        assign.value * left.derived() * diag.asDiagonal();
+                else
+                    target.template middleCols<OR>(this->seg_start_, this->output_rows())
+                        .noalias() += assign.value * left.derived() * diag.asDiagonal();
             } else {
-                std::cout << "right_jacobian_product has not been implemented for: " << this->name
-                          << std::endl
-                          << std::endl;
+                static_assert(detail::dependent_false<Assignment>::value,
+                              "Segment right_jacobian_product: unhandled Assignment policy");
             }
         };
 
@@ -416,9 +423,8 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
                                         this->output_rows())
                 .noalias() += assign.value * left.derived() * diag;
         } else {
-            std::cout << "symetric_jacobian_product has not been implemented for: " << this->name
-                      << std::endl
-                      << std::endl;
+            static_assert(detail::dependent_false<Assignment>::value,
+                          "Segment symetric_jacobian_product: unhandled Assignment policy");
         }
     }
 
@@ -435,6 +441,7 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
     inline void accumulate_jacobian(CMatRef<Target> target_, CEigRef<JacType> right,
                                     Assignment assign) const {
         MatRef<Target> target = target_.const_cast_derived();
+        typedef typename Target::Scalar Scalar;
         if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
             target.template middleCols<OR>(this->seg_start_, this->output_rows()).diagonal() =
                 right.derived()
@@ -450,7 +457,19 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
                 right.derived()
                     .template middleCols<OR>(this->seg_start_, this->output_rows())
                     .diagonal();
+        } else if constexpr (std::is_same<Assignment, ScaledDirectAssignment<Scalar>>::value) {
+            target.template middleCols<OR>(this->seg_start_, this->output_rows()).diagonal() =
+                assign.value * right.derived()
+                                   .template middleCols<OR>(this->seg_start_, this->output_rows())
+                                   .diagonal();
+        } else if constexpr (std::is_same<Assignment, ScaledPlusEqualsAssignment<Scalar>>::value) {
+            target.template middleCols<OR>(this->seg_start_, this->output_rows()).diagonal() +=
+                assign.value * right.derived()
+                                   .template middleCols<OR>(this->seg_start_, this->output_rows())
+                                   .diagonal();
         } else {
+            static_assert(detail::dependent_false<Assignment>::value,
+                          "Segment accumulate_jacobian: unhandled Assignment policy");
         }
     }
     /// @internal
@@ -466,6 +485,7 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
     inline void accumulate_gradient(CMatRef<Target> target_, CEigRef<JacType> right,
                                     Assignment assign) const {
         MatRef<Target> target = target_.const_cast_derived();
+        typedef typename Target::Scalar Scalar;
         if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
             target.template segment<OR>(this->seg_start_, this->output_rows()) =
                 right.derived().template segment<OR>(this->seg_start_, this->output_rows());
@@ -475,7 +495,17 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
         } else if constexpr (std::is_same<Assignment, MinusEqualsAssignment>::value) {
             target.template segment<OR>(this->seg_start_, this->output_rows()) -=
                 right.derived().template segment<OR>(this->seg_start_, this->output_rows());
+        } else if constexpr (std::is_same<Assignment, ScaledDirectAssignment<Scalar>>::value) {
+            target.template segment<OR>(this->seg_start_, this->output_rows()) =
+                assign.value *
+                right.derived().template segment<OR>(this->seg_start_, this->output_rows());
+        } else if constexpr (std::is_same<Assignment, ScaledPlusEqualsAssignment<Scalar>>::value) {
+            target.template segment<OR>(this->seg_start_, this->output_rows()) +=
+                assign.value *
+                right.derived().template segment<OR>(this->seg_start_, this->output_rows());
         } else {
+            static_assert(detail::dependent_false<Assignment>::value,
+                          "Segment accumulate_gradient: unhandled Assignment policy");
         }
     }
     /// @internal

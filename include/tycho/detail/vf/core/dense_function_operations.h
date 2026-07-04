@@ -95,9 +95,8 @@ void right_jacobian_product_impl(const Eigen::MatrixBase<Target> &target_,
             target.noalias() += assign.value * left.derived() * right.derived();
         }
     } else {
-        std::cout << "right_jacobian_product has not been implemented for: "
-
-                  << std::endl;
+        static_assert(detail::dependent_false<Assignment>::value,
+                      "right_jacobian_product: unhandled Assignment policy");
     }
 }
 
@@ -236,9 +235,8 @@ void symetric_jacobian_product_impl(const Eigen::MatrixBase<Target> &target_,
                 assign.value * right.derived().transpose() * left.derived() * right.derived();
         }
     } else {
-        std::cout << "symetric_jacobian_product has not been implemented for: "
-
-                  << std::endl;
+        static_assert(detail::dependent_false<Assignment>::value,
+                      "symetric_jacobian_product: unhandled Assignment policy");
     }
 }
 

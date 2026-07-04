@@ -14,7 +14,14 @@
 
 #pragma once
 
+#include <type_traits>
+
 namespace tycho::vf {
+
+namespace detail {
+/// @brief Dependent-false for static_asserts in if-constexpr else branches.
+template <class...> struct dependent_false : std::false_type {};
+} // namespace detail
 
 /// @brief Assignment tag selecting plain `target = value` semantics.
 /// @ingroup vf
@@ -27,13 +34,6 @@ struct PlusEqualsAssignment {};
 /// @brief Assignment tag selecting `target -= value` semantics.
 /// @ingroup vf
 struct MinusEqualsAssignment {};
-
-/// @brief Assignment tag selecting aliased `target = value` semantics.
-/// @ingroup vf
-///
-/// Used where the target may alias one of the operands, disabling the
-/// `noalias()` fast path.
-struct AliasedDirectAssignment {};
 
 /// @brief Assignment tag selecting scaled `target = scale * value` semantics.
 /// @ingroup vf

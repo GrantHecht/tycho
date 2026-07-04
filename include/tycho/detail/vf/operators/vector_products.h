@@ -432,6 +432,7 @@ struct FunctionVectorProduct_Impl
         } else if constexpr (Vsize == 4) {
             return this->quatprodimpl(sign, x1, x2);
         } else {
+            static_assert(detail::dependent_false<T1>::value, "vecprodimpl: Vsize must be 2/3/4");
         }
     }
 
@@ -455,6 +456,8 @@ struct FunctionVectorProduct_Impl
         } else if constexpr (Vsize == 4) {
             return this->fillquatprodmatrix(x, m_, sign);
         } else {
+            static_assert(detail::dependent_false<Source>::value,
+                          "fillprodmatrix: Vsize must be 2/3/4");
         }
     }
 
