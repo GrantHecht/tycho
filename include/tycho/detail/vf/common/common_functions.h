@@ -25,7 +25,6 @@
 #include "tycho/detail/vf/type_erasure/conditional.h"
 
 #include "tycho/detail/vf/common/elements.h"
-#include "tycho/detail/vf/common/value.h"
 #include "tycho/detail/vf/expressions/function_holder.h"
 #include "tycho/detail/vf/expressions/lambda_function.h"
 #include "tycho/detail/vf/expressions/nested_function.h"

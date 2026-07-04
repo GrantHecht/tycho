@@ -28,6 +28,25 @@ TEST_F(InterpComposeNullTableTest, InterpScalar1D_Throws) {
     EXPECT_THROW((void)vf::interp_scalar(null_table, t), std::invalid_argument);
 }
 
+TEST_F(InterpComposeNullTableTest, InterpScalar1D_MultiValueTable_Throws) {
+    // VF_REVIEW 1.7: interp_scalar must reject vector-valued (vlen_ != 1)
+    // tables rather than silently constructing a 1-row InterpFunction1D and
+    // writing vlen_ rows into it (assert/UB pre-fix).
+    const int n = 6;
+    Eigen::VectorXd ts(n);
+    for (int i = 0; i < n; ++i) ts[i] = double(i);
+    oc::InterpTable1D::MatType vs(2, n); // vlen = 2 (axis=1: rows are values)
+    for (int i = 0; i < n; ++i) {
+        vs(0, i) = std::sin(ts[i]);
+        vs(1, i) = std::cos(ts[i]);
+    }
+    auto multi_value_table = std::make_shared<oc::InterpTable1D>(ts, vs, 1, InterpType::Cubic);
+    ASSERT_EQ(multi_value_table->vlen_, 2);
+
+    auto input_arg = Arguments<1>();
+    EXPECT_THROW((void)vf::interp_scalar(multi_value_table, input_arg), std::invalid_argument);
+}
+
 TEST_F(InterpComposeNullTableTest, Interp2D_TwoScalars_Throws) {
     std::shared_ptr<oc::InterpTable2D> null_table;
     auto args = Arguments<2>();

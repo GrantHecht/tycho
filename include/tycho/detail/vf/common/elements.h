@@ -36,8 +36,9 @@ struct Elements : VectorFunction<Elements<IR, EL1, ELS...>, IR, 1 + sizeof...(EL
     VF_TYPE_ALIASES(Base);
     using Base::compute;
     /// @brief Tuple of the selected input indices as integral constants.
-    static const std::tuple<std::integral_constant<int, EL1>, std::integral_constant<int, ELS>...>
-        elements;
+    static constexpr std::tuple<std::integral_constant<int, EL1>,
+                                std::integral_constant<int, ELS>...>
+        elements{};
     /// @brief Number of selected elements (the output dimension).
     static constexpr int num_elements = 1 + sizeof...(ELS);
 
@@ -115,7 +116,7 @@ struct Elements : VectorFunction<Elements<IR, EL1, ELS...>, IR, 1 + sizeof...(EL
         tycho::utils::tuple_for_loop(elements, [&](const auto &ele, int i) {
             fx[i] = x[ele.value];
             jx(i, ele.value) = 1.0;
-            adjgrad[ele.value] = adjvars[i];
+            adjgrad[ele.value] += adjvars[i];
         });
     }
 };

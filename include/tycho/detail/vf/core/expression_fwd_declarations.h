@@ -69,8 +69,6 @@ template <int IR, int EL1, int... ELS> struct Elements;
 template <int IR, int OR> struct Constant;
 ///////////////////////////////////////////////////////////////////////////////////////
 
-template <int OR> struct Value;
-
 template <class T> struct Is_Segment;
 template <class T> struct Is_Arguments;
 template <class T> struct Is_ScaledSegment;
