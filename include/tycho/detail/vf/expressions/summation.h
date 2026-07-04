@@ -41,8 +41,15 @@ namespace detail {
 /// @brief Whether two half-open intervals `[s1,s1+z1)` and `[s2,s2+z2)`
 /// *provably* overlap. A negative start marks a runtime/unknown range; such a
 /// pair is treated as non-provable (returns false), so the caller keeps the
-/// fast path — matching the pre-existing behavior for runtime-start segments,
-/// which the fast path already handles correctly when their starts differ.
+/// fast path.
+///
+/// @warning Compile-time only. Two runtime-start segments with the *same*
+/// (compile-time-unknown) start — e.g. `x.segment<2>(k) + x.segment<2>(k)` —
+/// still double-count, because their equality cannot be proven here. This is
+/// unchanged from the pre-fix behavior and out of scope for VF_REVIEW 1.10,
+/// which targeted compile-time-provable overlap (identical/overlapping static
+/// ranges) only. Do NOT read "runtime-start segments keep the fast path" as
+/// "runtime-start segments are always safe".
 constexpr bool intervals_provably_overlap(int s1, int z1, int s2, int z2) {
     if (s1 < 0 || s2 < 0) {
         return false;

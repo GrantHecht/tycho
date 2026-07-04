@@ -86,6 +86,7 @@ TEST_F(SummationOverlap, MultiFunctionSumRepeatedSegment) {
 
     Eigen::VectorXd lm = deterministic_random_vector(1, 62, -1.0, 1.0);
     verify_adjoint_consistency(f, x, lm);
+    verify_adjoint_hessian_fd(f, x, lm, 1e-4);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -110,6 +111,9 @@ TEST_F(SummationOverlap, NestedSumRepeatedSegment) {
 
     Eigen::VectorXd x = deterministic_random_vector(6, 63, 0.5, 2.0);
     verify_jacobian_fd(f, x, 1e-5);
+    Eigen::VectorXd lm = deterministic_random_vector(1, 632, -1.0, 1.0);
+    verify_adjoint_consistency(f, x, lm);
+    verify_adjoint_hessian_fd(f, x, lm, 1e-4);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -152,4 +156,7 @@ TEST_F(SummationOverlap, DisjointMultiSegmentsStillCorrect) {
 
     Eigen::VectorXd x = deterministic_random_vector(6, 66, 0.5, 2.0);
     verify_jacobian_fd(f, x, 1e-5);
+    Eigen::VectorXd lm = deterministic_random_vector(1, 662, -1.0, 1.0);
+    verify_adjoint_consistency(f, x, lm);
+    verify_adjoint_hessian_fd(f, x, lm, 1e-4);
 }
