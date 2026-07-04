@@ -127,6 +127,11 @@ nitpick_ignore_regex = [
     ("cpp:identifier", r"SZ_\w+.*"),
     ("cpp:identifier", r"return_type_t.*"),
     ("cpp:identifier", r"(Derived|Scalar|Func\d*|IR\d*|OR\d*|ST\d*|JMode)"),
+    # ``DomainMatrix`` (a ``tycho`` typedef for Eigen::Matrix<int,2,-1>) is
+    # rendered bare as the return type of the ``input_domain()`` members on the
+    # erased predicate wrappers (GenericConditional/GenericComparative); it is
+    # not a documented cross-reference target under the VF page's Doxygen subset.
+    ("cpp:identifier", r"DomainMatrix"),
     # C++ optimal-control reference page: Breathe renders the member signatures
     # of the ``tycho::oc`` phase/problem types with bare (unqualified) internal
     # typedef names and prose references that Doxygen's curated scope does not
