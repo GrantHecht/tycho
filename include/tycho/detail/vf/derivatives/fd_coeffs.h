@@ -128,9 +128,9 @@ template <> struct FDCoeffs<3, 4, FDCoeffType::Forwards, 0> {
 /// @brief Forward stencil: 3rd derivative, O(h^6), no shift.
 template <> struct FDCoeffs<3, 6, FDCoeffType::Forwards, 0> {
     static constexpr int N = 9; ///< Number of stencil nodes.
-    static constexpr arr<N> weights = {-801 / 80.0, 349 / 6.0,    -18353 / 120.0,
-                                       2391 / 10.0, -1457 / 30.0, -561 / 8.0,
-                                       527 / 30.0,  -469 / 240.0}; ///< Per-node weights.
+    static constexpr arr<N> weights = {-801 / 80.0, 349 / 6.0,   -18353 / 120.0, 2391 / 10.0,
+                                       -1457 / 6.0, 4891 / 30.0, -561 / 8.0,     527 / 30.0,
+                                       -469 / 240.0}; ///< Per-node weights.
 };
 
 // 4th derivatives
@@ -281,7 +281,7 @@ struct FDCoeffs<Order, Accuracy, FDCoeffType::Backwards, Shift>
     static constexpr arr<N> flip(const arr<N> a) {
         arr<N> out;
         for (int i = 0; i < N; i++) {
-            out[i] = C * a[N - i];
+            out[i] = C * a[N - 1 - i];
         }
         return out;
     }
