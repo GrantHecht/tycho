@@ -19,9 +19,11 @@ namespace {
 // conditions:
 //   sum_k weights[k] * node(k)^m == 0        for m != order
 //   sum_k weights[k] * node(k)^m == order!   for m == order
-// This is both the definition of a consistent FD stencil and a strong check
-// that the table wasn't transcribed incorrectly (wrong node count, wrong
-// coefficient, wrong sign, etc.).
+// An N-node stencil is uniquely pinned by exactly N such conditions
+// (m = 0 .. N-1), so we assert the full set — not just m <= order. Checking
+// only through `order` proves *consistency* (correct derivative order) but not
+// the claimed *accuracy*; the full check also catches a table that is a valid
+// but lower-accuracy stencil mislabeled with these template parameters.
 template <class Table> void check_moments(int order, int first_node) {
     constexpr int N = Table::N;
     ASSERT_EQ(static_cast<int>(Table::weights.size()), N);
@@ -29,7 +31,7 @@ template <class Table> void check_moments(int order, int first_node) {
     for (int m = 1; m <= order; m++) {
         fact *= m;
     }
-    for (int m = 0; m <= order; m++) {
+    for (int m = 0; m < N; m++) {
         double s = 0;
         for (int k = 0; k < N; k++) {
             s += Table::weights[k] * std::pow(double(first_node + k), m);
