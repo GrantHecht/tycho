@@ -1452,7 +1452,6 @@ include/tycho/detail/vf/
     common/
         constant.h                Constant value functions
         elements.h                Extract non-contiguous elements
-        value.h                   Scalar value functions
         common_functions.h        aggregate include for common/ headers
         value_lock.h              ValueLock wrapper
     operators/

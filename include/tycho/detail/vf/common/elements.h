@@ -97,7 +97,8 @@ struct Elements : VectorFunction<Elements<IR, EL1, ELS...>, IR, 1 + sizeof...(EL
     /// @param x        Input vector.
     /// @param fx_      Output vector receiving the selected components.
     /// @param jx_      Jacobian buffer; one unit entry is set per selected column.
-    /// @param adjgrad_ Adjoint-gradient buffer; selected slots are scattered into.
+    /// @param adjgrad_ Adjoint-gradient buffer; selected slots are accumulated into
+    ///                 (caller must pre-zero — duplicate indices sum their contributions).
     /// @param adjhess_ Adjoint-Hessian buffer; left unchanged (zero).
     /// @param adjvars  Adjoint (Lagrange-multiplier) seed vector.
     /// @endinternal
@@ -116,6 +117,9 @@ struct Elements : VectorFunction<Elements<IR, EL1, ELS...>, IR, 1 + sizeof...(EL
         tycho::utils::tuple_for_loop(elements, [&](const auto &ele, int i) {
             fx[i] = x[ele.value];
             jx(i, ele.value) = 1.0;
+            // += (not =): duplicate indices must sum J^T·λ contributions.
+            // adjgrad is pre-zeroed by the dispatch layer; jx above uses = only
+            // because its duplicate columns land in distinct rows and never collide.
             adjgrad[ele.value] += adjvars[i];
         });
     }
