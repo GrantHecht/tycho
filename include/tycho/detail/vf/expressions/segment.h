@@ -19,6 +19,10 @@
 #include "tycho/detail/vf/derivatives/detect_diagonal.h"
 #include "tycho/detail/vf/type_erasure/conditional.h"
 
+#include <fmt/format.h>
+
+#include <stdexcept>
+
 namespace tycho::vf {
 
 /// @internal
@@ -119,9 +123,15 @@ struct Is_ScaledSegment<StaticScaled<Segment<IR, OR, ST>, VALUE>> : std::true_ty
 /// @endinternal
 template <int ST> struct SegStartHolder {
     static constexpr int seg_start_ = ST; ///< @brief Compile-time segment start index.
-    /// @brief No-op: the start index is fixed at compile time.
-    /// @param st  Ignored.
-    void set_seg_start(int st) {};
+    /// @brief Validate a runtime start index against the compile-time value.
+    /// @param st  Candidate runtime start; must equal @p ST.
+    /// @throws std::invalid_argument if @p st contradicts the compile-time start.
+    void set_seg_start(int st) {
+        if (st != ST) {
+            throw std::invalid_argument(
+                fmt::format("Segment: runtime start {} contradicts compile-time start {}", st, ST));
+        }
+    }
 };
 /// @internal
 /// @brief Runtime-start specialization of @ref SegStartHolder (`ST == -1`).
@@ -290,7 +300,7 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
                        .diagonal();
 
             if constexpr (std::is_same<Assignment, DirectAssignment>::value) {
-                if constexpr (Is_EigenDiagonalMatrix<typename std::remove_const_reference<
+                if constexpr (Is_EigenDiagonalMatrix<typename tycho::utils::remove_const_reference<
                                   decltype(left.derived())>::type>::value) {
                     target.template middleCols<OR>(this->seg_start_, this->output_rows())
                         .diagonal() = left.derived().diagonal().cwiseProduct(diag);
@@ -304,7 +314,7 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
                 }
 
             } else if constexpr (std::is_same<Assignment, PlusEqualsAssignment>::value) {
-                if constexpr (Is_EigenDiagonalMatrix<typename std::remove_const_reference<
+                if constexpr (Is_EigenDiagonalMatrix<typename tycho::utils::remove_const_reference<
                                   decltype(left.derived())>::type>::value) {
                     target.template middleCols<OR>(this->seg_start_, this->output_rows())
                         .diagonal() += left.derived().diagonal().cwiseProduct(diag);
@@ -319,7 +329,7 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
 
             } else if constexpr (std::is_same<Assignment, MinusEqualsAssignment>::value) {
 
-                if constexpr (Is_EigenDiagonalMatrix<typename std::remove_const_reference<
+                if constexpr (Is_EigenDiagonalMatrix<typename tycho::utils::remove_const_reference<
                                   decltype(left.derived())>::type>::value) {
                     target.template middleCols<OR>(this->seg_start_, this->output_rows())
                         .diagonal() -= left.derived().diagonal().cwiseProduct(diag);
@@ -394,7 +404,7 @@ struct Segment_Impl : VectorFunction<Derived, IR, OR>, SegStartHolder<ST> {
                                         this->output_rows())
                 .noalias() = left.derived() * diag;
         } else if constexpr (std::is_same<Assignment, PlusEqualsAssignment>::value) {
-            if constexpr (Is_EigenDiagonalMatrix<typename std::remove_const_reference<
+            if constexpr (Is_EigenDiagonalMatrix<typename tycho::utils::remove_const_reference<
                               decltype(left.derived())>::type>::value) {
                 target
                     .template block<OR, OR>(this->seg_start_, this->seg_start_, this->output_rows(),

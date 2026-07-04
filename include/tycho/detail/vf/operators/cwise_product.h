@@ -16,6 +16,10 @@
 
 #include "tycho/detail/vf/core/vector_function.h"
 
+#include <fmt/format.h>
+
+#include <stdexcept>
+
 namespace tycho::vf {
 
 /// @internal
@@ -94,18 +98,16 @@ struct CwiseFunctionProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Fu
     CwiseFunctionProduct_Impl(Func1 f1, Func2 f2) : func1(std::move(f1)), func2(std::move(f2)) {
         int irtemp = std::max(this->func1.input_rows(), this->func2.input_rows());
         if (this->func1.output_rows() != this->func2.output_rows()) {
-            std::cout << "User Input Error in CwiseFunctionProduct:" << this->name() << std::endl;
-            std::cout << "	Output Size of Func1 ( " << this->func1.name()
-                      << " ) does not match Output Size of Func2 ( " << this->func2.name() << " )"
-                      << std::endl;
-            throw std::invalid_argument("");
+            throw std::invalid_argument(fmt::format(
+                "User Input Error in CwiseFunctionProduct: {}\n\tOutput Size of Func1 ( {} ) "
+                "does not match Output Size of Func2 ( {} )",
+                this->name(), this->func1.name(), this->func2.name()));
         }
         if (this->func1.input_rows() != this->func2.input_rows()) {
-            std::cout << "User Input Error in CwiseFunctionProduct:" << this->name() << std::endl;
-            std::cout << "	Input Size of Func1 ( " << this->func1.name()
-                      << " ) does not match Output Size of Func2 ( " << this->func2.name() << " )"
-                      << std::endl;
-            throw std::invalid_argument("");
+            throw std::invalid_argument(fmt::format(
+                "User Input Error in CwiseFunctionProduct: {}\n\tInput Size of Func1 ( {} ) "
+                "does not match Output Size of Func2 ( {} )",
+                this->name(), this->func1.name(), this->func2.name()));
         }
 
         this->set_io_rows(irtemp, this->func1.output_rows());

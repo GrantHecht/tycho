@@ -155,6 +155,11 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     inline bool is_linear() const { return this->is_linear_; }
     /// @brief Enable or disable SuperScalar (SIMD) vectorization on the stored function.
     /// @param b  True to enable vectorization.
+    /// @warning This mutates the SHARED erased model: `func_` is a reference-counted
+    ///     handle, so every @ref GenericFunction copy sharing the same underlying
+    ///     storage observes the change. There is no synchronization, so toggling
+    ///     concurrently from multiple threads is undefined; this is intended to be
+    ///     set once at setup time, before the function is evaluated concurrently.
     void enable_vectorization(bool b) const {
         this->func_.get().enable_vectorization(b);
         this->enable_vectorization_ = b;

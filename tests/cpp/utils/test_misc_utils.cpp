@@ -44,12 +44,12 @@ TEST(GetCoreCountTest, AtLeastOne) { EXPECT_GE(get_core_count(), 1); }
 ///////////////////////////////////////////////////////////////////////////////
 
 TEST(STDExtensionsTest, RemoveConstRef) {
-    static_assert(std::is_same_v<std::remove_const_reference<const int &>::type, int>);
+    static_assert(std::is_same_v<tycho::utils::remove_const_reference<const int &>::type, int>);
     SUCCEED();
 }
 
 TEST(STDExtensionsTest, PassThroughDouble) {
-    static_assert(std::is_same_v<std::remove_const_reference<double>::type, double>);
+    static_assert(std::is_same_v<tycho::utils::remove_const_reference<double>::type, double>);
     SUCCEED();
 }
 

@@ -72,21 +72,18 @@ struct FunctionDotProduct_Impl : VectorFunction<Derived, SZ_MAX<Func1::IRC, Func
     FunctionDotProduct_Impl(Func1 f1, Func2 f2) : func1(std::move(f1)), func2(std::move(f2)) {
         int irtemp = std::max(this->func1.input_rows(), this->func2.input_rows());
         if (this->func1.output_rows() != this->func2.output_rows()) {
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Math Error in FunctionDotProduct/.dot method !!!\n"
-                       "Output Size of Func1 (ORows = {0:}) does not match Output Size of Func2 "
-                       "(ORows = {1:}).\n",
-                       this->func1.output_rows(), this->func2.output_rows());
-
-            throw std::invalid_argument("");
+            throw std::invalid_argument(fmt::format(
+                "Math Error in FunctionDotProduct/.dot method !!!\n"
+                "Output Size of Func1 (ORows = {0:}) does not match Output Size of Func2 "
+                "(ORows = {1:}).\n",
+                this->func1.output_rows(), this->func2.output_rows()));
         }
         if (this->func1.input_rows() != this->func2.input_rows()) {
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Math Error in FunctionDotProduct/.dot method !!!\n"
-                       "Input Size of Func1 (IRows = {0:}) does not match Input Size of Func2 "
-                       "(IRows = {1:}).\n",
-                       this->func1.input_rows(), this->func2.input_rows());
-            throw std::invalid_argument("");
+            throw std::invalid_argument(fmt::format(
+                "Math Error in FunctionDotProduct/.dot method !!!\n"
+                "Input Size of Func1 (IRows = {0:}) does not match Input Size of Func2 "
+                "(IRows = {1:}).\n",
+                this->func1.input_rows(), this->func2.input_rows()));
         }
 
         this->set_io_rows(irtemp, 1);

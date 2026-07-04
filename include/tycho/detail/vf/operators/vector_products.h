@@ -249,31 +249,23 @@ struct FunctionVectorProduct_Impl
                                {this->func1.input_domain(), this->func2.input_domain()});
 
         if (this->func1.output_rows() != Vsize) {
-
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Math Error in FunctionVectorProduct (VectorSize = {1:}) !!!\n"
-                       "Output Size of Func1 (ORows = {0:})  must equal {1:}.\n",
-                       this->func1.output_rows(), Vsize);
-            throw std::invalid_argument("");
+            throw std::invalid_argument(
+                fmt::format("Math Error in FunctionVectorProduct (VectorSize = {1:}) !!!\n"
+                            "Output Size of Func1 (ORows = {0:})  must equal {1:}.\n",
+                            this->func1.output_rows(), Vsize));
         }
         if (this->func2.output_rows() != Vsize) {
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Math Error in FunctionVectorProduct (VectorSize = {1:}) !!!\n"
-                       "Output Size of Func2 (ORows = {0:})  must equal {1:}.\n",
-                       this->func2.output_rows(), Vsize);
-            throw std::invalid_argument("");
+            throw std::invalid_argument(
+                fmt::format("Math Error in FunctionVectorProduct (VectorSize = {1:}) !!!\n"
+                            "Output Size of Func2 (ORows = {0:})  must equal {1:}.\n",
+                            this->func2.output_rows(), Vsize));
         }
         if (this->func1.input_rows() != this->func2.input_rows()) {
-
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Math Error in FunctionVectorProduct (VectorSize = {2:}) !!!\n"
-                       "Input Size of Func1 (IRows = {0:}) does not match Input Size of Func2 "
-                       "(IRows = {1:}).\n",
-                       this->func1.input_rows(), this->func2.input_rows(), Vsize);
-            throw std::invalid_argument("");
-
-            // throw std::invalid_argument("Functions 1,2 in vector product must have same numer of
-            // input rows");
+            throw std::invalid_argument(fmt::format(
+                "Math Error in FunctionVectorProduct (VectorSize = {2:}) !!!\n"
+                "Input Size of Func1 (IRows = {0:}) does not match Input Size of Func2 "
+                "(IRows = {1:}).\n",
+                this->func1.input_rows(), this->func2.input_rows(), Vsize));
         }
     }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

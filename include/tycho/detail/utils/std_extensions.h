@@ -16,7 +16,7 @@
 
 #include <type_traits>
 
-namespace std {
+namespace tycho::utils {
 
 /// @internal
 /// @brief Type trait that strips both `const` and reference qualifiers from T
@@ -26,4 +26,4 @@ template <class T> struct remove_const_reference {
     using type = typename std::remove_const<typename std::remove_reference<T>::type>::type;
 };
 
-} // namespace std
+} // namespace tycho::utils
