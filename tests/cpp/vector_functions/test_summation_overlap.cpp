@@ -20,10 +20,12 @@
 // operand's `INPUT_DOMAIN::sub_domains`, NOT the runtime `input_domain()` (which
 // for a static-size function always spans the whole [0, IR) block and cannot
 // distinguish sub-ranges). The fast path is disabled only on a *provable*
-// overlap of concrete compile-time ranges; runtime-start segments (start == -1)
-// cannot be proven to overlap and keep the fast path, matching the pre-existing
-// behavior. Each test asserts the expected `segments_disjoint_` value so it
-// verifies the gating decision, not merely the numeric result.
+// overlap of concrete compile-time ranges. A runtime-start segment
+// (`segment<N>(k)` with runtime `k`) has an unknown compile-time offset;
+// `SingleDomain` widens its descriptor to the full `[0, IR)` range, so such a
+// segment is (correctly) reported as overlapping everything and its sums route
+// to the base path. Each test asserts the expected `segments_disjoint_` value so
+// it verifies the gating decision, not merely the numeric result.
 //
 // These tests compose the segment sum with a nonlinear outer op (.norm()),
 // which routes the Jacobian through right_jacobian_product / accumulate_jacobian
@@ -145,27 +147,46 @@ TEST_F(SummationOverlap, DisjointMultiSegmentsStillCorrect) {
     auto a = args.template segment<2>(0) * 2.0;
     auto b = args.template segment<2>(2) * 3.0;
     auto c = args.template segment<2>(4) * 4.0;
-    auto s = a + (b + c); // MultiFunctionSum over three disjoint segments
+    auto s = a + (b + c); // MultiFunctionSum over three runtime-start segments
     static_assert(decltype(s)::IsSumofSegments,
-                  "test must exercise the MultiFunctionSum all-segments fast path");
-    // Runtime-start segments cannot be proven to overlap at compile time, so the
-    // fast path is kept (matching pre-existing behavior; correct when disjoint).
-    static_assert(decltype(s)::segments_disjoint_,
-                  "runtime-start segments must keep the fast path (overlap unprovable)");
+                  "test must exercise the MultiFunctionSum all-segments path");
+    // A runtime-start segment (segment<N>(k) with runtime k) has compile-time
+    // INPUT_DOMAIN start -1; SingleDomain now widens that to the full [0,IR)
+    // range (see function_domains.h), so the disjointness gate cannot prove
+    // these disjoint and routes the sum to the correct base path -- rather than
+    // the fast path, which double-counts and (via the old contains_elem -1 bug)
+    // produced a row-0-only, and even out-of-bounds, adjoint Hessian.
+    static_assert(!decltype(s)::segments_disjoint_,
+                  "runtime-start segments report a full-range domain -> route to base");
     auto f = s.norm();
 
     Eigen::VectorXd x = deterministic_random_vector(6, 66, 0.5, 2.0);
     verify_jacobian_fd(f, x, 1e-5);
-    // NOTE: only the Jacobian is checked here. The adjoint gradient/Hessian of a
-    // sum of *runtime-start* segments (segment<N>(k), whose compile-time
-    // INPUT_DOMAIN start is -1) are computed incorrectly by the domain-aware KKT
-    // assembly: CompositeDomain::contains_elem treats the unresolved -1 start as a
-    // literal offset, collapsing the covered range to ~index 0, so the Hessian
-    // populates only row 0. This is a PRE-EXISTING domain-machinery bug, distinct
-    // from the §1.10 compile-time overlap double-count fixed here, and reachable
-    // only via runtime-start segments. The obvious global fix (treat a -1 start as
-    // full coverage) regresses real optimizations (multi-spacecraft continuation
-    // diverges) by widening KKT sparsity, so it needs a targeted fix + PSIOPT
-    // review out of scope for this PR. Tracked as a backlog item; the disjoint
-    // *compile-time*-start Hessian path is covered by DisjointSegmentsStillCorrect.
+    Eigen::VectorXd lm = deterministic_random_vector(1, 662, -1.0, 1.0);
+    verify_adjoint_consistency(f, x, lm);
+    verify_adjoint_hessian_fd(f, x, lm, 1e-4);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Partial-coverage runtime-start segments: the untouched input columns must
+// stay zero in the adjoint Hessian (regression guard for the SingleDomain
+// full-range widening -- it must widen to the true [0,IR), not over-write
+// columns the function never reads, and not leave the -1 leaf OOB).
+///////////////////////////////////////////////////////////////////////////////
+
+TEST_F(SummationOverlap, PartialCoverageRuntimeSegmentsHessian) {
+    auto args = Arguments<8>();                 // cols 2,5 read by no segment
+    auto a = args.template segment<2>(0) * 2.0; // cols 0,1
+    auto b = args.template segment<2>(3) * 3.0; // cols 3,4
+    auto c = args.template segment<2>(6) * 4.0; // cols 6,7
+    auto s = a + (b + c);                        // equal-size (2) segments -> valid sum
+    static_assert(decltype(s)::IsSumofSegments,
+                  "test must exercise the MultiFunctionSum all-segments path");
+    auto f = s.norm();
+
+    Eigen::VectorXd x = deterministic_random_vector(8, 71, 0.5, 2.0);
+    verify_jacobian_fd(f, x, 1e-5);
+    Eigen::VectorXd lm = deterministic_random_vector(1, 72, -1.0, 1.0);
+    verify_adjoint_consistency(f, x, lm);
+    verify_adjoint_hessian_fd(f, x, lm, 1e-4);
 }

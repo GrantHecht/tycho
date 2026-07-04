@@ -56,11 +56,25 @@ using utils::make_array;
 /// @tparam Size  Length of the active range.
 template <int IR, int Start, int Size> struct SingleDomain {
     static constexpr int DomainSize = IR; ///< @brief Total input row count.
-    /// @brief The single contiguous sub-domain `{Start, Size}`.
+
+    /// @brief Offset of the active range (full range for a runtime-start segment).
+    ///
+    /// A runtime-start segment (e.g. `x.segment<N>(k)` with a runtime `k`) carries
+    /// the sentinel `Start == -1`: its true offset is unknown at compile time. The
+    /// compile-time sparse-domain descriptor conservatively represents it as the
+    /// full range `[0, IR)` so that (a) domain-aware assembly never indexes with
+    /// the sentinel (`middleCols(-1, ...)` is an out-of-bounds write in NDEBUG),
+    /// (b) it never *under*-covers the true runtime range (which collapsed the
+    /// adjoint Hessian to ~row 0), and (c) the disjointness gate treats it as
+    /// possibly-overlapping and routes runtime-start segment sums to the correct
+    /// base path. The segment's actual scatter still uses its runtime `seg_start_`;
+    /// only the compile-time sparse domain is widened here.
+    static constexpr int start = (Start < 0) ? 0 : Start;
+    /// @brief Length of the active range (full IR for a runtime-start segment).
+    static constexpr int size = (Start < 0) ? IR : Size;
+    /// @brief The single contiguous sub-domain (widened to `{0, IR}` if runtime-start).
     static constexpr std::array<std::array<int, 2>, 1> sub_domains = {
-        std::array<int, 2>{Start, Size}};
-    static constexpr int start = Start; ///< @brief Offset of the active range.
-    static constexpr int size = Size;   ///< @brief Length of the active range.
+        std::array<int, 2>{start, size}};
 };
 
 /// @brief Compile-time input domain formed by merging several sub-domains.

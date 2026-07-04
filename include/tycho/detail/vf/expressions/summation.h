@@ -39,17 +39,16 @@ namespace detail {
 // -----------------------------------------------------------------------------
 
 /// @brief Whether two half-open intervals `[s1,s1+z1)` and `[s2,s2+z2)`
-/// *provably* overlap. A negative start marks a runtime/unknown range; such a
-/// pair is treated as non-provable (returns false), so the caller keeps the
-/// fast path.
+/// *provably* overlap.
 ///
-/// @warning Compile-time only. Two runtime-start segments with the *same*
-/// (compile-time-unknown) start — e.g. `x.segment<2>(k) + x.segment<2>(k)` —
-/// still double-count, because their equality cannot be proven here. This is
-/// unchanged from the pre-fix behavior and out of scope for VF_REVIEW 1.10,
-/// which targeted compile-time-provable overlap (identical/overlapping static
-/// ranges) only. Do NOT read "runtime-start segments keep the fast path" as
-/// "runtime-start segments are always safe".
+/// The negative-start guard is defensive: `SingleDomain` now widens a
+/// runtime-start segment's descriptor to the full range `[0, IR)` (see
+/// function_domains.h), so a runtime-start operand arrives here as `{0, IR}` and
+/// overlaps everything — i.e. runtime-start segment sums are (correctly) reported
+/// as non-disjoint and routed to the base path, which handles both the shared-
+/// column double-count and the runtime offset correctly. A raw negative start no
+/// longer reaches this function from a `SingleDomain` leaf; the guard remains
+/// only so a stray unknown range is treated as non-provable rather than indexed.
 constexpr bool intervals_provably_overlap(int s1, int z1, int s2, int z2) {
     if (s1 < 0 || s2 < 0) {
         return false;
