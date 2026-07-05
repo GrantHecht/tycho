@@ -16,6 +16,8 @@
 
 #include "tycho/detail/integrators/rk_coeffs.h"
 #include "tycho/vector_functions.h"
+#include <stdexcept>
+#include <type_traits>
 
 namespace tycho::integrators {
 
@@ -75,8 +77,8 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
     /// @brief Enables SuperScalar dispatch for batch trajectories.
     static constexpr bool is_vectorizable = true;
 
-    using RKData = RKCoeffs<RKOp>;                 ///< Butcher tableau data type for RKOp.
-    static constexpr int Stages = RKData::Stages;  ///< Number of stages in the selected tableau.
+    using RKData = RKCoeffs<RKOp>;                    ///< Butcher tableau data type for RKOp.
+    static constexpr int Stages = RKData::Stages;     ///< Number of stages in the selected tableau.
     static constexpr int Stgsm1 = RKData::Stages - 1; ///< Stages minus one (used in stage loops).
 
     DODE ode_; ///< @internal The underlying ODE VectorFunction.
@@ -245,6 +247,17 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
             Scalar t0 = xtup[this->ode_.t_var()];
             Scalar tf = x[this->ode_.input_rows()];
             Scalar h = tf - t0;
+
+            // Guard the STM adjoint-Hessian 1/h scaling against a zero-duration
+            // step (INTEGRATORS_REVIEW §3.3). Scalar-only: the SuperScalar batch
+            // path relies on the pad-lane time fix (§3.4).
+            if constexpr (std::is_floating_point_v<Scalar>) {
+                if (h == Scalar(0.0)) {
+                    throw std::invalid_argument(
+                        "RKStepper: zero step size (tf == t0) in the STM adjoint-Hessian path; "
+                        "the 1/h scaling is undefined.");
+                }
+            }
 
             xs[0] = xtup;
             this->ode_.compute(xtup, k_vals[0]);

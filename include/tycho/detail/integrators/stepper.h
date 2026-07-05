@@ -8,6 +8,7 @@
 #include "tycho/detail/utils/memory_management.h"
 #include <Eigen/Core>
 #include <stdexcept>
+#include <type_traits>
 
 namespace tycho::integrators {
 
@@ -22,8 +23,8 @@ namespace tycho::integrators {
 ///   Scalar — numeric type (double, SuperScalar, etc.)
 template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
 
-    using RKData = RKCoeffs<Alg>;                           ///< @internal Butcher tableau type.
-    static constexpr int Stages = RKData::Stages;           ///< @internal Number of main RK stages.
+    using RKData = RKCoeffs<Alg>;                 ///< @internal Butcher tableau type.
+    static constexpr int Stages = RKData::Stages; ///< @internal Number of main RK stages.
     /// @internal
     /// @brief Stages minus one (loop bound).
     static constexpr int Stgsm1 = Stages - 1;
@@ -39,7 +40,7 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
     /// @brief Total extra stage slots allocated.
     static constexpr int ExtraCount = RKData::InterpStages + ExtraOffset;
 
-    using ODEState = typename DODE::template Input<Scalar>;  ///< @internal Scalar-typed ODE state.
+    using ODEState = typename DODE::template Input<Scalar>; ///< @internal Scalar-typed ODE state.
     /// @internal
     /// @brief Scalar-typed ODE derivative.
     using ODEDeriv = typename DODE::template Output<Scalar>;
@@ -48,9 +49,9 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
     /// AdaptiveDriver takes this before each step and restores on reject so
     /// the retry reads f(xi), not the unconditionally-overwritten f(xnext).
     struct FsalSnapshot {
-        ODEDeriv k;   ///< @internal Cached f(xf) derivative.
-        bool valid;   ///< @internal Whether k may be used as k[0] for the next step.
-        bool fresh;   ///< @internal Whether k unambiguously holds f(xf) from the last step.
+        ODEDeriv k; ///< @internal Cached f(xf) derivative.
+        bool valid; ///< @internal Whether k may be used as k[0] for the next step.
+        bool fresh; ///< @internal Whether k unambiguously holds f(xf) from the last step.
     };
 
     /// Seed f(xi) into the FSAL cache and mark it valid. Callers that
@@ -87,7 +88,7 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
     /// to recover f(xf) must do so only after a step() that actually wrote
     /// f(xf) into the cache — the unconditional check below catches misuse
     /// in Release as well as Debug. Concretely, for !FSAL && !LastStageIsFxf
-    /// methods (Vern7/8/9), only step<true>() (i.e., ComputeMidpoint=true)
+    /// methods (DOPRI87, Vern7/8/9), only step<true>() (i.e., ComputeMidpoint=true)
     /// populates k_fsal_; step<false>() leaves it stale. peek_fresh_ tracks
     /// this distinction.
     ///
@@ -125,7 +126,7 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
     //   peek_fresh_ — "k_fsal_ unambiguously holds f(curr_xf) as written
     //                 by the most recent step()"
     // For FSAL / LastStageIsFxf methods both flags toggle in lockstep.
-    // For !LastStageIsFxf methods (Vern*) the midpoint branch sets
+    // For !LastStageIsFxf methods (DOPRI87, Vern7/8/9) the midpoint branch sets
     // peek_fresh_=true while leaving fsal_valid_=false (see comment in
     // step()), reflecting that the seeding decision is left to the driver.
     ODEDeriv k_fsal_;
@@ -160,6 +161,22 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
             xtup = x;
             Scalar t0 = xtup[ode.t_var()];
             Scalar h = tf - t0;
+
+            // Direct callers must not pass a zero-duration step: the 1/h FSAL
+            // scaling below is undefined at h == 0. Drivers short-circuit H == 0
+            // upstream; this guards direct Stepper::step callers (e.g. a
+            // shooting path that collapses a phase duration to zero mid-iteration)
+            // — INTEGRATORS_REVIEW §3.3. Scalar-only: the SuperScalar batch path
+            // relies on the pad-lane time fix (§3.4). Intentionally unconditional
+            // across methods (a zero-duration step is degenerate regardless),
+            // not narrowed to only the methods that reach the 1/h scaling.
+            if constexpr (std::is_floating_point_v<Scalar>) {
+                if (h == Scalar(0.0)) {
+                    throw std::invalid_argument(
+                        "Stepper::step: zero step size (tf == t0); the 1/h FSAL scaling is "
+                        "undefined. Callers must guard against a zero-duration step.");
+                }
+            }
 
             // The previous step's peek freshness is invalidated as soon as
             // we begin a new step — branches below that write f(xf) into
@@ -203,9 +220,9 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
             xf = xtup;
 
             // Update FSAL cache for methods where k_vals.back() = f(xf)·h —
-            // i.e., FSAL (DOPRI54, Tsit5, BS3, BS5) or LastStageIsFxf=true
-            // (DOPRI87). For LastStageIsFxf=false (Vern7/8/9) the extra f(xf)
-            // evaluation happens in the midpoint branch below.
+            // i.e., FSAL (DOPRI54, Tsit5, BS3) or LastStageIsFxf=true (BS5).
+            // For LastStageIsFxf=false methods (DOPRI87, Vern7/8/9) the extra
+            // f(xf) evaluation happens in the midpoint branch below.
             if constexpr (RKData::FSAL || RKData::LastStageIsFxf) {
                 k_fsal_ = k_vals.back() * (Scalar(1.0) / h);
                 fsal_valid_ = true;
@@ -223,8 +240,8 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
 
             // Midpoint with interpolant extra stages (BS5/Tsit5/Vern7/8/9).
             if constexpr (ComputeMidpoint) {
-                // For LastStageIsFxf=false methods (Vern7/8/9), f(xf) is not
-                // in k_vals.back(); evaluate it into k_vals_extra[0] so the
+                // For LastStageIsFxf=false methods (DOPRI87, Vern7/8/9), f(xf)
+                // is not in k_vals.back(); evaluate it into k_vals_extra[0] so the
                 // Bmid sum can pick it up, and seed k_fsal_ with f(xf).
                 if constexpr (!RKData::LastStageIsFxf) {
                     ode.compute(xf, k_vals_extra[0]);

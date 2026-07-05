@@ -8,6 +8,7 @@
 #include <cmath>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 
 namespace tycho::integrators {
 
@@ -27,6 +28,10 @@ namespace tycho::integrators {
 template <class Derived>
 inline void check_state_finite_or_throw(const Eigen::MatrixBase<Derived> &v, double t, double h,
                                         const char *site, int trajectory_idx = -1) {
+    static_assert(std::is_floating_point_v<typename Derived::Scalar>,
+                  "check_state_finite_or_throw operates on scalar (double) state vectors; the "
+                  "static_cast<double> finiteness check is not defined for SuperScalar element "
+                  "types. Use the per-lane finiteness path for batch states.");
     if (v.allFinite())
         return;
     Eigen::Index bad = -1;
@@ -54,8 +59,8 @@ inline void check_state_finite_or_throw(const Eigen::MatrixBase<Derived> &v, dou
 /// RMS matches Julia's `ODE_DEFAULT_NORM`; MAX is the conservative L∞
 /// alternative for stiff problems.
 enum class ErrorNormType {
-    RMS,   ///< Root-mean-square of per-component errors.
-    MAX    ///< Maximum of per-component errors.
+    RMS, ///< Root-mean-square of per-component errors.
+    MAX  ///< Maximum of per-component errors.
 };
 
 /// Compute element-wise scaled residuals per Julia's convention:
@@ -83,6 +88,8 @@ inline double error_norm(const Eigen::MatrixBase<Derived> &res, ErrorNormType ty
         return std::sqrt(res.squaredNorm() / static_cast<double>(n));
     }
     // MAX
+    if (res.size() == 0)
+        return 0.0;
     return res.cwiseAbs().maxCoeff();
 }
 

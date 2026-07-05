@@ -216,11 +216,25 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                 throw std::invalid_argument(
                     "ParallelDriver: incorrectly sized input state on lane " + std::to_string(i));
             }
+            // Reject non-finite tf / x0 up front (INTEGRATORS_REVIEW §1.5).
+            if (!std::isfinite(tfs[i])) {
+                throw std::invalid_argument("ParallelDriver: tf on lane " + std::to_string(i) +
+                                            " is not finite.");
+            }
+            for (int k = 0; k < ode.input_rows(); ++k) {
+                if (!std::isfinite(static_cast<double>(xis[i][k]))) {
+                    throw std::invalid_argument("ParallelDriver: initial state component " +
+                                                std::to_string(k) + " on lane " +
+                                                std::to_string(i) + " is not finite.");
+                }
+            }
             update_control(xis[i]);
 
             double t0 = xis[i][ode.t_var()];
             h_spans[i] = tfs[i] - t0;
 
+            // Compute the nominal step count in double and clamp to max_steps
+            // before any int cast / reserve (INTEGRATORS_REVIEW §1.4).
             int numsteps;
             if (h_spans[i] == 0.0) {
                 hs[i] = 0.0;
@@ -228,10 +242,17 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
             } else if (cfg.adaptive && cfg.use_hairer_wanner_initdt) {
                 hs[i] = estimate_initial_dt(ode, xis[i], tfs[i], abs_tols, rel_tols,
                                             cfg.error_order, cfg.error_norm_type);
-                numsteps = std::max(1, int(std::abs(h_spans[i] / (hs[i] == 0.0 ? 1.0 : hs[i]))));
+                double hh = std::abs(hs[i]);
+                double nominal = std::abs(h_spans[i]) / (hh == 0.0 ? 1.0 : hh);
+                numsteps = std::max(
+                    1, static_cast<int>(std::min(nominal, static_cast<double>(cfg.max_steps))));
             } else {
-                numsteps = int(std::abs(h_spans[i] / cfg.def_step_size)) + 1;
-                hs[i] = 0.9 * (h_spans[i] / double(numsteps));
+                double nominal = std::abs(h_spans[i] / cfg.def_step_size) + 1.0;
+                numsteps = std::max(
+                    1, static_cast<int>(std::min(nominal, static_cast<double>(cfg.max_steps))));
+                // h from the UNCLAMPED nominal so fixed-step resolution matches
+                // def_step_size; only the reserve count (numsteps) is clamped.
+                hs[i] = 0.9 * (h_spans[i] / nominal);
             }
 
             xdotis[i].resize(ode.output_rows());
@@ -384,6 +405,21 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                     xnext_ss.setZero();
                     xnext_est_ss.setZero();
                     xnext_mid_ss.setZero();
+
+                    // Pad unused SIMD lanes [Vmax, width) with lane-0-of-pack
+                    // data — state rows AND the target-time slot — so pad lanes
+                    // compute a valid, nonzero h. Otherwise the unwritten
+                    // tnext_ss pad slot leaves h = tnext - t0 = 0 when lane-0's
+                    // t0 == 0, giving Inf/NaN via the 1/h FSAL scaling
+                    // (INTEGRATORS_REVIEW §3.4). Lane-local today, but a latent
+                    // trap if an ODE body couples lanes.
+                    for (int Vp = Vmax; Vp < SuperScalar::SizeAtCompileTime; ++Vp) {
+                        for (int k = 0; k < ode.input_rows(); ++k)
+                            xi_ss[k][Vp] = xi_ss[k][0];
+                        for (int k = 0; k < ode.output_rows(); ++k)
+                            xdotnext_ss[k][Vp] = xdotnext_ss[k][0];
+                        tnext_ss[Vp] = tnext_ss[0];
+                    }
 
                     // Seed FSAL only for methods where Stepper actually updates
                     // k_fsal_ post-step (FSAL or LastStageIsFxf). For methods

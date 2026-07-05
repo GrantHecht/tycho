@@ -12,8 +12,8 @@
 #include <cmath>
 #include <gtest/gtest.h>
 
-using tycho::integrators::ErrorNormType;
 using tycho::integrators::error_norm;
+using tycho::integrators::ErrorNormType;
 using tycho::integrators::scaled_residuals;
 
 TEST(ErrorNormTest, JuliaResidualUsesMaxOfBeforeAfter) {
@@ -79,4 +79,11 @@ TEST(ErrorNormTest, VectorizedPerComponentTolerances) {
         double denom = atol[i] + std::max(std::abs(u0[i]), std::abs(u1[i])) * rtol[i];
         EXPECT_NEAR(res[i], utilde[i] / denom, 1e-15) << "i=" << i;
     }
+}
+
+// MAX branch must not call maxCoeff() on an empty vector (UB / assert) —
+// INTEGRATORS_REVIEW §3.5.
+TEST(ErrorNormTest, MaxBranchEmptyVectorReturnsZero) {
+    Eigen::VectorXd empty(0);
+    EXPECT_DOUBLE_EQ(error_norm(empty, ErrorNormType::MAX), 0.0);
 }

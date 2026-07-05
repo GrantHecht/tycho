@@ -12,11 +12,13 @@
 #include "tycho/detail/typedefs/eigen_types.h"
 
 #include <Eigen/Core>
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <variant>
 #include <vector>
 
@@ -58,10 +60,9 @@ struct AdaptiveConfig {
                                         std::to_string(max_step_change));
         }
         if (error_order <= 0) {
-            throw std::invalid_argument(
-                "AdaptiveConfig::error_order must be positive "
-                "(enters the q=err^(1/(p+1)) exponent); got " +
-                std::to_string(error_order));
+            throw std::invalid_argument("AdaptiveConfig::error_order must be positive "
+                                        "(enters the q=err^(1/(p+1)) exponent); got " +
+                                        std::to_string(error_order));
         }
         if (!std::isfinite(def_step_size) || def_step_size <= 0.0) {
             throw std::invalid_argument(
@@ -80,7 +81,10 @@ struct AdaptiveConfig {
 /// Template parameters:
 ///   Alg    — IVPAlg enum selecting the Butcher tableau (compile-time)
 ///   DODE   — ODE type
-///   Scalar — numeric type (double by default; SuperScalar for batched use)
+///   Scalar — numeric type. This driver is the SCALAR path (double). The
+///            batched SuperScalar path is ParallelDriver; AdaptiveDriver's body
+///            (1/h FSAL scaling, scalar comparisons) does not compile with a
+///            SuperScalar Scalar.
 ///
 /// State held by the driver is minimal: just the Stepper<Alg> which maintains
 /// the FSAL cache across consecutive integrate() calls. All other inputs
@@ -167,6 +171,23 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
             throw std::invalid_argument("AdaptiveDriver: incorrectly sized input state.");
         }
 
+        // Reject non-finite tf / x0 up front (INTEGRATORS_REVIEW §1.5). A NaN
+        // tf makes every (tnext - tf) comparison false, so the loop would
+        // otherwise run to max_steps before throwing a misleading "stuck"
+        // diagnostic; a non-finite x0 poisons the first derivative.
+        if constexpr (std::is_floating_point_v<Scalar>) {
+            if (!std::isfinite(static_cast<double>(tf))) {
+                throw std::invalid_argument("AdaptiveDriver: tf is not finite (tf=" +
+                                            std::to_string(static_cast<double>(tf)) + ").");
+            }
+            for (Eigen::Index i = 0; i < x.size(); ++i) {
+                if (!std::isfinite(static_cast<double>(x[i]))) {
+                    throw std::invalid_argument("AdaptiveDriver: initial state component " +
+                                                std::to_string(i) + " is not finite.");
+                }
+            }
+        }
+
         // After validation succeeds, invalidate any FSAL state left over from
         // a prior integrate() (including one that threw mid-step). Stale
         // k_fsal_ would otherwise be reused as stage 0 on the first step.
@@ -227,16 +248,33 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
             return xi0;
         }
 
-        // Initial step size.
+        // Initial step size. Compute the nominal step count in double and clamp
+        // to max_steps before any int cast / reserve, so a huge H/step ratio can
+        // neither overflow int (UB) nor drive a multi-GB reserve ahead of the
+        // max_steps guard (INTEGRATORS_REVIEW §1.4).
         Scalar h;
         int numsteps;
-        if (cfg.adaptive && cfg.use_hairer_wanner_initdt) {
-            h = estimate_initial_dt(ode, x, tf, abs_tols, rel_tols, cfg.error_order,
-                                    cfg.error_norm_type);
-            numsteps = std::max(1, int(std::abs(H / (h == Scalar(0.0) ? Scalar(1.0) : h))));
-        } else {
-            numsteps = int(std::abs(H / cfg.def_step_size)) + 1;
-            h = Scalar(0.9) * (H / Scalar(numsteps));
+        {
+            double nominal;
+            if (cfg.adaptive && cfg.use_hairer_wanner_initdt) {
+                h = estimate_initial_dt(ode, x, tf, abs_tols, rel_tols, cfg.error_order,
+                                        cfg.error_norm_type);
+                double hh = std::abs(static_cast<double>(h));
+                nominal = std::abs(static_cast<double>(H)) / (hh == 0.0 ? 1.0 : hh);
+            } else {
+                nominal =
+                    std::abs(static_cast<double>(H) / static_cast<double>(cfg.def_step_size)) + 1.0;
+            }
+            double clamped = std::min(nominal, static_cast<double>(cfg.max_steps));
+            numsteps = std::max(1, static_cast<int>(clamped));
+            if (!(cfg.adaptive && cfg.use_hairer_wanner_initdt)) {
+                // Fixed-step h is computed from the UNCLAMPED nominal so the step
+                // size still matches def_step_size; only the reserve count
+                // (numsteps) is clamped. Using the clamped count here would
+                // silently coarsen a fixed-step run whose nominal count exceeds
+                // max_steps instead of letting the in-loop max_steps guard throw.
+                h = Scalar(0.9) * (H / Scalar(nominal));
+            }
         }
 
         ODEState xi = x;
@@ -306,6 +344,24 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
                     tnext = tf;
                     continueloop = false;
                 }
+            }
+
+            // Zero-progress stall: at large |t| the controller can shrink h below
+            // the representable spacing of t, so `tnext = t + h` rounds back to t
+            // and the step's internal (tnext - t0) would be exactly 0. Route this
+            // to the max_steps rejection diagnostic here — otherwise Stepper::step
+            // would be called with an effective h == 0. That both trips the §3.3
+            // direct-caller guard AND (for !FSAL methods like Vern7) makes no
+            // progress; either way the integration is stuck like the max_steps
+            // case. This fires only on genuine underflow (h resolvable methods
+            // reach the max_steps cap normally with tnext != t).
+            if (continueloop && tnext == xi[ode.t_var()]) {
+                throw std::runtime_error(
+                    "AdaptiveDriver: step size underflowed to zero at large |t| (tnext rounds "
+                    "back to t); the adaptive controller is stuck like the max_steps rejection "
+                    "case (max_steps=" +
+                    std::to_string(cfg.max_steps) +
+                    "). Loosen tolerances or rescale the independent variable.");
             }
 
             xnext.setZero();

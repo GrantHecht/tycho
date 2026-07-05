@@ -158,8 +158,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     /// Type-erased single-step propagator.
     using StepperWrapperType = GenericFunction<SZ_SUM<DODE::IRC, 1>::value, DODE::IRC>;
-    using ControllerType = GenericFunction<-1, -1>;  ///< Type-erased control law function.
-    using StopFuncType = GenericConditional<-1>;      ///< Type-erased stop-condition predicate.
+    using ControllerType = GenericFunction<-1, -1>; ///< Type-erased control law function.
+    using StopFuncType = GenericConditional<-1>;    ///< Type-erased stop-condition predicate.
 
     /// Return type of scalar integrate: final state.
     using IntegRet = ODEState<double>;
@@ -182,9 +182,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     friend oc::CentralShootingDefect<DODE, Integrator>;
 
   protected:
-    DODE ode_; ///< @internal The wrapped ODE.
+    DODE ode_;                    ///< @internal The wrapped ODE.
     bool use_controller_ = false; ///< @internal Whether a user control law is active.
-    ControllerType controller_; ///< @internal Type-erased controller function.
+    ControllerType controller_;   ///< @internal Type-erased controller function.
     // User-provided controller specification: the GenericFunction for the
     // control law and the input-variable locations it reads. Empty when
     // the integrator has no user controller. std::optional encodes the
@@ -194,7 +194,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// @brief User control-law spec (function + input-variable locations); empty when no
     /// controller.
     std::optional<std::pair<ControllerType, Eigen::VectorXi>> controller_spec_;
-    StepperWrapperType stepper_; ///< @internal Type-erased RK stepper.
+    StepperWrapperType stepper_;         ///< @internal Type-erased RK stepper.
     IVPAlg rk_method_ = IVPAlg::DOPRI87; ///< @internal Active RK method.
 
   public:
@@ -502,16 +502,16 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
     /// @internal Embedded error-estimator order p; the step-size exponent is 1/(p+1).
     int error_order_ = 7;
-    double def_step_size_ = 0.1; ///< @internal Initial/fixed step size.
+    double def_step_size_ = 0.1;    ///< @internal Initial/fixed step size.
     double max_step_change_ = 10.0; ///< @internal Max per-step growth ratio |dt_new/dt_old|.
     // Julia-style maxiters cap — safety net against runaway rejection loops or
     // pathological dynamics. The adaptive controller handles step-size control;
     // there is no hard min/max on dt, only a hard cap on iterations.
     int max_steps_ = 1'000'000; ///< @internal Hard cap on total steps before throwing.
-    bool adaptive_ = true; ///< @internal Whether adaptive step-size control is active.
+    bool adaptive_ = true;      ///< @internal Whether adaptive step-size control is active.
     double event_residual_tol_ = 1.0e-6; ///< @internal Event residual tol (units of f).
     double event_abscissa_tol_ = 1.0e-6; ///< @internal Event abscissa tol (units of t).
-    int max_event_iters_ = 10; ///< @internal Max Newton iterations per event refinement.
+    int max_event_iters_ = 10;           ///< @internal Max Newton iterations per event refinement.
     /// @internal
     /// @brief Whether batch calls use the vectorized driver.
     bool vectorize_batch_calls_ = true;
@@ -619,8 +619,8 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// exit.
     struct CounterWriteback {
         const Integrator &integ; ///< @internal Target integrator.
-        int &na; ///< @internal Local accepted-step counter.
-        int &nr; ///< @internal Local rejected-step counter.
+        int &na;                 ///< @internal Local accepted-step counter.
+        int &nr;                 ///< @internal Local rejected-step counter.
         ~CounterWriteback() noexcept {
             integ.naccept_ = na;
             integ.nreject_ = nr;
@@ -635,7 +635,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// @brief RAII guard that sums per-trajectory naccept/nreject vectors into Integrator
     /// counters.
     struct BatchCounterWriteback {
-        const Integrator &integ; ///< @internal Target integrator.
+        const Integrator &integ;      ///< @internal Target integrator.
         const std::vector<int> &nacc; ///< @internal Per-trajectory accepted-step counters.
         const std::vector<int> &nrej; ///< @internal Per-trajectory rejected-step counters.
         ~BatchCounterWriteback() noexcept {
@@ -649,7 +649,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// scope exit.
     struct EventCounterWriteback {
         const Integrator &integ; ///< @internal Target integrator.
-        int &nfailed; ///< @internal Local event-refinement failure counter.
+        int &nfailed;            ///< @internal Local event-refinement failure counter.
         // Counter is exposed via get_failed_event_count(); callers that
         // care about silent nullopt slots should poll that instead.
         ~EventCounterWriteback() noexcept {
@@ -953,18 +953,16 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         // size mismatch would surface as Eigen dimension assertions in
         // debug builds and as out-of-bounds reads in release.
         if (src.abs_tols_.size() != this->ode_.x_vars()) {
-            throw std::invalid_argument(
-                "copy_settings_from: src abs_tols size (" +
-                std::to_string(src.abs_tols_.size()) +
-                ") does not match target ode_.x_vars() (" +
-                std::to_string(this->ode_.x_vars()) + ")");
+            throw std::invalid_argument("copy_settings_from: src abs_tols size (" +
+                                        std::to_string(src.abs_tols_.size()) +
+                                        ") does not match target ode_.x_vars() (" +
+                                        std::to_string(this->ode_.x_vars()) + ")");
         }
         if (src.rel_tols_.size() != this->ode_.x_vars()) {
-            throw std::invalid_argument(
-                "copy_settings_from: src rel_tols size (" +
-                std::to_string(src.rel_tols_.size()) +
-                ") does not match target ode_.x_vars() (" +
-                std::to_string(this->ode_.x_vars()) + ")");
+            throw std::invalid_argument("copy_settings_from: src rel_tols size (" +
+                                        std::to_string(src.rel_tols_.size()) +
+                                        ") does not match target ode_.x_vars() (" +
+                                        std::to_string(this->ode_.x_vars()) + ")");
         }
 
         this->adaptive_ = src.adaptive_;
@@ -1529,6 +1527,12 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         if (x0s.empty()) {
             return {};
         }
+        if (static_cast<Eigen::Index>(x0s.size()) != tfs.size()) {
+            throw std::invalid_argument(
+                "Integrator::integrate: x0s and tfs must have the same size; got " +
+                std::to_string(x0s.size()) + " states and " + std::to_string(tfs.size()) +
+                " final times.");
+        }
         const int n = static_cast<int>(x0s.size());
         std::vector<ControllerVariant> ctrls = this->make_worker_controllers(n);
         std::vector<int> nacc(n, 0), nrej(n, 0);
@@ -1557,6 +1561,12 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                                       const Eigen::VectorXd &tfs) const {
         if (x0s.empty()) {
             return {};
+        }
+        if (static_cast<Eigen::Index>(x0s.size()) != tfs.size()) {
+            throw std::invalid_argument(
+                "Integrator::integrate_stm: x0s and tfs must have the same size; got " +
+                std::to_string(x0s.size()) + " states and " + std::to_string(tfs.size()) +
+                " final times.");
         }
         const int n = static_cast<int>(x0s.size());
         std::vector<ControllerVariant> ctrls = this->make_worker_controllers(n);
@@ -1595,6 +1605,18 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                    const std::vector<ODEState<double>> &lfs) const {
         if (x0s.empty()) {
             return {};
+        }
+        if (static_cast<Eigen::Index>(x0s.size()) != tfs.size()) {
+            throw std::invalid_argument(
+                "Integrator::integrate_stm2: x0s and tfs must have the same size; got " +
+                std::to_string(x0s.size()) + " states and " + std::to_string(tfs.size()) +
+                " final times.");
+        }
+        if (x0s.size() != lfs.size()) {
+            throw std::invalid_argument(
+                "Integrator::integrate_stm2: x0s and lfs must have the same size; got " +
+                std::to_string(x0s.size()) + " states and " + std::to_string(lfs.size()) +
+                " adjoint seeds.");
         }
         const int n = static_cast<int>(x0s.size());
         std::vector<ControllerVariant> ctrls = this->make_worker_controllers(n);
@@ -1830,6 +1852,12 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// Parallel batch integrate. Accept/reject counters are summed across
     /// lanes into `get_naccept()` / `get_nreject()` on scope exit via
     /// BatchCounterWriteback (RAII-safe on unwind).
+    ///
+    /// @note The parallel dispatch calls the user ODE / control / event
+    ///       functions concurrently across worker threads. Those callables must
+    ///       be reentrant (thread-safe); there is no thread_safe() gating. Run a
+    ///       non-reentrant user function through the serial integrate/
+    ///       integrate_stm batch entry points instead (INTEGRATORS_REVIEW §3.5).
     std::vector<IntegRet> integrate_parallel(const std::vector<ODEState<double>> &x0s,
                                              const Eigen::VectorXd &tfs, int n_parts) {
         const int n = static_cast<int>(x0s.size());
@@ -2124,9 +2152,11 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// via `integrate_stm`. Non-threadpool fallback runs single-threaded
     /// and accumulates the full segmented total into the members.
     STMRet integrate_stm_parallel(const ODEState<double> &x0, double tf, int n_parts) {
-        if (n_parts < 0) {
-            throw std::invalid_argument("integrate_stm_parallel: n_parts must be >= 0; got " +
-                                        std::to_string(n_parts));
+        if (n_parts < 1) {
+            throw std::invalid_argument(
+                "integrate_stm_parallel: n_parts must be >= 1; got " + std::to_string(n_parts) +
+                ". n_parts == 0 would return the initial state with an identity STM without "
+                "integrating to tf.");
         }
         VectorX<double> ts = VectorX<double>::LinSpaced(n_parts + 1, x0[this->ode_.t_var()], tf);
         std::vector<ODEState<double>> xs(n_parts + 1);

@@ -394,6 +394,10 @@ set(TYCHO_METHOD_TEST_SOURCES
     integrators/test_event_directions.cpp
     integrators/test_event_boundary_crossing.cpp
     integrators/test_event_tol_split.cpp
+    integrators/test_batch_size_validation.cpp
+    integrators/test_integrate_input_validation.cpp
+    integrators/test_zero_step_guard.cpp
+    integrators/test_superscalar_pad_lanes.cpp
 )
 tycho_add_test_executable(tycho_method_tests TYCHO_METHOD_TEST_SOURCES)
 target_include_directories(tycho_method_tests PRIVATE
