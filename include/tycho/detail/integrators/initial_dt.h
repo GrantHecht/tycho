@@ -29,6 +29,20 @@ namespace tycho::integrators {
 ///   dt  = tdir · min(100·dt₀, dt₁)
 ///
 /// Direction: sign(tf - t0). Atol/Rtol are per-component.
+///
+/// @note Exponent convention — matches OrdinaryDiffEq.jl, NOT the Hairer
+///   textbook. The `order` argument passed by the drivers is the *embedded*
+///   error-estimator order (ErrorOrder = p − 1 with p the method order), so the
+///   exponent `1/(order+1)` equals `1/p`. OrdinaryDiffEq's `ode_determine_initdt`
+///   uses `dt1 = (0.01/max(d1,d2))^(1/order)` with `order =
+///   get_current_alg_order(alg) = alg_order = p`, i.e. also `1/p`. So this
+///   implementation is exponent-identical to OrdinaryDiffEq (DOPRI54 → 1/5).
+///   Hairer, Nørsett & Wanner (II.4.14) print `1/(p+1)`; OrdinaryDiffEq
+///   deliberately deviates to `1/p`, and Tycho follows OrdinaryDiffEq. Do NOT
+///   "correct" this to `1/(order+2)`: it enlarges the first step and drives
+///   stiff/bang-bang problems (e.g. GoddardRocket) into a non-recovering
+///   rejection loop. (A fuller DiffEq alignment would also clamp dt to
+///   dtmax=|tf−t0| and dtmin, which this port omits — harmless in practice.)
 template <class DODE, class InputVec, class TolVec>
 double estimate_initial_dt(const DODE &ode, const InputVec &x0, double tf, const TolVec &abs_tols,
                            const TolVec &rel_tols, int order, ErrorNormType norm_type) {
