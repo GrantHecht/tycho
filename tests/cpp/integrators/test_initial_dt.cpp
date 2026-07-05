@@ -57,8 +57,7 @@ TEST(InitialDtTest, ZeroTolsOnZeroStateThrowsFromHWInitialDt) {
     Eigen::VectorXd atol = Eigen::VectorXd::Zero(2);
     Eigen::VectorXd rtol = Eigen::VectorXd::Zero(2);
     try {
-        (void)estimate_initial_dt(sho, x0, /*tf=*/1.0, atol, rtol, /*order=*/5,
-                                  ErrorNormType::RMS);
+        (void)estimate_initial_dt(sho, x0, /*tf=*/1.0, atol, rtol, /*order=*/5, ErrorNormType::RMS);
         FAIL() << "estimate_initial_dt should have thrown on degenerate scaling";
     } catch (const std::runtime_error &e) {
         const std::string msg = e.what();
@@ -170,4 +169,22 @@ TEST(InitialDtTest, HairerWannerOff_FixedStepReachesTf) {
     const double r_final = std::sqrt(xf[0] * xf[0] + xf[1] * xf[1] + xf[2] * xf[2]);
     EXPECT_NEAR(r_final, r0, 1.0) << "circular LEO radius should be preserved over tf=5s";
     EXPECT_NE(xf[0], x0[0]) << "state must have evolved";
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// dtmax clamp (OrdinaryDiffEq parity): the returned first step must never
+// exceed the integration span |tf - t0|. Over a tiny span the well-conditioned
+// SHO estimate (~5e-3) would otherwise overshoot the whole interval; it must be
+// clamped to the span.
+///////////////////////////////////////////////////////////////////////////////
+TEST(InitialDtClamp, DtmaxClampsToSpan) {
+    TychoTest::SHO sho(0.0);
+    Eigen::Vector3d x0;
+    x0 << 1.0, 0.0, 0.0;
+    Eigen::VectorXd atol = Eigen::VectorXd::Constant(2, 1e-6);
+    Eigen::VectorXd rtol = Eigen::VectorXd::Constant(2, 1e-6);
+    const double tf = 1.0e-4; // span far smaller than the unclamped estimate
+    const double dt = estimate_initial_dt(sho, x0, tf, atol, rtol, /*order=*/4, ErrorNormType::RMS);
+    EXPECT_GT(dt, 0.0);
+    EXPECT_LE(dt, tf) << "first step must be clamped to the span dtmax = |tf - t0|";
 }

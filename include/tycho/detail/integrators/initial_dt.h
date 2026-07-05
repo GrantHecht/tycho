@@ -8,6 +8,7 @@
 #include <Eigen/Core>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace tycho::integrators {
 
@@ -41,8 +42,15 @@ namespace tycho::integrators {
 ///   deliberately deviates to `1/p`, and Tycho follows OrdinaryDiffEq. Do NOT
 ///   "correct" this to `1/(order+2)`: it enlarges the first step and drives
 ///   stiff/bang-bang problems (e.g. GoddardRocket) into a non-recovering
-///   rejection loop. (A fuller DiffEq alignment would also clamp dt to
-///   dtmax=|tf−t0| and dtmin, which this port omits — harmless in practice.)
+///   rejection loop.
+///
+/// @note dtmax/dtmin clamping — matches OrdinaryDiffEq's `ode_determine_initdt`:
+///   `dt₀ = min(dt₀, dtmax)`, and the returned magnitude is
+///   `max(dtmin, min(100·dt₀, dt₁, dtmax))`. `dtmax = |tf − t0|` (OrdinaryDiffEq's
+///   default: the integration span) so the first step never exceeds the whole
+///   interval; `dtmin = max(eps(t0), eps(tf))` (the ULP at the endpoints) floors
+///   it against sub-representable steps. Both are computed in positive-magnitude
+///   space (like the rest of this routine); `tdir` is applied at return.
 template <class DODE, class InputVec, class TolVec>
 double estimate_initial_dt(const DODE &ode, const InputVec &x0, double tf, const TolVec &abs_tols,
                            const TolVec &rel_tols, int order, ErrorNormType norm_type) {
@@ -50,6 +58,17 @@ double estimate_initial_dt(const DODE &ode, const InputVec &x0, double tf, const
     const double tdir = (tf >= t0) ? 1.0 : -1.0;
     const int n = ode.x_vars();
     constexpr double smalldt = 1.0e-6;
+
+    // dtmax/dtmin clamps (OrdinaryDiffEq parity, positive-magnitude space):
+    // dtmax = |tf - t0| (the integration span — OrdinaryDiffEq's default dtmax);
+    // dtmin = max(eps(t0), eps(tf)) (ULP at the endpoints, == Julia's
+    // prob2dtmin with use_end_time). tdir is applied to the final magnitude.
+    const double dtmax = std::abs(tf - t0);
+    const auto ulp = [](double t) {
+        const double a = std::abs(t);
+        return std::nextafter(a, std::numeric_limits<double>::infinity()) - a;
+    };
+    const double dtmin = std::max(ulp(t0), ulp(tf));
 
     Eigen::VectorXd sk(n);
     for (int i = 0; i < n; ++i) {
@@ -76,6 +95,9 @@ double estimate_initial_dt(const DODE &ode, const InputVec &x0, double tf, const
     } else {
         dt0 = 0.01 * d0 / d1;
     }
+    // Clamp dt0 to dtmax before the trial step (matches OrdinaryDiffEq, which
+    // clamps prior to evaluating f at the trial point x1).
+    dt0 = std::min(dt0, dtmax);
 
     typename DODE::template Input<double> x1 = x0;
     for (int i = 0; i < n; ++i) {
@@ -102,7 +124,7 @@ double estimate_initial_dt(const DODE &ode, const InputVec &x0, double tf, const
         dt1 = std::pow(0.01 / max_d1d2, 1.0 / (static_cast<double>(order) + 1.0));
     }
 
-    double dt = std::min(100.0 * dt0, dt1);
+    double dt = std::max(dtmin, std::min({100.0 * dt0, dt1, dtmax}));
     double signed_dt = tdir * dt;
     if (!std::isfinite(signed_dt) || signed_dt == 0.0) {
         // Non-finite or exactly-zero return is almost always the user setting
