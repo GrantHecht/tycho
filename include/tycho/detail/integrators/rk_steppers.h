@@ -500,25 +500,45 @@ template <class DODE, IVPAlg RKOp> struct RKStepper_Impl {
         }
     }
 
+    /// @internal Dependent-false for the static_asserts below: a bare
+    /// `static_assert(false)` in a constexpr-if else branch is ill-formed
+    /// (evaluated even when the branch is discarded), so the condition must
+    /// depend on a template parameter to fire only on instantiation.
+    template <class...> static constexpr bool kMakeStateUnsupported = false;
+
     /// @internal
     /// @brief Assembles a full ODE input vector [x0, ti, u, p] from separate components.
+    ///
+    /// Only (UV >= 0, PV == 0) ODEs are supported: the collocation stage-chain
+    /// transcription does not thread parameter-dependent dynamics (DODE::PV > 0)
+    /// or fully-dynamic control sizes (DODE::UV == -1). Those combinations
+    /// static_assert with a clear message rather than falling off the end and
+    /// returning `void` — which previously produced a wall of template errors
+    /// far from the cause (INTEGRATORS_REVIEW §1.6).
     template <class Xtype, class Titype, class Utype, class Ptype>
     static auto make_state(const DODE &ode, const Xtype &x0, const Titype &ti, const Utype &u,
                            const Ptype &p) {
         if constexpr (DODE::UV > 0) {
-            if constexpr (DODE::PV > 0) {
-            } else if constexpr (DODE::PV == 0) {
+            if constexpr (DODE::PV == 0) {
                 return StackedOutputs{x0, ti, u};
+            } else {
+                static_assert(kMakeStateUnsupported<Xtype>,
+                              "make_state: parameter-dependent dynamics (DODE::PV > 0) are not "
+                              "supported in the collocation stage-chain transcription; only "
+                              "(UV >= 0, PV == 0) ODEs route through compute_xf/make_state.");
             }
         } else if constexpr (DODE::UV == 0) {
-            if constexpr (DODE::PV > 0) {
-            } else if constexpr (DODE::PV == 0) {
+            if constexpr (DODE::PV == 0) {
                 return StackedOutputs{x0, ti};
+            } else {
+                static_assert(kMakeStateUnsupported<Xtype>,
+                              "make_state: parameter-dependent dynamics (DODE::PV > 0) are not "
+                              "supported in the collocation stage-chain transcription.");
             }
-        } else if constexpr (DODE::UV == -1) {
-            if constexpr (DODE::PV > 0) {
-            } else if constexpr (DODE::PV == 0) {
-            }
+        } else {
+            static_assert(kMakeStateUnsupported<Xtype>,
+                          "make_state: fully-dynamic control size (DODE::UV == -1) is not "
+                          "supported in the collocation stage-chain transcription.");
         }
     }
 
