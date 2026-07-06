@@ -25,13 +25,14 @@ using tycho::integrators::ErrorNormType;
 using tycho::integrators::estimate_initial_dt;
 
 ///////////////////////////////////////////////////////////////////////////////
-// Tiny-derivative branch: when both d₁ and d₂ are ≤ 1e-15, the algorithm
-// must fall back to dt₁ = max(smalldt, dt₀·1e-3) instead of
-// (0.01/max(d₁,d₂))^(1/(order+1)) — dividing by ~0 would otherwise produce
-// infinity. Trigger via the SHO ODE started at the fixed point x=0, v=0,
-// where f(x) ≡ 0 identically. Expected dt₀ = smalldt = 1e-6.
+// Constant-derivative early-out (OrdinaryDiffEq parity): when the trial step
+// reproduces f₀ exactly, OrdinaryDiffEq short-circuits with
+// `f₀ == f₁ && return tdir·max(dtmin, 100·dt₀)`. Trigger via the SHO ODE at the
+// fixed point x=0, v=0 where f ≡ 0: the d₀/d₁ < 1e-5 branch sets dt₀ = smalldt =
+// 1e-6, the trial step leaves the state unchanged, f₁ == f₀, and the early-out
+// returns 100·dt₀ = 1e-4 (NOT the pre-parity 1e-6, and NOT clamped to dtmax).
 ///////////////////////////////////////////////////////////////////////////////
-TEST(InitialDtTest, TinyDerivativeBranchFallsBackToSmallDt) {
+TEST(InitialDtTest, ConstDerivativeStartReturnsHundredDt0) {
     TychoTest::SHO sho(0.0);
     Eigen::Vector3d x0;
     x0 << 0.0, 0.0, 0.0; // at fixed point — f(x0) = (v=0, -x=0) = 0
@@ -39,7 +40,7 @@ TEST(InitialDtTest, TinyDerivativeBranchFallsBackToSmallDt) {
     Eigen::VectorXd rtol = Eigen::VectorXd::Constant(2, 1e-13);
     double tf = 1.0;
     double dt0 = estimate_initial_dt(sho, x0, tf, atol, rtol, /*order=*/5, ErrorNormType::RMS);
-    EXPECT_NEAR(dt0, 1e-6, 1e-9) << "tiny-derivative branch should return smalldt = 1e-6";
+    EXPECT_NEAR(dt0, 1e-4, 1e-7) << "f₀==f₁ early-out returns 100·dt₀ = 100·smalldt = 1e-4";
     EXPECT_GT(dt0, 0.0) << "dt must remain finite and positive for forward integration";
 }
 
@@ -66,18 +67,19 @@ TEST(InitialDtTest, ZeroTolsOnZeroStateThrowsFromHWInitialDt) {
     }
 }
 
-// Regression for the dtmin-floor silent-failure hole: a degenerate per-component
-// scaling on a NON-first component under MAX norm slips past both the driver's
-// abs_tol+rel_tol>0 precheck (rel_tol>0 satisfies it, yet sk[i]=atol+|x0|*rtol
-// still underflows to 0 because x0[i]==0) AND the f0/f1 finiteness checks (the
-// state stays finite). The raw HW estimate collapses to 0/NaN; before the fix
-// the new std::max(dtmin, …) floor laundered that into a silent ~1-ULP step,
-// masking the tolerance misconfiguration. The guard must now run on the RAW
-// (pre-floor) estimate and throw. Component 1 (v) carries the zero scaling so
-// its NaN is dropped by MAX maxCoeff (not first element) — the exact path that
-// evaded the guard. Contrast ZeroTolsOnZeroStateThrowsFromHWInitialDt above,
-// which uses RMS (NaN propagates and trips an earlier check instead).
-TEST(InitialDtTest, MaxNormDegenerateScalingThrowsNotSilentTinyStep) {
+// Degenerate per-component scaling must return a finite dtmin-floored step, NOT
+// throw — multiple-shooting robustness (OrdinaryDiffEq parity). Component 1 (v)
+// carries a zero scaling: atol[1]=0 and x0[1]=0 make sk[1]=atol+|v0|*rtol=0, which
+// still passes the driver's abs+rel>0 precheck (rel[1]>0) yet drives the raw HW
+// estimate to 0. The dynamics stay finite (f₀=f₁ here), so the estimator must
+// coerce the degenerate estimate to the dtmin floor and return a tiny finite step
+// the integrator can take — an intermediate PSIOPT / multiple-shooting iterate
+// must be recoverable, not aborted. Uses MAX norm so the sk[1]=0 NaN is dropped
+// (comp 1 is not the max element) rather than propagating; either way the result
+// must be finite and non-throwing. Contrast ZeroTolsOnZeroStateThrowsFromHWInitialDt,
+// where the DYNAMICS themselves go NaN (f(x1) at a NaN state) — that DOES throw,
+// because NaN dynamics are unrecoverable regardless.
+TEST(InitialDtTest, DegenerateScalingReturnsFiniteFloorNotThrow) {
     TychoTest::SHO sho(0.0);
     Eigen::Vector3d x0;
     x0 << 1.0, 0.0, 0.0; // x=1 (finite scaling), v=0 (zero scaling on comp 1)
@@ -86,15 +88,13 @@ TEST(InitialDtTest, MaxNormDegenerateScalingThrowsNotSilentTinyStep) {
     Eigen::VectorXd rtol(2);
     rtol << 1e-13, 1e-6; // comp 1 rel_tol > 0 → passes the driver abs+rel>0 gate,
                          // but sk[1] = 0 + |v0|*rtol[1] = 0 since v0 == 0.
-    try {
-        (void)estimate_initial_dt(sho, x0, /*tf=*/1.0, atol, rtol, /*order=*/5,
-                                  ErrorNormType::MAX);
-        FAIL() << "degenerate MAX-norm scaling must throw, not return a silent tiny step";
-    } catch (const std::runtime_error &e) {
-        const std::string msg = e.what();
-        EXPECT_NE(msg.find("Hairer-Wanner initial-dt"), std::string::npos)
-            << "throw must originate in the HW initdt path (not be masked by dtmin): " << msg;
-    }
+    double dt = 0.0;
+    ASSERT_NO_THROW(dt = estimate_initial_dt(sho, x0, /*tf=*/1.0, atol, rtol, /*order=*/5,
+                                             ErrorNormType::MAX))
+        << "degenerate scaling must not abort a recoverable (PSIOPT) integration";
+    EXPECT_TRUE(std::isfinite(dt)) << "returned step must be finite (never NaN/Inf)";
+    EXPECT_GT(dt, 0.0) << "forward integration must return a positive step";
+    EXPECT_LE(dt, 1.0) << "step must not exceed the span";
 }
 
 TEST(InitialDtTest, KeplerLEOYieldsReasonableFirstStep) {
