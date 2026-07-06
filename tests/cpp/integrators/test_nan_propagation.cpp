@@ -1,18 +1,24 @@
 ///////////////////////////////////////////////////////////////////////////////
-// NaN propagation guard tests
+// NaN propagation / recovery tests
 //
-// Pins the unconditional finite-state checks added to integrate_impl
-// (scalar + SuperScalar batch) and estimate_initial_dt. Without these
-// guards, a NaN-producing ODE silently drives the adaptive loop into
-// progressive step shrinkage until max_steps trips, surfacing only as a
-// generic "may be stuck" message. With the guards, the user sees an
-// immediate diagnostic naming the failing site, time, step size, and
-// (for batch) the trajectory index.
+// Covers how the integrator responds to non-finite state along two axes:
+//
+//   * Unrecoverable NaN DYNAMICS at the initial point (estimate_initial_dt) and
+//     in fixed-step mode still THROW with a site-naming diagnostic — a NaN at x0
+//     cannot be resolved by step control, and OrdinaryDiffEq errors here too.
+//
+//   * A non-finite error norm / midpoint in the ADAPTIVE loop is treated as a
+//     rejected step: the driver shrinks h and retries (OrdinaryDiffEq parity —
+//     EEst == NaN fails EEst <= 1). A *transient* singularity resolves at smaller
+//     h and the integration completes (PSIOPT / multiple-shooting recovery); a
+//     *persistent* singularity (state never moves) reject-shrinks h to underflow
+//     and the zero-progress stall guard throws a bounded, specific diagnostic.
 //
 // Strategy: drive the Kepler dynamics at the origin (r = 0). Kepler's
 // acceleration is -mu * r / |r|^3, which evaluates to 0/0 = NaN when
 // r is the zero vector — a real, reachable ill-defined state for this
-// dynamics, not a synthetic injection.
+// dynamics, not a synthetic injection. A time-keyed NaN SHO injects a
+// transient (single-time) NaN for the recovery cases.
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "integrator_test_utils.h"
@@ -129,11 +135,18 @@ TEST_P(NanPropagationControllerTest, HairerWannerThrowsOnOriginKepler) {
     }
 }
 
-// Parametrized scalar-adaptive path: HW off + adaptive on + pathological
-// dynamics. Exercises the err_norm / xnext finite checks under each controller
-// and proves PI/PID history state (errold_, err_[], qold_) does not cause the
-// guard to fail silently.
-TEST_P(NanPropagationControllerTest, ScalarAdaptiveThrowsOnOriginKepler) {
+// Parametrized scalar-adaptive path: HW off + adaptive on + a PERSISTENT
+// singularity (Kepler at the origin, where acc = -mu*r/|r|^3 = 0/0 = NaN for ANY
+// step size). The non-finite reject-and-shrink path — which lets a *transient*
+// NaN recover at smaller h — cannot resolve a persistent singularity: xi never
+// moves (rejected steps don't advance the state), so every retry re-produces the
+// NaN, h shrinks until it underflows the representable spacing of t, and the
+// zero-progress stall guard fires. This confirms the failure is bounded and
+// diagnosed (not an infinite loop or silent hang) under every controller. The
+// non-finite reject bypasses the controller (it can't derive a factor from a
+// NaN EEst), so all three controllers behave identically here — the test proves
+// PI/PID history state does not change the terminal diagnostic.
+TEST_P(NanPropagationControllerTest, ScalarAdaptivePersistentSingularityStalls) {
     astro::Kepler kep(kMu);
     Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI87, 1.0);
     integ.set_controller(GetParam());
@@ -147,13 +160,11 @@ TEST_P(NanPropagationControllerTest, ScalarAdaptiveThrowsOnOriginKepler) {
         FAIL() << "Expected runtime_error under controller " << static_cast<int>(GetParam());
     } catch (const std::runtime_error &e) {
         std::string msg(e.what());
-        // Either xnext-finite check fires first, or err_norm guard. Both are
-        // acceptable exit points — neither should leak past to a max_steps bail.
-        const bool hit_xnext = msg.find("Non-finite state") != std::string::npos;
-        const bool hit_errnorm = msg.find("Non-finite error norm") != std::string::npos;
-        EXPECT_TRUE(hit_xnext || hit_errnorm) << "Expected xnext or err_norm guard; got: " << msg;
-        EXPECT_EQ(msg.find("max_steps"), std::string::npos)
-            << "Must not fall through to max_steps diagnostic: " << msg;
+        // A persistent singularity reject-shrinks h to underflow, then the
+        // zero-progress stall guard throws the "underflowed" diagnostic (which
+        // also names a singularity as a possible cause).
+        EXPECT_NE(msg.find("underflowed"), std::string::npos)
+            << "persistent singularity should reject-shrink to a stall diagnostic; got: " << msg;
     } catch (...) {
         FAIL() << "Expected std::runtime_error.";
     }
@@ -273,19 +284,20 @@ struct TimeKeyedNaNSHO
 
 } // namespace
 
-// A.1 — BS5 with NaN injected at t = h/2 corrupts xnext_mid via the extra-stage
-// compute (BS5 ExtraC[0] = 1/2). Standard stages of BS5 evaluate at c values
-// {0, 1/6, 2/9, 3/7, 2/3, 3/4, 1, 1, 1} — none equals 1/2 — so xnext / xnext_est
-// stay finite, err_norm guard does NOT fire, and the new midpoint guard inside
-// the adaptive branch catches the NaN-laced xnext_mid.
-TEST_F(NanPropagationTest, AdaptiveMidpointStateGuardFiresOnExtraStageNaN) {
-    // Initial step under HW-disabled adaptive: with def_step_size = 0.1 and
-    // tf = 0.1, AdaptiveDriver computes h = 0.9 * H/numsteps = 0.9 * 0.1/2 =
-    // 0.045 (numsteps = abs(0.1/0.1)+1 = 2). First step's midpoint is at
-    // t = 0 + 0.045/2 = 0.0225. BS5's extra stage 0 fires at the same time.
-    //
-    // Loose tolerances ensure step 1 is accepted on first try (no controller
-    // rejection that would shrink h and shift the midpoint off the trigger).
+// A.1 — a TRANSIENT midpoint NaN must RECOVER via reject-and-shrink, not abort.
+// BS5's extra stage (ExtraC[0] = 1/2) evaluates at the step midpoint; a NaN
+// injected at the single time t = h/2 corrupts xnext_mid while xnext / xnext_est
+// (standard stages, c values {0, 1/6, 2/9, 3/7, 2/3, 3/4, 1, 1, 1} — none 1/2)
+// stay finite, so the err_norm guard does not fire and the adaptive midpoint
+// finiteness check sees the NaN. Under the reject-and-shrink policy this rejects
+// the step and shrinks h, moving every evaluation point off the single trigger
+// time; the integration then completes past t = 0.0225 and never revisits it.
+// This is the transient-singularity recovery the PSIOPT / multiple-shooting use
+// case needs — the integrator must not throw.
+TEST_F(NanPropagationTest, AdaptiveTransientMidpointNaNRecoversByShrinking) {
+    // First step (HW off, def_step 0.1, tf 0.1): h = 0.9 * H/numsteps = 0.045,
+    // midpoint at t = 0.0225 = BS5 extra-stage time — the injected NaN. Loose
+    // tolerances so the only rejection is the NaN one.
     constexpr double kFirstStepMidpoint = 0.0225;
     TimeKeyedNaNSHO ode(kFirstStepMidpoint);
     Integrator<TimeKeyedNaNSHO> integ(ode, IVPAlg::BS5, 0.1);
@@ -297,22 +309,10 @@ TEST_F(NanPropagationTest, AdaptiveMidpointStateGuardFiresOnExtraStageNaN) {
     x0 << 1.0, 0.0, 0.0;
     std::vector<Integrator<TimeKeyedNaNSHO>::EventPack> events;
 
-    try {
-        (void)integ.integrate_dense(x0, 0.1, events, /*alloutput=*/true);
-        FAIL() << "Expected runtime_error from adaptive midpoint guard, got success.";
-    } catch (const std::runtime_error &e) {
-        std::string msg(e.what());
-        EXPECT_NE(msg.find("Non-finite state"), std::string::npos)
-            << "Diagnostic should mention 'Non-finite state'; got: " << msg;
-        EXPECT_NE(msg.find("AdaptiveDriver::stepper.step (midpoint)"), std::string::npos)
-            << "Should identify the new adaptive-branch midpoint guard; got: " << msg;
-        EXPECT_EQ(msg.find("Non-finite error norm"), std::string::npos)
-            << "err_norm guard must NOT fire here — extra-stage NaN does not flow into "
-               "xnext or xnext_est; got: "
-            << msg;
-    } catch (...) {
-        FAIL() << "Expected std::runtime_error, got a different exception type.";
-    }
+    EXPECT_NO_THROW({
+        auto traj = integ.integrate_dense(x0, 0.1, events, /*alloutput=*/true);
+        (void)traj;
+    }) << "a transient midpoint NaN must recover by rejecting and shrinking h, not throw";
 }
 
 // A.2 — DOPRI87 with NaN injected at t = h/2 hits ONLY the post-step

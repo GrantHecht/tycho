@@ -985,6 +985,50 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
   protected:
     /// @internal
+    /// @brief Method order p for a user-selectable algorithm (p = ErrorOrder + 1;
+    /// see the per-alg error_order assignments in set_method).
+    static int method_order_for(IVPAlg alg) {
+        switch (alg) {
+        case IVPAlg::DOPRI54:
+            return 5;
+        case IVPAlg::DOPRI87:
+            return 8;
+        case IVPAlg::Tsit5:
+            return 5;
+        case IVPAlg::BS3:
+            return 3;
+        case IVPAlg::BS5:
+            return 5;
+        case IVPAlg::Vern7:
+            return 7;
+        case IVPAlg::Vern8:
+            return 8;
+        case IVPAlg::Vern9:
+            return 9;
+        default:
+            throw std::logic_error("method_order_for: algorithm not user-selectable");
+        }
+    }
+
+    /// @internal
+    /// @brief Per-method Lund PI/PID gains (β1, β2), matching OrdinaryDiffEq's
+    /// `beta2_default(alg)` and `beta1_default(alg, β2)`. Generic: β2 = 2/(5·order),
+    /// β1 = 1/order − 3·β2/4 (which equals 7/(10·order)). DOPRI54 (DP5) overrides
+    /// β2 = 4/100, giving β1 = 17/100. Used for off-preference PI and for PID
+    /// defaults so both track the method order rather than the struct-default
+    /// order-5 values.
+    static void default_lund_betas_for(IVPAlg alg, double &beta1, double &beta2) {
+        if (alg == IVPAlg::DOPRI54) {
+            beta1 = 17.0 / 100.0;
+            beta2 = 4.0 / 100.0;
+            return;
+        }
+        const double order = static_cast<double>(method_order_for(alg));
+        beta2 = 2.0 / (5.0 * order);
+        beta1 = 1.0 / order - 3.0 * beta2 / 4.0;
+    }
+
+    /// @internal
     /// @brief Returns the default step-size controller variant with per-method tuned parameters.
     static ControllerVariant default_controller_for(IVPAlg alg) {
         switch (alg) {
@@ -1055,12 +1099,25 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
             if (std::holds_alternative<IController>(preferred))
                 return preferred;
             return IController{};
-        case IVPController::PI:
+        case IVPController::PI: {
             if (std::holds_alternative<PIController>(preferred))
                 return preferred;
-            return PIController{};
-        case IVPController::PID:
-            return PIDController{};
+            // Off-preference PI (e.g. DOPRI87, whose default is I): use the
+            // order-scaled Lund gains for THIS method's order, not the
+            // struct-default order-5 betas.
+            PIController c;
+            default_lund_betas_for(alg, c.beta1_, c.beta2_);
+            return c;
+        }
+        case IVPController::PID: {
+            // OrdinaryDiffEq's PID defaults reuse beta1_default/beta2_default —
+            // the same order-scaled Lund pair as PI — with β3 = 0, NOT the
+            // pure-integral (1, 0, 0) struct default.
+            PIDController c;
+            default_lund_betas_for(alg, c.beta1_, c.beta2_);
+            c.beta3_ = 0.0;
+            return c;
+        }
         }
         // Unreachable — switch is exhaustive over IVPController.
         throw std::logic_error("controller_defaults_for: unknown IVPController kind");

@@ -388,22 +388,28 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                 }
 
                 // Zero-progress stall — diagnostic parity with AdaptiveDriver
-                // (§3.3). At large |t| the controller can shrink hs[i] below the
-                // ULP of t, so tnext = t + h rounds back to t and the SIMD step
-                // would run with an effective h == 0: FSAL/LastStageIsFxf methods
-                // poison the 1/h FSAL cache (a later, ODE-blaming "non-finite
-                // state" throw one step on), non-FSAL methods silently make no
-                // progress. Throw here with the same specific, actionable message
-                // regardless of method family. Fires only on genuine underflow
-                // (the final clamped step above sets continueloops[i] = false).
+                // (§3.3). hs[i] has shrunk below the ULP of t, so tnext = t + h
+                // rounds back to t and the SIMD step would run with an effective
+                // h == 0: FSAL/LastStageIsFxf methods poison the 1/h FSAL cache (a
+                // later, ODE-blaming "non-finite state" throw one step on),
+                // non-FSAL methods silently make no progress. Two causes reach
+                // here: large |t| (h < ULP(t)) or the non-finite reject-and-shrink
+                // path driving h to underflow on a lane whose state does not
+                // resolve under step reduction. Throw here with the same specific
+                // message regardless of method family. Fires only on genuine
+                // underflow (the final clamped step above sets continueloops[i] =
+                // false).
                 if (continueloops[i] && tnext == xis[i][ode.t_var()]) {
                     throw std::runtime_error(
                         "ParallelDriver: step size underflowed to zero on trajectory " +
                         std::to_string(i) +
-                        " at large |t| (tnext rounds back to t); the adaptive controller is stuck "
-                        "like the max_steps rejection case (max_steps=" +
+                        " (tnext rounds back to t — no progress possible). Either |t| is too large "
+                        "for the step resolution, or the state repeatedly produced non-finite "
+                        "(NaN/Inf) derivatives that did not resolve under step reduction (a "
+                        "singularity). max_steps=" +
                         std::to_string(cfg.max_steps) +
-                        "). Loosen tolerances or rescale the independent variable.");
+                        ". Rescale the independent variable, loosen tolerances, or check the "
+                        "dynamics for singularities.");
                 }
 
                 for (int k = 0; k < ode.input_rows(); ++k) {
@@ -499,34 +505,57 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                                                         xnext.head(u_x_vars), abs_tols, rel_tols);
                             double err_norm = error_norm(res, cfg.error_norm_type);
 
-                            // Single-chokepoint per-lane finite guard.
-                            // Non-finite err_norm subsumes both xnext and
-                            // xnext_est NaN checks (NaN in either flows into
-                            // utilde/res/norm). One scalar isfinite per lane
-                            // replaces the previous full allFinite scan on
-                            // xnext. Fixed-step path checks xnext separately
-                            // since err_norm isn't computed there.
+                            // Non-finite err_norm (NaN/Inf from xnext, xnext_est,
+                            // or the residual — one scalar isfinite subsumes both
+                            // xnext and xnext_est): reject this lane's step and
+                            // shrink its h, then retry — do NOT throw. Mirrors
+                            // OrdinaryDiffEq (EEst == NaN fails EEst <= 1 -> reject)
+                            // and the scalar AdaptiveDriver: an over-large step
+                            // into a stiff/near-singular region can resolve at
+                            // smaller h, so a multiple-shooting / PSIOPT iterate
+                            // recovers instead of aborting the whole batch. The
+                            // controller cannot derive a growth factor from a
+                            // non-finite EEst, so shrink by kNonfiniteStepShrink;
+                            // a genuinely unintegrable lane still terminates via
+                            // the per-lane stall/max_steps guards.
                             if (!std::isfinite(err_norm)) {
-                                throw std::runtime_error(
-                                    "Non-finite error norm from ParallelDriver (" +
-                                    std::to_string(err_norm) + ") on trajectory " +
-                                    std::to_string(itmp) +
-                                    " at t=" + std::to_string(xis[itmp][ode.t_var()]) +
-                                    " (h=" + std::to_string(h_lane) +
-                                    "); state or embedded estimate produced NaN/Inf.");
+                                // Un-poison this lane's FSAL before retrying. For
+                                // FSAL/LastStageIsFxf methods, peek_fsal() above
+                                // wrote f(xnext) into xdotnext_ss[itmp]; when xnext
+                                // is NaN that is a NaN k[0] that the retry's
+                                // seed_fsal would feed back regardless of h,
+                                // defeating recovery. Recompute f(xi) (finite for
+                                // a transient singularity, since xi is unchanged
+                                // and lies off the bad time) so the shrunk retry
+                                // starts from a clean stage-0. A persistent
+                                // singularity leaves f(xi) non-finite and correctly
+                                // stalls. Non-FSAL methods reset_fsal every step,
+                                // so no un-poisoning is needed there.
+                                if constexpr (method_does_fsal) {
+                                    xdotnext.setZero();
+                                    ode.compute(xis[itmp], xdotnext);
+                                    for (int k = 0; k < ode.output_rows(); ++k)
+                                        xdotnext_ss[k][itmp] = xdotnext[k];
+                                }
+                                hs[itmp] *= kNonfiniteStepShrink;
+                                nrej[itmp]++;
+                                continueloops[itmp] = true;
+                                continue;
                             }
 
                             // err_norm catches NaN that flows through xnext or
                             // xnext_est, but xnext_mid is computed from a
                             // different stage combination (extra-stage
                             // interpolant on Vern7/8/9) and can carry NaN while
-                            // the embedded pair stays finite. Guard the
-                            // midpoint slot separately when storemidpoints will
-                            // push it into user storage.
-                            if (storemidpoints) {
-                                check_state_finite_or_throw(
-                                    xnext_mid.head(ode.x_vars()), xis[itmp][ode.t_var()], h_lane,
-                                    "ParallelDriver::stepper.step (midpoint)", itmp);
+                            // the embedded pair stays finite. Treat a non-finite
+                            // midpoint the same way — reject and shrink — when
+                            // storemidpoints will push it into user storage.
+                            if (storemidpoints &&
+                                !xnext_mid.head(ode.x_vars()).allFinite()) {
+                                hs[itmp] *= kNonfiniteStepShrink;
+                                nrej[itmp]++;
+                                continueloops[itmp] = true;
+                                continue;
                             }
 
                             auto outcome = update_controller(controllers[itmp], h_lane, err_norm,

@@ -59,12 +59,20 @@ namespace tycho::integrators {
 ///   positive-magnitude space (like the rest of this routine); `tdir` is applied
 ///   at return. `tf == t0` (dtmax == 0) returns a zero step (a no-op).
 ///
-/// @note Degenerate scaling is non-throwing (multiple-shooting robustness). If a
-///   degenerate per-component scaling (sk[i] → 0) drives the raw estimate to 0 or
-///   a non-finite value, this routine returns the finite dtmin floor rather than
-///   throwing — an intermediate PSIOPT / multiple-shooting iterate must be able to
-///   recover. Only genuinely-unrecoverable *dynamics* (NaN/Inf from f(x0)/f(x1))
-///   throw, matching OrdinaryDiffEq's NaN-in-f₀ exit.
+/// @note Non-finite handling. A genuinely-non-finite *dynamics* evaluation —
+///   f(x0) or f(x1) returning NaN/Inf — throws via check_state_finite_or_throw
+///   (matching OrdinaryDiffEq, which errors on a NaN f₀). A degenerate
+///   per-component scaling (sk[i] = atol + |x0|·rtol → 0, e.g. atol[i] == 0 with
+///   x0[i] == 0) produces a 0/0 = NaN scaled residual; under both RMS
+///   (squaredNorm) and MAX (the NaN-propagating maxCoeff guard in error_norm.h)
+///   this drives dt0 → NaN → x1 → NaN, so the f(x1) check throws with a clear
+///   diagnostic. That is the correct response to a static tolerance
+///   misconfiguration, and matches OrdinaryDiffEq (dt = NaN → ReturnCode.DtNaN,
+///   an abort). Recovery from a *transient* non-finite step is the adaptive
+///   driver's job (reject-and-shrink), not this one-shot estimate's. The final
+///   `!isfinite(dt_raw) || dt_raw <= 0 → dtmin` coercion below only floors a
+///   finite-but-degenerate raw estimate (e.g. dt1 underflow with finite f), not
+///   the NaN-dynamics case, which has already thrown.
 template <class DODE, class InputVec, class TolVec>
 double estimate_initial_dt(const DODE &ode, const InputVec &x0, double tf, const TolVec &abs_tols,
                            const TolVec &rel_tols, int order, ErrorNormType norm_type) {
@@ -163,21 +171,16 @@ double estimate_initial_dt(const DODE &ode, const InputVec &x0, double tf, const
         dt1 = std::pow(0.01 / max_d1d2, 1.0 / (static_cast<double>(order) + 1.0));
     }
 
-    // OrdinaryDiffEq parity + multiple-shooting robustness: return a finite,
-    // dtmin-floored step here — do NOT throw. An intermediate PSIOPT /
-    // multiple-shooting iterate can transiently produce a degenerate per-component
-    // scaling (sk[i] = atol + |x0|*rtol underflowing to 0 when atol[i] == 0 and
-    // x0[i] == 0), which drives the raw estimate to 0 or a non-finite value.
-    // Aborting would kill a solve PSIOPT could otherwise step away from, so we
-    // coerce such an estimate to the dtmin floor — a tiny but finite step the
-    // integrator can take and the optimizer can move past — exactly as
-    // OrdinaryDiffEq returns tdir*max(dtmin, min(100dt0, dt1, dtmax)). Genuinely
-    // unrecoverable *dynamics* (NaN/Inf in f(x0) or f(x1)) still throw above via
-    // check_state_finite_or_throw, matching OrdinaryDiffEq's NaN-in-f0 exit —
-    // PSIOPT cannot recover from NaN dynamics regardless. The coercion is explicit
-    // rather than a reliance on C++ std::max(x, NaN) == x (which is order-dependent
-    // and differs from Julia's NaN-propagating max), so the result is
-    // deterministic.
+    // Return the dtmin-floored estimate. The coercion below only floors a
+    // finite-but-degenerate raw estimate (e.g. dt1 underflow to 0 with finite f)
+    // to dtmin — a tiny but valid first step — exactly as OrdinaryDiffEq returns
+    // tdir*max(dtmin, min(100dt0, dt1, dtmax)). It is NOT the NaN-scaling escape
+    // hatch: a degenerate per-component scaling (sk[i] → 0) produces a NaN d0/dt0
+    // → NaN x1, which the f(x1) check above has already thrown on (matching
+    // OrdinaryDiffEq's dt=NaN → DtNaN abort). The coercion is written explicitly
+    // (not via std::max(x, NaN) == x, which is order-dependent and differs from
+    // Julia's NaN-propagating max) so any residual non-finite raw value floors
+    // deterministically rather than laundering silently.
     double dt_raw = std::min({100.0 * dt0, dt1, dtmax});
     if (!std::isfinite(dt_raw) || dt_raw <= 0.0) {
         dt_raw = dtmin;

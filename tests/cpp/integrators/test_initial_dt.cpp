@@ -67,19 +67,19 @@ TEST(InitialDtTest, ZeroTolsOnZeroStateThrowsFromHWInitialDt) {
     }
 }
 
-// Degenerate per-component scaling must return a finite dtmin-floored step, NOT
-// throw — multiple-shooting robustness (OrdinaryDiffEq parity). Component 1 (v)
-// carries a zero scaling: atol[1]=0 and x0[1]=0 make sk[1]=atol+|v0|*rtol=0, which
-// still passes the driver's abs+rel>0 precheck (rel[1]>0) yet drives the raw HW
-// estimate to 0. The dynamics stay finite (f₀=f₁ here), so the estimator must
-// coerce the degenerate estimate to the dtmin floor and return a tiny finite step
-// the integrator can take — an intermediate PSIOPT / multiple-shooting iterate
-// must be recoverable, not aborted. Uses MAX norm so the sk[1]=0 NaN is dropped
-// (comp 1 is not the max element) rather than propagating; either way the result
-// must be finite and non-throwing. Contrast ZeroTolsOnZeroStateThrowsFromHWInitialDt,
-// where the DYNAMICS themselves go NaN (f(x1) at a NaN state) — that DOES throw,
-// because NaN dynamics are unrecoverable regardless.
-TEST(InitialDtTest, DegenerateScalingReturnsFiniteFloorNotThrow) {
+// Degenerate per-component scaling throws via the NaN-dynamics guard, CONSISTENTLY
+// under both RMS and MAX norms. Component 1 (v) carries a zero scaling: atol[1]=0
+// and x0[1]=0 make sk[1]=atol+|v0|*rtol=0, which still passes the driver's
+// abs+rel>0 precheck (rel[1]>0). The 0/0 scaled residual is NaN; under both RMS
+// (squaredNorm propagates NaN) and MAX (the NaN-propagating maxCoeff guard —
+// error_norm.h) the estimate d0 goes NaN, so dt0 goes NaN, the trial state x1
+// goes NaN, and f(x1) trips check_state_finite_or_throw. This is a static
+// tolerance misconfiguration (atol=0 on a zero component), not a recoverable
+// transient — throwing with a clear diagnostic is correct, and matches
+// OrdinaryDiffEq, which returns dt=NaN -> ReturnCode.DtNaN (an abort) here.
+// Recovery from a *transient* NaN during stepping is the driver's job
+// (reject-and-shrink), not the one-shot initial-dt estimate's.
+TEST(InitialDtTest, DegenerateScalingThrowsViaNonFiniteState) {
     TychoTest::SHO sho(0.0);
     Eigen::Vector3d x0;
     x0 << 1.0, 0.0, 0.0; // x=1 (finite scaling), v=0 (zero scaling on comp 1)
@@ -88,13 +88,19 @@ TEST(InitialDtTest, DegenerateScalingReturnsFiniteFloorNotThrow) {
     Eigen::VectorXd rtol(2);
     rtol << 1e-13, 1e-6; // comp 1 rel_tol > 0 → passes the driver abs+rel>0 gate,
                          // but sk[1] = 0 + |v0|*rtol[1] = 0 since v0 == 0.
-    double dt = 0.0;
-    ASSERT_NO_THROW(dt = estimate_initial_dt(sho, x0, /*tf=*/1.0, atol, rtol, /*order=*/5,
-                                             ErrorNormType::MAX))
-        << "degenerate scaling must not abort a recoverable (PSIOPT) integration";
-    EXPECT_TRUE(std::isfinite(dt)) << "returned step must be finite (never NaN/Inf)";
-    EXPECT_GT(dt, 0.0) << "forward integration must return a positive step";
-    EXPECT_LE(dt, 1.0) << "step must not exceed the span";
+    // Both norms must behave identically now that MAX propagates NaN.
+    for (ErrorNormType norm : {ErrorNormType::RMS, ErrorNormType::MAX}) {
+        try {
+            (void)estimate_initial_dt(sho, x0, /*tf=*/1.0, atol, rtol, /*order=*/5, norm);
+            FAIL() << "degenerate scaling must throw via the non-finite-state guard";
+        } catch (const std::runtime_error &e) {
+            const std::string msg = e.what();
+            EXPECT_NE(msg.find("Non-finite state"), std::string::npos)
+                << "should throw from the f(x1) dynamics check; got: " << msg;
+            EXPECT_NE(msg.find("Hairer-Wanner initial-dt"), std::string::npos)
+                << "should identify the HW initial-dt site; got: " << msg;
+        }
+    }
 }
 
 TEST(InitialDtTest, KeplerLEOYieldsReasonableFirstStep) {

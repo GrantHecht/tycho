@@ -6,6 +6,7 @@
 
 #include <Eigen/Core>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -64,6 +65,16 @@ enum class ErrorNormType {
     MAX  ///< Maximum of per-component errors.
 };
 
+/// Fixed step-shrink factor applied by the adaptive drivers when a step
+/// produces a non-finite error norm (NaN/Inf state or embedded estimate). The
+/// controller cannot derive a growth factor from a non-finite EEst, so the
+/// drivers reject the step and multiply h by this factor before retrying —
+/// mirroring OrdinaryDiffEq's reject path (EEst == NaN fails EEst <= 1). Chosen
+/// aggressive (10x shrink) so a genuinely unintegrable state reaches the
+/// zero-progress stall guard in a bounded number of retries, while a resolvable
+/// over-large step still recovers at smaller h.
+inline constexpr double kNonfiniteStepShrink = 0.1;
+
 /// Compute element-wise scaled residuals per Julia's convention:
 ///
 ///   res_i = ũ_i / (α_i + max(|u₀_i|, |u₁_i|) · ρ_i)
@@ -91,7 +102,17 @@ inline double error_norm(const Eigen::MatrixBase<Derived> &res, ErrorNormType ty
     // MAX
     if (res.size() == 0)
         return 0.0;
-    return res.cwiseAbs().maxCoeff();
+    const auto absres = res.cwiseAbs();
+    // Propagate a NaN rather than letting Eigen's maxCoeff drop it. maxCoeff
+    // reduces with `acc < c`, and a NaN comparison is false, so a NaN component
+    // is silently skipped (unless it is the first element) — a finite result
+    // would then mask a NaN state. RMS propagates NaN via squaredNorm; MAX must
+    // too, so the driver sees a non-finite err_norm and rejects the step (or the
+    // finite guard fires). Inf needs no special-case: maxCoeff already yields Inf
+    // for an Inf component when no NaN is present.
+    if (absres.array().isNaN().any())
+        return std::numeric_limits<double>::quiet_NaN();
+    return absres.maxCoeff();
 }
 
 } // namespace tycho::integrators

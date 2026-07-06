@@ -34,7 +34,13 @@ struct AdaptiveConfig {
     ErrorNormType error_norm_type = ErrorNormType::RMS;
     /// Initial/fixed step size when Hairer-Wanner auto-init is off.
     double def_step_size = 0.01;
-    /// Maximum ratio |dt_new/dt_old| allowed per step (must be > 1).
+    /// Maximum ratio |dt_new/dt_old| allowed per step (must be > 1). This is a
+    /// Tycho extension with no OrdinaryDiffEq analog — Julia bounds step growth
+    /// solely through the in-controller qmin/qmax clamp. At the default 10.0 it
+    /// is inert (every shipped controller's own growth/shrink envelope is
+    /// already tighter than [1/10, 10]); it only takes effect, and thus only
+    /// diverges from OrdinaryDiffEq, if a user sets it below the controller's
+    /// growth cap.
     double max_step_change = 10.0;
     /// Hard cap on total steps (accepted + rejected) before throwing.
     int max_steps = 1'000'000;
@@ -347,24 +353,27 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
                 }
             }
 
-            // Zero-progress stall: at large |t| the controller can shrink h below
-            // the representable spacing of t, so `tnext = t + h` rounds back to t
-            // and the step's internal (tnext - t0) would be exactly 0. Route this
-            // to the max_steps rejection diagnostic here — otherwise Stepper::step
-            // would be called with an effective h == 0, which its §3.3 guard
-            // rejects unconditionally (for every algorithm) with a generic
-            // invalid_argument. Detecting the stall here instead gives the
-            // specific, actionable "underflowed" message and keeps the direct-
-            // caller guard for its intended use (a caller passing tf == t0).
-            // Fires only on genuine underflow (h-resolvable methods reach the
-            // max_steps cap normally with tnext != t).
+            // Zero-progress stall: `h` has shrunk below the representable spacing
+            // of t, so `tnext = t + h` rounds back to t and the step's internal
+            // (tnext - t0) would be exactly 0. Two causes reach here: (1) at large
+            // |t| the controller shrinks h below ULP(t); (2) the state repeatedly
+            // produced non-finite derivatives, so the non-finite reject-and-shrink
+            // path drove h to underflow (a genuine singularity that does not
+            // resolve under step reduction). Route both to a specific diagnostic
+            // here — otherwise Stepper::step would run with an effective h == 0,
+            // which its §3.3 guard rejects with a generic invalid_argument. This
+            // keeps the direct-caller guard for its intended use (tf == t0).
+            // Fires only on genuine underflow (h-resolvable steps advance with
+            // tnext != t).
             if (continueloop && tnext == xi[ode.t_var()]) {
                 throw std::runtime_error(
-                    "AdaptiveDriver: step size underflowed to zero at large |t| (tnext rounds "
-                    "back to t); the adaptive controller is stuck like the max_steps rejection "
-                    "case (max_steps=" +
+                    "AdaptiveDriver: step size underflowed to zero (tnext rounds back to t — no "
+                    "progress possible). Either |t| is too large for the step resolution, or the "
+                    "state repeatedly produced non-finite (NaN/Inf) derivatives that did not "
+                    "resolve under step reduction (a singularity in the dynamics). max_steps=" +
                     std::to_string(cfg.max_steps) +
-                    "). Loosen tolerances or rescale the independent variable.");
+                    ". Rescale the independent variable, loosen tolerances, or check the dynamics "
+                    "for singularities.");
             }
 
             xnext.setZero();
@@ -392,28 +401,39 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
                                             abs_tols, rel_tols);
                 double err_norm = error_norm(res, cfg.error_norm_type);
 
-                // Single-chokepoint finite guard. A non-finite err_norm catches
-                // BOTH xnext NaN (NaN flows into the numerator) and xnext_est
-                // NaN (NaN flows into utilde), so one scalar isfinite subsumes
-                // both xnext and err_norm checks. Fixed-step path handles xnext
-                // separately below since it doesn't compute err_norm.
+                // Non-finite err_norm (NaN/Inf from xnext, xnext_est, or the
+                // residual — one scalar isfinite subsumes both xnext and
+                // xnext_est): reject the step and shrink h, then retry — do NOT
+                // throw. This mirrors OrdinaryDiffEq, where EEst == NaN fails the
+                // `EEst <= 1` accept test and the step is rejected; an over-large
+                // step into a stiff/near-singular region can often be resolved at
+                // smaller h, so a multiple-shooting / PSIOPT iterate recovers
+                // internally instead of aborting the whole solve. The controller
+                // cannot derive a growth factor from a non-finite EEst, so we
+                // shrink by the fixed kNonfiniteStepShrink. A genuinely
+                // unintegrable state still fails — the zero-progress stall guard
+                // (tnext == t, above) or the max_steps cap terminates the loop
+                // with a diagnostic after a bounded number of retries.
                 if (!std::isfinite(err_norm)) {
-                    throw std::runtime_error(
-                        "Non-finite error norm from AdaptiveDriver (" + std::to_string(err_norm) +
-                        ") at t=" + std::to_string(static_cast<double>(xi[ode.t_var()])) +
-                        " (h=" + std::to_string(static_cast<double>(h)) +
-                        "); state or embedded estimate produced NaN/Inf. Check ODE dynamics "
-                        "and intermediate-stage evaluations.");
+                    stepper_.restore_fsal(fsal_saved);
+                    h *= Scalar(kNonfiniteStepShrink);
+                    nreject++;
+                    continueloop = true;
+                    continue;
                 }
 
                 // err_norm catches NaN that flows through xnext or xnext_est, but
                 // xnext_mid is computed from a different stage combination
                 // (extra-stage interpolant on Vern7/8/9) and can carry NaN while
-                // the embedded pair stays finite. Guard the midpoint slot
-                // separately when storemidpoints will push it into user storage.
-                if (storemidpoints) {
-                    check_state_finite_or_throw(xnext_mid.head(ode.x_vars()), xi[ode.t_var()], h,
-                                                "AdaptiveDriver::stepper.step (midpoint)");
+                // the embedded pair stays finite. Treat a non-finite midpoint the
+                // same way — reject and shrink — when storemidpoints will push it
+                // into user storage.
+                if (storemidpoints && !xnext_mid.head(ode.x_vars()).allFinite()) {
+                    stepper_.restore_fsal(fsal_saved);
+                    h *= Scalar(kNonfiniteStepShrink);
+                    nreject++;
+                    continueloop = true;
+                    continue;
                 }
 
                 auto outcome = update_controller(controller, static_cast<double>(h), err_norm,
