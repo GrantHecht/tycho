@@ -188,3 +188,31 @@ TEST(InitialDtClamp, DtmaxClampsToSpan) {
     EXPECT_GT(dt, 0.0);
     EXPECT_LE(dt, tf) << "first step must be clamped to the span dtmax = |tf - t0|";
 }
+
+// §1.4/dtmax: zero-duration span (tf == t0) is a no-op — estimate_initial_dt
+// returns a zero step (no integration), it does not throw. (The drivers
+// short-circuit H == 0 and return the initial state upstream anyway.)
+TEST(InitialDtClamp, ZeroSpanReturnsZeroStep) {
+    TychoTest::SHO sho(0.0);
+    Eigen::Vector3d x0;
+    x0 << 1.0, 0.0, 5.0;
+    Eigen::VectorXd atol = Eigen::VectorXd::Constant(2, 1e-6);
+    Eigen::VectorXd rtol = Eigen::VectorXd::Constant(2, 1e-6);
+    const double dt =
+        estimate_initial_dt(sho, x0, /*tf=*/5.0, atol, rtol, /*order=*/4, ErrorNormType::RMS);
+    EXPECT_EQ(dt, 0.0);
+}
+
+// Backward, tiny-span: the dtmax clamp must hold in magnitude space and the
+// returned step must carry the correct (negative) sign via tdir.
+TEST(InitialDtClamp, BackwardTinySpanClampsWithCorrectSign) {
+    TychoTest::SHO sho(0.0);
+    Eigen::Vector3d x0;
+    x0 << 1.0, 0.0, 1.0; // t0 = 1.0
+    Eigen::VectorXd atol = Eigen::VectorXd::Constant(2, 1e-6);
+    Eigen::VectorXd rtol = Eigen::VectorXd::Constant(2, 1e-6);
+    const double tf = 1.0 - 1.0e-4; // backward, span 1e-4 far below the estimate
+    const double dt = estimate_initial_dt(sho, x0, tf, atol, rtol, /*order=*/4, ErrorNormType::RMS);
+    EXPECT_LT(dt, 0.0) << "backward integration must return a negative step";
+    EXPECT_LE(std::abs(dt), 1.0e-4) << "magnitude must be clamped to the span dtmax";
+}

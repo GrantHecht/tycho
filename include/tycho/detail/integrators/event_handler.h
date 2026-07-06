@@ -305,6 +305,11 @@ struct EventHandler {
                 auto refine_one = [&](double tig_candidate, double lo,
                                       double hi) -> std::optional<double> {
                     double tevent = newton(tig_candidate);
+                    // Inclusive bracket (>=/<=): a root landing exactly on a
+                    // bracket endpoint is legitimate — the §1.2 endpoint-crossing
+                    // fix admits crossings whose value is exactly 0 at a step
+                    // boundary, so the refined root can sit on lo/hi. The NaN
+                    // sentinel still routes to retry (NaN >= lo is false).
                     if (!(tevent >= lo && tevent <= hi)) {
                         return std::nullopt;
                     }

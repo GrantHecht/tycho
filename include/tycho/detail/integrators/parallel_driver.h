@@ -360,7 +360,8 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                         "ParallelDriver: trajectory " + std::to_string(i) +
                         " exceeded max_steps (" + std::to_string(cfg.max_steps) +
                         ") before reaching tf; the adaptive controller for this lane may "
-                        "be stuck in a rejection loop.");
+                        "be stuck in a rejection loop, or a fixed-step run requested more "
+                        "steps than the cap allows.");
                 }
             }
 
@@ -384,6 +385,24 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                         tnext = tfs[i];
                         continueloops[i] = false;
                     }
+                }
+
+                // Zero-progress stall — diagnostic parity with AdaptiveDriver
+                // (§3.3). At large |t| the controller can shrink hs[i] below the
+                // ULP of t, so tnext = t + h rounds back to t and the SIMD step
+                // would run with an effective h == 0: FSAL/LastStageIsFxf methods
+                // poison the 1/h FSAL cache (a later, ODE-blaming "non-finite
+                // state" throw one step on), non-FSAL methods silently make no
+                // progress. Throw here with the same specific, actionable message
+                // regardless of method family. Fires only on genuine underflow
+                // (the final clamped step above sets continueloops[i] = false).
+                if (continueloops[i] && tnext == xis[i][ode.t_var()]) {
+                    throw std::runtime_error(
+                        "ParallelDriver: step size underflowed to zero on trajectory " +
+                        std::to_string(i) +
+                        " at large |t| (tnext rounds back to t); the adaptive controller is stuck "
+                        "like the max_steps rejection case. Loosen tolerances or rescale the "
+                        "independent variable.");
                 }
 
                 for (int k = 0; k < ode.input_rows(); ++k) {
@@ -541,6 +560,13 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                                     xnext_mid.head(ode.x_vars()), xis[itmp][ode.t_var()], hs[itmp],
                                     "ParallelDriver::stepper.step (midpoint)", itmp);
                             }
+                            // Count each fixed step toward this lane's max_steps
+                            // cap (mirrors AdaptiveDriver): fixed-step mode takes
+                            // no rejections, so without this the per-lane guard
+                            // never fires and an oversized fixed-step request
+                            // grinds out its full nominal count instead of
+                            // throwing promptly.
+                            nacc[itmp]++;
                         }
 
                         bool eventbreak = false;

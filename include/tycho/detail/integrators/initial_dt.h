@@ -47,10 +47,14 @@ namespace tycho::integrators {
 /// @note dtmax/dtmin clamping — matches OrdinaryDiffEq's `ode_determine_initdt`:
 ///   `dt₀ = min(dt₀, dtmax)`, and the returned magnitude is
 ///   `max(dtmin, min(100·dt₀, dt₁, dtmax))`. `dtmax = |tf − t0|` (OrdinaryDiffEq's
-///   default: the integration span) so the first step never exceeds the whole
-///   interval; `dtmin = max(eps(t0), eps(tf))` (the ULP at the endpoints) floors
-///   it against sub-representable steps. Both are computed in positive-magnitude
-///   space (like the rest of this routine); `tdir` is applied at return.
+///   default: the integration span) so the first step is capped at the interval
+///   width; `dtmin = max(eps(t0), eps(tf))` (the ULP at the endpoints) floors it
+///   against sub-representable steps. The dtmin floor wins over the dtmax cap
+///   only in the extreme regime dtmin > dtmax (huge |t| with a sub-ULP span) —
+///   matching OrdinaryDiffEq, and harmless because the driver's per-step
+///   overshoot clamp trims the first step to tf regardless. Both are computed in
+///   positive-magnitude space (like the rest of this routine); `tdir` is applied
+///   at return. `tf == t0` (dtmax == 0) returns a zero step (a no-op).
 template <class DODE, class InputVec, class TolVec>
 double estimate_initial_dt(const DODE &ode, const InputVec &x0, double tf, const TolVec &abs_tols,
                            const TolVec &rel_tols, int order, ErrorNormType norm_type) {
@@ -69,6 +73,15 @@ double estimate_initial_dt(const DODE &ode, const InputVec &x0, double tf, const
         return std::nextafter(a, std::numeric_limits<double>::infinity()) - a;
     };
     const double dtmin = std::max(ulp(t0), ulp(tf));
+    // Zero-duration span (tf == t0) is a no-op: there is no step to take, so
+    // return a zero step (no integration) rather than computing one. This also
+    // avoids the 0/0 that would otherwise arise below (dt0 clamped to
+    // dtmax == 0 -> d2 = norm/dt0 = NaN, which std::max/std::min silently drop by
+    // argument order). The drivers short-circuit H == 0 and return the initial
+    // state before ever reaching here; a direct caller simply gets dt == 0.
+    if (dtmax == 0.0) {
+        return 0.0;
+    }
 
     Eigen::VectorXd sk(n);
     for (int i = 0; i < n; ++i) {

@@ -1521,17 +1521,20 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// @brief Integrate a batch of trajectories; returns vector of final states.
     std::vector<ODEState<double>> integrate(const std::vector<ODEState<double>> &x0s,
                                             const Eigen::VectorXd &tfs) const {
-        // Empty-batch input is a no-op. Without this short-circuit the
-        // vectorized branch routes to ParallelDriver, which rejects empty
-        // input — making the API behavior depend on vectorize_batch_calls_.
-        if (x0s.empty()) {
-            return {};
-        }
+        // Validate size agreement first, so an empty x0s paired with a
+        // non-empty tfs still throws rather than being masked by the empty
+        // short-circuit below.
         if (static_cast<Eigen::Index>(x0s.size()) != tfs.size()) {
             throw std::invalid_argument(
                 "Integrator::integrate: x0s and tfs must have the same size; got " +
                 std::to_string(x0s.size()) + " states and " + std::to_string(tfs.size()) +
                 " final times.");
+        }
+        // Empty-batch input is a no-op. Without this short-circuit the
+        // vectorized branch routes to ParallelDriver, which rejects empty
+        // input — making the API behavior depend on vectorize_batch_calls_.
+        if (x0s.empty()) {
+            return {};
         }
         const int n = static_cast<int>(x0s.size());
         std::vector<ControllerVariant> ctrls = this->make_worker_controllers(n);
@@ -1559,14 +1562,14 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// @brief Integrate a batch of trajectories with state transition matrices.
     std::vector<STMRet> integrate_stm(const std::vector<ODEState<double>> &x0s,
                                       const Eigen::VectorXd &tfs) const {
-        if (x0s.empty()) {
-            return {};
-        }
         if (static_cast<Eigen::Index>(x0s.size()) != tfs.size()) {
             throw std::invalid_argument(
                 "Integrator::integrate_stm: x0s and tfs must have the same size; got " +
                 std::to_string(x0s.size()) + " states and " + std::to_string(tfs.size()) +
                 " final times.");
+        }
+        if (x0s.empty()) {
+            return {};
         }
         const int n = static_cast<int>(x0s.size());
         std::vector<ControllerVariant> ctrls = this->make_worker_controllers(n);
@@ -1603,9 +1606,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     std::vector<std::tuple<ODEState<double>, Jacobian<double>, Hessian<double>>>
     integrate_stm2(const std::vector<ODEState<double>> &x0s, const Eigen::VectorXd &tfs,
                    const std::vector<ODEState<double>> &lfs) const {
-        if (x0s.empty()) {
-            return {};
-        }
         if (static_cast<Eigen::Index>(x0s.size()) != tfs.size()) {
             throw std::invalid_argument(
                 "Integrator::integrate_stm2: x0s and tfs must have the same size; got " +
@@ -1617,6 +1617,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                 "Integrator::integrate_stm2: x0s and lfs must have the same size; got " +
                 std::to_string(x0s.size()) + " states and " + std::to_string(lfs.size()) +
                 " adjoint seeds.");
+        }
+        if (x0s.empty()) {
+            return {};
         }
         const int n = static_cast<int>(x0s.size());
         std::vector<ControllerVariant> ctrls = this->make_worker_controllers(n);

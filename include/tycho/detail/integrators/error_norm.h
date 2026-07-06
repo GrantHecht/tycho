@@ -31,7 +31,8 @@ inline void check_state_finite_or_throw(const Eigen::MatrixBase<Derived> &v, dou
     static_assert(std::is_floating_point_v<typename Derived::Scalar>,
                   "check_state_finite_or_throw operates on scalar (double) state vectors; the "
                   "static_cast<double> finiteness check is not defined for SuperScalar element "
-                  "types. Use the per-lane finiteness path for batch states.");
+                  "types. Batch paths call this same function per lane after "
+                  "extracting scalar (double) values.");
     if (v.allFinite())
         return;
     Eigen::Index bad = -1;

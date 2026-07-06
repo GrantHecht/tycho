@@ -329,7 +329,8 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
                 throw std::runtime_error(
                     "AdaptiveDriver exceeded max_steps (" + std::to_string(cfg.max_steps) +
                     ") before reaching tf; the adaptive controller may be stuck in a "
-                    "rejection loop. Raise via max_steps or loosen tolerances.");
+                    "rejection loop, or a fixed-step run requested more steps than the cap "
+                    "allows. Raise via max_steps, loosen tolerances, or enlarge the step size.");
             }
             Scalar tnext = xi[ode.t_var()] + h;
             if (H > Scalar(0.0)) {
@@ -350,11 +351,13 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
             // the representable spacing of t, so `tnext = t + h` rounds back to t
             // and the step's internal (tnext - t0) would be exactly 0. Route this
             // to the max_steps rejection diagnostic here — otherwise Stepper::step
-            // would be called with an effective h == 0. That both trips the §3.3
-            // direct-caller guard AND (for !FSAL methods like Vern7) makes no
-            // progress; either way the integration is stuck like the max_steps
-            // case. This fires only on genuine underflow (h resolvable methods
-            // reach the max_steps cap normally with tnext != t).
+            // would be called with an effective h == 0, which its §3.3 guard
+            // rejects unconditionally (for every algorithm) with a generic
+            // invalid_argument. Detecting the stall here instead gives the
+            // specific, actionable "underflowed" message and keeps the direct-
+            // caller guard for its intended use (a caller passing tf == t0).
+            // Fires only on genuine underflow (h-resolvable methods reach the
+            // max_steps cap normally with tnext != t).
             if (continueloop && tnext == xi[ode.t_var()]) {
                 throw std::runtime_error(
                     "AdaptiveDriver: step size underflowed to zero at large |t| (tnext rounds "
@@ -443,6 +446,12 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
                     check_state_finite_or_throw(xnext_mid.head(ode.x_vars()), xi[ode.t_var()], h,
                                                 "AdaptiveDriver::stepper.step (midpoint)");
                 }
+                // Fixed-step mode takes no rejections, but each accepted step
+                // must still count toward max_steps so the cap actually bounds
+                // the loop (an oversized fixed-step request throws promptly at
+                // the guard above instead of grinding out its full nominal count
+                // — the reserve clamp at §1.4 relies on this).
+                naccept++;
             }
 
             bool eventbreak = false;

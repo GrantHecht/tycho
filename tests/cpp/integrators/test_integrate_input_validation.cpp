@@ -1,14 +1,19 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Non-finite tf / x0 must be rejected immediately (INTEGRATORS_REVIEW §1.5),
-// not ground through max_steps. (§1.4 numsteps-reserve clamp is implemented in
-// both drivers and exercised by every integration test's entry path; it has no
-// robust standalone red-green trigger because fixed-step mode is not publicly
-// toggleable, so it is covered by inspection + no-crash across the suite.)
+// Integrator entry-point input validation:
+//   §1.5 — non-finite tf / x0 rejected immediately (both the scalar
+//          AdaptiveDriver path and the batch ParallelDriver path), not ground
+//          through max_steps.
+//   §1.4 — in fixed-step mode the numsteps reserve is clamped to max_steps, but
+//          h is computed from the UNCLAMPED nominal so the requested step size
+//          is honored: an oversized fixed-step request hits the max_steps guard
+//          promptly (bounded reserve) instead of silently integrating coarser.
 ///////////////////////////////////////////////////////////////////////////////
 #include "integrator_test_utils.h"
 #include <gtest/gtest.h>
 
 #include <limits>
+#include <string>
+#include <vector>
 
 using namespace tycho;
 using namespace tycho::integrators;
@@ -38,4 +43,41 @@ TEST_F(IntegrateInputValidationTest, FiniteInputStillIntegrates) {
     Integrator<SHO> integ(ode, IVPAlg::DOPRI87, 0.01);
     Eigen::Vector3d x0(1.0, 0.0, 0.0);
     EXPECT_NO_THROW((void)integ.integrate(x0, 1.0));
+}
+
+// §1.5 on the batch ParallelDriver path (default vectorize_batch_calls_=true):
+// a non-finite tf or x0 on any lane must be rejected per-lane.
+TEST_F(IntegrateInputValidationTest, BatchNonFiniteLaneRejected) {
+    SHO ode(0.0);
+    Integrator<SHO> integ(ode, IVPAlg::DOPRI87, 0.01);
+    integ.vectorize_batch_calls_ = true; // exercise ParallelDriver
+    std::vector<Eigen::Vector3d> x0s(3, Eigen::Vector3d(1.0, 0.0, 0.0));
+
+    Eigen::VectorXd tfs_nan(3);
+    tfs_nan << 1.0, std::numeric_limits<double>::quiet_NaN(), 1.0;
+    EXPECT_THROW((void)integ.integrate(x0s, tfs_nan), std::invalid_argument);
+
+    Eigen::VectorXd tfs_ok(3);
+    tfs_ok << 1.0, 1.0, 1.0;
+    x0s[2] = Eigen::Vector3d(std::numeric_limits<double>::infinity(), 0.0, 0.0);
+    EXPECT_THROW((void)integ.integrate(x0s, tfs_ok), std::invalid_argument);
+}
+
+// §1.4: fixed-step mode (adaptive_ = false) with a tiny step over a unit span
+// must throw max_steps promptly. If the clamp had coarsened h (the pre-fix bug),
+// the run would instead complete in ~max_steps coarse steps without throwing.
+TEST_F(IntegrateInputValidationTest, FixedStepNumstepsClampThrowsMaxSteps) {
+    SHO ode(0.0);
+    Integrator<SHO> integ(ode, IVPAlg::DOPRI87, 0.01);
+    integ.set_initial_step_size(1.0e-6); // tiny fixed step; disables HW auto-initdt
+    integ.adaptive_ = false;             // true fixed-step mode
+    integ.set_max_steps(1000);
+    Eigen::Vector3d x0(1.0, 0.0, 0.0);
+    try {
+        (void)integ.integrate(x0, 1.0); // span 1.0 / 1e-6 => ~1e6 steps >> 1000
+        FAIL() << "expected a max_steps runtime_error for the oversized fixed-step run";
+    } catch (const std::runtime_error &e) {
+        EXPECT_NE(std::string(e.what()).find("max_steps"), std::string::npos)
+            << "diagnostic should mention max_steps; got: " << e.what();
+    }
 }
