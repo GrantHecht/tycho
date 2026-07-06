@@ -48,6 +48,40 @@ TEST_F(SuperScalarPadLaneTest, VectorizedBatchIntegrateMatchesScalar) {
         << "Vectorized (pad-lane) integrate must match the scalar path.";
 }
 
+// StmDriver pad lanes via integrate_stm (Jacobian-only path): single trajectory
+// -> pad lanes. The Jacobian-only pad-lane fill block in stm_driver.h is distinct
+// from the adjoint-Hessian block covered by the integrate_stm2 test below, so it
+// needs its own coverage — an unfilled pad-lane time slot would route h == 0
+// through the FSAL 1/h scaling on the padded lanes.
+TEST_F(SuperScalarPadLaneTest, VectorizedBatchIntegrateStmMatchesScalar) {
+    SHO ode(0.0);
+    std::vector<Eigen::Vector3d> x0s(1, Eigen::Vector3d(1.0, 0.0, 0.0)); // t0 == 0
+    Eigen::VectorXd tfs(1);
+    tfs << 3.14159;
+
+    Integrator<SHO> scalar_integ(ode, IVPAlg::DOPRI54, 0.01);
+    scalar_integ.set_abs_tol(1e-12);
+    scalar_integ.set_rel_tol(1e-12);
+    scalar_integ.vectorize_batch_calls_ = false;
+    auto scalar_res = scalar_integ.integrate_stm(x0s, tfs);
+
+    Integrator<SHO> vec_integ(ode, IVPAlg::DOPRI54, 0.01);
+    vec_integ.set_abs_tol(1e-12);
+    vec_integ.set_rel_tol(1e-12);
+    vec_integ.vectorize_batch_calls_ = true;
+    auto vec_res = vec_integ.integrate_stm(x0s, tfs);
+
+    ASSERT_EQ(scalar_res.size(), 1u);
+    ASSERT_EQ(vec_res.size(), 1u);
+    const auto &[xf_s, J_s] = scalar_res[0];
+    const auto &[xf_v, J_v] = vec_res[0];
+    EXPECT_TRUE(xf_v.allFinite());
+    EXPECT_TRUE(J_v.allFinite());
+    EXPECT_NEAR((xf_v - xf_s).norm(), 0.0, 1e-8);
+    EXPECT_NEAR((J_v - J_s).norm(), 0.0, 1e-6)
+        << "Vectorized (pad-lane) STM Jacobian must match the scalar path.";
+}
+
 // StmDriver pad lanes via integrate_stm2 (the adjoint-Hessian path is the only
 // STM-side 1/h division): single trajectory -> pad lanes.
 TEST_F(SuperScalarPadLaneTest, VectorizedBatchIntegrateStm2MatchesScalar) {

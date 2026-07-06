@@ -175,8 +175,8 @@ TEST_F(RegressionIVPTest, Case05_EventCrossing) {
             // mean refinement failed). Assert presence before comparing.
             ASSERT_TRUE(eventlocs[g][e].has_value())
                 << "Case05_event_g" << g << "_e" << e << " refinement failed unexpectedly";
-            // Event locations are resolved by Newton to event_tol_=1e-6 by
-            // default; pinning tighter than that is a platform-brittle FP
+            // Event locations are resolved by Newton to event_residual_tol=1e-6
+            // by default; pinning tighter than that is a platform-brittle FP
             // drift test, not a correctness gate. Use 1e-6 to catch real
             // drift without flagging ULP-level shifts.
             expect_vector_match(*eventlocs[g][e], golden_group[e], 1e-6,

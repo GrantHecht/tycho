@@ -60,3 +60,30 @@ TEST_F(BatchSizeValidationTest, MatchedSizesStillWork) {
     tfs << 1.0, 2.0;
     EXPECT_NO_THROW((void)integ.integrate(x0s, tfs));
 }
+
+// §3.1 ordering: the size check runs BEFORE the empty-batch short-circuit, so an
+// empty x0s paired with a NON-empty tfs still throws rather than being masked by
+// the `if (x0s.empty()) return {};` early-out. This is the exact case the
+// production comment motivates; reordering the check back after the short-circuit
+// would silently return {} and this test alone catches it.
+TEST_F(BatchSizeValidationTest, EmptyX0sWithNonEmptyTfsThrows) {
+    SHO ode(0.0);
+    Integrator<SHO> integ(ode, IVPAlg::DOPRI87, 0.01);
+    std::vector<Eigen::Vector3d> x0s; // empty
+    Eigen::VectorXd tfs(1);
+    tfs << 1.0; // non-empty → genuine size mismatch, must not be masked
+    EXPECT_THROW((void)integ.integrate(x0s, tfs), std::invalid_argument);
+}
+
+// The legitimate empty-batch no-op: matched (both empty) sizes return {} without
+// throwing. Guards against an over-eager size check that would reject the valid
+// empty-in/empty-out call.
+TEST_F(BatchSizeValidationTest, EmptyBatchReturnsEmpty) {
+    SHO ode(0.0);
+    Integrator<SHO> integ(ode, IVPAlg::DOPRI87, 0.01);
+    std::vector<Eigen::Vector3d> x0s; // empty
+    Eigen::VectorXd tfs(0);           // empty → matched, legitimate no-op
+    std::vector<Eigen::Vector3d> out;
+    EXPECT_NO_THROW(out = integ.integrate(x0s, tfs));
+    EXPECT_TRUE(out.empty());
+}

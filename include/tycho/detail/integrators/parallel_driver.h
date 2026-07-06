@@ -401,8 +401,9 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                         "ParallelDriver: step size underflowed to zero on trajectory " +
                         std::to_string(i) +
                         " at large |t| (tnext rounds back to t); the adaptive controller is stuck "
-                        "like the max_steps rejection case. Loosen tolerances or rescale the "
-                        "independent variable.");
+                        "like the max_steps rejection case (max_steps=" +
+                        std::to_string(cfg.max_steps) +
+                        "). Loosen tolerances or rescale the independent variable.");
                 }
 
                 for (int k = 0; k < ode.input_rows(); ++k) {

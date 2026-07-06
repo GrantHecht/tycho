@@ -81,3 +81,28 @@ TEST_F(IntegrateInputValidationTest, FixedStepNumstepsClampThrowsMaxSteps) {
             << "diagnostic should mention max_steps; got: " << e.what();
     }
 }
+
+// §1.4 on the batch ParallelDriver path: the fixed-step max_steps guard lives in
+// BOTH drivers, but the scalar test above only exercises AdaptiveDriver. Without
+// the mirror nacc[itmp]++ in parallel_driver.h, a batch fixed-step run counts no
+// steps and grinds out its full nominal count instead of throwing. This pins the
+// batch guard (delete the mirror increment and this test alone catches it).
+TEST_F(IntegrateInputValidationTest, BatchFixedStepNumstepsClampThrowsMaxSteps) {
+    SHO ode(0.0);
+    Integrator<SHO> integ(ode, IVPAlg::DOPRI87, 0.01);
+    integ.set_initial_step_size(1.0e-6);  // tiny fixed step; disables HW auto-initdt
+    integ.adaptive_ = false;              // true fixed-step mode
+    integ.vectorize_batch_calls_ = true;  // exercise ParallelDriver (default path)
+    integ.set_max_steps(1000);
+    std::vector<Eigen::Vector3d> x0s(1, Eigen::Vector3d(1.0, 0.0, 0.0));
+    Eigen::VectorXd tfs(1);
+    tfs << 1.0; // span 1.0 / 1e-6 => ~1e6 steps >> 1000
+    try {
+        (void)integ.integrate(x0s, tfs);
+        FAIL() << "ParallelDriver fixed-step run should throw max_steps, not grind to completion";
+    } catch (const std::runtime_error &e) {
+        const std::string msg(e.what());
+        EXPECT_NE(msg.find("max_steps"), std::string::npos) << msg;
+        EXPECT_NE(msg.find("ParallelDriver"), std::string::npos) << msg;
+    }
+}

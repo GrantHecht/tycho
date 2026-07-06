@@ -66,6 +66,37 @@ TEST(InitialDtTest, ZeroTolsOnZeroStateThrowsFromHWInitialDt) {
     }
 }
 
+// Regression for the dtmin-floor silent-failure hole: a degenerate per-component
+// scaling on a NON-first component under MAX norm slips past both the driver's
+// abs_tol+rel_tol>0 precheck (rel_tol>0 satisfies it, yet sk[i]=atol+|x0|*rtol
+// still underflows to 0 because x0[i]==0) AND the f0/f1 finiteness checks (the
+// state stays finite). The raw HW estimate collapses to 0/NaN; before the fix
+// the new std::max(dtmin, …) floor laundered that into a silent ~1-ULP step,
+// masking the tolerance misconfiguration. The guard must now run on the RAW
+// (pre-floor) estimate and throw. Component 1 (v) carries the zero scaling so
+// its NaN is dropped by MAX maxCoeff (not first element) — the exact path that
+// evaded the guard. Contrast ZeroTolsOnZeroStateThrowsFromHWInitialDt above,
+// which uses RMS (NaN propagates and trips an earlier check instead).
+TEST(InitialDtTest, MaxNormDegenerateScalingThrowsNotSilentTinyStep) {
+    TychoTest::SHO sho(0.0);
+    Eigen::Vector3d x0;
+    x0 << 1.0, 0.0, 0.0; // x=1 (finite scaling), v=0 (zero scaling on comp 1)
+    Eigen::VectorXd atol(2);
+    atol << 1e-12, 0.0; // comp 1 abs_tol == 0
+    Eigen::VectorXd rtol(2);
+    rtol << 1e-13, 1e-6; // comp 1 rel_tol > 0 → passes the driver abs+rel>0 gate,
+                         // but sk[1] = 0 + |v0|*rtol[1] = 0 since v0 == 0.
+    try {
+        (void)estimate_initial_dt(sho, x0, /*tf=*/1.0, atol, rtol, /*order=*/5,
+                                  ErrorNormType::MAX);
+        FAIL() << "degenerate MAX-norm scaling must throw, not return a silent tiny step";
+    } catch (const std::runtime_error &e) {
+        const std::string msg = e.what();
+        EXPECT_NE(msg.find("Hairer-Wanner initial-dt"), std::string::npos)
+            << "throw must originate in the HW initdt path (not be masked by dtmin): " << msg;
+    }
+}
+
 TEST(InitialDtTest, KeplerLEOYieldsReasonableFirstStep) {
     tycho::astro::Kepler kep(398600.4418);
     Eigen::Matrix<double, 7, 1> x0;

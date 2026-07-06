@@ -22,12 +22,13 @@ namespace tycho::integrators {
 ///   d₁ = norm(f₀ ./ sk)
 ///   if d₀ < 1e-5 or d₁ < 1e-5: dt₀ = 1e-6
 ///   else:                      dt₀ = 0.01 · (d₀/d₁)
+///   dt₀ = min(dt₀, dtmax)                        [clamp — see dtmax/dtmin note]
 ///   u₁ = u0 + tdir·dt₀ · f₀
 ///   f₁ = f(u₁, t+tdir·dt₀)
 ///   d₂ = norm((f₁-f₀) ./ sk) / dt₀
 ///   if max(d₁,d₂) ≤ 1e-15: dt₁ = max(smalldt, 1e-3 · dt₀)
 ///   else:                  dt₁ = (0.01 / max(d₁,d₂))^(1/(order+1))
-///   dt  = tdir · min(100·dt₀, dt₁)
+///   dt  = tdir · max(dtmin, min(100·dt₀, dt₁, dtmax))   [clamp — see note below]
 ///
 /// Direction: sign(tf - t0). Atol/Rtol are per-component.
 ///
@@ -137,22 +138,34 @@ double estimate_initial_dt(const DODE &ode, const InputVec &x0, double tf, const
         dt1 = std::pow(0.01 / max_d1d2, 1.0 / (static_cast<double>(order) + 1.0));
     }
 
-    double dt = std::max(dtmin, std::min({100.0 * dt0, dt1, dtmax}));
-    double signed_dt = tdir * dt;
+    // Raw Hairer-Wanner estimate (positive magnitude) BEFORE the dtmin floor.
+    // The finite/nonzero guard below must see this raw value, not the floored
+    // one: a degenerate per-component scaling — sk[i] = atol + |x0|*rtol
+    // underflowing to 0 on some component — drives the raw estimate to 0 or
+    // NaN (e.g. under MAX norm, maxCoeff drops a NaN that isn't the first
+    // element, leaving a finite dt0 but an Inf d2 -> dt1 == 0 -> raw == 0).
+    // Applying std::max(dtmin, …) first would launder that into a silent
+    // ~1-ULP step, masking the exact tolerance misconfiguration this
+    // diagnostic names. Guard first, floor second.
+    double dt_raw = std::min({100.0 * dt0, dt1, dtmax});
+    double signed_dt = tdir * dt_raw;
     if (!std::isfinite(signed_dt) || signed_dt == 0.0) {
-        // Non-finite or exactly-zero return is almost always the user setting
+        // Non-finite or exactly-zero estimate is almost always the user setting
         // both abs_tol and rel_tol to zero on a component where x0 is zero —
         // the scaling vector sk[i] = atol + |x0|*rtol goes to zero, and the
-        // scaled residuals become 0/0 = NaN. The adaptive driver catches this
-        // case upstream; this guards the remaining FP edges (atol > 0 but
-        // atol + |x0|*rtol still underflows, etc.).
+        // scaled residuals become 0/0 = NaN or a/0 = Inf. The adaptive driver
+        // rejects abs_tol + rel_tol <= 0 upstream, but that check passes when
+        // rel_tol > 0 and x0[i] == 0 (sk[i] still underflows to 0); this guards
+        // that remaining FP edge.
         throw std::runtime_error(
             "Hairer-Wanner initial-dt estimator produced a non-finite or zero step: dt=" +
             std::to_string(signed_dt) + " (d0=" + std::to_string(d0) +
             ", d1=" + std::to_string(d1) + ", d2=" + std::to_string(d2) +
             "). Check per-component abs_tol / rel_tol and the initial state.");
     }
-    return signed_dt;
+    // Apply the OrdinaryDiffEq dtmin floor only to a legitimately finite,
+    // positive estimate (a genuinely-stiff sub-dtmin step).
+    return tdir * std::max(dtmin, dt_raw);
 }
 
 } // namespace tycho::integrators
