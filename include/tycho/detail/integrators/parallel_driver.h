@@ -519,24 +519,18 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                             // a genuinely unintegrable lane still terminates via
                             // the per-lane stall/max_steps guards.
                             if (!std::isfinite(err_norm)) {
-                                // Un-poison this lane's FSAL before retrying. For
-                                // FSAL/LastStageIsFxf methods, peek_fsal() above
-                                // wrote f(xnext) into xdotnext_ss[itmp]; when xnext
-                                // is NaN that is a NaN k[0] that the retry's
-                                // seed_fsal would feed back regardless of h,
-                                // defeating recovery. Recompute f(xi) (finite for
-                                // a transient singularity, since xi is unchanged
-                                // and lies off the bad time) so the shrunk retry
-                                // starts from a clean stage-0. A persistent
-                                // singularity leaves f(xi) non-finite and correctly
-                                // stalls. Non-FSAL methods reset_fsal every step,
-                                // so no un-poisoning is needed there.
-                                if constexpr (method_does_fsal) {
-                                    xdotnext.setZero();
-                                    ode.compute(xis[itmp], xdotnext);
-                                    for (int k = 0; k < ode.output_rows(); ++k)
-                                        xdotnext_ss[k][itmp] = xdotnext[k];
-                                }
+                                // No explicit FSAL un-poisoning is needed here. The
+                                // retry re-packs this lane from xdotis[itmp] (top of
+                                // loop, before seed_fsal), and xdotis is written only
+                                // on an accepted step (below), so on a reject it still
+                                // holds the finite f(xi) from the last accepted step.
+                                // The NaN that peek_fsal wrote into xdotnext_ss on the
+                                // bad step is fully overwritten from xdotis before the
+                                // next seed_fsal, so the shrunk retry starts from a
+                                // clean stage-0 without any per-lane recompute. (A
+                                // genuinely persistent singularity leaves xis[itmp]
+                                // and its derivative unable to resolve under shrink and
+                                // terminates via the per-lane stall/max_steps guards.)
                                 hs[itmp] *= kNonfiniteStepShrink;
                                 nrej[itmp]++;
                                 continueloops[itmp] = true;
@@ -562,7 +556,15 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                                                              cfg.error_order, nacc[itmp]);
                             double hnext = outcome.dt_new;
 
-                            if (hnext / h_lane > cfg.max_step_change)
+                            // First accepted step is exempt from the max_step_change
+                            // clamp — OrdinaryDiffEq's qmax_first_step deliberately
+                            // lets a conservative Hairer-Wanner initial dt grow
+                            // quickly, and this Tycho-only clamp would otherwise cap
+                            // that first-step growth (nacc[itmp] is the count of
+                            // *previously* accepted steps, so == 0 is the first step).
+                            if (nacc[itmp] == 0)
+                                h_lane = hnext;
+                            else if (hnext / h_lane > cfg.max_step_change)
                                 h_lane *= cfg.max_step_change;
                             else if (hnext / h_lane < 1.0 / cfg.max_step_change)
                                 h_lane /= cfg.max_step_change;

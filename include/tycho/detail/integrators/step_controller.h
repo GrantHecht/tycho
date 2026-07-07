@@ -264,8 +264,9 @@ struct PIController {
 /// accept_safety, history shift) matches OrdinaryDiffEqCore.jl `PIDController`.
 /// The struct-default gains below are a bare pure-integral (1, 0, 0) fallback
 /// for direct construction; when selected via `Integrator::set_controller(PID)`
-/// the per-method order-scaled Lund gains (β1 = 7/(10·order), β2 = 2/(5·order),
-/// β3 = 0 — OrdinaryDiffEq's `beta1_default`/`beta2_default`) are applied by
+/// the per-method order-scaled Lund gains (generically β1 = 7/(10·order),
+/// β2 = 2/(5·order), β3 = 0 — OrdinaryDiffEq's `beta1_default`/`beta2_default`,
+/// with DOPRI54 overridden to β1 = 17/100, β2 = 4/100) are applied by
 /// `controller_defaults_for`, matching OrdinaryDiffEq's algorithm defaults.
 struct PIDController {
     double beta1_ = 1.0;           ///< @internal Proportional gain (bare default; see class note).

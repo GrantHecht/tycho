@@ -20,6 +20,7 @@
 #include <Eigen/Core>
 #include <cmath>
 #include <gtest/gtest.h>
+#include <limits>
 
 using tycho::integrators::ErrorNormType;
 using tycho::integrators::estimate_initial_dt;
@@ -67,19 +68,20 @@ TEST(InitialDtTest, ZeroTolsOnZeroStateThrowsFromHWInitialDt) {
     }
 }
 
-// Degenerate per-component scaling throws via the NaN-dynamics guard, CONSISTENTLY
-// under both RMS and MAX norms. Component 1 (v) carries a zero scaling: atol[1]=0
-// and x0[1]=0 make sk[1]=atol+|v0|*rtol=0, which still passes the driver's
-// abs+rel>0 precheck (rel[1]>0). The 0/0 scaled residual is NaN; under both RMS
-// (squaredNorm propagates NaN) and MAX (the NaN-propagating maxCoeff guard —
-// error_norm.h) the estimate d0 goes NaN, so dt0 goes NaN, the trial state x1
-// goes NaN, and f(x1) trips check_state_finite_or_throw. This is a static
-// tolerance misconfiguration (atol=0 on a zero component), not a recoverable
-// transient — throwing with a clear diagnostic is correct, and matches
-// OrdinaryDiffEq, which returns dt=NaN -> ReturnCode.DtNaN (an abort) here.
-// Recovery from a *transient* NaN during stepping is the driver's job
-// (reject-and-shrink), not the one-shot initial-dt estimate's.
-TEST(InitialDtTest, DegenerateScalingThrowsViaNonFiniteState) {
+// Degenerate per-component scaling throws intrinsically via the non-finite-dt0
+// guard, CONSISTENTLY under both RMS and MAX norms. Component 1 (v) carries a
+// zero scaling: atol[1]=0 and x0[1]=0 make sk[1]=atol+|v0|*rtol=0, which still
+// passes the driver's abs+rel>0 precheck (rel[1]>0). The 0/0 scaled residual is
+// NaN; under both RMS (squaredNorm propagates NaN) and MAX (the NaN-propagating
+// maxCoeff guard — error_norm.h) the estimate d0 goes NaN, so dt0 goes NaN, and
+// the intrinsic `!isfinite(dt0)` guard aborts BEFORE the trial step (rather than
+// relying on the NaN to propagate through f(x1) — which only throws if the
+// dynamics don't launder it). This is a static tolerance misconfiguration
+// (atol=0 on a zero component), not a recoverable transient — throwing with a
+// clear diagnostic is correct, and matches OrdinaryDiffEq, which returns dt=NaN
+// -> ReturnCode.DtNaN (an abort) here. Recovery from a *transient* NaN during
+// stepping is the driver's job (reject-and-shrink), not this one-shot estimate's.
+TEST(InitialDtTest, DegenerateScalingThrowsViaNonFiniteDt0) {
     TychoTest::SHO sho(0.0);
     Eigen::Vector3d x0;
     x0 << 1.0, 0.0, 0.0; // x=1 (finite scaling), v=0 (zero scaling on comp 1)
@@ -92,13 +94,38 @@ TEST(InitialDtTest, DegenerateScalingThrowsViaNonFiniteState) {
     for (ErrorNormType norm : {ErrorNormType::RMS, ErrorNormType::MAX}) {
         try {
             (void)estimate_initial_dt(sho, x0, /*tf=*/1.0, atol, rtol, /*order=*/5, norm);
-            FAIL() << "degenerate scaling must throw via the non-finite-state guard";
+            FAIL() << "degenerate scaling must throw via the non-finite-dt0 guard";
         } catch (const std::runtime_error &e) {
             const std::string msg = e.what();
-            EXPECT_NE(msg.find("Non-finite state"), std::string::npos)
-                << "should throw from the f(x1) dynamics check; got: " << msg;
+            EXPECT_NE(msg.find("degenerate error scaling"), std::string::npos)
+                << "should throw from the intrinsic non-finite-dt0 guard; got: " << msg;
             EXPECT_NE(msg.find("Hairer-Wanner initial-dt"), std::string::npos)
                 << "should identify the HW initial-dt site; got: " << msg;
+        }
+    }
+}
+
+// A non-finite integration endpoint (t0 or tf is NaN/Inf) must throw
+// intrinsically — the estimator cannot rely on its callers to pre-validate, and
+// a NaN tf would otherwise slip past the `dtmax == 0` short-circuit and be
+// silently laundered by the std::min({...}) raw-estimate fold (std::min drops a
+// NaN in any but its first argument), returning a finite, wrong-signed step.
+TEST(InitialDtTest, NonFiniteEndpointThrows) {
+    TychoTest::SHO sho(0.0);
+    Eigen::Vector3d x0;
+    x0 << 1.0, 0.0, 0.0;
+    Eigen::VectorXd atol = Eigen::VectorXd::Constant(2, 1e-9);
+    Eigen::VectorXd rtol = Eigen::VectorXd::Constant(2, 1e-9);
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const double inf = std::numeric_limits<double>::infinity();
+    for (double bad_tf : {nan, inf}) {
+        try {
+            (void)estimate_initial_dt(sho, x0, bad_tf, atol, rtol, /*order=*/5, ErrorNormType::RMS);
+            FAIL() << "non-finite tf must throw";
+        } catch (const std::runtime_error &e) {
+            const std::string msg = e.what();
+            EXPECT_NE(msg.find("non-finite integration endpoint"), std::string::npos)
+                << "should throw from the intrinsic endpoint guard; got: " << msg;
         }
     }
 }
@@ -238,6 +265,34 @@ TEST(InitialDtClamp, ZeroSpanReturnsZeroStep) {
     const double dt =
         estimate_initial_dt(sho, x0, /*tf=*/5.0, atol, rtol, /*order=*/4, ErrorNormType::RMS);
     EXPECT_EQ(dt, 0.0);
+}
+
+// dtmin floor: at very large |t0| the ULP spacing of the time axis exceeds any
+// well-conditioned step estimate, so the returned magnitude must be floored to
+// dtmin = nextafter(max(eps(t0), eps(tf))) rather than a sub-representable value.
+// Construct t0 = 1e16 (where one ULP ≈ 2) with tf one ULP above: the raw estimate
+// (min(100·dt0, dt1, dtmax)) is ≤ dtmax = one ULP < dtmin, so the final
+// max(dtmin, dt_raw) returns exactly dtmin. Pins the floor path (commit 7d98c49a)
+// that the t0≈0 clamp tests never exercise.
+TEST(InitialDtClamp, DtminFloorDominatesAtLargeTime) {
+    TychoTest::SHO sho(0.0);
+    const double t0 = 1.0e16;
+    const double tf = std::nextafter(t0, std::numeric_limits<double>::infinity());
+    Eigen::Vector3d x0;
+    x0 << 1.0, 0.0, t0;
+    Eigen::VectorXd atol = Eigen::VectorXd::Constant(2, 1e-6);
+    Eigen::VectorXd rtol = Eigen::VectorXd::Constant(2, 1e-6);
+
+    const double dt = estimate_initial_dt(sho, x0, tf, atol, rtol, /*order=*/4, ErrorNormType::RMS);
+
+    const auto ulp = [](double t) {
+        const double a = std::abs(t);
+        return std::nextafter(a, std::numeric_limits<double>::infinity()) - a;
+    };
+    const double dtmin =
+        std::nextafter(std::max(ulp(t0), ulp(tf)), std::numeric_limits<double>::infinity());
+    EXPECT_GT(dt, 0.0) << "forward step must stay positive";
+    EXPECT_DOUBLE_EQ(dt, dtmin) << "returned magnitude must be floored to dtmin at large |t|";
 }
 
 // Backward, tiny-span: the dtmax clamp must hold in magnitude space and the

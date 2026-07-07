@@ -36,11 +36,15 @@ struct AdaptiveConfig {
     double def_step_size = 0.01;
     /// Maximum ratio |dt_new/dt_old| allowed per step (must be > 1). This is a
     /// Tycho extension with no OrdinaryDiffEq analog — Julia bounds step growth
-    /// solely through the in-controller qmin/qmax clamp. At the default 10.0 it
-    /// is inert (every shipped controller's own growth/shrink envelope is
-    /// already tighter than [1/10, 10]); it only takes effect, and thus only
-    /// diverges from OrdinaryDiffEq, if a user sets it below the controller's
-    /// growth cap.
+    /// solely through the in-controller qmin/qmax clamp. Applied on every step
+    /// EXCEPT the first accepted one, which the drivers exempt to match
+    /// OrdinaryDiffEq's qmax_first_step (a conservative Hairer-Wanner initial dt
+    /// is allowed to grow quickly on step one). On steady-state steps at the
+    /// default 10.0: the shrink side is inert (the shipped controllers' qmin=1/5
+    /// never shrinks past 1/10), while the growth side ties the steady-state
+    /// qmax=10 exactly — so it never binds *tighter* than the controller and
+    /// only diverges from OrdinaryDiffEq if a user sets it below the
+    /// controller's qmax.
     double max_step_change = 10.0;
     /// Hard cap on total steps (accepted + rejected) before throwing.
     int max_steps = 1'000'000;
@@ -440,7 +444,14 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
                                                  cfg.error_order, naccept);
                 double hnext = outcome.dt_new;
 
-                if (hnext / static_cast<double>(h) > cfg.max_step_change)
+                // First accepted step is exempt from the max_step_change clamp —
+                // OrdinaryDiffEq's qmax_first_step deliberately lets a conservative
+                // Hairer-Wanner initial dt grow quickly, and this Tycho-only clamp
+                // would otherwise cap that first-step growth (naccept is the count of
+                // *previously* accepted steps, so == 0 is the first step).
+                if (naccept == 0)
+                    h = Scalar(hnext);
+                else if (hnext / static_cast<double>(h) > cfg.max_step_change)
                     h *= Scalar(cfg.max_step_change);
                 else if (hnext / static_cast<double>(h) < 1.0 / cfg.max_step_change)
                     h /= Scalar(cfg.max_step_change);

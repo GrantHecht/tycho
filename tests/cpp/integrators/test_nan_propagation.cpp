@@ -309,10 +309,55 @@ TEST_F(NanPropagationTest, AdaptiveTransientMidpointNaNRecoversByShrinking) {
     x0 << 1.0, 0.0, 0.0;
     std::vector<Integrator<TimeKeyedNaNSHO>::EventPack> events;
 
-    EXPECT_NO_THROW({
-        auto traj = integ.integrate_dense(x0, 0.1, events, /*alloutput=*/true);
-        (void)traj;
-    }) << "a transient midpoint NaN must recover by rejecting and shrinking h, not throw";
+    Integrator<TimeKeyedNaNSHO>::DenseEventRet traj;
+    EXPECT_NO_THROW({ traj = integ.integrate_dense(x0, 0.1, events, /*alloutput=*/true); })
+        << "a transient midpoint NaN must recover by rejecting and shrinking h, not throw";
+    // Recovery must actually reach tf with a finite state — not merely "not throw"
+    // (a recovery that restored FSAL wrong or landed on NaN would still pass a bare
+    // EXPECT_NO_THROW if it happened to complete).
+    const auto &grid = std::get<0>(traj);
+    ASSERT_FALSE(grid.empty());
+    const auto &xf = grid.back();
+    EXPECT_NEAR(xf[2], 0.1, 1e-9) << "recovered trajectory must reach tf";
+    EXPECT_TRUE(std::isfinite(xf[0]) && std::isfinite(xf[1]))
+        << "recovered final state must be finite";
+}
+
+// A TRANSIENT full-step-node NaN must RECOVER via the PRIMARY err_norm reject
+// branch (not the midpoint guard). DOPRI54's last stage (c = 1) evaluates at the
+// step-end node t0 + h; a NaN injected at the single time t = 0.045 (= the first
+// step's end node with HW off, def_step 0.1, tf 0.1) flows into xnext AND
+// xnext_est, so err_norm goes non-finite and the driver rejects + shrinks h. The
+// shrunk retry's nodes move off 0.045 and the integration completes; adaptive
+// re-alignment never lands another evaluation exactly on 0.045 (a measure-zero
+// coincidence at tol 1e-12). Recovery must produce the SAME final state as the
+// clean SHO (NaN trigger disabled) — this pins correct-state recovery through the
+// err_norm branch, which the persistent-singularity stall test only drives to
+// termination, never to recovery. DOPRI54 is FSAL, so the scalar restore_fsal on
+// the err_norm reject path is exercised here.
+TEST_F(NanPropagationTest, AdaptiveTransientErrNormNaNRecoversByShrinking) {
+    constexpr double kFirstStepNode = 0.045;
+    Eigen::Vector3d x0;
+    x0 << 1.0, 0.0, 0.0;
+
+    auto run = [&](double nan_at_t) {
+        TimeKeyedNaNSHO ode(nan_at_t);
+        Integrator<TimeKeyedNaNSHO> integ(ode, IVPAlg::DOPRI54, 0.1);
+        integ.set_auto_initial_dt(false);
+        integ.set_abs_tol(1e-8);
+        integ.set_rel_tol(1e-8);
+        return integ.integrate(x0, 0.1);
+    };
+
+    // Clean reference: identical integration with the trigger disabled.
+    auto ref = run(std::numeric_limits<double>::quiet_NaN());
+    Integrator<TimeKeyedNaNSHO>::IntegRet got;
+    EXPECT_NO_THROW({ got = run(kFirstStepNode); })
+        << "a transient full-step-node NaN must recover via err_norm reject-and-shrink";
+    for (int i = 0; i < 2; ++i)
+        EXPECT_NEAR(got[i], ref[i], 1e-7)
+            << "recovered state must match the clean reference; component " << i;
+    EXPECT_NEAR(got[2], 0.1, 1e-9) << "recovered trajectory must reach tf";
 }
 
 // A.2 — DOPRI87 with NaN injected at t = h/2 hits ONLY the post-step
@@ -354,6 +399,91 @@ TEST_F(NanPropagationTest, AdaptiveMidpointDerivGuardFiresOnSingularRhs) {
             << msg;
     } catch (...) {
         FAIL() << "Expected std::runtime_error, got a different exception type.";
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Batch (SIMD) reject-and-shrink recovery. The scalar path is covered above; the
+// per-lane batch path has its own reject-and-shrink block (parallel_driver.h),
+// and for FSAL methods a distinct FSAL-consistency concern on a rejected lane.
+// Five trajectories force a SECOND SIMD pack (W = 4), so trajectory index 4 is
+// packed — the exact configuration in which a lane-vs-trajectory index confusion
+// in the FSAL reject path would corrupt SuperScalar-buffer memory. DOPRI54 is
+// FSAL. A single-time NaN at every lane's first step-end node (t = 0.045) makes
+// each lane's err_norm non-finite once; every lane must reject, shrink, and
+// recover to the SAME state the scalar driver produces.
+// -----------------------------------------------------------------------------
+TEST_F(NanPropagationTest, BatchTransientNaNRecoversAndMatchesScalar) {
+    constexpr double kFirstStepNode = 0.045;
+    TimeKeyedNaNSHO ode(kFirstStepNode);
+    using I = Integrator<TimeKeyedNaNSHO>;
+    using R = I::IntegRet;
+
+    std::vector<R> x0s(5);
+    for (int j = 0; j < 5; ++j) {
+        x0s[j][0] = 1.0 + 0.1 * j; // distinct amplitude per lane
+        x0s[j][1] = 0.0;
+        x0s[j][2] = 0.0; // t0
+    }
+    Eigen::VectorXd tfs(5);
+    tfs.setConstant(0.1);
+
+    auto run = [&](bool vectorize) {
+        I integ(ode, IVPAlg::DOPRI54, 0.1);
+        integ.set_auto_initial_dt(false);
+        integ.set_abs_tol(1e-8);
+        integ.set_rel_tol(1e-8);
+        integ.vectorize_batch_calls_ = vectorize;
+        return integ.integrate(x0s, tfs);
+    };
+
+    std::vector<R> scalar, batch;
+    ASSERT_NO_THROW({ scalar = run(false); });
+    EXPECT_NO_THROW({ batch = run(true); })
+        << "vectorized batch transient NaN must recover per-lane, not throw";
+    ASSERT_EQ(scalar.size(), 5u);
+    ASSERT_EQ(batch.size(), 5u);
+    for (int j = 0; j < 5; ++j)
+        for (int i = 0; i < 3; ++i)
+            EXPECT_NEAR(batch[j][i], scalar[j][i], 1e-9)
+                << "vectorized batch must match scalar after recovery; traj=" << j << " comp=" << i;
+}
+
+// Batch persistent singularity: a lane that never resolves under step reduction
+// (Kepler at the origin, acc = 0/0 = NaN for any h) must reject-shrink to an
+// underflow stall with a per-lane diagnostic — the batch analog of
+// ScalarAdaptivePersistentSingularityStalls. The singular lane is index 4 (second
+// SIMD pack) on the FSAL DOPRI54 method, so the reject path runs with a
+// trajectory index >= the SIMD width.
+TEST_F(NanPropagationTest, BatchPersistentSingularityStalls) {
+    astro::Kepler kep(kMu);
+    Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI54, 1.0);
+    integ.set_auto_initial_dt(false);
+    integ.set_abs_tol(1e-6);
+    integ.set_rel_tol(1e-9);
+    integ.vectorize_batch_calls_ = true; // adaptive on (default)
+
+    using K = Integrator<astro::Kepler>::IntegRet;
+    K good, bad;
+    auto g = leo_state();
+    auto b = origin_state();
+    for (int i = 0; i < 7; ++i) {
+        good[i] = g[i];
+        bad[i] = b[i];
+    }
+    std::vector<K> x0s = {good, good, good, good, bad}; // singular lane = index 4
+    Eigen::VectorXd tfs(5);
+    tfs.setConstant(100.0);
+
+    try {
+        integ.integrate(x0s, tfs);
+        FAIL() << "batch persistent singularity must stall-throw";
+    } catch (const std::runtime_error &e) {
+        std::string msg(e.what());
+        EXPECT_NE(msg.find("underflowed"), std::string::npos)
+            << "persistent singular lane should reject-shrink to a stall; got: " << msg;
+    } catch (...) {
+        FAIL() << "Expected std::runtime_error.";
     }
 }
 

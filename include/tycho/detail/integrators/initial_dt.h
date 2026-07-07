@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <stdexcept>
 
 namespace tycho::integrators {
 
@@ -20,7 +21,7 @@ namespace tycho::integrators {
 ///   sk_i = atol_i + |u0_i| · rtol_i
 ///   d₀ = norm(u0 ./ sk)
 ///   d₁ = norm(f₀ ./ sk)
-///   if d₀ < 1e-5 or d₁ < 1e-5: dt₀ = 1e-6
+///   if d₀ < 1e-5 or d₁ < 1e-5: dt₀ = smalldt   [= max(dtmin, 1e-6)]
 ///   else:                      dt₀ = 0.01 · (d₀/d₁)
 ///   dt₀ = min(dt₀, dtmax)                        [clamp — see dtmax/dtmin note]
 ///   u₁ = u0 + tdir·dt₀ · f₀
@@ -77,6 +78,23 @@ template <class DODE, class InputVec, class TolVec>
 double estimate_initial_dt(const DODE &ode, const InputVec &x0, double tf, const TolVec &abs_tols,
                            const TolVec &rel_tols, int order, ErrorNormType norm_type) {
     const double t0 = x0[ode.t_var()];
+
+    // Intrinsic finiteness guard on the endpoints. A non-finite t0 or tf makes
+    // dtmax = |tf - t0| NaN, which slips past the `dtmax == 0` short-circuit
+    // below (NaN == 0 is false) and would then be silently laundered by the
+    // std::min({...}) that forms the raw estimate — std::min drops a NaN in any
+    // but its first argument — returning a finite but wrong (and wrong-signed,
+    // since tdir keys off tf >= t0) step with no error. The production drivers
+    // already reject non-finite tf/x0 before calling this, but the function is
+    // namespace-visible and directly unit-tested, so make the abort a property
+    // of the estimator itself, not of its callers. Matches OrdinaryDiffEq, whose
+    // dt = NaN path aborts via ReturnCode.DtNaN.
+    if (!std::isfinite(t0) || !std::isfinite(tf)) {
+        throw std::runtime_error(
+            "estimate_initial_dt (Hairer-Wanner initial-dt): non-finite integration "
+            "endpoint (t0 or tf is NaN/Inf); cannot compute an initial step.");
+    }
+
     const double tdir = (tf >= t0) ? 1.0 : -1.0;
     const int n = ode.x_vars();
 
@@ -135,6 +153,22 @@ double estimate_initial_dt(const DODE &ode, const InputVec &x0, double tf, const
     // clamps prior to evaluating f at the trial point x1).
     dt0 = std::min(dt0, dtmax);
 
+    // Make the degenerate-scaling abort intrinsic rather than contingent on the
+    // user ODE propagating a NaN. A per-component scaling sk[i] = atol[i] +
+    // |x0[i]|*rtol[i] == 0 (static misconfiguration: atol[i] == 0 on a zero
+    // state component) yields a 0/0 = NaN (or Inf/Inf = NaN) in d0/d1 and hence
+    // a non-finite dt0. Rather than rely on that NaN flowing through f(x1) to
+    // trip the check below (which only fires if the dynamics don't launder it),
+    // abort here. Past the endpoint guard above, dtmax is finite and d0/d1 are
+    // finite whenever every sk[i] > 0, so a non-finite dt0 uniquely signals the
+    // degenerate 0/0 scaling. Matches OrdinaryDiffEq's dt = NaN -> DtNaN abort.
+    if (!std::isfinite(dt0)) {
+        throw std::runtime_error(
+            "estimate_initial_dt (Hairer-Wanner initial-dt): non-finite trial step "
+            "dt0 from degenerate error scaling (sk[i] = atol[i] + |x0[i]|*rtol[i] == 0 "
+            "— check for atol[i] == 0 on a zero state component).");
+    }
+
     typename DODE::template Input<double> x1 = x0;
     for (int i = 0; i < n; ++i) {
         x1[i] = x0[i] + tdir * dt0 * f0[i];
@@ -175,12 +209,15 @@ double estimate_initial_dt(const DODE &ode, const InputVec &x0, double tf, const
     // finite-but-degenerate raw estimate (e.g. dt1 underflow to 0 with finite f)
     // to dtmin — a tiny but valid first step — exactly as OrdinaryDiffEq returns
     // tdir*max(dtmin, min(100dt0, dt1, dtmax)). It is NOT the NaN-scaling escape
-    // hatch: a degenerate per-component scaling (sk[i] → 0) produces a NaN d0/dt0
-    // → NaN x1, which the f(x1) check above has already thrown on (matching
-    // OrdinaryDiffEq's dt=NaN → DtNaN abort). The coercion is written explicitly
-    // (not via std::max(x, NaN) == x, which is order-dependent and differs from
-    // Julia's NaN-propagating max) so any residual non-finite raw value floors
-    // deterministically rather than laundering silently.
+    // hatch: the two intrinsic guards above (non-finite endpoint, and non-finite
+    // dt0 from degenerate sk[i] → 0 scaling) have already thrown before reaching
+    // here, so past this point dtmax, dt0, and dt1 are all finite and the
+    // std::min({...}) below cannot silently launder a NaN (std::min drops a NaN
+    // in any but its first argument, so the earlier guards — not this fold — are
+    // what make the abort deterministic). The `!isfinite` coercion is retained as
+    // defense-in-depth; it floors a finite-but-tiny/zero raw estimate to dtmin and
+    // is written explicitly (not via std::max(x, NaN) == x, which is order-
+    // dependent and differs from Julia's NaN-propagating max).
     double dt_raw = std::min({100.0 * dt0, dt1, dtmax});
     if (!std::isfinite(dt_raw) || dt_raw <= 0.0) {
         dt_raw = dtmin;

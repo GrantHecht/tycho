@@ -45,23 +45,79 @@ TEST_F(IntegratorTest, MaxStepChangeSetterRejectsValuesAtOrBelowOne) {
     EXPECT_DOUBLE_EQ(integ.get_max_step_change(), 10.0);
 }
 
+namespace {
+// Constant-rate ODE dx/dt = 1. The embedded error is identically zero, so the
+// controller proposes its MAXIMUM growth on every step — making max_step_change
+// the binding constraint on every steady-state step. SHO is unsuitable here: its
+// ideal step size stabilises once cruising and the controller stops wanting to
+// grow, so after the first-step exemption (OrdinaryDiffEq qmax_first_step parity)
+// jumps straight to cruising, the clamp never binds again. ConstRate keeps the
+// clamp binding on every step after the first.
+struct ConstRate : oc::StaticODE<ConstRate, 1, 0, 0, vf::DenseDerivativeMode::FDiffFwd,
+                                  vf::DenseDerivativeMode::FDiffFwd> {
+    ConstRate() { this->set_ode_size(1, 0, 0); }
+    template <class InType, class OutType>
+    inline void compute_impl(vf::CVecRef<InType> x_, vf::CVecRef<OutType> fx_) const {
+        auto &fx = fx_.const_cast_derived();
+        fx[0] = typename InType::Scalar(1.0);
+    }
+};
+} // namespace
+
 // -----------------------------------------------------------------------------
-// Clamp behaviour: run with a loose tolerance and a very small
-// max_step_change. Under those conditions every controller proposal
-// would want to grow h by well over max_step_change on SHO (smooth,
-// low error), so the driver-side clamp is the binding constraint.
-// Step count should scale inversely with max_step_change: tighter
-// clamp → more steps.
+// Steady-state clamp: after the first (exempt) step, no accepted-step growth
+// ratio may exceed max_step_change. On ConstRate the controller wants maximum
+// growth every step, so the clamp binds at exactly its value on each steady step.
+// Note the first-step exemption: step 1 is the initial h and step 2 carries the
+// unclamped first-step growth, so the steady-state invariant is checked from the
+// third accepted step onward.
+// -----------------------------------------------------------------------------
+TEST_F(IntegratorTest, MaxStepChangeClamp_BoundsSteadyStateGrowth) {
+    ConstRate ode;
+    Eigen::Vector2d x0;
+    x0 << 0.0, 0.0; // x = 0, t = 0
+    Integrator<ConstRate> integ(ode, IVPAlg::DOPRI87, 1.0);
+    integ.set_initial_step_size(1.0); // HW off; adaptive stays on
+    integ.set_abs_tol(1e-4);
+    integ.set_rel_tol(1e-4);
+    const double clamp = 1.5;
+    integ.set_max_step_change(clamp);
+
+    auto traj = integ.integrate_dense(x0, 1.0e6);
+    ASSERT_GE(traj.size(), 6u) << "need several steady-state steps to probe the clamp";
+    constexpr int kTimeIdx = 1; // 1-state ODE → time in slot 1
+
+    int checked = 0;
+    for (size_t k = 3; k + 1 < traj.size(); ++k) {
+        const double h_prev = traj[k - 1][kTimeIdx] - traj[k - 2][kTimeIdx];
+        const double h_cur = traj[k][kTimeIdx] - traj[k - 1][kTimeIdx];
+        if (h_prev <= 0.0)
+            continue;
+        EXPECT_LE(h_cur / h_prev, clamp * (1.0 + 1e-9))
+            << "steady-state growth exceeded max_step_change at accepted step " << k;
+        ++checked;
+    }
+    EXPECT_GT(checked, 0) << "no steady-state steps were exercised";
+}
+
+// -----------------------------------------------------------------------------
+// Regression guard: a tighter clamp forces more iterations to cover the same
+// interval (the post-first-step ramp is geometric in the clamp factor). ConstRate
+// keeps the controller perpetually wanting to grow, so the clamp — not the
+// dynamics — governs the step count after the first step. If a future edit
+// deletes or inverts the clamp, steps_1p5 drops to or below steps_10 and this
+// fails.
 // -----------------------------------------------------------------------------
 TEST_F(IntegratorTest, MaxStepChangeClamp_TighterBoundTakesMoreSteps) {
-    SHO ode(0.0);
-    Eigen::Vector3d x0;
-    x0 << 1.0, 0.0, 0.0;
-    const double tf = 10.0;
+    ConstRate ode;
+    Eigen::Vector2d x0;
+    x0 << 0.0, 0.0;
+    const double tf = 1.0e6;
 
     auto run_with_clamp = [&](double clamp) {
-        Integrator<SHO> integ(ode, IVPAlg::DOPRI87, 0.001);
-        integ.set_abs_tol(1e-4); // Loose — errors stay small, controller wants to grow
+        Integrator<ConstRate> integ(ode, IVPAlg::DOPRI87, 1.0);
+        integ.set_initial_step_size(1.0);
+        integ.set_abs_tol(1e-4);
         integ.set_rel_tol(1e-4);
         integ.set_max_step_change(clamp);
         (void)integ.integrate(x0, tf);
@@ -71,12 +127,6 @@ TEST_F(IntegratorTest, MaxStepChangeClamp_TighterBoundTakesMoreSteps) {
     const int64_t steps_1p5 = run_with_clamp(1.5);
     const int64_t steps_10 = run_with_clamp(10.0);
 
-    // Tighter clamp (1.5) constrains per-step growth, forcing more iterations
-    // to cover the same interval than the loose clamp (10.0). This test
-    // would have passed pre-fix because the clamp was always in effect —
-    // its value is as a regression guard: if a future edit deletes or
-    // inverts the clamp, `steps_1p5` drops to or below `steps_10` and
-    // this fails.
     EXPECT_GT(steps_1p5, steps_10)
         << "max_step_change=1.5 took " << steps_1p5 << " steps vs " << steps_10
         << " for max_step_change=10.0 — clamp appears to have regressed";

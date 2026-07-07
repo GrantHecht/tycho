@@ -11,6 +11,7 @@
 #include <Eigen/Core>
 #include <cmath>
 #include <gtest/gtest.h>
+#include <limits>
 
 using tycho::integrators::error_norm;
 using tycho::integrators::ErrorNormType;
@@ -86,4 +87,36 @@ TEST(ErrorNormTest, VectorizedPerComponentTolerances) {
 TEST(ErrorNormTest, MaxBranchEmptyVectorReturnsZero) {
     Eigen::VectorXd empty(0);
     EXPECT_DOUBLE_EQ(error_norm(empty, ErrorNormType::MAX), 0.0);
+}
+
+// MAX branch must PROPAGATE a NaN, not silently drop it. Eigen's maxCoeff()
+// returns whichever operand is not NaN by argument order (like C++ std::max),
+// so a NaN at a non-first index would be laundered to a finite value — the exact
+// Julia-vs-C++ trap (Julia max(x,NaN) === NaN). The explicit isNaN().any() guard
+// in error_norm.h must force NaN out regardless of position.
+TEST(ErrorNormTest, MaxBranchPropagatesNaN) {
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    Eigen::VectorXd tail_nan(2);
+    tail_nan << 1.0, nan; // NaN at the LAST index — the case maxCoeff drops
+    EXPECT_TRUE(std::isnan(error_norm(tail_nan, ErrorNormType::MAX)));
+
+    Eigen::VectorXd head_nan(2);
+    head_nan << nan, 1.0; // NaN at the FIRST index
+    EXPECT_TRUE(std::isnan(error_norm(head_nan, ErrorNormType::MAX)));
+}
+
+// Inf must survive as Inf (a large-but-real error), NOT be turned into NaN or
+// dropped. Distinguishes the NaN guard from a blanket non-finite coercion.
+TEST(ErrorNormTest, MaxBranchKeepsInfAsInf) {
+    Eigen::VectorXd res(2);
+    res << std::numeric_limits<double>::infinity(), 1.0;
+    EXPECT_TRUE(std::isinf(error_norm(res, ErrorNormType::MAX)));
+}
+
+// RMS must also propagate a NaN (squaredNorm: NaN² → NaN → sqrt → NaN). Pins the
+// companion guarantee the drivers rely on ("one scalar isfinite subsumes both").
+TEST(ErrorNormTest, RMSPropagatesNaN) {
+    Eigen::VectorXd res(2);
+    res << 1.0, std::numeric_limits<double>::quiet_NaN();
+    EXPECT_TRUE(std::isnan(error_norm(res, ErrorNormType::RMS)));
 }
