@@ -199,7 +199,14 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativ
                     adjgrad[0] += jx(i, 0) * adjvars[i];
                 }
                 state.setZero();
-                Scalar h = Scalar(this->table->delta_t_ / 10.0);
+                // Local FD step: delta_t_ is only set by the even-data loaders; the
+                // phase path uses load_exact_data(), which leaves delta_t_ == 0. Fall
+                // back to the table's average block width so h stays strictly
+                // positive (OC review §1.5).
+                double span = this->table->delta_t_ > 0.0
+                                  ? this->table->delta_t_
+                                  : this->table->total_t_ / std::max(1, this->table->num_blocks_);
+                Scalar h = Scalar(span / 10.0);
                 this->table->interpolate_deriv_ref(t + h, state);
                 for (int i = 0; i < this->output_rows(); i++) {
                     hx(0, 0) += (state(this->vars[i], 1) - jx(i, 0)) * adjvars[i] / h;

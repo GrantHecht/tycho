@@ -7,11 +7,11 @@
 
 #pragma once
 
-#include <tycho/tycho.h>
 #include "test_utils.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <memory>
+#include <tycho/tycho.h>
 #include <vector>
 
 namespace TychoTest {
@@ -72,6 +72,52 @@ make_brach_phase(int n_pts = 100, int n_defects = 32,
     phase->add_delta_time_objective(1.0, ScaleModes::AUTO);
 
     return phase;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Helper: build a non-even-data LGLInterpTable via load_exact_data
+//
+// load_exact_data() is the loader used by the phase path (ode_phase_base.cpp);
+// unlike the even-data loaders it never sets delta_t_ (stays 0.0). Used to
+// reproduce OC review §1.5: InterpFunction's non-LGL3 FD-Hessian branch
+// historically derived its step directly from delta_t_.
+///////////////////////////////////////////////////////////////////////////////
+
+/// Build a single-state (no controls) LGLInterpTable in the given transcription
+/// mode from a short analytic trajectory (x(t) = sin(t), xdot = cos(t)) loaded
+/// via load_exact_data(), so delta_t_ stays 0.0 as it does on the phase path.
+inline std::shared_ptr<LGLInterpTable> make_exact_lgl_table(TranscriptionModes method) {
+    constexpr int x_vars = 1;
+    // 6 == (num_nodes - 1) is divisible by (block_size_ - 1) for LGL3/5/7 (1, 2, 3).
+    constexpr int num_nodes = 7;
+    constexpr double t_final = 1.0;
+
+    auto tab = std::make_shared<LGLInterpTable>(x_vars, /*uv=*/0, method);
+
+    std::vector<Eigen::VectorXd> xtudat;
+    std::vector<Eigen::VectorXd> xdotdat;
+    xtudat.reserve(num_nodes);
+    xdotdat.reserve(num_nodes);
+    for (int i = 0; i < num_nodes; ++i) {
+        double t = t_final * static_cast<double>(i) / (num_nodes - 1);
+        Eigen::VectorXd node(2); // [x, t] -- axis_ == x_vars == 1
+        node << std::sin(t), t;
+        xtudat.push_back(node);
+        Eigen::VectorXd deriv(1);
+        deriv << std::cos(t);
+        xdotdat.push_back(deriv);
+    }
+
+    tab->load_exact_data(xtudat, xdotdat);
+    return tab;
+}
+
+/// Indices of all state variables (excluding the time/control columns) of a table.
+inline Eigen::VectorXi all_state_vars(const std::shared_ptr<LGLInterpTable> &tab) {
+    Eigen::VectorXi v(tab->x_vars_);
+    for (int i = 0; i < tab->x_vars_; ++i)
+        v[i] = i;
+    return v;
 }
 
 } // namespace TychoTest
