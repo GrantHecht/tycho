@@ -571,6 +571,14 @@ add_definitions(-DFMT_USE_LOCALE=0)
 if(WIN32)
 ## See : https://developercommunity.visualstudio.com/t/Access-violation-in-_Thrd_yield-after-up/10664660#T-N10669129-N10678728
 add_definitions(-D_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR)
+## Windows portability defines for building on Windows (clang-cl / MSVC):
+##  - NOMINMAX: <windows.h> (pulled in by detail/utils/thread_pool.h) defines
+##    min()/max() macros that clobber std::min/std::max across the header-only
+##    VF library.
+##  - WIN32_LEAN_AND_MEAN: excludes the RPC headers (rpcndr.h) that #define
+##    small/hyper, which detail/astro/kepler uses as ordinary identifiers.
+##  - _USE_MATH_DEFINES: exposes M_PI et al. from <cmath> (used by examples).
+add_definitions(-DNOMINMAX -DWIN32_LEAN_AND_MEAN -D_USE_MATH_DEFINES)
 endif()
 
 

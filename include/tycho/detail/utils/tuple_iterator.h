@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <array>      // std::array
 #include <functional> // std::invoke
 #include <tuple>      // std::tuple
 #include <type_traits>
