@@ -304,6 +304,15 @@ struct STMDriver {
                     stepper_input_ss[ode.input_rows()][v] =
                         (*(xs_s[idx].end() - i - 1))[ode.t_var()];
                 }
+                // Pad unused SIMD lanes [vmax, vsize) with lane-0-of-pack values,
+                // INCLUDING the tf time slot at index input_rows (never written
+                // for pad lanes otherwise). Leaves pad lanes with a valid,
+                // nonzero h instead of h = 0 -> Inf/NaN via 1/h when lane-0's
+                // t0 == 0 (INTEGRATORS_REVIEW §3.4).
+                for (int vp = vmax; vp < vsize; ++vp) {
+                    for (int j = 0; j <= ode.input_rows(); ++j) // <= : include tf slot
+                        stepper_input_ss[j][vp] = stepper_input_ss[j][0];
+                }
 
                 stepper_output_ss.setZero();
                 stepper_jacobian_ss.setZero();
@@ -444,6 +453,12 @@ struct STMDriver {
                         stepper_input_ss[j][v] = xs_s[idx][i][j];
                     }
                     stepper_input_ss[ode.input_rows()][v] = xs_s[idx][i + 1][ode.t_var()];
+                }
+                // Pad unused SIMD lanes with lane-0-of-pack values incl. the tf
+                // slot, so pad lanes see a valid nonzero h (INTEGRATORS_REVIEW §3.4).
+                for (int vp = vmax; vp < vsize; ++vp) {
+                    for (int j = 0; j <= ode.input_rows(); ++j)
+                        stepper_input_ss[j][vp] = stepper_input_ss[j][0];
                 }
 
                 stepper_output_ss.setZero();

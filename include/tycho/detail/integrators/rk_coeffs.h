@@ -32,10 +32,11 @@ namespace tycho {
 //                      interpolation polynomial, beyond the main Stages.
 //                      0 means "no extras" (Tsit5, BS3, DOPRI54, DOPRI87).
 //     LastStageIsFxf — does k_{Stages-1} (the last main stage) equal f(xf)?
-//                      True for FSAL methods (by construction). Also true for
-//                      BS5/Vern7/Vern8/Vern9 (their perform_step evaluates the
-//                      last main stage at (t+h, xf) with a-row equal to B).
-//                      False only for DOPRI87 (needs an explicit f(xf)).
+//                      True for FSAL methods (by construction, e.g. DOPRI54,
+//                      Tsit5, BS3) AND for BS5 (its last main stage has an
+//                      a-row equal to the b-vector, so k_last = f(xf) even
+//                      though FSAL=false). False for DOPRI87 and Vern7/8/9,
+//                      which need an explicit f(xf) evaluation for dense output.
 //     BmidStages     — total k-values referenced by the midpoint sum:
 //                      Stages + InterpStages + (LastStageIsFxf ? 0 : 1).
 //     ExtraA         — InterpStages × (Stages + InterpStages) a-matrix; row e
@@ -142,14 +143,14 @@ template <IVPAlg opt> struct RKCoeffs {};
 /// @internal
 /// @brief Butcher tableau for RK4Classic (internal dispatch tag only, not runtime-selectable).
 template <> struct RKCoeffs<IVPAlg::RK4Classic> {
-    static constexpr int Stages = 4;              ///< @internal Number of stages.
-    static constexpr int Order = 4;               ///< @internal Method order.
+    static constexpr int Stages = 4; ///< @internal Number of stages.
+    static constexpr int Order = 4;  ///< @internal Method order.
     /// @internal
     /// @brief Embedded error estimator order (0 = none).
     static constexpr int ErrorOrder = 0;
-    static constexpr bool FSAL = false;           ///< @internal First-same-as-last property.
-    static constexpr bool HasEmbedded = false;    ///< @internal Has embedded error estimator.
-    static constexpr bool HasMidpoint = false;    ///< @internal Supports midpoint dense output.
+    static constexpr bool FSAL = false;        ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = false; ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = false; ///< @internal Supports midpoint dense output.
 
     // Dense-output schema fields — all zero because HasMidpoint=false.
     static constexpr int InterpStages = 0;        ///< @internal Extra interpolation stages.
@@ -178,12 +179,12 @@ template <> struct RKCoeffs<IVPAlg::RK4Classic> {
 /// @internal
 /// @brief Butcher tableau for DOPRI54 (Dormand-Prince 5(4), user-selectable).
 template <> struct RKCoeffs<IVPAlg::DOPRI54> {
-    static constexpr int Stages = 7;           ///< @internal Number of stages.
-    static constexpr int Order = 5;            ///< @internal Method order.
-    static constexpr int ErrorOrder = 4;       ///< @internal Embedded error estimator order.
-    static constexpr bool FSAL = true;         ///< @internal First-same-as-last property.
-    static constexpr bool HasEmbedded = true;  ///< @internal Has embedded error estimator.
-    static constexpr bool HasMidpoint = true;  ///< @internal Supports midpoint dense output.
+    static constexpr int Stages = 7;          ///< @internal Number of stages.
+    static constexpr int Order = 5;           ///< @internal Method order.
+    static constexpr int ErrorOrder = 4;      ///< @internal Embedded error estimator order.
+    static constexpr bool FSAL = true;        ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = true; ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = true; ///< @internal Supports midpoint dense output.
 
     // Dense-output schema fields (no extra interpolation stages — DOPRI54
     // uses its own 5th-order interpolation polynomial over existing main stages).
@@ -237,8 +238,8 @@ template <> struct RKCoeffs<IVPAlg::DOPRI54> {
 /// @brief Butcher tableau for DOPRI5 (internal transcription dispatch tag; use DOPRI54 for
 /// runtime use).
 template <> struct RKCoeffs<IVPAlg::DOPRI5> {
-    static constexpr int Stages = 6;           ///< @internal Number of stages.
-    static constexpr int Order = 5;            ///< @internal Method order.
+    static constexpr int Stages = 6; ///< @internal Number of stages.
+    static constexpr int Order = 5;  ///< @internal Method order.
     /// @internal
     /// @brief Embedded error estimator order (0 = none).
     static constexpr int ErrorOrder = 0;
@@ -287,12 +288,12 @@ template <> struct RKCoeffs<IVPAlg::DOPRI5> {
 /// @internal
 /// @brief Butcher tableau for DOPRI87 (Dormand-Prince 8(7), user-selectable).
 template <> struct RKCoeffs<IVPAlg::DOPRI87> {
-    static constexpr int Stages = 13;          ///< @internal Number of stages.
-    static constexpr int Order = 8;            ///< @internal Method order.
-    static constexpr int ErrorOrder = 7;       ///< @internal Embedded error estimator order.
-    static constexpr bool FSAL = false;        ///< @internal First-same-as-last property.
-    static constexpr bool HasEmbedded = true;  ///< @internal Has embedded error estimator.
-    static constexpr bool HasMidpoint = true;  ///< @internal Supports midpoint dense output.
+    static constexpr int Stages = 13;         ///< @internal Number of stages.
+    static constexpr int Order = 8;           ///< @internal Method order.
+    static constexpr int ErrorOrder = 7;      ///< @internal Embedded error estimator order.
+    static constexpr bool FSAL = false;       ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = true; ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = true; ///< @internal Supports midpoint dense output.
 
     // Dense-output schema fields — DOPRI87's last main stage is not f(xf),
     // so the midpoint branch must evaluate f(xf) as an extra k-value. No other
@@ -397,12 +398,12 @@ template <> struct RKCoeffs<IVPAlg::DOPRI87> {
 /// @internal
 /// @brief Butcher tableau for Tsit5 (Tsitouras 5(4), user-selectable).
 template <> struct RKCoeffs<IVPAlg::Tsit5> {
-    static constexpr int Stages = 7;           ///< @internal Number of stages.
-    static constexpr int Order = 5;            ///< @internal Method order.
-    static constexpr int ErrorOrder = 4;       ///< @internal Embedded error estimator order.
-    static constexpr bool FSAL = true;         ///< @internal First-same-as-last property.
-    static constexpr bool HasEmbedded = true;  ///< @internal Has embedded error estimator.
-    static constexpr bool HasMidpoint = true;  ///< @internal Supports midpoint dense output.
+    static constexpr int Stages = 7;          ///< @internal Number of stages.
+    static constexpr int Order = 5;           ///< @internal Method order.
+    static constexpr int ErrorOrder = 4;      ///< @internal Embedded error estimator order.
+    static constexpr bool FSAL = true;        ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = true; ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = true; ///< @internal Supports midpoint dense output.
 
     // Dense-output schema fields (Tsit5's own 4th-order interpolation
     // polynomial uses only the 7 main stages; no extras needed).
@@ -472,12 +473,12 @@ template <> struct RKCoeffs<IVPAlg::Tsit5> {
 /// @internal
 /// @brief Butcher tableau for BS3 (Bogacki-Shampine 3(2), user-selectable).
 template <> struct RKCoeffs<IVPAlg::BS3> {
-    static constexpr int Stages = 4;           ///< @internal Number of stages.
-    static constexpr int Order = 3;            ///< @internal Method order.
-    static constexpr int ErrorOrder = 2;       ///< @internal Embedded error estimator order.
-    static constexpr bool FSAL = true;         ///< @internal First-same-as-last property.
-    static constexpr bool HasEmbedded = true;  ///< @internal Has embedded error estimator.
-    static constexpr bool HasMidpoint = true;  ///< @internal Supports midpoint dense output.
+    static constexpr int Stages = 4;          ///< @internal Number of stages.
+    static constexpr int Order = 3;           ///< @internal Method order.
+    static constexpr int ErrorOrder = 2;      ///< @internal Embedded error estimator order.
+    static constexpr bool FSAL = true;        ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = true; ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = true; ///< @internal Supports midpoint dense output.
 
     // Dense-output schema fields (BS3 falls back to Hermite cubic in Julia;
     // no extras needed).
@@ -536,8 +537,8 @@ template <> struct RKCoeffs<IVPAlg::BS3> {
 /// @brief Butcher tableau for BS3Trans (Bogacki-Shampine 3(2), transcription-only, no dense
 /// output).
 template <> struct RKCoeffs<IVPAlg::BS3Trans> {
-    static constexpr int Stages = 3;           ///< @internal Number of stages.
-    static constexpr int Order = 3;            ///< @internal Method order.
+    static constexpr int Stages = 3; ///< @internal Number of stages.
+    static constexpr int Order = 3;  ///< @internal Method order.
     /// @internal
     /// @brief Embedded error estimator order (0 = none).
     static constexpr int ErrorOrder = 0;
@@ -588,14 +589,14 @@ template <> struct RKCoeffs<IVPAlg::BS3Trans> {
 /// @internal
 /// @brief Butcher tableau for BS5 (Bogacki-Shampine 5(4), user-selectable).
 template <> struct RKCoeffs<IVPAlg::BS5> {
-    static constexpr int Stages = 8;           ///< @internal Number of stages.
-    static constexpr int Order = 5;            ///< @internal Method order.
-    static constexpr int ErrorOrder = 4;       ///< @internal Embedded error estimator order.
+    static constexpr int Stages = 8;     ///< @internal Number of stages.
+    static constexpr int Order = 5;      ///< @internal Method order.
+    static constexpr int ErrorOrder = 4; ///< @internal Embedded error estimator order.
     /// @internal
     /// @brief First-same-as-last property (B_8=0; not strict-FSAL).
     static constexpr bool FSAL = false;
-    static constexpr bool HasEmbedded = true;  ///< @internal Has embedded error estimator.
-    static constexpr bool HasMidpoint = true;  ///< @internal Supports midpoint dense output.
+    static constexpr bool HasEmbedded = true; ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = true; ///< @internal Supports midpoint dense output.
 
     // Dense-output schema fields. BS5's perform_step evaluates k_8 at
     // (t+h, xf) so k_8 = f(xf); 3 additional stages (k_9, k_10, k_11) needed
@@ -698,8 +699,8 @@ template <> struct RKCoeffs<IVPAlg::BS5> {
 /// @brief Butcher tableau for BS5Trans (Bogacki-Shampine 5(4), transcription-only, no dense
 /// output).
 template <> struct RKCoeffs<IVPAlg::BS5Trans> {
-    static constexpr int Stages = 7;           ///< @internal Number of stages.
-    static constexpr int Order = 5;            ///< @internal Method order.
+    static constexpr int Stages = 7; ///< @internal Number of stages.
+    static constexpr int Order = 5;  ///< @internal Method order.
     /// @internal
     /// @brief Embedded error estimator order (0 = none).
     static constexpr int ErrorOrder = 0;
@@ -762,12 +763,12 @@ template <> struct RKCoeffs<IVPAlg::BS5Trans> {
 /// @internal
 /// @brief Butcher tableau for Vern7 (Verner 7(6), user-selectable).
 template <> struct RKCoeffs<IVPAlg::Vern7> {
-    static constexpr int Stages = 10;          ///< @internal Number of stages.
-    static constexpr int Order = 7;            ///< @internal Method order.
-    static constexpr int ErrorOrder = 6;       ///< @internal Embedded error estimator order.
-    static constexpr bool FSAL = false;        ///< @internal First-same-as-last property.
-    static constexpr bool HasEmbedded = true;  ///< @internal Has embedded error estimator.
-    static constexpr bool HasMidpoint = true;  ///< @internal Supports midpoint dense output.
+    static constexpr int Stages = 10;         ///< @internal Number of stages.
+    static constexpr int Order = 7;           ///< @internal Method order.
+    static constexpr int ErrorOrder = 6;      ///< @internal Embedded error estimator order.
+    static constexpr bool FSAL = false;       ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = true; ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = true; ///< @internal Supports midpoint dense output.
 
     // Dense-output schema fields. The 6 extra stages (k_11..k_16) form the
     // Vern7Interp polynomial. f(xf) is evaluated separately in the midpoint
@@ -913,8 +914,8 @@ template <> struct RKCoeffs<IVPAlg::Vern7> {
 /// @internal
 /// @brief Butcher tableau for Vern7Trans (Verner 7(6), transcription-only, no dense output).
 template <> struct RKCoeffs<IVPAlg::Vern7Trans> {
-    static constexpr int Stages = 9;           ///< @internal Number of stages.
-    static constexpr int Order = 7;            ///< @internal Method order.
+    static constexpr int Stages = 9; ///< @internal Number of stages.
+    static constexpr int Order = 7;  ///< @internal Method order.
     /// @internal
     /// @brief Embedded error estimator order (0 = none).
     static constexpr int ErrorOrder = 0;
@@ -985,12 +986,12 @@ template <> struct RKCoeffs<IVPAlg::Vern7Trans> {
 /// @internal
 /// @brief Butcher tableau for Vern8 (Verner 8(7), user-selectable).
 template <> struct RKCoeffs<IVPAlg::Vern8> {
-    static constexpr int Stages = 13;          ///< @internal Number of stages.
-    static constexpr int Order = 8;            ///< @internal Method order.
-    static constexpr int ErrorOrder = 7;       ///< @internal Embedded error estimator order.
-    static constexpr bool FSAL = false;        ///< @internal First-same-as-last property.
-    static constexpr bool HasEmbedded = true;  ///< @internal Has embedded error estimator.
-    static constexpr bool HasMidpoint = true;  ///< @internal Supports midpoint dense output.
+    static constexpr int Stages = 13;         ///< @internal Number of stages.
+    static constexpr int Order = 8;           ///< @internal Method order.
+    static constexpr int ErrorOrder = 7;      ///< @internal Embedded error estimator order.
+    static constexpr bool FSAL = false;       ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = true; ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = true; ///< @internal Supports midpoint dense output.
 
     /// @internal
     /// @brief Extra interpolation stages.
@@ -1292,8 +1293,8 @@ template <> struct RKCoeffs<IVPAlg::Vern8> {
 /// @internal
 /// @brief Butcher tableau for Vern8Trans (Verner 8(7), transcription-only, no dense output).
 template <> struct RKCoeffs<IVPAlg::Vern8Trans> {
-    static constexpr int Stages = 12;          ///< @internal Number of stages.
-    static constexpr int Order = 8;            ///< @internal Method order.
+    static constexpr int Stages = 12; ///< @internal Number of stages.
+    static constexpr int Order = 8;   ///< @internal Method order.
     /// @internal
     /// @brief Embedded error estimator order (0 = none).
     static constexpr int ErrorOrder = 0;
@@ -1378,12 +1379,12 @@ template <> struct RKCoeffs<IVPAlg::Vern8Trans> {
 /// @internal
 /// @brief Butcher tableau for Vern9 (Verner 9(8), user-selectable).
 template <> struct RKCoeffs<IVPAlg::Vern9> {
-    static constexpr int Stages = 16;          ///< @internal Number of stages.
-    static constexpr int Order = 9;            ///< @internal Method order.
-    static constexpr int ErrorOrder = 8;       ///< @internal Embedded error estimator order.
-    static constexpr bool FSAL = false;        ///< @internal First-same-as-last property.
-    static constexpr bool HasEmbedded = true;  ///< @internal Has embedded error estimator.
-    static constexpr bool HasMidpoint = true;  ///< @internal Supports midpoint dense output.
+    static constexpr int Stages = 16;         ///< @internal Number of stages.
+    static constexpr int Order = 9;           ///< @internal Method order.
+    static constexpr int ErrorOrder = 8;      ///< @internal Embedded error estimator order.
+    static constexpr bool FSAL = false;       ///< @internal First-same-as-last property.
+    static constexpr bool HasEmbedded = true; ///< @internal Has embedded error estimator.
+    static constexpr bool HasMidpoint = true; ///< @internal Supports midpoint dense output.
 
     /// @internal
     /// @brief Extra interpolation stages.
@@ -1816,8 +1817,8 @@ template <> struct RKCoeffs<IVPAlg::Vern9> {
 /// @internal
 /// @brief Butcher tableau for Vern9Trans (Verner 9(8), transcription-only, no dense output).
 template <> struct RKCoeffs<IVPAlg::Vern9Trans> {
-    static constexpr int Stages = 15;          ///< @internal Number of stages.
-    static constexpr int Order = 9;            ///< @internal Method order.
+    static constexpr int Stages = 15; ///< @internal Number of stages.
+    static constexpr int Order = 9;   ///< @internal Method order.
     /// @internal
     /// @brief Embedded error estimator order (0 = none).
     static constexpr int ErrorOrder = 0;
@@ -1917,8 +1918,8 @@ template <> struct RKCoeffs<IVPAlg::Vern9Trans> {
 /// @internal
 /// @brief Butcher tableau for Tsit5Trans (Tsitouras 5(4), transcription-only, no dense output).
 template <> struct RKCoeffs<IVPAlg::Tsit5Trans> {
-    static constexpr int Stages = 6;           ///< @internal Number of stages.
-    static constexpr int Order = 5;            ///< @internal Method order.
+    static constexpr int Stages = 6; ///< @internal Number of stages.
+    static constexpr int Order = 5;  ///< @internal Method order.
     /// @internal
     /// @brief Embedded error estimator order (0 = none).
     static constexpr int ErrorOrder = 0;

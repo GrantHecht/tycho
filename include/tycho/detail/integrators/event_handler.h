@@ -27,6 +27,11 @@ using oc::InterpFunction;
 using oc::LGLInterpTable;
 using vf::GenericFunction;
 
+/// Machine-precision floor on the event abscissa bracket width, applied on top
+/// of the user's abscissa tolerance so bisection always terminates even at
+/// abscissa_tol == 0 or at ephemeris-scale |t| (INTEGRATORS_REVIEW §3.2).
+inline constexpr double kEventBracketRelTol = 16.0 * std::numeric_limits<double>::epsilon();
+
 /// Named direction constants for EventPack::direction. Left as plain int to
 /// preserve brace-init call-site syntax (`{gf, 0, 1}`) across C++ callers and
 /// to let the nanobind tuple-based Python API pass through unchanged.
@@ -97,6 +102,17 @@ class EventPack {
 ///
 /// Provides static methods used by AdaptiveDriver and Integrator to detect
 /// zero-crossings in event VectorFunctions during adaptive integration.
+///
+/// @note Limitations (INTEGRATORS_REVIEW §3.2):
+///   - Direction filtering (`event_direction::Rising/Falling`) is applied in
+///     integration-traversal order, not physical-time order. Under backward
+///     integration (tf < t0) a physically-rising crossing is reported as
+///     falling. Interpret the filter relative to traversal direction, or flip
+///     it by sign(tf - t0).
+///   - Only the endpoint sign product of each accepted step is inspected; an
+///     even number of crossings inside a single accepted step is invisible
+///     (no dense-output subsampling). Tighten tolerances / cap the step size
+///     if sub-step crossings must be resolved.
 struct EventHandler {
 
     /// @brief Alias for the integrators-namespace EventPack type.
@@ -131,8 +147,21 @@ struct EventHandler {
             int dir = events[j].direction();
             double vprod = vprev * vnext;
 
-            if (vprod < 0.0) {
-                if ((dir > 0 && vnext > 0) || (dir < 0 && vnext < 0) || dir == 0) {
+            // A crossing is either a strict sign flip across the interior
+            // (vprod < 0) OR the next endpoint sitting exactly on zero while
+            // the previous value was nonzero (INTEGRATORS_REVIEW §1.2). The
+            // vprev != 0 guard means the *following* step (which sees
+            // vprev == 0 at this same endpoint) does not double-count.
+            bool crossing = (vprod < 0.0) || (vnext == 0.0 && vprev != 0.0);
+            if (crossing) {
+                // Classify direction by the approach: rising if the value came
+                // up to/through zero (vnext > 0, or vnext == 0 from below),
+                // falling if it came down. This makes the endpoint-zero case
+                // filter correctly under Rising/Falling instead of being
+                // silently dropped by the old `vnext > 0` / `vnext < 0` test.
+                bool rising = (vnext > 0.0) || (vnext == 0.0 && vprev < 0.0);
+                bool falling = (vnext < 0.0) || (vnext == 0.0 && vprev > 0.0);
+                if ((dir > 0 && rising) || (dir < 0 && falling) || dir == 0) {
                     Eigen::Vector2d times;
                     times[0] = t_prev;
                     times[1] = xnext[t_var];
@@ -165,7 +194,8 @@ struct EventHandler {
     static std::vector<std::vector<std::optional<ODEState>>>
     refine_events(std::shared_ptr<LGLInterpTable> tab, const std::vector<EventPack> &events,
                   const std::vector<std::vector<Eigen::Vector2d>> &eventtimes, int input_rows,
-                  int max_iters, double tol, int &n_failed_refinements) {
+                  int max_iters, double residual_tol, double abscissa_tol,
+                  int &n_failed_refinements) {
 
         Eigen::VectorXi vars;
         vars.setLinSpaced(input_rows, 0, input_rows - 1);
@@ -188,7 +218,7 @@ struct EventHandler {
                         fx.setZero();
                         jx.setZero();
                         func.compute_jacobian(x, fx, jx);
-                        if (std::abs(fx[0]) < std::abs(tol)) {
+                        if (std::abs(fx[0]) < std::abs(residual_tol)) {
                             break;
                         }
                         // Guard against singular / non-finite Jacobian. Without
@@ -247,7 +277,10 @@ struct EventHandler {
                         }
 
                         tm = (tlow + thigh) / 2.0;
-                        if ((thigh - tlow) / 2.0 < std::abs(tol))
+                        if ((thigh - tlow) / 2.0 <
+                            std::max(std::abs(abscissa_tol),
+                                     kEventBracketRelTol *
+                                         std::max({std::abs(tlow), std::abs(thigh), 1.0})))
                             break;
 
                         x[0] = tm;
@@ -263,20 +296,26 @@ struct EventHandler {
 
                 // Run Newton from `tig` and accept only if the result is
                 // both in-bracket AND satisfies the residual contract
-                // |f(tevent)| <= tol. The internal `newton` lambda returns
-                // its last iterate on max_iters exhaustion without checking
-                // |fx| <= tol, so a slow-converging iterate that happens to
-                // land in-bracket would otherwise be silently accepted as
-                // the root and evade the n_failed_refinements counter.
+                // |f(tevent)| <= residual_tol. The internal `newton` lambda
+                // returns its last iterate on max_iters exhaustion without
+                // checking |fx| <= residual_tol, so a slow-converging
+                // iterate that happens to land in-bracket would otherwise be
+                // silently accepted as the root and evade the
+                // n_failed_refinements counter.
                 auto refine_one = [&](double tig_candidate, double lo,
                                       double hi) -> std::optional<double> {
                     double tevent = newton(tig_candidate);
-                    if (!(tevent > lo && tevent < hi)) {
+                    // Inclusive bracket (>=/<=): a root landing exactly on a
+                    // bracket endpoint is legitimate — the §1.2 endpoint-crossing
+                    // fix admits crossings whose value is exactly 0 at a step
+                    // boundary, so the refined root can sit on lo/hi. The NaN
+                    // sentinel still routes to retry (NaN >= lo is false).
+                    if (!(tevent >= lo && tevent <= hi)) {
                         return std::nullopt;
                     }
                     x[0] = tevent;
                     auto fv = func.compute(x);
-                    if (!std::isfinite(fv[0]) || std::abs(fv[0]) > tol) {
+                    if (!std::isfinite(fv[0]) || std::abs(fv[0]) > residual_tol) {
                         return std::nullopt;
                     }
                     return tevent;

@@ -223,8 +223,9 @@ TEST_F(IntegratorTest, STMParallelWorkerThrowsLeavesMainCountersCurrent) {
     const int64_t observed = integ.get_naccept();
     EXPECT_GE(observed, lower_bound)
         << "Writeback should reflect accumulated main-thread accept count, not "
-           "per-segment-local (baseline=" << baseline_naccept << ", lower_bound="
-        << lower_bound << ", observed=" << observed << "). A regression that publishes "
+           "per-segment-local (baseline="
+        << baseline_naccept << ", lower_bound=" << lower_bound << ", observed=" << observed
+        << "). A regression that publishes "
            "only the last segment's local main_na would land near "
         << (baseline_naccept / (kNParts - 1)) << ".";
     EXPECT_LE(observed, upper_bound)
@@ -264,4 +265,13 @@ TEST_F(IntegratorTest, STMParallelMainUnwindAggregatesWorkerFailures) {
         EXPECT_NE(msg.find("worker failure at t="), std::string::npos)
             << "At least one worker what() must be included: " << msg;
     }
+}
+
+// n_parts == 0 must be rejected, not silently return the initial state with an
+// identity STM (INTEGRATORS_REVIEW §3.5).
+TEST_F(IntegratorTest, STMParallelZeroPartsRejected) {
+    SHO ode(0.0);
+    Integrator<SHO> integ(ode, IVPAlg::DOPRI87, 0.01);
+    Eigen::Vector3d x0(1.0, 0.0, 0.0);
+    EXPECT_THROW((void)integ.integrate_stm_parallel(x0, 1.0, 0), std::invalid_argument);
 }
