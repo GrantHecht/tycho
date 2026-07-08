@@ -12,7 +12,6 @@ exceptions rather than crashing or being silently swallowed.
 import unittest
 
 import _tychopy as ast
-import numpy as np
 
 vf = ast.vector_functions
 oc = ast.optimal_control
@@ -55,7 +54,9 @@ class LinkRemoval(unittest.TestCase):
 
     def _make_two_phase_linked_ocp(self):
         ocp = self._make_two_phase_ocp()
-        ocp.add_direct_link_equal_con(0, "Back", [0], 1, "Front", [0], auto_scale="auto")
+        ocp.add_direct_link_equal_con(
+            0, "Back", [0], 1, "Front", [0], auto_scale="auto"
+        )
         return ocp
 
     def test_remove_phase_out_of_range_raises(self):

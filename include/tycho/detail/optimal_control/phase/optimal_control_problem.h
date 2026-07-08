@@ -455,7 +455,9 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
     /// @throws std::invalid_argument if @p ith is out of range, or if any
     ///         link function still references phase @p ith.
     void remove_phase(int ith) {
-        this->reset_transcription();
+        // Validate before any mutation (including the transcription/post-opt
+        // flags): a rejected removal must leave the OCP fully unmodified.
+        // Mirrors add_func_impl/remove_func_impl.
         if (ith < 0)
             ith = (int(this->phases.size()) + ith);
         if (ith < 0 || ith >= int(this->phases.size()))
@@ -477,6 +479,8 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
         check_referenced(this->link_inequalities_);
         check_referenced(this->link_objectives_);
 
+        this->reset_transcription();
+        this->invalidate_post_opt_info();
         this->phases.erase(this->phases.begin() + ith);
         this->phase_names.erase(this->phase_names.begin() + ith);
 
