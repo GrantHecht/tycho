@@ -36,10 +36,15 @@ void tycho::oc::PhaseIndexer::add_partitioned_equality(
     const std::vector<ConstraintInterface> &eqfuns, PhaseRegionFlags sreg,
     const Eigen::VectorXi &rxtuv, const Eigen::VectorXi &rodepv, const Eigen::VectorXi &rstatpv,
     const std::vector<ThreadingFlags> &Tmodes) {
+    if (eqfuns.empty())
+        return;
+
     int index = this->nlp_->equality_constraints_.size();
     int temp = this->next_phase_eq_con_;
     auto vincin = this->make_Vindex_Cindex(sreg, rxtuv, rodepv, rstatpv, eqfuns[0].output_rows(),
                                            this->next_phase_eq_con_);
+    assert(static_cast<size_t>(vincin[0].cols()) == eqfuns.size() &&
+           Tmodes.size() == eqfuns.size());
     for (int i = 0; i < eqfuns.size(); i++) {
         MatrixXi vindex = vincin[0].col(i);
         MatrixXi cindex = vincin[1].col(i);
@@ -273,8 +278,9 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
     } break;
     case PhaseRegionFlags::InnerPath: {
         if (IsOnlyControl && this->blocked_controls_) {
-            CinSet(this->num_defects_ - 2);
-            v_index_.resize(x1len, this->num_defects_ - 2);
+            int ncols = std::max(0, this->num_defects_ - 2);
+            CinSet(ncols);
+            v_index_.resize(x1len, ncols);
 
             for (int i = 1; i < (this->num_defects_ - 1); i++) {
                 int loc = 0;
@@ -344,16 +350,17 @@ tycho::oc::PhaseIndexer::make_Vindex_Cindex(PhaseRegionFlags sreg, const VectorX
     } break;
     case PhaseRegionFlags::FrontNodalBackPath: {
         if (IsOnlyControl && this->blocked_controls_) {
-            CinSet(this->num_defects_ - 2);
-            v_index_.resize(x3len, this->num_defects_ - 2);
+            int ncols = std::max(0, this->num_defects_ - 2);
+            CinSet(ncols);
+            v_index_.resize(x3len, ncols);
 
             for (int i = 1; i < (this->num_defects_ - 1); i++) {
                 int loc = 0;
                 VinLoopImpl(loc, i - 1, this->ode_first_state_locs_, rxtuv);
                 PathLoopImpl(loc, i - 1, i * (this->defect_cardinal_states_ - 1));
                 VinLoopImpl(loc, i - 1, this->ode_last_state_locs_, rxtuv);
-                VinLoopImpl(loc, i, this->ode_param_locs_, rodepv);
-                VinLoopImpl(loc, i, this->static_param_locs_, rstatpv);
+                VinLoopImpl(loc, i - 1, this->ode_param_locs_, rodepv);
+                VinLoopImpl(loc, i - 1, this->static_param_locs_, rstatpv);
             }
         } else {
             CinSet(this->num_defects_ - 1);
