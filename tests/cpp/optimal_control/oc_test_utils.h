@@ -81,8 +81,11 @@ make_brach_phase(int n_pts = 100, int n_defects = 32,
 
 /// @brief Non-unit `[x, y, v, t, theta]` scaling units matching the
 /// `xtu_p_vars()` layout of `make_brach_phase()`'s `BrachODE` (x_vars=3,
-/// u_vars=1, p_vars=0). Deliberately far from the all-ones default so that
-/// re-transcribing under these units changes the packed NLP the solver sees.
+/// u_vars=1, p_vars=0). Only consumed by the transcription when auto-scaling
+/// is enabled (`set_auto_scaling(true)`); deliberately far from the all-ones
+/// default so re-transcribing under these units changes the NLP the solver
+/// sees. Values are rough characteristic scales of the Brachistochrone
+/// solution (x, y ~ 10 m, v ~ 5 m/s, t ~ 2 s, theta ~ 0.5 rad).
 inline Eigen::VectorXd brach_nonunit_units() {
     Eigen::VectorXd units(5);
     units << 10.0, 10.0, 5.0, 2.0, 0.5;
