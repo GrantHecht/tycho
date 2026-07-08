@@ -75,6 +75,69 @@ make_brach_phase(int n_pts = 100, int n_defects = 32,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Helper: build a single-segment phase with exactly-representable linear
+// dynamics, for OC review §1.7 / §3.4 mesh-refinement robustness tests.
+//
+// State: [x, v, t], x_vars=2, u_vars=0, p_vars=0. ODE: dx/dt = v, dv/dt = 0
+// (constant velocity), so the analytic solution x(t) = x0 + v0*t is a linear
+// polynomial in t -- exactly representable by any LGL collocation scheme, so
+// the de Boor mesh-error estimate is identically zero regardless of node
+// placement. Combined with a single defect interval (num_blocks == 1), this
+// reproduces the zero-error/zero-density mesh that pre-fix produced an
+// out-of-bounds de Boor stencil read (§1.7) and 0/0 (NaN) bins (§3.4).
+///////////////////////////////////////////////////////////////////////////////
+
+struct LinearODE_Impl : ODESize<2, 0, 0> {
+    static auto Definition() {
+        auto args = Arguments<3>(); // [x, v, t]
+        auto v = args.coeff<1>();
+        auto xdot = v;
+        auto vdot = 0.0 * v; // constant velocity
+        return StackedOutputs{xdot, vdot};
+    }
+};
+BUILD_ODE_FROM_EXPRESSION(LinearODE, LinearODE_Impl);
+
+/// @brief Build a single-segment ODEPhase<LinearODE> with an exact linear
+/// trajectory guess: x0=0, v0=1, t in [0, 1].
+/// @param nsegs  Number of defect intervals (segments) to construct with.
+inline std::shared_ptr<ODEPhase<LinearODE>> make_linear_phase(int nsegs = 1) {
+    constexpr double x0 = 0.0, v0 = 1.0, t0 = 0.0, tf = 1.0;
+    constexpr int n_pts = 5;
+
+    std::vector<Eigen::VectorXd> traj;
+    traj.reserve(n_pts);
+    for (int i = 0; i < n_pts; ++i) {
+        double s = static_cast<double>(i) / (n_pts - 1);
+        double t = t0 + (tf - t0) * s;
+        Eigen::VectorXd pt(3);
+        pt[0] = x0 + v0 * (t - t0); // x(t)
+        pt[1] = v0;                 // v(t) (constant)
+        pt[2] = t;                  // t
+        traj.push_back(pt);
+    }
+
+    LinearODE ode;
+    auto phase = std::make_shared<ODEPhase<LinearODE>>(ode, TranscriptionModes::LGL3, traj, nsegs);
+
+    // Front boundary: fix x0, v0, t0.
+    Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(3, 0, 2);
+    Eigen::VectorXd front_val(3);
+    front_val << x0, v0, t0;
+    phase->add_boundary_value(PhaseRegionFlags::Front, front_idx, front_val, ScaleModes::AUTO);
+
+    // Back boundary: fix only tf, leaving xf/vf to be pinned down by the
+    // (exact) defect equations alone.
+    Eigen::VectorXi back_idx(1);
+    back_idx << 2;
+    Eigen::VectorXd back_val(1);
+    back_val << tf;
+    phase->add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val, ScaleModes::AUTO);
+
+    return phase;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Helper: build a non-even-data LGLInterpTable via load_exact_data
 //
 // load_exact_data() is the loader used by the phase path (ode_phase_base.cpp);

@@ -87,7 +87,9 @@ struct MeshIterateInfo {
         this->avg_error_ = (this->error_.head(n - 1).cwiseProduct(hs)).sum();
 
         this->gmean_error_ =
-            std::exp((std::log(this->max_error_) + std::log(this->avg_error_)) / 2.0);
+            (this->max_error_ > 0.0 && this->avg_error_ > 0.0)
+                ? std::exp(0.5 * (std::log(this->max_error_) + std::log(this->avg_error_)))
+                : 0.0;
 
         // this->gmean_error_ = std::exp((this->error_.head(n - 1).array().log()*hs.array()).sum());
 
@@ -101,7 +103,10 @@ struct MeshIterateInfo {
                 (this->distribution_[i]) * (this->times_[i + 1] - this->times_[i]);
         }
 
-        this->distintegral_ = this->distintegral_ / this->distintegral_[n - 1];
+        double denom = this->distintegral_[n - 1];
+        if (denom > 0.0)
+            this->distintegral_ = this->distintegral_ / denom;
+        // else: flat/zero-error mesh -- leave distintegral_ as-is; calc_bins linspaces.
         /////////////////////////////////////////////////////
     }
 
@@ -112,6 +117,14 @@ struct MeshIterateInfo {
 
         Eigen::VectorXd bins;
         bins.setLinSpaced(nbins + 1, 0.0, 1.0);
+
+        if (this->distintegral_.tail(1)(0) <= 0.0) {
+            // Flat/zero-error mesh: the ctor left distintegral_ un-normalized (all
+            // zero) since there is no error density to equidistribute against.
+            // Nothing to redistribute -- keep the linear spacing.
+            return bins;
+        }
+
         int elem = 0;
         for (int i = 1; i < nbins; i++) {
             double di = double(i) / double(nbins);
@@ -124,7 +137,7 @@ struct MeshIterateInfo {
             double d0 = this->distintegral_[elem];
             double d1 = this->distintegral_[elem + 1];
             double slope = (d1 - d0) / (t1 - t0);
-            bins[i] = (di - d0) / slope + t0;
+            bins[i] = (slope > 0.0) ? (di - d0) / slope + t0 : 0.5 * (t0 + t1);
         }
         return bins;
     }
