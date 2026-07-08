@@ -20,6 +20,8 @@
 #include "tycho/detail/vf/common/value_lock.h"
 #include "tycho/detail/vf/scaling/auto_scaling_utils.h"
 
+#include <cassert>
+
 using tycho::vf::Arguments;
 using tycho::vf::IOScaled;
 using tycho::vf::StackedOutputs;
@@ -1101,6 +1103,15 @@ void tycho::oc::ODEPhaseBase::check_functions(int pnum) {
 Eigen::VectorXd tycho::oc::ODEPhaseBase::get_input_scale(PhaseRegionFlags flag, VectorXi XtUV,
                                                          VectorXi OPV, VectorXi SPV) const {
 
+    // Auto-scaling invariant: make_func_impl always remaps ODEParams/StaticParams
+    // selectors to the Params region, placing the parameter indices in op_vars_/sp_vars_
+    // (scaled from xtup_units_[+xtu_vars()] and sp_units_ respectively). A stored
+    // StateFunction reaching auto-scaling therefore never carries a param region flag, so
+    // no parameter index is ever mis-scaled through the state-indexed XtUV path.
+    assert(flag != PhaseRegionFlags::StaticParams && flag != PhaseRegionFlags::ODEParams &&
+           "param regions are remapped to Params by make_func_impl; "
+           "these switch arms are unreachable for auto-scaling");
+
     int nloops;
     switch (flag) {
     case PhaseRegionFlags::Front:
@@ -1150,6 +1161,12 @@ Eigen::VectorXd tycho::oc::ODEPhaseBase::get_input_scale(PhaseRegionFlags flag, 
 std::vector<Eigen::VectorXd> tycho::oc::ODEPhaseBase::get_test_inputs(PhaseRegionFlags flag,
                                                                       VectorXi XtUV, VectorXi OPV,
                                                                       VectorXi SPV) const {
+
+    // See get_input_scale: param regions are remapped to Params by make_func_impl, so a
+    // param region flag is unreachable at the auto-scaling call site.
+    assert(flag != PhaseRegionFlags::StaticParams && flag != PhaseRegionFlags::ODEParams &&
+           "param regions are remapped to Params by make_func_impl; "
+           "these switch arms are unreachable for auto-scaling");
 
     std::vector<std::vector<int>> test_states;
 
