@@ -76,6 +76,9 @@ template <class FuncType> struct StateFunction {
     /// function carrying xtu indices would produce a variable-index table smaller
     /// than the function's input size — an out-of-bounds gather at solve time.
     /// Reject the malformed binding at construction instead.
+    ///
+    /// This guards construction only: the binding fields are public, so it does
+    /// not protect against post-construction mutation.
     /// @throws std::invalid_argument if a param-region flag is combined with
     ///         non-empty @c xtu_vars_.
     void check_param_region_invariant() const {
@@ -131,10 +134,14 @@ template <class FuncType> struct StateFunction {
     ///
     /// When @p Reg is @c ODEParams or @c StaticParams, @p xtuv is interpreted as
     /// the corresponding parameter indices; otherwise it is the state/time/control
-    /// indices.
+    /// indices. @c Params is not a valid single-group selector here: a combined
+    /// parameter-vector index cannot be split into ODE-param and static-param
+    /// indices without the phase dimensions, which this class does not know.
+    /// Select @c ODEParams or @c StaticParams instead.
     /// @param f     The wrapped VectorFunction.
     /// @param Reg   Phase region (or parameter region) the function acts on.
     /// @param xtuv  Variable indices, interpreted per @p Reg.
+    /// @throws std::invalid_argument if @p Reg is @c Params and @p xtuv is non-empty.
     StateFunction(FuncType f, PhaseRegionFlags Reg, Eigen::VectorXi xtuv) {
         this->func_ = f;
         this->output_scales_ = Eigen::VectorXd::Ones(this->func_.output_rows());
@@ -162,6 +169,7 @@ template <class FuncType> struct StateFunction {
             break;
         }
         }
+        this->check_param_region_invariant();
     }
     /// @brief Construct from a single variable group plus an output-scale specification.
     /// @param f        The wrapped VectorFunction.

@@ -163,6 +163,18 @@ class ParamScaling(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     oc.StateConstraint(fun, reg, one, empty, empty)
 
+        # Single-index-group (3-arg) ctor: a Params flag stores the indices in
+        # xtu_vars_ verbatim (no remap is possible -- a combined parameter
+        # vector index cannot be split into op/sp without phase dimensions),
+        # so it must be rejected too.
+        with self.assertRaises(ValueError):
+            oc.StateConstraint(fun, oc.PhaseRegionFlags.Params, one)
+
+        # ODEParams/StaticParams single-group selectors remap the indices into
+        # op_vars_/sp_vars_ and must remain constructible.
+        oc.StateConstraint(fun, oc.PhaseRegionFlags.ODEParams, one)
+        oc.StateConstraint(fun, oc.PhaseRegionFlags.StaticParams, one)
+
 
 if __name__ == "__main__":
     unittest.main(exit=False)
