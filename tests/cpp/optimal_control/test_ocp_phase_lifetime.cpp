@@ -122,3 +122,32 @@ TEST_F(OcpPhaseLifetimeTest, PostAddPhaseStaticParamNamesVisible) {
                                                             names_sp));
     EXPECT_GE(sp_link, 0);
 }
+
+// ---------------------------------------------------------------------------
+// OC review §1.9: OptimalControlProblemBase::remove_phase() must (a) reject
+// removal of a phase still referenced by a link function, (b) bounds-check
+// its index argument (and phase()'s), and (c) shift the phase indices
+// recorded on every remaining link function down by one wherever they
+// referenced a phase after the removed slot.
+// ---------------------------------------------------------------------------
+
+TEST_F(OcpPhaseLifetimeTest, RemovePhaseShiftsLinkIndices) {
+    auto ocp = make_three_phase_ocp();       // phases 0,1,2
+    add_forward_link(ocp, /*a=*/1, /*b=*/2); // link on {1,2}
+    ocp.remove_phase(0);
+    // remaining phases now {0,1}; the link must target {0,1} after shift.
+    EXPECT_EQ(first_link_phases(ocp), (std::vector<int>{0, 1}));
+}
+
+TEST_F(OcpPhaseLifetimeTest, RemoveReferencedPhaseThrows) {
+    auto ocp = make_three_phase_ocp();
+    add_forward_link(ocp, 1, 2);
+    EXPECT_THROW(ocp.remove_phase(1), std::invalid_argument); // 1 is referenced
+}
+
+TEST_F(OcpPhaseLifetimeTest, RemovePhaseAndPhaseOutOfRangeThrow) {
+    auto ocp = make_three_phase_ocp();
+    EXPECT_THROW(ocp.remove_phase(10), std::invalid_argument);
+    EXPECT_THROW(ocp.remove_phase(-5), std::invalid_argument);
+    EXPECT_THROW((void)ocp.phase(10), std::invalid_argument);
+}

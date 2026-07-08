@@ -45,8 +45,9 @@ class OptimalControlProblem {
     /// @param p  The phase to add (must outlive the problem).
     /// @return The index assigned to the phase.
     int add_phase(Phase &p) {
+        int idx = ocp_.add_phase(p.base_ptr()); // may throw; do not mutate phases_ first
         phases_.push_back(&p);
-        return ocp_.add_phase(p.base_ptr());
+        return idx;
     }
 
     /// @brief Add a phase to the problem with an explicit name.
@@ -54,8 +55,9 @@ class OptimalControlProblem {
     /// @param name  Unique name for the phase.
     /// @return The index assigned to the phase.
     int add_phase(Phase &p, const std::string &name) {
+        int idx = ocp_.add_phase(p.base_ptr(), name); // may throw; do not mutate phases_ first
         phases_.push_back(&p);
-        return ocp_.add_phase(p.base_ptr(), name);
+        return idx;
     }
 
     /// @brief Add forward-link equality constraints between two phases using named variables.

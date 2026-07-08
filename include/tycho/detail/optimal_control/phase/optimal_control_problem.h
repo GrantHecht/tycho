@@ -444,20 +444,63 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
     }
 
     /// @brief Remove a phase by index.
+    ///
+    /// Rejects removal of a phase still referenced by any link equality,
+    /// inequality, or objective function (the caller must remove or adjust
+    /// that link first). On success, shifts the phase index recorded on
+    /// every remaining link function down by one wherever it referenced a
+    /// phase after @p ith, so links continue to target the correct phases
+    /// after the removed phase's slot collapses.
     /// @param ith  Phase index (negative counts from the end).
+    /// @throws std::invalid_argument if @p ith is out of range, or if any
+    ///         link function still references phase @p ith.
     void remove_phase(int ith) {
         this->reset_transcription();
         if (ith < 0)
-            ith = (this->phases.size() + ith);
+            ith = (int(this->phases.size()) + ith);
+        if (ith < 0 || ith >= int(this->phases.size()))
+            throw std::invalid_argument(fmt::format(
+                "remove_phase: index {} out of range for {} phases", ith, this->phases.size()));
+
+        auto check_referenced = [&](auto &funcmap) {
+            for (auto &[key, f] : funcmap)
+                for (auto &ptl : f.phases_to_link_)
+                    for (int k = 0; k < ptl.size(); k++) {
+                        if (ptl[k] == ith)
+                            throw std::invalid_argument(fmt::format(
+                                "remove_phase: phase {} is still referenced by a link function; "
+                                "remove or adjust that link first",
+                                ith));
+                    }
+        };
+        check_referenced(this->link_equalities_);
+        check_referenced(this->link_inequalities_);
+        check_referenced(this->link_objectives_);
+
         this->phases.erase(this->phases.begin() + ith);
         this->phase_names.erase(this->phase_names.begin() + ith);
+
+        auto shift = [&](auto &funcmap) {
+            for (auto &[key, f] : funcmap)
+                for (auto &ptl : f.phases_to_link_)
+                    for (int k = 0; k < ptl.size(); k++)
+                        if (ptl[k] > ith)
+                            ptl[k] -= 1;
+        };
+        shift(this->link_equalities_);
+        shift(this->link_inequalities_);
+        shift(this->link_objectives_);
     }
     /// @brief Access a phase by index.
     /// @param ith  Phase index (negative counts from the end).
     /// @return Shared pointer to the phase.
+    /// @throws std::invalid_argument if @p ith is out of range.
     PhasePtr phase(int ith) {
         if (ith < 0)
-            ith = (this->phases.size() + ith);
+            ith = (int(this->phases.size()) + ith);
+        if (ith < 0 || ith >= int(this->phases.size()))
+            throw std::invalid_argument(fmt::format(
+                "phase: index {} out of range for {} phases", ith, this->phases.size()));
         return this->phases[ith];
     }
 

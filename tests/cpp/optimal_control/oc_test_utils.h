@@ -273,4 +273,36 @@ inline std::shared_ptr<BrachSwitchTestPhase> make_bangbang_phase(double u_scale 
     return phase;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// Helpers: OptimalControlProblemBase phase-lifetime tests (OC review §1.9 —
+// remove_phase link-index remap/guard + bounds-checked phase()/remove_phase()).
+///////////////////////////////////////////////////////////////////////////////
+
+/// @brief Build an OptimalControlProblemBase with three independent
+/// LinearODE phases (indices 0, 1, 2), for remove_phase() tests.
+inline OptimalControlProblemBase make_three_phase_ocp() {
+    OptimalControlProblemBase ocp;
+    ocp.add_phase(make_linear_phase());
+    ocp.add_phase(make_linear_phase());
+    ocp.add_phase(make_linear_phase());
+    return ocp;
+}
+
+/// @brief Add a direct link-equality constraint on the "x" state (index 0)
+/// linking phase @p a's Back region to phase @p b's Front region.
+/// @return The index assigned to the constraint.
+inline int add_forward_link(OptimalControlProblemBase &ocp, int a, int b) {
+    Eigen::VectorXi vars(1);
+    vars << 0;
+    return ocp.add_direct_link_equal_con(a, PhaseRegionFlags::Back, vars, b,
+                                         PhaseRegionFlags::Front, vars, ScaleModes::AUTO);
+}
+
+/// @brief The phase indices (PhasePack order) of the first link-equality
+/// constraint in @p ocp, as a plain `vector<int>` for `EXPECT_EQ` comparisons.
+inline std::vector<int> first_link_phases(const OptimalControlProblemBase &ocp) {
+    const auto &ptl = ocp.link_equalities_.begin()->second.phases_to_link_.front();
+    return std::vector<int>(ptl.data(), ptl.data() + ptl.size());
+}
+
 } // namespace TychoTest
