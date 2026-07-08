@@ -500,6 +500,11 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
                 int start = (BlockSize - 1) * i;
                 int stop = (BlockSize - 1) * (i + 1);
 
+                if (this->u_vars() != 0 && this->control_mode_ == ControlModes::BlockConstant) {
+                    Xin.segment(this->xt_vars(), this->u_vars()) =
+                        Traj[start].segment(this->xt_vars(), this->u_vars());
+                }
+
                 double tf = Traj[stop][this->t_var()];
                 Xout = Integ.integrate(Xin, tf);
                 Xin = Xout;
