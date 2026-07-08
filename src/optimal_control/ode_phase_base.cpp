@@ -1513,7 +1513,7 @@ Eigen::VectorXd tycho::oc::ODEPhaseBase::calc_switches() {
 
     for (int i = 0; i < this->active_traj_.size() - 1; i++) {
         udiff = (uvals.col(i + 1) - uvals.col(i)).cwiseAbs();
-        unddiff = (uvals.col(i + 1) - uvals.col(i)).cwiseAbs();
+        unddiff = (und.col(i + 1) - und.col(i)).cwiseAbs();
         if (udiff.maxCoeff() > this->abs_switch_tol_ &&
             unddiff.maxCoeff() > this->rel_switch_tol_) {
             double t = tsnd[i + 1] / 2.0 + tsnd[i] / 2.0;

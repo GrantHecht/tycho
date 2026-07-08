@@ -51,3 +51,26 @@ TEST_F(OptimalControlTest, CostateErrorEstimationSupportedModesDoNotThrow) {
     EXPECT_NO_THROW((void)phase->return_costate_traj());
     EXPECT_NO_THROW((void)phase->return_traj_error());
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// OC review §1.4 — calc_switches() normalized-tolerance test degenerates for
+// non-O(1) controls
+//
+// `unddiff` (meant to test the normalized `und` matrix against
+// rel_switch_tol_) was computed from the same raw expression as `udiff`, so
+// `und` was dead. For a control whose magnitude isn't O(1), that makes the
+// "relative" check degenerate into another absolute-scale check: every raw
+// step whose magnitude exceeds rel_switch_tol_ (0.3) gets flagged as a
+// switch, not just genuine jumps.
+///////////////////////////////////////////////////////////////////////////////
+
+TEST_F(OptimalControlTest, ControlSwitchDetectionUsesNormalizedDiff) {
+    auto phase = make_bangbang_phase(/*u_scale=*/1000.0);
+
+    Eigen::VectorXd sw = phase->calc_switches();
+
+    ASSERT_EQ(sw.size(), 1) << "Only the true control jump should be flagged as a switch; a raw "
+                               "(non-normalized) diff test spuriously flags every "
+                               "large-magnitude step as a switch.";
+    EXPECT_NEAR(sw[0], kBangBangSwitchTime, 1e-2);
+}
