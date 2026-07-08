@@ -20,8 +20,6 @@
 #include "tycho/detail/vf/common/value_lock.h"
 #include "tycho/detail/vf/scaling/auto_scaling_utils.h"
 
-#include <cassert>
-
 using tycho::vf::Arguments;
 using tycho::vf::IOScaled;
 using tycho::vf::StackedOutputs;
@@ -1103,15 +1101,15 @@ void tycho::oc::ODEPhaseBase::check_functions(int pnum) {
 Eigen::VectorXd tycho::oc::ODEPhaseBase::get_input_scale(PhaseRegionFlags flag, VectorXi XtUV,
                                                          VectorXi OPV, VectorXi SPV) const {
 
-    // Auto-scaling invariant: make_func_impl always remaps ODEParams/StaticParams
-    // selectors to the Params region, placing the parameter indices in op_vars_/sp_vars_
-    // (scaled from xtup_units_[+xtu_vars()] and sp_units_ respectively). A stored
-    // StateFunction reaching auto-scaling therefore never carries a param region flag, so
-    // no parameter index is ever mis-scaled through the state-indexed XtUV path.
-    assert(flag != PhaseRegionFlags::StaticParams && flag != PhaseRegionFlags::ODEParams &&
-           "param regions are remapped to Params by make_func_impl; "
-           "these switch arms are unreachable for auto-scaling");
-
+    // Param-region correctness (OC review §1.11): each scale below is drawn from the unit
+    // array matching the vector its index lives in — XtUV from xtup_units_ (state block),
+    // OPV from xtup_units_ with the +xtu_vars() offset (ODE-param block), SPV from
+    // sp_units_ — independent of `flag`, which only selects nloops. A parameter is
+    // therefore mis-scaled only if a param index sits in XtUV, and StateFunction's
+    // check_param_region_invariant rejects that binding at construction (the phase indexer
+    // binds Params/ODEParams/StaticParams regions from op/sp vars only and ignores
+    // xtu_vars_, see PhaseIndexer::make_Vindex_Cindex). A param-region `flag` arriving
+    // here with indices in OPV/SPV is valid and scales correctly.
     int nloops;
     switch (flag) {
     case PhaseRegionFlags::Front:
@@ -1162,12 +1160,10 @@ std::vector<Eigen::VectorXd> tycho::oc::ODEPhaseBase::get_test_inputs(PhaseRegio
                                                                       VectorXi XtUV, VectorXi OPV,
                                                                       VectorXi SPV) const {
 
-    // See get_input_scale: param regions are remapped to Params by make_func_impl, so a
-    // param region flag is unreachable at the auto-scaling call site.
-    assert(flag != PhaseRegionFlags::StaticParams && flag != PhaseRegionFlags::ODEParams &&
-           "param regions are remapped to Params by make_func_impl; "
-           "these switch arms are unreachable for auto-scaling");
-
+    // See the param-region note in get_input_scale: test values, like scales, are drawn
+    // per index vector (XtUV from the trajectory state block, OPV from the trajectory with
+    // the +xtu_vars() offset, SPV from active_static_params_), so param-region flags with
+    // indices in OPV/SPV are valid here and sample the correct slots.
     std::vector<std::vector<int>> test_states;
 
     int nloops = 0;

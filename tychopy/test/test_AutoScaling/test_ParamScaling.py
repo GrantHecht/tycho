@@ -3,118 +3,165 @@ import unittest
 import numpy as np
 
 import tychopy.optimal_control as oc
-import tychopy.vector_functions as vf
+from tychopy.vector_functions import Arguments as Args
 
 
 class ParamODE(oc.ODEBase):
-    """Minimal ODE carrying a single ODE (dynamics) parameter.
+    """Minimal ODE carrying one ODE (dynamics) parameter: xdot = u + p.
 
-    Sizes: 2 states, 1 control, 1 ODE parameter. The full input node vector is
-    ``[x0, x1, t, u, p]`` (length ``xtu_p_vars`` == 5), so ``xtu_vars`` == 4 and
-    the ODE parameter sits at absolute input index 4.
+    Sizes: 1 state, 1 control, 1 ODE parameter. The full input node vector is
+    ``[x, t, u, p]`` (length ``xtu_p_vars`` == 4), so ``xtu_vars`` == 3 and the
+    ODE parameter occupies absolute input index 3.
     """
 
     def __init__(self):
-        XVars = 2
+        XVars = 1
         UVars = 1
         PVars = 1
 
         args = oc.ODEArguments(XVars, UVars, PVars)
-        x1 = args.x_var(1)
         u = args.u_var(0)
         p = args.p_var(0)
-        xdot = vf.stack([x1, u * p])
+        xdot = u + p
         super().__init__(xdot, XVars, UVars, PVars)
 
 
 class ParamScaling(unittest.TestCase):
     """Characterizes auto-scaling of parameter-region function bindings (OC §1.11).
 
-    ``ODEPhaseBase::get_input_scale`` draws its per-input scale factors from
-    ``xtup_units_`` (state/time/control/ODE-param block) and ``sp_units_``
-    (static-param block). ``make_func_impl`` remaps any ``ODEParams`` /
-    ``StaticParams`` selector to the ``Params`` region, placing the parameter
-    indices in ``op_vars_`` / ``sp_vars_`` (never in the state-indexed
-    ``xtu_vars_``). These tests lock in that:
+    The problem has the analytic solution x(t) = 2 t, u = 0.5, once the
+    boundary values, the ODE-param pin (p = 1.5), and the static-param pins
+    (s0 = 0.7, s1 = 0.9) are enforced and the integral of u^2 is minimized:
+    x(0) = 0, x(1) = 2 and xdot = u + p force integral(u) = 0.5, and
+    minimizing integral(u^2) makes u constant.
 
-      * a static-parameter input is scaled by ``sp_units_[i]``;
-      * an ODE-parameter input is scaled by ``xtup_units_[i + xtu_vars()]`` --
-        i.e. the ``+ xtu_vars()`` offset is applied, so a param is never
-        mis-scaled by a state unit.
+    With auto-scaling ON and deliberately non-unit, all-distinct units, the
+    param pins are only satisfied in PHYSICAL values if the auto-scaling
+    machinery (calc_auto_scales -> get_input_scale/get_test_inputs -> IOScaled
+    wrapping at transcription) scales each parameter input by its own unit:
+
+    * the ODE param by ``xtup_units_[0 + xtu_vars()]`` -- if the +xtu_vars()
+      offset were dropped, the pin would resolve to p = 1.5 * 11 / 2 = 8.25,
+      failing the assertion;
+    * each static param by ``sp_units_[i]`` -- if state units were used
+      instead, s0 would resolve to 0.7 * 13 / 2 != 0.7.
+
+    The static-param pins are registered through BOTH registration routes:
+    s0 via the ``make_func_impl`` selector path (which remaps the
+    ``StaticParams`` selector to the ``Params`` region), and s1 via a
+    pre-built ``StateConstraint`` carrying a verbatim ``StaticParams`` region
+    flag with its index in ``sp_vars_`` -- valid, and it must scale via
+    ``sp_units_`` just the same.
     """
 
-    # ODE sizes (see ParamODE); xtu_vars = XVars + t + UVars = 2 + 1 + 1 = 4.
-    XVARS = 2
-    UVARS = 1
-    PVARS = 1
-    XTU_VARS = XVARS + 1 + UVARS  # 4
-    XTU_P_VARS = XTU_VARS + PVARS  # 5
+    # ODE sizes (see ParamODE); xtu_vars = XVars + t + UVars = 1 + 1 + 1 = 3.
+    XTU_VARS = 3
 
-    # Deliberately non-unit, all-distinct units so any mis-indexing is caught.
-    # Layout matches the node vector: [x0, x1, t, u, p_ode].
-    XTUP_UNITS = [2.0, 3.0, 5.0, 7.0, 11.0]
-    SP_VALUES = [0.5, 0.9]
+    # Deliberately non-unit, all-distinct units. Layout: [x, t, u, p_ode].
+    XTUP_UNITS = [2.0, 3.0, 5.0, 11.0]
     SP_UNITS = [13.0, 17.0]
 
-    def _build_phase(self):
+    # Pinned values and the analytic solution.
+    P_PIN = 1.5
+    S0_PIN = 0.7
+    S1_PIN = 0.9
+    XF = 2.0
+    U_STAR = 0.5
+
+    TOL = 1.0e-6
+
+    def _build_phase(self, auto_scale):
         ode = ParamODE()
 
-        nsegs = 4
-        traj_ig = [[1.0, 0.0, t, 0.4, 0.0] for t in np.linspace(0.0, 1.0, 20)]
+        nsegs = 16
+        traj_ig = [[2.0 * t, t, 0.5, self.P_PIN] for t in np.linspace(0.0, 1.0, 20)]
 
         phase = ode.phase("LGL3", traj_ig, nsegs)
         phase.set_units(np.array(self.XTUP_UNITS))
-        phase.set_static_params(np.array(self.SP_VALUES), np.array(self.SP_UNITS))
+        phase.set_static_params(np.array([0.5, 0.4]), np.array(self.SP_UNITS))
+
+        phase.add_boundary_value("Front", [0, 1], [0.0, 0.0])
+        phase.add_boundary_value("Back", [1], [1.0])
+        phase.add_boundary_value("Back", [0], [self.XF])
+
+        # make_func_impl selector routes: ODEParams and StaticParams selectors
+        # are remapped to the Params region with indices in op_vars_/sp_vars_.
+        phase.add_boundary_value("ODEParams", [0], [self.P_PIN])
+        phase.add_boundary_value("StaticParams", [0], [self.S0_PIN])
+
+        # Direct-construction route: a pre-built StateConstraint with a
+        # verbatim StaticParams region flag (bypasses make_func_impl). The
+        # index sits in sp_vars_; xtu_vars_ is empty.
+        empty = np.array([], dtype=np.int32)
+        sp1 = np.array([1], dtype=np.int32)
+        pin_s1 = oc.StateConstraint(
+            Args(1)[0] - self.S1_PIN,
+            oc.PhaseRegionFlags.StaticParams,
+            empty,
+            empty,
+            sp1,
+        )
+        phase.add_equal_con(pin_s1)
+
+        phase.add_integral_objective(Args(1)[0] ** 2, [2])
+
+        phase.set_auto_scaling(auto_scale)
+        phase.set_num_partitions(1)
+
+        if __name__ != "__main__":
+            phase.optimizer.print_level = 3
+
         return phase
 
-    @staticmethod
-    def _empty():
-        return np.array([], dtype=np.int32)
+    def _check_solution(self, phase):
+        traj = phase.return_traj()
+        sp = phase.return_static_params()
 
-    @staticmethod
-    def _idx(*values):
-        return np.array(list(values), dtype=np.int32)
+        # Analytic trajectory: x(1) = 2, u = 0.5 everywhere.
+        self.assertAlmostEqual(traj[-1][0], self.XF, delta=self.TOL)
+        self.assertAlmostEqual(traj[0][2], self.U_STAR, delta=self.TOL)
+        self.assertAlmostEqual(traj[-1][2], self.U_STAR, delta=self.TOL)
 
-    def test_static_param_autoscale_uses_sp_units(self):
-        phase = self._build_phase()
+        # ODE param pinned in PHYSICAL units on every node row: fails if the
+        # +xtu_vars() offset is dropped anywhere in the scaling chain.
+        for row in traj:
+            self.assertAlmostEqual(row[self.XTU_VARS], self.P_PIN, delta=self.TOL)
 
-        # Register an AUTO-scaled StaticParams objective: make_func_impl remaps the
-        # StaticParams selector to the Params region with the index in sp_vars_.
-        phase.add_value_objective("StaticParams", 0, 1.0)
+        # Static params pinned in PHYSICAL units: s0 through the selector
+        # (make_func_impl) route, s1 through the pre-built param-flag route.
+        self.assertAlmostEqual(sp[0], self.S0_PIN, delta=self.TOL)
+        self.assertAlmostEqual(sp[1], self.S1_PIN, delta=self.TOL)
 
-        # The auto-scaler computes the static-param input scale from sp_units_.
-        scales = phase.get_input_scale(
-            oc.PhaseRegionFlags.Params, self._empty(), self._empty(), self._idx(0, 1)
-        )
+    def test_param_pins_no_autoscale(self):
+        # Ground truth: same problem without auto-scaling.
+        phase = self._build_phase(False)
+        phase.optimize()
+        self._check_solution(phase)
 
-        self.assertAlmostEqual(scales[0], self.SP_UNITS[0], places=10)
-        self.assertAlmostEqual(scales[1], self.SP_UNITS[1], places=10)
+    def test_param_pins_survive_autoscaled_optimize(self):
+        # optimize() -> transcribe() -> calc_auto_scales() runs the full
+        # auto-scaling machinery over every registered function, including the
+        # remapped Params-region pins and the verbatim StaticParams-flag pin.
+        phase = self._build_phase(True)
+        phase.optimize()
+        self._check_solution(phase)
 
-    def test_ode_param_autoscale_uses_xtu_offset(self):
-        phase = self._build_phase()
+    def test_param_flag_with_xtu_indices_raises(self):
+        # A param-region flag with indices in the state-block (xtu) slot is a
+        # malformed binding (the phase indexer binds param regions from
+        # op_vars/sp_vars only) and must be rejected at construction.
+        empty = np.array([], dtype=np.int32)
+        one = np.array([0], dtype=np.int32)
+        fun = Args(1)[0] - 1.0
 
-        # The ODE-param input scale is xtup_units_[i + xtu_vars()], not the
-        # state-slot xtup_units_[i]; the +xtu_vars() offset must be applied.
-        scales = phase.get_input_scale(
-            oc.PhaseRegionFlags.Params, self._empty(), self._idx(0), self._empty()
-        )
-
-        expected = self.XTUP_UNITS[self.XTU_VARS]  # 11.0, the ODE-param unit
-        wrong_if_offset_dropped = self.XTUP_UNITS[0]  # 2.0, a state unit
-
-        self.assertAlmostEqual(scales[0], expected, places=10)
-        self.assertNotAlmostEqual(scales[0], wrong_if_offset_dropped, places=10)
-
-    def test_mixed_param_scale_ordering(self):
-        phase = self._build_phase()
-
-        # OP indices are packed before SP indices (get_input_scale loop order).
-        scales = phase.get_input_scale(
-            oc.PhaseRegionFlags.Params, self._empty(), self._idx(0), self._idx(1)
-        )
-
-        self.assertAlmostEqual(scales[0], self.XTUP_UNITS[self.XTU_VARS], places=10)
-        self.assertAlmostEqual(scales[1], self.SP_UNITS[1], places=10)
+        for reg in (
+            oc.PhaseRegionFlags.Params,
+            oc.PhaseRegionFlags.ODEParams,
+            oc.PhaseRegionFlags.StaticParams,
+        ):
+            with self.subTest(region=reg):
+                with self.assertRaises(ValueError):
+                    oc.StateConstraint(fun, reg, one, empty, empty)
 
 
 if __name__ == "__main__":
