@@ -203,6 +203,11 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         auto tmp = IOScaled<VectorFunctionalX>(odetemp, this->xtup_units_, output_scales);
 
         this->ode_scaled_ = ScaledODE(tmp, this->x_vars(), this->u_vars(), this->p_vars());
+
+        // The NLP built by transcribe() bakes in the previous units (defect constraints,
+        // objective/constraint scaling, etc.); a stale NLP would silently be reused by the
+        // next solve_optimize() if we didn't force a rebuild here.
+        this->reset_transcription();
     }
 
     /// @internal

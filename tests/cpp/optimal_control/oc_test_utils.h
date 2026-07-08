@@ -75,6 +75,21 @@ make_brach_phase(int n_pts = 100, int n_defects = 32,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Helper: non-unit packing units for a Brachistochrone phase, for OC review
+// §1.12 (set_units() must trigger reset_transcription()) tests.
+///////////////////////////////////////////////////////////////////////////////
+
+/// @brief Non-unit `[x, y, v, t, theta]` scaling units matching the
+/// `xtu_p_vars()` layout of `make_brach_phase()`'s `BrachODE` (x_vars=3,
+/// u_vars=1, p_vars=0). Deliberately far from the all-ones default so that
+/// re-transcribing under these units changes the packed NLP the solver sees.
+inline Eigen::VectorXd brach_nonunit_units() {
+    Eigen::VectorXd units(5);
+    units << 10.0, 10.0, 5.0, 2.0, 0.5;
+    return units;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Helper: build a phase with exactly-representable linear dynamics, for OC
 // review §1.7 / §3.4 mesh-refinement robustness tests.
 //
