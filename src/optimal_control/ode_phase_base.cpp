@@ -403,8 +403,9 @@ std::vector<Eigen::VectorXd> tycho::oc::ODEPhaseBase::return_costate_traj() cons
         } else if (this->num_tran_card_states_ == 2) {
             return LGLCoeffs<2>::InteriorSpacings[i];
         } else {
-            std::invalid_argument("Costate estimation Not Implemented for specified Transcription "
-                                  "Mode");
+            throw std::invalid_argument(
+                "Costate estimation Not Implemented for specified Transcription "
+                "Mode");
             return 0.0;
         }
     };
@@ -467,8 +468,9 @@ std::vector<Eigen::VectorXd> tycho::oc::ODEPhaseBase::return_traj_error() const 
         } else if (this->num_tran_card_states_ == 2) {
             return LGLCoeffs<2>::InteriorSpacings[i];
         } else {
-            std::invalid_argument("Error estimation Not Implemented for specified Transcription "
-                                  "Mode");
+            throw std::invalid_argument(
+                "Error estimation Not Implemented for specified Transcription "
+                "Mode");
             return 0.0;
         }
     };
