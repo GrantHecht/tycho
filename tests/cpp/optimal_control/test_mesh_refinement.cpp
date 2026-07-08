@@ -85,6 +85,13 @@ TEST_F(OptimalControlTest, ControlSwitchDetectionUsesNormalizedDiff) {
 // Fixed (OC §1.7) by short-circuiting to a zero local error estimate when
 // there is no neighbor segment to difference against.
 //
+// The num_blocks == 1 state cannot be constructed directly (the validated
+// set_traj overload throws for fewer than 2 segments,
+// ode_phase_base.cpp:499-501); it is reached in production only through the
+// adaptive-mesh loop: update_mesh() -> refine_traj_manual() has no
+// segment-count guard, and its clamp chain bottoms out at min_segments_,
+// which may be 1.
+//
 // That zero error/density is itself the exactly-resolved (converged) case:
 // pre-fix, dividing by an all-zero distribution integral / zero max-error
 // produced NaN in MeshIterateInfo's ctor (gmean_error_, distintegral_) and in
@@ -92,25 +99,46 @@ TEST_F(OptimalControlTest, ControlSwitchDetectionUsesNormalizedDiff) {
 // as converged and producing finite, linearly-spaced bins instead.
 ///////////////////////////////////////////////////////////////////////////////
 
-TEST(MeshRobustness, SingleSegmentLinearDynamicsNoCrashFiniteBins) {
-    // Linear (exactly representable) dynamics + single-segment adaptive mesh:
-    // pre-fix hits yvecs[1]/hs[1] OOB (§1.7) and 0/0 density -> NaN bins (§3.4).
-    auto phase = make_linear_phase(/*nsegs=*/1);
+TEST(MeshRobustness, RefinementToSingleSegmentNoCrashConverges) {
+    // §1.7 end-to-end: construct with 2 segments (the constructible minimum)
+    // and drive the mesh down to 1 segment through the refinement loop.
+    // force_one_mesh_iter_ makes iteration 0 call update_mesh() even though
+    // the linear mesh's error is already ~0; with min_segments_ = 1,
+    // mesh_red_factor_ = 0.25, and num_extra_segs_ = 0, update_mesh computes
+    // n = clamp(ceil(2 * 0.25) + 0, ...) = 1 (each per-entry error term is
+    // ~0, far below the 0.25 reduction floor; mesh_tol_ = 1e-3 keeps any
+    // solver round-off orders of magnitude inside that margin). The second
+    // check_mesh() then runs the de Boor estimator with num_blocks == 1 --
+    // pre-fix, an out-of-bounds read of yvecs[1]/hs[1] (§1.7).
+    auto phase = make_linear_phase(/*nsegs=*/2);
     phase->optimizer_->set_print_level(0);
-    phase->set_min_segments(1);
+    phase->print_mesh_info_ = false;
     phase->set_adaptive_mesh(true);
     phase->set_mesh_error_estimator(MeshErrorEstimators::DEBOOR);
+    phase->set_mesh_tol(1e-3);
+    phase->set_min_segments(1);
+    phase->set_mesh_red_factor(0.25);
+    phase->num_extra_segs_ = 0;
+    phase->force_one_mesh_iter_ = true;
 
     EXPECT_NO_THROW(phase->solve());     // ASan-clean, no UB
     EXPECT_TRUE(phase->mesh_converged_); // zero-error mesh => converged, kept
+    ASSERT_FALSE(phase->mesh_iters_.empty());
+    // Proves the final check_mesh() really ran on a single-segment mesh,
+    // i.e. the §1.7 num_blocks == 1 guard path was actually exercised.
+    EXPECT_EQ(phase->mesh_iters_.back().numsegs_, 1);
+    EXPECT_TRUE(phase->mesh_iters_.back().converged_);
 }
 
 TEST(MeshRobustness, GetMeshInfoZeroDensityNoCrashFiniteBins) {
     // Directly exercises get_mesh_info()'s distint-normalize guard (OC §3.4,
-    // ode_phase_base.h): a single-segment phase's de Boor error/density is
-    // identically zero (no stencil neighbor, §1.7), so distint's last entry
-    // is exactly 0 -- pre-fix, normalizing by it produced NaN bins.
-    auto phase = make_linear_phase(/*nsegs=*/1);
+    // ode_phase_base.h): the exact-binary linear trajectory cancels the de
+    // Boor derivative estimate bit-exactly (see make_linear_phase docs), so
+    // every density entry -- and hence distint's last entry -- is exactly
+    // 0.0. Pre-fix, normalizing by it produced NaN bins. get_mesh_info is
+    // the Python-exposed diagnostic (sole caller: ode_phase_base_bind.cpp);
+    // no solve needed, the ctor already populates active_traj_.
+    auto phase = make_linear_phase(/*nsegs=*/2);
 
     auto [tsnd, bins, error] = phase->get_mesh_info(/*integ=*/false, /*n=*/4);
 

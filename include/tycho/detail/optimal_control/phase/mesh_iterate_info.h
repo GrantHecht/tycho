@@ -118,7 +118,7 @@ struct MeshIterateInfo {
         Eigen::VectorXd bins;
         bins.setLinSpaced(nbins + 1, 0.0, 1.0);
 
-        if (this->distintegral_.tail(1)(0) <= 0.0) {
+        if (this->distintegral_[this->distintegral_.size() - 1] <= 0.0) {
             // Flat/zero-error mesh: the ctor left distintegral_ un-normalized (all
             // zero) since there is no error density to equidistribute against.
             // Nothing to redistribute -- keep the linear spacing.

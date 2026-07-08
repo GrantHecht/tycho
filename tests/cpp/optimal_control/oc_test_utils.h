@@ -75,16 +75,25 @@ make_brach_phase(int n_pts = 100, int n_defects = 32,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Helper: build a single-segment phase with exactly-representable linear
-// dynamics, for OC review §1.7 / §3.4 mesh-refinement robustness tests.
+// Helper: build a phase with exactly-representable linear dynamics, for OC
+// review §1.7 / §3.4 mesh-refinement robustness tests.
 //
 // State: [x, v, t], x_vars=2, u_vars=0, p_vars=0. ODE: dx/dt = v, dv/dt = 0
 // (constant velocity), so the analytic solution x(t) = x0 + v0*t is a linear
-// polynomial in t -- exactly representable by any LGL collocation scheme, so
-// the de Boor mesh-error estimate is identically zero regardless of node
-// placement. Combined with a single defect interval (num_blocks == 1), this
-// reproduces the zero-error/zero-density mesh that pre-fix produced an
-// out-of-bounds de Boor stencil read (§1.7) and 0/0 (NaN) bins (§3.4).
+// polynomial in t -- exactly representable by any LGL collocation scheme.
+// All trajectory values (x, v, t on a power-of-two grid) and the LGL3
+// cardinal power weights (lgl_coeffs.h:80-85, small exact-binary rationals)
+// are exact in binary floating point, so the de Boor derivative estimate
+// cancels to bit-exact zero: the mesh error/density is identically 0.0,
+// reproducing the zero-density mesh that pre-fix produced 0/0 (NaN) bins
+// (§3.4).
+//
+// NOTE: nsegs >= 2 is required at construction -- the validated set_traj
+// overload (ode_phase_base.cpp:499-501) throws for DPB.sum() < 2. The
+// num_blocks == 1 state that under-ran the de Boor stencil (§1.7) is only
+// reachable through mesh refinement: update_mesh() -> refine_traj_manual()
+// has no segment-count guard and the min_segments_ clamp permits n == 1.
+// See MeshRobustness.RefinementToSingleSegmentNoCrashConverges.
 ///////////////////////////////////////////////////////////////////////////////
 
 struct LinearODE_Impl : ODESize<2, 0, 0> {
@@ -98,10 +107,11 @@ struct LinearODE_Impl : ODESize<2, 0, 0> {
 };
 BUILD_ODE_FROM_EXPRESSION(LinearODE, LinearODE_Impl);
 
-/// @brief Build a single-segment ODEPhase<LinearODE> with an exact linear
-/// trajectory guess: x0=0, v0=1, t in [0, 1].
-/// @param nsegs  Number of defect intervals (segments) to construct with.
-inline std::shared_ptr<ODEPhase<LinearODE>> make_linear_phase(int nsegs = 1) {
+/// @brief Build an ODEPhase<LinearODE> with an exact linear trajectory guess:
+/// x0=0, v0=1, t in [0, 1].
+/// @param nsegs  Number of defect intervals (segments) to construct with;
+///               must be >= 2 (set_traj throws below that).
+inline std::shared_ptr<ODEPhase<LinearODE>> make_linear_phase(int nsegs = 2) {
     constexpr double x0 = 0.0, v0 = 1.0, t0 = 0.0, tf = 1.0;
     constexpr int n_pts = 5;
 
