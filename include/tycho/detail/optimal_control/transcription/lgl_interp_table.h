@@ -20,6 +20,7 @@
 #include "tycho/vector_functions.h"
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <functional>
 #include <iostream>
 #include <numeric>
@@ -81,10 +82,18 @@ struct LGLInterpTable {
     double order_ = 3.0;   ///< Polynomial order of the interpolant.
     double error_weight_;  ///< Error-estimate weighting coefficient.
 
-    int block_size_ = 0;                  ///< Number of nodes per interpolation block.
-    int num_blocks_ = 0;                  ///< Number of interpolation blocks.
-    int num_states_ = 0;                  ///< Total number of stored nodes.
-    mutable int last_block_accessed_ = 0; ///< Cache of the last block hit (search hint).
+    int block_size_ = 0; ///< Number of nodes per interpolation block.
+    int num_blocks_ = 0; ///< Number of interpolation blocks.
+    int num_states_ = 0; ///< Total number of stored nodes.
+    /// @brief Cache of the last block hit (search hint).
+    ///
+    /// Written by @ref find_block, a `const` member function that may be invoked
+    /// concurrently from multiple threads evaluating this table (e.g. multi-threaded
+    /// Jacobian evaluation of an @ref InterpFunction composed over this table).
+    /// `std::atomic` with relaxed ordering: it is only a search-direction hint, so a
+    /// stale value read by one thread while another updates it costs at most a few
+    /// extra `check_ith_block` probes, never incorrect results.
+    mutable std::atomic<int> last_block_accessed_{0};
 
     bool periodic_ = false;  ///< Whether the trajectory is treated as periodic.
     bool even_data_ = false; ///< Whether nodes are evenly spaced in time.
@@ -208,6 +217,10 @@ struct LGLInterpTable {
     /// @brief Construct a state-only table inferring dimensions from the data.
     /// @param xtudat  Trajectory node data (last entry of each is time).
     LGLInterpTable(const std::vector<Eigen::VectorXd> &xtudat) {
+        if (xtudat.empty()) {
+            throw std::invalid_argument(
+                "LGLInterpTable: input trajectory node data is empty; cannot infer dimensions.");
+        }
         this->x_vars_ = xtudat[0].size() - 1;
         this->u_vars_ = 0;
         this->axis_ = xtudat[0].size() - 1;
@@ -228,6 +241,68 @@ struct LGLInterpTable {
     }
     /// @brief Default constructor; produces an empty, unconfigured table.
     LGLInterpTable() {}
+
+    /// @brief Copy constructor.
+    ///
+    /// `last_block_accessed_` is a `std::atomic` search-hint cache (see its
+    /// declaration), not part of the table's logical value, so it is deliberately
+    /// NOT read from @p other -- doing so would race against concurrent
+    /// interpolation calls on @p other. The copy simply starts with a fresh hint
+    /// of 0; correctness is unaffected (see the member's doc comment), only the
+    /// first post-copy `find_block` search may cost a few extra probes.
+    LGLInterpTable(const LGLInterpTable &other)
+        : xtu_data_(other.xtu_data_), xdot_data_(other.xdot_data_), x_vars_(other.x_vars_),
+          u_vars_(other.u_vars_), xtu_vars_(other.xtu_vars_), axis_(other.axis_),
+          delta_t_(other.delta_t_), total_t_(other.total_t_), t0_(other.t0_), tf_(other.tf_),
+          eps_(other.eps_), method_(other.method_), blocked_controls_(other.blocked_controls_),
+          has_ode_(other.has_ode_), order_(other.order_), error_weight_(other.error_weight_),
+          block_size_(other.block_size_), num_blocks_(other.num_blocks_),
+          num_states_(other.num_states_), last_block_accessed_(0), periodic_(other.periodic_),
+          even_data_(other.even_data_), warn_out_of_bounds_(other.warn_out_of_bounds_),
+          throw_out_of_bounds_(other.throw_out_of_bounds_), t_spacing_(other.t_spacing_),
+          x_weights_(other.x_weights_), dx_weights_(other.dx_weights_),
+          u_weights_(other.u_weights_), ode_(other.ode_) {}
+
+    /// @brief Copy assignment operator.
+    ///
+    /// See the copy constructor: `last_block_accessed_` resets to 0 rather than
+    /// copying @p other's (possibly concurrently-updated) hint.
+    LGLInterpTable &operator=(const LGLInterpTable &other) {
+        if (this == &other) {
+            return *this;
+        }
+        xtu_data_ = other.xtu_data_;
+        xdot_data_ = other.xdot_data_;
+        x_vars_ = other.x_vars_;
+        u_vars_ = other.u_vars_;
+        xtu_vars_ = other.xtu_vars_;
+        axis_ = other.axis_;
+        delta_t_ = other.delta_t_;
+        total_t_ = other.total_t_;
+        t0_ = other.t0_;
+        tf_ = other.tf_;
+        eps_ = other.eps_;
+        method_ = other.method_;
+        blocked_controls_ = other.blocked_controls_;
+        has_ode_ = other.has_ode_;
+        order_ = other.order_;
+        error_weight_ = other.error_weight_;
+        block_size_ = other.block_size_;
+        num_blocks_ = other.num_blocks_;
+        num_states_ = other.num_states_;
+        last_block_accessed_.store(0, std::memory_order_relaxed);
+        periodic_ = other.periodic_;
+        even_data_ = other.even_data_;
+        warn_out_of_bounds_ = other.warn_out_of_bounds_;
+        throw_out_of_bounds_ = other.throw_out_of_bounds_;
+        t_spacing_ = other.t_spacing_;
+        x_weights_ = other.x_weights_;
+        dx_weights_ = other.dx_weights_;
+        u_weights_ = other.u_weights_;
+        ode_ = other.ode_;
+        return *this;
+    }
+
     /// @brief Return a non-owning shared pointer aliasing this table.
     ///
     /// The returned pointer shares no ownership (use_count() == 0) and never
@@ -244,9 +319,13 @@ struct LGLInterpTable {
     /// @brief Validate that input node times are strictly monotonic and non-duplicated.
     /// @tparam VecType  The node-vector type.
     /// @param xtudat  Trajectory node data.
-    /// @throws std::invalid_argument on duplicate or non-monotonic times.
+    /// @throws std::invalid_argument if @p xtudat is empty, or on duplicate or non-monotonic
+    ///         times.
     /// @endinternal
     template <class VecType> void check_input(const std::vector<VecType> &xtudat) {
+        if (xtudat.empty()) {
+            throw std::invalid_argument("LGLInterpTable: input trajectory node data is empty.");
+        }
 
         double t0 = xtudat.front()[this->axis_];
         double tf = xtudat.back()[this->axis_];
@@ -264,6 +343,27 @@ struct LGLInterpTable {
                     fmt::format("Non monotonic time coordinates in LGLInterpTable."));
             }
         }
+    }
+
+    /// @internal
+    /// @brief Compute `num_blocks_` from `num_states_` and `block_size_`, validating that the
+    ///        node count evenly divides into blocks.
+    ///
+    /// A block spans `block_size_` nodes sharing `block_size_ - 1` interior edges, so
+    /// `num_states_ - 1` must be an exact multiple of `block_size_ - 1`; otherwise the trailing
+    /// nodes beyond the last complete block would be silently dropped from all block-indexed
+    /// queries (interpolation, defect indexing, etc.) via integer-division truncation.
+    /// @throws std::invalid_argument if `num_states_ - 1` is not evenly divisible by
+    ///         `block_size_ - 1`.
+    /// @endinternal
+    void compute_num_blocks() {
+        if ((this->num_states_ - 1) % (this->block_size_ - 1) != 0) {
+            throw std::invalid_argument(
+                fmt::format("LGLInterpTable: node count {} is incompatible with block size {} "
+                            "(node count - 1 must be evenly divisible by block size - 1).",
+                            this->num_states_, this->block_size_));
+        }
+        this->num_blocks_ = (this->num_states_ - 1) / (this->block_size_ - 1);
     }
 
     /// @brief Mark the trajectory periodic and snap the last node to the first state.
@@ -285,23 +385,30 @@ struct LGLInterpTable {
     /// @internal
     /// @brief Load evenly-time-spaced node data, computing derivatives from the ODE or FD.
     /// @param xtudat  Trajectory node data (evenly spaced).
+    /// @throws std::invalid_argument if @p xtudat is empty, has mismatched node dimension, has
+    ///         duplicate/non-monotonic times, or has a node count incompatible with the block
+    ///         size.
     /// @endinternal
     void load_even_data(const std::vector<Eigen::VectorXd> &xtudat) {
+        if (xtudat.empty()) {
+            throw std::invalid_argument(
+                "LGLInterpTable::load_even_data: input trajectory node data is empty.");
+        }
         int msize = xtudat[0].size();
         if (msize != this->xtu_vars_) {
-            std::cout << "User Input Error in supplying data to LGLInterpTable" << std::endl;
-            std::cout << " Dimension of Input States(" << msize
-                      << ") does not match expected dimensions of the Table(" << this->xtu_vars_
-                      << ")" << std::endl;
-            exit(1);
+            throw std::invalid_argument(fmt::format(
+                "LGLInterpTable::load_even_data: input state dimension {} does not match "
+                "table dimension {}.",
+                msize, this->xtu_vars_));
         }
+        check_input(xtudat);
         this->xtu_data_.resize(this->xtu_vars_, xtudat.size());
         this->xdot_data_.resize(this->x_vars_, xtudat.size());
         this->t0_ = xtudat[0][axis_];
         this->tf_ = xtudat.back()[axis_];
         this->total_t_ = xtudat.back()[axis_] - xtudat[0][axis_];
         this->num_states_ = xtudat.size();
-        this->num_blocks_ = (this->num_states_ - 1) / (this->block_size_ - 1);
+        this->compute_num_blocks();
         this->delta_t_ = this->total_t_ / double(this->num_blocks_);
         this->even_data_ = true;
         this->last_block_accessed_ = 0;
@@ -337,16 +444,22 @@ struct LGLInterpTable {
     /// @brief Load evenly-spaced node data together with supplied derivatives.
     /// @param xtudat   Trajectory node data (evenly spaced).
     /// @param xdotdat  Per-node state derivatives.
+    /// @throws std::invalid_argument if @p xtudat is empty, has mismatched node dimension, has
+    ///         duplicate/non-monotonic times, or has a node count incompatible with the block
+    ///         size.
     /// @endinternal
     void load_even_data2(const std::vector<Eigen::VectorXd> &xtudat,
                          const std::vector<Eigen::VectorXd> &xdotdat) {
+        if (xtudat.empty()) {
+            throw std::invalid_argument(
+                "LGLInterpTable::load_even_data2: input trajectory node data is empty.");
+        }
         int msize = xtudat[0].size();
         if (msize != this->xtu_vars_) {
-            std::cout << "User Input Error in supplying data to LGLInterpTable" << std::endl;
-            std::cout << " Dimension of Input States(" << msize
-                      << ") does not match expected dimensions of the Table(" << this->xtu_vars_
-                      << ")" << std::endl;
-            exit(1);
+            throw std::invalid_argument(fmt::format(
+                "LGLInterpTable::load_even_data2: input state dimension {} does not match "
+                "table dimension {}.",
+                msize, this->xtu_vars_));
         }
 
         check_input(xtudat);
@@ -358,7 +471,7 @@ struct LGLInterpTable {
 
         this->total_t_ = xtudat.back()[axis_] - xtudat[0][axis_];
         this->num_states_ = xtudat.size();
-        this->num_blocks_ = (this->num_states_ - 1) / (this->block_size_ - 1);
+        this->compute_num_blocks();
         this->delta_t_ = this->total_t_ / double(this->num_blocks_);
         this->even_data_ = true;
         this->last_block_accessed_ = 0;
@@ -374,15 +487,20 @@ struct LGLInterpTable {
     /// @brief Load arbitrarily-spaced node data and resample onto an even mesh.
     /// @param dnum    Number of defect intervals to resample to.
     /// @param xtudat  Trajectory node data (unevenly spaced).
+    /// @throws std::invalid_argument if @p xtudat is empty, has mismatched node dimension, or
+    ///         has duplicate/non-monotonic times.
     /// @endinternal
     void load_uneven_data(int dnum, const std::vector<Eigen::VectorXd> &xtudat) {
+        if (xtudat.empty()) {
+            throw std::invalid_argument(
+                "LGLInterpTable::load_uneven_data: input trajectory node data is empty.");
+        }
         int msize = xtudat[0].size();
         if (msize != this->xtu_vars_) {
-            std::cout << "User Input Error in supplying data to LGLInterpTable" << std::endl;
-            std::cout << " Dimension of Input States(" << msize
-                      << ") does not match expected dimensions of the Table(" << this->xtu_vars_
-                      << ")" << std::endl;
-            exit(1);
+            throw std::invalid_argument(fmt::format(
+                "LGLInterpTable::load_uneven_data: input state dimension {} does not match "
+                "table dimension {}.",
+                msize, this->xtu_vars_));
         }
         check_input(xtudat);
 
@@ -399,7 +517,10 @@ struct LGLInterpTable {
 
         this->total_t_ = xtudat.back()[axis_] - xtudat[0][axis_];
         this->num_states_ = xtudat.size();
-        this->num_blocks_ = (this->num_states_ - 1) / (this->block_size_ - 1);
+        // set_method(LGL3) above fixes block_size_ == 2, so num_states_ - 1 is trivially
+        // divisible by block_size_ - 1 == 1 here; compute_num_blocks() never throws in this
+        // path, it is used purely for consistency with the other loaders.
+        this->compute_num_blocks();
         this->even_data_ = false;
         this->last_block_accessed_ = 0;
         Eigen::VectorXd temp(this->x_vars_);
@@ -440,6 +561,8 @@ struct LGLInterpTable {
     /// @brief Load node data and resample it onto an even mesh using the ODE for derivatives.
     /// @param dnum    Number of defect intervals to resample to.
     /// @param xtudat  Trajectory node data.
+    /// @throws std::invalid_argument if @p xtudat is empty, has duplicate/non-monotonic times,
+    ///         or has a node count incompatible with the table's block size.
     /// @endinternal
     void load_regular_data(int dnum, const std::vector<Eigen::VectorXd> &xtudat) {
 
@@ -454,7 +577,7 @@ struct LGLInterpTable {
 
         this->total_t_ = xtudat.back()[axis_] - xtudat[0][axis_];
         this->num_states_ = xtudat.size();
-        this->num_blocks_ = (this->num_states_ - 1) / (this->block_size_ - 1);
+        this->compute_num_blocks();
         this->even_data_ = false;
         this->last_block_accessed_ = 0;
         Eigen::VectorXd temp(this->x_vars_);
@@ -470,6 +593,8 @@ struct LGLInterpTable {
     /// @internal
     /// @brief Load node data exactly (no resampling), computing derivatives from the ODE.
     /// @param xtudat  Trajectory node data.
+    /// @throws std::invalid_argument if @p xtudat is empty, has duplicate/non-monotonic times,
+    ///         or has a node count incompatible with the table's block size.
     /// @endinternal
     void load_exact_data(const std::vector<Eigen::VectorXd> &xtudat) {
 
@@ -484,7 +609,7 @@ struct LGLInterpTable {
 
         this->total_t_ = xtudat.back()[axis_] - xtudat[0][axis_];
         this->num_states_ = xtudat.size();
-        this->num_blocks_ = (this->num_states_ - 1) / (this->block_size_ - 1);
+        this->compute_num_blocks();
         this->even_data_ = false;
         this->last_block_accessed_ = 0;
         Eigen::VectorXd temp(this->x_vars_);
@@ -501,6 +626,8 @@ struct LGLInterpTable {
     /// @tparam V2  Derivative-vector type.
     /// @param xtudat   Trajectory node data.
     /// @param xdotdat  Per-node state derivatives.
+    /// @throws std::invalid_argument if @p xtudat is empty, has duplicate/non-monotonic times,
+    ///         or has a node count incompatible with the table's block size.
     /// @endinternal
     template <class V1, class V2>
     void load_exact_data(const std::vector<V1> &xtudat, const std::vector<V2> &xdotdat) {
@@ -514,7 +641,7 @@ struct LGLInterpTable {
 
         this->total_t_ = xtudat.back()[axis_] - xtudat[0][axis_];
         this->num_states_ = xtudat.size();
-        this->num_blocks_ = (this->num_states_ - 1) / (this->block_size_ - 1);
+        this->compute_num_blocks();
         this->even_data_ = false;
         this->last_block_accessed_ = 0;
         for (int i = 0; i < this->num_states_; i++) {
@@ -604,8 +731,20 @@ struct LGLInterpTable {
     /// @brief Compute the cumulative discretization-error integral over the trajectory.
     /// @param num_samps  Number of time samples.
     /// @return Per-sample @c [cumulative-error, time] pairs.
+    /// @throws std::invalid_argument if the table has no ODE (the error integral needs
+    ///         `ode_.compute()` to evaluate the true derivative), or if @p num_samps < 2 (the
+    ///         step `h = ts[1] - ts[0]` requires at least two samples).
     /// @endinternal
     std::vector<Eigen::VectorXd> error_integral(int num_samps) {
+        if (!this->has_ode_) {
+            throw std::invalid_argument(
+                "LGLInterpTable::error_integral: table has no ODE; cannot evaluate the "
+                "discretization error, which requires the true derivative from the ODE.");
+        }
+        if (num_samps < 2) {
+            throw std::invalid_argument(fmt::format(
+                "LGLInterpTable::error_integral: num_samps must be >= 2, got {}.", num_samps));
+        }
         Eigen::VectorXd ts;
         ts.setLinSpaced(num_samps, this->t0_, this->tf_);
         std::vector<Eigen::VectorXd> errint(ts.size(), Eigen::VectorXd(2));
@@ -681,9 +820,9 @@ struct LGLInterpTable {
 
                 Scalar frac = tlocal / this->total_t_;
                 if (frac > 1.0) {
-                    tlocal -= int(frac) * this->total_t_;
+                    tlocal -= std::floor(frac) * this->total_t_;
                 } else if (frac < 0.0) {
-                    tlocal += (int(std::abs(frac)) + 1) * this->total_t_;
+                    tlocal += (std::floor(std::abs(frac)) + 1) * this->total_t_;
                 }
             }
 
@@ -696,7 +835,7 @@ struct LGLInterpTable {
             tnd = remainder / this->delta_t_;
             return;
         }
-        element = this->last_block_accessed_;
+        element = this->last_block_accessed_.load(std::memory_order_relaxed);
         int sd = 0;
         do {
             sd = this->check_ith_block(tglobal, element);
@@ -710,7 +849,7 @@ struct LGLInterpTable {
                 break;
             }
         } while (sd != 0);
-        this->last_block_accessed_ = element;
+        this->last_block_accessed_.store(element, std::memory_order_relaxed);
         double tb0 = this->xtu_data_.middleCols((this->block_size_ - 1) * element,
                                                 this->block_size_)(axis_, 0);
         double tbf = this->xtu_data_.middleCols((this->block_size_ - 1) * element,

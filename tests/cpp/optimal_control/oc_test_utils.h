@@ -251,6 +251,60 @@ inline Eigen::VectorXi all_state_vars(const std::shared_ptr<LGLInterpTable> &tab
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Helpers: LGLInterpTable::load_even_data() rejection paths, for OC review
+// §3.2 (LGLInterpTable robustness -- throw not exit(1), validate inputs).
+//
+// All helpers build a no-ODE table (x_vars=1, u_vars=0, so xtu_vars_ == 2,
+// axis_ == 1) and call load_even_data() directly with deliberately malformed
+// input, exercising the throwing path pre-fix reached via std::cout + exit(1).
+///////////////////////////////////////////////////////////////////////////////
+
+/// @brief load_even_data() with nodes one column short of xtu_vars_ (2).
+inline void load_even_wrong_dim() {
+    LGLInterpTable tab(/*xv=*/1, /*uv=*/0, TranscriptionModes::LGL3);
+    std::vector<Eigen::VectorXd> xtudat;
+    for (int i = 0; i < 3; ++i) {
+        Eigen::VectorXd node(1); // wrong: table expects xtu_vars_ == 2 ([x, t])
+        node << double(i);
+        xtudat.push_back(node);
+    }
+    tab.load_even_data(xtudat);
+}
+
+/// @brief load_even_data() with two nodes sharing the same time coordinate.
+inline void load_even_duplicate_times() {
+    LGLInterpTable tab(/*xv=*/1, /*uv=*/0, TranscriptionModes::LGL3);
+    Eigen::VectorXd n0(2), n1(2), n2(2);
+    n0 << 0.0, 0.0;
+    n1 << 1.0, 0.0; // duplicate time (0.0) vs n0
+    n2 << 2.0, 1.0;
+    std::vector<Eigen::VectorXd> xtudat{n0, n1, n2};
+    tab.load_even_data(xtudat);
+}
+
+/// @brief load_even_data() with a node count incompatible with the table's block
+/// size: LGL5 has block_size_ == 3 (block_size_ - 1 == 2), so num_states_ - 1 must
+/// be a multiple of 2; 4 nodes gives num_states_ - 1 == 3, which is not.
+inline void load_even_missized_blocks() {
+    LGLInterpTable tab(/*xv=*/1, /*uv=*/0, TranscriptionModes::LGL5);
+    std::vector<Eigen::VectorXd> xtudat;
+    constexpr int num_nodes = 4;
+    for (int i = 0; i < num_nodes; ++i) {
+        Eigen::VectorXd node(2);
+        node << double(i), double(i);
+        xtudat.push_back(node);
+    }
+    tab.load_even_data(xtudat);
+}
+
+/// @brief load_even_data() with an empty node vector.
+inline void load_even_empty() {
+    LGLInterpTable tab(/*xv=*/1, /*uv=*/0, TranscriptionModes::LGL3);
+    std::vector<Eigen::VectorXd> xtudat;
+    tab.load_even_data(xtudat);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Helper: build a phase with a hand-set, large-magnitude control trajectory
 // for calc_switches() unit tests (OC review §1.4).
 //

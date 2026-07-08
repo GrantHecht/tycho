@@ -156,6 +156,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     optimal_control/test_interp_function_hessian.cpp
     optimal_control/test_phase_indexer.cpp
     optimal_control/test_set_units_retranscription.cpp
+    optimal_control/test_lgl_table_robustness.cpp
 
     # Solvers
     solvers/test_psiopt_convergence.cpp
