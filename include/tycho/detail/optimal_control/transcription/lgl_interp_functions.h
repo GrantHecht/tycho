@@ -59,13 +59,25 @@ struct InterpFunction : VectorFunction<InterpFunction<OR>, 1, OR, DenseDerivativ
     /// @brief Construct interpolating an explicit set of table variables.
     /// @param tab  The trajectory table to interpolate.
     /// @param v    Indices of the table variables to output.
-    /// @throws std::invalid_argument if any index exceeds the table's dimensions.
+    /// @throws std::invalid_argument if any index exceeds the table's dimensions, or (for
+    ///     fixed OR > 0) if the table's xtu_vars_ exceeds the compile-time scratch size
+    ///     TempSize == OR + 1 (e.g. a control-bearing table paired with a fixed-OR
+    ///     InterpFunction sized only for its state + time columns).
     InterpFunction(std::shared_ptr<LGLInterpTable> tab, Eigen::VectorXi v) {
         this->table = tab;
         this->vars = v;
 
         if (v.maxCoeff() + 1 > tab->xtu_vars_) {
             throw std::invalid_argument("Interpolation table has incorrect dimensions");
+        }
+
+        if constexpr (OR > 0) {
+            if (tab->xtu_vars_ > TempSize) {
+                throw std::invalid_argument(fmt::format(
+                    "InterpFunction<{}>: table xtu_vars ({}) exceeds compile-time scratch size "
+                    "{}; use the dynamic InterpFunction<-1> instead",
+                    OR, tab->xtu_vars_, TempSize));
+            }
         }
 
         this->set_io_rows(1, this->vars.size());

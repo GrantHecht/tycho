@@ -203,6 +203,45 @@ inline std::shared_ptr<LGLInterpTable> make_exact_lgl_table(TranscriptionModes m
     return tab;
 }
 
+/// Build a state+control LGLInterpTable analogous to @ref make_exact_lgl_table
+/// (short analytic trajectory loaded via load_exact_data(), so delta_t_ stays
+/// 0.0), but with @p u_vars control columns appended after the time column:
+/// layout `[x_0..x_{x_vars-1}, t, u_0..u_{u_vars-1}]` (axis_ == x_vars). Used
+/// by OC review §1.6: pairing a fixed compile-time-OR InterpFunction<OR>
+/// (whose scratch is sized for exactly OR+1 columns) with a CONTROL-bearing
+/// table -- controls push xtu_vars_ above OR+1 whenever u_vars is large enough.
+inline std::shared_ptr<LGLInterpTable> make_exact_lgl_table_with_controls(TranscriptionModes method,
+                                                                          int x_vars, int u_vars) {
+    // 6 == (num_nodes - 1) is divisible by (block_size_ - 1) for LGL3/5/7 (1, 2, 3).
+    constexpr int num_nodes = 7;
+    constexpr double t_final = 1.0;
+
+    auto tab = std::make_shared<LGLInterpTable>(x_vars, u_vars, method);
+
+    std::vector<Eigen::VectorXd> xtudat;
+    std::vector<Eigen::VectorXd> xdotdat;
+    xtudat.reserve(num_nodes);
+    xdotdat.reserve(num_nodes);
+    for (int i = 0; i < num_nodes; ++i) {
+        double t = t_final * static_cast<double>(i) / (num_nodes - 1);
+        Eigen::VectorXd node(x_vars + u_vars + 1); // [x..., t, u...] -- axis_ == x_vars
+        for (int j = 0; j < x_vars; ++j)
+            node[j] = std::sin(t * (j + 1));
+        node[x_vars] = t;
+        for (int j = 0; j < u_vars; ++j)
+            node[x_vars + 1 + j] = std::cos(t * (j + 1));
+        xtudat.push_back(node);
+
+        Eigen::VectorXd deriv(x_vars);
+        for (int j = 0; j < x_vars; ++j)
+            deriv[j] = (j + 1) * std::cos(t * (j + 1));
+        xdotdat.push_back(deriv);
+    }
+
+    tab->load_exact_data(xtudat, xdotdat);
+    return tab;
+}
+
 /// Indices of all state variables (excluding the time/control columns) of a table.
 inline Eigen::VectorXi all_state_vars(const std::shared_ptr<LGLInterpTable> &tab) {
     Eigen::VectorXi v(tab->x_vars_);

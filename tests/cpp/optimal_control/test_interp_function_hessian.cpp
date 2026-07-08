@@ -41,3 +41,39 @@ TEST(InterpFunctionHessian, NonLGL3AdjointHessianIsFinite) {
     EXPECT_TRUE(std::isfinite(adjhess(0, 0)))
         << "adjoint Hessian is NaN -- FD step h derived from delta_t_ == 0";
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// InterpFunction<OR> fixed-scratch ctor guard (OC review §1.6)
+//
+// The explicit-vars InterpFunction<OR> constructor uses a fixed-size scratch
+// buffer sized for exactly TempSize == OR + 1 columns (see compute_impl's
+// `Eigen::Matrix<Scalar, TempSize, 1, 0, TempSize, 1> state` under `if
+// constexpr (OR > 0)`). Pairing it with a table whose xtu_vars_ > TempSize --
+// e.g. a CONTROL-bearing table -- smashes that fixed-size scratch at
+// evaluation time. The ctor must throw std::invalid_argument up front instead.
+///////////////////////////////////////////////////////////////////////////////
+
+TEST(InterpFunctionHessian, FixedORScratchGuardThrowsOnControlTable) {
+    // x_vars=3, u_vars=2 -> xtu_vars_ = 6, exceeding InterpFunction<3>'s
+    // TempSize == 3 + 1 == 4.
+    auto tab = make_exact_lgl_table_with_controls(TranscriptionModes::LGL3, /*x_vars=*/3,
+                                                  /*u_vars=*/2);
+    Eigen::VectorXi vars = all_state_vars(tab);
+    ASSERT_EQ(vars.size(), 3);
+    EXPECT_THROW((InterpFunction<3>(tab, vars)), std::invalid_argument);
+}
+
+TEST(InterpFunctionHessian, FixedORScratchGuardAllowsFittingControlTable) {
+    // x_vars=2, u_vars=1 -> xtu_vars_ = 4, exactly matching InterpFunction<3>'s
+    // TempSize == 3 + 1 == 4 -- must still construct (no false positive).
+    auto tab = make_exact_lgl_table_with_controls(TranscriptionModes::LGL3, /*x_vars=*/2,
+                                                  /*u_vars=*/1);
+    ASSERT_EQ(tab->xtu_vars_, 4);
+
+    // Layout is [x0, x1, t, u0] (axis_ == x_vars == 2); select the two state
+    // vars plus the control var (index 3), skipping the time column.
+    Eigen::VectorXi vars(3);
+    vars << 0, 1, 3;
+
+    EXPECT_NO_THROW((InterpFunction<3>(tab, vars)));
+}
