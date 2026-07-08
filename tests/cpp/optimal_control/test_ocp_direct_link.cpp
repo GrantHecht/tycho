@@ -655,3 +655,122 @@ TEST_F(OcpDirectLinkTest, AddLinkObjectivePartialMutationOnFuncSizeMismatch) {
                  std::invalid_argument);
     EXPECT_EQ(ocp.base().link_objectives_.size(), before);
 }
+
+// ---------------------------------------------------------------------------
+// OC review §1.10 -- Path region handling in direct links.
+//
+// §1.10a (decision, locked): a Path region only has well-defined per-node row
+// assembly through the dedicated PathToPath branch of make_link_Vindex_Cindex
+// (optimal_control_problem.cpp). Every other LinkFlags value -- including the
+// ReadRegions default used by add_direct_link_equal_con / the explicit-region
+// add_link_equal_con overloads -- falls through to that function's generic
+// `default` case, which treats Path as a single-node region and silently
+// mis-sizes it. check_function_size now rejects Path up-front for any
+// non-PathToPath link, pointing the caller at PathToPath instead.
+//
+// §1.10b (bug): the PathToPath branch itself dropped any appended link-param
+// rows when assembling v_index_ from link_param_locs_, unlike the `default`
+// case (shared by ReadRegions and every other LinkFlags value), which already
+// appended them correctly. See PathToPathAppendsLinkParamRows below.
+// ---------------------------------------------------------------------------
+
+TEST_F(OcpDirectLinkTest, PathRegionInReadRegionsLinkRejected) {
+    auto ode = make_direct_link_ode();
+    auto p0 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(0.0, 1.0), 8);
+    auto p1 = ode.phase(TranscriptionModes::LGL3, make_linear_guess_dl(1.0, 2.0), 8);
+
+    OptimalControlProblem ocp;
+    ocp.add_phase(p0);
+    ocp.add_phase(p1);
+
+    Eigen::VectorXi vars(1);
+    vars << 0; // x
+
+    const auto before = ocp.base().link_equalities_.size();
+
+    // Region Path on the second phase with the default (ReadRegions) link
+    // flag must be rejected before any mutation.
+    EXPECT_THROW(ocp.base().add_direct_link_equal_con(0, PhaseRegionFlags::Back, vars, 1,
+                                                      PhaseRegionFlags::Path, vars,
+                                                      ScaleModes::AUTO),
+                 std::invalid_argument);
+    EXPECT_EQ(ocp.base().link_equalities_.size(), before)
+        << "Rejected Path-region link must leave the constraint map untouched";
+}
+
+TEST_F(OcpDirectLinkTest, PathToPathAppendsLinkParamRows) {
+    // make_link_Vindex_Cindex is protected on OptimalControlProblemBase, and
+    // exercising it end-to-end would require a VectorFunction whose IRows
+    // exactly matches region-rows + link-param-rows plus a full transcribe();
+    // probing it directly isolates the row-assembly bug precisely. This
+    // mirrors the BrachSwitchTestPhase pattern in oc_test_utils.h (a
+    // test-local subclass exposing one protected internal for direct
+    // inspection).
+    struct PathToPathAccessOcp : OptimalControlProblemBase {
+        std::array<Eigen::MatrixXi, 2>
+        probe(LinkFlags reg, const Eigen::Matrix<PhaseRegionFlags, -1, 1> &phase_regs,
+              const std::vector<Eigen::VectorXi> &ptl, const std::vector<Eigen::VectorXi> &xtv,
+              const std::vector<Eigen::VectorXi> &opv, const std::vector<Eigen::VectorXi> &spv,
+              const std::vector<Eigen::VectorXi> &lv, int orows, int &next_c_loc) {
+            return this->make_link_Vindex_Cindex(reg, phase_regs, ptl, xtv, opv, spv, lv, orows,
+                                                 next_c_loc);
+        }
+    };
+
+    PathToPathAccessOcp ocp;
+    ocp.add_phase(make_linear_phase());
+    ocp.add_phase(make_linear_phase());
+
+    // Populate indexer_ (path-node counts, etc.) for both phases via a normal
+    // transcription. No link functions are registered, so this only builds
+    // the phase-level NLP structure.
+    ocp.transcribe();
+
+    Eigen::Matrix<PhaseRegionFlags, -1, 1> phase_regs(2);
+    phase_regs << PhaseRegionFlags::Path, PhaseRegionFlags::Path;
+
+    Eigen::VectorXi sel(1);
+    sel << 0; // "x", present (and identically discretized) on both phases
+
+    std::vector<Eigen::VectorXi> ptl;
+    Eigen::VectorXi app(2);
+    app << 0, 1;
+    ptl.push_back(app);
+
+    std::vector<Eigen::VectorXi> xtv{sel, sel};
+    std::vector<Eigen::VectorXi> empty_per_phase{Eigen::VectorXi(), Eigen::VectorXi()};
+
+    // One shared link param. No link params were registered via
+    // set_link_params(); link_param_locs_ is set by hand to an arbitrary
+    // marker NLP location so the row-assembly logic can be tested in
+    // isolation from the rest of the link-param pipeline.
+    ocp.link_param_locs_.resize(1);
+    ocp.link_param_locs_ << 777;
+
+    std::vector<Eigen::VectorXi> lv_none{Eigen::VectorXi()};
+    Eigen::VectorXi one_lp(1);
+    one_lp << 0;
+    std::vector<Eigen::VectorXi> lv_one{one_lp};
+
+    int next_c_loc = 0;
+    auto vc_none = ocp.probe(LinkFlags::PathToPath, phase_regs, ptl, xtv, empty_per_phase,
+                             empty_per_phase, lv_none, 1, next_c_loc);
+    const int region_rows = vc_none[0].rows();
+    ASSERT_GT(region_rows, 0);
+    ASSERT_GT(vc_none[0].cols(), 0);
+
+    next_c_loc = 0;
+    auto vc_one = ocp.probe(LinkFlags::PathToPath, phase_regs, ptl, xtv, empty_per_phase,
+                            empty_per_phase, lv_one, 1, next_c_loc);
+
+    // Pre-fix: vc_one[0].rows() == region_rows (the lv_one link param was
+    // silently dropped). Post-fix: exactly one row is appended per link param.
+    EXPECT_EQ(vc_one[0].rows(), region_rows + 1)
+        << "PathToPath v_index_ must gain exactly one row per appended link param";
+    EXPECT_EQ(vc_one[0].cols(), vc_none[0].cols());
+
+    for (int c = 0; c < vc_one[0].cols(); ++c) {
+        EXPECT_EQ(vc_one[0](region_rows, c), 777)
+            << "Appended link-param row must carry link_param_locs_[0] in every column";
+    }
+}

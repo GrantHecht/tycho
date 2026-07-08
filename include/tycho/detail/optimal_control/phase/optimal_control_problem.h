@@ -1551,10 +1551,27 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
                         switch (flag) {
                         case PhaseRegionFlags::Front:
                         case PhaseRegionFlags::Back:
-                        case PhaseRegionFlags::Path:
                         case PhaseRegionFlags::ODEParams:
                         case PhaseRegionFlags::StaticParams:
                         case PhaseRegionFlags::Params:
+                            xmult = 1;
+                            break;
+                        case PhaseRegionFlags::Path:
+                            // A Path region only has well-defined per-node row assembly
+                            // through the dedicated PathToPath branch of
+                            // make_link_Vindex_Cindex (optimal_control_problem.cpp); every
+                            // other LinkFlags value (including the ReadRegions default used
+                            // for an explicit-region link built via add_link_equal_con /
+                            // add_direct_link_equal_con) routes through that function's
+                            // generic `default` case, which treats Path as a single-node
+                            // region and silently mis-sizes it (OC review §1.10a).
+                            if (func.link_flag_ != LinkFlags::PathToPath) {
+                                throw std::invalid_argument(fmt::format(
+                                    "Transcription Error!!!\n"
+                                    "Region 'Path' is not supported in a ReadRegions link ({}); "
+                                    "use a PathToPath link for path-to-path coupling.\n",
+                                    ftype));
+                            }
                             xmult = 1;
                             break;
                         case PhaseRegionFlags::FrontandBack:
