@@ -102,6 +102,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     vector_functions/test_vf_input_domains.cpp
     vector_functions/test_parsed_input.cpp
     vector_functions/test_vf_type_erasure_guards.cpp
+    vector_functions/test_interp_table_validation.cpp
 
     # Astro
     astro/test_kepler_conversions.cpp
@@ -308,6 +309,17 @@ set_source_files_properties(
 # doesn't force a full unity-batch rebuild.
 set_source_files_properties(
     vector_functions/test_vf_type_erasure_guards.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)
+
+# test_interp_table_validation.cpp: keep standalone for the same reason as the
+# other entries above -- avoid shifting later unity batch boundaries. Also
+# isolates the interp_table_1d.h / interp_table_2d.h / cheb_table.h edits
+# (OC_REVIEW 3.3, 3.1: strict-ascending grid validation, non-finite Cheb
+# sample rejection, populated/null table guards) so iterating on this test
+# doesn't force a full unity-batch rebuild.
+set_source_files_properties(
+    vector_functions/test_interp_table_validation.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
 

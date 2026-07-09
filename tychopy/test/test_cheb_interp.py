@@ -470,6 +470,31 @@ def test_residual_net_silent_when_resolved():
         _warn_if_residual_exceeds(f, tab, lb, ub)  # must not raise
 
 
+def test_from_values_rejects_nan_1d():
+    """ChebTable.from_values (1-D) rejects a NaN grid sample in C++ (OC review
+    3.3). Distinct from test_nan_sample_rejected_1d, which exercises the
+    pure-Python sampler check in cheb_from_function -- this calls from_values
+    directly so the C++ guard is the one that fires."""
+    n, lb, ub = 8, 0.0, 1.0
+    pts = vf.ChebTable.cheb_points(n, lb, ub)
+    vals = np.sin(pts).reshape(-1, 1)
+    vals[3, 0] = np.nan
+    with pytest.raises(ValueError):
+        vf.ChebTable.from_values(vals, lb, ub, n)
+
+
+def test_from_values_rejects_inf_nd():
+    """ChebTable.from_values (N-D) rejects an Inf grid sample in C++."""
+    orders = [4, 4]
+    lb = np.array([0.0, 0.0])
+    ub = np.array([1.0, 1.0])
+    tsize = (orders[0] + 1) * (orders[1] + 1)
+    vals = np.ones((tsize, 1))
+    vals[7, 0] = np.inf
+    with pytest.raises(ValueError):
+        vf.ChebTable.from_values(vals, lb, ub, orders)
+
+
 def test_clamp_derivative_zero_outside_1d():
     """Under Clamp the value is flat outside [lb, ub], so eval_deriv1/2 return 0
     there; the boundary retains the (nonzero) one-sided endpoint slope."""

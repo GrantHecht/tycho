@@ -6,6 +6,7 @@
 #include "tycho/detail/vf/core/vector_function.h"
 #include <Eigen/Dense>
 #include <cmath>
+#include <fmt/format.h>
 #include <limits>
 #include <numbers>
 #include <pocketfft_hdronly.h>
@@ -88,8 +89,9 @@ struct ChebTable {
     // out-of-domain policy. Clamp (default): queries outside [lb_[d], ub_[d]]
     // snap to the nearest endpoint (no extrapolation) — a global Chebyshev
     // polynomial diverges catastrophically outside its domain, so clamping is
-    // deliberate. This differs from InterpTable1D, which extrapolates. Periodic:
-    // wrap the query modulo the axis span back into the domain before mapping.
+    // deliberate. This differs from InterpTable1D, which throws on out-of-domain
+    // queries. Periodic: wrap the query modulo the axis span back into the domain
+    // before mapping.
     // The trailing clamp also guards endpoint round-off in both cases.
     // Note: a non-finite (NaN/Inf) query is not rejected here — it propagates to
     // a NaN output. Construction rejects non-finite samples; eval-time callers
@@ -151,6 +153,25 @@ struct ChebTable {
         if (order >= 1)
             g[0] *= 0.5; // convert prime-convention T_0 term
         return g;
+    }
+
+    // Reject any non-finite (NaN/Inf) sample before it reaches the DCT-I
+    // transform. axis_xi's contract (see the comment above it) documents that
+    // construction rejects non-finite samples so eval-time callers never need
+    // a per-query finiteness check; a single non-finite input sample would
+    // otherwise poison every Chebyshev coefficient via the DCT-I recurrence.
+    // Shared by both the 1-D and N-D from_values overloads.
+    static void require_finite_grid(const MatType &grid_values) {
+        for (Eigen::Index r = 0; r < grid_values.rows(); ++r) {
+            for (Eigen::Index c = 0; c < grid_values.cols(); ++c) {
+                if (!std::isfinite(grid_values(r, c))) {
+                    throw std::invalid_argument(
+                        fmt::format("ChebTable: grid_values contains a non-finite sample at "
+                                    "(row={}, col={}) = {}",
+                                    r, c, grid_values(r, c)));
+                }
+            }
+        }
     }
 
   public:
@@ -481,6 +502,8 @@ struct ChebTable {
     ///                     only during interpolant construction, never during
     ///                     evaluation or solve-time hot paths.
     /// @param oob          Out-of-domain policy for the single axis (default Clamp).
+    /// @throws std::invalid_argument on bad @p order/@p lb/@p ub/@p nthreads, a
+    ///         shape mismatch, or a non-finite entry in @p grid_values.
     static ChebTable from_values(const MatType &grid_values, double lb, double ub, int order,
                                  int nthreads = 1, OutOfDomain oob = OutOfDomain::Clamp) {
         if (order < 1)
@@ -491,6 +514,7 @@ struct ChebTable {
             throw std::invalid_argument("ChebTable: require ub > lb");
         if (nthreads < 0)
             throw std::invalid_argument("ChebTable: nthreads must be >= 0 (0 = auto)");
+        require_finite_grid(grid_values);
 
         ChebTable out;
 
@@ -597,6 +621,10 @@ struct ChebTable {
     /// using @c coeffs_along_axis.  All three precomputed tensors are filled:
     /// @c value_ (DCT-I coefficients), @c grad_[j] = D_j value_ (gradient tensors),
     /// and @c hess_[hess_index(j,k,D)] = D_k D_j value_ (upper-triangle Hessian tensors).
+    ///
+    /// @throws std::invalid_argument on bad @p orders/@p lb/@p ub/@p nthreads/@p oob, a
+    ///         shape mismatch, an oversized table, or a non-finite entry in
+    ///         @p grid_values_flat.
     static ChebTable from_values(const MatType &grid_values_flat, const Eigen::VectorXd &lb,
                                  const Eigen::VectorXd &ub, const std::vector<int> &orders,
                                  int nthreads = 1, std::vector<OutOfDomain> oob = {}) {
@@ -632,6 +660,7 @@ struct ChebTable {
             throw std::invalid_argument(
                 "ChebTable: table too large — olen*prod(order+1) exceeds the int "
                 "scratch-buffer limit");
+        require_finite_grid(grid_values_flat);
         out.value_ = grid_values_flat; // copy; DCT applied in place below
         for (int ax = 0; ax < D; ++ax)
             coeffs_along_axis(out.value_, out.shape_, out.strides_, ax, nthreads);
@@ -806,11 +835,14 @@ struct ChebFunction : VectorFunction<ChebFunction<IR>, IR, -1, DenseDerivativeMo
 
     /// @brief Default-construct an empty wrapper (null @c tab); assign a table before use.
     ChebFunction() {}
-    /// @brief Construct a VectorFunction backed by @c tab_ (must be non-null; for a
-    /// fixed @c IR it must match the table's input dimension).
+    /// @brief Construct a VectorFunction backed by @c tab_ (must be non-null and
+    /// populated; for a fixed @c IR it must match the table's input dimension).
+    /// @throws std::invalid_argument if @p tab_ is null, unpopulated (default-
+    ///         constructed), or (for fixed @c IR) its input dimension disagrees with @c IR.
     explicit ChebFunction(std::shared_ptr<ChebTable> tab_) : tab(tab_) {
         if (!tab_)
             throw std::invalid_argument("ChebFunction: null ChebTable");
+        tab_->require_populated();
         // set_input_rows is a compile-time no-op when IR >= 0 (fixed input dim),
         // so a fixed IR that disagrees with the table's runtime input dim would
         // otherwise be silently accepted. Reject it here.
