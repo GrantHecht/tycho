@@ -1800,9 +1800,15 @@ adaptive_mesh : bool, optional
             nb::object np_number = (nb::object)nb::module_::import_("numpy").attr("number");
 
             auto is_numeric_scalar = [&](nb::handle h) {
-                return h.type().is(py_float) || h.type().is(py_int) || h.type().is(np_int) ||
-                       h.type().is(np_float) ||
-                       PyObject_IsInstance(h.ptr(), np_number.ptr()) == 1 || PyBool_Check(h.ptr());
+                if (h.type().is(py_float) || h.type().is(py_int) || h.type().is(np_int) ||
+                    h.type().is(np_float) || PyBool_Check(h.ptr())) {
+                    return true;
+                }
+                int r = PyObject_IsInstance(h.ptr(), np_number.ptr());
+                if (r < 0) {
+                    PyErr_Clear();
+                }
+                return r == 1;
             };
 
             Eigen::VectorXd Units(self.xtu_p_vars());

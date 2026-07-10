@@ -109,9 +109,15 @@ std::vector<GenericFunction<-1, -1>> ParsePythonArgs(nb::args x, int irows) {
     auto is_numeric_scalar = [&](nb::handle h) {
         // Exact-type fast paths first, then the general numpy.number ABC check for every
         // other signed/unsigned int and float width (int8/16/64, uint*, float16/32, ...).
-        return h.type().is(py_float) || h.type().is(py_int) || h.type().is(np_int) ||
-               h.type().is(np_float) || PyObject_IsInstance(h.ptr(), np_number) == 1 ||
-               PyBool_Check(h.ptr());
+        if (h.type().is(py_float) || h.type().is(py_int) || h.type().is(np_int) ||
+            h.type().is(np_float) || PyBool_Check(h.ptr())) {
+            return true;
+        }
+        int r = PyObject_IsInstance(h.ptr(), np_number);
+        if (r < 0) {
+            PyErr_Clear();
+        }
+        return r == 1;
     };
 
     int i = 0;
@@ -246,9 +252,15 @@ std::vector<GenericFunction<-1, 1>> ParsePythonArgsScalar(nb::args x, int irows)
     auto is_numeric_scalar = [&](nb::handle h) {
         // Exact-type fast paths first, then the general numpy.number ABC check for every
         // other signed/unsigned int and float width (int8/16/64, uint*, float16/32, ...).
-        return h.type().is(py_float) || h.type().is(py_int) || h.type().is(np_int) ||
-               h.type().is(np_float) || PyObject_IsInstance(h.ptr(), np_number) == 1 ||
-               PyBool_Check(h.ptr());
+        if (h.type().is(py_float) || h.type().is(py_int) || h.type().is(np_int) ||
+            h.type().is(np_float) || PyBool_Check(h.ptr())) {
+            return true;
+        }
+        int r = PyObject_IsInstance(h.ptr(), np_number);
+        if (r < 0) {
+            PyErr_Clear();
+        }
+        return r == 1;
     };
 
     int i = 0;

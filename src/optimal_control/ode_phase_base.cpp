@@ -492,13 +492,13 @@ void tycho::oc::ODEPhaseBase::set_traj(const std::vector<Eigen::VectorXd> &mesh,
     int msize = mesh[0].size();
     if (msize != this->table_.xtu_vars_) {
         throw std::invalid_argument(fmt::format(
-            "User Input Error in function setInitTraj for ODE:{0}. Dimension of Input "
+            "User Input Error in function set_traj for ODE:{0}. Dimension of Input "
             "States({1}) does not match expected dimensions of the ODE({2})",
             this->table_.ode_.name(), msize, this->table_.xtu_vars_));
     }
     if ((DBS.size() - 1) != DPB.size()) {
         throw std::invalid_argument(fmt::format(
-            "User Input Error in function setInitTraj for ODE:{0}. Size of Defect Bin "
+            "User Input Error in function set_traj for ODE:{0}. Size of Defect Bin "
             "Spacing({1}) not consistent with size of Defects Per Bin({2})",
             this->table_.ode_.name(), DBS.size(), DPB.size()));
     }
@@ -577,7 +577,7 @@ void tycho::oc::ODEPhaseBase::set_traj(const std::vector<Eigen::VectorXd> &mesh)
     int msize = mesh[0].size();
     if (msize != this->table_.xtu_vars_) {
         throw std::invalid_argument(fmt::format(
-            "User Input Error in function setInitTraj for ODE:{0}. Dimension of Input "
+            "User Input Error in function set_traj for ODE:{0}. Dimension of Input "
             "States({1}) does not match expected dimensions of the ODE({2})",
             this->table_.ode_.name(), msize, this->table_.xtu_vars_));
     }
@@ -612,7 +612,7 @@ void tycho::oc::ODEPhaseBase::set_traj(const std::vector<Eigen::VectorXd> &mesh)
 void tycho::oc::ODEPhaseBase::refine_traj_manual(VectorXd DBS, VectorXi DPB) {
     if ((DBS.size() - 1) != DPB.size()) {
         throw std::invalid_argument(fmt::format(
-            "User Input Error in function setInitTraj for ODE:{0}. Size of Defect Bin "
+            "User Input Error in function refine_traj_manual for ODE:{0}. Size of Defect Bin "
             "Spacing({1}) not consistent with size of Defects Per Bin({2})",
             this->table_.ode_.name(), DBS.size(), DPB.size()));
     }

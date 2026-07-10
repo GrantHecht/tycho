@@ -188,7 +188,7 @@ ValueError
 
     m.def("sum", [](const GenS &first, nb::args x) {
         auto funcs = std::vector{first};
-        auto funcsrest = ParsePythonArgsScalar(x);
+        auto funcsrest = ParsePythonArgsScalar(x, first.input_rows());
         for (const auto &f : funcsrest)
             funcs.push_back(f);
         return DynamicSum(funcs);
@@ -205,7 +205,7 @@ ValueError
 
     m.def("sum", [](const Gen &first, nb::args x) {
         auto funcs = std::vector{first};
-        auto funcsrest = ParsePythonArgs(x);
+        auto funcsrest = ParsePythonArgs(x, first.input_rows());
         for (const auto &f : funcsrest)
             funcs.push_back(f);
         return DynamicSum(funcs);

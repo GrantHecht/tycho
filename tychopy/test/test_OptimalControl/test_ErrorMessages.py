@@ -72,5 +72,37 @@ class TestErrorMessagesNotEmpty(unittest.TestCase):
             self.phase.add_equal_con("Front", func, [0, 1])
 
 
+class TestOptimizationProblemBoundsOffByOne(unittest.TestCase):
+    """``OptimizationProblem::transcribe`` bounds-checks each constraint/
+    objective's variable index vector against ``numVars`` (the size of
+    ``active_variables_``). Valid indices are ``[0, numVars)``, so the check
+    must reject an index exactly equal to ``numVars`` (the boundary), not
+    just indices greater than it. Pre-fix, ``maxCoeff() > numVars`` let
+    ``index == numVars`` through -- an out-of-bounds read one past the end of
+    ``active_variables_``.
+    """
+
+    def test_equality_constraint_index_at_numvars_raises(self):
+        solvs = ast.solvers
+        prob = solvs.OptimizationProblem()
+        prob.set_vars([0.0, 0.0])  # numVars == 2; valid indices are {0, 1}
+        con = vf.Arguments(2)  # identity: 2 in, 2 out
+        # Index 2 == numVars is the exact off-by-one boundary (not just > numVars).
+        prob.add_equal_con(con, [0, 2])
+        with self.assertRaisesRegex(ValueError, "out of bounds"):
+            prob.solve()
+
+    def test_inequality_constraint_valid_indices_still_work(self):
+        """Sanity check of the construction path with in-bounds indices --
+        must not raise at transcribe time."""
+        solvs = ast.solvers
+        prob = solvs.OptimizationProblem()
+        prob.set_vars([0.0, 0.0])
+        con = vf.Arguments(2).squared_norm() - 2.0
+        prob.add_inequal_con(con, [0, 1])  # both indices < numVars == 2
+        prob.optimizer.print_level = 0
+        prob.solve()  # must not raise
+
+
 if __name__ == "__main__":
     unittest.main()

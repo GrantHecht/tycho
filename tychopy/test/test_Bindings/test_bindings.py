@@ -636,26 +636,20 @@ class TestParsePythonArgs(unittest.TestCase):
         """ParsePythonArgsScalar (used by vf.sum) must accept np.int64 the same way
         ParsePythonArgs does for vf.stack.
 
-        Note: `vf.sum(scalar_fn, np.int64(...))` (a single VF followed by a bare
-        scalar) is not usable here — the `sum(const GenS&, nb::args)` overload
-        calls `ParsePythonArgsScalar(x)` without seeding `irows` from `first`
-        (unlike the analogous `stack_scalar` overload), so with no VF left in
-        the variadic tail `irows` never gets set and the call always raises
-        "Argument list must contain at least one VectorFunction" -- even for a
-        plain Python float. That is a pre-existing gap unrelated to numpy
-        acceptance; see docs/dev/notes or file an issue rather than working
-        around it here. Instead, exercise ParsePythonArgsScalar's np.int64
-        acceptance via `vf.sum(e0, e1, np.int64(2))`, where `e1` supplies a
-        VF in the variadic tail so `irows` gets set before the scalar is
-        parsed, and compare against the equivalent plain-float call."""
+        Exercised via the two-arg `sum(const GenS&, nb::args)` form directly:
+        `sum(e0, np.int64(2))`/`sum(e0, 2.0)` now seed `irows` from `e0.input_rows()`
+        before parsing the scalar tail (the `sum(const GenS&, ...)` and
+        `sum(const Gen&, ...)` overloads previously omitted this seeding step,
+        unlike the analogous `stack`/`stack_scalar` overloads, so a lone
+        VF-then-scalar call always raised "Argument list must contain at least
+        one VectorFunction" even though `first` was itself a VectorFunction)."""
         e0 = vf.Element(3, 1, 0)
-        e1 = vf.Element(3, 1, 1)
         x = np.array([1.0, 2.0, 3.0])
-        result_int = vf.sum(e0, e1, np.int64(2))
-        result_float = vf.sum(e0, e1, 2.0)
+        result_int = vf.sum(e0, np.int64(2))
+        result_float = vf.sum(e0, 2.0)
         out_int = result_int.compute(x)
         out_float = result_float.compute(x)
-        np.testing.assert_allclose(out_int, [5.0])
+        np.testing.assert_allclose(out_int, [3.0])
         np.testing.assert_allclose(out_int, out_float)
 
 
@@ -835,12 +829,12 @@ class TestNegativeSizeRejection(unittest.TestCase):
     Release builds) instead of raising a clean Python exception at the call
     boundary.
 
-    Zero-size segments are deliberately still accepted: ``ODEArguments``'s
-    ``u_vec()``/``p_vec()`` bindings (``src/bindings/optimal_control/
-    ode_arguments_bind.h``) construct exactly this shape unconditionally for
-    control-free/parameter-free ODEs (e.g. ``ODEArguments(3)`` has
-    ``u_vars() == p_vars() == 0`` by design), so only ``orows < 0`` /
-    negative pads are rejected here, not ``orows == 0``.
+    Zero-size segments built directly via ``head(0)``/``tail(0)``/
+    ``segment(x, 0)`` are deliberately still accepted -- only ``orows < 0``
+    / negative pads are rejected here, not ``orows == 0``. (Note:
+    ``ODEArguments.u_vec()``/``p_vec()`` no longer construct this shape for
+    control-free/parameter-free ODEs -- they raise ``ValueError`` instead;
+    see ``TestODEArgumentsZeroVarThrow``.)
     """
 
     def setUp(self):
@@ -855,8 +849,7 @@ class TestNegativeSizeRejection(unittest.TestCase):
             self.f.tail(-1)
 
     def test_tail_zero_still_works(self):
-        # Zero-size segments are legitimate (control-free/parameter-free ODEs
-        # route through this exact shape) -- must not raise.
+        # Zero-size segments built directly are legitimate -- must not raise.
         np.testing.assert_allclose(
             self.f.tail(0).compute([1.0, 2.0, 3.0, 4.0, 5.0]), []
         )
@@ -888,6 +881,39 @@ class TestNegativeSizeRejection(unittest.TestCase):
         np.testing.assert_allclose(
             self.f.segment(1, 2).compute([1.0, 2.0, 3.0, 4.0, 5.0]), [2.0, 3.0]
         )
+
+
+# ---------------------------------------------------------------------------
+# TestODEArgumentsZeroVarThrow
+# ---------------------------------------------------------------------------
+
+
+class TestODEArgumentsZeroVarThrow(unittest.TestCase):
+    """``ODEArguments.u_vec()``/``p_vec()`` must raise a helpful ValueError for
+    control-free/parameter-free ODEs instead of silently building a useless
+    zero-size segment, aligning with the builder API's ``ODEArgsProxy::u_vec``/
+    ``p_vec`` (``include/tycho/detail/optimal_control/builder/ode_builder.h``),
+    which already guards this case."""
+
+    def test_u_vec_zero_controls_raises(self):
+        oc = ast.optimal_control
+        args = oc.ODEArguments(6)  # 0 controls, 0 params
+        with self.assertRaisesRegex(ValueError, "no control variables declared"):
+            args.u_vec()
+
+    def test_p_vec_zero_params_raises(self):
+        oc = ast.optimal_control
+        args = oc.ODEArguments(6, 3)  # 3 controls, 0 params
+        with self.assertRaisesRegex(ValueError, "no parameter variables declared"):
+            args.p_vec()
+
+    def test_u_vec_with_controls_still_works(self):
+        oc = ast.optimal_control
+        args = oc.ODEArguments(6, 3)
+        u = args.u_vec()
+        self.assertEqual(u.output_rows(), 3)
+        x = np.arange(10.0)  # [x(6), t(1), u(3)]
+        np.testing.assert_allclose(u.compute(x), [7.0, 8.0, 9.0])
 
 
 # ---------------------------------------------------------------------------
