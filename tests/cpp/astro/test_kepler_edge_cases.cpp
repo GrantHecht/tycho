@@ -100,10 +100,14 @@ TEST(KeplerEdgeCases, NearParabolic) {
 // Kepler equation M = e*sinh(H) - H via Newton iteration seeded at H = M.
 // For moderate |M| (>~15) that seed lands far from the true root and the
 // 15-iteration budget exhausts without converging; pre-fix, the loop had no
-// residual check and silently returned the far-from-root H as if converged.
-// The fix seeds with the Gooding-class asinh(M/e) guess, checks the residual
-// after the loop, and NaN-poisons the whole output (via kepler_nan_value,
-// matching the LCD/IFT Kepler paths) when convergence is not reached.
+// convergence check and silently returned the far-from-root H as if
+// converged. The fix seeds with the Gooding-class asinh(M/e) guess, tests
+// convergence on the Newton STEP (|dH| < 1e-12, matching the |dX| <= Xtol
+// convention of kepler_lcd_iterate -- scale-invariant near the root, unlike
+// a raw-residual test whose FP noise floor grows as O(eps*M) and would
+// falsely reject valid states for |M| beyond a few thousand), and
+// NaN-poisons the whole output (via kepler_nan_value, matching the LCD/IFT
+// Kepler paths) when convergence is not reached.
 // ---------------------------------------------------------------------------
 
 TEST(KeplerEdgeCases, HyperbolicModerateMConverges) {
@@ -111,8 +115,8 @@ TEST(KeplerEdgeCases, HyperbolicModerateMConverges) {
     // 1 per iteration from the far-from-root seed (H=50) and never reaches
     // the true root (H* ~ 4.28) within MAXITERS=15. Post-fix, the
     // asinh(M/e) seed lands within ~0.1 of H* and the loop converges to
-    // full residual tolerance in ~5 iterations (verified via standalone
-    // probe: converged=1, iters=5, final |residual| ~1.4e-14).
+    // sub-tolerance step size in ~5 iterations (verified via standalone
+    // probe: converged=1, iters=5, |dH| ~2.7e-16, residual ~1e-14).
     const double e = 1.5;
     const double M = 50.0;
     Vector6<double> oe;
@@ -160,48 +164,79 @@ TEST(KeplerEdgeCases, HyperbolicModerateMConvergesClassicToModified) {
            "Newton solve converged to the wrong root for moderate |M|";
 }
 
-TEST(KeplerEdgeCases, HyperbolicLargeMNaNPoisonedNotFiniteWrong) {
-    // M this large exceeds what the fixed asinh-seeded Newton loop can drive
-    // below the absolute residual tolerance (residual scales with M, so the
-    // achievable floor from double rounding, ~M*eps, exceeds TOL=1e-12) --
-    // verified via standalone probe: converged=0 after 15 iterations even
-    // though the final H (~14.1) is accurate to ~1e-16 relative precision.
-    // This must surface as an explicit NaN-poisoned signal, never a finite
-    // value that merely looks plausible.
+TEST(KeplerEdgeCases, HyperbolicLargeMConvergesUnderStepSizeCheck) {
+    // Under the step-size convergence test, large |M| converges to machine-
+    // relative precision -- an absolute-residual test would falsely NaN-poison
+    // these states because the residual's FP noise floor is O(eps*M) (~1e-13
+    // at M=4e3, ~1e-10 at M=1e6), far above a fixed 1e-12 threshold, even
+    // though H itself is accurate to ~1e-16 relative. M=4e3 is realistically
+    // reachable (~73 days past periapsis on this a=-10000 km Earth orbit);
+    // probe: M=4e3 converges in 4 iterations, M=1e6 in 3.
     const double e = 1.5;
-    const double M = 1.0e6;
-    Vector6<double> oe;
-    oe << -10000.0, e, 10.0 * std::numbers::pi / 180.0, 20.0 * std::numbers::pi / 180.0,
-        30.0 * std::numbers::pi / 180.0, M;
+    for (double M : {4.0e3, 1.0e6}) {
+        Vector6<double> oe;
+        oe << -10000.0, e, 10.0 * std::numbers::pi / 180.0, 20.0 * std::numbers::pi / 180.0,
+            30.0 * std::numbers::pi / 180.0, M;
 
-    auto rv = classic_to_cartesian<double>(oe, MU_EARTH);
-    EXPECT_FALSE(rv.allFinite());
-    for (int i = 0; i < 6; ++i)
-        EXPECT_TRUE(std::isnan(rv[i])) << "classic_to_cartesian component " << i
-                                       << " should be NaN-poisoned on non-convergence";
+        auto rv = classic_to_cartesian<double>(oe, MU_EARTH);
+        ASSERT_TRUE(rv.allFinite()) << "classic_to_cartesian NaN-poisoned a convergent large-M "
+                                       "hyperbolic state (M="
+                                    << M << ")";
+        // Round-trip M recovery (Newton-free closed form in
+        // cartesian_to_classic) must match the input M to tight RELATIVE
+        // tolerance; probe: 1.9e-13 at M=4e3, 1.9e-10 at M=1e6 (the residual
+        // amplifies H-recovery conditioning by e*cosh(H) ~ M near the
+        // asymptote, so machine-accurate H yields ~1e-10 relative here).
+        auto oe2 = cartesian_to_classic<double>(rv, MU_EARTH);
+        EXPECT_NEAR(oe2[5] / M, 1.0, 1e-8)
+            << "Recovered M does not match input at M=" << M
+            << " -- large-M hyperbolic Newton solve converged to the wrong root";
 
-    auto mee = classic_to_modified<double>(oe, MU_EARTH);
-    EXPECT_FALSE(mee.allFinite());
-    for (int i = 0; i < 6; ++i)
-        EXPECT_TRUE(std::isnan(mee[i])) << "classic_to_modified component " << i
-                                        << " should be NaN-poisoned on non-convergence";
+        auto mee = classic_to_modified<double>(oe, MU_EARTH);
+        ASSERT_TRUE(mee.allFinite()) << "classic_to_modified NaN-poisoned a convergent large-M "
+                                        "hyperbolic state (M="
+                                     << M << ")";
+        auto oe3 = modified_to_classic<double>(mee, MU_EARTH);
+        EXPECT_NEAR(oe3[5] / M, 1.0, 1e-8)
+            << "Recovered M via MEE round trip does not match input at M=" << M;
+    }
 }
 
-TEST(KeplerEdgeCases, HyperbolicOverflowMNaNPoisoned) {
-    // M large enough that the Newton seed itself (asinh(M/e)) pushes sinh/cosh
-    // into overflow (H_seed ~ ln(2M/e) > ~709.78 trips exp overflow); the
-    // resulting inf/NaN residual must never leak through as a finite state.
-    const double e = 1.5;
-    const double M = 1.0e300;
-    Vector6<double> oe;
-    oe << -10000.0, e, 10.0 * std::numbers::pi / 180.0, 20.0 * std::numbers::pi / 180.0,
-        30.0 * std::numbers::pi / 180.0, M;
+TEST(KeplerEdgeCases, HyperbolicNearParabolicDivergenceNaNPoisoned) {
+    // Genuine Newton divergence under the step-size check: for e barely above
+    // 1 with small |M|, the Newton derivative e*cosh(H) - 1 is ~(e-1) tiny
+    // near the asinh(M/e) seed, so the first step overshoots wildly and the
+    // iteration either oscillates (|dH| ~ 1 forever; M=0.01) or drives
+    // sinh/cosh to overflow and the step to NaN (M=0.001), never reaching
+    // |dH| < 1e-12 within MAXITERS=15 (both verified via standalone probe).
+    // This must surface as an explicit all-NaN poison, never a finite value
+    // that merely looks plausible. (Control: same e with M=1 converges.)
+    const double e = 1.0 + 1.0e-10;
+    for (double M : {0.01, 0.001}) {
+        Vector6<double> oe;
+        oe << -10000.0, e, 10.0 * std::numbers::pi / 180.0, 20.0 * std::numbers::pi / 180.0,
+            30.0 * std::numbers::pi / 180.0, M;
 
-    auto rv = classic_to_cartesian<double>(oe, MU_EARTH);
-    EXPECT_FALSE(rv.allFinite());
+        auto rv = classic_to_cartesian<double>(oe, MU_EARTH);
+        for (int i = 0; i < 6; ++i)
+            EXPECT_TRUE(std::isnan(rv[i]))
+                << "classic_to_cartesian component " << i
+                << " should be NaN-poisoned on non-convergence (M=" << M << ")";
 
-    auto mee = classic_to_modified<double>(oe, MU_EARTH);
-    EXPECT_FALSE(mee.allFinite());
+        auto mee = classic_to_modified<double>(oe, MU_EARTH);
+        for (int i = 0; i < 6; ++i)
+            EXPECT_TRUE(std::isnan(mee[i]))
+                << "classic_to_modified component " << i
+                << " should be NaN-poisoned on non-convergence (M=" << M << ")";
+    }
+
+    // Control: nearby convergent case must NOT be poisoned (probe: converges
+    // in 8 iterations at M=1).
+    Vector6<double> oe_ok;
+    oe_ok << -10000.0, e, 10.0 * std::numbers::pi / 180.0, 20.0 * std::numbers::pi / 180.0,
+        30.0 * std::numbers::pi / 180.0, 1.0;
+    EXPECT_TRUE(classic_to_cartesian<double>(oe_ok, MU_EARTH).allFinite());
+    EXPECT_TRUE(classic_to_modified<double>(oe_ok, MU_EARTH).allFinite());
 }
 
 TEST(KeplerEdgeCases, EllipticPathUnaffectedByHyperbolicFix) {

@@ -101,28 +101,36 @@ Vector6<Scalar> classic_to_cartesian(const Vector6<Scalar> &oelems, Scalar mu) {
         // closely than H = M for moderate/large |M|, where the H = M seed
         // can leave the Newton iterate outside the basin of convergence.
         Scalar H = asinh(M / e);
-        Scalar sinhH;
-        Scalar coshH;
-        Scalar fH;
-        Scalar jH;
         bool converged = false;
 
         for (int i = 0; i < MAXITERS; i++) {
-            sinhH = sinh(H);
-            coshH = cosh(H);
-            fH = e * sinhH - H - M;
-            if (abs(fH) < TOL) {
+            Scalar sinhHi = sinh(H);
+            Scalar coshHi = cosh(H);
+            Scalar fH = e * sinhHi - H - M;
+            Scalar dH = fH / (e * coshHi - 1);
+            H = H - dH;
+            // Step-size convergence test, matching kepler_lcd_iterate's
+            // |dX| <= Xtol convention (same 1e-12 magnitude as LCD's default
+            // Xtol): scale-invariant near a well-conditioned root, unlike a
+            // raw-residual test whose FP noise floor grows as O(eps*M) (three
+            // O(M) terms cancel in fH) and would falsely reject valid states
+            // for |M| beyond a few thousand.
+            if (abs(dH) < TOL) {
                 converged = true;
                 break;
             }
-            H = H - (fH) / (e * coshH - 1);
         }
         if (!converged) {
-            // Non-convergence (or sinh/cosh overflow to NaN for very large
-            // |M|) must not silently propagate a finite-but-wrong state —
-            // poison the whole output, mirroring the LCD/IFT Kepler paths.
+            // Non-convergence (incl. NaN steps from sinh/cosh overflow, which
+            // fail the |dH| < TOL comparison every iteration) must not
+            // silently propagate a finite-but-wrong state — poison the whole
+            // output, mirroring the LCD/IFT Kepler paths.
             return Vector6<Scalar>::Constant(kepler_nan_value<Scalar>());
         }
+        // Evaluate sinh/cosh at the accepted H (the loop breaks after taking
+        // the final sub-tolerance step, so in-loop values are one step stale).
+        Scalar sinhH = sinh(H);
+        Scalar coshH = cosh(H);
         Scalar rc = a * (1 - e * coshH);
 
         Scalar v = 2.0 * atan2(sqrt(1. + e) * sinh(H / 2.0), sqrt(e - 1) * cosh(H / 2.0));
@@ -362,26 +370,30 @@ Vector6<Scalar> classic_to_modified(const Vector6<Scalar> &oelems, Scalar mu) {
         // closely than H = M for moderate/large |M|, where the H = M seed
         // can leave the Newton iterate outside the basin of convergence.
         Scalar H = asinh(M / e);
-        Scalar sinhH;
-        Scalar coshH;
-        Scalar fH;
-        Scalar jH;
         bool converged = false;
 
         for (int i = 0; i < MAXITERS; i++) {
-            sinhH = sinh(H);
-            coshH = cosh(H);
-            fH = e * sinhH - H - M;
-            if (abs(fH) < TOL) {
+            Scalar sinhHi = sinh(H);
+            Scalar coshHi = cosh(H);
+            Scalar fH = e * sinhHi - H - M;
+            Scalar dH = fH / (e * coshHi - 1);
+            H = H - dH;
+            // Step-size convergence test, matching kepler_lcd_iterate's
+            // |dX| <= Xtol convention (same 1e-12 magnitude as LCD's default
+            // Xtol): scale-invariant near a well-conditioned root, unlike a
+            // raw-residual test whose FP noise floor grows as O(eps*M) (three
+            // O(M) terms cancel in fH) and would falsely reject valid states
+            // for |M| beyond a few thousand.
+            if (abs(dH) < TOL) {
                 converged = true;
                 break;
             }
-            H = H - (fH) / (e * coshH - 1);
         }
         if (!converged) {
-            // Non-convergence (or sinh/cosh overflow to NaN for very large
-            // |M|) must not silently propagate a finite-but-wrong state —
-            // poison the whole output, mirroring the LCD/IFT Kepler paths.
+            // Non-convergence (incl. NaN steps from sinh/cosh overflow, which
+            // fail the |dH| < TOL comparison every iteration) must not
+            // silently propagate a finite-but-wrong state — poison the whole
+            // output, mirroring the LCD/IFT Kepler paths.
             return Vector6<Scalar>::Constant(kepler_nan_value<Scalar>());
         }
         v = 2.0 * atan2(sqrt(1. + e) * sinh(H / 2.0), sqrt(e - 1) * cosh(H / 2.0));
