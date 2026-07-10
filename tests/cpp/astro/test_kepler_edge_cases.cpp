@@ -76,17 +76,46 @@ TEST(KeplerEdgeCases, FullRoundTripClassicMEECartClassic) {
 }
 
 TEST(KeplerEdgeCases, NearParabolic) {
-    // Near-parabolic orbit: e = 0.9999, sampled AWAY from periapsis (M = 1.0).
-    // The elliptic Newton solve now tests convergence on the step size
-    // (|dE| < 1e-12, matching kepler_lcd_iterate and the hyperbolic branch).
-    // From the E = M seed this converges for e = 0.9999 at M = 1.0 (~6 iters,
-    // verified via standalone probe) but NOT for small M near periapsis
-    // (M <~ 0.15), where the 1 - e*cosE denominator shrinks and the seed
-    // leaves the Newton basin -- those inputs are now NaN-poisoned, covered by
-    // EllipticNonConvergencePoisonsOutput below.  (Pre-fix, the residual-break
+    // Near-parabolic orbit: e = 0.999, sampled AWAY from periapsis (M = 1.0).
+    //
+    // Why e = 0.999 and not e = 0.9999 (this test's value before the CODEBASE
+    // 1.1b / OC 1.14 elliptic step-size fix landed): standalone probe (built
+    // with this project's default TYCHO_FP_MODE=SAFER_FAST flags, i.e.
+    // -ffast-math -fno-finite-math-only, matching the real tycho_tests TU) shows
+    // that at e = 0.9999 the Newton solve for E itself is fine -- it converges
+    // to the *correct* root (agrees with a bisection reference and with the
+    // pre-Task-11 residual-break loop's E to within a few ULPs) -- but the
+    // *decode* side of the round trip (cartesian_to_classic's v-recovery via
+    // acos()/atan(), see its @warning) is catastrophically ill-conditioned
+    // whenever the resulting true anomaly v lands close to 0 or pi (peri-/
+    // apoapsis, where acos'(x)= -1/sqrt(1-x^2) and the E-from-v atan/tan(v/2)
+    // formula both blow up). At e = 0.9999 nearly every M in (0, pi) puts v
+    // within that blow-up neighborhood, so under -ffast-math's reduced-precision
+    // transcendentals a many-orders-of-magnitude amplification of ULP-level
+    // noise routinely pushes the round-trip error to ~1e-3 -- reproduced
+    // identically with the OLD pre-Task-11 loop at the same (e, M), so this is
+    // pre-existing round-trip conditioning, not a step-size-criterion
+    // regression. A probe grid over M in [0.6, 2.9] (step 0.05) at e = 0.9999
+    // found the round-trip error oscillating between ~1e-9 and ~1e-3 with no
+    // safe margin. e = 0.999 is an order of magnitude further from the
+    // singularity: the same grid at e = 0.999 is uniformly ~1e-9 except for a
+    // few isolated (<=0.01-wide) needles (e.g. M = 0.90, 1.09, 1.11), and
+    // M = 1.0 sits with >=0.08 clearance from the nearest needle on either
+    // side (probe: round-trip diff = 1.5e-9 at M = 1.0, vs. 9.9e-4 that e =
+    // 0.9999 gave here before this fix). e = 0.999 is still genuinely
+    // near-parabolic and the elliptic Newton solve is non-trivial: from the
+    // E = M seed it converges in ~7 iterations under the stricter step-size
+    // test (|dE| < 1e-12, matching kepler_lcd_iterate and the hyperbolic
+    // branch) for M = 1.0, but not reliably for small M near periapsis: the
+    // 1 - e*cosE denominator shrinks there and the E = M seed can leave the
+    // Newton basin in a thin, non-monotonic knife-edge band (probe: e.g.
+    // M = 0.10 and 0.12 converge but 0.105 and 0.115 do not -- see the
+    // MAXITERS_ELLIPTIC @warning in kepler_utils.h). Those non-convergent
+    // small-M inputs are NaN-poisoned, covered by
+    // EllipticNonConvergencePoisonsOutput below. (Pre-fix, the residual-break
     // loop silently returned a finite-but-wrong state for the small-M case.)
     Vector6<double> oe;
-    oe << 50000.0, 0.9999, 10.0 * std::numbers::pi / 180.0, 0.0, 0.0, 1.0;
+    oe << 50000.0, 0.999, 10.0 * std::numbers::pi / 180.0, 0.0, 0.0, 1.0;
     auto rv = classic_to_cartesian<double>(oe, MU_EARTH);
     for (int i = 0; i < 6; ++i) {
         EXPECT_TRUE(std::isfinite(rv[i]))
