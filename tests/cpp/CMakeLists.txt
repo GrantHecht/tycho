@@ -155,6 +155,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     optimal_control/test_ocp_phase_lifetime.cpp
     optimal_control/test_lgl_table_ptr.cpp
     optimal_control/test_trapezoidal_hessian_sparsity.cpp
+    optimal_control/test_shooting_hessian_sparsity.cpp
     optimal_control/test_interp_function_hessian.cpp
     optimal_control/test_phase_indexer.cpp
     optimal_control/test_set_units_retranscription.cpp
