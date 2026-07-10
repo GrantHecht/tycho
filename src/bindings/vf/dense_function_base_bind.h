@@ -1366,6 +1366,12 @@ ScalarFunction
 
     //////////////////////////////////////
     obj.def("dot", [](const Derived &seg1, const Eigen::VectorXd &seg2) {
+        if (seg2.size() != seg1.output_rows()) {
+            throw std::invalid_argument(
+                fmt::format("dot: constant vector has {} entries but the function has {} "
+                            "output rows",
+                            seg2.size(), seg1.output_rows()));
+        }
         return GenS(dot_product(seg1, Constant<-1, Derived::ORC>(seg1.input_rows(), seg2)));
     }, R"doc(Overload accepting a constant vector right-hand operand; see :meth:`dot`.)doc");
 

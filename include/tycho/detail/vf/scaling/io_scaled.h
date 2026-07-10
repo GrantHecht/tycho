@@ -18,6 +18,10 @@
 
 #include "tycho/detail/vf/core/vector_function.h"
 
+#include <fmt/format.h>
+
+#include <stdexcept>
+
 namespace tycho::vf {
 
 /// @ingroup vf
@@ -61,6 +65,16 @@ struct IOScaled
     /// @param output_scales  Per-component output scale factors.
     IOScaled(Func f, const Input<double> &input_scales, const Output<double> &output_scales)
         : func_(std::move(f)) {
+        if (input_scales.size() != this->func_.input_rows()) {
+            throw std::invalid_argument(
+                fmt::format("IOScaled: input_scales has {} entries but the function has {} inputs",
+                            input_scales.size(), this->func_.input_rows()));
+        }
+        if (output_scales.size() != this->func_.output_rows()) {
+            throw std::invalid_argument(fmt::format(
+                "IOScaled: output_scales has {} entries but the function has {} outputs",
+                output_scales.size(), this->func_.output_rows()));
+        }
         this->set_io_rows(this->func_.input_rows(), this->func_.output_rows());
         this->set_input_domain(this->input_rows(), {this->func_.input_domain()});
 

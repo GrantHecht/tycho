@@ -734,5 +734,73 @@ class TestParsedInputEval(unittest.TestCase):
         np.testing.assert_allclose(jac[0, 2], 6.0)  # 2*x2, the summed scatter
 
 
+# ---------------------------------------------------------------------------
+# TestConstantOperandSizeChecks
+# ---------------------------------------------------------------------------
+
+
+class TestConstantOperandSizeChecks(unittest.TestCase):
+    """Python-boundary regression coverage for the length checks added to
+    FunctionVectorSum_Impl (``f + vec`` / ``f - vec``), RowScaled_Impl
+    (``cwise_product`` / ``cwise_quotient`` with a constant vector), the
+    ``dot`` binding lambda, and the IOScaled ctor (CODEBASE 1.1b).
+
+    Pre-fix, a length-mismatched constant vector was silently accepted
+    (UB / a hard-to-diagnose crash at evaluation time downstream, not a
+    clean Python exception at the call boundary).
+    """
+
+    def setUp(self):
+        self.f = vf.Arguments(3).head(3)
+
+    def test_add_wrong_length_vector_raises(self):
+        with self.assertRaises(ValueError):
+            self.f + [1.0, 2.0]
+
+    def test_sub_wrong_length_vector_raises(self):
+        with self.assertRaises(ValueError):
+            self.f - [1.0, 2.0]
+
+    def test_cwise_product_wrong_length_raises(self):
+        with self.assertRaises(ValueError):
+            self.f.cwise_product([1.0, 2.0])
+
+    def test_cwise_quotient_wrong_length_raises(self):
+        with self.assertRaises(ValueError):
+            self.f.cwise_quotient([1.0, 2.0])
+
+    def test_dot_wrong_length_raises(self):
+        with self.assertRaises(ValueError):
+            self.f.dot([1.0, 2.0])
+
+    def test_correct_lengths_still_work(self):
+        g = (self.f + [1.0, 1.0, 1.0]).cwise_product([2.0, 2.0, 2.0])
+        np.testing.assert_allclose(g.compute([1.0, 2.0, 3.0]), [4.0, 6.0, 8.0])
+        self.assertAlmostEqual(
+            self.f.dot([1.0, 0.0, 1.0]).compute([1.0, 2.0, 3.0])[0], 4.0
+        )
+
+    def test_ioscaled_wrong_length_input_scales_raises(self):
+        """IOScaled is only registered on GenericFunction (see
+        ``reg.build_register<IOScaled<Gen>>`` in
+        ``src/bindings/vf/tycho_vector_functions.cpp``), so a bare
+        ``Args(3).head(3)`` (a Segment) must be wrapped via
+        ``vf.VectorFunction(...)`` first -- same pattern as
+        ``TestParsedInputEval`` above."""
+        g = vf.VectorFunction(self.f)  # input_rows() == output_rows() == 3
+        with self.assertRaises(ValueError):
+            vf.IOScaled(g, [1.0, 2.0], [1.0, 1.0, 1.0])
+
+    def test_ioscaled_wrong_length_output_scales_raises(self):
+        g = vf.VectorFunction(self.f)
+        with self.assertRaises(ValueError):
+            vf.IOScaled(g, [1.0, 1.0, 1.0], [1.0, 2.0])
+
+    def test_ioscaled_correct_lengths_still_work(self):
+        g = vf.VectorFunction(self.f)
+        scaled = vf.IOScaled(g, [2.0, 2.0, 2.0], [3.0, 3.0, 3.0])
+        np.testing.assert_allclose(scaled.compute([1.0, 2.0, 3.0]), [6.0, 12.0, 18.0])
+
+
 if __name__ == "__main__":
     unittest.main(exit=False)
