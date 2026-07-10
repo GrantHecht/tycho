@@ -23,9 +23,7 @@ void tycho::solvers::OptimizationProblem::transcribe() {
     int numVars = this->active_variables_.size();
 
     if (numVars == 0) {
-        fmt::print(fmt::fg(fmt::color::red), "Transcription Error!!!\n"
-                                             "No variables provided to OptimizationProblem");
-        throw std::invalid_argument("");
+        throw std::invalid_argument("No variables provided to OptimizationProblem");
     }
 
     int numEqCons = 0;
@@ -41,10 +39,8 @@ void tycho::solvers::OptimizationProblem::transcribe() {
 
         for (int i = 0; i < numappl; i++) {
             if (func.indices_[i].maxCoeff() > numVars) {
-                fmt::print(fmt::fg(fmt::color::red),
-                           "Transcription Error!!!\n"
-                           "Variable indices out of bounds in equality constraint");
-                throw std::invalid_argument("");
+                throw std::invalid_argument(
+                    "Variable indices out of bounds in equality constraint");
             }
             vindex.col(i) = func.indices_[i];
             for (int j = 0; j < orows; j++) {
@@ -74,10 +70,8 @@ void tycho::solvers::OptimizationProblem::transcribe() {
 
         for (int i = 0; i < numappl; i++) {
             if (func.indices_[i].maxCoeff() > numVars) {
-                fmt::print(fmt::fg(fmt::color::red),
-                           "Transcription Error!!!\n"
-                           "Variable indices out of bounds in inequality constraint");
-                throw std::invalid_argument("");
+                throw std::invalid_argument(
+                    "Variable indices out of bounds in inequality constraint");
             }
             vindex.col(i) = func.indices_[i];
             for (int j = 0; j < orows; j++) {
@@ -105,10 +99,7 @@ void tycho::solvers::OptimizationProblem::transcribe() {
 
         for (int i = 0; i < numappl; i++) {
             if (func.indices_[i].maxCoeff() > numVars) {
-                fmt::print(fmt::fg(fmt::color::red),
-                           "Transcription Error!!!\n"
-                           "Variable indices out of bounds in inequality constraint");
-                throw std::invalid_argument("");
+                throw std::invalid_argument("Variable indices out of bounds in objective");
             }
             vindex.col(i) = func.indices_[i];
         }

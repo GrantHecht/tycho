@@ -70,11 +70,9 @@ int tycho::oc::ODEPhaseBase::add_lu_var_bound(RegionType reg, VarIndexType var, 
                                               double upperbound, double lbscale, double ubscale,
                                               ScaleType scale_t) {
     if (lowerbound > upperbound) {
-        fmt::print(fmt::fg(fmt::color::red),
-                   "Transcription Error!!!\n"
-                   "Lower-bound({0:.3e}) greater than Upper-bound({1:.3e}) \n",
-                   lowerbound, upperbound);
-        throw std::invalid_argument("");
+        throw std::invalid_argument(
+            fmt::format("Lower-bound({0:.3e}) greater than Upper-bound({1:.3e})", lowerbound,
+                        upperbound));
     }
     check_lbscale(lbscale);
     check_ubscale(ubscale);
@@ -90,11 +88,9 @@ int tycho::oc::ODEPhaseBase::add_lu_var_bound(PhaseRegionFlags reg, int var, dou
                                               double upperbound, double lbscale, double ubscale) {
 
     if (lowerbound > upperbound) {
-        fmt::print(fmt::fg(fmt::color::red),
-                   "Transcription Error!!!\n"
-                   "Lower-bound({0:.3e}) greater than Upper-bound({1:.3e}) \n",
-                   lowerbound, upperbound);
-        throw std::invalid_argument("");
+        throw std::invalid_argument(
+            fmt::format("Lower-bound({0:.3e}) greater than Upper-bound({1:.3e})", lowerbound,
+                        upperbound));
     }
     check_lbscale(lbscale);
     check_ubscale(ubscale);
@@ -135,11 +131,9 @@ int tycho::oc::ODEPhaseBase::add_lu_func_bound(RegionType reg, ScalarFunctionalX
                                                ScaleType scale_t) {
 
     if (lowerbound > upperbound) {
-        fmt::print(fmt::fg(fmt::color::red),
-                   "Transcription Error!!!\n"
-                   "Lower-bound({0:.3e}) greater than Upper-bound({1:.3e}) \n",
-                   lowerbound, upperbound);
-        throw std::invalid_argument("");
+        throw std::invalid_argument(
+            fmt::format("Lower-bound({0:.3e}) greater than Upper-bound({1:.3e})", lowerbound,
+                        upperbound));
     }
     check_lbscale(lbscale);
     check_ubscale(ubscale);
@@ -179,11 +173,9 @@ int tycho::oc::ODEPhaseBase::add_lu_norm_bound(RegionType reg, VarIndexType xtup
                                                double lowerbound, double upperbound, double lbscale,
                                                double ubscale, ScaleType scale_t) {
     if (lowerbound > upperbound) {
-        fmt::print(fmt::fg(fmt::color::red),
-                   "Transcription Error!!!\n"
-                   "Lower-bound({0:.3e}) greater than Upper-bound({1:.3e}) \n",
-                   lowerbound, upperbound);
-        throw std::invalid_argument("");
+        throw std::invalid_argument(
+            fmt::format("Lower-bound({0:.3e}) greater than Upper-bound({1:.3e})", lowerbound,
+                        upperbound));
     }
     check_lbscale(lbscale);
     check_ubscale(ubscale);
@@ -215,11 +207,9 @@ int tycho::oc::ODEPhaseBase::add_lu_squared_norm_bound(RegionType reg, VarIndexT
                                                        double lbscale, double ubscale,
                                                        ScaleType scale_t) {
     if (lowerbound > upperbound) {
-        fmt::print(fmt::fg(fmt::color::red),
-                   "Transcription Error!!!\n"
-                   "Lower-bound({0:.3e}) greater than Upper-bound({1:.3e}) \n",
-                   lowerbound, upperbound);
-        throw std::invalid_argument("");
+        throw std::invalid_argument(
+            fmt::format("Lower-bound({0:.3e}) greater than Upper-bound({1:.3e})", lowerbound,
+                        upperbound));
     }
     check_lbscale(lbscale);
     check_ubscale(ubscale);
@@ -501,20 +491,16 @@ void tycho::oc::ODEPhaseBase::set_traj(const std::vector<Eigen::VectorXd> &mesh,
     }
     int msize = mesh[0].size();
     if (msize != this->table_.xtu_vars_) {
-        std::cout << "User Input Error in function setInitTraj for ODE:" << this->table_.ode_.name()
-                  << std::endl;
-        std::cout << " Dimension of Input States(" << msize
-                  << ") does not match expected dimensions of the ODE(" << this->table_.xtu_vars_
-                  << ")" << std::endl;
-        throw std::invalid_argument("");
+        throw std::invalid_argument(fmt::format(
+            "User Input Error in function setInitTraj for ODE:{0}. Dimension of Input "
+            "States({1}) does not match expected dimensions of the ODE({2})",
+            this->table_.ode_.name(), msize, this->table_.xtu_vars_));
     }
     if ((DBS.size() - 1) != DPB.size()) {
-        std::cout << "User Input Error in function setInitTraj for ODE:" << this->table_.ode_.name()
-                  << std::endl;
-        std::cout << "  Size of Defect Bin Spacing(" << DBS.size()
-                  << ") not consistent with size of Defects Per Bin(" << DPB.size() << ")"
-                  << std::endl;
-        throw std::invalid_argument("");
+        throw std::invalid_argument(fmt::format(
+            "User Input Error in function setInitTraj for ODE:{0}. Size of Defect Bin "
+            "Spacing({1}) not consistent with size of Defects Per Bin({2})",
+            this->table_.ode_.name(), DBS.size(), DPB.size()));
     }
     for (auto &X : mesh) {
         if (X.hasNaN()) {
@@ -590,12 +576,10 @@ void tycho::oc::ODEPhaseBase::set_traj(const std::vector<Eigen::VectorXd> &mesh)
     }
     int msize = mesh[0].size();
     if (msize != this->table_.xtu_vars_) {
-        std::cout << "User Input Error in function setInitTraj for ODE:" << this->table_.ode_.name()
-                  << std::endl;
-        std::cout << " Dimension of Input States(" << msize
-                  << ") does not match expected dimensions of the ODE(" << this->table_.xtu_vars_
-                  << ")" << std::endl;
-        throw std::invalid_argument("");
+        throw std::invalid_argument(fmt::format(
+            "User Input Error in function setInitTraj for ODE:{0}. Dimension of Input "
+            "States({1}) does not match expected dimensions of the ODE({2})",
+            this->table_.ode_.name(), msize, this->table_.xtu_vars_));
     }
     for (auto &X : mesh) {
         if (X.hasNaN()) {
@@ -627,12 +611,10 @@ void tycho::oc::ODEPhaseBase::set_traj(const std::vector<Eigen::VectorXd> &mesh)
 
 void tycho::oc::ODEPhaseBase::refine_traj_manual(VectorXd DBS, VectorXi DPB) {
     if ((DBS.size() - 1) != DPB.size()) {
-        std::cout << "User Input Error in function setInitTraj for ODE:" << this->table_.ode_.name()
-                  << std::endl;
-        std::cout << "  Size of Defect Bin Spacing(" << DBS.size()
-                  << ") not consistent with size of Defects Per Bin(" << DPB.size() << ")"
-                  << std::endl;
-        throw std::invalid_argument("");
+        throw std::invalid_argument(fmt::format(
+            "User Input Error in function setInitTraj for ODE:{0}. Size of Defect Bin "
+            "Spacing({1}) not consistent with size of Defects Per Bin({2})",
+            this->table_.ode_.name(), DBS.size(), DPB.size()));
     }
 
     this->table_.load_exact_data(this->active_traj_);
@@ -1067,53 +1049,36 @@ void tycho::oc::ODEPhaseBase::check_functions(int pnum) {
     auto CheckFun = [&](const std::string &type, auto &func) {
         if (func.xtu_vars_.size() > 0) {
             if (func.xtu_vars_.maxCoeff() >= this->xtu_p_vars() || func.xtu_vars_.minCoeff() < 0) {
-
-                fmt::print(fmt::fg(fmt::color::red),
-                           "Transcription Error!!!\n"
-                           "{0:} function state variable indices out of bounds in phase:{1:}\n"
-                           " Function Storage Index:{2:}\n"
-                           " Function Name:{3:}\n",
-                           type, pnum, func.storage_index_, func.func_.name());
-                throw std::invalid_argument("");
+                throw std::invalid_argument(fmt::format(
+                    "{0:} function state variable indices out of bounds in phase {1:}; "
+                    "function storage index {2:}, name {3:}",
+                    type, pnum, func.storage_index_, func.func_.name()));
             }
         }
         if (func.op_vars_.size() > 0) {
             if (func.op_vars_.maxCoeff() >= this->p_vars() || func.op_vars_.minCoeff() < 0) {
-
-                fmt::print(fmt::fg(fmt::color::red),
-                           "Transcription Error!!!\n"
-                           "{0:} function ODE Param variable indices out of bounds in phase:{1:}\n"
-                           " Function Storage Index:{2:}\n"
-                           " Function Name:{3:}\n",
-                           type, pnum, func.storage_index_, func.func_.name());
-                throw std::invalid_argument("");
+                throw std::invalid_argument(fmt::format(
+                    "{0:} function ODE Param variable indices out of bounds in phase {1:}; "
+                    "function storage index {2:}, name {3:}",
+                    type, pnum, func.storage_index_, func.func_.name()));
             }
         }
         if (func.sp_vars_.size() > 0) {
             if (func.sp_vars_.maxCoeff() >= this->num_stat_params_ ||
                 func.sp_vars_.minCoeff() < 0) {
-                fmt::print(
-                    fmt::fg(fmt::color::red),
-                    "Transcription Error!!!\n"
-                    "{0:} function Static Param variable indices out of bounds in phase:{1:}\n"
-                    " Function Storage Index:{2:}\n"
-                    " Function Name:{3:}\n",
-                    type, pnum, func.storage_index_, func.func_.name());
-                throw std::invalid_argument("");
+                throw std::invalid_argument(fmt::format(
+                    "{0:} function Static Param variable indices out of bounds in phase {1:}; "
+                    "function storage index {2:}, name {3:}",
+                    type, pnum, func.storage_index_, func.func_.name()));
             }
         }
         if (func.ext_vars_.size() > 0) {
             if (func.ext_vars_.maxCoeff() >= this->num_stat_params_ ||
                 func.ext_vars_.minCoeff() < 0) {
-
-                fmt::print(fmt::fg(fmt::color::red),
-                           "Transcription Error!!!\n"
-                           "{0:} function Integral Static Param variable indices out of bounds in "
-                           "phase:{1:}\n"
-                           " Function Storage Index:{2:}\n"
-                           " Function Name:{3:}\n",
-                           type, pnum, func.storage_index_, func.func_.name());
-                throw std::invalid_argument("");
+                throw std::invalid_argument(fmt::format(
+                    "{0:} function Integral Static Param variable indices out of bounds in "
+                    "phase {1:}; function storage index {2:}, name {3:}",
+                    type, pnum, func.storage_index_, func.func_.name()));
             }
         }
     };
