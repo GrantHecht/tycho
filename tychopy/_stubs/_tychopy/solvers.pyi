@@ -493,7 +493,14 @@ class OptimizationProblemBase:
     def jet_job_mode(self, arg: JetJobModes, /) -> None: ...
 
     @property
-    def num_partitions(self) -> int: ...
+    def num_partitions(self) -> int:
+        """
+        Number of NLP matrix partitions.
+
+        Assignment routes through :meth:`set_num_partitions` and raises
+        ``ValueError`` for values < 1. Use ``set_num_partitions(n, qp_threads)`` to
+        also set the QP thread count.
+        """
 
     @num_partitions.setter
     def num_partitions(self, arg: int, /) -> None: ...

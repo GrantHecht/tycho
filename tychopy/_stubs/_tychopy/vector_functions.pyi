@@ -7569,12 +7569,6 @@ def stack(arg0: float, /, *args) -> VectorFunction: ...
 def stack(arg0: numpy.ndarray, /, *args) -> VectorFunction: ...
 
 @overload
-def stack(arg: Sequence[ScalarFunction], /) -> VectorFunction: ...
-
-@overload
-def stack(arg: Sequence[VectorFunction], /) -> VectorFunction: ...
-
-@overload
 def stack_scalar(arg: Sequence[ScalarFunction], /) -> VectorFunction:
     """
     Concatenate scalar-output VectorFunctions vertically into one VectorFunction.
@@ -7606,9 +7600,6 @@ def stack_scalar(arg0: ScalarFunction, /, *args) -> VectorFunction: ...
 
 @overload
 def stack_scalar(arg0: float, /, *args) -> VectorFunction: ...
-
-@overload
-def stack_scalar(arg: Sequence[ScalarFunction], /) -> VectorFunction: ...
 
 @overload
 def sum(arg: Sequence[ScalarFunction], /) -> ScalarFunction:
@@ -7657,12 +7648,6 @@ def sum(arg0: VectorFunction, /, *args) -> VectorFunction: ...
 
 @overload
 def sum(arg0: numpy.ndarray, /, *args) -> VectorFunction: ...
-
-@overload
-def sum(arg: Sequence[ScalarFunction], /) -> ScalarFunction: ...
-
-@overload
-def sum(arg: Sequence[VectorFunction], /) -> VectorFunction: ...
 
 def sum_scalar(arg: Sequence[ScalarFunction], /) -> ScalarFunction:
     """
@@ -7738,8 +7723,7 @@ def sum_elems(arg0: Sequence[Element], arg1: Sequence[float], /) -> ScalarFuncti
         The list must contain at least one element.
     scales : list[float]
         Scalar multiplier for each function.  Must have at least as many entries
-        as *funcs*; no length check is performed — passing a shorter *scales*
-        causes undefined behavior.
+        as *funcs*.
 
     Returns
     -------
@@ -7750,8 +7734,8 @@ def sum_elems(arg0: Sequence[Element], arg1: Sequence[float], /) -> ScalarFuncti
     Raises
     ------
     ValueError
-        If the list is empty or any two elements have mismatched input
-        dimensions.
+        If the list is empty, any two elements have mismatched input
+        dimensions, or *scales* has fewer entries than *funcs*.
     """
 
 @overload
@@ -12723,11 +12707,10 @@ class IOScaled:
         IOScaled
             Wrapped function with scaled input and output.
 
-        Notes
-        -----
-        The scale-vector lengths are not validated against ``func``'s dimensions;
-        supplying ``input_scales`` or ``output_scales`` of the wrong length leads to
-        undefined behavior at evaluation time.
+        Raises
+        ------
+        ValueError
+            If either scale vector's length does not match the function's dimensions.
         """
 
     def input_rows(self) -> int:

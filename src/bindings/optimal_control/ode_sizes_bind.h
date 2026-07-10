@@ -191,7 +191,8 @@ idxs : dict[str, numpy.ndarray of int]
 Raises
 ------
 ValueError
-    If any group in ``idxs`` is empty.
+    If any group in ``idxs`` is empty, or contains an index outside
+    ``[0, xtu_p_vars())``.
 )doc");
     obj.def("idx", &Derived::idx,
             R"doc(Look up a named variable index group by name.
