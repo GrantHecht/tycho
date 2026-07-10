@@ -294,13 +294,31 @@ template <class FuncType> struct LinkFunction {
         this->init(f, make_phase_reg_flags(strto_LinkFlag(Flag)), PTL, xtv, opv, spv, lv);
     }
 
+    /// @internal
+    /// @brief Guard against @c PTL[0] indexing on an empty phases-to-link vector.
+    ///
+    /// Several convenience constructors below broadcast a single state-binding
+    /// (or an empty one) across every application by sizing it off
+    /// @c PTL[0].size() before @ref init runs its own (later) empty-PTL check.
+    /// With an empty @p PTL, that broadcast indexes past the end of the vector
+    /// (undefined behavior) before @ref init is ever reached, so it must be
+    /// rejected here first.
+    /// @throws std::invalid_argument if @p PTL is empty.
+    /// @endinternal
+    static void check_ptl_nonempty(const std::vector<Eigen::VectorXi> &PTL) {
+        if (PTL.empty())
+            throw std::invalid_argument("LinkFunction: PTL (phases-to-link) must not be empty");
+    }
+
     /// @brief Construct from an explicit region vector and state bindings only.
     /// @param f        The wrapped VectorFunction.
     /// @param RegFlags Region of each linked phase.
     /// @param PTL      Phases-to-link index groups.
     /// @param xtv      Per-phase state/time/control variable indices (params left empty).
+    /// @throws std::invalid_argument if @p PTL is empty.
     LinkFunction(FuncType f, Eigen::Matrix<PhaseRegionFlags, -1, 1> RegFlags,
                  std::vector<Eigen::VectorXi> PTL, std::vector<Eigen::VectorXi> xtv) {
+        check_ptl_nonempty(PTL);
         Eigen::VectorXi empty;
         empty.resize(0);
         std::vector<Eigen::VectorXi> emptyvec(PTL[0].size(), empty);
@@ -313,8 +331,10 @@ template <class FuncType> struct LinkFunction {
     /// @param Flag  Link pairing (regions are derived from it).
     /// @param PTL   Phases-to-link index groups.
     /// @param xtv   Per-phase state/time/control variable indices (params left empty).
+    /// @throws std::invalid_argument if @p PTL is empty.
     LinkFunction(FuncType f, LinkFlags Flag, std::vector<Eigen::VectorXi> PTL,
                  std::vector<Eigen::VectorXi> xtv) {
+        check_ptl_nonempty(PTL);
         Eigen::VectorXi empty;
         empty.resize(0);
         std::vector<Eigen::VectorXi> emptyvec(PTL[0].size(), empty);
@@ -327,8 +347,10 @@ template <class FuncType> struct LinkFunction {
     /// @param RegFlags Region of each linked phase.
     /// @param PTL      Phases-to-link index groups.
     /// @param xtv      State/time/control indices applied to every linked phase.
+    /// @throws std::invalid_argument if @p PTL is empty.
     LinkFunction(FuncType f, Eigen::Matrix<PhaseRegionFlags, -1, 1> RegFlags,
                  std::vector<Eigen::VectorXi> PTL, Eigen::VectorXi xtv) {
+        check_ptl_nonempty(PTL);
         Eigen::VectorXi empty;
         empty.resize(0);
         std::vector<Eigen::VectorXi> xtvvec(PTL[0].size(), xtv);
@@ -342,8 +364,10 @@ template <class FuncType> struct LinkFunction {
     /// @param Flag  Link pairing (regions are derived from it).
     /// @param PTL   Phases-to-link index groups.
     /// @param xtv   State/time/control indices applied to every linked phase.
+    /// @throws std::invalid_argument if @p PTL is empty.
     LinkFunction(FuncType f, LinkFlags Flag, std::vector<Eigen::VectorXi> PTL,
                  Eigen::VectorXi xtv) {
+        check_ptl_nonempty(PTL);
         Eigen::VectorXi empty;
         empty.resize(0);
         std::vector<Eigen::VectorXi> xtvvec(PTL[0].size(), xtv);
@@ -358,8 +382,10 @@ template <class FuncType> struct LinkFunction {
     /// @param Flag  Link-pairing name (regions are derived from it).
     /// @param PTL   Phases-to-link index groups.
     /// @param xtv   State/time/control indices applied to every linked phase.
+    /// @throws std::invalid_argument if @p PTL is empty.
     LinkFunction(FuncType f, std::string Flag, std::vector<Eigen::VectorXi> PTL,
                  Eigen::VectorXi xtv) {
+        check_ptl_nonempty(PTL);
         Eigen::VectorXi empty;
         empty.resize(0);
         std::vector<Eigen::VectorXi> xtvvec(PTL[0].size(), xtv);

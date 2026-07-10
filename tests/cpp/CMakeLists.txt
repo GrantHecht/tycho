@@ -47,6 +47,7 @@ set(TYCHO_TEST_LIGHT_SOURCES
     utils/test_var_registry.cpp
     utils/test_exception_what.cpp
     optimal_control/test_ode_sizes.cpp
+    optimal_control/test_optimal_control_flags.cpp
     integrators/test_step_controller.cpp
     integrators/test_rk_tableau_consistency.cpp
     vector_functions/test_fd_coeffs.cpp

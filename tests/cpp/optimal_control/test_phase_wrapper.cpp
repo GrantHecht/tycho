@@ -333,6 +333,12 @@ TEST_F(PhaseWrapperTest, AddStaticParamNameRejectsEmptyName) {
     EXPECT_THROW(phase.add_static_param_name("", 0), std::invalid_argument);
 }
 
+TEST_F(PhaseWrapperTest, AddStaticParamNameRejectsNegative) {
+    auto ode = make_brach_ode();
+    auto phase = ode.phase(TranscriptionModes::LGL3, make_brach_guess(), 16);
+    EXPECT_THROW(phase.add_static_param_name("p", -1), std::invalid_argument);
+}
+
 TEST_F(PhaseWrapperTest, AddStaticParamNameRejectsDuplicate) {
     auto ode = make_brach_ode();
     auto phase = ode.phase(TranscriptionModes::LGL3, make_brach_guess(), 16);

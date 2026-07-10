@@ -151,3 +151,87 @@ TEST_F(OcpPhaseLifetimeTest, RemovePhaseAndPhaseOutOfRangeThrow) {
     EXPECT_THROW(ocp.remove_phase(-5), std::invalid_argument);
     EXPECT_THROW((void)ocp.phase(10), std::invalid_argument);
 }
+
+// ---------------------------------------------------------------------------
+// OC review §3.8: LinkFunction's "state-bindings-only" convenience
+// constructors size their broadcast xtv/empty vectors off PTL[0].size()
+// *before* delegating to init() (which only later checks nappl == 0). With
+// an empty PTL that PTL[0] access is undefined behavior. Each of the four
+// overload families exercised below must now throw std::invalid_argument
+// instead. (The fully-bound constructors that route straight through init()
+// already throw cleanly via its pre-existing nappl == 0 check; not
+// re-tested here.)
+// ---------------------------------------------------------------------------
+
+TEST_F(OcpPhaseLifetimeTest, LinkFunctionRegFlagsStateBindingsRejectsEmptyPTL) {
+    auto args = Arguments<1>();
+    GenericFunction<-1, -1> identity(args);
+
+    Eigen::Matrix<PhaseRegionFlags, -1, 1> reg_flags(2);
+    reg_flags << PhaseRegionFlags::Back, PhaseRegionFlags::Front;
+
+    std::vector<Eigen::VectorXi> empty_ptl;
+    Eigen::VectorXi idx(1);
+    idx << 0;
+    std::vector<Eigen::VectorXi> xtv{idx};
+
+    EXPECT_THROW(
+        (tycho::oc::LinkFunction<GenericFunction<-1, -1>>(identity, reg_flags, empty_ptl, xtv)),
+        std::invalid_argument);
+}
+
+TEST_F(OcpPhaseLifetimeTest, LinkFunctionLinkFlagStateBindingsRejectsEmptyPTL) {
+    auto args = Arguments<1>();
+    GenericFunction<-1, -1> identity(args);
+
+    std::vector<Eigen::VectorXi> empty_ptl;
+    Eigen::VectorXi idx(1);
+    idx << 0;
+    std::vector<Eigen::VectorXi> xtv{idx};
+
+    EXPECT_THROW((tycho::oc::LinkFunction<GenericFunction<-1, -1>>(identity, LinkFlags::BackToFront,
+                                                                   empty_ptl, xtv)),
+                 std::invalid_argument);
+}
+
+TEST_F(OcpPhaseLifetimeTest, LinkFunctionRegFlagsSharedBindingRejectsEmptyPTL) {
+    auto args = Arguments<1>();
+    GenericFunction<-1, -1> identity(args);
+
+    Eigen::Matrix<PhaseRegionFlags, -1, 1> reg_flags(2);
+    reg_flags << PhaseRegionFlags::Back, PhaseRegionFlags::Front;
+
+    std::vector<Eigen::VectorXi> empty_ptl;
+    Eigen::VectorXi xtv(1);
+    xtv << 0;
+
+    EXPECT_THROW(
+        (tycho::oc::LinkFunction<GenericFunction<-1, -1>>(identity, reg_flags, empty_ptl, xtv)),
+        std::invalid_argument);
+}
+
+TEST_F(OcpPhaseLifetimeTest, LinkFunctionLinkFlagSharedBindingRejectsEmptyPTL) {
+    auto args = Arguments<1>();
+    GenericFunction<-1, -1> identity(args);
+
+    std::vector<Eigen::VectorXi> empty_ptl;
+    Eigen::VectorXi xtv(1);
+    xtv << 0;
+
+    EXPECT_THROW((tycho::oc::LinkFunction<GenericFunction<-1, -1>>(identity, LinkFlags::BackToFront,
+                                                                   empty_ptl, xtv)),
+                 std::invalid_argument);
+}
+
+TEST_F(OcpPhaseLifetimeTest, LinkFunctionLinkFlagNameSharedBindingRejectsEmptyPTL) {
+    auto args = Arguments<1>();
+    GenericFunction<-1, -1> identity(args);
+
+    std::vector<Eigen::VectorXi> empty_ptl;
+    Eigen::VectorXi xtv(1);
+    xtv << 0;
+
+    EXPECT_THROW((tycho::oc::LinkFunction<GenericFunction<-1, -1>>(
+                     identity, std::string("BackToFront"), empty_ptl, xtv)),
+                 std::invalid_argument);
+}
