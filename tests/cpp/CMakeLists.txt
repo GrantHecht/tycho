@@ -143,6 +143,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     optimal_control/test_phase_construction.cpp
     optimal_control/test_ocp_multiphase.cpp
     optimal_control/test_lgl_collocation.cpp
+    optimal_control/test_mesh_spacing_hooks.cpp
     optimal_control/test_mesh_refinement.cpp
     optimal_control/test_runtime_ode.cpp
     optimal_control/test_ode_builder.cpp

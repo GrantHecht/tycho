@@ -195,8 +195,8 @@ template <int CSC> struct LGLMeshSpacing : VectorFunction<LGLMeshSpacing<CSC>, C
     /// @param fx_  Output residual vector to write.
     /// @endinternal
     template <class InType, class OutType>
-    inline void compute(const Eigen::MatrixBase<InType> &x,
-                        Eigen::MatrixBase<OutType> const &fx_) const {
+    inline void compute_impl(const Eigen::MatrixBase<InType> &x,
+                             Eigen::MatrixBase<OutType> const &fx_) const {
         typedef typename InType::Scalar Scalar;
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
         Scalar h = x[CSC - 1] - x[0];
