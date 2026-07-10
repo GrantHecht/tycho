@@ -634,11 +634,29 @@ class TestParsePythonArgs(unittest.TestCase):
 
     def test_sum_accepts_np_int64_scalar(self):
         """ParsePythonArgsScalar (used by vf.sum) must accept np.int64 the same way
-        ParsePythonArgs does for vf.stack."""
+        ParsePythonArgs does for vf.stack.
+
+        Note: `vf.sum(scalar_fn, np.int64(...))` (a single VF followed by a bare
+        scalar) is not usable here — the `sum(const GenS&, nb::args)` overload
+        calls `ParsePythonArgsScalar(x)` without seeding `irows` from `first`
+        (unlike the analogous `stack_scalar` overload), so with no VF left in
+        the variadic tail `irows` never gets set and the call always raises
+        "Argument list must contain at least one VectorFunction" -- even for a
+        plain Python float. That is a pre-existing gap unrelated to numpy
+        acceptance; see docs/dev/notes or file an issue rather than working
+        around it here. Instead, exercise ParsePythonArgsScalar's np.int64
+        acceptance via `vf.sum(e0, e1, np.int64(2))`, where `e1` supplies a
+        VF in the variadic tail so `irows` gets set before the scalar is
+        parsed, and compare against the equivalent plain-float call."""
         e0 = vf.Element(3, 1, 0)
-        result = vf.sum(e0, np.int64(2))
-        out = result.compute(np.array([1.0, 2.0, 3.0]))
-        np.testing.assert_allclose(out, [3.0])
+        e1 = vf.Element(3, 1, 1)
+        x = np.array([1.0, 2.0, 3.0])
+        result_int = vf.sum(e0, e1, np.int64(2))
+        result_float = vf.sum(e0, e1, 2.0)
+        out_int = result_int.compute(x)
+        out_float = result_float.compute(x)
+        np.testing.assert_allclose(out_int, [5.0])
+        np.testing.assert_allclose(out_int, out_float)
 
 
 # ---------------------------------------------------------------------------
