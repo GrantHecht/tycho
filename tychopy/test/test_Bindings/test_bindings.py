@@ -802,5 +802,75 @@ class TestConstantOperandSizeChecks(unittest.TestCase):
         np.testing.assert_allclose(scaled.compute([1.0, 2.0, 3.0]), [6.0, 12.0, 18.0])
 
 
+# ---------------------------------------------------------------------------
+# TestNegativeSizeRejection
+# ---------------------------------------------------------------------------
+
+
+class TestNegativeSizeRejection(unittest.TestCase):
+    """Python-boundary regression coverage for Segment_Impl (``head`` /
+    ``tail`` / ``segment``) and PaddedOutput (``padded_lower`` /
+    ``padded_upper``) rejecting negative sizes (CODEBASE 1.1b).
+
+    Pre-fix, a negative segment size or pad count was silently accepted
+    (the resulting ``output_rows()`` went negative, silent UB downstream in
+    Release builds) instead of raising a clean Python exception at the call
+    boundary.
+
+    Zero-size segments are deliberately still accepted: ``ODEArguments``'s
+    ``u_vec()``/``p_vec()`` bindings (``src/bindings/optimal_control/
+    ode_arguments_bind.h``) construct exactly this shape unconditionally for
+    control-free/parameter-free ODEs (e.g. ``ODEArguments(3)`` has
+    ``u_vars() == p_vars() == 0`` by design), so only ``orows < 0`` /
+    negative pads are rejected here, not ``orows == 0``.
+    """
+
+    def setUp(self):
+        self.f = vf.Arguments(5)
+
+    def test_head_negative_raises(self):
+        with self.assertRaises(ValueError):
+            self.f.head(-3)
+
+    def test_tail_negative_raises(self):
+        with self.assertRaises(ValueError):
+            self.f.tail(-1)
+
+    def test_tail_zero_still_works(self):
+        # Zero-size segments are legitimate (control-free/parameter-free ODEs
+        # route through this exact shape) -- must not raise.
+        np.testing.assert_allclose(
+            self.f.tail(0).compute([1.0, 2.0, 3.0, 4.0, 5.0]), []
+        )
+
+    def test_segment_negative_size_raises(self):
+        with self.assertRaises(ValueError):
+            self.f.segment(1, -2)
+
+    def test_segment_zero_size_still_works(self):
+        np.testing.assert_allclose(
+            self.f.segment(1, 0).compute([1.0, 2.0, 3.0, 4.0, 5.0]), []
+        )
+
+    def test_padded_lower_negative_raises(self):
+        with self.assertRaises(ValueError):
+            self.f.head(3).padded_lower(-2)
+
+    def test_padded_upper_negative_raises(self):
+        with self.assertRaises(ValueError):
+            self.f.head(3).padded_upper(-2)
+
+    def test_padded_lower_zero_still_works(self):
+        np.testing.assert_allclose(
+            self.f.head(3).padded_lower(0).compute([1.0, 2.0, 3.0, 4.0, 5.0]),
+            [1.0, 2.0, 3.0],
+        )
+
+    def test_valid_segment_still_works(self):
+        np.testing.assert_allclose(
+            self.f.segment(1, 2).compute([1.0, 2.0, 3.0, 4.0, 5.0]), [2.0, 3.0]
+        )
+
+
 if __name__ == "__main__":
     unittest.main(exit=False)

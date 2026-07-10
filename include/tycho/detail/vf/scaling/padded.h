@@ -104,6 +104,11 @@ struct PaddedOutput
     /// @param upad  Number of leading zero rows to prepend.
     /// @param lpad  Number of trailing zero rows to append.
     PaddedOutput(Func f, int upad, int lpad) : UpperPadHolder<UP>(upad), func_(std::move(f)) {
+        if (upad < 0 || lpad < 0) {
+            throw std::invalid_argument(fmt::format(
+                "PaddedOutput: pad sizes must be non-negative (upad={}, lpad={})", upad, lpad));
+        }
+
         this->set_io_rows(this->func_.input_rows(), this->func_.output_rows() + upad + lpad);
 
         this->set_input_domain(this->input_rows(), {func_.input_domain()});
