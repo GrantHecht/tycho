@@ -326,6 +326,17 @@ set_source_files_properties(
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
 
+# test_shooting_hessian_sparsity.cpp: keep standalone -- it deliberately
+# mirrors test_trapezoidal_hessian_sparsity.cpp (OC_REVIEW 1.13 vs the
+# trapezoidal contract it replicates), sharing the anonymous-namespace
+# constant kCrossSolveTol, which collides when both land in the same unity
+# batch. Skipping also avoids shifting later unity batch boundaries (see
+# notes above).
+set_source_files_properties(
+    optimal_control/test_shooting_hessian_sparsity.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)
+
 # Reduce optimization level for tests to improve compile time.
 # With Clang/GCC, the last -O flag takes precedence over -O3 from COMPILE_FLAGS.
 # Tests don't need -O3 — correctness is unaffected by optimization level.
