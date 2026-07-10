@@ -1783,6 +1783,16 @@ adaptive_mesh : bool, optional
             nb::object np_array = (nb::object)nb::module_::import_("numpy").attr("ndarray");
             nb::object np_float = (nb::object)nb::module_::import_("numpy").attr("float64");
             nb::object np_int = (nb::object)nb::module_::import_("numpy").attr("int32");
+            // numpy.number covers every signed/unsigned int and float width (including 0-d
+            // array scalars boxed as np.float64/np.int64), unlike the np_int/np_float
+            // exact-type checks above, which only match numpy's int32/float64 aliases.
+            nb::object np_number = (nb::object)nb::module_::import_("numpy").attr("number");
+
+            auto is_numeric_scalar = [&](nb::handle h) {
+                return h.type().is(py_float) || h.type().is(py_int) || h.type().is(np_int) ||
+                       h.type().is(np_float) ||
+                       PyObject_IsInstance(h.ptr(), np_number.ptr()) == 1 || PyBool_Check(h.ptr());
+            };
 
             Eigen::VectorXd Units(self.xtu_p_vars());
             Units.setOnes();
@@ -1793,8 +1803,7 @@ adaptive_mesh : bool, optional
                 Eigen::VectorXd units(idxs.size());
                 units.setOnes();
 
-                if (kw.second.type().is(py_int) || kw.second.type().is(py_float) ||
-                    kw.second.type().is(np_float) || kw.second.type().is(np_int)) {
+                if (is_numeric_scalar(kw.second)) {
                     double unit = nb::cast<double>(kw.second);
                     units *= unit;
                 } else if (kw.second.type().is(np_array) || kw.second.type().is(py_list)) {
@@ -1804,17 +1813,19 @@ adaptive_mesh : bool, optional
                             "Size of index group {0:} does not match units vector.", name));
                     }
                     for (int i = 0; i < lenvec; i++) {
-                        auto elem = kw.second.attr("__getitem__")(nb::int_(i)).type();
-                        if (!(elem.is(py_float) || elem.is(py_int) || elem.is(np_int) ||
-                              elem.is(np_float))) {
-                            nb::print(nb::str(elem));
-                            throw std::invalid_argument(
-                                "Vectors and lists must only contain doubles or floats");
+                        nb::object elem = kw.second.attr("__getitem__")(nb::int_(i));
+                        if (!is_numeric_scalar(elem)) {
+                            throw std::invalid_argument(fmt::format(
+                                "Vectors and lists must only contain ints or floats; got "
+                                "element of type {}",
+                                nb::cast<std::string>(nb::str(elem.type()))));
                         }
-                        units[i] = nb::cast<double>(kw.second.attr("__getitem__")(nb::int_(i)));
+                        units[i] = nb::cast<double>(elem);
                     }
                 } else {
-                    throw std::invalid_argument("Invalid unit type");
+                    throw std::invalid_argument(
+                        fmt::format("Invalid unit type for index group {0:}; got type {1:}", name,
+                                    nb::cast<std::string>(nb::str(kw.second.type()))));
                 }
 
                 for (int i = 0; i < idxs.size(); i++) {

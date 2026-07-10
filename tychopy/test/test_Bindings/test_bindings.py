@@ -597,6 +597,49 @@ class TestParsePythonArgs(unittest.TestCase):
             "apply(g) must compute g(self(x)), distinct from eval(g) = self(g(x))",
         )
 
+    def test_stack_accepts_np_int64_scalar(self):
+        """np.int64 (numpy's default int dtype on 64-bit Linux) must not be spuriously
+        rejected by the exact-type np.int32 identity check."""
+        f = vf.Arguments(2).head(2)
+        g = vf.stack(f, np.int64(2))
+        np.testing.assert_allclose(g.compute([1.0, 2.0]), [1.0, 2.0, 2.0])
+
+    def test_stack_accepts_np_float32_scalar(self):
+        """np.float32 must not be spuriously rejected by the exact-type np.float64 check."""
+        f = vf.Arguments(2).head(2)
+        g = vf.stack(f, np.float32(3.5))
+        np.testing.assert_allclose(g.compute([1.0, 2.0]), [1.0, 2.0, 3.5])
+
+    def test_stack_accepts_python_bool_scalar(self):
+        """A Python bool is a valid numeric 0/1 constant."""
+        f = vf.Arguments(2).head(2)
+        g = vf.stack(f, True)
+        np.testing.assert_allclose(g.compute([1.0, 2.0]), [1.0, 2.0, 1.0])
+
+    def test_stack_accepts_np_integer_array(self):
+        """np.arange(...) constants (int64 array) must be accepted, not just float arrays."""
+        f = vf.Arguments(2).head(2)
+        g = vf.stack(f, np.arange(3))  # int64 array constant
+        np.testing.assert_allclose(g.compute([1.0, 2.0]), [1.0, 2.0, 0.0, 1.0, 2.0])
+
+    def test_stack_rejects_non_numeric_with_type_in_message(self):
+        f = vf.Arguments(2).head(2)
+        with self.assertRaisesRegex(ValueError, "type"):
+            vf.stack(f, object())
+
+    def test_stack_rejects_non_numeric_list_element_with_type_in_message(self):
+        f = vf.Arguments(2).head(2)
+        with self.assertRaisesRegex(ValueError, "type"):
+            vf.stack(f, [1.0, object()])
+
+    def test_sum_accepts_np_int64_scalar(self):
+        """ParsePythonArgsScalar (used by vf.sum) must accept np.int64 the same way
+        ParsePythonArgs does for vf.stack."""
+        e0 = vf.Element(3, 1, 0)
+        result = vf.sum(e0, np.int64(2))
+        out = result.compute(np.array([1.0, 2.0, 3.0]))
+        np.testing.assert_allclose(out, [3.0])
+
 
 # ---------------------------------------------------------------------------
 # TestCartesianToMEEBindings
