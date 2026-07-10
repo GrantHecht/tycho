@@ -38,7 +38,7 @@ void tycho::solvers::OptimizationProblem::transcribe() {
         MatrixXi cindex(orows, numappl);
 
         for (int i = 0; i < numappl; i++) {
-            if (func.indices_[i].maxCoeff() >= numVars) {
+            if (func.indices_[i].minCoeff() < 0 || func.indices_[i].maxCoeff() >= numVars) {
                 throw std::invalid_argument(
                     "Variable indices out of bounds in equality constraint");
             }
@@ -69,7 +69,7 @@ void tycho::solvers::OptimizationProblem::transcribe() {
         MatrixXi cindex(orows, numappl);
 
         for (int i = 0; i < numappl; i++) {
-            if (func.indices_[i].maxCoeff() >= numVars) {
+            if (func.indices_[i].minCoeff() < 0 || func.indices_[i].maxCoeff() >= numVars) {
                 throw std::invalid_argument(
                     "Variable indices out of bounds in inequality constraint");
             }
@@ -98,7 +98,7 @@ void tycho::solvers::OptimizationProblem::transcribe() {
         MatrixXi vindex(irows, numappl);
 
         for (int i = 0; i < numappl; i++) {
-            if (func.indices_[i].maxCoeff() >= numVars) {
+            if (func.indices_[i].minCoeff() < 0 || func.indices_[i].maxCoeff() >= numVars) {
                 throw std::invalid_argument("Variable indices out of bounds in objective");
             }
             vindex.col(i) = func.indices_[i];

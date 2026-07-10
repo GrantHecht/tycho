@@ -80,6 +80,11 @@ class TestOptimizationProblemBoundsOffByOne(unittest.TestCase):
     just indices greater than it. Pre-fix, ``maxCoeff() > numVars`` let
     ``index == numVars`` through -- an out-of-bounds read one past the end of
     ``active_variables_``.
+
+    The same check also rejects negative indices (``minCoeff() < 0``): a
+    negative index passes the VectorXi caster (which only rejects int32
+    overflow, not negative values) and would otherwise reach unchecked
+    matrix indexing.
     """
 
     def test_equality_constraint_index_at_numvars_raises(self):
@@ -89,6 +94,19 @@ class TestOptimizationProblemBoundsOffByOne(unittest.TestCase):
         con = vf.Arguments(2)  # identity: 2 in, 2 out
         # Index 2 == numVars is the exact off-by-one boundary (not just > numVars).
         prob.add_equal_con(con, [0, 2])
+        with self.assertRaisesRegex(ValueError, "out of bounds"):
+            prob.solve()
+
+    def test_equality_constraint_negative_index_raises(self):
+        """A negative variable index (e.g. -1) is not caught by the VectorXi
+        caster (which only rejects int32 overflow), so it must be rejected by
+        the ``minCoeff() < 0`` guard in ``transcribe()`` -- otherwise it sails
+        past the upper-bound check into unchecked matrix indexing."""
+        solvs = ast.solvers
+        prob = solvs.OptimizationProblem()
+        prob.set_vars([0.0, 0.0])  # numVars == 2; valid indices are {0, 1}
+        con = vf.Arguments(2)  # identity: 2 in, 2 out
+        prob.add_equal_con(con, [0, -1])
         with self.assertRaisesRegex(ValueError, "out of bounds"):
             prob.solve()
 
