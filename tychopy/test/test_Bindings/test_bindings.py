@@ -890,5 +890,22 @@ class TestNegativeSizeRejection(unittest.TestCase):
         )
 
 
+# ---------------------------------------------------------------------------
+# TestNumPartitionsValidation
+# ---------------------------------------------------------------------------
+
+
+class TestNumPartitionsValidation(unittest.TestCase):
+    def test_zero_partitions_raises(self):
+        prob = ast.solvers.OptimizationProblem()
+        with self.assertRaises(ValueError):
+            prob.num_partitions = 0
+
+    def test_valid_assignment_roundtrips(self):
+        prob = ast.solvers.OptimizationProblem()
+        prob.num_partitions = 4
+        self.assertEqual(prob.num_partitions, 4)
+
+
 if __name__ == "__main__":
     unittest.main(exit=False)

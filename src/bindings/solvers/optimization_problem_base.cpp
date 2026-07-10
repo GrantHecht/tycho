@@ -27,7 +27,14 @@ void TychoBind<OptimizationProblemBase>::build(nb::module_ &m) {
     using JetJobModes = OptimizationProblemBase::JetJobModes;
     auto obj = nb::class_<OptimizationProblemBase>(m, "OptimizationProblemBase");
     obj.def_rw("jet_job_mode", &OptimizationProblemBase::jet_job_mode_);
-    obj.def_rw("num_partitions", &OptimizationProblemBase::num_partitions_);
+    obj.def_prop_rw(
+        "num_partitions", [](const OptimizationProblemBase &self) { return self.num_partitions_; },
+        [](OptimizationProblemBase &self, int n) { self.set_num_partitions(n); },
+        R"doc(Number of NLP matrix partitions.
+
+Assignment routes through :meth:`set_num_partitions` and raises
+``ValueError`` for values < 1. Use ``set_num_partitions(n, qp_threads)`` to
+also set the QP thread count.)doc");
     obj.def_ro("optimizer", &OptimizationProblemBase::optimizer_);
 
     obj.def("set_num_partitions",
