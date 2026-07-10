@@ -20,6 +20,8 @@
 #include "dense_function_base_bind.h"
 #include "tycho/detail/vf/core/vector_function.h"
 
+#include <fmt/format.h>
+
 namespace tycho {
 
 using namespace tycho::vf;
@@ -71,6 +73,19 @@ struct PyVectorFunction
         nb::gil_scoped_acquire acquire; // safe no-op if GIL already held
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
         auto result = pyfun(Input<double>(x), *pyargs);
+        const Py_ssize_t n = PyObject_Length(result.ptr());
+        if (n < 0) {
+            PyErr_Clear();
+            throw std::invalid_argument(fmt::format(
+                "PyVectorFunction: callable returned an object with no length; expected a "
+                "sequence of {} floats",
+                this->output_rows()));
+        }
+        if (n != this->output_rows()) {
+            throw std::invalid_argument(fmt::format(
+                "PyVectorFunction: callable returned {} values, expected {}", n,
+                this->output_rows()));
+        }
         fx = nb::cast<Output<double>>(result);
     }
 

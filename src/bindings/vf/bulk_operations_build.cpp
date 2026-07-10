@@ -15,6 +15,8 @@
 
 #include "tycho_vector_functions.h"
 
+#include <fmt/format.h>
+
 namespace tycho::vf {
 
 GenericFunction<-1, -1> DynamicStack(const std::vector<GenericFunction<-1, -1>> &elems) {
@@ -217,13 +219,6 @@ ValueError
         return DynamicSum(funcs);
     });
 
-    //////////////////////////////////////////////////////////
-
-    m.def("stack", [](const std::vector<GenS> &elems) { return DynamicStack(elems); });
-    m.def("stack_scalar", [](const std::vector<GenS> &elems) { return DynamicStack(elems); });
-    m.def("stack", [](const std::vector<Gen> &elems) { return DynamicStack(elems); });
-
-    m.def("sum", [](const std::vector<GenS> &elems) { return DynamicSum(elems); });
     m.def("sum_scalar", [](const std::vector<GenS> &elems) { return DynamicSum(elems); },
           R"doc(Elementwise sum of several scalar-output VectorFunctions.
 
@@ -250,7 +245,6 @@ ValueError
     If any two functions have mismatched input dimensions, or the list is
     empty.
 )doc");
-    m.def("sum", [](const std::vector<Gen> &elems) { return DynamicSum(elems); });
 
     m.def("sum_elems", &make_dynamic_sum<GenS, ELEM>,
           R"doc(Sum several scalar segment-output VectorFunctions into one scalar.
@@ -281,6 +275,11 @@ ValueError
     m.def(
         "sum_elems",
         [](const std::vector<ELEM> &elems, const std::vector<double> &scales) {
+            if (scales.size() < elems.size()) {
+                throw std::invalid_argument(
+                    fmt::format("sum_elems: scales has {} entries but {} functions were given",
+                                scales.size(), elems.size()));
+            }
             std::vector<Scaled<ELEM>> selems;
             for (int i = 0; i < elems.size(); i++) {
                 selems.emplace_back(elems[i] * scales[i]);
@@ -301,8 +300,7 @@ funcs : list[Segment]
     The list must contain at least one element.
 scales : list[float]
     Scalar multiplier for each function.  Must have at least as many entries
-    as *funcs*; no length check is performed — passing a shorter *scales*
-    causes undefined behavior.
+    as *funcs*.
 
 Returns
 -------
@@ -313,7 +311,7 @@ VectorFunction
 Raises
 ------
 ValueError
-    If the list is empty or any two elements have mismatched input
-    dimensions.
+    If the list is empty, any two elements have mismatched input
+    dimensions, or *scales* has fewer entries than *funcs*.
 )doc");
 }

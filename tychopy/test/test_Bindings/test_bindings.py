@@ -691,5 +691,48 @@ class TestCartesianToMEEBindings(unittest.TestCase):
         self.assertEqual(gen.output_rows(), 6)
 
 
+# ---------------------------------------------------------------------------
+# TestParsedInputEval
+# ---------------------------------------------------------------------------
+
+
+class TestParsedInputEval(unittest.TestCase):
+    """Python-boundary regression coverage for ParsedInput's variable-location
+    validation (the C++ fix landed in PR 2; see
+    ``include/tycho/detail/vf/expressions/parsed_input.h``).
+
+    ``eval(int, list[int])`` (the remapped-input-projection overload) is only
+    registered on non-``Segment``/``Arguments`` VectorFunctions -- Segment and
+    Arguments types are excluded via ``is_arglike`` in
+    ``BinaryOperatorsBuild`` (``src/bindings/vf/dense_function_base_bind.h``).
+    So a bare ``Args(3).head(3)`` does not expose ``.eval(int, list)``; it is
+    wrapped via ``vf.VectorFunction(...)`` (same pattern as
+    ``TestCartesianToMEEBindings.test_vf_compose_overload`` above) to obtain a
+    GenericFunction that does.
+    """
+
+    def test_eval_rejects_wrong_length_map(self):
+        f = vf.VectorFunction(Args(3).head(3))  # input_rows() == 3
+        with self.assertRaises(ValueError):
+            f.eval(4, [0, 1])  # 2 entries for a 3-input function
+
+    def test_eval_rejects_out_of_range_entries(self):
+        f = vf.VectorFunction(Args(3).head(3))  # input_rows() == 3
+        with self.assertRaises(ValueError):
+            f.eval(4, [0, 1, 4])  # 4 outside [0, 4)
+        with self.assertRaises(ValueError):
+            f.eval(4, [0, 1, -1])  # -1 outside [0, 4)
+
+    def test_eval_duplicate_indices_sum_derivatives(self):
+        # f(a, b) = a*b gathered as (x2, x2) => d/dx2 [x2^2] = 2*x2.
+        args = Args(2)
+        prod = args.coeff(0) * args.coeff(1)
+        g = prod.eval(4, [2, 2])
+        x = np.array([0.0, 0.0, 3.0, 0.0])
+        np.testing.assert_allclose(g.compute(x), [9.0])
+        jac = g.jacobian(x)
+        np.testing.assert_allclose(jac[0, 2], 6.0)  # 2*x2, the summed scatter
+
+
 if __name__ == "__main__":
     unittest.main(exit=False)
