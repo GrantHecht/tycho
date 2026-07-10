@@ -146,11 +146,12 @@ struct InterpTable1D {
 
         tsize_ = ts_.size();
         vlen_ = vs_.rows();
-        ttotal_ = ts_[tsize_ - 1] - ts_[0];
 
         if (tsize_ < 5) {
             throw std::invalid_argument("t coordinates must be larger than 4");
         }
+        ttotal_ = ts_[tsize_ - 1] - ts_[0];
+
         if (tsize_ != vs_.cols()) {
             throw std::invalid_argument(
                 "Length of t coordinates must match length of interpolation axis");

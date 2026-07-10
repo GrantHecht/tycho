@@ -450,6 +450,11 @@ struct InterpTable2D {
     /// @param y_vals  Y coordinates of the query points (same shape as @p x_vals).
     /// @return Matrix of interpolated values.
     MatType interp(const MatType &x_vals, const MatType &y_vals) const {
+        if (x_vals.rows() != y_vals.rows() || x_vals.cols() != y_vals.cols()) {
+            throw std::invalid_argument(
+                fmt::format("InterpTable2D::interp: x_vals is {}x{} but y_vals is {}x{}",
+                            x_vals.rows(), x_vals.cols(), y_vals.rows(), y_vals.cols()));
+        }
         MatType z_out(x_vals.rows(), x_vals.cols());
 
         for (int i = 0; i < x_vals.rows(); i++) {
