@@ -142,5 +142,100 @@ class TestLambertBatchValidation(unittest.TestCase):
             np.testing.assert_allclose(V2s_t[i, :], v2, rtol=1e-12)
 
 
+class TestLambertBatchVectorized(unittest.TestCase):
+    """Coverage for the ``vectorize=True`` SuperScalar (vsize=8) packed loop.
+
+    ``_mk`` above builds ``N`` *identical* problems, which cannot expose a
+    lane-mapping bug (every lane produces the same answer regardless of
+    mapping). The tests here use ``N=10`` *distinct* well-posed problems —
+    one 8-wide SIMD pack plus a 2-wide scalar remainder — so a mis-mapped
+    SIMD lane would show up as a mismatch against the corresponding scalar
+    call.
+    """
+
+    MU = 1.0
+
+    def _mk_varied(self, n):
+        # N distinct, non-collinear short-way transfers on the unit circle:
+        # R1 fixed, R2 swept through n transfer angles strictly between 0
+        # and 180 degrees (so none are collinear / well-posed for all n).
+        thetas = np.deg2rad(np.linspace(10.0, 150.0, n))
+        R1s = np.tile(np.array([[1.0], [0.0], [0.0]]), (1, n))
+        R2s = np.vstack([np.cos(thetas), np.sin(thetas), np.zeros(n)])
+        dts = np.full(n, 1.0)
+        lws = [False] * n
+        V1s = np.zeros((3, n))
+        V2s = np.zeros((3, n))
+        return R1s, R2s, dts, lws, V1s, V2s
+
+    def test_batch_vectorized_matches_scalar(self):
+        # N=10 covers one full 8-wide SuperScalar pack plus a 2-wide scalar
+        # remainder; vectorize=True routes the first 8 problems through the
+        # packed SIMD loop. Confirmed passing on the current .so.
+        n = 10
+        R1s, R2s, dts, lws, V1s, V2s = self._mk_varied(n)
+        codes = typy.astro.lambert_izzo(R1s, R2s, dts, self.MU, lws, V1s, V2s, 0, True)
+        np.testing.assert_array_equal(codes, np.zeros(n, dtype=codes.dtype))
+        for i in range(n):
+            v1, v2 = typy.astro.lambert_izzo(
+                R1s[:, i], R2s[:, i], dts[i], self.MU, lws[i]
+            )
+            np.testing.assert_allclose(V1s[:, i], v1, rtol=1e-12)
+            np.testing.assert_allclose(V2s[:, i], v2, rtol=1e-12)
+
+    def test_batch_vectorized_axis1_matches_scalar(self):
+        # Same problems and packing as above, transposed (N, 3) layout.
+        # Confirmed passing on the current .so.
+        n = 10
+        R1s, R2s, dts, lws, _, _ = self._mk_varied(n)
+        R1s_t = np.ascontiguousarray(R1s.T)
+        R2s_t = np.ascontiguousarray(R2s.T)
+        V1s_t = np.zeros((n, 3))
+        V2s_t = np.zeros((n, 3))
+        codes = typy.astro.lambert_izzo(
+            R1s_t, R2s_t, dts, self.MU, lws, V1s_t, V2s_t, 1, True
+        )
+        np.testing.assert_array_equal(codes, np.zeros(n, dtype=codes.dtype))
+        for i in range(n):
+            v1, v2 = typy.astro.lambert_izzo(
+                R1s_t[i, :], R2s_t[i, :], dts[i], self.MU, lws[i]
+            )
+            np.testing.assert_allclose(V1s_t[i, :], v1, rtol=1e-12)
+            np.testing.assert_allclose(V2s_t[i, :], v2, rtol=1e-12)
+
+    def test_vectorized_collinear_exitcodes(self):
+        # NEW BEHAVIOR (Task 10): passes only after rebuilding against the
+        # updated lambert_solvers_bind.cpp. On the pre-Task-10 .so, the
+        # vectorized packed loop does *not* promote the "NaN-with-success"
+        # collinear exit code (verified: codes stayed all-zero even though
+        # V1s/V2s were NaN at both collinear indices below), so this test
+        # is expected to fail until the branch's binding changes are built.
+        #
+        # One collinear problem inside the packed SIMD lane (index 3, the
+        # 4th of the first 8-wide pack) and one in the scalar remainder
+        # (index 9, the last of the 2-wide tail).
+        n = 10
+        R1s, R2s, dts, lws, V1s, V2s = self._mk_varied(n)
+        R2s[:, 3] = [2.0, 0.0, 0.0]  # collinear with R1s[:, 3] == [1,0,0]
+        R2s[:, 9] = [3.0, 0.0, 0.0]  # collinear with R1s[:, 9] == [1,0,0]
+
+        codes = typy.astro.lambert_izzo(R1s, R2s, dts, self.MU, lws, V1s, V2s, 0, True)
+
+        collinear = {3, 9}
+        for i in range(n):
+            if i in collinear:
+                self.assertNotEqual(
+                    codes[i], 0, msg=f"index {i} should be flagged collinear"
+                )
+            else:
+                self.assertEqual(
+                    codes[i], 0, msg=f"index {i} should have converged cleanly"
+                )
+
+        ok_idx = [i for i in range(n) if i not in collinear]
+        self.assertTrue(np.all(np.isfinite(V1s[:, ok_idx])))
+        self.assertTrue(np.all(np.isfinite(V2s[:, ok_idx])))
+
+
 if __name__ == "__main__":
     unittest.main()
