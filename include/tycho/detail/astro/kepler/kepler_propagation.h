@@ -11,11 +11,20 @@ namespace tycho::astro {
 ///
 /// Uses the universal-variable LCD iteration followed by the Goodyear f-g map.
 /// On LCD non-convergence returns a NaN-poisoned vector.
-/// @tparam Scalar Numeric scalar type (double or Eigen::Array SuperScalar).
+/// @tparam Scalar Numeric scalar type — currently Scalar=double only, the
+///                templated signature notwithstanding (OC §3.9). The body
+///                does not compile for Eigen::Array SuperScalar Scalars:
+///                the `dt == Scalar(0)` guard requires a contextual bool
+///                (Eigen's array operator== yields a component-wise array),
+///                and `double(mu)` has no conversion from an array Scalar.
+///                The underlying kepler_lcd_iterate kernel *does* have SS
+///                overloads, so extending this wrapper (per-lane dt==0
+///                handling + a scalar `double mu` parameter) is the obvious
+///                follow-up if a SuperScalar propagation entry point is ever
+///                needed.
 /// @param[in] RV  Initial Cartesian state [rx, ry, rz, vx, vy, vz].
 /// @param[in] dt  Time-of-flight.
-/// @param[in] mu  Gravitational parameter (must be > 0); cast to double internally
-///                regardless of Scalar type.
+/// @param[in] mu  Gravitational parameter (must be > 0); cast to double internally.
 /// @return Propagated Cartesian state [rx', ry', rz', vx', vy', vz'].
 template <class Scalar>
 Vector6<Scalar> propagate_cartesian(const Vector6<Scalar> &RV, Scalar dt, Scalar mu) {

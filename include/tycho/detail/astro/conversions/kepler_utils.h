@@ -60,7 +60,7 @@ using detail::kepler_nan_value;
 ///          (1e-12), but performs no convergence check afterward and does not
 ///          NaN-poison on non-convergence (unlike the hyperbolic branch below,
 ///          which poisons via kepler_nan_value<Scalar>() — see OC review
-///          §1.8). Convergence slows for high eccentricity (e → 1⁻) because
+///          §1.14). Convergence slows for high eccentricity (e → 1⁻) because
 ///          the update's denominator `1 - e·cosE` shrinks near periapsis
 ///          (E ≈ 0); MAXITERS can be exhausted before |fE| < TOL, silently
 ///          returning an under-converged E/state with no diagnostic.
