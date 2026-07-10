@@ -242,6 +242,18 @@ class TestTypeCasters(unittest.TestCase):
         result = self.f2.compute((1.0, 2.0))
         np.testing.assert_allclose(result, [1.0, 4.0])
 
+    def test_vectorxd_rejects_str(self):
+        """VectorXd custom caster must reject str (a digit-string must not
+        silently parse element-wise into a numeric vector)."""
+        with self.assertRaises(TypeError):
+            self.f2.compute("12")  # digit-string must not parse as [1., 2.]
+
+    def test_vectorxd_rejects_dict(self):
+        """VectorXd custom caster must reject dict (iterating its keys is
+        not a sensible numeric-vector payload)."""
+        with self.assertRaises(TypeError):
+            self.f2.compute({1.0: "a", 2.0: "b"})
+
     def test_vectorxi_dtype_int32(self):
         """Fix D: VectorXi::from_cpp must produce np.int32 dtype, not np.intc."""
         # Use phase/OCP to get a VectorXi back from C++ — easiest via
@@ -263,6 +275,54 @@ class TestTypeCasters(unittest.TestCase):
             )
         except (AttributeError, TypeError):
             self.skipTest("No accessible VectorXi-returning API for dtype check")
+
+    def test_vectorxi_rejects_bytes(self):
+        """VectorXi custom caster must reject bytes (they must not silently
+        become the vector of their code points, e.g. b"AB" -> [65, 66]).
+
+        ``eval(int, Eigen::VectorXi)`` (the remapped-input-projection overload)
+        is only registered on generic (non-Segment/Arguments) VectorFunctions,
+        so a ``vf.stack(...)`` result is used here rather than a bare
+        ``Arguments``/``Segment`` object.
+        """
+        f = vf.stack(Args(2), [1.0, 2.0])
+        with self.assertRaises(TypeError):
+            f.eval(4, b"AB")  # bytes must not become [65, 66]
+
+    def test_vectorxi_rejects_huge_index(self):
+        """VectorXi custom caster must reject an index that overflows int32
+        rather than silently truncating it to a small, wrong, in-bounds value
+        (CODEBASE_REVIEW 1.1b)."""
+        f = vf.stack(Args(2), [1.0, 2.0])
+        with self.assertRaises((TypeError, ValueError)):
+            f.eval(4, [5_000_000_000, 0])  # must not wrap to a small int32
+
+    def test_scaletype_huge_int_raises_not_crashes(self):
+        """Fix: ScaleType's noexcept ``from_python`` must not let a Python
+        exception (OverflowError converting 10**400 to a C double) propagate
+        as a C++ exception out of a noexcept function -- that is a hard
+        interpreter crash (std::terminate), not a Python-catchable failure.
+
+        Pre-fix: interpreter abort. Post-fix: a clean Python exception from
+        the failed argument cast. ``ScaleType`` is only reachable via a
+        phase's ``auto_scale``-family arguments, so a minimal single-state,
+        no-control ODE phase is built to reach it (see
+        ``tychopy/test/test_OptimalControl/test_NewMethods.py`` for the same
+        ``oc.ode_x.ode`` subclassing pattern).
+        """
+        oc = ast.optimal_control
+
+        class _ScaleTypeProbeODE(oc.ode_x.ode):
+            def __init__(self):
+                args = oc.ODEArguments(1)
+                x = args.x_var(0)
+                super().__init__((-1.0) * x, 1)
+
+        ode = _ScaleTypeProbeODE()
+        traj = [np.array([1.0, t]) for t in np.linspace(0.0, 1.0, 20)]
+        phase = ode.phase("LGL3", traj, 4)
+        with self.assertRaises(Exception):
+            phase.add_boundary_value("Front", 0, 0.0, auto_scale=10**400)
 
     def test_stack_list_arg(self):
         """ParsePythonArgs must accept a Python list as a constant vector."""
