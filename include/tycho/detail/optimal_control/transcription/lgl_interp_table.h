@@ -250,6 +250,16 @@ struct LGLInterpTable {
     /// interpolation calls on @p other. The copy simply starts with a fresh hint
     /// of 0; correctness is unaffected (see the member's doc comment), only the
     /// first post-copy `find_block` search may cost a few extra probes.
+    ///
+    /// `ode_` is copied only when @p other actually holds one (`has_ode_`):
+    /// GenericFunction's copy *constructor* throws "Attempting to copy null
+    /// function" on an empty (default-constructed) source, so an unconditional
+    /// init-list `ode_(other.ode_)` would make every loaded-but-ODE-less table
+    /// (a perfectly valid state -- the FD-derivative constructors never set an
+    /// ODE) uncopyable. Copy *assignment* shares ownership without an empty
+    /// check, so the body-assign below is safe. The `has_ode_` gate is sound
+    /// because only this class's own constructors ever assign `ode_`, and each
+    /// sets `has_ode_ = true` in the same statement sequence.
     LGLInterpTable(const LGLInterpTable &other)
         : xtu_data_(other.xtu_data_), xdot_data_(other.xdot_data_), x_vars_(other.x_vars_),
           u_vars_(other.u_vars_), xtu_vars_(other.xtu_vars_), axis_(other.axis_),
@@ -261,12 +271,20 @@ struct LGLInterpTable {
           even_data_(other.even_data_), warn_out_of_bounds_(other.warn_out_of_bounds_),
           throw_out_of_bounds_(other.throw_out_of_bounds_), t_spacing_(other.t_spacing_),
           x_weights_(other.x_weights_), dx_weights_(other.dx_weights_),
-          u_weights_(other.u_weights_), ode_(other.ode_) {}
+          u_weights_(other.u_weights_) {
+        if (other.has_ode_) {
+            this->ode_ = other.ode_;
+        }
+    }
 
     /// @brief Copy assignment operator.
     ///
     /// See the copy constructor: `last_block_accessed_` resets to 0 rather than
-    /// copying @p other's (possibly concurrently-updated) hint.
+    /// copying @p other's (possibly concurrently-updated) hint. Unlike the copy
+    /// constructor, `ode_` is assigned unconditionally: GenericFunction's copy
+    /// *assignment* (unlike its copy constructor) has no empty-source check, so
+    /// this works for ODE-less tables too and correctly clears the target's ODE
+    /// when @p other has none.
     LGLInterpTable &operator=(const LGLInterpTable &other) {
         if (this == &other) {
             return *this;

@@ -199,6 +199,42 @@ TEST(LGLTableRobustness, CopyPreservesDataAndResetsHint) {
     EXPECT_NEAR((orig_val - assign_val).norm(), 0.0, 1e-12);
 }
 
+/// Copying an ODE-less table (has_ode_ == false, e.g. the FD-derivative
+/// constructors / load_exact_data helper path) must work: GenericFunction's
+/// copy constructor throws "Attempting to copy null function" on an empty
+/// source, so the table's copy ctor gates the ode_ copy on has_ode_.
+/// (Pre-existing landmine: the old implicit copy ctor had identical throwing
+/// semantics; nothing in production ever copied an ODE-less table.)
+TEST(LGLTableRobustness, CopyOdeLessTableWorks) {
+    auto tab = make_exact_lgl_table(TranscriptionModes::LGL3);
+    ASSERT_FALSE(tab->has_ode_);
+    EXPECT_NO_THROW({
+        LGLInterpTable c(*tab);
+        EXPECT_FALSE(c.has_ode_);
+    });
+    EXPECT_NO_THROW({
+        LGLInterpTable a;
+        a = *tab;
+        EXPECT_FALSE(a.has_ode_);
+    });
+}
+
+/// Copying an ODE-bearing table must share the ODE through both copy paths.
+TEST(LGLTableRobustness, CopyOdeBearingTablePreservesOde) {
+    auto phase = make_linear_phase();
+    LGLInterpTable tab = phase->return_traj_table(); // itself a copy-with-ODE
+    ASSERT_TRUE(tab.has_ode_);
+
+    LGLInterpTable c(tab);
+    EXPECT_TRUE(c.has_ode_);
+    EXPECT_NO_THROW(c.error_integral(5)); // uses ode_.compute()
+
+    LGLInterpTable a;
+    a = tab;
+    EXPECT_TRUE(a.has_ode_);
+    EXPECT_NO_THROW(a.error_integral(5));
+}
+
 /// Concurrent const interpolate() calls (each internally calling find_block(),
 /// which reads/writes last_block_accessed_) must not crash or corrupt results
 /// -- the search-hint is only ever a perf hint, so any interleaving of the
