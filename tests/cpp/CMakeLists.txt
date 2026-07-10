@@ -160,6 +160,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     optimal_control/test_phase_indexer.cpp
     optimal_control/test_set_units_retranscription.cpp
     optimal_control/test_lgl_table_robustness.cpp
+    optimal_control/test_state_function_regions.cpp
 
     # Solvers
     solvers/test_psiopt_convergence.cpp

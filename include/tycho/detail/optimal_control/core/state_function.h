@@ -207,7 +207,16 @@ template <class FuncType> struct StateFunction {
             break;
         }
         case PhaseRegionFlags::StaticParams: {
-            this->region_flag_ = PhaseRegionFlags::Params;
+            // Preserve the caller's state region (Reg, set above) rather than
+            // reclassifying to Params -- symmetric with the ODEParams arm
+            // above, which never overwrites region_flag_. See OC review
+            // §1.19: this arm previously overwrote region_flag_ with Params
+            // while xtu_vars_ stayed populated with state indices, silently
+            // discarding the caller's requested state region (the ODEParams
+            // arm did not have this bug). check_param_region_invariant()
+            // below is unaffected either way here: it only rejects
+            // Params/ODEParams/StaticParams region flags combined with
+            // non-empty xtu_vars_, and Reg is a state region.
             this->op_vars_.resize(0);
             this->sp_vars_ = pv;
             break;
