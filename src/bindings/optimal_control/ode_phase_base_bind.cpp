@@ -105,20 +105,25 @@ b : bool
         "set_traj",
         nb::overload_cast<const std::vector<Eigen::VectorXd> &, Eigen::VectorXd, Eigen::VectorXi>(
             &ODEPhaseBase::set_traj),
-        "");
+        nb::call_guard<nb::gil_scoped_release>(), "");
 
-    obj.def("set_traj", nb::overload_cast<const std::vector<Eigen::VectorXd> &, Eigen::VectorXd,
-                                          Eigen::VectorXi, bool>(&ODEPhaseBase::set_traj));
+    obj.def("set_traj",
+            nb::overload_cast<const std::vector<Eigen::VectorXd> &, Eigen::VectorXd,
+                              Eigen::VectorXi, bool>(&ODEPhaseBase::set_traj),
+            nb::call_guard<nb::gil_scoped_release>());
 
     obj.def("set_traj",
             nb::overload_cast<const std::vector<Eigen::VectorXd> &, int>(&ODEPhaseBase::set_traj),
-            "");
+            nb::call_guard<nb::gil_scoped_release>(), "");
 
-    obj.def("set_traj", nb::overload_cast<const std::vector<Eigen::VectorXd> &, int, bool>(
-                            &ODEPhaseBase::set_traj));
+    obj.def("set_traj",
+            nb::overload_cast<const std::vector<Eigen::VectorXd> &, int, bool>(
+                &ODEPhaseBase::set_traj),
+            nb::call_guard<nb::gil_scoped_release>());
 
     obj.def("set_traj",
             nb::overload_cast<const std::vector<Eigen::VectorXd> &>(&ODEPhaseBase::set_traj),
+            nb::call_guard<nb::gil_scoped_release>(),
             R"doc(Set (or replace) the phase's initial-guess trajectory.
 
 Parameters
@@ -164,6 +169,7 @@ preserved. Invalidates the cached transcription and post-solve data.
             nb::overload_cast<std::string>(&ODEPhaseBase::switch_transcription_mode), "");
 
     obj.def("transcribe", nb::overload_cast<bool, bool>(&ODEPhaseBase::transcribe),
+            nb::call_guard<nb::gil_scoped_release>(),
             R"doc(Transcribe the phase into its underlying nonlinear program.
 
 Builds the transcribed NLP (defect constraints, user constraints, and
@@ -180,6 +186,7 @@ showfuns : bool
 )doc");
 
     obj.def("refine_traj_manual", nb::overload_cast<int>(&ODEPhaseBase::refine_traj_manual),
+            nb::call_guard<nb::gil_scoped_release>(),
             R"doc(Resample the current trajectory onto a new number of segments.
 
 Parameters
@@ -189,6 +196,7 @@ num : int
 )doc");
     obj.def("refine_traj_manual",
             nb::overload_cast<VectorXd, VectorXi>(&ODEPhaseBase::refine_traj_manual),
+            nb::call_guard<nb::gil_scoped_release>(),
             R"doc(Resample the current trajectory onto an explicit mesh specification.
 
 Parameters
@@ -199,6 +207,7 @@ bin_segments : numpy.ndarray of int
     Number of segments to place in each bin.
 )doc");
     obj.def("refine_traj_equal", &ODEPhaseBase::refine_traj_equal, nb::arg("n"),
+            nb::call_guard<nb::gil_scoped_release>(),
             R"doc(Resample the current trajectory onto an equally-spaced mesh.
 
 Parameters
@@ -1707,6 +1716,7 @@ tuple of (numpy.ndarray, numpy.ndarray, numpy.ndarray)
     per-segment error vector.
 )doc");
     obj.def("refine_traj_auto", &ODEPhaseBase::refine_traj_auto,
+            nb::call_guard<nb::gil_scoped_release>(),
             R"doc(Run one automatic mesh-refinement step.
 
 Estimates the per-interval discretization error and redistributes mesh nodes
@@ -1715,6 +1725,7 @@ to drive it below :attr:`mesh_tol`. This is invoked automatically when
 refinement loop.
 )doc");
     obj.def("calc_global_error", &ODEPhaseBase::calc_global_error,
+            nb::call_guard<nb::gil_scoped_release>(),
             R"doc(Estimate the global (end-to-end) discretization error of the trajectory.
 
 Returns
