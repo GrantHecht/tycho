@@ -292,10 +292,25 @@ class TestTypeCasters(unittest.TestCase):
     def test_vectorxi_rejects_huge_index(self):
         """VectorXi custom caster must reject an index that overflows int32
         rather than silently truncating it to a small, wrong, in-bounds value
-        (CODEBASE_REVIEW 1.1b)."""
+        (CODEBASE_REVIEW 1.1b).
+
+        ``2**32`` is used here (not e.g. ``5_000_000_000``) because it is the
+        smallest huge value that actually discriminates pre-fix from post-fix
+        behavior: ``(int32_t)PyLong_AsLong(2**32)`` wraps to exactly ``0`` --
+        a valid, in-bounds, silently-wrong index that the pre-fix caster
+        accepted without complaint. A value like ``5_000_000_000`` truncates
+        (mod 2**32) to 705032704, which is *also* out of this function's
+        valid index range, so pre-fix code raises ValueError via
+        ParsedInput's bounds check too -- that value does not distinguish
+        the bug from the fix. Post-fix, the new ``py_long_to_int32`` helper
+        rejects ``2**32`` outright and the caster returns false, so nanobind
+        raises TypeError (not ValueError) at the binding boundary.
+        """
         f = vf.stack(Args(2), [1.0, 2.0])
-        with self.assertRaises((TypeError, ValueError)):
-            f.eval(4, [5_000_000_000, 0])  # must not wrap to a small int32
+        with self.assertRaises(TypeError):
+            f.eval(
+                4, [2**32, 0]
+            )  # pre-fix: wraps to 0 (valid, wrong); post-fix: rejected
 
     def test_scaletype_huge_int_raises_not_crashes(self):
         """Fix: ScaleType's noexcept ``from_python`` must not let a Python
