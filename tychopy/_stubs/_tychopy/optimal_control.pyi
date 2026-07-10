@@ -5598,6 +5598,11 @@ class ODEArguments(_tychopy.vector_functions.Arguments):
         -------
         VectorFunction
             Expression selecting the control block, of size ``Uvars``.
+
+        Raises
+        ------
+        ValueError
+            If no control variables were declared (``Uvars == 0``).
         """
 
     def u_var(self, arg: int, /) -> _tychopy.vector_functions.Element:
@@ -5623,6 +5628,11 @@ class ODEArguments(_tychopy.vector_functions.Arguments):
         -------
         VectorFunction
             Expression selecting the parameter block, of size ``Pvars``.
+
+        Raises
+        ------
+        ValueError
+            If no parameter variables were declared (``Pvars == 0``).
         """
 
     def p_var(self, arg: int, /) -> _tychopy.vector_functions.Element:
