@@ -55,6 +55,21 @@ using detail::kepler_nan_value;
 ///               hyperbolic mean anomaly (M = e·sinh(H) − H).
 /// @param mu     Gravitational parameter (km³/s² or consistent units).
 /// @return Six Cartesian state [rx, ry, rz, vx, vy, vz].
+/// @warning Elliptic branch (e < 1): the Newton iteration on E runs a fixed
+///          MAXITERS=15 iterations, breaking early once |E - e·sinE - M| < TOL
+///          (1e-12), but performs no convergence check afterward and does not
+///          NaN-poison on non-convergence (unlike the hyperbolic branch below,
+///          which poisons via kepler_nan_value<Scalar>() — see OC review
+///          §1.8). Convergence slows for high eccentricity (e → 1⁻) because
+///          the update's denominator `1 - e·cosE` shrinks near periapsis
+///          (E ≈ 0); MAXITERS can be exhausted before |fE| < TOL, silently
+///          returning an under-converged E/state with no diagnostic.
+/// @warning Hyperbolic branch (e > 1): converges via an asinh(M/e) seed and a
+///          step-size (|dH| < TOL) test, NaN-poisoning the whole output on
+///          non-convergence (incl. sinh/cosh overflow). Genuinely
+///          non-convergent near-parabolic orbits (e → 1⁺) can still diverge
+///          and NaN-poison; a Barker-style seed for the near-parabolic regime
+///          is a potential future enhancement, not currently implemented.
 template <class Scalar>
 Vector6<Scalar> classic_to_cartesian(const Vector6<Scalar> &oelems, Scalar mu) {
 
@@ -176,6 +191,17 @@ Vector6<Scalar> classic_to_cartesian(const Vector6<Scalar> &oelems, Scalar mu) {
 /// @return Six classical elements [a, e, i, Omega, omega, M], where M is the
 ///         elliptic mean anomaly (M = E − e·sin(E)) for e < 1 and the hyperbolic
 ///         mean anomaly (M = e·sinh(H) − H) for e > 1.
+/// @warning `v`, `Omega`, `w`, and `i` are each computed via `acos()` of a
+///          normalized-vector dot product. Mathematically these arguments lie
+///          in [-1, 1], but floating-point round-off (e.g. near-collinear
+///          `evec`/`R`, near-zero eccentricity, or near-zero/near-180°
+///          inclination) can push an argument marginally outside [-1, 1],
+///          making `acos()` return NaN with no clamp/guard.
+/// @warning `M` is derived from `v` via `atan(tan(v/2)/sqrt((1+e)/(1-e)))`
+///          (elliptic) or `atanh(tan(v/2)/sqrt((1+e)/(e-1)))` (hyperbolic).
+///          `atanh`'s argument must lie strictly in (-1, 1); near-parabolic
+///          orbits (e → 1) or `v → π` push the argument toward ±1
+///          (`atanh` → ±∞) or beyond (`atanh` → NaN), again unguarded.
 template <class Scalar> Vector6<Scalar> cartesian_to_classic(const Vector6<Scalar> &XV, Scalar mu) {
 
     const double PI = 3.14159265358979;
@@ -286,6 +312,12 @@ Vector6<Scalar> modified_to_cartesian(const Vector6<Scalar> &meelems, Scalar mu)
 /// @return Six classical elements [a, e, i, Omega, omega, M], where M is the
 ///         elliptic mean anomaly (M = E − e·sin(E)) for e < 1 and the hyperbolic
 ///         mean anomaly (M = e·sinh(H) − H) for e > 1.
+/// @warning `M` is derived from `v` via `atan(tan(v/2)/sqrt((1+e)/(1-e)))`
+///          (elliptic) or `atanh(tan(v/2)/sqrt((1+e)/(e-1)))` (hyperbolic),
+///          the same domain-sensitive formula used by cartesian_to_classic().
+///          `atanh`'s argument must lie strictly in (-1, 1); near-parabolic
+///          orbits (e → 1) or `v → π` push the argument toward ±1
+///          (`atanh` → ±∞) or beyond (`atanh` → NaN), unguarded.
 template <class Scalar>
 Vector6<Scalar> modified_to_classic(const Vector6<Scalar> &meelems, Scalar mu) {
 
@@ -334,6 +366,14 @@ Vector6<Scalar> modified_to_classic(const Vector6<Scalar> &meelems, Scalar mu) {
 /// @param mu     Gravitational parameter (km³/s² or consistent units); accepted for
 ///               API symmetry but is not used in the algebraic conversion.
 /// @return Six MEE [p, f, g, h, k, L].
+/// @warning Elliptic branch (e < 1): same fixed-MAXITERS=15, unchecked/
+///          unpoisoned Newton loop on E as classic_to_cartesian() — see the
+///          warning there. The `1 - e·cosE` denominator shrinks near
+///          periapsis for high eccentricity (e → 1⁻), and non-convergence
+///          after MAXITERS is not detected or signaled.
+/// @warning Hyperbolic branch (e > 1): NaN-poisons on non-convergence (see
+///          classic_to_cartesian()); near-parabolic orbits (e → 1⁺) can still
+///          genuinely diverge and NaN-poison.
 template <class Scalar>
 Vector6<Scalar> classic_to_modified(const Vector6<Scalar> &oelems, Scalar mu) {
 
@@ -486,6 +526,11 @@ Vector6<Scalar> cartesian_to_modified(const Vector6<Scalar> &XV, Scalar mu) {
 /// @param XV Six Cartesian state [rx, ry, rz, vx, vy, vz].
 /// @param mu Gravitational parameter (km³/s² or consistent units).
 /// @return Six classical elements [a, e, i, Omega, omega, nu] (nu = true anomaly).
+/// @warning `nu` (v), `Omega`, `w`, and `i` are each computed via `acos()` of a
+///          normalized-vector dot product — see the identical warning on
+///          cartesian_to_classic(). Round-off can push an argument marginally
+///          outside [-1, 1] (near-collinear vectors, near-zero eccentricity or
+///          inclination), making `acos()` return NaN with no clamp/guard.
 template <class Scalar>
 Vector6<Scalar> cartesian_to_classic_true(const Vector6<Scalar> &XV, Scalar mu) {
 
@@ -619,6 +664,11 @@ struct CartesianToClassic_Impl {
 
         auto drv = R.dot(V);
 
+        // NOTE (OC §3.9): vtmp/Omegatmp/wtmp/i below are each acos() of a
+        // normalized-vector dot product; the argument is mathematically in
+        // [-1, 1] but round-off can push it marginally outside, and acos()
+        // returns NaN unguarded — same caveat as the scalar
+        // cartesian_to_classic() this expression mirrors.
         auto vtmp = acos(evec.normalized().dot(R.normalized()));
 
         // True-anomaly quadrant: when R·V < 0 (past periapsis, descending), the
@@ -627,6 +677,10 @@ struct CartesianToClassic_Impl {
         // swapped, producing the wrong anomaly quadrant for descending states).
         auto v = IfElseFunction{drv < 0, 2 * PI - vtmp, vtmp};
 
+        // NOTE (OC §3.9): the atanh() branch below (MH) requires its argument
+        // strictly in (-1, 1); near-parabolic e -> 1 or v -> pi push it toward
+        // +-1 (atanh -> +-inf) or beyond (atanh -> NaN), unguarded — same
+        // caveat as the scalar cartesian_to_classic()/modified_to_classic().
         auto M =
             [mu]() {
                 auto ev = Arguments<2>();
