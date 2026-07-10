@@ -663,21 +663,45 @@ void tycho::oc::ODEPhaseBase::refine_traj_auto() {
 }
 
 void tycho::oc::ODEPhaseBase::sub_variables(PhaseRegionFlags reg, VectorXi indices, VectorXd vals) {
+    if (indices.size() != vals.size()) {
+        throw std::invalid_argument(
+            fmt::format("ODEPhaseBase::sub_variables: indices size ({}) does not match vals "
+                        "size ({})",
+                        indices.size(), vals.size()));
+    }
     switch (reg) {
     case PhaseRegionFlags::Front: {
+        const int width = static_cast<int>(this->active_traj_[0].size());
         for (int i = 0; i < indices.size(); i++) {
+            if (indices[i] < 0 || indices[i] >= width) {
+                throw std::invalid_argument(
+                    fmt::format("ODEPhaseBase::sub_variables: Front index {} out of range [0, {})",
+                                indices[i], width));
+            }
             this->active_traj_[0][indices[i]] = vals[i];
         }
         break;
     }
     case PhaseRegionFlags::Back: {
+        const int width = static_cast<int>(this->active_traj_.back().size());
         for (int i = 0; i < indices.size(); i++) {
+            if (indices[i] < 0 || indices[i] >= width) {
+                throw std::invalid_argument(
+                    fmt::format("ODEPhaseBase::sub_variables: Back index {} out of range [0, {})",
+                                indices[i], width));
+            }
             this->active_traj_.back()[indices[i]] = vals[i];
         }
         break;
     }
     case PhaseRegionFlags::Path: {
+        const int width = static_cast<int>(this->active_traj_[0].size());
         for (int i = 0; i < indices.size(); i++) {
+            if (indices[i] < 0 || indices[i] >= width) {
+                throw std::invalid_argument(
+                    fmt::format("ODEPhaseBase::sub_variables: Path index {} out of range [0, {})",
+                                indices[i], width));
+            }
             for (int j = 0; j < this->active_traj_.size(); j++) {
                 this->active_traj_[j][indices[i]] = vals[i];
             }
@@ -685,7 +709,14 @@ void tycho::oc::ODEPhaseBase::sub_variables(PhaseRegionFlags reg, VectorXi indic
         break;
     }
     case PhaseRegionFlags::StaticParams: {
+        const int width = static_cast<int>(this->active_static_params_.size());
         for (int i = 0; i < indices.size(); i++) {
+            if (indices[i] < 0 || indices[i] >= width) {
+                throw std::invalid_argument(
+                    fmt::format("ODEPhaseBase::sub_variables: StaticParams index {} out of "
+                                "range [0, {})",
+                                indices[i], width));
+            }
             this->active_static_params_[indices[i]] = vals[i];
         }
         break;

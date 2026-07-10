@@ -966,8 +966,14 @@ class Phase {
     /// @param region  The phase region.
     /// @param vars    Variable indices within the region.
     /// @param vals    Values to assign, one per index in @p vars.
+    /// @throws std::invalid_argument if @p vars and @p vals sizes differ.
     void sub_variables(PhaseRegionFlags region, const Eigen::VectorXi &vars,
                        const Eigen::VectorXd &vals) {
+        if (vars.size() != vals.size()) {
+            throw std::invalid_argument(
+                fmt::format("Phase::sub_variables: vars size ({}) does not match vals size ({})",
+                            vars.size(), vals.size()));
+        }
         phase_->sub_variables(region, vars, vals);
     }
 
@@ -990,9 +996,15 @@ class Phase {
     ///                the static-parameter name map; otherwise through the XtUP registry.
     /// @param vars    Variable names (one per value in @p vals).
     /// @param vals    Values to assign, one per name in @p vars.
-    /// @throws std::invalid_argument if any name is unknown or maps to multiple indices.
+    /// @throws std::invalid_argument if any name is unknown or maps to multiple indices, or if
+    ///         @p vars and @p vals sizes differ.
     void sub_variables(PhaseRegionFlags region, const std::vector<std::string> &vars,
                        const Eigen::VectorXd &vals) {
+        if (vars.size() != vals.size()) {
+            throw std::invalid_argument(
+                fmt::format("Phase::sub_variables: vars size ({}) does not match vals size ({})",
+                            vars.size(), vals.size()));
+        }
         Eigen::VectorXi idx(static_cast<int>(vars.size()));
         if (region == PhaseRegionFlags::StaticParams) {
             for (int i = 0; i < static_cast<int>(vars.size()); ++i)

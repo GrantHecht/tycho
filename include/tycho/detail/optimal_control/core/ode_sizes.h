@@ -209,8 +209,10 @@ template <int _XV, int _UV, int _PV> struct ODESize : ODEXUPVSizes<_XV, _UV, _PV
 
     /// @brief Register a named group of variable indices.
     /// @param name  Group name (must be unique).
-    /// @param idx   Indices belonging to the group (must be non-empty).
-    /// @throws std::invalid_argument if @p idx is empty or @p name already exists.
+    /// @param idx   Indices belonging to the group (must be non-empty, each in
+    ///              `[0, xtu_p_vars())`).
+    /// @throws std::invalid_argument if @p idx is empty, @p name already exists, or any
+    ///         element of @p idx is outside `[0, xtu_p_vars())`.
     void add_idx(const std::string &name, const Eigen::VectorXi &idx) {
         if (idx.size() == 0) {
             throw std::invalid_argument(
@@ -219,6 +221,12 @@ template <int _XV, int _UV, int _PV> struct ODESize : ODEXUPVSizes<_XV, _UV, _PV
         if (xtu_p_idxs_.contains(name)) {
             throw std::invalid_argument(
                 fmt::format("Variable index group with name: {0:} already exists.", name));
+        }
+        if ((idx.array() < 0).any() || (idx.array() >= this->xtu_p_vars()).any()) {
+            throw std::invalid_argument(
+                fmt::format("Variable index group with name: {0:} has index out of range "
+                            "[0, {1:}).",
+                            name, this->xtu_p_vars()));
         }
         xtu_p_idxs_.insert(name, idx);
     }
@@ -305,6 +313,10 @@ template <int _XV, int _UV, int _PV> struct ODESize : ODEXUPVSizes<_XV, _UV, _PV
     /// @throws std::invalid_argument if any relative index is out of range.
     /// @endinternal
     Eigen::VectorXi idxs_impl(const Eigen::VectorXi &zidxs, const Eigen::VectorXi &idxs) const {
+
+        if (zidxs.size() == 0) {
+            throw std::invalid_argument("idxs_impl: empty index vector");
+        }
 
         auto minelem = *std::min_element(zidxs.begin(), zidxs.end());
         auto maxelem = *std::max_element(zidxs.begin(), zidxs.end());

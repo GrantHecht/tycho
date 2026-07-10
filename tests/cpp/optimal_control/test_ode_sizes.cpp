@@ -71,6 +71,29 @@ TEST(ODESizeTest, PidxsWithSubindexing) {
     EXPECT_EQ(result[1], 9);   // xtu_vars() + 3
 }
 
+TEST(ODESizeTest, IdxsImplEmptyInputThrows) {
+    // OC review §1.18: idxs_impl() called min/max_element on an empty zidxs
+    // vector (UB); it must throw instead.
+    ODESize<3, 1, 0> ode;
+    EXPECT_THROW(ode.x_idxs(Eigen::VectorXi(0)), std::invalid_argument);
+}
+
+TEST(ODESizeTest, AddIdxRejectsOutOfRange) {
+    // OC review §1.18: add_idx() did not range-check its indices against
+    // xtu_p_vars(); an out-of-range index silently corrupted the registry.
+    ODESize<3, 1, 0> ode; // xtu_p_vars() == 3 + 1(t) + 1 + 0 == 5
+    Eigen::VectorXi bad(1);
+    bad << 9999;
+    EXPECT_THROW(ode.add_idx("bad_range", bad), std::invalid_argument);
+}
+
+TEST(ODESizeTest, AddIdxRejectsNegativeIndex) {
+    ODESize<3, 1, 0> ode;
+    Eigen::VectorXi bad(1);
+    bad << -1;
+    EXPECT_THROW(ode.add_idx("neg", bad), std::invalid_argument);
+}
+
 TEST(ODESizeTest, SetGetIdxsRoundtrip) {
     ODESize<3, 2, 0> ode;
 
