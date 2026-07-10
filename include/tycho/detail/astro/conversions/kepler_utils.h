@@ -13,6 +13,7 @@
 // =============================================================================
 
 #pragma once
+#include "tycho/detail/astro/kepler/kepler_lcd_iterate.h"
 #include "tycho/vector_functions.h"
 
 namespace tycho::astro {
@@ -30,6 +31,12 @@ using vf::MatRef;
 using vf::VecRef;
 using vf::VectorExpression;
 using vf::VectorFunction;
+
+// kepler_nan_value<Scalar>() is the LCD/IFT NaN-poison primitive (see
+// kepler_lcd_iterate.h) — reused here so the hyperbolic Newton solves below
+// poison their output via the exact same mechanism/constant as the rest of
+// the Kepler subsystem on non-convergence.
+using detail::kepler_nan_value;
 
 ////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////              Conversions                  /////////////////////////
@@ -90,19 +97,31 @@ Vector6<Scalar> classic_to_cartesian(const Vector6<Scalar> &oelems, Scalar mu) {
         vy = vc * sqrt(1. - e * e) * cosE;
 
     } else { // Hyperbolic
-        Scalar H = M;
+        // Gooding-class initial guess: asinh(M/e) tracks the root far more
+        // closely than H = M for moderate/large |M|, where the H = M seed
+        // can leave the Newton iterate outside the basin of convergence.
+        Scalar H = asinh(M / e);
         Scalar sinhH;
         Scalar coshH;
         Scalar fH;
         Scalar jH;
+        bool converged = false;
 
         for (int i = 0; i < MAXITERS; i++) {
             sinhH = sinh(H);
             coshH = cosh(H);
             fH = e * sinhH - H - M;
-            if (abs(fH) < TOL)
+            if (abs(fH) < TOL) {
+                converged = true;
                 break;
+            }
             H = H - (fH) / (e * coshH - 1);
+        }
+        if (!converged) {
+            // Non-convergence (or sinh/cosh overflow to NaN for very large
+            // |M|) must not silently propagate a finite-but-wrong state —
+            // poison the whole output, mirroring the LCD/IFT Kepler paths.
+            return Vector6<Scalar>::Constant(kepler_nan_value<Scalar>());
         }
         Scalar rc = a * (1 - e * coshH);
 
@@ -339,19 +358,31 @@ Vector6<Scalar> classic_to_modified(const Vector6<Scalar> &oelems, Scalar mu) {
         }
         v = 2.0 * atan2(sqrt(1. + e) * sin(E / 2.0), sqrt(1. - e) * cos(E / 2.0));
     } else { // Hyperbolic
-        Scalar H = M;
+        // Gooding-class initial guess: asinh(M/e) tracks the root far more
+        // closely than H = M for moderate/large |M|, where the H = M seed
+        // can leave the Newton iterate outside the basin of convergence.
+        Scalar H = asinh(M / e);
         Scalar sinhH;
         Scalar coshH;
         Scalar fH;
         Scalar jH;
+        bool converged = false;
 
         for (int i = 0; i < MAXITERS; i++) {
             sinhH = sinh(H);
             coshH = cosh(H);
             fH = e * sinhH - H - M;
-            if (abs(fH) < TOL)
+            if (abs(fH) < TOL) {
+                converged = true;
                 break;
+            }
             H = H - (fH) / (e * coshH - 1);
+        }
+        if (!converged) {
+            // Non-convergence (or sinh/cosh overflow to NaN for very large
+            // |M|) must not silently propagate a finite-but-wrong state —
+            // poison the whole output, mirroring the LCD/IFT Kepler paths.
+            return Vector6<Scalar>::Constant(kepler_nan_value<Scalar>());
         }
         v = 2.0 * atan2(sqrt(1. + e) * sinh(H / 2.0), sqrt(e - 1) * cosh(H / 2.0));
     }
@@ -552,7 +583,8 @@ BUILD_FROM_EXPRESSION(ModifiedToCartesian, ModifiedToCartesian_Impl, double);
 /// The public type CartesianToClassic is created from this via BUILD_FROM_EXPRESSION.
 /// @endinternal
 struct CartesianToClassic_Impl {
-    /// @internal @brief Build the Cartesian → classical elements conversion expression. @endinternal
+    /// @internal @brief Build the Cartesian → classical elements conversion expression.
+    /// @endinternal
     static auto Definition(double mu) {
         const double PI = 3.14159265358979;
 
