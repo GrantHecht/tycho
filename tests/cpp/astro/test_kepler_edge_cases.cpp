@@ -76,9 +76,17 @@ TEST(KeplerEdgeCases, FullRoundTripClassicMEECartClassic) {
 }
 
 TEST(KeplerEdgeCases, NearParabolic) {
-    // Near-parabolic orbit: e = 0.9999
+    // Near-parabolic orbit: e = 0.9999, sampled AWAY from periapsis (M = 1.0).
+    // The elliptic Newton solve now tests convergence on the step size
+    // (|dE| < 1e-12, matching kepler_lcd_iterate and the hyperbolic branch).
+    // From the E = M seed this converges for e = 0.9999 at M = 1.0 (~6 iters,
+    // verified via standalone probe) but NOT for small M near periapsis
+    // (M <~ 0.15), where the 1 - e*cosE denominator shrinks and the seed
+    // leaves the Newton basin -- those inputs are now NaN-poisoned, covered by
+    // EllipticNonConvergencePoisonsOutput below.  (Pre-fix, the residual-break
+    // loop silently returned a finite-but-wrong state for the small-M case.)
     Vector6<double> oe;
-    oe << 50000.0, 0.9999, 10.0 * std::numbers::pi / 180.0, 0.0, 0.0, 0.1;
+    oe << 50000.0, 0.9999, 10.0 * std::numbers::pi / 180.0, 0.0, 0.0, 1.0;
     auto rv = classic_to_cartesian<double>(oe, MU_EARTH);
     for (int i = 0; i < 6; ++i) {
         EXPECT_TRUE(std::isfinite(rv[i]))
@@ -253,4 +261,104 @@ TEST(KeplerEdgeCases, EllipticPathUnaffectedByHyperbolicFix) {
     auto oe2 = cartesian_to_classic<double>(rv, MU_EARTH);
     for (int i = 0; i < 6; ++i)
         EXPECT_NEAR(oe[i], oe2[i], 1e-9) << "Element " << i << " mismatch in elliptic round trip";
+}
+
+// ---------------------------------------------------------------------------
+// CODEBASE §1.1b / OC §1.14 completion: elliptic-anomaly Newton solve now
+// signals non-convergence.
+//
+// The elliptic branches of classic_to_cartesian and classic_to_modified
+// solve M = E - e*sin(E) via Newton iteration from the E = M seed. They now
+// test convergence on the Newton STEP (|dE| < 1e-12, matching
+// kepler_lcd_iterate's |dX| <= Xtol convention and the hyperbolic branch),
+// track a `converged` flag, and NaN-poison the whole output (via
+// kepler_nan_value) when MAXITERS = 15 is exhausted -- instead of the former
+// residual-break loop that silently returned a finite-but-wrong state.  The
+// former break tested |E - e*sinE - M| < TOL *before* stepping, which accepted
+// an under-converged E near periapsis of near-parabolic orbits: a tiny residual
+// need not imply a tiny step there because the 1 - e*cosE denominator shrinks.
+// ---------------------------------------------------------------------------
+
+TEST(KeplerEdgeCases, EllipticNonConvergencePoisonsOutput) {
+    // Probed divergent input (scan over (e, M) near e -> 1-, standalone probe):
+    // e = 1 - 1e-9, M = 1e-8 is genuinely non-convergent from the E = M seed --
+    // the Newton step never falls below 1e-12 within MAXITERS = 15 (the
+    // 1 - e*cosE denominator is ~1e-9 near E ~ 0, so the step oscillates /
+    // overshoots).  Pre-fix this returned a finite-but-wrong state; post-fix
+    // the whole output is NaN-poisoned.
+    Vector6<double> oe;
+    oe << 1.0e5, 1.0 - 1.0e-9, 0.1, 0.1, 0.1, /*M=*/1.0e-8;
+
+    auto rv = classic_to_cartesian<double>(oe, MU_EARTH);
+    for (int i = 0; i < 6; ++i)
+        EXPECT_TRUE(std::isnan(rv[i]))
+            << "classic_to_cartesian component " << i
+            << " should be NaN-poisoned on elliptic non-convergence";
+
+    auto mee = classic_to_modified<double>(oe, MU_EARTH);
+    for (int i = 0; i < 6; ++i)
+        EXPECT_TRUE(std::isnan(mee[i]))
+            << "classic_to_modified component " << i
+            << " should be NaN-poisoned on elliptic non-convergence";
+
+    // Control: same near-parabolic e sampled away from periapsis (M = 1.0)
+    // converges and must NOT be poisoned (probe: ~6 iters).
+    Vector6<double> oe_ok;
+    oe_ok << 1.0e5, 1.0 - 1.0e-9, 0.1, 0.1, 0.1, 1.0;
+    EXPECT_TRUE(classic_to_cartesian<double>(oe_ok, MU_EARTH).allFinite());
+    EXPECT_TRUE(classic_to_modified<double>(oe_ok, MU_EARTH).allFinite());
+}
+
+TEST(KeplerEdgeCases, NominalEllipticRoundTripUnchanged) {
+    // The step-first Newton loop takes one extra step vs the former
+    // residual-break loop, but for well-conditioned orbits that step is a
+    // no-op at 1e-12 (standalone probe: max |E_old - E_new| = 2.1e-13 over this
+    // grid).  Verify nominal elliptic orbits still produce finite states whose
+    // classic->cartesian->classic round trip recovers the input elements:
+    // a to ~1e-6, e to ~1e-9, and (for e > 0, where the anomaly is well-defined)
+    // the mean anomaly M mod 2*pi to ~1e-8.  M recovery is the independent
+    // check that the Newton-solved E is correct (cartesian_to_classic recovers
+    // M closed-form, Newton-free).  e = 0 is excluded from the e/M checks: the
+    // eccentricity vector is ill-defined there (catastrophic cancellation), so
+    // only a-recovery and finiteness are asserted -- same reasoning as
+    // NearCircularEquatorial above.
+    const double PI = std::numbers::pi;
+    for (double e : {0.0, 0.1, 0.7, 0.95}) {
+        for (double M : {0.2, 0.9, 1.7, 2.6, 3.4, 4.3, 5.2}) {
+            Vector6<double> oe;
+            oe << 7000.0, e, 0.3, 0.4, 0.5, M;
+            auto rv = classic_to_cartesian<double>(oe, MU_EARTH);
+            ASSERT_TRUE(rv.allFinite())
+                << "nominal elliptic orbit NaN-poisoned (e=" << e << ", M=" << M << ")";
+            auto oe2 = cartesian_to_classic<double>(rv, MU_EARTH);
+            EXPECT_NEAR(oe2[0], 7000.0, 1e-6)
+                << "semi-major axis not recovered (e=" << e << ", M=" << M << ")";
+            if (e > 0.0) {
+                EXPECT_NEAR(oe2[1], e, 1e-9)
+                    << "eccentricity not recovered (e=" << e << ", M=" << M << ")";
+                double dM = std::remainder(oe2[5] - M, 2.0 * PI);
+                EXPECT_NEAR(dM, 0.0, 1e-8)
+                    << "mean anomaly not recovered (e=" << e << ", M=" << M
+                    << ") -- Newton-solved E is wrong";
+            }
+        }
+    }
+}
+
+TEST(KeplerEdgeCases, PropagateCartesianDtZeroValidates) {
+    // CODEBASE §1.1b: the dt == 0 early return in propagate_cartesian
+    // previously bypassed every input check (mu > 0, dt finite, V0 finite,
+    // r0 > 0).  Those checks are now hoisted ahead of the early return, so a
+    // dt == 0 call with invalid inputs raises std::invalid_argument.
+    Vector6<double> rv;
+    rv << 7000.0, 0.0, 0.0, 0.0, 7.5, 0.0;
+    EXPECT_THROW(propagate_cartesian<double>(rv, 0.0, -1.0), std::invalid_argument);
+
+    Vector6<double> zero = Vector6<double>::Zero();
+    EXPECT_THROW(propagate_cartesian<double>(zero, 0.0, MU_EARTH), std::invalid_argument);
+
+    // Valid dt == 0 call is still an identity (no exception, returns input).
+    auto same = propagate_cartesian<double>(rv, 0.0, MU_EARTH);
+    for (int i = 0; i < 6; ++i)
+        EXPECT_EQ(same[i], rv[i]) << "dt == 0 identity broken at component " << i;
 }

@@ -55,15 +55,17 @@ using detail::kepler_nan_value;
 ///               hyperbolic mean anomaly (M = e·sinh(H) − H).
 /// @param mu     Gravitational parameter (km³/s² or consistent units).
 /// @return Six Cartesian state [rx, ry, rz, vx, vy, vz].
-/// @warning Elliptic branch (e < 1): the Newton iteration on E runs a fixed
-///          MAXITERS=15 iterations, breaking early once |E - e·sinE - M| < TOL
-///          (1e-12), but performs no convergence check afterward and does not
-///          NaN-poison on non-convergence (unlike the hyperbolic branch below,
-///          which poisons via kepler_nan_value<Scalar>() — see OC review
-///          §1.14). Convergence slows for high eccentricity (e → 1⁻) because
-///          the update's denominator `1 - e·cosE` shrinks near periapsis
-///          (E ≈ 0); MAXITERS can be exhausted before |fE| < TOL, silently
-///          returning an under-converged E/state with no diagnostic.
+/// @warning Elliptic branch (e < 1): the Newton iteration on E runs at most
+///          MAXITERS=15 steps from the E = M seed and tests convergence on the
+///          Newton step (|dE| < TOL, 1e-12) — the same step-size convention as
+///          the hyperbolic branch below and kepler_lcd_iterate. On
+///          non-convergence the whole output is NaN-poisoned via
+///          kepler_nan_value<Scalar>(), rather than silently returning an
+///          under-converged state (OC review §1.14). Convergence can fail for
+///          near-parabolic orbits (e → 1⁻) sampled near periapsis (small |M|),
+///          where the update's denominator `1 - e·cosE` shrinks near E ≈ 0 and
+///          the E = M seed leaves the Newton basin; such inputs now poison,
+///          they no longer return a finite-but-wrong state with no diagnostic.
 /// @warning Hyperbolic branch (e > 1): converges via an asinh(M/e) seed and a
 ///          step-size (|dH| < TOL) test, NaN-poisoning the whole output on
 ///          non-convergence (incl. sinh/cosh overflow). Genuinely
@@ -92,16 +94,38 @@ Vector6<Scalar> classic_to_cartesian(const Vector6<Scalar> &oelems, Scalar mu) {
         Scalar E = M;
         Scalar sinE;
         Scalar cosE;
-        Scalar fE;
-        Scalar jE;
+        bool converged = false;
         for (int i = 0; i < MAXITERS; i++) {
             sinE = sin(E);
             cosE = cos(E);
-            fE = E - e * sinE - M;
-            if (abs(fE) < TOL)
+            Scalar fE = E - e * sinE - M;
+            Scalar dE = fE / (1 - e * cosE);
+            E = E - dE;
+            // Step-size convergence test, matching kepler_lcd_iterate's
+            // |dX| <= Xtol convention (and the hyperbolic branch below).
+            // Scale-invariant near a well-conditioned root, unlike the former
+            // raw-residual break (|fE| < TOL *before* stepping), which accepted
+            // an under-converged E near periapsis of near-parabolic orbits: a
+            // tiny residual fE need not imply a tiny step there because the
+            // 1 - e*cosE denominator shrinks.
+            if (abs(dE) < TOL) {
+                converged = true;
                 break;
-            E = E - (fE) / (1 - e * cosE);
+            }
         }
+        if (!converged) {
+            // Non-convergence (e.g. e -> 1- near periapsis, where the
+            // 1 - e*cosE denominator shrinks and the E = M seed leaves the
+            // Newton basin) must not silently return a finite-but-wrong state
+            // — poison the whole output, mirroring the hyperbolic branch below
+            // and the LCD/IFT Kepler paths.
+            return Vector6<Scalar>::Constant(kepler_nan_value<Scalar>());
+        }
+        // Refresh sin/cos at the accepted E: the loop breaks after taking the
+        // final sub-tolerance step, so the in-loop sinE/cosE are one step stale
+        // and vx/vy below consume them.
+        sinE = sin(E);
+        cosE = cos(E);
         Scalar v = 2.0 * atan2(sqrt(1. + e) * sin(E / 2.0), sqrt(1. - e) * cos(E / 2.0));
         Scalar rc = a * (1. - e * cos(E));
         Scalar vc = sqrt(mu * a) / rc;
@@ -366,11 +390,12 @@ Vector6<Scalar> modified_to_classic(const Vector6<Scalar> &meelems, Scalar mu) {
 /// @param mu     Gravitational parameter (km³/s² or consistent units); accepted for
 ///               API symmetry but is not used in the algebraic conversion.
 /// @return Six MEE [p, f, g, h, k, L].
-/// @warning Elliptic branch (e < 1): same fixed-MAXITERS=15, unchecked/
-///          unpoisoned Newton loop on E as classic_to_cartesian() — see the
-///          warning there. The `1 - e·cosE` denominator shrinks near
-///          periapsis for high eccentricity (e → 1⁻), and non-convergence
-///          after MAXITERS is not detected or signaled.
+/// @warning Elliptic branch (e < 1): same MAXITERS=15 Newton loop on E as
+///          classic_to_cartesian(), converging on the step size (|dE| < TOL)
+///          and NaN-poisoning the whole output on non-convergence — see the
+///          warning there. Near-parabolic orbits (e → 1⁻) sampled near
+///          periapsis can exhaust MAXITERS (the `1 - e·cosE` denominator
+///          shrinks) and are poisoned rather than silently under-converged.
 /// @warning Hyperbolic branch (e > 1): NaN-poisons on non-convergence (see
 ///          classic_to_cartesian()); near-parabolic orbits (e → 1⁺) can still
 ///          genuinely diverge and NaN-poison.
@@ -392,17 +417,26 @@ Vector6<Scalar> classic_to_modified(const Vector6<Scalar> &oelems, Scalar mu) {
     Scalar v;
     if (e < 1.0) { // Elliptic
         Scalar E = M;
-        Scalar sinE;
-        Scalar cosE;
-        Scalar fE;
-        Scalar jE;
+        bool converged = false;
         for (int i = 0; i < MAXITERS; i++) {
-            sinE = sin(E);
-            cosE = cos(E);
-            fE = E - e * sinE - M;
-            if (abs(fE) < TOL)
+            Scalar sinE = sin(E);
+            Scalar cosE = cos(E);
+            Scalar fE = E - e * sinE - M;
+            Scalar dE = fE / (1 - e * cosE);
+            E = E - dE;
+            // Step-size convergence test, matching kepler_lcd_iterate's
+            // |dX| <= Xtol convention (and the hyperbolic branch below); see
+            // classic_to_cartesian() for the near-parabolic rationale.
+            if (abs(dE) < TOL) {
+                converged = true;
                 break;
-            E = E - (fE) / (1 - e * cosE);
+            }
+        }
+        if (!converged) {
+            // Non-convergence near e -> 1- (periapsis) must not silently
+            // propagate a finite-but-wrong state — poison, mirroring the
+            // hyperbolic branch and classic_to_cartesian().
+            return Vector6<Scalar>::Constant(kepler_nan_value<Scalar>());
         }
         v = 2.0 * atan2(sqrt(1. + e) * sin(E / 2.0), sqrt(1. - e) * cos(E / 2.0));
     } else { // Hyperbolic

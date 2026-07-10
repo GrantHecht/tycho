@@ -154,7 +154,12 @@ See Also
 modified_to_cartesian : Inverse conversion.
 )doc");
     m.def("classic_to_cartesian", [](const Vector6<double> &oelems, double mu) {
-        return classic_to_cartesian(oelems, mu);
+        const auto rv = classic_to_cartesian(oelems, mu);
+        if (!rv.allFinite())
+            throw std::runtime_error(
+                "classic_to_cartesian: anomaly iteration did not converge "
+                "(near-parabolic eccentricity or extreme mean anomaly)");
+        return rv;
     },
           R"doc(Convert classical orbital elements to a Cartesian state.
 
@@ -176,12 +181,26 @@ Returns
 ndarray, shape (6,)
     Cartesian state ``[rx, ry, rz, vx, vy, vz]``.
 
+Raises
+------
+RuntimeError
+    If the anomaly Newton iteration fails to converge (near-parabolic
+    eccentricity ``e → 1`` sampled near periapsis, or extreme mean anomaly),
+    in which case the conversion NaN-poisons its output.
+
 See Also
 --------
 cartesian_to_classic : Inverse conversion.
 )doc");
     m.def("classic_to_modified",
-          [](const Vector6<double> &oelems, double mu) { return classic_to_modified(oelems, mu); },
+          [](const Vector6<double> &oelems, double mu) {
+              const auto rv = classic_to_modified(oelems, mu);
+              if (!rv.allFinite())
+                  throw std::runtime_error(
+                      "classic_to_modified: anomaly iteration did not converge "
+                      "(near-parabolic eccentricity or extreme mean anomaly)");
+              return rv;
+          },
           R"doc(Convert classical orbital elements to Modified Equinoctial Elements (MEE).
 
 Solves Kepler's equation for the true anomaly from the mean anomaly, then
@@ -200,6 +219,13 @@ Returns
 -------
 ndarray, shape (6,)
     MEE ``[p, f, g, h, k, L]`` where ``L`` is the true longitude (radians).
+
+Raises
+------
+RuntimeError
+    If the anomaly Newton iteration fails to converge (near-parabolic
+    eccentricity ``e → 1`` sampled near periapsis, or extreme mean anomaly),
+    in which case the conversion NaN-poisons its output.
 
 See Also
 --------
