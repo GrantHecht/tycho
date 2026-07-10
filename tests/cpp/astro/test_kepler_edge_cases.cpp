@@ -272,20 +272,30 @@ TEST(KeplerEdgeCases, EllipticPathUnaffectedByHyperbolicFix) {
 // test convergence on the Newton STEP (|dE| < 1e-12, matching
 // kepler_lcd_iterate's |dX| <= Xtol convention and the hyperbolic branch),
 // track a `converged` flag, and NaN-poison the whole output (via
-// kepler_nan_value) when MAXITERS = 15 is exhausted -- instead of the former
-// residual-break loop that silently returned a finite-but-wrong state.  The
-// former break tested |E - e*sinE - M| < TOL *before* stepping, which accepted
-// an under-converged E near periapsis of near-parabolic orbits: a tiny residual
-// need not imply a tiny step there because the 1 - e*cosE denominator shrinks.
+// kepler_nan_value) when MAXITERS_ELLIPTIC = 17 is exhausted -- instead of the
+// former residual-break loop that silently returned a finite-but-wrong state.
+// The former break tested |E - e*sinE - M| < TOL *before* stepping, which
+// accepted an under-converged E near periapsis of near-parabolic orbits: a
+// tiny residual need not imply a tiny step there because the 1 - e*cosE
+// denominator shrinks.
+//
+// The elliptic budget (17) is larger than the hyperbolic branch's (15): a
+// grid probe found a thin knife-edge band of near-parabolic small-|M| inputs
+// whose Newton step falls below tolerance on iteration 16, one or two steps
+// past the original 15-iteration budget -- see EllipticNonConvergencePoisonsOutput
+// below for the still-genuinely-divergent control input.
 // ---------------------------------------------------------------------------
 
 TEST(KeplerEdgeCases, EllipticNonConvergencePoisonsOutput) {
     // Probed divergent input (scan over (e, M) near e -> 1-, standalone probe):
     // e = 1 - 1e-9, M = 1e-8 is genuinely non-convergent from the E = M seed --
-    // the Newton step never falls below 1e-12 within MAXITERS = 15 (the
-    // 1 - e*cosE denominator is ~1e-9 near E ~ 0, so the step oscillates /
-    // overshoots).  Pre-fix this returned a finite-but-wrong state; post-fix
-    // the whole output is NaN-poisoned.
+    // the Newton step never falls below 1e-12 within MAXITERS_ELLIPTIC = 17
+    // (the 1 - e*cosE denominator is ~1e-9 near E ~ 0, so the step oscillates /
+    // overshoots).  Re-verified after the elliptic budget was raised from 15
+    // to 17 (to retain a knife-edge band of near-convergent inputs, see the
+    // block comment above): this input still poisons at 17 -- it is genuinely
+    // divergent, not merely budget-starved.  Pre-fix this returned a
+    // finite-but-wrong state; post-fix the whole output is NaN-poisoned.
     Vector6<double> oe;
     oe << 1.0e5, 1.0 - 1.0e-9, 0.1, 0.1, 0.1, /*M=*/1.0e-8;
 

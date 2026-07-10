@@ -56,22 +56,30 @@ using detail::kepler_nan_value;
 /// @param mu     Gravitational parameter (km³/s² or consistent units).
 /// @return Six Cartesian state [rx, ry, rz, vx, vy, vz].
 /// @warning Elliptic branch (e < 1): the Newton iteration on E runs at most
-///          MAXITERS=15 steps from the E = M seed and tests convergence on the
-///          Newton step (|dE| < TOL, 1e-12) — the same step-size convention as
-///          the hyperbolic branch below and kepler_lcd_iterate. On
-///          non-convergence the whole output is NaN-poisoned via
+///          MAXITERS_ELLIPTIC=17 steps from the E = M seed and tests convergence
+///          on the Newton step (|dE| < TOL, 1e-12) — the same step-size
+///          convention as the hyperbolic branch below and kepler_lcd_iterate.
+///          On non-convergence the whole output is NaN-poisoned via
 ///          kepler_nan_value<Scalar>(), rather than silently returning an
-///          under-converged state (OC review §1.14). Convergence can fail for
-///          near-parabolic orbits (e → 1⁻) sampled near periapsis (small |M|),
-///          where the update's denominator `1 - e·cosE` shrinks near E ≈ 0 and
-///          the E = M seed leaves the Newton basin; such inputs now poison,
-///          they no longer return a finite-but-wrong state with no diagnostic.
+///          under-converged state (OC review §1.14). The budget is 17 rather
+///          than the hyperbolic branch's 15: a grid probe found a thin
+///          knife-edge band of near-parabolic (e → 1⁻), small-|M| inputs whose
+///          Newton step falls below TOL on iteration 16 (i.e. the 15-iteration
+///          budget was one or two steps short, poisoning inputs that were in
+///          fact converging), while genuinely divergent near-parabolic inputs
+///          (e.g. e = 1 − 1e-9, M = 1e-8) still exhaust the larger budget and
+///          poison. Convergence can still fail for near-parabolic orbits
+///          sampled near periapsis (small |M|), where the update's denominator
+///          `1 - e·cosE` shrinks near E ≈ 0 and the E = M seed leaves the
+///          Newton basin; such inputs poison, they no longer return a
+///          finite-but-wrong state with no diagnostic.
 /// @warning Hyperbolic branch (e > 1): converges via an asinh(M/e) seed and a
-///          step-size (|dH| < TOL) test, NaN-poisoning the whole output on
-///          non-convergence (incl. sinh/cosh overflow). Genuinely
-///          non-convergent near-parabolic orbits (e → 1⁺) can still diverge
-///          and NaN-poison; a Barker-style seed for the near-parabolic regime
-///          is a potential future enhancement, not currently implemented.
+///          step-size (|dH| < TOL) test over MAXITERS=15 steps, NaN-poisoning
+///          the whole output on non-convergence (incl. sinh/cosh overflow).
+///          Genuinely non-convergent near-parabolic orbits (e → 1⁺) can still
+///          diverge and NaN-poison; a Barker-style seed for the near-parabolic
+///          regime is a potential future enhancement, not currently
+///          implemented.
 template <class Scalar>
 Vector6<Scalar> classic_to_cartesian(const Vector6<Scalar> &oelems, Scalar mu) {
 
@@ -91,11 +99,19 @@ Vector6<Scalar> classic_to_cartesian(const Vector6<Scalar> &oelems, Scalar mu) {
     Scalar x, y, vx, vy;
 
     if (e < 1.0) { // Elliptic
+        // Elliptic branch gets a larger iteration budget than the hyperbolic
+        // branch below (MAXITERS=15): a thin knife-edge band of near-parabolic
+        // (e -> 1-) small-|M| inputs converges to an accurate E within ~16
+        // iterations under the stricter step-size test but not within 15 (see
+        // the @warning above and the probe referenced there). Scoped to this
+        // branch only -- the hyperbolic branch's basin/step-size behavior is
+        // unrelated and is left at MAXITERS.
+        const int MAXITERS_ELLIPTIC = 17;
         Scalar E = M;
         Scalar sinE;
         Scalar cosE;
         bool converged = false;
-        for (int i = 0; i < MAXITERS; i++) {
+        for (int i = 0; i < MAXITERS_ELLIPTIC; i++) {
             sinE = sin(E);
             cosE = cos(E);
             Scalar fE = E - e * sinE - M;
@@ -390,15 +406,17 @@ Vector6<Scalar> modified_to_classic(const Vector6<Scalar> &meelems, Scalar mu) {
 /// @param mu     Gravitational parameter (km³/s² or consistent units); accepted for
 ///               API symmetry but is not used in the algebraic conversion.
 /// @return Six MEE [p, f, g, h, k, L].
-/// @warning Elliptic branch (e < 1): same MAXITERS=15 Newton loop on E as
-///          classic_to_cartesian(), converging on the step size (|dE| < TOL)
-///          and NaN-poisoning the whole output on non-convergence — see the
-///          warning there. Near-parabolic orbits (e → 1⁻) sampled near
-///          periapsis can exhaust MAXITERS (the `1 - e·cosE` denominator
-///          shrinks) and are poisoned rather than silently under-converged.
-/// @warning Hyperbolic branch (e > 1): NaN-poisons on non-convergence (see
-///          classic_to_cartesian()); near-parabolic orbits (e → 1⁺) can still
-///          genuinely diverge and NaN-poison.
+/// @warning Elliptic branch (e < 1): same MAXITERS_ELLIPTIC=17 Newton loop on E
+///          as classic_to_cartesian(), converging on the step size (|dE| <
+///          TOL) and NaN-poisoning the whole output on non-convergence — see
+///          the warning there (including the knife-edge-band rationale for
+///          the 17-iteration budget). Near-parabolic orbits (e → 1⁻) sampled
+///          near periapsis can exhaust MAXITERS_ELLIPTIC (the `1 - e·cosE`
+///          denominator shrinks) and are poisoned rather than silently
+///          under-converged.
+/// @warning Hyperbolic branch (e > 1): NaN-poisons on non-convergence over
+///          MAXITERS=15 steps (see classic_to_cartesian()); near-parabolic
+///          orbits (e → 1⁺) can still genuinely diverge and NaN-poison.
 template <class Scalar>
 Vector6<Scalar> classic_to_modified(const Vector6<Scalar> &oelems, Scalar mu) {
 
@@ -416,9 +434,14 @@ Vector6<Scalar> classic_to_modified(const Vector6<Scalar> &oelems, Scalar mu) {
     // Calc True anomally
     Scalar v;
     if (e < 1.0) { // Elliptic
+        // See classic_to_cartesian() for why the elliptic branch gets a
+        // larger budget (17) than the hyperbolic branch below (MAXITERS=15):
+        // a knife-edge band of near-parabolic small-|M| inputs needs ~16
+        // iterations to fall below the step-size tolerance.
+        const int MAXITERS_ELLIPTIC = 17;
         Scalar E = M;
         bool converged = false;
-        for (int i = 0; i < MAXITERS; i++) {
+        for (int i = 0; i < MAXITERS_ELLIPTIC; i++) {
             Scalar sinE = sin(E);
             Scalar cosE = cos(E);
             Scalar fE = E - e * sinE - M;

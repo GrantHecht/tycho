@@ -118,7 +118,9 @@ class TestKeplerPropagateErrors(unittest.TestCase):
         # non-finite result to RuntimeError (parity with the propagate_*
         # siblings).  Probed divergent input: near-parabolic e = 1 - 1e-9
         # sampled near periapsis (M = 1e-8), where the E = M seed leaves the
-        # Newton basin and MAXITERS = 15 is exhausted.
+        # Newton basin and MAXITERS_ELLIPTIC = 17 (raised from 15 to retain a
+        # knife-edge band of near-convergent inputs -- this one is genuinely
+        # divergent and re-verified to still poison at 17) is exhausted.
         oe = [1.0e5, 1.0 - 1e-9, 0.1, 0.1, 0.1, 1e-8]
         with self.assertRaisesRegex(RuntimeError, r"classic_to_cartesian.*converge"):
             typy.astro.classic_to_cartesian(oe, 398600.4418)
