@@ -2069,7 +2069,13 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
             distint[i + 1] = distint[i] + (dist[i]) * (tsnd[i + 1] - tsnd[i]);
         }
 
-        distint = distint / distint[distint.size() - 1];
+        double total = distint[distint.size() - 1];
+        if (total <= 0.0) { // already-resolved (zero-error) mesh
+            Eigen::VectorXd bins;
+            bins.setLinSpaced(n + 1, 0.0, 1.0);
+            return std::tuple{tsnd, bins, error};
+        }
+        distint = distint / total;
 
         Eigen::VectorXd bins;
         bins.setLinSpaced(n + 1, 0.0, 1.0);
@@ -2084,7 +2090,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
             double d0 = distint[elem];
             double d1 = distint[elem + 1];
             double slope = (d1 - d0) / (t1 - t0);
-            bins[i] = (di - d0) / slope + t0;
+            bins[i] = (slope > 0.0) ? (di - d0) / slope + t0 : 0.5 * (t0 + t1);
         }
 
         return std::tuple{tsnd, bins, error};

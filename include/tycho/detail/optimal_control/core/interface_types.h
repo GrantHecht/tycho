@@ -63,9 +63,16 @@ using RegionType = std::variant<PhaseRegionFlags, std::string>;
 /// @brief Resolve a @ref RegionType selector to a concrete @ref PhaseRegionFlags.
 /// @param reg_t  Region as an enum value or its string name.
 /// @return The corresponding PhaseRegionFlags enumerator.
+/// @throws std::invalid_argument if @p reg_t is valueless (e.g. left in a
+///         moved-from or exception-during-assignment state).
 /// @endinternal
 static PhaseRegionFlags get_PhaseRegion(RegionType reg_t) {
-    PhaseRegionFlags reg;
+    PhaseRegionFlags reg{PhaseRegionFlags::NotSet};
+
+    if (reg_t.valueless_by_exception()) {
+        throw std::invalid_argument(
+            "get_PhaseRegion: RegionType variant is valueless (valueless_by_exception)");
+    }
 
     if (std::holds_alternative<PhaseRegionFlags>(reg_t)) {
         reg = std::get<PhaseRegionFlags>(reg_t);

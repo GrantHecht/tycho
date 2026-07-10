@@ -203,6 +203,11 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
         auto tmp = IOScaled<VectorFunctionalX>(odetemp, this->xtup_units_, output_scales);
 
         this->ode_scaled_ = ScaledODE(tmp, this->x_vars(), this->u_vars(), this->p_vars());
+
+        // The NLP built by transcribe() bakes in the previous units (defect constraints,
+        // objective/constraint scaling, etc.); a stale NLP would silently be reused by the
+        // next solve_optimize() if we didn't force a rebuild here.
+        this->reset_transcription();
     }
 
     /// @internal
@@ -500,6 +505,11 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
                 int start = (BlockSize - 1) * i;
                 int stop = (BlockSize - 1) * (i + 1);
 
+                if (this->u_vars() != 0 && this->control_mode_ == ControlModes::BlockConstant) {
+                    Xin.segment(this->xt_vars(), this->u_vars()) =
+                        Traj[start].segment(this->xt_vars(), this->u_vars());
+                }
+
                 double tf = Traj[stop][this->t_var()];
                 Xout = Integ.integrate(Xin, tf);
                 Xin = Xout;
@@ -659,7 +669,11 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
                           ((yvecs[i + 1] - yvecs[i]) / (hs[i] + hs[i + 1])).cwiseAbs();
 
             } else if (i == 0) {
-                err_tmp = (2 * (yvecs[i] - yvecs[i + 1]) / (hs[i] + hs[i + 1])).cwiseAbs();
+                if (num_blocks == 1) {
+                    err_tmp.setZero(); // single interval: no de Boor stencil neighbor
+                } else {
+                    err_tmp = (2 * (yvecs[i] - yvecs[i + 1]) / (hs[i] + hs[i + 1])).cwiseAbs();
+                }
             } else {
                 err_tmp = (2 * (yvecs[i] - yvecs[i - 1]) / (hs[i] + hs[i - 1])).cwiseAbs();
             }
@@ -738,7 +752,9 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
 
                 double h = std::abs(tf - t0);
                 mesh_errors.col(i) = evec;
-                mesh_dist.col(i) = mesh_errors.col(i) / (std::pow(h, this->order_ + 1) * max_err);
+                double denom = std::pow(h, this->order_ + 1) * max_err;
+                mesh_dist.col(i) = (max_err > 0.0) ? (mesh_errors.col(i) / denom).eval()
+                                                   : Eigen::VectorXd::Zero(this->x_vars());
                 mesh_dist.col(i) = (mesh_dist.col(i).array().pow(1 / (this->order_ + 1))).eval();
             }
 

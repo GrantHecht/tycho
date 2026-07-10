@@ -98,6 +98,11 @@ void lambert_izzo_impl(const Vector3<Scalar> &R1dim, const Vector3<Scalar> &R2di
 
     Scalar r2 = norm(R2);
     Scalar logdt = log(dt);
+    // NOTE (OC §3.9): R1_hat . R2_hat lies in [-1, 1] mathematically, but for
+    // near-collinear R1/R2 (0 deg or 180 deg transfer) round-off can push the
+    // acos() argument marginally outside that range, returning NaN here.
+    // Even when theta itself is finite, exactly-collinear R1/R2 make nhat
+    // (below) the zero vector — see the NaN-with-success warning there.
     Scalar theta = acos(Scalar(R1.dot(R2)) / r2);
 
     /////////////////////////////////////////////////////////////////////////////////////////
@@ -133,6 +138,13 @@ void lambert_izzo_impl(const Vector3<Scalar> &R1dim, const Vector3<Scalar> &R2di
     Scalar s = (c + 1.0 + r2) / 2.0;
     Scalar am = s / 2.0;
     Scalar lambda = sqrt(r2) * cos(theta / 2.0) / s;
+    // NOTE (OC §3.9): Nmax is the theoretical maximum number of complete
+    // revolutions feasible for this transfer geometry/time-of-flight, but it
+    // is never enforced (see the commented-out clamp below) — a caller-
+    // supplied Nin exceeding Nmax is not rejected or clamped up front. In
+    // practice this typically surfaces as Newton non-convergence (exint=1)
+    // rather than a silently-wrong result, but the failure mode is a slow
+    // iteration-budget exhaustion instead of an immediate, cheap rejection.
     Scalar Nmax = floor(sqrt(Scalar(2.0) / (s * s * s)) * dt / Pi);
 
     Scalar x1, x2, N;
@@ -144,6 +156,13 @@ void lambert_izzo_impl(const Vector3<Scalar> &R1dim, const Vector3<Scalar> &R2di
             x1 = -0.740867916771357;
             x2 = 0.4208790341605184;
         } else {
+            // Disabled Nmax clamp (OC §3.9): note `std::max(N, Nmax)` can only
+            // ever *raise* N (never lower it) — re-enabling it as written
+            // would silently increase the revolution count used in tofcon()'s
+            // `2*Pi*N` term above the caller-requested Nin whenever
+            // Nmax > Nin, not "cap" an over-large Nin down to something
+            // feasible. Re-enabling needs its own audit/fix, not a
+            // find-and-uncomment; left disabled and documented instead.
             // N = std::max(N, Nmax);
             if constexpr (BranchisScalar) {
                 if (rightbranch) {
@@ -436,6 +455,17 @@ void lambert_izzo_impl(const Vector3<Scalar> &R1dim, const Vector3<Scalar> &R2di
     Vector3<Scalar> that1;
     Vector3<Scalar> that2;
 
+    // WARNING (OC §3.9): "NaN-with-success" — when R1 and R2 are (numerically)
+    // collinear (0 deg or 180 deg transfer), cross(R1, R2) is the zero vector,
+    // so `nhat / norm(nhat)` is 0/0 and NaN-poisons nhat (and therefore
+    // V1/V2 below) via that1/that2. This collinearity check happens after
+    // the Newton convergence loop above, whose `exint` exit code reflects
+    // only |x1 - xn| < tol — it is entirely independent of this geometric
+    // degeneracy. A collinear-geometry call can therefore report exint = 0
+    // (converged) while V1/V2 are NaN; callers must check V1.allFinite() /
+    // V2.allFinite() directly and not rely on exint alone (both public
+    // lambert_izzo() overloads below already NaN-poison on exint != 0 for
+    // Scalar=double, but do not separately guard this collinear case).
     cross(R1, R2, nhat);
     nhat = (nhat / norm(nhat)) * lwsign;
 
@@ -473,6 +503,13 @@ void lambert_izzo_impl(const Vector3<Scalar> &R1dim, const Vector3<Scalar> &R2di
 /// @param[in] longway True to use the long-way (> π) transfer arc; false for short-way.
 /// @return `std::array<Vector3<Scalar>, 2>` = `{V1, V2}`, the departure and arrival
 ///         velocity vectors. For Scalar=double, NaN-poisoned on non-convergence.
+/// @warning "NaN-with-success" (OC §3.9): a 0° or 180° transfer (R1, R2
+///          numerically collinear) leaves the transfer-plane normal
+///          undefined, and V1/V2 come back NaN even though the Newton solve
+///          itself converges — the NaN-poison-on-`exint!=0` guard here does
+///          NOT catch this case. Check `V1.allFinite()`/`V2.allFinite()` for
+///          collinear-geometry inputs rather than relying on convergence
+///          alone; see the in-body warning at the `nhat` computation.
 template <class Scalar>
 std::array<Vector3<Scalar>, 2> lambert_izzo(const Vector3<Scalar> &R1, const Vector3<Scalar> &R2,
                                             Scalar dt, double mu, bool longway) {
@@ -510,6 +547,16 @@ std::array<Vector3<Scalar>, 2> lambert_izzo(const Vector3<Scalar> &R1, const Vec
 ///                        (only meaningful when Nrevs > 0).
 /// @return `std::array<Vector3<Scalar>, 2>` = `{V1, V2}`, the departure and arrival
 ///         velocity vectors. For Scalar=double, NaN-poisoned on non-convergence.
+/// @warning "NaN-with-success" (OC §3.9): see the identical warning on the
+///          zero-revolution lambert_izzo() overload above — collinear R1/R2
+///          NaN-poisons V1/V2 independently of the Newton solve's exint.
+/// @warning The theoretical maximum feasible revolution count (`Nmax` in
+///          lambert_izzo_impl) is computed but never clamped against the
+///          caller-supplied `Nrevs` (the clamp is present in source but
+///          disabled — see the in-body note). Requesting more revolutions
+///          than the transfer geometry/time-of-flight can support typically
+///          fails via Newton non-convergence rather than an immediate,
+///          cheap rejection.
 template <class Scalar>
 std::array<Vector3<Scalar>, 2> lambert_izzo(const Vector3<Scalar> &R1, const Vector3<Scalar> &R2,
                                             Scalar dt, double mu, bool longway, int Nrevs,

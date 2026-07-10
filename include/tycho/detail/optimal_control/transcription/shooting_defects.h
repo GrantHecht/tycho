@@ -137,7 +137,13 @@ struct ShootingDefect
     /// @param ode    The ODE to shoot.
     /// @param integ  The integrator expression.
     ShootingDefect(const DODE &ode, const Integrator &integ) : Base(ode, integ) {}
-    bool enable_hessian_sparsity_ = false; ///< Whether to exploit Hessian sparsity.
+    /// @brief Whether to exploit Hessian sparsity.
+    ///
+    /// @note Not honored on this legacy expression-tree path; the KKT fill runs
+    ///   through the generic VectorExpression machinery, which has no static
+    ///   sparsity mask. Hessian-sparsity exploitation is implemented only on the
+    ///   default @ref CentralShootingDefect path.
+    bool enable_hessian_sparsity_ = false;
 };
 
 /// @ingroup optimal_control
@@ -169,6 +175,7 @@ struct CentralShootingDefect
 
     static constexpr bool is_vectorizable = true; ///< Supports SuperScalar batched evaluation.
     bool enable_hessian_sparsity_ = false;        ///< Whether to exploit Hessian sparsity.
+    Eigen::MatrixXi nz_locs_;                     ///< Nonzero-pattern mask of the adjoint Hessian.
 
     DODE ode_;         ///< The ODE whose dynamics are shot.
     Integrator integ_; ///< The integrator providing STM integration.
@@ -178,6 +185,87 @@ struct CentralShootingDefect
     /// @param integ  The integrator providing STM integration.
     CentralShootingDefect(const DODE &ode, const Integrator &integ) : ode_(ode), integ_(integ) {
         this->set_io_rows(2 * this->ode_.xtu_vars() + this->ode_.p_vars(), this->ode_.x_vars());
+
+        // Build the static adjoint-Hessian sparsity mask. The shooting-defect
+        // input layout is [x1(xtu), x2(xtu), p] with 2 cardinal endpoints, the
+        // same structure the trapezoidal defect uses (trapezoidal_defects.h). The
+        // adjoint Hessian couples: each endpoint's xtu block with itself, the p
+        // block with itself, each endpoint's xtu block with p, and (via the shared
+        // midpoint time tm = (t1 + t2) / 2) the two endpoint time rows/columns.
+        // The only structural zero is the endpoint-to-endpoint cross block: the
+        // two arcs' second-order STMs never couple non-time states of one endpoint
+        // to non-time states of the other (the integrator Hessian is block
+        // diagonal per arc).
+        nz_locs_.resize(this->input_rows(), this->input_rows());
+        nz_locs_.setZero();
+
+        int xtu = this->ode_.xtu_vars();
+        nz_locs_.topLeftCorner(xtu, xtu).setOnes();
+        nz_locs_.block(xtu, xtu, xtu, xtu).setOnes();
+        nz_locs_.bottomRightCorner(this->ode_.p_vars(), this->ode_.p_vars()).setOnes();
+
+        int j = 0;
+        int cardinals = 2;
+        nz_locs_
+            .block(j * this->ode_.xtu_vars(), cardinals * this->ode_.xtu_vars(),
+                   this->ode_.xtu_vars(), this->ode_.p_vars())
+            .setOnes();
+
+        nz_locs_
+            .block(cardinals * this->ode_.xtu_vars(), j * this->ode_.xtu_vars(),
+                   this->ode_.p_vars(), this->ode_.xtu_vars())
+            .setOnes();
+        j = 1;
+        nz_locs_
+            .block(j * this->ode_.xtu_vars(), cardinals * this->ode_.xtu_vars(),
+                   this->ode_.xtu_vars(), this->ode_.p_vars())
+            .setOnes();
+
+        nz_locs_
+            .block(cardinals * this->ode_.xtu_vars(), j * this->ode_.xtu_vars(),
+                   this->ode_.p_vars(), this->ode_.xtu_vars())
+            .setOnes();
+
+        nz_locs_.col(this->ode_.t_var()).setOnes();
+        nz_locs_.col(this->ode_.t_var() + this->ode_.xtu_vars() * (cardinals - 1)).setOnes();
+        nz_locs_.row(this->ode_.t_var()).setOnes();
+        nz_locs_.row(this->ode_.t_var() + this->ode_.xtu_vars() * (cardinals - 1)).setOnes();
+    }
+
+    /// @internal
+    /// @brief Whether the given adjoint-Hessian element is (possibly) nonzero.
+    /// @param row  Hessian row index.
+    /// @param col  Hessian column index.
+    /// @return True if the element may be nonzero (always true unless sparsity is enabled).
+    /// @endinternal
+    inline bool hessian_elem_is_nonzero(int row, int col) const {
+        if (this->enable_hessian_sparsity_) {
+            return bool(this->nz_locs_(row, col));
+        } else {
+            return true;
+        }
+    }
+
+    /// @internal
+    /// @brief Accumulate one adjoint-Hessian element into the sparse storage.
+    /// @param v        The value to add.
+    /// @param row      Hessian row index.
+    /// @param col      Hessian column index.
+    /// @param mpt      Pointer to the dense value storage.
+    /// @param lpt      Pointer to the element-location index table.
+    /// @param freeloc  In/out next free slot in @p lpt; advanced if the element is stored.
+    /// @endinternal
+    inline void add_hessian_elem(double v, int row, int col, double *mpt, const int *lpt,
+                                 int &freeloc) const {
+        if (this->enable_hessian_sparsity_) {
+            if (bool(this->nz_locs_(row, col))) {
+                mpt[lpt[freeloc]] += v;
+                freeloc++;
+            }
+        } else {
+            mpt[lpt[freeloc]] += v;
+            freeloc++;
+        }
     }
 
     /// @brief Default constructor; leaves the ODE and integrator unset.

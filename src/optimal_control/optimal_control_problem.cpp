@@ -613,6 +613,7 @@ std::array<Eigen::MatrixXi, 2> tycho::oc::OptimalControlProblemBase::make_link_V
         std::vector<MatrixXi> vtemps2(PhaseRegs.size());
 
         int irows = 0;
+        int lprows = 0;
         for (int i = 0; i < PTL.size(); i++) {
             int sz = 0;
             irows = 0;
@@ -631,16 +632,26 @@ std::array<Eigen::MatrixXi, 2> tycho::oc::OptimalControlProblemBase::make_link_V
                 }
             }
             cols += sz;
-            vtemps[i].resize(irows, sz);
+
+            // Append this application's link-param rows (dropped pre-fix — see OC
+            // review §1.10b): every column (path node) of a PathToPath application
+            // shares the same link-param rows, since link params are global NLP
+            // variables, not per-node ones.
+            lprows = (lv.size() > size_t(i)) ? int(lv[i].size()) : 0;
+            vtemps[i].resize(irows + lprows, sz);
 
             int start = 0;
             for (int j = 0; j < PhaseRegs.size(); j++) {
                 vtemps[i].middleRows(start, vtemps2[j].rows()) = vtemps2[j];
                 start += vtemps2[j].rows();
             }
+            for (int k = 0; k < lprows; k++) {
+                vtemps[i].row(start).setConstant(this->link_param_locs_[lv[i][k]]);
+                start++;
+            }
         }
 
-        v_index_.resize(irows, cols);
+        v_index_.resize(irows + lprows, cols);
 
         int start = 0;
         for (int i = 0; i < PTL.size(); i++) {

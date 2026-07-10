@@ -47,6 +47,7 @@ set(TYCHO_TEST_LIGHT_SOURCES
     utils/test_var_registry.cpp
     utils/test_exception_what.cpp
     optimal_control/test_ode_sizes.cpp
+    optimal_control/test_optimal_control_flags.cpp
     integrators/test_step_controller.cpp
     integrators/test_rk_tableau_consistency.cpp
     vector_functions/test_fd_coeffs.cpp
@@ -102,6 +103,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     vector_functions/test_vf_input_domains.cpp
     vector_functions/test_parsed_input.cpp
     vector_functions/test_vf_type_erasure_guards.cpp
+    vector_functions/test_interp_table_validation.cpp
 
     # Astro
     astro/test_kepler_conversions.cpp
@@ -142,6 +144,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     optimal_control/test_phase_construction.cpp
     optimal_control/test_ocp_multiphase.cpp
     optimal_control/test_lgl_collocation.cpp
+    optimal_control/test_mesh_spacing_hooks.cpp
     optimal_control/test_mesh_refinement.cpp
     optimal_control/test_runtime_ode.cpp
     optimal_control/test_ode_builder.cpp
@@ -153,6 +156,12 @@ set(TYCHO_TEST_HEAVY_SOURCES
     optimal_control/test_ocp_phase_lifetime.cpp
     optimal_control/test_lgl_table_ptr.cpp
     optimal_control/test_trapezoidal_hessian_sparsity.cpp
+    optimal_control/test_shooting_hessian_sparsity.cpp
+    optimal_control/test_interp_function_hessian.cpp
+    optimal_control/test_phase_indexer.cpp
+    optimal_control/test_set_units_retranscription.cpp
+    optimal_control/test_lgl_table_robustness.cpp
+    optimal_control/test_state_function_regions.cpp
 
     # Solvers
     solvers/test_psiopt_convergence.cpp
@@ -304,6 +313,28 @@ set_source_files_properties(
 # doesn't force a full unity-batch rebuild.
 set_source_files_properties(
     vector_functions/test_vf_type_erasure_guards.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)
+
+# test_interp_table_validation.cpp: keep standalone for the same reason as the
+# other entries above -- avoid shifting later unity batch boundaries. Also
+# isolates the interp_table_1d.h / interp_table_2d.h / cheb_table.h edits
+# (OC_REVIEW 3.3, 3.1: strict-ascending grid validation, non-finite Cheb
+# sample rejection, populated/null table guards) so iterating on this test
+# doesn't force a full unity-batch rebuild.
+set_source_files_properties(
+    vector_functions/test_interp_table_validation.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)
+
+# test_shooting_hessian_sparsity.cpp: keep standalone -- it deliberately
+# mirrors test_trapezoidal_hessian_sparsity.cpp (OC_REVIEW 1.13 vs the
+# trapezoidal contract it replicates), sharing the anonymous-namespace
+# constant kCrossSolveTol, which collides when both land in the same unity
+# batch. Skipping also avoids shifting later unity batch boundaries (see
+# notes above).
+set_source_files_properties(
+    optimal_control/test_shooting_hessian_sparsity.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
 

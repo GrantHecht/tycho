@@ -444,20 +444,67 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
     }
 
     /// @brief Remove a phase by index.
+    ///
+    /// Rejects removal of a phase still referenced by any link equality,
+    /// inequality, or objective function (the caller must remove or adjust
+    /// that link first). On success, shifts the phase index recorded on
+    /// every remaining link function down by one wherever it referenced a
+    /// phase after @p ith, so links continue to target the correct phases
+    /// after the removed phase's slot collapses.
     /// @param ith  Phase index (negative counts from the end).
+    /// @throws std::invalid_argument if @p ith is out of range, or if any
+    ///         link function still references phase @p ith.
     void remove_phase(int ith) {
-        this->reset_transcription();
+        // Validate before any mutation (including the transcription/post-opt
+        // flags): a rejected removal must leave the OCP fully unmodified.
+        // Mirrors add_func_impl/remove_func_impl.
         if (ith < 0)
-            ith = (this->phases.size() + ith);
+            ith = (int(this->phases.size()) + ith);
+        if (ith < 0 || ith >= int(this->phases.size()))
+            throw std::invalid_argument(fmt::format(
+                "remove_phase: index {} out of range for {} phases", ith, this->phases.size()));
+
+        auto check_referenced = [&](auto &funcmap) {
+            for (auto &[key, f] : funcmap)
+                for (auto &ptl : f.phases_to_link_)
+                    for (int k = 0; k < ptl.size(); k++) {
+                        if (ptl[k] == ith)
+                            throw std::invalid_argument(fmt::format(
+                                "remove_phase: phase {} is still referenced by a link function; "
+                                "remove or adjust that link first",
+                                ith));
+                    }
+        };
+        check_referenced(this->link_equalities_);
+        check_referenced(this->link_inequalities_);
+        check_referenced(this->link_objectives_);
+
+        this->reset_transcription();
+        this->invalidate_post_opt_info();
         this->phases.erase(this->phases.begin() + ith);
         this->phase_names.erase(this->phase_names.begin() + ith);
+
+        auto shift = [&](auto &funcmap) {
+            for (auto &[key, f] : funcmap)
+                for (auto &ptl : f.phases_to_link_)
+                    for (int k = 0; k < ptl.size(); k++)
+                        if (ptl[k] > ith)
+                            ptl[k] -= 1;
+        };
+        shift(this->link_equalities_);
+        shift(this->link_inequalities_);
+        shift(this->link_objectives_);
     }
     /// @brief Access a phase by index.
     /// @param ith  Phase index (negative counts from the end).
     /// @return Shared pointer to the phase.
+    /// @throws std::invalid_argument if @p ith is out of range.
     PhasePtr phase(int ith) {
         if (ith < 0)
-            ith = (this->phases.size() + ith);
+            ith = (int(this->phases.size()) + ith);
+        if (ith < 0 || ith >= int(this->phases.size()))
+            throw std::invalid_argument(fmt::format(
+                "phase: index {} out of range for {} phases", ith, this->phases.size()));
         return this->phases[ith];
     }
 
@@ -1504,10 +1551,27 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
                         switch (flag) {
                         case PhaseRegionFlags::Front:
                         case PhaseRegionFlags::Back:
-                        case PhaseRegionFlags::Path:
                         case PhaseRegionFlags::ODEParams:
                         case PhaseRegionFlags::StaticParams:
                         case PhaseRegionFlags::Params:
+                            xmult = 1;
+                            break;
+                        case PhaseRegionFlags::Path:
+                            // A Path region only has well-defined per-node row assembly
+                            // through the dedicated PathToPath branch of
+                            // make_link_Vindex_Cindex (optimal_control_problem.cpp); every
+                            // other LinkFlags value (including the ReadRegions default used
+                            // for an explicit-region link built via add_link_equal_con /
+                            // add_direct_link_equal_con) routes through that function's
+                            // generic `default` case, which treats Path as a single-node
+                            // region and silently mis-sizes it (OC review §1.10a).
+                            if (func.link_flag_ != LinkFlags::PathToPath) {
+                                throw std::invalid_argument(fmt::format(
+                                    "Transcription Error!!!\n"
+                                    "Region 'Path' is not supported in a ReadRegions link ({}); "
+                                    "use a PathToPath link for path-to-path coupling.\n",
+                                    ftype));
+                            }
                             xmult = 1;
                             break;
                         case PhaseRegionFlags::FrontandBack:

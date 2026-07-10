@@ -908,10 +908,14 @@ class Phase {
     /// @brief Register a single named static parameter.
     /// @param name      The name to register; must not be empty or already registered.
     /// @param sp_index  Zero-based index of the static parameter this name maps to.
-    /// @throws std::invalid_argument if @p name is empty or already registered.
+    /// @throws std::invalid_argument if @p name is empty or already registered, or if
+    ///         @p sp_index is negative.
     void add_static_param_name(const std::string &name, int sp_index) {
         if (name.empty())
             throw std::invalid_argument("Phase::add_static_param_name: name must not be empty");
+        if (sp_index < 0)
+            throw std::invalid_argument(fmt::format(
+                "Phase::add_static_param_name: sp_index must be non-negative (got {})", sp_index));
         if (sp_names_.count(name) > 0)
             throw std::invalid_argument(
                 fmt::format("Phase::add_static_param_name: '{}' already registered", name));
@@ -966,8 +970,14 @@ class Phase {
     /// @param region  The phase region.
     /// @param vars    Variable indices within the region.
     /// @param vals    Values to assign, one per index in @p vars.
+    /// @throws std::invalid_argument if @p vars and @p vals sizes differ.
     void sub_variables(PhaseRegionFlags region, const Eigen::VectorXi &vars,
                        const Eigen::VectorXd &vals) {
+        if (vars.size() != vals.size()) {
+            throw std::invalid_argument(
+                fmt::format("Phase::sub_variables: vars size ({}) does not match vals size ({})",
+                            vars.size(), vals.size()));
+        }
         phase_->sub_variables(region, vars, vals);
     }
 
@@ -990,9 +1000,15 @@ class Phase {
     ///                the static-parameter name map; otherwise through the XtUP registry.
     /// @param vars    Variable names (one per value in @p vals).
     /// @param vals    Values to assign, one per name in @p vars.
-    /// @throws std::invalid_argument if any name is unknown or maps to multiple indices.
+    /// @throws std::invalid_argument if any name is unknown or maps to multiple indices, or if
+    ///         @p vars and @p vals sizes differ.
     void sub_variables(PhaseRegionFlags region, const std::vector<std::string> &vars,
                        const Eigen::VectorXd &vals) {
+        if (vars.size() != vals.size()) {
+            throw std::invalid_argument(
+                fmt::format("Phase::sub_variables: vars size ({}) does not match vals size ({})",
+                            vars.size(), vals.size()));
+        }
         Eigen::VectorXi idx(static_cast<int>(vars.size()));
         if (region == PhaseRegionFlags::StaticParams) {
             for (int i = 0; i < static_cast<int>(vars.size()); ++i)

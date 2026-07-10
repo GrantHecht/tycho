@@ -23,6 +23,19 @@ namespace tycho::astro::detail {
 // very small dt or near-period seeds.
 /// @internal
 /// @brief Threshold below which Stumpff C/S functions use leading-order Taylor expansion.
+///
+/// @note Accuracy "trough" (OC §3.9): the recursion form's relative error
+///       grows like O(machine_eps / y) as y -> 0 (catastrophic cancellation
+///       in `1 - cos(sqrt(y))`), so it is *worst* just above
+///       kStumpffTaylorEps — e.g. at y ~ 1e-8 the recursion's cancellation
+///       error is ~1e-8, while the 2-term Taylor form used just below the
+///       threshold has truncation error O(y^2) ~ 1e-16. The switch is
+///       therefore a step improvement in achievable accuracy, not a smooth
+///       handoff, and the recursion-side region approaching the threshold
+///       from above is the least accurate part of the function's domain.
+///       The 2-term Taylor truncation itself is negligible at this
+///       threshold; it would need re-deriving (more series terms) if
+///       kStumpffTaylorEps were ever raised significantly.
 /// @endinternal
 inline constexpr double kStumpffTaylorEps = 1.0e-8;
 

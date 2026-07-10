@@ -19,6 +19,7 @@
 #include "tycho/detail/solvers/non_linear_program.h"
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <functional>
 #include <iostream>
 #include <numeric>
@@ -79,17 +80,17 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
     VectorXi ode_param_locs_;       ///< NLP locations of the ODE-parameter variables.
     VectorXi static_param_locs_;    ///< NLP locations of the static-parameter variables.
 
-    int num_defects_;  ///< Number of defect (collocation) intervals.
-    int num_states_;   ///< Total number of discretized states.
-    int num_controls_; ///< Total number of control nodes.
+    int num_defects_ = 0;  ///< Number of defect (collocation) intervals.
+    int num_states_ = 0;   ///< Total number of discretized states.
+    int num_controls_ = 0; ///< Total number of control nodes.
 
     bool blocked_controls_ = false; ///< Whether controls are held block-constant.
-    int blocked_control_start_;     ///< NLP start location of the blocked controls.
+    int blocked_control_start_ = 0; ///< NLP start location of the blocked controls.
 
-    int defect_cardinal_states_; ///< Number of cardinal states per defect interval.
-    int num_nodal_states_;       ///< Number of nodal (mesh) states.
+    int defect_cardinal_states_ = 0; ///< Number of cardinal states per defect interval.
+    int num_nodal_states_ = 0;       ///< Number of nodal (mesh) states.
 
-    int num_phase_vars_;        ///< Total number of decision variables in this phase.
+    int num_phase_vars_ = 0;    ///< Total number of decision variables in this phase.
     int num_phase_eq_cons_ = 0; ///< Number of equality-constraint rows in this phase.
     int num_phase_iq_cons_ = 0; ///< Number of inequality-constraint rows in this phase.
     int next_phase_eq_con_ = 0; ///< Next free equality-constraint row.
@@ -105,6 +106,14 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
     int num_obj_funs_ = 0; ///< Number of objective functions registered.
     int num_eq_funs_ = 0;  ///< Number of equality functions registered.
     int num_iq_funs_ = 0;  ///< Number of inequality functions registered.
+
+    /// @brief Whether @ref begin_indexing has run since the last @ref set_dimensions.
+    ///
+    /// Guards against calling @ref begin_indexing twice in a row without an
+    /// intervening @ref set_dimensions, which would double-offset
+    /// `ode_first_state_locs_`/`ode_last_state_locs_`/`ode_param_locs_`/
+    /// `static_param_locs_` by `n` and silently corrupt the NLP indexing.
+    bool indexed_ = false;
 
     /// @brief Default constructor; dimensions must be set before indexing.
     PhaseIndexer() {}
@@ -125,6 +134,7 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
     /// @param Dnum      Number of defect intervals.
     /// @param BlockCon  Whether controls are held block-constant.
     void set_dimensions(int DCS, int Dnum, bool BlockCon) {
+        this->indexed_ = false;
         this->num_defects_ = Dnum;
         this->defect_cardinal_states_ = DCS;
         this->num_states_ = (this->defect_cardinal_states_ - 1) * this->num_defects_ + 1;
@@ -172,6 +182,7 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
     /// @param ep  Equality-constraint-row offset of this phase.
     /// @param ip  Inequality-constraint-row offset of this phase.
     void begin_indexing(std::shared_ptr<NonLinearProgram> np, int n, int ep, int ip) {
+        assert(!this->indexed_ && "begin_indexing called twice without set_dimensions");
         this->nlp_ = np;
 
         this->num_phase_eq_cons_ = 0;
@@ -196,6 +207,8 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
         this->num_obj_funs_ = 0;
         this->num_eq_funs_ = 0;
         this->num_iq_funs_ = 0;
+
+        this->indexed_ = true;
     }
 
     /// @internal

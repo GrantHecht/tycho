@@ -96,6 +96,21 @@ kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Vector3<Scalar
 // threshold so the Taylor branch covers the whole suspect band.
 /// @internal
 /// @brief Taylor-fallback threshold for IFT-layer alpha partials near the parabolic branch.
+///
+/// @warning Blend-key mismatch (OC §3.9): the kernel's own primal Stumpff
+///          U0..U3 (compute_universal_functions / stumpff_C_S in
+///          kepler_lcd_iterate.h) blend recursion-vs-Taylor on
+///          y = alpha*X^2, while this IFT layer's partials blend on |alpha|
+///          alone. Since y also depends on X, a state can have "small"
+///          alpha (Taylor branch here) but "large" y = alpha*X^2 (recursion
+///          branch in the kernel primal) when |X| is large, or vice versa —
+///          the primal U_n and its alpha-partials are then evaluated via
+///          different series regimes for the same point. Both regimes are
+///          individually accurate near their respective thresholds (the
+///          numeric value 1e-8 is shared with kStumpffTaylorEps precisely to
+///          keep the suspect bands aligned), so this is a minor consistency
+///          wart rather than a known correctness bug; documented here for
+///          anyone extending the blend logic.
 /// @endinternal
 inline constexpr double kIFTAlphaTaylorEps = 1.0e-8;
 
@@ -416,6 +431,23 @@ compute_U_second_partials(const Eigen::Array<double, W, 1> &alpha,
 /// @brief Propagate Cartesian state using the LCD kernel (primal only, no derivatives).
 ///
 /// On any non-convergence NaN-poisons xf entirely (all-or-nothing contract).
+/// @warning No post-composition finite-guard (OC §3.9): unlike
+///          kepler_propagate_jacobian() / kepler_propagate_adjoint_hessian()
+///          below (which re-check finiteness of their outputs after
+///          composing the f-g map — see the "Post-composition finite-guard"
+///          blocks there — because a converged-but-degenerate LCD solve,
+///          e.g. k.r -> 0, can still produce a finite k.r whose reciprocal
+///          in `aFt = -sqmu/(k.r0*k.r)*k.U.U1` overflows to inf), this
+///          primal-only path trusts kepler_lcd_iterate's converged=true
+///          (which checks X, U0..U3, r, sigma for finiteness, but not that
+///          r/r0 stay bounded away from 0) and returns aF/aG/aFt/aGt
+///          directly. A degenerate near-singular-radius solve can therefore
+///          silently return a finite-but-huge or +-inf xf instead of the
+///          NaN-poisoned output the SS all-or-nothing contract otherwise
+///          guarantees. Not fixed here — adding the guard would change
+///          observable output for this edge case, so it is left as a
+///          documented limitation (see propagate_cartesian() in
+///          kepler_propagation.h for the same pattern/gap).
 /// @tparam Scalar Numeric scalar type (double or SuperScalar).
 /// @param[in]  R0  Initial position vector.
 /// @param[in]  V0  Initial velocity vector.

@@ -190,7 +190,10 @@ inline MeshErrorAggregation strto_MeshErrorAggregation(const std::string &str) {
 /// @param str  Region name (e.g. "Front", "Back", "Path", "ODEParams");
 ///             several names accept a "First"/"Last" synonym.
 /// @return The matching PhaseRegionFlags enumerator.
-/// @throws std::invalid_argument if @p str is not a recognized region.
+/// @throws std::invalid_argument if @p str is not a recognized user-facing
+///         region, or if it names an internal sentinel (@c NotSet,
+///         @c FrontNodalBackPath, @c Accumulate, @c BlockDefectPath) that is
+///         not selectable through the string interface.
 inline PhaseRegionFlags strto_PhaseRegionFlag(const std::string &str) {
 
     if (str == "Front" || str == "First")
@@ -209,9 +212,24 @@ inline PhaseRegionFlags strto_PhaseRegionFlag(const std::string &str) {
         return PhaseRegionFlags::BackandFront;
     else if (str == "InnerPath")
         return PhaseRegionFlags::InnerPath;
+    else if (str == "NodalPath")
+        return PhaseRegionFlags::NodalPath;
+    else if (str == "DefectPath")
+        return PhaseRegionFlags::DefectPath;
     else if (str == "PairWisePath")
         return PhaseRegionFlags::PairWisePath;
-    else {
+    else if (str == "DefectPairWisePath")
+        return PhaseRegionFlags::DefectPairWisePath;
+    else if (str == "Params")
+        return PhaseRegionFlags::Params;
+    else if (str == "NotSet" || str == "FrontNodalBackPath" || str == "Accumulate" ||
+             str == "BlockDefectPath") {
+        auto msg = fmt::format(
+            "strto_PhaseRegionFlag: '{0}' is an internal sentinel, not a user-selectable "
+            "PhaseRegionFlag",
+            str);
+        throw std::invalid_argument(msg);
+    } else {
         auto msg = fmt::format("Unrecognized PhaseRegionFlag: {0}\n", str);
         throw std::invalid_argument(msg);
     }

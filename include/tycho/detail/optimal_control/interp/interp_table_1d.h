@@ -156,8 +156,10 @@ struct InterpTable1D {
                 "Length of t coordinates must match length of interpolation axis");
         }
         for (int i = 0; i < tsize_ - 1; i++) {
-            if (ts_[i + 1] < ts_[i]) {
-                throw std::invalid_argument("t Coordinates must be in ascending order");
+            if (ts_[i + 1] <= ts_[i]) {
+                throw std::invalid_argument(fmt::format(
+                    "InterpTable1D: grid nodes must be strictly ascending (t[{}]={} >= t[{}]={})",
+                    i, ts_[i], i + 1, ts_[i + 1]));
             }
         }
 
@@ -402,8 +404,12 @@ struct InterpFunction1D
     InterpFunction1D() {}
     /// @brief Construct from an interpolation table.
     /// @param tab  The table to wrap.
+    /// @throws std::invalid_argument if @p tab is null.
     InterpFunction1D(std::shared_ptr<InterpTable1D> tab) : tab(tab) {
-        this->set_io_rows(1, tab->vlen_);
+        if (!this->tab) {
+            throw std::invalid_argument("InterpFunction1D: null InterpTable1D");
+        }
+        this->set_io_rows(1, this->tab->vlen_);
     }
 
     /// @internal

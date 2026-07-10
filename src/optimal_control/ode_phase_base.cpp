@@ -403,8 +403,9 @@ std::vector<Eigen::VectorXd> tycho::oc::ODEPhaseBase::return_costate_traj() cons
         } else if (this->num_tran_card_states_ == 2) {
             return LGLCoeffs<2>::InteriorSpacings[i];
         } else {
-            std::invalid_argument("Costate estimation Not Implemented for specified Transcription "
-                                  "Mode");
+            throw std::invalid_argument(
+                "Costate estimation Not Implemented for specified Transcription "
+                "Mode");
             return 0.0;
         }
     };
@@ -467,8 +468,9 @@ std::vector<Eigen::VectorXd> tycho::oc::ODEPhaseBase::return_traj_error() const 
         } else if (this->num_tran_card_states_ == 2) {
             return LGLCoeffs<2>::InteriorSpacings[i];
         } else {
-            std::invalid_argument("Error estimation Not Implemented for specified Transcription "
-                                  "Mode");
+            throw std::invalid_argument(
+                "Error estimation Not Implemented for specified Transcription "
+                "Mode");
             return 0.0;
         }
     };
@@ -661,21 +663,52 @@ void tycho::oc::ODEPhaseBase::refine_traj_auto() {
 }
 
 void tycho::oc::ODEPhaseBase::sub_variables(PhaseRegionFlags reg, VectorXi indices, VectorXd vals) {
+    if (indices.size() != vals.size()) {
+        throw std::invalid_argument(
+            fmt::format("ODEPhaseBase::sub_variables: indices size ({}) does not match vals "
+                        "size ({})",
+                        indices.size(), vals.size()));
+    }
+    const bool needs_traj = (reg == PhaseRegionFlags::Front || reg == PhaseRegionFlags::Back ||
+                             reg == PhaseRegionFlags::Path);
+    if (needs_traj && this->active_traj_.empty()) {
+        throw std::invalid_argument(
+            "ODEPhaseBase::sub_variables: no trajectory loaded; call set_traj before "
+            "substituting Front/Back/Path variables");
+    }
     switch (reg) {
     case PhaseRegionFlags::Front: {
+        const int width = static_cast<int>(this->active_traj_[0].size());
         for (int i = 0; i < indices.size(); i++) {
+            if (indices[i] < 0 || indices[i] >= width) {
+                throw std::invalid_argument(
+                    fmt::format("ODEPhaseBase::sub_variables: Front index {} out of range [0, {})",
+                                indices[i], width));
+            }
             this->active_traj_[0][indices[i]] = vals[i];
         }
         break;
     }
     case PhaseRegionFlags::Back: {
+        const int width = static_cast<int>(this->active_traj_.back().size());
         for (int i = 0; i < indices.size(); i++) {
+            if (indices[i] < 0 || indices[i] >= width) {
+                throw std::invalid_argument(
+                    fmt::format("ODEPhaseBase::sub_variables: Back index {} out of range [0, {})",
+                                indices[i], width));
+            }
             this->active_traj_.back()[indices[i]] = vals[i];
         }
         break;
     }
     case PhaseRegionFlags::Path: {
+        const int width = static_cast<int>(this->active_traj_[0].size());
         for (int i = 0; i < indices.size(); i++) {
+            if (indices[i] < 0 || indices[i] >= width) {
+                throw std::invalid_argument(
+                    fmt::format("ODEPhaseBase::sub_variables: Path index {} out of range [0, {})",
+                                indices[i], width));
+            }
             for (int j = 0; j < this->active_traj_.size(); j++) {
                 this->active_traj_[j][indices[i]] = vals[i];
             }
@@ -683,7 +716,14 @@ void tycho::oc::ODEPhaseBase::sub_variables(PhaseRegionFlags reg, VectorXi indic
         break;
     }
     case PhaseRegionFlags::StaticParams: {
+        const int width = static_cast<int>(this->active_static_params_.size());
         for (int i = 0; i < indices.size(); i++) {
+            if (indices[i] < 0 || indices[i] >= width) {
+                throw std::invalid_argument(
+                    fmt::format("ODEPhaseBase::sub_variables: StaticParams index {} out of "
+                                "range [0, {})",
+                                indices[i], width));
+            }
             this->active_static_params_[indices[i]] = vals[i];
         }
         break;
@@ -1099,6 +1139,15 @@ void tycho::oc::ODEPhaseBase::check_functions(int pnum) {
 Eigen::VectorXd tycho::oc::ODEPhaseBase::get_input_scale(PhaseRegionFlags flag, VectorXi XtUV,
                                                          VectorXi OPV, VectorXi SPV) const {
 
+    // Param-region correctness (OC review §1.11): each scale below is drawn from the unit
+    // array matching the vector its index lives in — XtUV from xtup_units_ (state block),
+    // OPV from xtup_units_ with the +xtu_vars() offset (ODE-param block), SPV from
+    // sp_units_ — independent of `flag`, which only selects nloops. A parameter is
+    // therefore mis-scaled only if a param index sits in XtUV, and StateFunction's
+    // check_param_region_invariant rejects that binding at construction (the phase indexer
+    // binds Params/ODEParams/StaticParams regions from op/sp vars only and ignores
+    // xtu_vars_, see PhaseIndexer::make_Vindex_Cindex). A param-region `flag` arriving
+    // here with indices in OPV/SPV is valid and scales correctly.
     int nloops;
     switch (flag) {
     case PhaseRegionFlags::Front:
@@ -1149,6 +1198,10 @@ std::vector<Eigen::VectorXd> tycho::oc::ODEPhaseBase::get_test_inputs(PhaseRegio
                                                                       VectorXi XtUV, VectorXi OPV,
                                                                       VectorXi SPV) const {
 
+    // See the param-region note in get_input_scale: test values, like scales, are drawn
+    // per index vector (XtUV from the trajectory state block, OPV from the trajectory with
+    // the +xtu_vars() offset, SPV from active_static_params_), so param-region flags with
+    // indices in OPV/SPV are valid here and sample the correct slots.
     std::vector<std::vector<int>> test_states;
 
     int nloops = 0;
@@ -1511,7 +1564,7 @@ Eigen::VectorXd tycho::oc::ODEPhaseBase::calc_switches() {
 
     for (int i = 0; i < this->active_traj_.size() - 1; i++) {
         udiff = (uvals.col(i + 1) - uvals.col(i)).cwiseAbs();
-        unddiff = (uvals.col(i + 1) - uvals.col(i)).cwiseAbs();
+        unddiff = (und.col(i + 1) - und.col(i)).cwiseAbs();
         if (udiff.maxCoeff() > this->abs_switch_tol_ &&
             unddiff.maxCoeff() > this->rel_switch_tol_) {
             double t = tsnd[i + 1] / 2.0 + tsnd[i] / 2.0;

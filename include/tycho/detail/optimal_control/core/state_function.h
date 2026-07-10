@@ -68,12 +68,39 @@ template <class FuncType> struct StateFunction {
     int phase_local_index_ = 0; ///< Index of this function within its phase.
     int global_index_ = 0;      ///< Index of this function within the whole problem.
 
+    /// @brief Enforce that a param-region function binds no state-block indices.
+    ///
+    /// The phase indexer binds @c Params / @c ODEParams / @c StaticParams region
+    /// functions from @c op_vars_ / @c sp_vars_ only and ignores @c xtu_vars_
+    /// entirely (see @c PhaseIndexer::make_Vindex_Cindex), so a param-region
+    /// function carrying xtu indices would produce a variable-index table smaller
+    /// than the function's input size — an out-of-bounds gather at solve time.
+    /// Reject the malformed binding at construction instead.
+    ///
+    /// This guards construction only: the binding fields are public, so it does
+    /// not protect against post-construction mutation.
+    /// @throws std::invalid_argument if a param-region flag is combined with
+    ///         non-empty @c xtu_vars_.
+    void check_param_region_invariant() const {
+        bool param_region = this->region_flag_ == PhaseRegionFlags::Params ||
+                            this->region_flag_ == PhaseRegionFlags::ODEParams ||
+                            this->region_flag_ == PhaseRegionFlags::StaticParams;
+        if (param_region && this->xtu_vars_.size() != 0) {
+            throw std::invalid_argument(
+                "A Params/ODEParams/StaticParams region function cannot bind state/time/control "
+                "(xtu) variable indices: parameter regions read only op_vars/sp_vars. Pass the "
+                "parameter indices through op_vars/sp_vars (or use the single-index-group "
+                "constructor, which routes them automatically).");
+        }
+    }
+
     /// @brief Construct with explicit state, ODE-param, and static-param bindings.
     /// @param f     The wrapped VectorFunction.
     /// @param Reg   Phase region the function acts on.
     /// @param xtuv  State/time/control variable indices.
     /// @param opv   ODE-parameter variable indices.
     /// @param spv   Static-parameter variable indices.
+    /// @throws std::invalid_argument if @p Reg is a parameter region and @p xtuv is non-empty.
     StateFunction(FuncType f, PhaseRegionFlags Reg, Eigen::VectorXi xtuv, Eigen::VectorXi opv,
                   Eigen::VectorXi spv) {
         this->region_flag_ = Reg;
@@ -82,6 +109,7 @@ template <class FuncType> struct StateFunction {
         this->op_vars_ = opv;
         this->sp_vars_ = spv;
         this->output_scales_ = Eigen::VectorXd::Ones(this->func_.output_rows());
+        this->check_param_region_invariant();
     }
 
     /// @brief Construct with explicit bindings and an output-scale specification.
@@ -106,10 +134,14 @@ template <class FuncType> struct StateFunction {
     ///
     /// When @p Reg is @c ODEParams or @c StaticParams, @p xtuv is interpreted as
     /// the corresponding parameter indices; otherwise it is the state/time/control
-    /// indices.
+    /// indices. @c Params is not a valid single-group selector here: a combined
+    /// parameter-vector index cannot be split into ODE-param and static-param
+    /// indices without the phase dimensions, which this class does not know.
+    /// Select @c ODEParams or @c StaticParams instead.
     /// @param f     The wrapped VectorFunction.
     /// @param Reg   Phase region (or parameter region) the function acts on.
     /// @param xtuv  Variable indices, interpreted per @p Reg.
+    /// @throws std::invalid_argument if @p Reg is @c Params and @p xtuv is non-empty.
     StateFunction(FuncType f, PhaseRegionFlags Reg, Eigen::VectorXi xtuv) {
         this->func_ = f;
         this->output_scales_ = Eigen::VectorXd::Ones(this->func_.output_rows());
@@ -137,6 +169,7 @@ template <class FuncType> struct StateFunction {
             break;
         }
         }
+        this->check_param_region_invariant();
     }
     /// @brief Construct from a single variable group plus an output-scale specification.
     /// @param f        The wrapped VectorFunction.
@@ -158,7 +191,8 @@ template <class FuncType> struct StateFunction {
     /// @param xtuv    State/time/control variable indices.
     /// @param ParReg  Parameter region — must be @c ODEParams or @c StaticParams.
     /// @param pv      Parameter variable indices.
-    /// @throws std::invalid_argument if @p ParReg is neither @c ODEParams nor @c StaticParams.
+    /// @throws std::invalid_argument if @p ParReg is neither @c ODEParams nor @c StaticParams,
+    ///         or if the resulting region flag is a parameter region while @p xtuv is non-empty.
     StateFunction(FuncType f, PhaseRegionFlags Reg, Eigen::VectorXi xtuv, PhaseRegionFlags ParReg,
                   Eigen::VectorXi pv) {
         this->func_ = f;
@@ -173,7 +207,16 @@ template <class FuncType> struct StateFunction {
             break;
         }
         case PhaseRegionFlags::StaticParams: {
-            this->region_flag_ = PhaseRegionFlags::Params;
+            // Preserve the caller's state region (Reg, set above) rather than
+            // reclassifying to Params -- symmetric with the ODEParams arm
+            // above, which never overwrites region_flag_. See OC review
+            // §1.19: this arm previously overwrote region_flag_ with Params
+            // while xtu_vars_ stayed populated with state indices, silently
+            // discarding the caller's requested state region (the ODEParams
+            // arm did not have this bug). check_param_region_invariant()
+            // below is unaffected either way here: it only rejects
+            // Params/ODEParams/StaticParams region flags combined with
+            // non-empty xtu_vars_, and Reg is a state region.
             this->op_vars_.resize(0);
             this->sp_vars_ = pv;
             break;
@@ -183,6 +226,7 @@ template <class FuncType> struct StateFunction {
                 "Param region flag must be either StaticParams or ODEParams");
         }
         }
+        this->check_param_region_invariant();
     }
     /// @brief Default constructor; leaves all bindings empty.
     StateFunction() {}

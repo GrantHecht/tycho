@@ -86,8 +86,8 @@ TEST_F(SubVariablesPhaseTest, AddValueLockPinsInitialState) {
     // Bound both controls and add a quadratic sum-of-squares objective
     phase.add_lu_var_bound(PhaseRegionFlags::Path, 3, -5.0, 5.0);
     phase.add_lu_var_bound(PhaseRegionFlags::Path, 4, -5.0, 5.0);
-    phase.add_integral_objective(
-        GenericFunction<-1, 1>(Arguments<2>().squared_norm()), {"u1", "u2"});
+    phase.add_integral_objective(GenericFunction<-1, 1>(Arguments<2>().squared_norm()),
+                                 {"u1", "u2"});
 
     phase.optimizer().set_print_level(0);
 
@@ -133,8 +133,8 @@ TEST_F(SubVariablesPhaseTest, NamedOverloadLocksFrontState) {
 
     phase.add_lu_var_bound(PhaseRegionFlags::Path, 3, -5.0, 5.0);
     phase.add_lu_var_bound(PhaseRegionFlags::Path, 4, -5.0, 5.0);
-    phase.add_integral_objective(
-        GenericFunction<-1, 1>(Arguments<2>().squared_norm()), {"u1", "u2"});
+    phase.add_integral_objective(GenericFunction<-1, 1>(Arguments<2>().squared_norm()),
+                                 {"u1", "u2"});
 
     phase.optimizer().set_print_level(0);
     auto status = phase.solve_optimize();
@@ -155,4 +155,122 @@ TEST_F(SubVariablesPhaseTest, UnknownNameThrows) {
     const std::vector<std::string> bad{"not_a_variable"};
     Eigen::Matrix<double, 1, 1> val(0.0);
     EXPECT_THROW(phase.sub_variables(PhaseRegionFlags::Front, bad, val), std::invalid_argument);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// OC review §1.18: ODEPhaseBase::sub_variables() had no size-match or
+// bounds-check guard, so a mismatched or out-of-range `indices` vector
+// silently indexed past the end of `active_traj_[i]` / `active_static_params_`
+// (or read stale/garbage `vals` entries). The Phase-wrapper overloads
+// (phase_wrapper.h) forward directly to the base and need the same size
+// guard so the diagnostic fires before any name resolution work is done.
+///////////////////////////////////////////////////////////////////////////////
+
+// Base-level (ODEPhaseBase::sub_variables) size-mismatch guard, exercised
+// through the raw ODEPhase<BrachODE> pointer make_brach_phase() returns
+// (bypasses the Phase wrapper entirely).
+TEST_F(SubVariablesPhaseTest, BaseMismatchedSizesThrow) {
+    auto phase = make_brach_phase(10);
+    Eigen::VectorXi idx(2);
+    idx << 0, 1;
+    Eigen::VectorXd vals(1);
+    vals << 3.0;
+    EXPECT_THROW(phase->sub_variables(PhaseRegionFlags::Front, idx, vals), std::invalid_argument);
+}
+
+// Base-level bounds check: an index past the end of the trajectory row
+// (BrachODE: x_vars=3, u_vars=1, p_vars=0 -> row width xtu_p_vars()==5) must
+// throw rather than write out of bounds.
+TEST_F(SubVariablesPhaseTest, BaseOutOfRangeIndexThrowsFront) {
+    auto phase = make_brach_phase(10);
+    Eigen::VectorXi idx(1);
+    idx << 999;
+    Eigen::VectorXd vals(1);
+    vals << 1.0;
+    EXPECT_THROW(phase->sub_variables(PhaseRegionFlags::Front, idx, vals), std::invalid_argument);
+}
+
+TEST_F(SubVariablesPhaseTest, BaseOutOfRangeIndexThrowsBack) {
+    auto phase = make_brach_phase(10);
+    Eigen::VectorXi idx(1);
+    idx << -1;
+    Eigen::VectorXd vals(1);
+    vals << 1.0;
+    EXPECT_THROW(phase->sub_variables(PhaseRegionFlags::Back, idx, vals), std::invalid_argument);
+}
+
+// Trajectory-less phase guard: ODEPhase(ode, Tmode) (ode_phase.h) is
+// constructible -- and Python-reachable -- without ever setting a trajectory,
+// leaving active_traj_ empty. sub_variables(Front/Back/Path, ...) on such a
+// phase must throw a diagnostic pointing at set_traj, not dereference the
+// empty vector.
+TEST_F(SubVariablesPhaseTest, BaseTrajectorylessPhaseThrows) {
+    BrachODE ode(9.81);
+    auto phase = std::make_shared<ODEPhase<BrachODE>>(ode, TranscriptionModes::LGL3);
+    Eigen::VectorXi idx(1);
+    idx << 0;
+    Eigen::VectorXd vals(1);
+    vals << 1.0;
+    EXPECT_THROW(phase->sub_variables(PhaseRegionFlags::Front, idx, vals), std::invalid_argument);
+    EXPECT_THROW(phase->sub_variables(PhaseRegionFlags::Back, idx, vals), std::invalid_argument);
+    EXPECT_THROW(phase->sub_variables(PhaseRegionFlags::Path, idx, vals), std::invalid_argument);
+    // Even the previously-no-op empty call must throw: there is no trajectory
+    // for the substitution to (not) apply to.
+    EXPECT_THROW(
+        phase->sub_variables(PhaseRegionFlags::Front, Eigen::VectorXi(0), Eigen::VectorXd(0)),
+        std::invalid_argument);
+}
+
+// StaticParams bounds check: make_brach_phase() never registers static
+// params, so active_static_params_ is empty and even index 0 is out of range.
+TEST_F(SubVariablesPhaseTest, BaseOutOfRangeIndexThrowsStaticParams) {
+    auto phase = make_brach_phase(10);
+    Eigen::VectorXi idx(1);
+    idx << 0;
+    Eigen::VectorXd vals(1);
+    vals << 1.0;
+    EXPECT_THROW(phase->sub_variables(PhaseRegionFlags::StaticParams, idx, vals),
+                 std::invalid_argument);
+}
+
+// Phase-wrapper index-overload guard (phase_wrapper.h): the wrapper must
+// reject a vars/vals size mismatch itself, before ever forwarding to the
+// base. The "Phase::sub_variables" message prefix pins that the throw came
+// from the wrapper layer, not from ODEPhaseBase.
+TEST_F(SubVariablesPhaseTest, WrapperIndexOverloadMismatchedSizesThrow) {
+    auto ode = make_trivial_ode();
+    auto traj_ig = make_linear_guess(0.0, 0.0, 1.0, 1.0);
+    auto phase = ode.phase(TranscriptionModes::LGL3, traj_ig, 8);
+
+    Eigen::VectorXi idx(2);
+    idx << 0, 1;
+    Eigen::VectorXd vals(1);
+    vals << 1.0;
+    try {
+        phase.sub_variables(PhaseRegionFlags::Front, idx, vals);
+        FAIL() << "expected std::invalid_argument";
+    } catch (const std::invalid_argument &e) {
+        EXPECT_EQ(std::string(e.what()).rfind("Phase::sub_variables", 0), 0u)
+            << "throw did not come from the wrapper layer: " << e.what();
+    }
+}
+
+// Phase-wrapper named-overload guard (phase_wrapper.h): same check, through
+// the string-name resolution path; the size guard must fire before any name
+// resolution work is done.
+TEST_F(SubVariablesPhaseTest, WrapperNamedOverloadMismatchedSizesThrow) {
+    auto ode = make_trivial_ode();
+    auto traj_ig = make_linear_guess(0.0, 0.0, 1.0, 1.0);
+    auto phase = ode.phase(TranscriptionModes::LGL3, traj_ig, 8);
+
+    const std::vector<std::string> names{"x", "y"};
+    Eigen::VectorXd vals(1);
+    vals << 1.0;
+    try {
+        phase.sub_variables(PhaseRegionFlags::Front, names, vals);
+        FAIL() << "expected std::invalid_argument";
+    } catch (const std::invalid_argument &e) {
+        EXPECT_EQ(std::string(e.what()).rfind("Phase::sub_variables", 0), 0u)
+            << "throw did not come from the wrapper layer: " << e.what();
+    }
 }

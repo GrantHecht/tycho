@@ -132,18 +132,24 @@ struct InterpTable3D {
         }
 
         for (int i = 0; i < xsize_ - 1; i++) {
-            if (xs_[i + 1] < xs_[i]) {
-                throw std::invalid_argument("X coordinates must be in ascending order");
+            if (xs_[i + 1] <= xs_[i]) {
+                throw std::invalid_argument(fmt::format(
+                    "InterpTable3D: grid nodes must be strictly ascending (x[{}]={} >= x[{}]={})",
+                    i, xs_[i], i + 1, xs_[i + 1]));
             }
         }
         for (int i = 0; i < ysize_ - 1; i++) {
-            if (ys_[i + 1] < ys_[i]) {
-                throw std::invalid_argument("Y coordinates must be in ascending order");
+            if (ys_[i + 1] <= ys_[i]) {
+                throw std::invalid_argument(fmt::format(
+                    "InterpTable3D: grid nodes must be strictly ascending (y[{}]={} >= y[{}]={})",
+                    i, ys_[i], i + 1, ys_[i + 1]));
             }
         }
         for (int i = 0; i < zsize_ - 1; i++) {
-            if (zs_[i + 1] < zs_[i]) {
-                throw std::invalid_argument("Z coordinates must be in ascending order");
+            if (zs_[i + 1] <= zs_[i]) {
+                throw std::invalid_argument(fmt::format(
+                    "InterpTable3D: grid nodes must be strictly ascending (z[{}]={} >= z[{}]={})",
+                    i, zs_[i], i + 1, zs_[i + 1]));
             }
         }
 
@@ -899,7 +905,13 @@ struct InterpFunction3D : VectorFunction<InterpFunction3D, 3, 1, DenseDerivative
     InterpFunction3D() {}
     /// @brief Construct from an interpolation table.
     /// @param tab  The table to wrap.
-    InterpFunction3D(std::shared_ptr<InterpTable3D> tab) : tab(tab) { this->set_io_rows(3, 1); }
+    /// @throws std::invalid_argument if @p tab is null.
+    InterpFunction3D(std::shared_ptr<InterpTable3D> tab) : tab(tab) {
+        if (!this->tab) {
+            throw std::invalid_argument("InterpFunction3D: null InterpTable3D");
+        }
+        this->set_io_rows(3, 1);
+    }
 
     /// @internal
     /// @brief Evaluate the interpolated value at the input point.
