@@ -207,6 +207,29 @@ template <int _XV, int _UV, int _PV> struct ODESize : ODEXUPVSizes<_XV, _UV, _PV
 
     FlatMap<std::string, Eigen::VectorXi> xtu_p_idxs_; ///< Registry of named variable index groups.
 
+  private:
+    /// @internal
+    /// @brief Validate a named variable index group (shared by @ref add_idx and @ref set_idxs).
+    /// @param name  Group name (used only for the error message).
+    /// @param idx   Indices belonging to the group (must be non-empty, each in
+    ///              `[0, xtu_p_vars())`).
+    /// @throws std::invalid_argument if @p idx is empty or any element of @p idx is
+    ///         outside `[0, xtu_p_vars())`.
+    /// @endinternal
+    void check_idx_group(const std::string &name, const Eigen::VectorXi &idx) const {
+        if (idx.size() == 0) {
+            throw std::invalid_argument(
+                fmt::format("Variable index group with name: {0:} has no elements.", name));
+        }
+        if ((idx.array() < 0).any() || (idx.array() >= this->xtu_p_vars()).any()) {
+            throw std::invalid_argument(
+                fmt::format("Variable index group with name: {0:} has index out of range "
+                            "[0, {1:}).",
+                            name, this->xtu_p_vars()));
+        }
+    }
+
+  public:
     /// @brief Register a named group of variable indices.
     /// @param name  Group name (must be unique).
     /// @param idx   Indices belonging to the group (must be non-empty, each in
@@ -214,19 +237,10 @@ template <int _XV, int _UV, int _PV> struct ODESize : ODEXUPVSizes<_XV, _UV, _PV
     /// @throws std::invalid_argument if @p idx is empty, @p name already exists, or any
     ///         element of @p idx is outside `[0, xtu_p_vars())`.
     void add_idx(const std::string &name, const Eigen::VectorXi &idx) {
-        if (idx.size() == 0) {
-            throw std::invalid_argument(
-                fmt::format("Variable index group with name: {0:} has no elements.", name));
-        }
+        this->check_idx_group(name, idx);
         if (xtu_p_idxs_.contains(name)) {
             throw std::invalid_argument(
                 fmt::format("Variable index group with name: {0:} already exists.", name));
-        }
-        if ((idx.array() < 0).any() || (idx.array() >= this->xtu_p_vars()).any()) {
-            throw std::invalid_argument(
-                fmt::format("Variable index group with name: {0:} has index out of range "
-                            "[0, {1:}).",
-                            name, this->xtu_p_vars()));
         }
         xtu_p_idxs_.insert(name, idx);
     }
@@ -256,14 +270,13 @@ template <int _XV, int _UV, int _PV> struct ODESize : ODEXUPVSizes<_XV, _UV, _PV
     }
 
     /// @brief Replace the entire named-index-group registry.
-    /// @param idxs  Map of group name to indices; each group must be non-empty.
-    /// @throws std::invalid_argument if any group is empty.
+    /// @param idxs  Map of group name to indices; each group must be non-empty and each
+    ///              index must be in `[0, xtu_p_vars())`.
+    /// @throws std::invalid_argument if any group is empty or has an index outside
+    ///         `[0, xtu_p_vars())`.
     void set_idxs(const FlatMap<std::string, Eigen::VectorXi> &idxs) {
         for (const auto &[name, idx] : idxs) {
-            if (idx.size() == 0) {
-                throw std::invalid_argument(
-                    fmt::format("Variable index group with name: {0:} has no elements.", name));
-            }
+            this->check_idx_group(name, idx);
         }
         this->xtu_p_idxs_ = idxs;
     }
