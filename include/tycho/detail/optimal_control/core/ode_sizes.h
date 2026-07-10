@@ -233,8 +233,10 @@ template <int _XV, int _UV, int _PV> struct ODESize : ODEXUPVSizes<_XV, _UV, _PV
 
     /// @brief Register a named group consisting of a single variable index.
     /// @param name  Group name (must be unique).
-    /// @param indx  The single index belonging to the group.
-    /// @throws std::invalid_argument if @p name already exists.
+    /// @param indx  The single index belonging to the group (must be in
+    ///              `[0, xtu_p_vars())`).
+    /// @throws std::invalid_argument if @p name already exists or @p indx is outside
+    ///         `[0, xtu_p_vars())`.
     void add_idx(const std::string &name, int indx) {
         Eigen::VectorXi idxv(1);
         idxv[0] = indx;

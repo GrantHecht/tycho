@@ -669,6 +669,13 @@ void tycho::oc::ODEPhaseBase::sub_variables(PhaseRegionFlags reg, VectorXi indic
                         "size ({})",
                         indices.size(), vals.size()));
     }
+    const bool needs_traj = (reg == PhaseRegionFlags::Front || reg == PhaseRegionFlags::Back ||
+                             reg == PhaseRegionFlags::Path);
+    if (needs_traj && this->active_traj_.empty()) {
+        throw std::invalid_argument(
+            "ODEPhaseBase::sub_variables: no trajectory loaded; call set_traj before "
+            "substituting Front/Back/Path variables");
+    }
     switch (reg) {
     case PhaseRegionFlags::Front: {
         const int width = static_cast<int>(this->active_traj_[0].size());
