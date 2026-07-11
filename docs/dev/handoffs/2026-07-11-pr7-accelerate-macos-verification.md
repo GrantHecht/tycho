@@ -10,8 +10,9 @@
 
 ## Context
 
-Branch: `chore/review-sweeps` (review-series PR 7). The Accelerate commit is
-`fa02be79` — `fix(solvers): Accelerate interface — factorize canonicalization,
+Branch: `fix/review-accelerate` (split out of review-series PR 7 so the rest of
+PR 7 can merge without waiting on macOS). The Accelerate commit is
+`5b581aef` — `fix(solvers): Accelerate interface — factorize canonicalization,
 solve status, size_t widths, zero-init dims (CODEBASE 1.3; macOS-only, needs
 macOS verification)`. It touches ONLY
 `include/tycho/detail/solvers/linear/accelerate_interface.h`, four mechanical hunks:
@@ -55,8 +56,8 @@ checks 0, 2c, and the gate below exist to close.
 
 ```bash
 cd <tycho clone>   # Grant's local clone
-git fetch origin && git switch chore/review-sweeps && git pull --ff-only
-git log --oneline | grep fa02be79   # must be an ancestor; if missing, STOP and report
+git fetch origin && git switch fix/review-accelerate && git pull --ff-only
+git log --oneline | grep 5b581aef   # must be an ancestor; if missing, STOP and report
 conda activate tycho
 cmake --preset macos-llvm-release -DBUILD_CPP_TESTS=ON
 cd build && ninja -j6 all
@@ -116,10 +117,11 @@ below INT_MAX — behavioral parity here is the check. P4 optional extra:
 default-construct an `AccelerateImpl` in the probe, `rows()`/`cols()` before
 `compute()` → both `0`.)
 
-Note: this branch also carries the rest of PR 7 (abs sweep, dead-code deletions,
-thread-pool startup fix, platform guards, new `-Wabsolute-value` flag). A test or
-example failure is not automatically an Accelerate problem — bisect the failure
-to the responsible change and report it either way.
+Note: this branch carries ONLY the Accelerate changes over `main` (the rest of
+PR 7 lives on `chore/review-sweeps` / PR #87 and may or may not be merged yet) —
+so a failure here that bisects to this branch's single code commit IS an
+Accelerate problem. If `main` itself fails the gate on your machine, report
+that separately as a pre-existing macOS issue.
 
 ### 4. Report + push
 
@@ -142,4 +144,4 @@ Fill in `docs/dev/handoffs/2026-07-11-pr7-accelerate-macos-verification-RESULTS.
 ```
 
 Commit the results file (and nothing else — probes stay out of the repo) to
-`chore/review-sweeps` with prefix `docs(handoff):` and push.
+`fix/review-accelerate` with prefix `docs(handoff):` and push.
