@@ -46,6 +46,7 @@ set(TYCHO_TEST_LIGHT_SOURCES
     utils/test_tuple_iterator.cpp
     utils/test_var_registry.cpp
     utils/test_exception_what.cpp
+    utils/test_platform_residue.cpp
     optimal_control/test_ode_sizes.cpp
     optimal_control/test_optimal_control_flags.cpp
     integrators/test_step_controller.cpp
