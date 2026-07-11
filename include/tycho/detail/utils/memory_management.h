@@ -308,7 +308,8 @@ template <class... T> struct TupleOfTempSpecs {
 /// are placed on the real stack with zero arena overhead.
 ///
 /// Call `resize()` at startup to pre-size the per-thread arenas and avoid reallocation
-/// during hot-path evaluation.
+/// during hot-path evaluation. Resizes only the calling thread's arenas; thread-pool
+/// workers are unaffected and warm up independently via high-water learning.
 struct BumpAllocator {
     using ScalarStackType = detail::BumpStack<double>;         ///< @internal Scalar arena type.
     /// @internal @brief SuperScalar arena type.
