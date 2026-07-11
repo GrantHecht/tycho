@@ -99,7 +99,7 @@ class CSIThruster:
             Initial mass
         """
         self.LTacc = F / M
-        self.Mdot = F / (Isp * 9.8065)
+        self.Mdot = F / (Isp * 9.80665)
         self.M0 = M
 
     def ThrustExpr(self, u, m, astar):
