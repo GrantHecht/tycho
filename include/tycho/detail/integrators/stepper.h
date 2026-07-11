@@ -245,8 +245,18 @@ template <IVPAlg Alg, class DODE, class Scalar> struct Stepper {
                 // Bmid sum can pick it up, and seed k_fsal_ with f(xf).
                 if constexpr (!RKData::LastStageIsFxf) {
                     ode.compute(xf, k_vals_extra[0]);
+                    // Capture k_fsal_ from the raw ode.compute() output BEFORE
+                    // the *=h scaling below (k_vals_extra[0] must stay
+                    // h-scaled for the Bmid xf_mid assembly further down).
+                    // INTEGRATORS §2.2: a coordinated caller (AdaptiveDriver)
+                    // may now feed k_fsal_ back into a later step's k_vals[0]
+                    // via seed_fsal() — capturing it pre-scale keeps that
+                    // reused value bit-identical to a fresh ode.compute() at
+                    // the next step's xi (== this step's xf), rather than
+                    // picking up a spurious *h/h round-trip that a
+                    // fresh-computed k_vals[0] would never have paid.
+                    k_fsal_ = k_vals_extra[0];
                     k_vals_extra[0] *= h;
-                    k_fsal_ = k_vals_extra[0] * (Scalar(1.0) / h);
                     // k_fsal_ now unambiguously holds f(xf) — peek_fsal()
                     // can read it. Intentionally do NOT set fsal_valid_=true:
                     // promoting it to a FSAL seed would silently corrupt

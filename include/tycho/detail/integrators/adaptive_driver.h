@@ -493,18 +493,39 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
             }
 
             xi = xnext;
-            // Only copy the FSAL cache out when a caller actually wants
-            // per-step derivatives stored — otherwise it's a wasted copy
-            // of a buffer whose lifetime is the next step(). The reference
-            // is invalidated by the next step() call (see Stepper::peek_fsal
-            // docstring).
-            if (storederivs) {
-                // peek_fsal requires the preceding step() to have set
-                // compute_midpoint=true. The (storemidpoints||storederivs)
-                // disjunction at the step() call site above guarantees that
-                // today; decoupling compute_midpoint from storederivs would
-                // break this branch.
-                xdoti = stepper_.peek_fsal();
+            // INTEGRATORS §2.2 f(xf) reuse. Every reject branch above
+            // `continue`s before reaching this line, so getting here means
+            // the step was accepted and `xi` (just assigned xnext) really is
+            // this step's xf — exactly the "coordinated caller passes
+            // xi == prev xf" contract Stepper::step's docstring requires
+            // before a peeked f(xf) may be promoted to a FSAL seed.
+            //
+            // stepper_.peek_fresh() is true here iff step<true>() ran this
+            // iteration, i.e. storemidpoints||storederivs (loop-invariant
+            // for the whole integrate() call — see the step<true>/
+            // step<false> dispatch above), which is the same condition that
+            // already gated the old storederivs-only peek_fsal() read. For
+            // FSAL/LastStageIsFxf methods (DOPRI54, Tsit5, BS3, BS5)
+            // peek_fresh_ is unconditionally true after every step() and
+            // fsal_valid_ is already set inside step() itself (see
+            // stepper.h's k_fsal_ update block), so seed_fsal below just
+            // re-seeds the identical value — a no-op in effect. The actual
+            // gap this closes is DOPRI87/Vern7/8/9 (!LastStageIsFxf): step()
+            // deliberately leaves fsal_valid_ false there (a bare Stepper
+            // caller issuing step() against an unrelated x0 must not
+            // silently reuse a stale f(xf_prev) as the next stage-0), but
+            // AdaptiveDriver is exactly the coordinated caller that can
+            // safely promote the peek to a seed here, saving one ODE eval on
+            // the next step.
+            if (stepper_.peek_fresh()) {
+                // Copy out (not alias) before seed_fsal() below overwrites
+                // k_fsal_ and clears peek_fresh_ — storederivs needs the
+                // value read here.
+                const ODEDeriv fxf = stepper_.peek_fsal();
+                if (storederivs) {
+                    xdoti = fxf;
+                }
+                stepper_.seed_fsal(fxf);
             }
             prev_event_vals = next_event_vals;
 
