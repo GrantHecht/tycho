@@ -29,6 +29,7 @@ add_executable(bench_all
     bench_cheb.cpp
     kepler/bench_kepler.cpp
     vector_functions/bench_vector_functions.cpp
+    vf/bench_vf_perf_paths.cpp
     type_erasure/bench_type_erasure.cpp
     integrators/bench_integrators.cpp
     integrators/bench_method_comparison.cpp
