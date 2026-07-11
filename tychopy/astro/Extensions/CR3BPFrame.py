@@ -249,7 +249,7 @@ class CR3BPFrame:
             func, X, xnd, znd, phideg, psideg, nplanrev, npo, t0
         )
 
-    def CalcSubPoint(self, func, IG):
+    def CalcSubPoint(self, func, IG, max_iters=100, tol=1.0e-14):
         """Compute Sub Lagrange points, such as with a solar sail
 
 
@@ -259,21 +259,37 @@ class CR3BPFrame:
             ASSET VectorFunction modeling dynamics
         IG : :obj:`list` of float
             Initial guess of location of sub Lagrange points
+        max_iters : int
+            Maximum number of Newton iterations before raising
+        tol : float
+            Convergence tolerance on the driven residual components (rows
+            [3:5], the only components the 2x2 update can influence)
 
         Returns
         -------
         X : :obj:`list` of float
             Position of sub Lagrange points
 
+        Raises
+        ------
+        RuntimeError
+            If the Newton iteration fails to converge within ``max_iters``
+
         """
         X = np.zeros((func.input_rows()))
         X[0:3] = IG
-        while max(abs(func.compute(X))) > 1.0e-14:
+        for _ in range(max_iters):
             F = func.compute(X)[3:5]
+            if max(abs(F)) < tol:
+                return np.array(X[0:3])
             Jt = func.jacobian(X)
             J = np.array([[Jt[3, 0], Jt[3, 1]], [Jt[4, 0], Jt[4, 1]]])
-            X[0:2] = X[0:2] - np.dot(np.linalg.inv(J), F)
-        return np.array(X[0:3])
+            X[0:2] = X[0:2] - np.linalg.solve(J, F)
+        F = func.compute(X)[3:5]
+        raise RuntimeError(
+            f"CalcSubPoint: Newton iteration did not converge within {max_iters} "
+            f"iterations (residual {max(abs(F)):.3e}, tol {tol:.1e})"
+        )
 
     def CalcSubPoints(self, func):
         """Compute Sub Lagrange points, such as with a solar sail

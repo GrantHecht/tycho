@@ -160,7 +160,7 @@ class MEETwoBody_LT(ODEBase, MEETwoBodyFrame):
         u = args.tail3()
         otherAccs = [self.thruster.ThrustExpr(u, self.astar)]
 
-        odeeq = self.MEETwoBodyFrame(X, otherAccs=otherAccs, otherEOMs=[])
+        odeeq = self.MEETwoBodyEOMs(X, otherAccs=otherAccs, otherEOMs=[])
         ODEBase.__init__(self, odeeq, 6, 3)
         ###################################
 

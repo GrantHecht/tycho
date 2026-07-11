@@ -83,10 +83,12 @@ class MEETwoBodyFrame:
             All equations of motion for two body model
 
         """
-        if len(otherAccs) > 1:
-            accs = vf.sum(otherAccs)
-        else:
+        if len(otherAccs) == 0:
+            accs = vf.ConstantVector(X.input_rows(), np.zeros(3))
+        elif len(otherAccs) == 1:
             accs = otherAccs[0]
+        else:
+            accs = vf.sum(otherAccs)
         MEEdot = ast.astro.modified_dynamics(1.0).eval(vf.stack([X, accs]))
 
         return vf.stack([MEEdot] + otherEOMs)

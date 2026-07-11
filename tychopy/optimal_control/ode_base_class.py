@@ -121,7 +121,7 @@ class ODEBase:
                 size = input_domain[1, i]
                 idxstmp += list(range(start, start + size))
             return idxstmp
-        elif isinstance(idxs, (int, np.int32, np.intc)):
+        elif isinstance(idxs, (int, np.integer)):
             return [idxs]
         elif hasattr(idxs, "__iter__") and not isinstance(idxs, str):
             if len(idxs) == 0:
@@ -249,7 +249,7 @@ class ODEBase:
             for name in names:
                 if isinstance(name, str):
                     idxs += list(self.idx(name))
-                elif isinstance(name, (int, np.int32, np.intc)):
+                elif isinstance(name, (int, np.integer)):
                     idxs.append(name)
                 else:
                     raise Exception("Invalid name specifier: {}".format(str(name)))
@@ -273,12 +273,7 @@ class ODEBase:
 
         else:
             # Its a trajectory, nd array or list of lists/arrays
-            size = len(source)
-            output = np.zeros((size, len(idxs)))
-            for j in range(0, size):
-                for i, idx in enumerate(idxs):
-                    output[j][i] = source[j][idx]
-
+            output = np.asarray(source)[:, idxs]
             return output
 
     def idx(self, Vname):

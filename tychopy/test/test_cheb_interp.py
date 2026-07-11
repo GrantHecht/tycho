@@ -508,3 +508,42 @@ def test_clamp_derivative_zero_outside_1d():
     # Boundary keeps the endpoint slope (nonzero).
     _, dv_b = tab.eval_deriv1(2.0)
     assert abs(dv_b[0]) > 1e-6
+
+
+# ---------------------------------------------------------------------------
+# Review-response coverage: N-D final-order convergence check + numpy scalars
+# ---------------------------------------------------------------------------
+
+
+def test_converged_nd_at_max_order_does_not_warn():
+    """N-D analog of test_converged_1d_does_not_warn: an axis that doubles
+    exactly to max_order must still be convergence-checked AT max_order
+    before giving up -- it must not warn just because it hit the ceiling."""
+
+    def f(x):
+        return np.array([np.sin(7.3 * x[0])])
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", ChebConvergenceWarning)
+        cheb_adaptive(f, [-1.0], [1.0], rtol=1e-10, order0=32, max_order=64)
+
+
+def test_cheb_from_function_accepts_np_int64_order():
+    """cheb_from_function (N-D dispatch) must accept a numpy integer scalar
+    order (not just a Python int) -- the N-D branch broadcasts a scalar
+    order to every axis via an isinstance(order, int) check."""
+
+    def f(x):
+        return np.array([x[0] ** 2])
+
+    cheb_from_function(f, [-1.0], [1.0], np.int64(8))
+
+
+def test_cheb_accepts_np_bool_periodic():
+    """cheb_from_function must accept a numpy bool_ periodic flag (not just
+    a Python bool) for the identity checks in _oob_policy."""
+
+    def f(t):
+        return np.array([np.sin(np.pi * t)])
+
+    cheb_from_function(f, -1.0, 1.0, 8, periodic=np.bool_(True))

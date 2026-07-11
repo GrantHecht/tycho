@@ -24,25 +24,31 @@ class LowThrustAcc:
     Low thrust acceleration model
     """
 
-    def __init__(self, NonDim_LTacc=True, LTacc=False):
+    def __init__(self, NonDim_LTacc=None, LTacc=None):
         """
-        Initialize desired acceleration value, if dimensional, with LTacc. NonDim_LTacc should be false.
-        If non-dimensional use NonDim_LTacc. LTacc should be false. Units should be the same as outermost ODE,
-        or scaled appropriately.
+        Initialize desired acceleration value, if dimensional, with LTacc. NonDim_LTacc should be
+        left unset (None). If non-dimensional use NonDim_LTacc, and leave LTacc unset (None). Units
+        should be the same as outermost ODE, or scaled appropriately. If neither is specified,
+        defaults to a non-dimensional acceleration of 1.0.
 
         Parameters
         ----------
-        NonDim_LTacc : float
+        NonDim_LTacc : float or None
             Non-dimensional acceleration value.
-            Set false if using LTacc.
-        LTacc : float
+            Leave None if using LTacc.
+        LTacc : float or None
             Dimensional acceleration value m/s^2.
-            Set false if using NonDim_LTacc
+            Leave None if using NonDim_LTacc.
         """
-        if (LTacc == False) and (NonDim_LTacc == False):
+        if isinstance(NonDim_LTacc, bool) or isinstance(LTacc, bool):
             raise ValueError(
-                "Please Specify either a dimensional or nondimensional Engine Acceleration"
+                "NonDim_LTacc/LTacc use a None-sentinel API: pass a numeric "
+                "value or leave the parameter unset (None), not a bool"
             )
+        if NonDim_LTacc is not None and LTacc is not None:
+            raise ValueError("Specify either NonDim_LTacc or LTacc, not both")
+        if NonDim_LTacc is None and LTacc is None:
+            NonDim_LTacc = 1.0  # preserve the historical zero-arg default
         self.LTacc = LTacc
         self.NDLTacc = NonDim_LTacc
 
@@ -63,7 +69,7 @@ class LowThrustAcc:
         Acceleration magnitude : float
             Either dimensional or non, depending on initialization parameters.
         """
-        if self.LTacc == False:
+        if self.LTacc is None:
             return u * (self.NDLTacc)
         else:
             return u * (self.LTacc / astar)
@@ -99,7 +105,7 @@ class CSIThruster:
             Initial mass
         """
         self.LTacc = F / M
-        self.Mdot = F / (Isp * 9.8065)
+        self.Mdot = F / (Isp * 9.80665)
         self.M0 = M
 
     def ThrustExpr(self, u, m, astar):

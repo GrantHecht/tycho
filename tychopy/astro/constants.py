@@ -39,7 +39,9 @@ MuVenus = 3.24858592e14
 MuMercury = 2.203178e13
 MuUranus = 5.79395132227901e15
 MuUranusBarycenter = 5.79454860000001e15
-MuNeptune = 6.83652710058002e15
+# planet-only GM (system GM minus Triton's ~1427.6 km^3/s^2); barycenter
+# value below unchanged. FLAGGED for human review — physical constant.
+MuNeptune = 6.8350995e15
 MuNeptuneBarycenter = 6.83652710058002e15
 
 
@@ -86,6 +88,6 @@ SpiceBodyProps["JUPITER BARYCENTER"] = {
     "Radius": RadiusJupiter,
 }
 SpiceBodyProps["SATURN BARYCENTER"] = {"Mu": MuSaturnBarycenter}
-SpiceBodyProps["NEPTUNE BARYCENTER"] = {"Mu": MuNeptune}
-SpiceBodyProps["URANUS BARYCENTER"] = {"Mu": MuUranus}
+SpiceBodyProps["NEPTUNE BARYCENTER"] = {"Mu": MuNeptuneBarycenter}
+SpiceBodyProps["URANUS BARYCENTER"] = {"Mu": MuUranusBarycenter}
 SpiceBodyProps["MARS BARYCENTER"] = {"Mu": MuMars}

@@ -341,14 +341,19 @@ def hmsm_to_days(hour=0, mins=0, sec=0, micro=0):
     return days / 24.0
 
 
-def datetime_to_jd(year, month, day, hour=0, mins=0, sec=0, micro=0):
-    return date_to_jd(year, month, day) + hmsm_to_days(hour, mins, sec, micro)
-
-
 def days_to_hmsm(days):
     """
     Convert fractional days to hours, minutes, seconds, and microseconds.
     Precision beyond microseconds is rounded to the nearest microsecond.
+
+    Uses a single round-to-microseconds followed by a divmod cascade (rather
+    than a per-unit modf/round chain), so it cannot produce a microsecond
+    component of 1_000_000 that would overflow into the next second (the
+    old modf-based cascade could round each stage independently and let
+    `micro` land on exactly 1e6). `hour` can be 24 only when `days` rounds
+    up to a full day (e.g. `days == 0.999999999999`); callers that feed this
+    into a `datetime` constructor must handle that carry (see
+    `jd_to_datetime`).
 
     Parameters
     ----------
@@ -380,18 +385,11 @@ def days_to_hmsm(days):
     (2, 24, 0, 0)
 
     """
-    hours = days * 24.0
-    hours, hour = math.modf(hours)
-
-    mins = hours * 60.0
-    mins, min = math.modf(mins)
-
-    secs = mins * 60.0
-    secs, sec = math.modf(secs)
-
-    micro = round(secs * 1.0e6)
-
-    return int(hour), int(min), int(sec), int(micro)
+    total_micro = round(days * 24.0 * 3600.0 * 1.0e6)
+    secs, micro = divmod(total_micro, 1_000_000)
+    mins, sec = divmod(secs, 60)
+    hour, mins = divmod(mins, 60)
+    return int(hour), int(mins), int(sec), int(micro)
 
 
 def datetime_to_jd(date):
@@ -450,7 +448,26 @@ def jd_to_datetime(jd):
 
     hour, min, sec, micro = days_to_hmsm(frac_days)
 
-    return datetime(year, month, day, hour, min, sec, micro)
+    # days_to_hmsm can return hour == 24 when frac_days rounds up to a full
+    # day at microsecond precision (e.g. frac_days == 0.999999999999),
+    # which the datetime constructor below would reject. Normalize the
+    # carry with a plain stdlib datetime + timedelta (this does not go
+    # through the module's own datetime.__add__/timedelta_to_days, so it
+    # can't recurse back into jd_to_datetime), then build the module's
+    # datetime subclass from the normalized fields.
+    base = dt.datetime(year, month, day) + dt.timedelta(
+        hours=hour, minutes=min, seconds=sec, microseconds=micro
+    )
+
+    return datetime(
+        base.year,
+        base.month,
+        base.day,
+        base.hour,
+        base.minute,
+        base.second,
+        base.microsecond,
+    )
 
 
 def timedelta_to_days(td):
@@ -477,7 +494,7 @@ def timedelta_to_days(td):
     """
     seconds_in_day = 24.0 * 3600.0
 
-    days = td.days + (td.seconds + (td.microseconds * 10.0e6)) / seconds_in_day
+    days = td.days + (td.seconds + (td.microseconds / 1.0e6)) / seconds_in_day
 
     return days
 
@@ -564,6 +581,13 @@ class datetime(dt.datetime):
 
 
 def JD_SPJ2000D(JD):
+    """
+    Notes
+    -----
+    ``JD`` is interpreted as a TDB-based Julian Date; the linear JD->ET
+    conversion is exact only for TDB. UTC-based JDs are offset by ~69 s
+    (leap seconds + 32.184 s).
+    """
     return (JD - 2451545.0) * 24.0 * 3600
 
 
