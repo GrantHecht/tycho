@@ -33,7 +33,9 @@ add_executable(bench_all
     integrators/bench_integrators.cpp
     integrators/bench_method_comparison.cpp
     integrators/bench_controller_comparison.cpp
+    integrators/bench_stm.cpp
     optimal_control/bench_optimal_control.cpp
+    optimal_control/bench_interp.cpp
     solvers/bench_solvers.cpp
     utils/bench_utils.cpp
 )
