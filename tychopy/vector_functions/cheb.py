@@ -33,10 +33,10 @@ def _oob_policy(periodic, D):
     """
     clamp = _vf.ChebTable.OutOfDomain.Clamp
     periodic_enum = _vf.ChebTable.OutOfDomain.Periodic
-    if periodic is None or periodic is False:
+    if periodic is None:
         return [clamp] * D
-    if periodic is True:
-        return [periodic_enum] * D
+    if isinstance(periodic, (bool, np.bool_)):
+        return [periodic_enum if bool(periodic) else clamp] * D
     flags = list(periodic)
     if len(flags) != D:
         raise ValueError(
@@ -190,7 +190,9 @@ def cheb_from_function(callable_fn, lb, ub, order, nthreads=1, periodic=None):
     """
     if _is_nd(lb):
         D = len(np.asarray(lb))
-        orders = [int(order)] * D if isinstance(order, int) else list(order)
+        orders = (
+            [int(order)] * D if isinstance(order, (int, np.integer)) else list(order)
+        )
         table, _ = _build_nd(
             callable_fn, lb, ub, orders, nthreads, _oob_policy(periodic, D)
         )
@@ -359,8 +361,8 @@ def _cheb_adaptive_nd(
     ub_arr = np.asarray(ub, dtype=float)
     D = len(lb_arr)
 
-    if isinstance(order0, int):
-        orders = [order0] * D
+    if isinstance(order0, (int, np.integer)):
+        orders = [int(order0)] * D
     else:
         orders = list(order0)
 
@@ -407,7 +409,12 @@ def _cheb_adaptive_nd(
                 return False
         return True
 
-    # Refine axes until all converged or max_order reached
+    # Refine axes until all converged or max_order reached.  Mirrors the 1-D
+    # loop's ordering: convergence of the *current* order is always checked
+    # before giving up on an axis, so an axis that doubles to exactly
+    # max_order still gets a converged_axis(d, max_order) check on the next
+    # pass before it is allowed to warn (an axis must never be marked
+    # "capped" without having been evaluated for convergence at max_order).
     axis_done = [False] * D
     while True:
         all_done = True
@@ -416,11 +423,12 @@ def _cheb_adaptive_nd(
                 continue
             if converged_axis(d, orders[d]):
                 axis_done[d] = True
-            else:
-                all_done = False
-                if orders[d] < max_order:
-                    orders[d] = min(orders[d] * 2, max_order)
-        if all_done or all(axis_done[d] or orders[d] >= max_order for d in range(D)):
+                continue
+            if orders[d] >= max_order:
+                continue  # non-convergent at max_order: will warn below
+            orders[d] = min(orders[d] * 2, max_order)
+            all_done = False  # doubled: must re-check at the new order
+        if all_done:
             break
 
     table, _ = _build_nd(
