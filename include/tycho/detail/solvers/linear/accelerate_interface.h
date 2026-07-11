@@ -527,12 +527,12 @@ class AccelerateImpl
             nopts.zeroTolerance = zero_tolerance_;
 
             // Get factor and workspace size
-            const int factorSize = std::is_same<Scalar, double>::value
-                                       ? m_symbolicFactorization->factorSize_Double
-                                       : m_symbolicFactorization->factorSize_Float;
-            const int workspaceSize = std::is_same<Scalar, double>::value
-                                          ? m_symbolicFactorization->workspaceSize_Double
-                                          : m_symbolicFactorization->workspaceSize_Float;
+            const size_t factorSize = std::is_same<Scalar, double>::value
+                                          ? m_symbolicFactorization->factorSize_Double
+                                          : m_symbolicFactorization->factorSize_Float;
+            const size_t workspaceSize = std::is_same<Scalar, double>::value
+                                             ? m_symbolicFactorization->workspaceSize_Double
+                                             : m_symbolicFactorization->workspaceSize_Float;
 
             m_numericFactorization.reset(new NumericFactorization(
                 SparseFactor(*m_symbolicFactorization, accel_matrix_, nopts,
@@ -598,7 +598,7 @@ class AccelerateImpl
     mutable std::vector<uint8_t> solve_workspace_; // Cache solve workspace
     mutable std::vector<Scalar> r_mem_;
     mutable int cached_solve_workspace_size_ = 0; // Track cached size
-    Index n_rows_, n_cols_;
+    Index n_rows_ = 0, n_cols_ = 0;
     std::unique_ptr<SymbolicFactorization, SymbolicFactorizationDeleter> m_symbolicFactorization;
     std::unique_ptr<NumericFactorization, NumericFactorizationDeleter> m_numericFactorization;
     SparseKind_t m_sparseKind;
@@ -683,7 +683,7 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::factorize(cons
         eigen_assert(a.rows() == a.cols());
     }
 
-    matrix_ = a;
+    get_matrix(a);
     buildAccelSparseMatrix();
     m_numericFactorization.reset(nullptr);
 
@@ -701,8 +701,6 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::_solve_impl(
 
     eigen_assert(n_rows_ == b.rows());
     eigen_assert(((b.cols() == 1) || b.outerStride() == b.rows()));
-
-    SparseStatus_t status = SparseStatusOK;
 
     Scalar *b_ptr = const_cast<Scalar *>(b.derived().data());
     Scalar *x_ptr = const_cast<Scalar *>(x.derived().data());
@@ -737,7 +735,10 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::_solve_impl(
 
     SparseSolve(*m_numericFactorization, bmat, xmat, ws);
 
-    updateInfoStatus(status);
+    // SparseSolve() returns void; Accelerate does not expose a per-call solve
+    // status. The factorization's own status field is the only documented
+    // failure channel available post-solve.
+    updateInfoStatus(m_numericFactorization->status);
 
     if (do_iterative_refinement_) {
         auto n = vDSP_Length(x.rows() * x.cols());
