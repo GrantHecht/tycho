@@ -971,9 +971,13 @@ struct LGLInterpTable {
     void interp_block_gen(Scalar t, const Eigen::MatrixBase<OutType> &fx,
                           const Eigen::MatrixBase<XtUBlockType> &xtublk,
                           const Eigen::MatrixBase<DXBlockType> &dxblk) const {
-        // Fixed-max-size (stack) buffer: LGL order is bounded at 7 (LGL7,
-        // x_weights_.rows() == 8), so this never spills to the heap -- avoids
-        // a malloc/free pair on every interp_block_gen call (OC review 2.2).
+        // Fixed-max-size (stack) buffer -- avoids a malloc/free pair on every
+        // interp_block_gen call (OC review 2.2). INVARIANT: LGL order is
+        // bounded at 7 (LGL7, x_weights_.rows() == 8; set_method's exhaustive
+        // switch is the only writer). MaxVector has NO heap fallback: resizing
+        // past 8 is an eigen_assert in Debug and silent stack overflow (UB)
+        // under NDEBUG -- any future higher-order LGL mode must bump this
+        // bound in all three interp_block_* kernels.
         MaxVector<Scalar, 8> tpow(x_weights_.rows());
         tpow[0] = Scalar(1.0);
         for (int i = 1; i < x_weights_.rows(); i++) {
