@@ -282,6 +282,63 @@ static void BM_VF_DynamicODE_Jacobian(benchmark::State &state) {
 }
 BENCHMARK(BM_VF_DynamicODE_Jacobian);
 
+static void BM_VF_DynamicODE_JGH(benchmark::State &state) {
+    // Second-order (KKT-path) variant of the two benches above: same dynamic
+    // composite expression, but timing the full
+    // `compute_jacobian_adjointgradient_adjointhessian` entry point (mirrors
+    // the call shape of `BM_VF_MinMax_Generic_JGH` above). This is the only
+    // call shape that reaches the JGH-only heap locals flagged by
+    // VF_REVIEW/dossier item 2 but left uncovered by `_Compute`/`_Jacobian`
+    // above (flagged as a deferred follow-up in
+    // .superpowers/sdd/task-2-report.md's "Deferred to controller checkpoint"
+    // section) -- verified by reading both headers at HEAD:
+    //   - cwise_operators.h:1467-1510
+    //     (`CwiseFunctionOperator::compute_jacobian_adjointgradient_adjointhessian_impl`):
+    //     `hxdiag` is heap-resized under the same `if constexpr
+    //     (Func::OutputIsDynamic)` guard as `fxt`/`jxdiag` (lines 1478-1486),
+    //     but `hxdiag` itself is a local unique to this JGH hook --
+    //     `compute_impl`/`compute_jacobian_impl` never declare it.
+    //     `adjtemp` (line 1492, `jxdiag.cwiseProduct(adjvars)`) is likewise
+    //     only ever constructed inside this JGH function body, as an
+    //     unguarded plain `Output<Scalar>` local -- it heap-allocates
+    //     whenever `Output<Scalar>` is dynamic-sized, i.e. under the
+    //     identical `Func::OutputIsDynamic` condition that gates the other
+    //     locals in this same function. `compute`/`compute_jacobian` (timed
+    //     by `_Compute`/`_Jacobian` above) never call this function, so
+    //     `hxdiag`/`adjtemp` never fire for them.
+    //   - parsed_input.h:157-206
+    //     (`ParsedInput::compute_jacobian_adjointgradient_adjointhessian_impl`,
+    //     non-contiguous branch lines 178-205): `gxin` (line 182) and `hxin`
+    //     (line 183) are locals unique to this JGH hook --
+    //     `compute_impl`/`compute_jacobian_impl` have no gradient/Hessian
+    //     locals at all, only `xin`/`jxin`. The bench's non-contiguous
+    //     `vlocs = {6, 0, 3}` keeps `contiguous_ = false` for the whole call
+    //     (same ctor reasoning as `_Compute`/`_Jacobian`: `delta = 0 - 6 =
+    //     -6 != 1` on the first pair), so this branch -- and both locals --
+    //     fire on every call.
+    auto expr = build_dynamic_ode_expr();
+    Eigen::VectorXd x(kDynODERows);
+    x << 0.3, 0.6, 0.9, 1.2, 0.4, -0.7, 2.0, 5.0;
+    Eigen::VectorXd lm(1);
+    lm << 1.0;
+    Eigen::VectorXd fx(1);
+    Eigen::MatrixXd jx(1, kDynODERows);
+    Eigen::VectorXd adjgrad(kDynODERows);
+    Eigen::MatrixXd adjhess(kDynODERows, kDynODERows);
+    for (auto _ : state) {
+        fx.setZero();
+        jx.setZero();
+        adjgrad.setZero();
+        adjhess.setZero();
+        expr.compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, adjgrad, adjhess, lm);
+        benchmark::DoNotOptimize(fx);
+        benchmark::DoNotOptimize(jx);
+        benchmark::DoNotOptimize(adjgrad);
+        benchmark::DoNotOptimize(adjhess);
+    }
+}
+BENCHMARK(BM_VF_DynamicODE_JGH);
+
 ///////////////////////////////////////////////////////////////////////////////
 // 3. Redundant FD primal evaluations under FDiffFwd mode — VF §2.3
 //    (dossier item 4)
