@@ -62,6 +62,7 @@ namespace tycho::vf {
 /// @tparam IR       Input rows at compile time (`-1` for dynamic).
 /// @tparam OR       Output rows at compile time (`-1` for dynamic).
 /// @ingroup vf
+// Canonical CRTP hook inventory: see computable_base.h ("Canonical CRTP hook inventory").
 template <class Derived, int IR, int OR>
 struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
     /// @brief Immediate base class supplying the evaluation interface.

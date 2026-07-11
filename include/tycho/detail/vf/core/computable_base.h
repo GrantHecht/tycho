@@ -86,6 +86,67 @@ namespace tycho::vf {
 /// @tparam IR       Input rows at compile time (`-1` for dynamic).
 /// @tparam OR       Output rows at compile time (`-1` for dynamic).
 /// @ingroup vf
+///
+/// ### Canonical CRTP hook inventory
+///
+/// `ComputableBase` and @ref DenseFunctionBase (which extends it) dispatch to a
+/// derived VectorFunction exclusively through unqualified `this->derived().X(...)`
+/// calls. There is no `virtual`/`override` in this hierarchy, so a hook name that is
+/// even one character off from the names below is **not** a compile error — it is a
+/// silently-unused method that shadows nothing, and the base's default behavior (or a
+/// pure-hook link error, for the three hooks with no default) applies instead. Treat
+/// this list as authoritative when adding a new override or auditing for near-misses;
+/// keep it in sync with the `derived().X(...)` call sites in this file and in
+/// `dense_function_base.h` if the dispatch surface changes.
+///
+/// **Pure hooks** (no base default; every leaf VectorFunction must implement these,
+/// or use the non-templated EnzymeAD `compute_impl`/`compute_jacobian_impl` variant
+/// described in the top-level project docs):
+/// - `compute_impl(x, fx)`
+/// - `compute_jacobian_impl(x, fx, jx)`
+/// - `compute_jacobian_adjointgradient_adjointhessian_impl(x, fx, jx, adjgrad, adjhess, adjvars)`
+///
+/// **Overridable dispatch surface** (each has a base default; a derived class may
+/// override any of these directly to short-circuit the default composition — the one
+/// class in the codebase that does this today is `CwiseOperator`, see below):
+/// - `compute(x, fx)`
+/// - `compute_jacobian(x, fx, jx)`
+/// - `compute_adjointgradient(x, fx, adjgrad, adjvars)`
+/// - `compute_jacobian_adjointgradient(x, fx, jx, adjgrad, adjvars)`
+/// - `compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, adjgrad, adjhess, adjvars)`
+/// - `jacobian(x, jx)`
+/// - `adjointgradient(x, adjgrad, adjvars)`
+/// - `adjointhessian(x, adjhess, adjvars)`
+/// - `hessian_elem_is_nonzero(row, col)` — Hessian sparsity predicate for KKT fill.
+/// - `jacobian_elem_is_nonzero(row, col)` — Jacobian sparsity predicate for KKT fill.
+/// - `add_hessian_elem(v, row, col, mpt, lpt, freeloc)` — scatters one Hessian value
+///   into KKT sparse storage.
+/// - `add_jacobian_elem(v, row, col, mpt, lpt, freeloc)` — scatters one Jacobian value
+///   into KKT sparse storage.
+/// - `kkt_fill_jac(...)` — Jacobian-only KKT scatter.
+/// - `kkt_fill_all(...)` — full Jacobian+Hessian KKT scatter.
+///
+/// (`enable_vectorization_` is also read via `derived().enable_vectorization_` to pick
+/// the SuperScalar dispatch path, but it is a plain field, not a method hook.)
+///
+/// **Constexpr trait hooks** (not dispatched via `derived().X()` — read directly off
+/// `Derived` as static constants — but part of the same override surface a
+/// near-miss/typo check should also watch): `is_vectorizable`, `is_linear_function`,
+/// `has_diagonal_jacobian`, `has_diagonal_hessian`, `is_cwise_operator`,
+/// `is_generic_function`, `is_conditional`. All are declared with their base-default
+/// values just below in this class.
+///
+/// **Known-legitimate direct overrider of `compute`/`compute_jacobian`:**
+/// `tycho::vf::CwiseOperator` (`cwise_operators.h`) overrides both directly instead of
+/// implementing `compute_impl`/`compute_jacobian_impl`, applying its derived class's
+/// `cwise_compute`/`cwise_compute_jacobian` hooks straight to the input. This is an
+/// intentional second CRTP tier, not a near-miss — any lint for hook-name typos should
+/// allowlist it rather than flag it.
+///
+/// @warning There is no `override` keyword for CRTP. A misspelled hook (e.g.
+///   `hessian_elem_is_non_zero` instead of `hessian_elem_is_nonzero`) compiles cleanly
+///   as an unused method and silently falls back to the base default — always verify a
+///   new or renamed hook against the exact names above.
 template <class Derived, int IR, int OR> struct ComputableBase : InputOutputSize<IR, OR> {
     /// @brief Downcast to the CRTP derived type.
     /// @return Mutable reference to the derived function.
