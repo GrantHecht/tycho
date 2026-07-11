@@ -169,6 +169,7 @@ class task {
         static_assert(sizeof(Fn) <= BUF_SIZE, "Callable exceeds task SBO buffer (64 bytes)");
         static_assert(alignof(Fn) <= ALIGN);
         static_assert(std::is_nothrow_move_constructible_v<Fn>);
+        static_assert(std::is_nothrow_constructible_v<Fn, F &&>);
         ::new (m_buf) Fn(std::forward<F>(f));
         m_invoke = [](void *p) { (*static_cast<Fn *>(p))(); };
         m_destroy = [](void *p) { static_cast<Fn *>(p)->~Fn(); };

@@ -61,18 +61,6 @@ template <int Arg1, int Arg2> struct SZ_MAXREALOP {
 };
 
 /// @internal
-/// @brief Compile-time minimum of two sizes without dynamic-propagation
-/// (intended: treats negative values as real integers and returns the smaller
-/// one; compare SZ_MAXREALOP).
-/// @note The current implementation is known-incorrect: it propagates -1 when
-/// either argument is negative (wrong for the "real integer" contract) and
-/// returns the LARGER argument when `Arg1 > Arg2` (a max, not a min). This
-/// struct has no call sites and is dead code — fix the body before first use.
-template <int Arg1, int Arg2> struct SZ_MINREALOP {
-    enum { value = ((Arg1 < 0 || Arg2 < 0) ? -1 : ((Arg1 > Arg2) ? Arg1 : Arg2)), Identity = 0 };
-};
-
-/// @internal
 /// @brief Compile-time left-biased sum: propagates dynamic (-1) only when
 /// the left (first) operand is negative.
 template <int Arg1, int Arg2> struct SZ_LSUMOP {
