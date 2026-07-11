@@ -14,12 +14,22 @@
 
 #pragma once
 
+#include <stdexcept>
+
+#include <fmt/format.h>
+
 namespace tycho::utils {
 
-/// @brief Compute the factorial of a non-negative integer.
-/// @param i  Non-negative integer.
+/// @brief Compute the factorial of an integer in [0, 12].
+/// @param i  Integer in [0, 12].
 /// @return  `i!` (returns 1 for i = 0 or i = 1).
-inline int factorial(int i) { return (i == 1 || i == 0) ? 1 : factorial(i - 1) * i; }
+/// @throws std::invalid_argument outside [0, 12] (13! overflows int; negatives never terminate).
+inline int factorial(int i) {
+    if (i < 0 || i > 12)
+        throw std::invalid_argument(
+            fmt::format("factorial({}) unsupported: valid range is [0, 12] (13! overflows int)", i));
+    return (i <= 1) ? 1 : factorial(i - 1) * i;
+}
 
 /// @brief Compute the partial factorial `max(i,j)! / min(i,j)!`.
 ///
