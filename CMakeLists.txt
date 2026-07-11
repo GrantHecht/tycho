@@ -542,6 +542,17 @@ if(COMPILE_TIME_TRACE AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     message(STATUS "Compile-time tracing enabled (-ftime-trace)")
 endif()
 
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
+   AND NOT CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+    # GNU-style Clang frontend only: clang-cl (MSVC frontend variant) does not
+    # reliably forward arbitrary raw GNU-style -W flags without an explicit
+    # /clang: prefix -- see the _TYCHO_WINDOWS_CLANG_NO_FINITE_MATH_ONLY_FLAG
+    # precedent above. Not gating on x64-Clang-Release (clang-cl) for now;
+    # revisit with /clang:-Wabsolute-value if Windows warning coverage is
+    # wanted later.
+    add_compile_options(-Wabsolute-value)
+endif()
+
 
 
 ################################################################################

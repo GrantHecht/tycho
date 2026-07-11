@@ -169,7 +169,7 @@ struct InterpTable1D {
 
         double terr = (ts_ - testt).lpNorm<Eigen::Infinity>();
 
-        if (terr > abs(ttotal_) * 1.0e-12) {
+        if (terr > std::abs(ttotal_) * 1.0e-12) {
             this->teven_ = false;
         }
 

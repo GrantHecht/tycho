@@ -68,6 +68,7 @@ template <class Scalar, class WayBool, class IntType, class BranchBool, class Ex
 void lambert_izzo_impl(const Vector3<Scalar> &R1dim, const Vector3<Scalar> &R2dim, Scalar dtdim,
                        double mu, WayBool longway, IntType Nin, BranchBool rightbranch,
                        Vector3<Scalar> &V1, Vector3<Scalar> &V2, ExitInt &exint) {
+    using std::abs;
 
     constexpr bool RisScalar = std::is_floating_point<Scalar>::value;
     constexpr bool WayisScalar = std::is_same<WayBool, bool>::value;

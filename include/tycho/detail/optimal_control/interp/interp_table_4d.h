@@ -185,16 +185,16 @@ struct InterpTable4D {
         double zerr = (zs_ - testz).lpNorm<Eigen::Infinity>();
         double werr = (ws_ - testw).lpNorm<Eigen::Infinity>();
 
-        if (xerr > abs(xtotal_) * 1.0e-12) {
+        if (xerr > std::abs(xtotal_) * 1.0e-12) {
             this->xeven_ = false;
         }
-        if (yerr > abs(ytotal_) * 1.0e-12) {
+        if (yerr > std::abs(ytotal_) * 1.0e-12) {
             this->yeven_ = false;
         }
-        if (zerr > abs(ztotal_) * 1.0e-12) {
+        if (zerr > std::abs(ztotal_) * 1.0e-12) {
             this->zeven_ = false;
         }
-        if (werr > abs(wtotal_) * 1.0e-12) {
+        if (werr > std::abs(wtotal_) * 1.0e-12) {
             this->weven_ = false;
         }
 
