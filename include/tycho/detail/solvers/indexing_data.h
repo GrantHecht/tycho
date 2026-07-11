@@ -173,7 +173,8 @@ struct SolverIndexingData {
     void set_v_index(const MatrixXi &vt) {
         if (vt.rows() != this->input_size_)
             throw std::invalid_argument(
-                fmt::format("SolverIndexingData::set_v_index: expected {} rows (input_size_), got {}",
+                fmt::format("SolverIndexingData::set_v_index: expected {} rows (input_size_), "
+                            "got {}",
                             this->input_size_, vt.rows()));
         this->v_index_ = vt;
         this->vindex_init_ = true;
@@ -186,7 +187,8 @@ struct SolverIndexingData {
     void set_c_index(const MatrixXi &ct) {
         if (ct.rows() != this->output_size_)
             throw std::invalid_argument(
-                fmt::format("SolverIndexingData::set_c_index: expected {} rows (output_size_), got {}",
+                fmt::format("SolverIndexingData::set_c_index: expected {} rows (output_size_), "
+                            "got {}",
                             this->output_size_, ct.rows()));
         this->c_index_ = ct;
         this->c_index_continuity_.resize(this->c_index_.cols());
