@@ -74,34 +74,12 @@ ABS_ALLOWLIST=(
 # If one is added in the future, list it here with the same rationale shape
 # as the abs entries above.
 #
-# KNOWN, DELIBERATELY-DEFERRED GAP (not a false positive — a real pre-existing
-# bare pow() call site left out of scope by the T1 sweep as a documented
-# judgment call; see .superpowers/sdd/task-1-report.md, "pow() calls ...
-# not in T1's documented scope"). Compile-probed benign on the current
-# toolchain (there is no integer `pow(int,int)` overload to shadow the
-# double one, unlike the `abs`/`::abs(int)` case), so this is lower-severity
-# than the abs class, but it is the same landmine shape and is tracked here
-# rather than silently dropped. A future PR folding these into the
-# `using std::pow;` pattern (as already done for lambert_izzo_impl's
-# `using std::abs;`) should delete these two blocks from the allowlist.
+# The lgl_control_splines.h / lambert_solvers.h gap tracked here previously
+# (bare pow() call sites with no `using std::pow;` guard) was closed by
+# adding function-scope `using std::pow;` declarations to each enclosing
+# function — see .superpowers/sdd/task-10-report.md, "Fix wave: pow guard
+# completion".
 POW_ALLOWLIST=(
-    # lgl_control_splines.h — 6 sites, none guarded by `using std::pow;`.
-    "include/tycho/detail/optimal_control/transcription/lgl_control_splines.h:159"
-    "include/tycho/detail/optimal_control/transcription/lgl_control_splines.h:161"
-    "include/tycho/detail/optimal_control/transcription/lgl_control_splines.h:194"
-    "include/tycho/detail/optimal_control/transcription/lgl_control_splines.h:195"
-    "include/tycho/detail/optimal_control/transcription/lgl_control_splines.h:296"
-    "include/tycho/detail/optimal_control/transcription/lgl_control_splines.h:297"
-    # lambert_solvers.h — 7 sites outside the (already-fixed) `using std::abs;`
-    # guarded region; these are `pow(...)`, not `abs(...)`, so that using-decl
-    # doesn't cover them.
-    "include/tycho/detail/astro/kepler/lambert_solvers.h:309"
-    "include/tycho/detail/astro/kepler/lambert_solvers.h:315"
-    "include/tycho/detail/astro/kepler/lambert_solvers.h:323"
-    "include/tycho/detail/astro/kepler/lambert_solvers.h:329"
-    "include/tycho/detail/astro/kepler/lambert_solvers.h:337"
-    "include/tycho/detail/astro/kepler/lambert_solvers.h:343"
-    "include/tycho/detail/astro/kepler/lambert_solvers.h:376"
 )
 
 # ---------------------------------------------------------------------------

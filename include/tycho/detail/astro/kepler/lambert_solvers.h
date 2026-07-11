@@ -68,6 +68,7 @@ void lambert_izzo_impl(const Vector3<Scalar> &R1dim, const Vector3<Scalar> &R2di
                        double mu, WayBool longway, int Nin, BranchBool rightbranch,
                        Vector3<Scalar> &V1, Vector3<Scalar> &V2, ExitInt &exint) {
     using std::abs;
+    using std::pow;
 
     constexpr bool RisScalar = std::is_floating_point<Scalar>::value;
     constexpr bool WayisScalar = std::is_same<WayBool, bool>::value;

@@ -140,6 +140,7 @@ struct LGLControlSpline : LGLControlSplineSize<LGLControlSpline<CSC, USZ, Order>
     template <class InType, class OutType>
     inline void compute_impl(const Eigen::MatrixBase<InType> &x,
                              Eigen::MatrixBase<OutType> const &fx_) const {
+        using std::pow;
         typedef typename InType::Scalar Scalar;
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
 
@@ -176,6 +177,7 @@ struct LGLControlSpline : LGLControlSplineSize<LGLControlSpline<CSC, USZ, Order>
     inline void compute_jacobian_impl(const Eigen::MatrixBase<InType> &x,
                                       Eigen::MatrixBase<OutType> const &fx_,
                                       Eigen::MatrixBase<JacType> const &jx_) const {
+        using std::pow;
         typedef typename InType::Scalar Scalar;
         Eigen::MatrixBase<JacType> &jx = jx_.const_cast_derived();
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
@@ -276,6 +278,7 @@ struct LGLControlSpline : LGLControlSplineSize<LGLControlSpline<CSC, USZ, Order>
         Eigen::MatrixBase<JacType> const &jx_, Eigen::MatrixBase<AdjGradType> const &adjgrad_,
         Eigen::MatrixBase<AdjHessType> const &adjhess_,
         const Eigen::MatrixBase<AdjVarType> &adjvars) const {
+        using std::pow;
         typedef typename InType::Scalar Scalar;
         Eigen::MatrixBase<JacType> &jx = jx_.const_cast_derived();
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
