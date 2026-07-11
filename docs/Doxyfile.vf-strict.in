@@ -48,10 +48,7 @@ ENABLED_SECTIONS       = internal
 DOT_GRAPH_MAX_NODES    = 120
 
 # Exclusions:
-#   - Avoid:: is dead test scaffolding (function_templates.h), not public API
-#     and not included by any TU.
 #   - VF_TYPE_ALIASES is a boilerplate CRTP type-alias macro re-exported by
 #     every expression type; expand it away so it is not counted as an
 #     undocumented member of each struct.
-EXCLUDE_SYMBOLS       += Avoid::*
 PREDEFINED            += VF_TYPE_ALIASES(x)=
