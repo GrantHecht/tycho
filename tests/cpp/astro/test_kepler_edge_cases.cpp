@@ -307,18 +307,23 @@ TEST(KeplerEdgeCases, EllipticPathUnaffectedByHyperbolicFix) {
 // instead of the former residual-break loop that silently returned a
 // finite-but-wrong state.
 //
-// PR8 amendment: the naive E = M seed is replaced by a Markley (1995) cubic
-// starter (detail::elliptic_kepler_seed). Derived from the exact Cardano
-// solution of the truncated-near-periapsis Kepler cubic, it tracks the true
-// root even in the doubly-singular near-parabolic corner (e -> 1-, M -> 0)
-// where E = M left the Newton basin (the 1 - e*cosE denominator shrinks near
-// E ~ 0). A convergence-map grid probe (log-spaced e up to 1-1e-12 x two-part M
-// grid, graded on the loop's own converged flag) confirms the new seed is a
+// PR8 amendment: the naive E = M seed is replaced by a threshold-hybrid
+// starter (detail::elliptic_kepler_seed): E = M below e = 0.9 (bit-identical
+// to the historical baseline in cost and convergence -- the E = M seed is
+// probe-verified divergence-free below e = 0.975, so nominal-eccentricity
+// call sites pay nothing), and a Markley (1995) cubic starter at e >= 0.9.
+// The Markley starter is derived from the exact Cardano solution of the
+// truncated-near-periapsis Kepler cubic, so it tracks the true root even in
+// the doubly-singular near-parabolic corner (e -> 1-, M -> 0) where E = M
+// left the Newton basin (the 1 - e*cosE denominator shrinks near E ~ 0). A
+// convergence-map grid probe (log-spaced e up to 1-1e-12 x two-part M grid,
+// graded on the loop's own converged flag) confirms the hybrid seed is a
 // strict superset of the old: zero previously-convergent cells regress, and
 // every previously-divergent near-parabolic cell -- down to the former control
-// input e = 1-1e-9, M = 1e-8 -- now converges (in <= 3 Newton steps). The
-// poison path is retained but now fires only on genuinely degenerate/non-finite
-// input, exercised by EllipticDegenerateInputPoisonsOutput below.
+// input e = 1-1e-9, M = 1e-8 -- now converges (in <= 3 Newton steps; all such
+// cells lie above the threshold, on the Markley path). The poison path is
+// retained but now fires only on genuinely degenerate/non-finite input,
+// exercised by EllipticDegenerateInputPoisonsOutput below.
 // ---------------------------------------------------------------------------
 
 TEST(KeplerEdgeCases, EllipticNearParabolicNowConverges) {
@@ -328,11 +333,12 @@ TEST(KeplerEdgeCases, EllipticNearParabolicNowConverges) {
     // EllipticNonConvergencePoisonsOutput control input): probe reports it now
     // converges in 2 Newton steps to E ~= 3.914e-3 (the cubic root, agreeing
     // with a bisection reference). Two further probe-confirmed gain cells at
-    // moderate-to-high e small-|M| are asserted alongside it.
+    // high-e small-|M| are asserted alongside it.
     struct Cell {
         double e, M;
     };
-    // All three lie in the probe's gain set (converged-new, divergent-old).
+    // All three lie in the probe's gain set (converged-new, divergent-old) and
+    // above the hybrid seed's e = 0.9 threshold, i.e. on the Markley path.
     for (Cell c : {Cell{1.0 - 1.0e-9, 1.0e-8}, Cell{1.0 - 1.0e-9, 0.12}, Cell{0.99, 0.105}}) {
         Vector6<double> oe;
         oe << 1.0e5, c.e, 0.1, 0.1, 0.1, c.M;
