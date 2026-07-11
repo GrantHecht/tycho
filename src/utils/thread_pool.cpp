@@ -48,8 +48,9 @@ void set_num_threads(int n) {
         // directly instead of spawning hardware_concurrency() threads and
         // immediately joining/respawning to n — see
         // ThreadPool::requested_thread_count() for the construction-order race
-        // note. On an already-constructed pool this has no effect beyond letting
-        // reset(n) below early-return when already at size n.
+        // note. On an already-constructed pool the stash is inert (only the
+        // ctor reads it); resizing then happens via reset(n) below, which
+        // independently early-returns when the pool is already at size n.
         ThreadPool::requested_thread_count().store(static_cast<unsigned>(n),
                                                    std::memory_order_release);
         g_pool_configuring.store(true, std::memory_order_release);

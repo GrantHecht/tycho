@@ -142,7 +142,7 @@ void lambert_izzo_impl(const Vector3<Scalar> &R1dim, const Vector3<Scalar> &R2di
 
     // pre-calculating the initial guesses to remove log/tan calls, see OldenHuis github for origin
     N = Scalar(double(Nin));
-    if (int(Nin) == 0) {
+    if (Nin == 0) {
         x1 = -0.740867916771357;
         x2 = 0.4208790341605184;
     } else {

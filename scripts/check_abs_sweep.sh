@@ -5,9 +5,11 @@
 # resolve via ordinary/ADL lookup, and on some toolchains or include orders
 # only the integer `::abs(int)` overload (from <cstdlib>) is visible,
 # silently truncating a floating-point argument to zero-or-one. This class of
-# bug was swept once across ~28 sites (see
-# .superpowers/sdd/task-1-report.md); this script is the CI guard that keeps
-# it from being silently reintroduced.
+# bug was swept once across ~28 sites in the 2026-07 review series (the
+# `using std::abs;` ADL pattern in kepler_utils.h / lambert_solvers.h /
+# root_finder.h is the sanctioned fix shape); this script is the CI guard
+# that keeps it from being silently reintroduced. -Wabsolute-value in
+# CMakeLists.txt is the compile-time half of the same guard.
 #
 # Invariant enforced, for each of `abs` and `pow` independently: a bare call
 # `abs(` / `pow(` (regex `(?<![\w:.>])abs\(` — i.e. not already qualified by
@@ -77,8 +79,7 @@ ABS_ALLOWLIST=(
 # The lgl_control_splines.h / lambert_solvers.h gap tracked here previously
 # (bare pow() call sites with no `using std::pow;` guard) was closed by
 # adding function-scope `using std::pow;` declarations to each enclosing
-# function — see .superpowers/sdd/task-10-report.md, "Fix wave: pow guard
-# completion".
+# function, so the allowlist is intentionally empty.
 POW_ALLOWLIST=(
 )
 
