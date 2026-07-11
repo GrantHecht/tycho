@@ -38,6 +38,63 @@ using vf::VectorFunction;
 // the Kepler subsystem on non-convergence.
 using detail::kepler_nan_value;
 
+namespace detail {
+
+/// @internal
+/// @brief Markley (1995) cubic starter for the elliptic Kepler equation.
+///
+/// Returns an initial guess E0 for Newton's iteration on M = E - e·sin(E).
+/// Derived from the exact Cardano solution of the depressed cubic obtained by
+/// truncating Kepler's equation near periapsis, so it tracks the true root even
+/// in the doubly-singular near-parabolic corner (e -> 1⁻, M -> 0) where the
+/// naive E0 = M seed lands far from the root and the Newton iterate leaves the
+/// basin of convergence. Mean anomaly is first reduced to [-π, π] (Kepler's
+/// equation is 2π-periodic: E(M + 2π·n) = E(M) + 2π·n) and the shift re-applied
+/// to the result, so the seed is valid for any finite M.
+///
+/// Fed as the seed into the existing Newton loop (which supplies the iterative
+/// refinement in place of Markley's own fifth-order correction step); the loop,
+/// its step-size convergence test, and its NaN-poison guard are unchanged. A
+/// grid probe (PR8 amendment) confirms this starter closes the near-parabolic
+/// divergence band the E = M seed suffered: every previously-divergent cell
+/// down to e = 1 − 1e-9, M = 1e-8 now converges, in ≤ 3 Newton steps.
+///
+/// Reference: Markley, F.L., "Kepler Equation Solver", Celestial Mechanics and
+/// Dynamical Astronomy 63 (1995) 101-111 (starter, Eqs. 19-20).
+/// @endinternal
+template <class Scalar> inline Scalar elliptic_kepler_seed(Scalar e, Scalar M) {
+    using std::abs;
+    using std::floor;
+    using std::max;
+    using std::pow;
+    using std::sqrt;
+    const double PI = 3.14159265358979;
+
+    // Reduce M to [-π, π]; the 2π·n shift is re-applied to the starter below.
+    Scalar n = floor(M / (2.0 * PI) + 0.5);
+    Scalar Mr = M - 2.0 * PI * n;
+    Scalar s = Mr < 0 ? Scalar(-1.0) : Scalar(1.0);
+    Scalar Ma = abs(Mr); // |M| in [0, π]
+    if (Ma == Scalar(0.0)) {
+        return 2.0 * PI * n; // exact root E = 2π·n at M = 2π·n
+    }
+
+    Scalar alpha = (3.0 * PI * PI + 1.6 * PI * (PI - Ma) / (1.0 + e)) / (PI * PI - 6.0);
+    Scalar d = 3.0 * (1.0 - e) + alpha * e;
+    Scalar q = 2.0 * alpha * d * (1.0 - e) - Ma * Ma;
+    Scalar r = 3.0 * alpha * d * (d - 1.0 + e) * Ma + Ma * Ma * Ma;
+    // q³ + r² is the Cardano discriminant of the truncated-Kepler cubic; it is
+    // >= 0 by construction (the cubic has a single real root), but clamp at 0 so
+    // a fast-math round-to-tiny-negative cannot turn sqrt into a spurious NaN
+    // seed (which would poison an otherwise-convergent near-parabolic state).
+    Scalar disc = max(Scalar(0.0), q * q * q + r * r);
+    Scalar w = pow(abs(r) + sqrt(disc), 2.0 / 3.0);
+    Scalar E1 = (2.0 * r * w / (w * w + w * q + q * q) + Ma) / d;
+    return s * E1 + 2.0 * PI * n;
+}
+
+} // namespace detail
+
 ////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////              Conversions                  /////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////
@@ -55,24 +112,24 @@ using detail::kepler_nan_value;
 ///               hyperbolic mean anomaly (M = e·sinh(H) − H).
 /// @param mu     Gravitational parameter (km³/s² or consistent units).
 /// @return Six Cartesian state [rx, ry, rz, vx, vy, vz].
-/// @warning Elliptic branch (e < 1): the Newton iteration on E runs at most
-///          MAXITERS_ELLIPTIC=17 steps from the E = M seed and tests convergence
-///          on the Newton step (|dE| < TOL, 1e-12) — the same step-size
-///          convention as the hyperbolic branch below and kepler_lcd_iterate.
-///          On non-convergence the whole output is NaN-poisoned via
-///          kepler_nan_value<Scalar>(), rather than silently returning an
-///          under-converged state (OC review §1.14). The budget is 17 rather
-///          than the hyperbolic branch's 15: a grid probe found a thin
-///          knife-edge band of near-parabolic (e → 1⁻), small-|M| inputs whose
-///          Newton step falls below TOL on iteration 16 (i.e. the 15-iteration
-///          budget was one or two steps short, poisoning inputs that were in
-///          fact converging), while genuinely divergent near-parabolic inputs
-///          (e.g. e = 1 − 1e-9, M = 1e-8) still exhaust the larger budget and
-///          poison. Convergence can still fail for near-parabolic orbits
-///          sampled near periapsis (small |M|), where the update's denominator
-///          `1 - e·cosE` shrinks near E ≈ 0 and the E = M seed leaves the
-///          Newton basin; such inputs poison, they no longer return a
-///          finite-but-wrong state with no diagnostic.
+/// @warning Elliptic branch (e < 1): the Newton iteration on E is seeded with a
+///          Markley (1995) cubic starter (detail::elliptic_kepler_seed), runs at
+///          most MAXITERS_ELLIPTIC=17 steps, and tests convergence on the Newton
+///          step (|dE| < TOL, 1e-12) — the same step-size convention as the
+///          hyperbolic branch below and kepler_lcd_iterate. On non-convergence
+///          the whole output is NaN-poisoned via kepler_nan_value<Scalar>(),
+///          rather than silently returning an under-converged state (OC review
+///          §1.14). The Markley starter is derived from the exact cubic
+///          approximation of Kepler's equation near periapsis, so it tracks the
+///          true root even in the near-parabolic (e → 1⁻), small-|M| corner
+///          where the former E = M seed left the Newton basin (the `1 - e·cosE`
+///          denominator shrinks near E ≈ 0): a grid probe (PR8 amendment)
+///          confirms every previously-divergent near-parabolic cell down to
+///          e = 1 − 1e-9, M = 1e-8 now converges — in ≤ 3 iterations — closing
+///          the knife-edge divergence band the E = M seed suffered.
+///          MAXITERS_ELLIPTIC = 17 is retained though the worst-case convergent
+///          input now needs only ~3 steps (deliberately generous); the poison
+///          path remains as a guard for degenerate/non-finite inputs.
 /// @warning Hyperbolic branch (e > 1): converges via an asinh(M/e) seed and a
 ///          step-size (|dH| < TOL) test over MAXITERS=15 steps, NaN-poisoning
 ///          the whole output on non-convergence (incl. sinh/cosh overflow).
@@ -100,15 +157,15 @@ Vector6<Scalar> classic_to_cartesian(const Vector6<Scalar> &oelems, Scalar mu) {
     Scalar x, y, vx, vy;
 
     if (e < 1.0) { // Elliptic
-        // Elliptic branch gets a larger iteration budget than the hyperbolic
-        // branch below (MAXITERS=15): a thin knife-edge band of near-parabolic
-        // (e -> 1-) small-|M| inputs converges to an accurate E within ~16
-        // iterations under the stricter step-size test but not within 15 (see
-        // the @warning above and the probe referenced there). Scoped to this
-        // branch only -- the hyperbolic branch's basin/step-size behavior is
-        // unrelated and is left at MAXITERS.
+        // Markley (1995) cubic starter (detail::elliptic_kepler_seed) replaces
+        // the naive E = M seed: it tracks the true root even in the
+        // near-parabolic (e -> 1-) small-|M| corner where E = M left the Newton
+        // basin, so every convergent input now needs <= 3 steps (probe, PR8
+        // amendment). MAXITERS_ELLIPTIC = 17 is retained as a generous guard
+        // (was raised from the hyperbolic branch's 15 under the old seed; kept
+        // here so the poison path only fires on genuinely degenerate input).
         const int MAXITERS_ELLIPTIC = 17;
-        Scalar E = M;
+        Scalar E = detail::elliptic_kepler_seed(e, M);
         Scalar sinE;
         Scalar cosE;
         bool converged = false;
@@ -131,11 +188,12 @@ Vector6<Scalar> classic_to_cartesian(const Vector6<Scalar> &oelems, Scalar mu) {
             }
         }
         if (!converged) {
-            // Non-convergence (e.g. e -> 1- near periapsis, where the
-            // 1 - e*cosE denominator shrinks and the E = M seed leaves the
-            // Newton basin) must not silently return a finite-but-wrong state
-            // — poison the whole output, mirroring the hyperbolic branch below
-            // and the LCD/IFT Kepler paths.
+            // With the Markley starter the near-parabolic band converges, so
+            // this guard now only fires on genuinely degenerate input (e.g.
+            // non-finite M, or e within machine-epsilon of parabolic). Such
+            // input must not silently return a finite-but-wrong state — poison
+            // the whole output, mirroring the hyperbolic branch below and the
+            // LCD/IFT Kepler paths.
             return Vector6<Scalar>::Constant(kepler_nan_value<Scalar>());
         }
         // Refresh sin/cos at the accepted E: the loop breaks after taking the
@@ -407,14 +465,14 @@ Vector6<Scalar> modified_to_classic(const Vector6<Scalar> &meelems, Scalar mu) {
 /// @param mu     Gravitational parameter (km³/s² or consistent units); accepted for
 ///               API symmetry but is not used in the algebraic conversion.
 /// @return Six MEE [p, f, g, h, k, L].
-/// @warning Elliptic branch (e < 1): same MAXITERS_ELLIPTIC=17 Newton loop on E
-///          as classic_to_cartesian(), converging on the step size (|dE| <
-///          TOL) and NaN-poisoning the whole output on non-convergence — see
-///          the warning there (including the knife-edge-band rationale for
-///          the 17-iteration budget). Near-parabolic orbits (e → 1⁻) sampled
-///          near periapsis can exhaust MAXITERS_ELLIPTIC (the `1 - e·cosE`
-///          denominator shrinks) and are poisoned rather than silently
-///          under-converged.
+/// @warning Elliptic branch (e < 1): same Markley-seeded, MAXITERS_ELLIPTIC=17
+///          Newton loop on E as classic_to_cartesian(), converging on the step
+///          size (|dE| < TOL) and NaN-poisoning the whole output on
+///          non-convergence — see the warning there (including how the Markley
+///          cubic starter closes the near-parabolic small-|M| divergence band
+///          the former E = M seed suffered). The poison path now fires only on
+///          genuinely degenerate/non-finite input rather than on ordinary
+///          near-parabolic orbits.
 /// @warning Hyperbolic branch (e > 1): NaN-poisons on non-convergence over
 ///          MAXITERS=15 steps (see classic_to_cartesian()); near-parabolic
 ///          orbits (e → 1⁺) can still genuinely diverge and NaN-poison.
@@ -436,12 +494,12 @@ Vector6<Scalar> classic_to_modified(const Vector6<Scalar> &oelems, Scalar mu) {
     // Calc True anomally
     Scalar v;
     if (e < 1.0) { // Elliptic
-        // See classic_to_cartesian() for why the elliptic branch gets a
-        // larger budget (17) than the hyperbolic branch below (MAXITERS=15):
-        // a knife-edge band of near-parabolic small-|M| inputs needs ~16
-        // iterations to fall below the step-size tolerance.
+        // Markley (1995) cubic starter (detail::elliptic_kepler_seed); see
+        // classic_to_cartesian() — it closes the near-parabolic small-|M|
+        // divergence band the former E = M seed suffered, so convergent inputs
+        // need <= 3 steps. MAXITERS_ELLIPTIC = 17 retained as a generous guard.
         const int MAXITERS_ELLIPTIC = 17;
-        Scalar E = M;
+        Scalar E = detail::elliptic_kepler_seed(e, M);
         bool converged = false;
         for (int i = 0; i < MAXITERS_ELLIPTIC; i++) {
             Scalar sinE = sin(E);
@@ -458,9 +516,10 @@ Vector6<Scalar> classic_to_modified(const Vector6<Scalar> &oelems, Scalar mu) {
             }
         }
         if (!converged) {
-            // Non-convergence near e -> 1- (periapsis) must not silently
-            // propagate a finite-but-wrong state — poison, mirroring the
-            // hyperbolic branch and classic_to_cartesian().
+            // With the Markley starter the near-parabolic band converges; this
+            // guard now fires only on genuinely degenerate/non-finite input.
+            // Must not silently propagate a finite-but-wrong state — poison,
+            // mirroring the hyperbolic branch and classic_to_cartesian().
             return Vector6<Scalar>::Constant(kepler_nan_value<Scalar>());
         }
         v = 2.0 * atan2(sqrt(1. + e) * sin(E / 2.0), sqrt(1. - e) * cos(E / 2.0));

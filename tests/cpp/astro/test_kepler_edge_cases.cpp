@@ -8,6 +8,8 @@
 #include "astro_test_utils.h"
 #include <cmath>
 #include <gtest/gtest.h>
+#include <limits>
+#include <numbers>
 #include <tycho/tycho.h>
 
 using namespace tycho;
@@ -104,16 +106,17 @@ TEST(KeplerEdgeCases, NearParabolic) {
     // side (probe: round-trip diff = 1.5e-9 at M = 1.0, vs. 9.9e-4 that e =
     // 0.9999 gave here before this fix). e = 0.999 is still genuinely
     // near-parabolic and the elliptic Newton solve is non-trivial: from the
-    // E = M seed it converges in ~7 iterations under the stricter step-size
-    // test (|dE| < 1e-12, matching kepler_lcd_iterate and the hyperbolic
-    // branch) for M = 1.0, but not reliably for small M near periapsis: the
-    // 1 - e*cosE denominator shrinks there and the E = M seed can leave the
-    // Newton basin in a thin, non-monotonic knife-edge band (probe: e.g.
-    // M = 0.10 and 0.12 converge but 0.105 and 0.115 do not -- see the
-    // MAXITERS_ELLIPTIC @warning in kepler_utils.h). Those non-convergent
-    // small-M inputs are NaN-poisoned, covered by
-    // EllipticNonConvergencePoisonsOutput below. (Pre-fix, the residual-break
-    // loop silently returned a finite-but-wrong state for the small-M case.)
+    // Markley cubic starter (PR8 amendment) the solve converges in <= 3
+    // iterations under the stricter step-size test (|dE| < 1e-12, matching
+    // kepler_lcd_iterate and the hyperbolic branch) for M = 1.0. Historically
+    // (pre-PR8, E = M seed) the small-M periapsis region was a thin,
+    // non-monotonic knife-edge band where the 1 - e*cosE denominator shrinks
+    // and the E = M iterate left the Newton basin (probe: M = 0.10 and 0.12
+    // converged but 0.105 and 0.115 did not, and were NaN-poisoned). The
+    // Markley starter closes that band -- those cells now converge, covered by
+    // EllipticNearParabolicNowConverges below. (Round-trip decode conditioning
+    // at high e, discussed above, is an orthogonal axis and is unaffected by
+    // the seed change.)
     Vector6<double> oe;
     oe << 50000.0, 0.999, 10.0 * std::numbers::pi / 180.0, 0.0, 0.0, 1.0;
     auto rv = classic_to_cartesian<double>(oe, MU_EARTH);
@@ -293,59 +296,103 @@ TEST(KeplerEdgeCases, EllipticPathUnaffectedByHyperbolicFix) {
 }
 
 // ---------------------------------------------------------------------------
-// CODEBASE §1.1b / OC §1.14 completion: elliptic-anomaly Newton solve now
-// signals non-convergence.
+// CODEBASE §1.1b / OC §1.14 + PR8 amendment: elliptic-anomaly Newton solve
+// signals non-convergence AND closes the near-parabolic divergence band.
 //
-// The elliptic branches of classic_to_cartesian and classic_to_modified
-// solve M = E - e*sin(E) via Newton iteration from the E = M seed. They now
-// test convergence on the Newton STEP (|dE| < 1e-12, matching
-// kepler_lcd_iterate's |dX| <= Xtol convention and the hyperbolic branch),
-// track a `converged` flag, and NaN-poison the whole output (via
-// kepler_nan_value) when MAXITERS_ELLIPTIC = 17 is exhausted -- instead of the
-// former residual-break loop that silently returned a finite-but-wrong state.
-// The former break tested |E - e*sinE - M| < TOL *before* stepping, which
-// accepted an under-converged E near periapsis of near-parabolic orbits: a
-// tiny residual need not imply a tiny step there because the 1 - e*cosE
-// denominator shrinks.
+// The elliptic branches of classic_to_cartesian and classic_to_modified solve
+// M = E - e*sin(E) via Newton iteration. They test convergence on the Newton
+// STEP (|dE| < 1e-12, matching kepler_lcd_iterate's |dX| <= Xtol convention and
+// the hyperbolic branch), track a `converged` flag, and NaN-poison the whole
+// output (via kepler_nan_value) when MAXITERS_ELLIPTIC = 17 is exhausted --
+// instead of the former residual-break loop that silently returned a
+// finite-but-wrong state.
 //
-// The elliptic budget (17) is larger than the hyperbolic branch's (15): a
-// grid probe found a thin knife-edge band of near-parabolic small-|M| inputs
-// whose Newton step falls below tolerance on iteration 16, one or two steps
-// past the original 15-iteration budget -- see EllipticNonConvergencePoisonsOutput
-// below for the still-genuinely-divergent control input.
+// PR8 amendment: the naive E = M seed is replaced by a Markley (1995) cubic
+// starter (detail::elliptic_kepler_seed). Derived from the exact Cardano
+// solution of the truncated-near-periapsis Kepler cubic, it tracks the true
+// root even in the doubly-singular near-parabolic corner (e -> 1-, M -> 0)
+// where E = M left the Newton basin (the 1 - e*cosE denominator shrinks near
+// E ~ 0). A convergence-map grid probe (log-spaced e up to 1-1e-12 x two-part M
+// grid, graded on the loop's own converged flag) confirms the new seed is a
+// strict superset of the old: zero previously-convergent cells regress, and
+// every previously-divergent near-parabolic cell -- down to the former control
+// input e = 1-1e-9, M = 1e-8 -- now converges (in <= 3 Newton steps). The
+// poison path is retained but now fires only on genuinely degenerate/non-finite
+// input, exercised by EllipticDegenerateInputPoisonsOutput below.
 // ---------------------------------------------------------------------------
 
-TEST(KeplerEdgeCases, EllipticNonConvergencePoisonsOutput) {
-    // Probed divergent input (scan over (e, M) near e -> 1-, standalone probe):
-    // e = 1 - 1e-9, M = 1e-8 is genuinely non-convergent from the E = M seed --
-    // the Newton step never falls below 1e-12 within MAXITERS_ELLIPTIC = 17
-    // (the 1 - e*cosE denominator is ~1e-9 near E ~ 0, so the step oscillates /
-    // overshoots).  Re-verified after the elliptic budget was raised from 15
-    // to 17 (to retain a knife-edge band of near-convergent inputs, see the
-    // block comment above): this input still poisons at 17 -- it is genuinely
-    // divergent, not merely budget-starved.  Pre-fix this returned a
-    // finite-but-wrong state; post-fix the whole output is NaN-poisoned.
+TEST(KeplerEdgeCases, EllipticNearParabolicNowConverges) {
+    // PR8 amendment: cells that were genuinely divergent from the E = M seed --
+    // and NaN-poisoned by the pre-PR8 loop -- now converge under the Markley
+    // cubic starter. The headline case is e = 1-1e-9, M = 1e-8 (the former
+    // EllipticNonConvergencePoisonsOutput control input): probe reports it now
+    // converges in 2 Newton steps to E ~= 3.914e-3 (the cubic root, agreeing
+    // with a bisection reference). Two further probe-confirmed gain cells at
+    // moderate-to-high e small-|M| are asserted alongside it.
+    struct Cell {
+        double e, M;
+    };
+    // All three lie in the probe's gain set (converged-new, divergent-old).
+    for (Cell c : {Cell{1.0 - 1.0e-9, 1.0e-8}, Cell{1.0 - 1.0e-9, 0.12}, Cell{0.99, 0.105}}) {
+        Vector6<double> oe;
+        oe << 1.0e5, c.e, 0.1, 0.1, 0.1, c.M;
+
+        auto rv = classic_to_cartesian<double>(oe, MU_EARTH);
+        ASSERT_TRUE(rv.allFinite())
+            << "classic_to_cartesian NaN-poisoned a now-convergent near-parabolic cell (e=" << c.e
+            << ", M=" << c.M << ")";
+
+        auto mee = classic_to_modified<double>(oe, MU_EARTH);
+        ASSERT_TRUE(mee.allFinite())
+            << "classic_to_modified NaN-poisoned a now-convergent near-parabolic cell (e=" << c.e
+            << ", M=" << c.M << ")";
+
+        // Independent correctness check: modified_to_classic recomputes M via
+        // the closed-form (Newton-free) arctan relation, so recovering the
+        // input M confirms the Newton-solved E landed on the true root rather
+        // than merely producing *some* finite state. Loosened to 1e-6 for the
+        // e = 1-1e-9 rows: the E-from-v decode (atan/tan(v/2)) is
+        // ill-conditioned near periapsis of extreme near-parabolic orbits
+        // (see the NearParabolic decode-conditioning discussion above), an
+        // orthogonal axis to the Newton convergence being asserted here.
+        auto oe2 = modified_to_classic<double>(mee, MU_EARTH);
+        double dM = std::remainder(oe2[5] - c.M, 2.0 * std::numbers::pi);
+        EXPECT_NEAR(dM, 0.0, 1e-6)
+            << "recovered mean anomaly wrong at e=" << c.e << ", M=" << c.M
+            << " -- Markley-seeded Newton solve converged to the wrong root";
+    }
+
+    // Control: the same near-parabolic e sampled away from periapsis (M = 1.0)
+    // already converged pre-PR8 and must still converge.
+    Vector6<double> oe_ok;
+    oe_ok << 1.0e5, 1.0 - 1.0e-9, 0.1, 0.1, 0.1, 1.0;
+    EXPECT_TRUE(classic_to_cartesian<double>(oe_ok, MU_EARTH).allFinite());
+    EXPECT_TRUE(classic_to_modified<double>(oe_ok, MU_EARTH).allFinite());
+}
+
+TEST(KeplerEdgeCases, EllipticDegenerateInputPoisonsOutput) {
+    // The Markley starter closes the near-parabolic divergence band (probe: no
+    // finite e < 1 input poisons, down to e = 1-1e-16), so the elliptic poison
+    // path now guards only genuinely degenerate input. A non-finite mean
+    // anomaly (NaN M) can never satisfy |dE| < 1e-12 -- every Newton step is
+    // NaN -- so MAXITERS_ELLIPTIC is exhausted and the whole output is
+    // NaN-poisoned rather than propagating a partially-finite garbage state.
+    // This documents that the poison mechanism is retained and still fires.
+    const double nan = std::numeric_limits<double>::quiet_NaN();
     Vector6<double> oe;
-    oe << 1.0e5, 1.0 - 1.0e-9, 0.1, 0.1, 0.1, /*M=*/1.0e-8;
+    oe << 1.0e5, 0.5, 0.1, 0.1, 0.1, /*M=*/nan;
 
     auto rv = classic_to_cartesian<double>(oe, MU_EARTH);
     for (int i = 0; i < 6; ++i)
         EXPECT_TRUE(std::isnan(rv[i]))
             << "classic_to_cartesian component " << i
-            << " should be NaN-poisoned on elliptic non-convergence";
+            << " should be NaN-poisoned on degenerate (NaN M) input";
 
     auto mee = classic_to_modified<double>(oe, MU_EARTH);
     for (int i = 0; i < 6; ++i)
         EXPECT_TRUE(std::isnan(mee[i]))
             << "classic_to_modified component " << i
-            << " should be NaN-poisoned on elliptic non-convergence";
-
-    // Control: same near-parabolic e sampled away from periapsis (M = 1.0)
-    // converges and must NOT be poisoned (probe: ~6 iters).
-    Vector6<double> oe_ok;
-    oe_ok << 1.0e5, 1.0 - 1.0e-9, 0.1, 0.1, 0.1, 1.0;
-    EXPECT_TRUE(classic_to_cartesian<double>(oe_ok, MU_EARTH).allFinite());
-    EXPECT_TRUE(classic_to_modified<double>(oe_ok, MU_EARTH).allFinite());
+            << " should be NaN-poisoned on degenerate (NaN M) input";
 }
 
 TEST(KeplerEdgeCases, NominalEllipticRoundTripUnchanged) {
