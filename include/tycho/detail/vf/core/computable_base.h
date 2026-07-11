@@ -136,8 +136,9 @@ namespace tycho::vf {
 /// `is_generic_function`, `is_conditional`. All are declared with their base-default
 /// values just below in this class.
 ///
-/// **Known-legitimate direct overrider of `compute`/`compute_jacobian`:**
-/// `tycho::vf::CwiseOperator` (`cwise_operators.h`) overrides both directly instead of
+/// **Known-legitimate direct overrider of `compute`/`compute_jacobian`/
+/// `compute_jacobian_adjointgradient_adjointhessian`:**
+/// `tycho::vf::CwiseOperator` (`cwise_operators.h`) overrides all three directly instead of
 /// implementing `compute_impl`/`compute_jacobian_impl`, applying its derived class's
 /// `cwise_compute`/`cwise_compute_jacobian` hooks straight to the input. This is an
 /// intentional second CRTP tier, not a near-miss — any lint for hook-name typos should
