@@ -17,6 +17,10 @@
 #include "tycho/detail/vf/core/vector_function.h"
 #include "tycho/detail/vf/derivatives/detect_diagonal.h"
 
+#include <fmt/format.h>
+
+#include <stdexcept>
+
 namespace tycho::vf {
 
 template <class Derived, class Func> struct FunctionVectorSum_Impl;
@@ -64,6 +68,12 @@ struct FunctionVectorSum_Impl
     /// @param v  The constant offset vector.
     template <class OutType>
     FunctionVectorSum_Impl(Func f, CVecRef<OutType> v) : func_(std::move(f)) {
+        if (v.size() != this->func_.output_rows()) {
+            throw std::invalid_argument(
+                fmt::format("Function/vector sum: offset vector has {} entries but the function "
+                            "has {} output rows",
+                            v.size(), this->func_.output_rows()));
+        }
         this->offset_vector = v;
         this->set_io_rows(this->func_.input_rows(), this->func_.output_rows());
         this->set_input_domain(this->input_rows(), {func_.input_domain()});

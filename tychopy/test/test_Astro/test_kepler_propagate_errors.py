@@ -48,6 +48,21 @@ class TestKeplerPropagateErrors(unittest.TestCase):
         with self.assertRaises(ValueError):
             typy.astro.propagate_cartesian(rv, 100.0, 0.0)
 
+    def test_propagate_cartesian_dt_zero_validates_mu(self):
+        # CODEBASE 1.1b: the dt == 0 early return previously bypassed all input
+        # validation (mu > 0, dt finite, V0 finite, r0 > 0).  Those checks are
+        # now hoisted ahead of the early return, so a dt == 0 call with mu <= 0
+        # raises std::invalid_argument -> ValueError.
+        rv = np.array([7000.0, 0.0, 0.0, 0.0, 7.5, 0.0])
+        with self.assertRaisesRegex(ValueError, r"propagate_cartesian.*mu"):
+            typy.astro.propagate_cartesian(rv, 0.0, -1.0)
+
+    def test_propagate_cartesian_dt_zero_validates_r0(self):
+        # A zero state vector (|R0| == 0) is rejected even when dt == 0, instead
+        # of being returned unchanged by the (previously unguarded) early return.
+        with self.assertRaisesRegex(ValueError, r"r0 must satisfy"):
+            typy.astro.propagate_cartesian(np.zeros(6), 0.0, 398600.4418)
+
     def test_propagate_cartesian_runtime_error_message_lists_causes(self):
         # Force a NaN-poisoned output by handing the kernel a NaN-component
         # initial state.  The post-loop finite mask in kepler_lcd_iterate
@@ -94,6 +109,27 @@ class TestKeplerPropagateErrors(unittest.TestCase):
             typy.astro.propagate_modified(mee, 100.0, -1.0)
         with self.assertRaisesRegex(ValueError, r"propagate_modified.*mu"):
             typy.astro.propagate_modified(mee, 100.0, 0.0)
+
+    # ----- classic_to_cartesian (elliptic non-convergence -> RuntimeError) -----
+
+    def test_classic_to_cartesian_divergent_raises(self):
+        # OC 1.14 completion: the elliptic-anomaly Newton solve now NaN-poisons
+        # its output on non-convergence, and the binding translates the
+        # non-finite result to RuntimeError (parity with the propagate_*
+        # siblings).  Probed divergent input: near-parabolic e = 1 - 1e-9
+        # sampled near periapsis (M = 1e-8), where the E = M seed leaves the
+        # Newton basin and MAXITERS_ELLIPTIC = 17 (raised from 15 to retain a
+        # knife-edge band of near-convergent inputs -- this one is genuinely
+        # divergent and re-verified to still poison at 17) is exhausted.
+        oe = [1.0e5, 1.0 - 1e-9, 0.1, 0.1, 0.1, 1e-8]
+        with self.assertRaisesRegex(RuntimeError, r"classic_to_cartesian.*converge"):
+            typy.astro.classic_to_cartesian(oe, 398600.4418)
+
+    def test_classic_to_modified_divergent_raises(self):
+        # Same divergent input through the classic_to_modified sibling.
+        oe = [1.0e5, 1.0 - 1e-9, 0.1, 0.1, 0.1, 1e-8]
+        with self.assertRaisesRegex(RuntimeError, r"classic_to_modified.*converge"):
+            typy.astro.classic_to_modified(oe, 398600.4418)
 
 
 if __name__ == "__main__":

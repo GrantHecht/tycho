@@ -21,6 +21,10 @@
 #pragma once
 #include "tycho/detail/vf/core/vector_function.h"
 
+#include <fmt/format.h>
+
+#include <stdexcept>
+
 namespace tycho::vf {
 
 /// @cond INTERNAL
@@ -569,6 +573,12 @@ struct RowScaled_Impl
     /// @param f  Function to wrap.
     /// @param s  Per-row output scale factors.
     template <class OutType> RowScaled_Impl(Func f, CVecRef<OutType> s) : func_(std::move(f)) {
+        if (s.size() != this->func_.output_rows()) {
+            throw std::invalid_argument(
+                fmt::format("RowScaled (cwise_product/cwise_quotient): scale vector has {} "
+                            "entries but the function has {} output rows",
+                            s.size(), this->func_.output_rows()));
+        }
         this->row_scale_values_ = s;
         this->set_io_rows(this->func_.input_rows(), this->func_.output_rows());
         this->set_input_domain(this->input_rows(), {func_.input_domain()});

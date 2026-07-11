@@ -192,7 +192,9 @@ class test_InterpTables(unittest.TestCase):
                         fx, jx, gx, hx = func.computeall(xin, [lm])
 
                         fxerr = abs(Val - fx).max()
-                        jxerr = abs(dVal - jx[0]).max()  # see Interp2D_test for shape rationale
+                        jxerr = abs(
+                            dVal - jx[0]
+                        ).max()  # see Interp2D_test for shape rationale
                         gxerr = abs(dVal * lm - gx).max()
                         hxerr = abs(d2Val * lm - hx).max()
 
@@ -260,7 +262,9 @@ class test_InterpTables(unittest.TestCase):
                             fx, jx, gx, hx = func.computeall(xin, [lm])
 
                             fxerr = abs(Val - fx).max()
-                            jxerr = abs(dVal - jx[0]).max()  # see Interp2D_test for shape rationale
+                            jxerr = abs(
+                                dVal - jx[0]
+                            ).max()  # see Interp2D_test for shape rationale
                             gxerr = abs(dVal * lm - gx).max()
                             hxerr = abs(d2Val * lm - hx).max()
 
@@ -606,6 +610,48 @@ class test_InterpTables(unittest.TestCase):
                 wscheck,
                 cache=True,
             )
+
+    def test_interp1d_empty_grid_raises(self):
+        # Empty Ts must raise ValueError, not crash on an out-of-bounds read
+        # (the size guard in set_data() must run before any ts_ indexing).
+        with self.assertRaises(ValueError):
+            vf.InterpTable1D(np.array([]), np.zeros((1, 0)), 0, "cubic")
+
+    def test_interp1d_short_grid_raises(self):
+        # Fewer than 5 grid points must raise ValueError.
+        with self.assertRaises(ValueError):
+            vf.InterpTable1D(np.linspace(0, 1, 4), np.zeros((1, 4)), 0, "cubic")
+
+    def test_interp2d_batch_shape_mismatch_raises(self):
+        xstab = np.linspace(-np.pi, np.pi, 8)
+        ystab = np.linspace(-np.pi, np.pi, 8)
+        X, Y = np.meshgrid(xstab, ystab)
+        F = np.cos(X) * np.cos(Y)
+        tab = vf.InterpTable2D(xstab, ystab, F, kind="cubic")
+
+        Xq = np.zeros((4, 4))
+        Yq = np.zeros((3, 4))
+        with self.assertRaises(ValueError):
+            tab.interp(Xq, Yq)
+
+    def test_interp2d_batch_valid_matches_scalar(self):
+        xstab = np.linspace(-np.pi, np.pi, 8)
+        ystab = np.linspace(-np.pi, np.pi, 8)
+        X, Y = np.meshgrid(xstab, ystab)
+        F = np.cos(X) * np.cos(Y)
+        tab = vf.InterpTable2D(xstab, ystab, F, kind="cubic")
+
+        Xq = np.array([[0.1, 0.2], [0.3, 0.4]])
+        Yq = np.array([[0.5, 0.6], [0.7, 0.8]])
+        out = tab.interp(Xq, Yq)
+
+        expected = np.array(
+            [
+                [tab.interp(Xq[0, 0], Yq[0, 0]), tab.interp(Xq[0, 1], Yq[0, 1])],
+                [tab.interp(Xq[1, 0], Yq[1, 0]), tab.interp(Xq[1, 1], Yq[1, 1])],
+            ]
+        )
+        self.assertLess(abs(out - expected).max(), 1.0e-13)
 
 
 if __name__ == "__main__":

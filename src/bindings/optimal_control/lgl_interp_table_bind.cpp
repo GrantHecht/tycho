@@ -209,6 +209,7 @@ tuple of numpy.ndarray
             R"doc(Mark the trajectory periodic, snapping the last node onto the first state.)doc");
 
     obj.def("interp_range", &LGLInterpTable::interp_range,
+            nb::call_guard<nb::gil_scoped_release>(),
             R"doc(Interpolate the trajectory at evenly-spaced samples over a time range.
 
 Parameters
@@ -226,6 +227,7 @@ list of numpy.ndarray
     ``num`` interpolated node vectors spanning ``[tl, th]``.
 )doc");
     obj.def("interp_whole_range", &LGLInterpTable::interp_whole_range,
+            nb::call_guard<nb::gil_scoped_release>(),
             R"doc(Interpolate the trajectory at evenly-spaced samples over ``[t0, tf]``.
 
 Parameters
@@ -239,6 +241,7 @@ list of numpy.ndarray
     ``num`` interpolated node vectors spanning the full table range.
 )doc");
     obj.def("error_integral", &LGLInterpTable::error_integral,
+            nb::call_guard<nb::gil_scoped_release>(),
             R"doc(Compute the cumulative ODE residual error integral over the trajectory.
 
 Evaluates the ODE at ``num_samps`` uniformly-spaced times, compares the

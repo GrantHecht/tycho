@@ -122,13 +122,25 @@ VectorFunction
     Scalar expression for time.
 )doc");
         obj.def(
-            "u_vec", [](const Derived &a) { return a.segment(a.xt_vars(), a.u_vars()); },
+            "u_vec",
+            [](const Derived &a) {
+                if (a.u_vars() == 0) {
+                    throw std::invalid_argument(
+                        "ODEArguments::u_vec: no control variables declared (uvars=0)");
+                }
+                return a.segment(a.xt_vars(), a.u_vars());
+            },
             R"doc(Control sub-vector ``u``.
 
 Returns
 -------
 VectorFunction
     Expression selecting the control block, of size ``Uvars``.
+
+Raises
+------
+ValueError
+    If no control variables were declared (``Uvars == 0``).
 )doc");
         obj.def(
             "u_var",
@@ -146,13 +158,25 @@ VectorFunction
     Scalar expression for control ``u[i]``.
 )doc");
         obj.def(
-            "p_vec", [](const Derived &a) { return a.segment(a.xtu_vars(), a.p_vars()); },
+            "p_vec",
+            [](const Derived &a) {
+                if (a.p_vars() == 0) {
+                    throw std::invalid_argument(
+                        "ODEArguments::p_vec: no parameter variables declared (pvars=0)");
+                }
+                return a.segment(a.xtu_vars(), a.p_vars());
+            },
             R"doc(ODE-parameter sub-vector ``p``.
 
 Returns
 -------
 VectorFunction
     Expression selecting the parameter block, of size ``Pvars``.
+
+Raises
+------
+ValueError
+    If no parameter variables were declared (``Pvars == 0``).
 )doc");
         obj.def(
             "p_var",

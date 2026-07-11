@@ -15,6 +15,8 @@
 
 #include "python_arg_parsing.h"
 
+#include <fmt/format.h>
+
 #include "function_registry.h"
 #include "tycho/detail/vf/common/common_functions.h"
 #include "tycho/detail/vf/core/vector_function.h"
@@ -96,6 +98,27 @@ std::vector<GenericFunction<-1, -1>> ParsePythonArgs(nb::args x, int irows) {
         nb::object o = nb::module_::import_("numpy").attr("int32");
         return o.release().ptr();
     }();
+    // numpy.number covers every signed/unsigned int and float width (including 0-d array
+    // scalars boxed as np.float64/np.int64), unlike the np_int/np_float exact-type checks
+    // above, which only match numpy's int32/float64 aliases.
+    static PyObject *np_number = [] {
+        nb::object o = nb::module_::import_("numpy").attr("number");
+        return o.release().ptr();
+    }();
+
+    auto is_numeric_scalar = [&](nb::handle h) {
+        // Exact-type fast paths first, then the general numpy.number ABC check for every
+        // other signed/unsigned int and float width (int8/16/64, uint*, float16/32, ...).
+        if (h.type().is(py_float) || h.type().is(py_int) || h.type().is(np_int) ||
+            h.type().is(np_float) || PyBool_Check(h.ptr())) {
+            return true;
+        }
+        int r = PyObject_IsInstance(h.ptr(), np_number);
+        if (r < 0) {
+            PyErr_Clear();
+        }
+        return r == 1;
+    };
 
     int i = 0;
     for (nb::handle xi : x) {
@@ -109,27 +132,27 @@ std::vector<GenericFunction<-1, -1>> ParsePythonArgs(nb::args x, int irows) {
                 throw std::invalid_argument("VectorFunctions in list must have same input size");
             }
 
-        } else if (xi.type().is(py_float) || xi.type().is(py_int) || xi.type().is(np_int) ||
-                   xi.type().is(np_float)) {
+        } else if (is_numeric_scalar(xi)) {
 
             // Good to go
         } else if (xi.type().is(py_list) || xi.type().is(np_array)) {
             // Loop over and check that these are arrays of doubles or ints
             int lenvec = nb::cast<int>(xi.attr("__len__")());
             for (int j = 0; j < lenvec; j++) {
-                auto elemj = xi.attr("__getitem__")(nb::int_(j)).type();
-                if (!(elemj.is(py_float) || elemj.is(py_int) || elemj.is(np_int) ||
-                      elemj.is(np_float))) {
-                    nb::print(nb::str(elemj));
-                    throw std::invalid_argument(
-                        "Vectors and lists must only contain doubles or floats");
+                nb::object elemj = xi.attr("__getitem__")(nb::int_(j));
+                if (!is_numeric_scalar(elemj)) {
+                    throw std::invalid_argument(fmt::format(
+                        "Vectors and lists must only contain ints or floats; got element of "
+                        "type {}",
+                        nb::cast<std::string>(nb::str(elemj.type()))));
                 }
             }
         }
 
         else {
-            nb::print(nb::str(xi.type()));
-            throw std::invalid_argument("Argument cannot be converted to VectorFunction");
+            throw std::invalid_argument(
+                fmt::format("Argument cannot be converted to VectorFunction; got type {}",
+                            nb::cast<std::string>(nb::str(xi.type()))));
         }
 
         i++;
@@ -156,8 +179,7 @@ std::vector<GenericFunction<-1, -1>> ParsePythonArgs(nb::args x, int irows) {
             funs.emplace_back(Rtype(nb::cast<SEG3>(xi)));
         } else if (xi.type().is(argtype)) {
             funs.emplace_back(Rtype(nb::cast<Arguments<-1>>(xi)));
-        } else if (xi.type().is(py_float) || xi.type().is(py_int) || xi.type().is(np_int) ||
-                   xi.type().is(np_float)) {
+        } else if (is_numeric_scalar(xi)) {
             Vector1<double> val;
             val[0] = nb::cast<double>(xi);
             funs.emplace_back(Constant<-1, 1>(irows, val));
@@ -219,6 +241,27 @@ std::vector<GenericFunction<-1, 1>> ParsePythonArgsScalar(nb::args x, int irows)
         nb::object o = nb::module_::import_("numpy").attr("int32");
         return o.release().ptr();
     }();
+    // numpy.number covers every signed/unsigned int and float width (including 0-d array
+    // scalars boxed as np.float64/np.int64), unlike the np_int/np_float exact-type checks
+    // above, which only match numpy's int32/float64 aliases.
+    static PyObject *np_number = [] {
+        nb::object o = nb::module_::import_("numpy").attr("number");
+        return o.release().ptr();
+    }();
+
+    auto is_numeric_scalar = [&](nb::handle h) {
+        // Exact-type fast paths first, then the general numpy.number ABC check for every
+        // other signed/unsigned int and float width (int8/16/64, uint*, float16/32, ...).
+        if (h.type().is(py_float) || h.type().is(py_int) || h.type().is(np_int) ||
+            h.type().is(np_float) || PyBool_Check(h.ptr())) {
+            return true;
+        }
+        int r = PyObject_IsInstance(h.ptr(), np_number);
+        if (r < 0) {
+            PyErr_Clear();
+        }
+        return r == 1;
+    };
 
     int i = 0;
     for (nb::handle xi : x) {
@@ -230,12 +273,12 @@ std::vector<GenericFunction<-1, 1>> ParsePythonArgsScalar(nb::args x, int irows)
                 throw std::invalid_argument("VectorFunctions in list must have same input size");
             }
 
-        } else if (xi.type().is(py_float) || xi.type().is(py_int) || xi.type().is(np_int) ||
-                   xi.type().is(np_float)) {
+        } else if (is_numeric_scalar(xi)) {
             // Good to go
         } else {
-            nb::print(nb::str(xi.type()));
-            throw std::invalid_argument("Argument cannot be converted to VectorFunction");
+            throw std::invalid_argument(
+                fmt::format("Argument cannot be converted to VectorFunction; got type {}",
+                            nb::cast<std::string>(nb::str(xi.type()))));
         }
 
         i++;
@@ -250,8 +293,7 @@ std::vector<GenericFunction<-1, 1>> ParsePythonArgsScalar(nb::args x, int irows)
             funs.emplace_back(Rtype(nb::cast<GenS>(xi)));
         } else if (xi.type().is(elemtype)) {
             funs.emplace_back(Rtype(nb::cast<ELEM>(xi)));
-        } else if (xi.type().is(py_float) || xi.type().is(py_int) || xi.type().is(np_float) ||
-                   xi.type().is(np_int)) {
+        } else if (is_numeric_scalar(xi)) {
             Vector1<double> val;
             val[0] = nb::cast<double>(xi);
             funs.emplace_back(Constant<-1, 1>(irows, val));

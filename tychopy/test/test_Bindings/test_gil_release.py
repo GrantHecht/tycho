@@ -54,6 +54,64 @@ def runs_concurrently(fn):
     return released
 
 
+def _linear_traj_guess(n=200):
+    """[x, v, t] node guess for SHO_Ode -- large enough that transcribe /
+    calc_global_error do real, measurable work per call."""
+    return [np.array([np.cos(t), -np.sin(t), t]) for t in np.linspace(0.0, 1.0, n)]
+
+
+class TestTranscriptionFamilyReleasesGIL(unittest.TestCase):
+    """transcribe / calc_global_error / interp-table batch evals (CODEBASE 1.1).
+
+    ``calc_global_error`` only needs a phase with an initial-guess trajectory
+    loaded (``active_traj_``, set by ``ode.phase(...)``/``set_traj``) --
+    ``num_tran_card_states_`` is fixed by the transcription mode at phase
+    construction, not by a prior ``transcribe()``/solve. A full solve is
+    unnecessary (and too expensive for a GIL test), so these tests build a
+    phase and call the target method directly without solving.
+    """
+
+    def setUp(self):
+        self.traj_ig = _linear_traj_guess(200)
+
+    def _make_phase(self):
+        ode = SHO_Ode()
+        return ode.phase("LGL3", self.traj_ig, 199)
+
+    def test_phase_transcribe_releases_gil(self):
+        phase = self._make_phase()
+        self.assertTrue(
+            runs_concurrently(
+                lambda: [phase.transcribe(False, False) for _ in range(200)]
+            )
+        )
+
+    def test_ocp_transcribe_releases_gil(self):
+        ocp = oc.OptimalControlProblem()
+        ocp.add_phase(self._make_phase())
+        self.assertTrue(
+            runs_concurrently(
+                lambda: [ocp.transcribe(False, False) for _ in range(300)]
+            )
+        )
+
+    def test_calc_global_error_releases_gil(self):
+        phase = self._make_phase()
+        self.assertTrue(
+            runs_concurrently(lambda: [phase.calc_global_error() for _ in range(500)])
+        )
+
+    def test_interp_table_batch_eval_releases_gil(self):
+        xs = np.linspace(0.0, 1.0, 25)
+        ys = np.linspace(0.0, 1.0, 25)
+        zs = np.outer(np.sin(3.0 * xs), np.cos(3.0 * ys))
+        tab = vf.InterpTable2D(xs, ys, zs)
+        qx, qy = np.meshgrid(np.linspace(0.0, 1.0, 220), np.linspace(0.0, 1.0, 220))
+        self.assertTrue(
+            runs_concurrently(lambda: [tab.interp(qx, qy) for _ in range(100)])
+        )
+
+
 class TestGilRelease(unittest.TestCase):
     def test_single_trajectory_integrate_family_releases_gil(self):
         ode = SHO_Ode()

@@ -62,11 +62,10 @@ Returns
 IOScaled
     Wrapped function with scaled input and output.
 
-Notes
------
-The scale-vector lengths are not validated against ``func``'s dimensions;
-supplying ``input_scales`` or ``output_scales`` of the wrong length leads to
-undefined behavior at evaluation time.
+Raises
+------
+ValueError
+    If either scale vector's length does not match the function's dimensions.
 )doc");
         bind::DenseBaseBuild<IOScaled<Func>>(obj);
     }

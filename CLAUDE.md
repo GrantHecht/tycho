@@ -546,6 +546,19 @@ Do **not** bulk find-and-replace remaining `asset_asrl` or `ASSET` identifiers w
 explicit instruction — residual uses may be load-bearing (CMake targets, internal type
 names) and require coordinated changes.
 
+### Error Handling and Boundary Validation
+
+- **Python boundary (T5):** every nanobind `_bind` definition that reaches
+  an unchecked `operator[]`/indexing path must validate sizes, bounds, and
+  dtypes at the boundary. Eigen's own asserts are compiled out under
+  `NDEBUG` (the Release default) and must never be the only guard.
+- **Errors (T6):** library code (`src/`, `include/tycho/`) never calls
+  `exit()`; never prints a diagnostic it doesn't also fold into the thrown
+  exception's message (`throw std::invalid_argument(fmt::format(...))`);
+  never constructs an exception without throwing it. nanobind translates
+  `std::invalid_argument` → `ValueError` and `std::runtime_error` →
+  `RuntimeError`.
+
 ### C++ — clang-format (LLVM style)
 
 Config: `.clang-format` at the repo root (LLVM base, 4-space indent, 100-column limit).

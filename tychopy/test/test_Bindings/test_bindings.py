@@ -242,6 +242,18 @@ class TestTypeCasters(unittest.TestCase):
         result = self.f2.compute((1.0, 2.0))
         np.testing.assert_allclose(result, [1.0, 4.0])
 
+    def test_vectorxd_rejects_str(self):
+        """VectorXd custom caster must reject str (a digit-string must not
+        silently parse element-wise into a numeric vector)."""
+        with self.assertRaises(TypeError):
+            self.f2.compute("12")  # digit-string must not parse as [1., 2.]
+
+    def test_vectorxd_rejects_dict(self):
+        """VectorXd custom caster must reject dict (iterating its keys is
+        not a sensible numeric-vector payload)."""
+        with self.assertRaises(TypeError):
+            self.f2.compute({1.0: "a", 2.0: "b"})
+
     def test_vectorxi_dtype_int32(self):
         """Fix D: VectorXi::from_cpp must produce np.int32 dtype, not np.intc."""
         # Use phase/OCP to get a VectorXi back from C++ — easiest via
@@ -263,6 +275,69 @@ class TestTypeCasters(unittest.TestCase):
             )
         except (AttributeError, TypeError):
             self.skipTest("No accessible VectorXi-returning API for dtype check")
+
+    def test_vectorxi_rejects_bytes(self):
+        """VectorXi custom caster must reject bytes (they must not silently
+        become the vector of their code points, e.g. b"AB" -> [65, 66]).
+
+        ``eval(int, Eigen::VectorXi)`` (the remapped-input-projection overload)
+        is only registered on generic (non-Segment/Arguments) VectorFunctions,
+        so a ``vf.stack(...)`` result is used here rather than a bare
+        ``Arguments``/``Segment`` object.
+        """
+        f = vf.stack(Args(2), [1.0, 2.0])
+        with self.assertRaises(TypeError):
+            f.eval(4, b"AB")  # bytes must not become [65, 66]
+
+    def test_vectorxi_rejects_huge_index(self):
+        """VectorXi custom caster must reject an index that overflows int32
+        rather than silently truncating it to a small, wrong, in-bounds value
+        (CODEBASE_REVIEW 1.1b).
+
+        ``2**32`` is used here (not e.g. ``5_000_000_000``) because it is the
+        smallest huge value that actually discriminates pre-fix from post-fix
+        behavior: ``(int32_t)PyLong_AsLong(2**32)`` wraps to exactly ``0`` --
+        a valid, in-bounds, silently-wrong index that the pre-fix caster
+        accepted without complaint. A value like ``5_000_000_000`` truncates
+        (mod 2**32) to 705032704, which is *also* out of this function's
+        valid index range, so pre-fix code raises ValueError via
+        ParsedInput's bounds check too -- that value does not distinguish
+        the bug from the fix. Post-fix, the new ``py_long_to_int32`` helper
+        rejects ``2**32`` outright and the caster returns false, so nanobind
+        raises TypeError (not ValueError) at the binding boundary.
+        """
+        f = vf.stack(Args(2), [1.0, 2.0])
+        with self.assertRaises(TypeError):
+            f.eval(
+                4, [2**32, 0]
+            )  # pre-fix: wraps to 0 (valid, wrong); post-fix: rejected
+
+    def test_scaletype_huge_int_raises_not_crashes(self):
+        """Fix: ScaleType's noexcept ``from_python`` must not let a Python
+        exception (OverflowError converting 10**400 to a C double) propagate
+        as a C++ exception out of a noexcept function -- that is a hard
+        interpreter crash (std::terminate), not a Python-catchable failure.
+
+        Pre-fix: interpreter abort. Post-fix: a clean Python exception from
+        the failed argument cast. ``ScaleType`` is only reachable via a
+        phase's ``auto_scale``-family arguments, so a minimal single-state,
+        no-control ODE phase is built to reach it (see
+        ``tychopy/test/test_OptimalControl/test_NewMethods.py`` for the same
+        ``oc.ode_x.ode`` subclassing pattern).
+        """
+        oc = ast.optimal_control
+
+        class _ScaleTypeProbeODE(oc.ode_x.ode):
+            def __init__(self):
+                args = oc.ODEArguments(1)
+                x = args.x_var(0)
+                super().__init__((-1.0) * x, 1)
+
+        ode = _ScaleTypeProbeODE()
+        traj = [np.array([1.0, t]) for t in np.linspace(0.0, 1.0, 20)]
+        phase = ode.phase("LGL3", traj, 4)
+        with self.assertRaises(Exception):
+            phase.add_boundary_value("Front", 0, 0.0, auto_scale=10**400)
 
     def test_stack_list_arg(self):
         """ParsePythonArgs must accept a Python list as a constant vector."""
@@ -522,6 +597,61 @@ class TestParsePythonArgs(unittest.TestCase):
             "apply(g) must compute g(self(x)), distinct from eval(g) = self(g(x))",
         )
 
+    def test_stack_accepts_np_int64_scalar(self):
+        """np.int64 (numpy's default int dtype on 64-bit Linux) must not be spuriously
+        rejected by the exact-type np.int32 identity check."""
+        f = vf.Arguments(2).head(2)
+        g = vf.stack(f, np.int64(2))
+        np.testing.assert_allclose(g.compute([1.0, 2.0]), [1.0, 2.0, 2.0])
+
+    def test_stack_accepts_np_float32_scalar(self):
+        """np.float32 must not be spuriously rejected by the exact-type np.float64 check."""
+        f = vf.Arguments(2).head(2)
+        g = vf.stack(f, np.float32(3.5))
+        np.testing.assert_allclose(g.compute([1.0, 2.0]), [1.0, 2.0, 3.5])
+
+    def test_stack_accepts_python_bool_scalar(self):
+        """A Python bool is a valid numeric 0/1 constant."""
+        f = vf.Arguments(2).head(2)
+        g = vf.stack(f, True)
+        np.testing.assert_allclose(g.compute([1.0, 2.0]), [1.0, 2.0, 1.0])
+
+    def test_stack_accepts_np_integer_array(self):
+        """np.arange(...) constants (int64 array) must be accepted, not just float arrays."""
+        f = vf.Arguments(2).head(2)
+        g = vf.stack(f, np.arange(3))  # int64 array constant
+        np.testing.assert_allclose(g.compute([1.0, 2.0]), [1.0, 2.0, 0.0, 1.0, 2.0])
+
+    def test_stack_rejects_non_numeric_with_type_in_message(self):
+        f = vf.Arguments(2).head(2)
+        with self.assertRaisesRegex(ValueError, "type"):
+            vf.stack(f, object())
+
+    def test_stack_rejects_non_numeric_list_element_with_type_in_message(self):
+        f = vf.Arguments(2).head(2)
+        with self.assertRaisesRegex(ValueError, "type"):
+            vf.stack(f, [1.0, object()])
+
+    def test_sum_accepts_np_int64_scalar(self):
+        """ParsePythonArgsScalar (used by vf.sum) must accept np.int64 the same way
+        ParsePythonArgs does for vf.stack.
+
+        Exercised via the two-arg `sum(const GenS&, nb::args)` form directly:
+        `sum(e0, np.int64(2))`/`sum(e0, 2.0)` now seed `irows` from `e0.input_rows()`
+        before parsing the scalar tail (the `sum(const GenS&, ...)` and
+        `sum(const Gen&, ...)` overloads previously omitted this seeding step,
+        unlike the analogous `stack`/`stack_scalar` overloads, so a lone
+        VF-then-scalar call always raised "Argument list must contain at least
+        one VectorFunction" even though `first` was itself a VectorFunction)."""
+        e0 = vf.Element(3, 1, 0)
+        x = np.array([1.0, 2.0, 3.0])
+        result_int = vf.sum(e0, np.int64(2))
+        result_float = vf.sum(e0, 2.0)
+        out_int = result_int.compute(x)
+        out_float = result_float.compute(x)
+        np.testing.assert_allclose(out_int, [3.0])
+        np.testing.assert_allclose(out_int, out_float)
+
 
 # ---------------------------------------------------------------------------
 # TestCartesianToMEEBindings
@@ -571,6 +701,236 @@ class TestCartesianToMEEBindings(unittest.TestCase):
         gen = TyAstro.cartesian_to_modified(vf.VectorFunction(seg), self.MU_EARTH)
         self.assertEqual(gen.input_rows(), 6)
         self.assertEqual(gen.output_rows(), 6)
+
+
+# ---------------------------------------------------------------------------
+# TestParsedInputEval
+# ---------------------------------------------------------------------------
+
+
+class TestParsedInputEval(unittest.TestCase):
+    """Python-boundary regression coverage for ParsedInput's variable-location
+    validation (the C++ fix landed in PR 2; see
+    ``include/tycho/detail/vf/expressions/parsed_input.h``).
+
+    ``eval(int, list[int])`` (the remapped-input-projection overload) is only
+    registered on non-``Segment``/``Arguments`` VectorFunctions -- Segment and
+    Arguments types are excluded via ``is_arglike`` in
+    ``BinaryOperatorsBuild`` (``src/bindings/vf/dense_function_base_bind.h``).
+    So a bare ``Args(3).head(3)`` does not expose ``.eval(int, list)``; it is
+    wrapped via ``vf.VectorFunction(...)`` (same pattern as
+    ``TestCartesianToMEEBindings.test_vf_compose_overload`` above) to obtain a
+    GenericFunction that does.
+    """
+
+    def test_eval_rejects_wrong_length_map(self):
+        f = vf.VectorFunction(Args(3).head(3))  # input_rows() == 3
+        with self.assertRaises(ValueError):
+            f.eval(4, [0, 1])  # 2 entries for a 3-input function
+
+    def test_eval_rejects_out_of_range_entries(self):
+        f = vf.VectorFunction(Args(3).head(3))  # input_rows() == 3
+        with self.assertRaises(ValueError):
+            f.eval(4, [0, 1, 4])  # 4 outside [0, 4)
+        with self.assertRaises(ValueError):
+            f.eval(4, [0, 1, -1])  # -1 outside [0, 4)
+
+    def test_eval_duplicate_indices_sum_derivatives(self):
+        # f(a, b) = a*b gathered as (x2, x2) => d/dx2 [x2^2] = 2*x2.
+        args = Args(2)
+        prod = args.coeff(0) * args.coeff(1)
+        g = prod.eval(4, [2, 2])
+        x = np.array([0.0, 0.0, 3.0, 0.0])
+        np.testing.assert_allclose(g.compute(x), [9.0])
+        jac = g.jacobian(x)
+        np.testing.assert_allclose(jac[0, 2], 6.0)  # 2*x2, the summed scatter
+
+
+# ---------------------------------------------------------------------------
+# TestConstantOperandSizeChecks
+# ---------------------------------------------------------------------------
+
+
+class TestConstantOperandSizeChecks(unittest.TestCase):
+    """Python-boundary regression coverage for the length checks added to
+    FunctionVectorSum_Impl (``f + vec`` / ``f - vec``), RowScaled_Impl
+    (``cwise_product`` / ``cwise_quotient`` with a constant vector), the
+    ``dot`` binding lambda, and the IOScaled ctor (CODEBASE 1.1b).
+
+    Pre-fix, a length-mismatched constant vector was silently accepted
+    (UB / a hard-to-diagnose crash at evaluation time downstream, not a
+    clean Python exception at the call boundary).
+    """
+
+    def setUp(self):
+        self.f = vf.Arguments(3).head(3)
+
+    def test_add_wrong_length_vector_raises(self):
+        with self.assertRaises(ValueError):
+            self.f + [1.0, 2.0]
+
+    def test_sub_wrong_length_vector_raises(self):
+        with self.assertRaises(ValueError):
+            self.f - [1.0, 2.0]
+
+    def test_cwise_product_wrong_length_raises(self):
+        with self.assertRaises(ValueError):
+            self.f.cwise_product([1.0, 2.0])
+
+    def test_cwise_quotient_wrong_length_raises(self):
+        with self.assertRaises(ValueError):
+            self.f.cwise_quotient([1.0, 2.0])
+
+    def test_dot_wrong_length_raises(self):
+        with self.assertRaises(ValueError):
+            self.f.dot([1.0, 2.0])
+
+    def test_correct_lengths_still_work(self):
+        g = (self.f + [1.0, 1.0, 1.0]).cwise_product([2.0, 2.0, 2.0])
+        np.testing.assert_allclose(g.compute([1.0, 2.0, 3.0]), [4.0, 6.0, 8.0])
+        self.assertAlmostEqual(
+            self.f.dot([1.0, 0.0, 1.0]).compute([1.0, 2.0, 3.0])[0], 4.0
+        )
+
+    def test_ioscaled_wrong_length_input_scales_raises(self):
+        """IOScaled is only registered on GenericFunction (see
+        ``reg.build_register<IOScaled<Gen>>`` in
+        ``src/bindings/vf/tycho_vector_functions.cpp``), so a bare
+        ``Args(3).head(3)`` (a Segment) must be wrapped via
+        ``vf.VectorFunction(...)`` first -- same pattern as
+        ``TestParsedInputEval`` above."""
+        g = vf.VectorFunction(self.f)  # input_rows() == output_rows() == 3
+        with self.assertRaises(ValueError):
+            vf.IOScaled(g, [1.0, 2.0], [1.0, 1.0, 1.0])
+
+    def test_ioscaled_wrong_length_output_scales_raises(self):
+        g = vf.VectorFunction(self.f)
+        with self.assertRaises(ValueError):
+            vf.IOScaled(g, [1.0, 1.0, 1.0], [1.0, 2.0])
+
+    def test_ioscaled_correct_lengths_still_work(self):
+        g = vf.VectorFunction(self.f)
+        scaled = vf.IOScaled(g, [2.0, 2.0, 2.0], [3.0, 3.0, 3.0])
+        np.testing.assert_allclose(scaled.compute([1.0, 2.0, 3.0]), [6.0, 12.0, 18.0])
+
+
+# ---------------------------------------------------------------------------
+# TestNegativeSizeRejection
+# ---------------------------------------------------------------------------
+
+
+class TestNegativeSizeRejection(unittest.TestCase):
+    """Python-boundary regression coverage for Segment_Impl (``head`` /
+    ``tail`` / ``segment``) and PaddedOutput (``padded_lower`` /
+    ``padded_upper``) rejecting negative sizes (CODEBASE 1.1b).
+
+    Pre-fix, a negative segment size or pad count was silently accepted
+    (the resulting ``output_rows()`` went negative, silent UB downstream in
+    Release builds) instead of raising a clean Python exception at the call
+    boundary.
+
+    Zero-size segments built directly via ``head(0)``/``tail(0)``/
+    ``segment(x, 0)`` are deliberately still accepted -- only ``orows < 0``
+    / negative pads are rejected here, not ``orows == 0``. (Note:
+    ``ODEArguments.u_vec()``/``p_vec()`` no longer construct this shape for
+    control-free/parameter-free ODEs -- they raise ``ValueError`` instead;
+    see ``TestODEArgumentsZeroVarThrow``.)
+    """
+
+    def setUp(self):
+        self.f = vf.Arguments(5)
+
+    def test_head_negative_raises(self):
+        with self.assertRaises(ValueError):
+            self.f.head(-3)
+
+    def test_tail_negative_raises(self):
+        with self.assertRaises(ValueError):
+            self.f.tail(-1)
+
+    def test_tail_zero_still_works(self):
+        # Zero-size segments built directly are legitimate -- must not raise.
+        np.testing.assert_allclose(
+            self.f.tail(0).compute([1.0, 2.0, 3.0, 4.0, 5.0]), []
+        )
+
+    def test_segment_negative_size_raises(self):
+        with self.assertRaises(ValueError):
+            self.f.segment(1, -2)
+
+    def test_segment_zero_size_still_works(self):
+        np.testing.assert_allclose(
+            self.f.segment(1, 0).compute([1.0, 2.0, 3.0, 4.0, 5.0]), []
+        )
+
+    def test_padded_lower_negative_raises(self):
+        with self.assertRaises(ValueError):
+            self.f.head(3).padded_lower(-2)
+
+    def test_padded_upper_negative_raises(self):
+        with self.assertRaises(ValueError):
+            self.f.head(3).padded_upper(-2)
+
+    def test_padded_lower_zero_still_works(self):
+        np.testing.assert_allclose(
+            self.f.head(3).padded_lower(0).compute([1.0, 2.0, 3.0, 4.0, 5.0]),
+            [1.0, 2.0, 3.0],
+        )
+
+    def test_valid_segment_still_works(self):
+        np.testing.assert_allclose(
+            self.f.segment(1, 2).compute([1.0, 2.0, 3.0, 4.0, 5.0]), [2.0, 3.0]
+        )
+
+
+# ---------------------------------------------------------------------------
+# TestODEArgumentsZeroVarThrow
+# ---------------------------------------------------------------------------
+
+
+class TestODEArgumentsZeroVarThrow(unittest.TestCase):
+    """``ODEArguments.u_vec()``/``p_vec()`` must raise a helpful ValueError for
+    control-free/parameter-free ODEs instead of silently building a useless
+    zero-size segment, aligning with the builder API's ``ODEArgsProxy::u_vec``/
+    ``p_vec`` (``include/tycho/detail/optimal_control/builder/ode_builder.h``),
+    which already guards this case."""
+
+    def test_u_vec_zero_controls_raises(self):
+        oc = ast.optimal_control
+        args = oc.ODEArguments(6)  # 0 controls, 0 params
+        with self.assertRaisesRegex(ValueError, "no control variables declared"):
+            args.u_vec()
+
+    def test_p_vec_zero_params_raises(self):
+        oc = ast.optimal_control
+        args = oc.ODEArguments(6, 3)  # 3 controls, 0 params
+        with self.assertRaisesRegex(ValueError, "no parameter variables declared"):
+            args.p_vec()
+
+    def test_u_vec_with_controls_still_works(self):
+        oc = ast.optimal_control
+        args = oc.ODEArguments(6, 3)
+        u = args.u_vec()
+        self.assertEqual(u.output_rows(), 3)
+        x = np.arange(10.0)  # [x(6), t(1), u(3)]
+        np.testing.assert_allclose(u.compute(x), [7.0, 8.0, 9.0])
+
+
+# ---------------------------------------------------------------------------
+# TestNumPartitionsValidation
+# ---------------------------------------------------------------------------
+
+
+class TestNumPartitionsValidation(unittest.TestCase):
+    def test_zero_partitions_raises(self):
+        prob = ast.solvers.OptimizationProblem()
+        with self.assertRaises(ValueError):
+            prob.num_partitions = 0
+
+    def test_valid_assignment_roundtrips(self):
+        prob = ast.solvers.OptimizationProblem()
+        prob.num_partitions = 4
+        self.assertEqual(prob.num_partitions, 4)
 
 
 if __name__ == "__main__":

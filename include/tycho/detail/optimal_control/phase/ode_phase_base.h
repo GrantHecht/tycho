@@ -1731,15 +1731,10 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         case PhaseRegionFlags::NodalPath: {
             int isize = func.xtu_vars_.size() + func.op_vars_.size() + func.sp_vars_.size();
             if (irows != isize) {
-
-                fmt::print(fmt::fg(fmt::color::red),
-                           "Transcription Error!!!\n"
-                           "Input size of {0:} (IRows = {1:}) does not match that implied by "
-                           "indexing parameters "
-                           "(IRows = {2:}).\n",
-                           ftype, irows, isize);
-
-                throw std::invalid_argument("");
+                throw std::invalid_argument(fmt::format(
+                    "Input size of {0:} (IRows = {1:}) does not match that implied by "
+                    "indexing parameters (IRows = {2:}).",
+                    ftype, irows, isize));
             }
             break;
         }
@@ -1748,13 +1743,10 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         case PhaseRegionFlags::PairWisePath: {
             int isize = func.xtu_vars_.size() * 2 + func.op_vars_.size() + func.sp_vars_.size();
             if (irows != isize) {
-                fmt::print(fmt::fg(fmt::color::red),
-                           "Transcription Error!!!\n"
-                           "Input size of {0:} (IRows = {1:}) does not match that implied by "
-                           "indexing parameters "
-                           "(IRows = {2:}).\n",
-                           ftype, irows, isize);
-                throw std::invalid_argument("");
+                throw std::invalid_argument(fmt::format(
+                    "Input size of {0:} (IRows = {1:}) does not match that implied by "
+                    "indexing parameters (IRows = {2:}).",
+                    ftype, irows, isize));
             }
             break;
         }
@@ -1811,11 +1803,8 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     /// @endinternal
     static void check_lbscale(double lbscale) {
         if (lbscale <= 0.0) {
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Transcription Error!!!\n"
-                       "Lower-bound scale ({0:.3e}) must be a strictly positive number.\n",
-                       lbscale);
-            throw std::invalid_argument("");
+            throw std::invalid_argument(fmt::format(
+                "Lower-bound scale ({0:.3e}) must be a strictly positive number.", lbscale));
         }
     }
     /// @internal
@@ -1825,11 +1814,8 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     /// @endinternal
     static void check_ubscale(double ubscale) {
         if (ubscale <= 0.0) {
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Transcription Error!!!\n"
-                       "Upper-bound scale ({0:.3e}) must be a strictly positive number.\n",
-                       ubscale);
-            throw std::invalid_argument("");
+            throw std::invalid_argument(fmt::format(
+                "Upper-bound scale ({0:.3e}) must be a strictly positive number.", ubscale));
         }
     }
 

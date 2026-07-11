@@ -105,20 +105,25 @@ b : bool
         "set_traj",
         nb::overload_cast<const std::vector<Eigen::VectorXd> &, Eigen::VectorXd, Eigen::VectorXi>(
             &ODEPhaseBase::set_traj),
-        "");
+        nb::call_guard<nb::gil_scoped_release>(), "");
 
-    obj.def("set_traj", nb::overload_cast<const std::vector<Eigen::VectorXd> &, Eigen::VectorXd,
-                                          Eigen::VectorXi, bool>(&ODEPhaseBase::set_traj));
+    obj.def("set_traj",
+            nb::overload_cast<const std::vector<Eigen::VectorXd> &, Eigen::VectorXd,
+                              Eigen::VectorXi, bool>(&ODEPhaseBase::set_traj),
+            nb::call_guard<nb::gil_scoped_release>());
 
     obj.def("set_traj",
             nb::overload_cast<const std::vector<Eigen::VectorXd> &, int>(&ODEPhaseBase::set_traj),
-            "");
+            nb::call_guard<nb::gil_scoped_release>(), "");
 
-    obj.def("set_traj", nb::overload_cast<const std::vector<Eigen::VectorXd> &, int, bool>(
-                            &ODEPhaseBase::set_traj));
+    obj.def("set_traj",
+            nb::overload_cast<const std::vector<Eigen::VectorXd> &, int, bool>(
+                &ODEPhaseBase::set_traj),
+            nb::call_guard<nb::gil_scoped_release>());
 
     obj.def("set_traj",
             nb::overload_cast<const std::vector<Eigen::VectorXd> &>(&ODEPhaseBase::set_traj),
+            nb::call_guard<nb::gil_scoped_release>(),
             R"doc(Set (or replace) the phase's initial-guess trajectory.
 
 Parameters
@@ -164,6 +169,7 @@ preserved. Invalidates the cached transcription and post-solve data.
             nb::overload_cast<std::string>(&ODEPhaseBase::switch_transcription_mode), "");
 
     obj.def("transcribe", nb::overload_cast<bool, bool>(&ODEPhaseBase::transcribe),
+            nb::call_guard<nb::gil_scoped_release>(),
             R"doc(Transcribe the phase into its underlying nonlinear program.
 
 Builds the transcribed NLP (defect constraints, user constraints, and
@@ -180,6 +186,7 @@ showfuns : bool
 )doc");
 
     obj.def("refine_traj_manual", nb::overload_cast<int>(&ODEPhaseBase::refine_traj_manual),
+            nb::call_guard<nb::gil_scoped_release>(),
             R"doc(Resample the current trajectory onto a new number of segments.
 
 Parameters
@@ -189,6 +196,7 @@ num : int
 )doc");
     obj.def("refine_traj_manual",
             nb::overload_cast<VectorXd, VectorXi>(&ODEPhaseBase::refine_traj_manual),
+            nb::call_guard<nb::gil_scoped_release>(),
             R"doc(Resample the current trajectory onto an explicit mesh specification.
 
 Parameters
@@ -199,6 +207,7 @@ bin_segments : numpy.ndarray of int
     Number of segments to place in each bin.
 )doc");
     obj.def("refine_traj_equal", &ODEPhaseBase::refine_traj_equal, nb::arg("n"),
+            nb::call_guard<nb::gil_scoped_release>(),
             R"doc(Resample the current trajectory onto an equally-spaced mesh.
 
 Parameters
@@ -1707,6 +1716,7 @@ tuple of (numpy.ndarray, numpy.ndarray, numpy.ndarray)
     per-segment error vector.
 )doc");
     obj.def("refine_traj_auto", &ODEPhaseBase::refine_traj_auto,
+            nb::call_guard<nb::gil_scoped_release>(),
             R"doc(Run one automatic mesh-refinement step.
 
 Estimates the per-interval discretization error and redistributes mesh nodes
@@ -1715,6 +1725,7 @@ to drive it below :attr:`mesh_tol`. This is invoked automatically when
 refinement loop.
 )doc");
     obj.def("calc_global_error", &ODEPhaseBase::calc_global_error,
+            nb::call_guard<nb::gil_scoped_release>(),
             R"doc(Estimate the global (end-to-end) discretization error of the trajectory.
 
 Returns
@@ -1783,6 +1794,22 @@ adaptive_mesh : bool, optional
             nb::object np_array = (nb::object)nb::module_::import_("numpy").attr("ndarray");
             nb::object np_float = (nb::object)nb::module_::import_("numpy").attr("float64");
             nb::object np_int = (nb::object)nb::module_::import_("numpy").attr("int32");
+            // numpy.number covers every signed/unsigned int and float width (including 0-d
+            // array scalars boxed as np.float64/np.int64), unlike the np_int/np_float
+            // exact-type checks above, which only match numpy's int32/float64 aliases.
+            nb::object np_number = (nb::object)nb::module_::import_("numpy").attr("number");
+
+            auto is_numeric_scalar = [&](nb::handle h) {
+                if (h.type().is(py_float) || h.type().is(py_int) || h.type().is(np_int) ||
+                    h.type().is(np_float) || PyBool_Check(h.ptr())) {
+                    return true;
+                }
+                int r = PyObject_IsInstance(h.ptr(), np_number.ptr());
+                if (r < 0) {
+                    PyErr_Clear();
+                }
+                return r == 1;
+            };
 
             Eigen::VectorXd Units(self.xtu_p_vars());
             Units.setOnes();
@@ -1793,8 +1820,7 @@ adaptive_mesh : bool, optional
                 Eigen::VectorXd units(idxs.size());
                 units.setOnes();
 
-                if (kw.second.type().is(py_int) || kw.second.type().is(py_float) ||
-                    kw.second.type().is(np_float) || kw.second.type().is(np_int)) {
+                if (is_numeric_scalar(kw.second)) {
                     double unit = nb::cast<double>(kw.second);
                     units *= unit;
                 } else if (kw.second.type().is(np_array) || kw.second.type().is(py_list)) {
@@ -1804,17 +1830,19 @@ adaptive_mesh : bool, optional
                             "Size of index group {0:} does not match units vector.", name));
                     }
                     for (int i = 0; i < lenvec; i++) {
-                        auto elem = kw.second.attr("__getitem__")(nb::int_(i)).type();
-                        if (!(elem.is(py_float) || elem.is(py_int) || elem.is(np_int) ||
-                              elem.is(np_float))) {
-                            nb::print(nb::str(elem));
-                            throw std::invalid_argument(
-                                "Vectors and lists must only contain doubles or floats");
+                        nb::object elem = kw.second.attr("__getitem__")(nb::int_(i));
+                        if (!is_numeric_scalar(elem)) {
+                            throw std::invalid_argument(fmt::format(
+                                "Vectors and lists must only contain ints or floats; got "
+                                "element of type {}",
+                                nb::cast<std::string>(nb::str(elem.type()))));
                         }
-                        units[i] = nb::cast<double>(kw.second.attr("__getitem__")(nb::int_(i)));
+                        units[i] = nb::cast<double>(elem);
                     }
                 } else {
-                    throw std::invalid_argument("Invalid unit type");
+                    throw std::invalid_argument(
+                        fmt::format("Invalid unit type for index group {0:}; got type {1:}", name,
+                                    nb::cast<std::string>(nb::str(kw.second.type()))));
                 }
 
                 for (int i = 0; i < idxs.size(); i++) {

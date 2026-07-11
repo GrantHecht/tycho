@@ -94,6 +94,26 @@ TEST(ODESizeTest, AddIdxRejectsNegativeIndex) {
     EXPECT_THROW(ode.add_idx("neg", bad), std::invalid_argument);
 }
 
+TEST(ODESizeTest, SetIdxsRejectsOutOfRange) {
+    // OC 1.18 follow-up: set_idxs() previously only checked for empty groups,
+    // skipping add_idx()'s range check against xtu_p_vars().
+    ODESize<3, 1, 0> ode; // xtu_p_vars() == 3 + 1(t) + 1 + 0 == 5
+    FlatMap<std::string, Eigen::VectorXi> idxs;
+    Eigen::VectorXi bad(1);
+    bad << 9999;
+    idxs.insert("bad_range", bad);
+    EXPECT_THROW(ode.set_idxs(idxs), std::invalid_argument);
+}
+
+TEST(ODESizeTest, SetIdxsRejectsNegativeIndex) {
+    ODESize<3, 1, 0> ode;
+    FlatMap<std::string, Eigen::VectorXi> idxs;
+    Eigen::VectorXi bad(1);
+    bad << -1;
+    idxs.insert("neg", bad);
+    EXPECT_THROW(ode.set_idxs(idxs), std::invalid_argument);
+}
+
 TEST(ODESizeTest, SetGetIdxsRoundtrip) {
     ODESize<3, 2, 0> ode;
 

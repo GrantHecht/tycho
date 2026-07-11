@@ -144,7 +144,7 @@ ValueError
 )doc");
     obj.def("interp",
             nb::overload_cast<const Eigen::VectorXd &>(&InterpTable1D::interp, nb::const_),
-            nb::arg("t_vals"),
+            nb::arg("t_vals"), nb::call_guard<nb::gil_scoped_release>(),
             R"doc(Evaluate the table at multiple coordinate values.
 
 Parameters
@@ -166,7 +166,7 @@ Equivalent to :py:meth:`interp(t) <InterpTable1D.interp>`.
 )doc");
     obj.def("__call__",
             nb::overload_cast<const Eigen::VectorXd &>(&InterpTable1D::interp, nb::const_),
-            nb::is_operator(),
+            nb::is_operator(), nb::call_guard<nb::gil_scoped_release>(),
             R"doc(Evaluate the table numerically — vector of coordinates.
 
 Equivalent to :py:meth:`interp(t_vals) <InterpTable1D.interp>`.
@@ -361,7 +361,7 @@ ValueError
 )doc");
     obj.def("interp", nb::overload_cast<const MatType &, const MatType &>(&InterpTable2D::interp,
                                                                           nb::const_),
-            nb::arg("x_vals"), nb::arg("y_vals"),
+            nb::arg("x_vals"), nb::arg("y_vals"), nb::call_guard<nb::gil_scoped_release>(),
             R"doc(Evaluate the table element-wise over two matrices of coordinates.
 
 Parameters
@@ -441,7 +441,7 @@ Equivalent to :py:meth:`interp(x, y) <InterpTable2D.interp>`.
 )doc");
     obj.def("__call__",
             nb::overload_cast<const MatType &, const MatType &>(&InterpTable2D::interp, nb::const_),
-            nb::is_operator(),
+            nb::is_operator(), nb::call_guard<nb::gil_scoped_release>(),
             R"doc(Evaluate the table numerically over matrices of coordinates.
 
 Equivalent to :py:meth:`interp(x_vals, y_vals) <InterpTable2D.interp>`.

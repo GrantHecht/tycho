@@ -220,6 +220,7 @@ numpy.ndarray
 )doc");
 
     obj.def("transcribe", nb::overload_cast<bool, bool>(&OptimalControlProblemBase::transcribe),
+            nb::call_guard<nb::gil_scoped_release>(),
             R"doc(Transcribe all phases and link functions into the shared NLP.
 
 Parameters

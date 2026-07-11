@@ -11,6 +11,8 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 
+#include <limits>
+
 // ============================================================================
 // nanobind type casters for Tycho interface types.
 //
@@ -21,6 +23,36 @@
 
 namespace nanobind {
 namespace detail {
+
+// ---------------------------------------------------------------------------
+// A Python object can satisfy the sequence/iteration protocol without being
+// a sensible numeric-vector payload: str parses digit-strings element-wise,
+// bytes/bytearray yield code points, dict iterates keys. Reject these
+// before any PySequence_Fast fallback (CODEBASE_REVIEW 1.1).
+// ---------------------------------------------------------------------------
+inline bool rejected_sequence_payload(PyObject *obj) {
+    return PyUnicode_Check(obj) || PyBytes_Check(obj) || PyByteArray_Check(obj) ||
+           PyDict_Check(obj);
+}
+
+// ---------------------------------------------------------------------------
+// Convert a Python int to int32, rejecting (instead of silently truncating)
+// values that do not fit — a wrapped index passes downstream bounds checks
+// while pointing at the wrong variable (CODEBASE_REVIEW 1.1b).
+// ---------------------------------------------------------------------------
+inline bool py_long_to_int32(PyObject *obj, int &out) {
+    long v = PyLong_AsLong(obj);
+    if (PyErr_Occurred()) {
+        PyErr_Clear();
+        return false;
+    }
+    if (v < static_cast<long>(std::numeric_limits<int>::min()) ||
+        v > static_cast<long>(std::numeric_limits<int>::max())) {
+        return false;
+    }
+    out = static_cast<int>(v);
+    return true;
+}
 
 // ---------------------------------------------------------------------------
 // Eigen::Tensor<Scalar, N>  (ColMajor — Eigen's default storage)
@@ -120,6 +152,9 @@ template <> struct type_caster<Eigen::VectorXd> {
         }
         // Fallback: Python sequence of numeric scalars (list, tuple, …).
         PyErr_Clear();
+        if (rejected_sequence_payload(src.ptr())) {
+            return false;
+        }
         PyObject *seq = PySequence_Fast(src.ptr(), "");
         if (!seq) {
             PyErr_Clear();
@@ -186,6 +221,9 @@ template <> struct type_caster<Eigen::VectorXi> {
         }
         // Fallback: Python sequence of integers (list, tuple, range, …).
         PyErr_Clear();
+        if (rejected_sequence_payload(src.ptr())) {
+            return false;
+        }
         PyObject *seq = PySequence_Fast(src.ptr(), "");
         if (!seq) {
             PyErr_Clear();
@@ -201,8 +239,14 @@ template <> struct type_caster<Eigen::VectorXi> {
                 ok = false;
                 break;
             }
-            value[i] = (int)PyLong_AsLong(as_long);
+            int converted;
+            bool fits = py_long_to_int32(as_long, converted);
             Py_DECREF(as_long);
+            if (!fits) {
+                ok = false;
+                break;
+            }
+            value[i] = converted;
         }
         Py_DECREF(seq);
         return ok;
@@ -246,12 +290,11 @@ template <> struct type_caster<tycho::oc::VarIndexType> {
     bool from_python(handle src, uint8_t flags, cleanup_list *cleanup) noexcept {
         // int
         if (PyLong_Check(src.ptr())) {
-            long v = PyLong_AsLong(src.ptr());
-            if (!PyErr_Occurred()) {
-                value = (int)v;
+            int converted;
+            if (py_long_to_int32(src.ptr(), converted)) {
+                value = converted;
                 return true;
             }
-            PyErr_Clear();
         }
         // string
         if (PyUnicode_Check(src.ptr())) {
@@ -267,6 +310,9 @@ template <> struct type_caster<tycho::oc::VarIndexType> {
         // Note: PySequence_Check returns 0 for range objects (they use mp_subscript
         // rather than sq_item), so we skip that check and call PySequence_Fast directly.
         PyErr_Clear(); // clear any pending error before C API calls
+        if (rejected_sequence_payload(src.ptr())) {
+            return false;
+        }
         PyObject *seq = PySequence_Fast(src.ptr(), "");
         if (!seq) {
             PyErr_Clear();
@@ -317,8 +363,14 @@ template <> struct type_caster<tycho::oc::VarIndexType> {
                     ok = false;
                     break;
                 }
-                v[i] = (int)PyLong_AsLong(as_long);
+                int converted;
+                bool fits = py_long_to_int32(as_long, converted);
                 Py_DECREF(as_long);
+                if (!fits) {
+                    ok = false;
+                    break;
+                }
+                v[i] = converted;
             }
             Py_DECREF(seq);
             if (ok) {
@@ -368,6 +420,10 @@ template <> struct type_caster<std::vector<Eigen::VectorXd>> {
             }
             // Fallback: treat element as a Python sequence of scalars.
             PyErr_Clear();
+            if (rejected_sequence_payload(item.ptr())) {
+                Py_DECREF(seq);
+                return false;
+            }
             PyObject *sub = PySequence_Fast(item.ptr(), "");
             if (!sub) {
                 PyErr_Clear();
@@ -451,6 +507,9 @@ template <> struct type_caster<std::variant<double, Eigen::VectorXd>> {
         }
         // Python sequence (list, tuple, range, numpy array) -> VectorXd
         {
+            if (rejected_sequence_payload(src.ptr())) {
+                return false;
+            }
             PyObject *seq = PySequence_Fast(src.ptr(), "");
             if (seq) {
                 Py_ssize_t n = PySequence_Fast_GET_SIZE(seq);
@@ -515,11 +574,26 @@ template <> struct type_caster<tycho::oc::ScaleType> {
             }
         }
         if (PyUnicode_Check(src.ptr())) {
-            value = nb::cast<std::string>(src);
+            Py_ssize_t sz;
+            const char *s = PyUnicode_AsUTF8AndSize(src.ptr(), &sz);
+            if (!s) {
+                PyErr_Clear();
+                return false;
+            }
+            value = std::string(s, static_cast<size_t>(sz));
             return true;
         }
-        if (PyFloat_Check(src.ptr()) || PyLong_Check(src.ptr())) {
-            value = nb::cast<double>(src);
+        if (PyFloat_Check(src.ptr())) {
+            value = PyFloat_AS_DOUBLE(src.ptr());
+            return true;
+        }
+        if (PyLong_Check(src.ptr())) {
+            double d = PyLong_AsDouble(src.ptr());
+            if (PyErr_Occurred()) {
+                PyErr_Clear();
+                return false;
+            }
+            value = d;
             return true;
         }
         {

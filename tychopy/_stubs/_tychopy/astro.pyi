@@ -137,6 +137,13 @@ def classic_to_cartesian(arg0: Annotated[NDArray[numpy.float64], dict(shape=(6),
     ndarray, shape (6,)
         Cartesian state ``[rx, ry, rz, vx, vy, vz]``.
 
+    Raises
+    ------
+    RuntimeError
+        If the anomaly Newton iteration fails to converge (near-parabolic
+        eccentricity ``e → 1`` sampled near periapsis, or extreme mean anomaly),
+        in which case the conversion NaN-poisons its output.
+
     See Also
     --------
     cartesian_to_classic : Inverse conversion.
@@ -162,6 +169,13 @@ def classic_to_modified(arg0: Annotated[NDArray[numpy.float64], dict(shape=(6), 
     -------
     ndarray, shape (6,)
         MEE ``[p, f, g, h, k, L]`` where ``L`` is the true longitude (radians).
+
+    Raises
+    ------
+    RuntimeError
+        If the anomaly Newton iteration fails to converge (near-parabolic
+        eccentricity ``e → 1`` sampled near periapsis, or extreme mean anomaly),
+        in which case the conversion NaN-poisons its output.
 
     See Also
     --------
@@ -1439,12 +1453,24 @@ def lambert_izzo(arg0: Annotated[NDArray[numpy.float64], dict(shape=(None, None)
     -------
     ndarray of int, shape (N,)
         Per-problem exit codes: ``0`` = converged, ``1`` = not converged
-        within 20 iterations.
+        within 20 iterations, or collinear-geometry input produced a
+        non-finite (NaN) result despite the Newton iteration itself
+        reporting convergence.
+
+    Raises
+    ------
+    ValueError
+        If ``axis`` is not ``0`` or ``1``, or if ``R1s``/``R2s``/``V1s``/``V2s``
+        do not have the shape implied by ``axis`` and the problem count, or if
+        ``dts``/``longways`` do not have length ``N``.
 
     Notes
     -----
     Unlike the scalar overloads this function does **not** raise on
-    non-convergence; inspect the returned exit-code vector instead.
+    non-convergence or collinear-geometry NaN results; the exit-code vector
+    now flags both, so it can be trusted without a separate ``allFinite()``
+    check on ``V1s``/``V2s``.  The GIL is released for the duration of the
+    call.
     """
 
 def lambert_izzo_multirev(R1: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], R2: Annotated[NDArray[numpy.float64], dict(shape=(3), order='C')], dt: float, mu: float, longway: bool, Nrevs: int, rightbranch: bool) -> tuple:

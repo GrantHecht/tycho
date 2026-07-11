@@ -79,13 +79,10 @@ struct OptimizationProblem : OptimizationProblemBase {
         for (auto &index : func.indices_) {
             int isize = index.size();
             if (irows != isize) {
-                fmt::print(fmt::fg(fmt::color::red),
-                           "Transcription Error!!!\n"
-                           "Input size of {0:} (IRows = {1:}) does not match that implied by "
-                           "indexing parameters "
-                           "(IRows = {2:}).\n",
-                           ftype, irows, isize);
-                throw std::invalid_argument("");
+                throw std::invalid_argument(fmt::format(
+                    "Input size of {0:} (IRows = {1:}) does not match that implied by "
+                    "indexing parameters (IRows = {2:}).",
+                    ftype, irows, isize));
             }
         }
     }

@@ -16,6 +16,8 @@
 #include "function_registry.h"
 #include "tycho/detail/astro/kepler/lambert_solvers.h"
 
+#include <fmt/format.h>
+
 #include <stdexcept>
 #include <string>
 
@@ -172,12 +174,45 @@ RuntimeError
              EigenRef<NumpyMat> V1s, EigenRef<NumpyMat> V2s, int axis, bool vectorize) {
               using SuperScalar = Eigen::Array<double, 8, 1>;
               constexpr int vsize = SuperScalar::SizeAtCompileTime;
-              int NumCalls;
-              if (axis == 0) {
-                  NumCalls = R1s.cols();
-              } else {
-                  NumCalls = R1s.rows();
+
+              // Newton-iteration non-convergence exit code, reused below to
+              // also flag the "NaN-with-success" collinear-geometry case
+              // (see the warning on lambert_izzo_impl in lambert_solvers.h):
+              // exint==0 there means only "Newton converged", it does not
+              // guarantee V1/V2 are finite.
+              constexpr int kNonConvergenceCode = 1;
+
+              if (axis != 0 && axis != 1) {
+                  throw std::invalid_argument(
+                      fmt::format("lambert_izzo: axis must be 0 or 1, got {}", axis));
               }
+              const int NumCalls = (axis == 0) ? int(R1s.cols()) : int(R1s.rows());
+              auto check_3xN = [&](const auto &M, const char *name) {
+                  const bool ok = (axis == 0) ? (M.rows() == 3 && M.cols() == NumCalls)
+                                              : (M.cols() == 3 && M.rows() == NumCalls);
+                  if (!ok) {
+                      throw std::invalid_argument(fmt::format(
+                          "lambert_izzo: {} has shape ({}, {}); expected {} for axis={} with {} "
+                          "problems",
+                          name, M.rows(), M.cols(), axis == 0 ? "(3, N)" : "(N, 3)", axis,
+                          NumCalls));
+                  }
+              };
+              check_3xN(R1s, "R1s");
+              check_3xN(R2s, "R2s");
+              check_3xN(V1s, "V1s");
+              check_3xN(V2s, "V2s");
+              if (dts.size() != NumCalls) {
+                  throw std::invalid_argument(
+                      fmt::format("lambert_izzo: dts has {} entries but R1s implies {} problems",
+                                  dts.size(), NumCalls));
+              }
+              if (int(longways.size()) != NumCalls) {
+                  throw std::invalid_argument(fmt::format(
+                      "lambert_izzo: longways has {} entries but R1s implies {} problems",
+                      longways.size(), NumCalls));
+              }
+
               int Packs = vectorize ? NumCalls / vsize : 0;
 
               Eigen::VectorXi exitcodes(NumCalls);
@@ -238,6 +273,23 @@ RuntimeError
                   for (int j = 0; j < vsize; j++) {
                       exitcodes[V + j] = ecodess[j];
                   }
+
+                  // NaN-poison guard: collinear-geometry inputs can leave
+                  // exint==0 (Newton "converged") while V1/V2 are NaN (see
+                  // the lambert_izzo_impl warning). Check the just-written
+                  // V1s/V2s slice per lane, respecting the axis layout, and
+                  // promote the exit code so callers who "trust the exit
+                  // codes" actually can.
+                  for (int j = 0; j < vsize; j++) {
+                      int idx = V + j;
+                      bool finite = (axis == 0) ? (V1s.col(idx).allFinite() &&
+                                                   V2s.col(idx).allFinite())
+                                                : (V1s.row(idx).allFinite() &&
+                                                   V2s.row(idx).allFinite());
+                      if (!finite && exitcodes[idx] == 0) {
+                          exitcodes[idx] = kNonConvergenceCode;
+                      }
+                  }
               }
 
               Vector3<double> R1;
@@ -263,6 +315,12 @@ RuntimeError
 
                   exitcodes[i] = excode;
 
+                  // Same NaN-poison guard as the packed loop above: collinear
+                  // geometry can leave excode==0 with non-finite V1/V2.
+                  if (exitcodes[i] == 0 && (!V1.allFinite() || !V2.allFinite())) {
+                      exitcodes[i] = kNonConvergenceCode;
+                  }
+
                   if (axis == 0) {
                       V1s.col(i) = V1;
                       V2s.col(i) = V2;
@@ -274,6 +332,7 @@ RuntimeError
 
               return exitcodes;
           },
+          nb::call_guard<nb::gil_scoped_release>(),
           R"doc(Solve a batch of Lambert problems in-place (vectorized overload).
 
 Solves ``N`` independent Lambert problems simultaneously, writing results
@@ -308,11 +367,23 @@ Returns
 -------
 ndarray of int, shape (N,)
     Per-problem exit codes: ``0`` = converged, ``1`` = not converged
-    within 20 iterations.
+    within 20 iterations, or collinear-geometry input produced a
+    non-finite (NaN) result despite the Newton iteration itself
+    reporting convergence.
+
+Raises
+------
+ValueError
+    If ``axis`` is not ``0`` or ``1``, or if ``R1s``/``R2s``/``V1s``/``V2s``
+    do not have the shape implied by ``axis`` and the problem count, or if
+    ``dts``/``longways`` do not have length ``N``.
 
 Notes
 -----
 Unlike the scalar overloads this function does **not** raise on
-non-convergence; inspect the returned exit-code vector instead.
+non-convergence or collinear-geometry NaN results; the exit-code vector
+now flags both, so it can be trusted without a separate ``allFinite()``
+check on ``V1s``/``V2s``.  The GIL is released for the duration of the
+call.
 )doc");
 }

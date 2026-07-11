@@ -29,8 +29,15 @@ namespace tycho::astro {
 template <class Scalar>
 Vector6<Scalar> propagate_cartesian(const Vector6<Scalar> &RV, Scalar dt, Scalar mu) {
     using std::sqrt;
-    if (dt == Scalar(0))
-        return RV;
+    // Validate unconditionally, before the dt == 0 early return: that return
+    // previously bypassed every input check in kepler_lcd_iterate (CODEBASE
+    // review §1.1b), so a dt == 0 call with mu <= 0 / non-finite dt / non-finite
+    // V0 / zero r0 slipped through silently. The duplicate checks inside
+    // kepler_lcd_iterate stay (cheap) for the dt != 0 path.
+    if (!(double(mu) > 0.0)) [[unlikely]]
+        throw std::invalid_argument("propagate_cartesian: mu must satisfy mu > 0");
+    if (!std::isfinite(double(dt))) [[unlikely]]
+        throw std::invalid_argument("propagate_cartesian: dt must be finite");
 
     // Materialize R0/V0 into concrete Vector3<Scalar> values: the segment
     // expressions returned by .head<3>() / .tail<3>() are VectorBlock types,
@@ -39,6 +46,12 @@ Vector6<Scalar> propagate_cartesian(const Vector6<Scalar> &RV, Scalar dt, Scalar
     // concrete Vector3<Eigen::Array<...>>).
     const Vector3<Scalar> R0 = RV.template head<3>();
     const Vector3<Scalar> V0 = RV.template tail<3>();
+    if (!V0.allFinite()) [[unlikely]]
+        throw std::invalid_argument("propagate_cartesian: V0 must be finite");
+    if (!(R0.norm() > 0.0)) [[unlikely]]
+        throw std::invalid_argument("propagate_cartesian: r0 must satisfy r0 > 0");
+    if (dt == Scalar(0))
+        return RV;
     auto k = ::tycho::astro::detail::kepler_lcd_iterate(R0, V0, dt, double(mu));
     if (!::tycho::astro::detail::all_converged(k.converged)) [[unlikely]]
         return Vector6<Scalar>::Constant(::tycho::astro::detail::kepler_nan_value<Scalar>());
