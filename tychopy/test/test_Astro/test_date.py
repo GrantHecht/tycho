@@ -29,11 +29,39 @@ def test_days_to_hmsm_never_returns_full_second_micro():
     assert 0 <= us <= 999999
 
 
-def test_jd_to_datetime_day_boundary_roundtrip():
-    # A JD whose fractional day rounds to exactly 1 s at micro precision
-    jd = date.datetime_to_jd(date.datetime(2020, 1, 1)) + 0.999999999999
-    d = date.jd_to_datetime(jd)  # must not raise
+def test_jd_to_datetime_day_boundary_roundtrip(monkeypatch):
+    """Exercise jd_to_datetime's hour==24 day-rollover carry.
+
+    Real doubles can't actually land in the carry window here: at
+    epoch-scale JD magnitude (~2.4589e6) the ULP is ~40us, far coarser than
+    the ~0.5us of fractional-day slack needed to trip days_to_hmsm's
+    round-up-to-24h path, so `datetime_to_jd(...) + 0.999999999999` collapses
+    to exactly +1.0 rather than ever reaching the carry. So instead we
+    monkeypatch days_to_hmsm -- a module-global lookup from inside
+    jd_to_datetime, not a from-import binding, so patching the module
+    attribute is sufficient -- to force it to return hour=24 directly, then
+    verify jd_to_datetime normalizes that into the next calendar day. A
+    trailing call on the real, unpatched path is kept only as a no-crash
+    sanity check; it does not exercise the carry.
+    """
+    monkeypatch.setattr(date, "days_to_hmsm", lambda frac_days: (24, 0, 0, 0))
+    jd = date.datetime_to_jd(date.datetime(2020, 1, 1))
+    d = date.jd_to_datetime(jd)
     assert isinstance(d, date.datetime)
+    assert (d.year, d.month, d.day, d.hour, d.minute, d.second, d.microsecond) == (
+        2020,
+        1,
+        2,
+        0,
+        0,
+        0,
+        0,
+    )
+
+    monkeypatch.undo()
+    jd_unpatched = date.datetime_to_jd(date.datetime(2020, 1, 1)) + 0.999999999999
+    d_unpatched = date.jd_to_datetime(jd_unpatched)  # must not raise
+    assert isinstance(d_unpatched, date.datetime)
 
 
 def test_datetime_jd_roundtrip_sweep():
