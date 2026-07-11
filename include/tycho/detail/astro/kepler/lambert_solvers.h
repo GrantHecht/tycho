@@ -49,7 +49,6 @@ namespace tycho::astro {
 /// Implementation based on Rudy Oldenhuis's multiple-revolution MATLAB variant (BSD-2).
 /// @tparam Scalar      Floating-point or Eigen::Array scalar type.
 /// @tparam WayBool     bool or Eigen::Array<bool, W, 1> — long-way flag.
-/// @tparam IntType     int or array — number of revolutions Nin.
 /// @tparam BranchBool  bool or array — right-branch flag.
 /// @tparam ExitInt     int or array — exit/convergence code (out).
 /// @param[in]  R1dim       Departure position vector (physical units).
@@ -64,16 +63,15 @@ namespace tycho::astro {
 /// @param[out] exint       Convergence exit code: 0 = converged, 1 = failed to converge
 ///                         within maxiters iterations.
 /// @endinternal
-template <class Scalar, class WayBool, class IntType, class BranchBool, class ExitInt>
+template <class Scalar, class WayBool, class BranchBool, class ExitInt>
 void lambert_izzo_impl(const Vector3<Scalar> &R1dim, const Vector3<Scalar> &R2dim, Scalar dtdim,
-                       double mu, WayBool longway, IntType Nin, BranchBool rightbranch,
+                       double mu, WayBool longway, int Nin, BranchBool rightbranch,
                        Vector3<Scalar> &V1, Vector3<Scalar> &V2, ExitInt &exint) {
     using std::abs;
 
     constexpr bool RisScalar = std::is_floating_point<Scalar>::value;
     constexpr bool WayisScalar = std::is_same<WayBool, bool>::value;
     constexpr bool BranchisScalar = std::is_same<BranchBool, bool>::value;
-    constexpr bool NisScalar = std::is_same<IntType, int>::value;
 
     constexpr double Pi = 3.14159265358979;
     constexpr double tol = 1.0e-11;
@@ -110,7 +108,6 @@ void lambert_izzo_impl(const Vector3<Scalar> &R1dim, const Vector3<Scalar> &R2di
 
     Scalar lwsign(1.0);
     Scalar branchsign(1.0);
-    bool NisSame = false;
 
     if constexpr (WayisScalar) {
         if (longway) {
@@ -139,75 +136,31 @@ void lambert_izzo_impl(const Vector3<Scalar> &R1dim, const Vector3<Scalar> &R2di
     Scalar s = (c + 1.0 + r2) / 2.0;
     Scalar am = s / 2.0;
     Scalar lambda = sqrt(r2) * cos(theta / 2.0) / s;
-    // NOTE (OC §3.9): Nmax is the theoretical maximum number of complete
-    // revolutions feasible for this transfer geometry/time-of-flight, but it
-    // is never enforced (see the commented-out clamp below) — a caller-
-    // supplied Nin exceeding Nmax is not rejected or clamped up front. In
-    // practice this typically surfaces as Newton non-convergence (exint=1)
-    // rather than a silently-wrong result, but the failure mode is a slow
-    // iteration-budget exhaustion instead of an immediate, cheap rejection.
-    Scalar Nmax = floor(sqrt(Scalar(2.0) / (s * s * s)) * dt / Pi);
 
     Scalar x1, x2, N;
 
     // pre-calculating the initial guesses to remove log/tan calls, see OldenHuis github for origin
-    if constexpr (NisScalar) {
-        N = Scalar(double(Nin));
-        if (int(Nin) == 0) {
-            x1 = -0.740867916771357;
-            x2 = 0.4208790341605184;
-        } else {
-            // Disabled Nmax clamp (OC §3.9): note `std::max(N, Nmax)` can only
-            // ever *raise* N (never lower it) — re-enabling it as written
-            // would silently increase the revolution count used in tofcon()'s
-            // `2*Pi*N` term above the caller-requested Nin whenever
-            // Nmax > Nin, not "cap" an over-large Nin down to something
-            // feasible. Re-enabling needs its own audit/fix, not a
-            // find-and-uncomment; left disabled and documented instead.
-            // N = std::max(N, Nmax);
-            if constexpr (BranchisScalar) {
-                if (rightbranch) {
-                    x1 = Scalar(2.154906449673281);
-                    x2 = Scalar(1.076354179950629);
-                } else {
-                    x1 = Scalar(-1.0763541799506295);
-                    x2 = Scalar(-0.36606678140737947);
-                }
-            } else {
-                for (int i = 0; i < Scalar::SizeAtCompileTime; i++) {
-                    if (rightbranch[i]) {
-                        x1[i] = 2.154906449673281;
-                        x2[i] = 1.076354179950629;
-                    } else {
-                        x1[i] = -1.0763541799506295;
-                        x2[i] = -0.36606678140737947;
-                    }
-                }
-            }
-        }
+    N = Scalar(double(Nin));
+    if (int(Nin) == 0) {
+        x1 = -0.740867916771357;
+        x2 = 0.4208790341605184;
     } else {
-        for (int i = 0; i < Scalar::SizeAtCompileTime; i++) {
-            N[i] = Nin[i];
-            if (Nin[i] == 0) {
-                x1 = -0.740867916771357;
-                x2 = 0.4208790341605184;
+        if constexpr (BranchisScalar) {
+            if (rightbranch) {
+                x1 = Scalar(2.154906449673281);
+                x2 = Scalar(1.076354179950629);
             } else {
-                if constexpr (BranchisScalar) {
-                    if (rightbranch) {
-                        x1[i] = 2.154906449673281;
-                        x2[i] = 1.0763541799506295;
-                    } else {
-                        x1[i] = -1.0763541799506295;
-                        x2[i] = -0.36606678140737947;
-                    }
+                x1 = Scalar(-1.0763541799506295);
+                x2 = Scalar(-0.36606678140737947);
+            }
+        } else {
+            for (int i = 0; i < Scalar::SizeAtCompileTime; i++) {
+                if (rightbranch[i]) {
+                    x1[i] = 2.154906449673281;
+                    x2[i] = 1.076354179950629;
                 } else {
-                    if (rightbranch[i]) {
-                        x1[i] = 2.154906449673281;
-                        x2[i] = 1.0763541799506295;
-                    } else {
-                        x1[i] = -1.0763541799506295;
-                        x2[i] = -0.36606678140737947;
-                    }
+                    x1[i] = -1.0763541799506295;
+                    x2[i] = -0.36606678140737947;
                 }
             }
         }
@@ -215,28 +168,10 @@ void lambert_izzo_impl(const Vector3<Scalar> &R1dim, const Vector3<Scalar> &R2di
 
     auto tofcon = [&](Scalar xin) {
         Scalar x;
-        if constexpr (NisScalar) {
-            if (Nin == 0) {
-                x = exp(xin) - 1.0;
-            } else {
-                x = atan(xin) * 2.0 / Pi;
-            }
+        if (Nin == 0) {
+            x = exp(xin) - 1.0;
         } else {
-            if (NisSame) {
-                if (Nin[0] == 0) {
-                    x = exp(xin) - 1.0;
-                } else {
-                    x = atan(xin) * 2.0 / Pi;
-                }
-            } else {
-                for (int i = 0; i < Scalar::SizeAtCompileTime; i++) {
-                    if (Nin[i] == 0) {
-                        x[i] = exp(xin[i]);
-                    } else {
-                        x[i] = atan(xin[i]) * 2.0 / Pi;
-                    }
-                }
-            }
+            x = atan(xin) * 2.0 / Pi;
         }
 
         Scalar a = am / (1 - x * x);
@@ -295,28 +230,10 @@ void lambert_izzo_impl(const Vector3<Scalar> &R1dim, const Vector3<Scalar> &R2di
             }
         }
         Scalar y;
-        if constexpr (NisScalar) {
-            if (Nin == 0) {
-                y = log(tof) - logdt;
-            } else {
-                y = tof - dt;
-            }
+        if (Nin == 0) {
+            y = log(tof) - logdt;
         } else {
-            if (NisSame) {
-                if (Nin[0] == 0) {
-                    y = log(tof) - logdt;
-                } else {
-                    y = tof - dt;
-                }
-            } else {
-                for (int i = 0; i < Scalar::SizeAtCompileTime; i++) {
-                    if (Nin[i] == 0) {
-                        y[i] = log(tof[i]) - logdt[i];
-                    } else {
-                        y[i] = tof[i] - dt[i];
-                    }
-                }
-            }
+            y = tof - dt;
         }
 
         return y;
@@ -375,28 +292,10 @@ void lambert_izzo_impl(const Vector3<Scalar> &R1dim, const Vector3<Scalar> &R2di
     }
 
     Scalar x;
-    if constexpr (NisScalar) {
-        if (Nin == 0) {
-            x = exp(xn) - 1.0;
-        } else {
-            x = atan(xn) * 2.0 / Pi;
-        }
+    if (Nin == 0) {
+        x = exp(xn) - 1.0;
     } else {
-        if (NisSame) {
-            if (Nin[0] == 0) {
-                x = exp(xn) - 1.0;
-            } else {
-                x = atan(xn) * 2.0 / Pi;
-            }
-        } else {
-            for (int i = 0; i < Scalar::SizeAtCompileTime; i++) {
-                if (Nin[i] == 0) {
-                    x[i] = exp(xn[i]) - 1.0;
-                } else {
-                    x[i] = atan(xn[i]) * 2.0 / Pi;
-                }
-            }
-        }
+        x = atan(xn) * 2.0 / Pi;
     }
 
     Scalar a = am / (1.0 - x * x);
@@ -551,13 +450,11 @@ std::array<Vector3<Scalar>, 2> lambert_izzo(const Vector3<Scalar> &R1, const Vec
 /// @warning "NaN-with-success" (OC §3.9): see the identical warning on the
 ///          zero-revolution lambert_izzo() overload above — collinear R1/R2
 ///          NaN-poisons V1/V2 independently of the Newton solve's exint.
-/// @warning The theoretical maximum feasible revolution count (`Nmax` in
-///          lambert_izzo_impl) is computed but never clamped against the
-///          caller-supplied `Nrevs` (the clamp is present in source but
-///          disabled — see the in-body note). Requesting more revolutions
-///          than the transfer geometry/time-of-flight can support typically
-///          fails via Newton non-convergence rather than an immediate,
-///          cheap rejection.
+/// @warning The theoretical maximum feasible revolution count for a given
+///          transfer geometry/time-of-flight is never validated against the
+///          caller-supplied `Nrevs`. Requesting more revolutions than the
+///          transfer can support typically fails via Newton non-convergence
+///          rather than an immediate, cheap rejection.
 template <class Scalar>
 std::array<Vector3<Scalar>, 2> lambert_izzo(const Vector3<Scalar> &R1, const Vector3<Scalar> &R2,
                                             Scalar dt, double mu, bool longway, int Nrevs,
