@@ -62,8 +62,6 @@ template <class... Funcs> struct ComparativeFunction;
 
 template <int IR, int OR, int ST> struct Segment;
 
-template <int EL> struct Element;
-
 template <int IR, int EL1, int... ELS> struct Elements;
 
 template <int IR, int OR> struct Constant;

@@ -4,7 +4,6 @@
 
 #include "tycho/vector_functions.h"
 
-#include "tycho/detail/solvers/solver_flags.h"
 #include "tycho/detail/solvers/solver_init.h"
 #include "tycho/detail/solvers/solver_function_base.h"
 #include "tycho/detail/solvers/constraint_function.h"

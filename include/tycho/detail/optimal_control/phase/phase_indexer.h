@@ -85,7 +85,6 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
     int num_controls_ = 0; ///< Total number of control nodes.
 
     bool blocked_controls_ = false; ///< Whether controls are held block-constant.
-    int blocked_control_start_ = 0; ///< NLP start location of the blocked controls.
 
     int defect_cardinal_states_ = 0; ///< Number of cardinal states per defect interval.
     int num_nodal_states_ = 0;       ///< Number of nodal (mesh) states.
