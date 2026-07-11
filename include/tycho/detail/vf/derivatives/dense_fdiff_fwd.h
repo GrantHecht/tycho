@@ -235,6 +235,8 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::FDiff
     /// @param adjvars  Adjoint (Lagrange) coefficients weighting each output row.
     /// @param ag0      Base-point adjoint gradient @f$ J(x)^\top \lambda @f$, already
     ///                 evaluated at @p x with the same @p adjvars.
+    /// @pre @p ag0 must not alias @p adjhess_ (the Hessian is written while @p ag0 is
+    ///      still being read column-by-column).
     template <class InType, class AdjHessType, class AdjVarType, class AdjGradType>
     inline void adjointhessian_from_gradient(CVecRef<InType> x, CMatRef<AdjHessType> adjhess_,
                                              CVecRef<AdjVarType> adjvars,
