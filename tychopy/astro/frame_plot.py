@@ -29,11 +29,11 @@ class Arrow3D(FancyArrowPatch):
         FancyArrowPatch.__init__(self, (0, 0), (0, 0), *args, **kwargs)
         self._verts3d = xs, ys, zs
 
-    def draw(self, renderer):
+    def do_3d_projection(self, renderer=None):
         xs3d, ys3d, zs3d = self._verts3d
-        xs, ys, zs = proj3d.proj_transform(xs3d, ys3d, zs3d, renderer.M)
+        xs, ys, zs = proj3d.proj_transform(xs3d, ys3d, zs3d, self.axes.M)
         self.set_positions((xs[0], ys[0]), (xs[1], ys[1]))
-        FancyArrowPatch.draw(self, renderer)
+        return np.min(zs)
 
 
 class PlotBase:
@@ -79,7 +79,7 @@ class PlotBase:
             self.addTraj(Trajs[i], header + str(tags[i]), cols[i])
 
     def addPropTraj(self, traj, name, color="", marker="", markersize=0, linestyle="-"):
-        self.addTraj(name, traj, color, marker, markersize, linestyle)
+        self.addTraj(traj, name, color, marker, markersize, linestyle)
 
     def addPoint(
         self,
@@ -293,7 +293,7 @@ class PlotBase:
                 ax = self.PlotSTraj(
                     objp, obj["Color"], obj["Name"], self.NormDensity, ax, 0.004
                 )
-        for obj in self.Points.items():
+        for obj in self.Points.values():
             objp = obj["Pos"]
             ax.scatter(
                 objp[0],
@@ -320,7 +320,7 @@ class PlotBase:
 
     def Plot3d(self, *args):
         fig = plt.figure()
-        ax = fig.gca(projection="3d")
+        ax = fig.add_subplot(projection="3d")
 
         self.Plot3dAx(ax, *args)
         plt.show()
