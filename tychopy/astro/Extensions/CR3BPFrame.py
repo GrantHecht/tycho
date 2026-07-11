@@ -285,6 +285,7 @@ class CR3BPFrame:
             Jt = func.jacobian(X)
             J = np.array([[Jt[3, 0], Jt[3, 1]], [Jt[4, 0], Jt[4, 1]]])
             X[0:2] = X[0:2] - np.linalg.solve(J, F)
+        F = func.compute(X)[3:5]
         raise RuntimeError(
             f"CalcSubPoint: Newton iteration did not converge within {max_iters} "
             f"iterations (residual {max(abs(F)):.3e}, tol {tol:.1e})"

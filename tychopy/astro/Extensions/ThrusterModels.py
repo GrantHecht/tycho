@@ -40,6 +40,11 @@ class LowThrustAcc:
             Dimensional acceleration value m/s^2.
             Leave None if using NonDim_LTacc.
         """
+        if isinstance(NonDim_LTacc, bool) or isinstance(LTacc, bool):
+            raise ValueError(
+                "NonDim_LTacc/LTacc use a None-sentinel API: pass a numeric "
+                "value or leave the parameter unset (None), not a bool"
+            )
         if NonDim_LTacc is not None and LTacc is not None:
             raise ValueError("Specify either NonDim_LTacc or LTacc, not both")
         if NonDim_LTacc is None and LTacc is None:

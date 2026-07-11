@@ -162,6 +162,41 @@ class TestLowThrustAcc:
         assert t.NDLTacc == 0.5
         assert t.ThrustExpr(2.0, 100.0) == 1.0
 
+    def test_lowthrustacc_nondim_false_raises(self):
+        """NonDim_LTacc=False must not be silently accepted as a valid
+        numeric value (False is not None, so it survived the None-sentinel
+        checks pre-fix and produced a spurious zero-thrust non-dim branch)."""
+        with pytest.raises(ValueError):
+            LowThrustAcc(NonDim_LTacc=False)
+
+    def test_lowthrustacc_ltacc_true_raises(self):
+        """LTacc=True must likewise be rejected, not silently accepted as a
+        numeric dimensional acceleration."""
+        with pytest.raises(ValueError):
+            LowThrustAcc(LTacc=True)
+
+
+class _NeverConvergesFunc:
+    """Stand-in VectorFunction: residual rows [3:5] are a constant
+    nonzero vector regardless of X, with an invertible (identity)
+    2x2 sub-Jacobian, so Newton always takes a nonzero step but the
+    residual magnitude never drops below tol."""
+
+    def input_rows(self):
+        return 6
+
+    def compute(self, X):
+        out = np.zeros(6)
+        out[3] = 1.0
+        out[4] = 1.0
+        return out
+
+    def jacobian(self, X):
+        J = np.zeros((6, 6))
+        J[3, 0] = 1.0
+        J[4, 1] = 1.0
+        return J
+
 
 class TestCalcSubPoint:
     """CalcSubPoint Newton iteration cap (Task 8, defect 4)."""
@@ -184,31 +219,26 @@ class TestCalcSubPoint:
         exercises exactly the code path that looped forever pre-fix (no
         iteration cap) while remaining safe to run post-fix (the cap
         guarantees termination)."""
-
-        class _NeverConvergesFunc:
-            """Stand-in VectorFunction: residual rows [3:5] are a constant
-            nonzero vector regardless of X, with an invertible (identity)
-            2x2 sub-Jacobian, so Newton always takes a nonzero step but the
-            residual magnitude never drops below tol."""
-
-            def input_rows(self):
-                return 6
-
-            def compute(self, X):
-                out = np.zeros(6)
-                out[3] = 1.0
-                out[4] = 1.0
-                return out
-
-            def jacobian(self, X):
-                J = np.zeros((6, 6))
-                J[3, 0] = 1.0
-                J[4, 1] = 1.0
-                return J
-
         frame = CR3BPFrame(1.0, 1.0, 1.0)
         with pytest.raises(RuntimeError):
             frame.CalcSubPoint(_NeverConvergesFunc(), np.array([0.1, 0.1, 0.0]))
+
+    @pytest.mark.timeout(30)
+    def test_calcsubpoint_max_iters_zero_raises_runtimeerror_not_unboundlocalerror(
+        self,
+    ):
+        """max_iters=0 skips the Newton loop body entirely, so ``F`` is
+        unbound at the raise site unless it is recomputed immediately before
+        raising. Must raise RuntimeError (not UnboundLocalError) with a
+        finite residual reported in the message."""
+        frame = CR3BPFrame(1.0, 1.0, 1.0)
+        with pytest.raises(RuntimeError) as exc_info:
+            frame.CalcSubPoint(
+                _NeverConvergesFunc(), np.array([0.1, 0.1, 0.0]), max_iters=0
+            )
+        message = str(exc_info.value)
+        residual_str = message.split("residual ")[1].split(",")[0]
+        assert np.isfinite(float(residual_str))
 
 
 if __name__ == "__main__":

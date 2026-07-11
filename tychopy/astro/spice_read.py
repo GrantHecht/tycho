@@ -48,8 +48,7 @@ def _sample_jds(startJD, endJD, numstep):
     """
     if numstep < 2:
         raise ValueError(f"numstep must be >= 2, got {numstep}")
-    step = (endJD - startJD) / float(numstep - 1)
-    return [startJD + i * step for i in range(numstep)]
+    return np.linspace(startJD, endJD, numstep).tolist()
 
 
 def GetEphemTraj2(
