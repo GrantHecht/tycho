@@ -14,8 +14,8 @@ namespace tycho::solvers {
 
 double ensure_solver_initialized() {
     static std::once_flag flag;
-    static double time_ms = 0.0;
-    std::call_once(flag, []() {
+    double first_init_ms = 0.0;
+    std::call_once(flag, [&first_init_ms]() {
         tycho::utils::Timer t;
         t.start();
 #ifdef USE_ACCELERATE_SPARSE
@@ -24,9 +24,9 @@ double ensure_solver_initialized() {
         dsecnd();
 #endif
         t.stop();
-        time_ms = double(t.count<std::chrono::microseconds>()) / 1000.0;
+        first_init_ms = double(t.count<std::chrono::microseconds>()) / 1000.0;
     });
-    return time_ms;
+    return first_init_ms; // 0.0 on every call after the first (header contract)
 }
 
 } // namespace tycho::solvers

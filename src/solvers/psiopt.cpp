@@ -712,7 +712,7 @@ double tycho::solvers::PSIOPT::loqo_mu(Eigen::Ref<Eigen::VectorXd> S,
                                        double mincomp) const {
     double eta = mincomp / avgcomp;
     double sigmat = .1 * std::pow(0.05 * (1.0 - eta) / eta, 3);
-    double sigma = std::min(0.8, abs(sigmat));
+    double sigma = std::min(0.8, std::abs(sigmat));
     return sigma * avgcomp;
 }
 
@@ -1316,7 +1316,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     for (int i = 0; i < this->slack_vars_; i++) {
         double fxi = v_rhs.iq_cons()[i];
         if (fxi < -settings_.bound_push_) {
-            v_xsl.slacks()[i] = abs(fxi);
+            v_xsl.slacks()[i] = std::abs(fxi);
         } else {
             v_xsl.slacks()[i] = settings_.bound_push_;
         }
@@ -1492,15 +1492,15 @@ double tycho::solvers::PSIOPT::ls_auglang(double obj_scale, double mu, double pr
         // Tolerance-filtered L1 penalty
         double TestL1Pen = 0;
         for (int i = 0; i < this->equal_cons_; i++) {
-            double eqerr = abs(rhs2.eq_cons()[i]);
-            double eqmul = abs(xsl.eq_lmults()[i]);
+            double eqerr = std::abs(rhs2.eq_cons()[i]);
+            double eqmul = std::abs(xsl.eq_lmults()[i]);
             if (eqerr > settings_.econ_tol_ * 10) {
                 TestL1Pen += eqerr * eqmul;
             }
         }
         for (int i = 0; i < this->inequal_cons_; i++) {
-            double iqerr = abs(rhs2.iq_cons()[i]);
-            double iqmul = abs(xsl.iq_lmults()[i]);
+            double iqerr = std::abs(rhs2.iq_cons()[i]);
+            double iqmul = std::abs(xsl.iq_lmults()[i]);
             if (iqerr > settings_.icon_tol_ * 10) {
                 TestL1Pen += iqerr * iqmul;
             }

@@ -82,6 +82,7 @@ using detail::kepler_nan_value;
 ///          implemented.
 template <class Scalar>
 Vector6<Scalar> classic_to_cartesian(const Vector6<Scalar> &oelems, Scalar mu) {
+    using std::abs;
 
     const int MAXITERS = 15;
     const double TOL = 1.0e-12;
@@ -419,6 +420,7 @@ Vector6<Scalar> modified_to_classic(const Vector6<Scalar> &meelems, Scalar mu) {
 ///          orbits (e → 1⁺) can still genuinely diverge and NaN-poison.
 template <class Scalar>
 Vector6<Scalar> classic_to_modified(const Vector6<Scalar> &oelems, Scalar mu) {
+    using std::abs;
 
     const int MAXITERS = 15;
     const double TOL = 1.0e-12;

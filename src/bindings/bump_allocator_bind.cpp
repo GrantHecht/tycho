@@ -39,12 +39,16 @@ There are two per-thread arenas:
 
 The default arena capacity is 64 elements per thread; the arena
 self-tunes upward after overflow (use :meth:`resize` to pre-size).
+Resizes only the calling thread's arenas; thread-pool workers are
+unaffected and warm up independently via high-water learning.
 )doc");
     obj.def_static("resize", nb::overload_cast<int>(&BumpAllocator::resize),
                    R"doc(Resize both per-thread arenas to the same element count.
 
 Must be called with no active allocations (i.e., outside any ODE or
-VectorFunction evaluation call).
+VectorFunction evaluation call). Resizes only the calling thread's
+arenas; thread-pool workers are unaffected and warm up independently
+via high-water learning.
 
 Parameters
 ----------
@@ -55,7 +59,9 @@ size : int
                    R"doc(Resize the scalar and super-scalar arenas independently.
 
 Must be called with no active allocations (i.e., outside any ODE or
-VectorFunction evaluation call).
+VectorFunction evaluation call). Resizes only the calling thread's
+arenas; thread-pool workers are unaffected and warm up independently
+via high-water learning.
 
 Parameters
 ----------

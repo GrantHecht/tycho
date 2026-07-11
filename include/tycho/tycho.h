@@ -1,5 +1,11 @@
 #pragma once
 
+#ifndef EIGEN_INITIALIZE_MATRICES_BY_ZERO
+#error "tycho requires -DEIGEN_INITIALIZE_MATRICES_BY_ZERO (set automatically by the CMake build; \
+see CMakeLists.txt). Several VectorFunction/interp/defect code paths rely on zero-initialized \
+Eigen temporaries and are undefined behavior without it."
+#endif
+
 // Tycho — High-performance trajectory design and optimal control
 // Public API umbrella header
 

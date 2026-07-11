@@ -47,10 +47,6 @@ struct ComparativeFunction<First, Rest...>
     /// @brief IfElseFunction base implementing the selection.
     using Base = IfElseFunction<BaseCond, First, Second>;
 
-    // Static Parameters
-    static constexpr bool IsComparative =
-        true; ///< @brief Trait flag: this is a comparative function.
-
     // ---------------------------------------------------------------------------
     // Constructors
     /// @brief Construct an empty (default) comparative function.
@@ -80,10 +76,6 @@ struct ComparativeFunction<First, Second>
     using BaseCond = ConditionalStatement<First, Second>;
     /// @brief IfElseFunction base implementing the selection.
     using Base = IfElseFunction<BaseCond, First, Second>;
-
-    // Static Parameters
-    static constexpr bool IsComparative =
-        true; ///< @brief Trait flag: this is a comparative function.
 
     // ---------------------------------------------------------------------------
     // Constructors

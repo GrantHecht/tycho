@@ -47,10 +47,10 @@ struct CR3BP_FDiff : VectorFunction<CR3BP_FDiff, 7, 6, DenseDerivativeMode::FDif
         Vector3<Scalar> X = x.template head<3>();
         Vector3<Scalar> V = x.template segment<3>(3);
 
-        Vector3<Scalar> p1loc;
+        Vector3<Scalar> p1loc = Vector3<Scalar>::Zero();
         p1loc[0] = -mu;
 
-        Vector3<Scalar> p2loc;
+        Vector3<Scalar> p2loc = Vector3<Scalar>::Zero();
         p2loc[0] = 1.0 - mu;
 
         Vector3<Scalar> dvec = X - p1loc;

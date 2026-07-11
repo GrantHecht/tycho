@@ -54,8 +54,6 @@ struct InterpTable2D {
     MatType dzxs_;       ///< Cached @f$\partial z/\partial x@f$ at grid nodes.
     MatType dzys_;       ///< Cached @f$\partial z/\partial y@f$ at grid nodes.
     MatType dzys_dxs_;   ///< Cached @f$\partial^2 z/\partial x\partial y@f$ at grid nodes.
-    Eigen::Matrix<Eigen::Array4d, -1, -1, Eigen::RowMajor>
-        all_dat_;                                ///< Per-cell coefficient cache.
     InterpType interp_kind_ = InterpType::Cubic; ///< Interpolation kind.
 
   public:
@@ -137,10 +135,10 @@ struct InterpTable2D {
         double xerr = (xs_ - testx).lpNorm<Eigen::Infinity>();
         double yerr = (ys_ - testy).lpNorm<Eigen::Infinity>();
 
-        if (xerr > abs(xtotal_) * 1.0e-12) {
+        if (xerr > std::abs(xtotal_) * 1.0e-12) {
             this->xeven_ = false;
         }
-        if (yerr > abs(ytotal_) * 1.0e-12) {
+        if (yerr > std::abs(ytotal_) * 1.0e-12) {
             this->yeven_ = false;
         }
 
@@ -155,7 +153,6 @@ struct InterpTable2D {
         dzxs_.resize(ysize_, xsize_);
         dzys_.resize(ysize_, xsize_);
         dzys_dxs_.resize(ysize_, xsize_);
-        all_dat_.resize(ysize_, xsize_);
 
         Eigen::Matrix<double, 5, 5> stens;
         stens.row(0).setOnes();

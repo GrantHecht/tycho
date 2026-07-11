@@ -99,6 +99,7 @@ struct ScalarRootFinder_Impl : VectorFunction<Derived, FX::IRC, 1> {
     /// @param jx  Scratch Jacobian used when no explicit derivative is supplied.
     /// @endinternal
     template <class VecType, class JacType> void find_root(VecType &x, JacType &jx) const {
+        using std::abs;
         typedef typename VecType::Scalar Scalar;
         Vector1<Scalar> fx;
         Vector1<Scalar> dfx;

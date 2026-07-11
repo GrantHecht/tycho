@@ -98,9 +98,6 @@ struct LGLInterpTable {
     bool periodic_ = false;  ///< Whether the trajectory is treated as periodic.
     bool even_data_ = false; ///< Whether nodes are evenly spaced in time.
 
-    bool warn_out_of_bounds_ = true;   ///< Warn on out-of-range time queries.
-    bool throw_out_of_bounds_ = false; ///< Throw on out-of-range time queries.
-
     Eigen::VectorXd t_spacing_;  ///< Normalized within-block node spacing.
     Eigen::MatrixXd x_weights_;  ///< Polynomial weights for the state interpolant.
     Eigen::MatrixXd dx_weights_; ///< Polynomial weights for the state-derivative interpolant.
@@ -268,8 +265,7 @@ struct LGLInterpTable {
           has_ode_(other.has_ode_), order_(other.order_), error_weight_(other.error_weight_),
           block_size_(other.block_size_), num_blocks_(other.num_blocks_),
           num_states_(other.num_states_), last_block_accessed_(0), periodic_(other.periodic_),
-          even_data_(other.even_data_), warn_out_of_bounds_(other.warn_out_of_bounds_),
-          throw_out_of_bounds_(other.throw_out_of_bounds_), t_spacing_(other.t_spacing_),
+          even_data_(other.even_data_), t_spacing_(other.t_spacing_),
           x_weights_(other.x_weights_), dx_weights_(other.dx_weights_),
           u_weights_(other.u_weights_) {
         if (other.has_ode_) {
@@ -311,8 +307,6 @@ struct LGLInterpTable {
         last_block_accessed_.store(0, std::memory_order_relaxed);
         periodic_ = other.periodic_;
         even_data_ = other.even_data_;
-        warn_out_of_bounds_ = other.warn_out_of_bounds_;
-        throw_out_of_bounds_ = other.throw_out_of_bounds_;
         t_spacing_ = other.t_spacing_;
         x_weights_ = other.x_weights_;
         dx_weights_ = other.dx_weights_;
