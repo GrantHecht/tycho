@@ -88,6 +88,6 @@ SpiceBodyProps["JUPITER BARYCENTER"] = {
     "Radius": RadiusJupiter,
 }
 SpiceBodyProps["SATURN BARYCENTER"] = {"Mu": MuSaturnBarycenter}
-SpiceBodyProps["NEPTUNE BARYCENTER"] = {"Mu": MuNeptune}
-SpiceBodyProps["URANUS BARYCENTER"] = {"Mu": MuUranus}
+SpiceBodyProps["NEPTUNE BARYCENTER"] = {"Mu": MuNeptuneBarycenter}
+SpiceBodyProps["URANUS BARYCENTER"] = {"Mu": MuUranusBarycenter}
 SpiceBodyProps["MARS BARYCENTER"] = {"Mu": MuMars}
