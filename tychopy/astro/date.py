@@ -581,6 +581,13 @@ class datetime(dt.datetime):
 
 
 def JD_SPJ2000D(JD):
+    """
+    Notes
+    -----
+    ``JD`` is interpreted as a TDB-based Julian Date; the linear JD->ET
+    conversion is exact only for TDB. UTC-based JDs are offset by ~69 s
+    (leap seconds + 32.184 s).
+    """
     return (JD - 2451545.0) * 24.0 * 3600
 
 

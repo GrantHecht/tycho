@@ -22,6 +22,36 @@ import tychopy.astro.date as dt
 # sp.furnsh('BasicKernel.txt')
 
 
+def _sample_jds(startJD, endJD, numstep):
+    """Return ``numstep`` sample Julian Dates from ``startJD`` to ``endJD``,
+    inclusive of both endpoints (i.e. ``endJD`` is always sampled).
+
+    Parameters
+    ----------
+    startJD : float
+        Starting Julian Date (TDB-based; see note below).
+    endJD : float
+        Ending Julian Date (TDB-based; see note below).
+    numstep : int
+        Number of samples to return (must be >= 2).
+
+    Returns
+    -------
+    list of float
+        ``numstep`` Julian Dates, uniformly spaced, with ``result[0] ==
+        startJD`` and ``result[-1] == endJD``.
+
+    Raises
+    ------
+    ValueError
+        If ``numstep < 2``.
+    """
+    if numstep < 2:
+        raise ValueError(f"numstep must be >= 2, got {numstep}")
+    step = (endJD - startJD) / float(numstep - 1)
+    return [startJD + i * step for i in range(numstep)]
+
+
 def GetEphemTraj2(
     body,
     startJD,
@@ -32,10 +62,14 @@ def GetEphemTraj2(
     Frame="ECLIPJ2000",
     Center="SOLAR SYSTEM BARYCENTER",
 ):
-    times = [
-        dt.JD_SPJ2000D(float(x) * (endJD - startJD) / float(numstep) + startJD)
-        for x in range(numstep)
-    ]
+    """
+    Notes
+    -----
+    ``startJD``/``endJD`` are interpreted as TDB-based Julian Dates; the
+    linear JD->ET conversion is exact only for TDB. UTC-based JDs are offset
+    by ~69 s (leap seconds + 32.184 s).
+    """
+    times = [dt.JD_SPJ2000D(jd) for jd in _sample_jds(startJD, endJD, numstep)]
     states = []
     t0 = times[0]
     for t in times:
@@ -49,10 +83,14 @@ def GetEphemTraj2(
 
 
 def PoleVector(IAUBodyFrame, TargetFrame, startJD, endJD, numstep, TU=1.0):
-    times = [
-        dt.JD_SPJ2000D(float(x) * (endJD - startJD) / float(numstep) + startJD)
-        for x in range(numstep)
-    ]
+    """
+    Notes
+    -----
+    ``startJD``/``endJD`` are interpreted as TDB-based Julian Dates; the
+    linear JD->ET conversion is exact only for TDB. UTC-based JDs are offset
+    by ~69 s (leap seconds + 32.184 s).
+    """
+    times = [dt.JD_SPJ2000D(jd) for jd in _sample_jds(startJD, endJD, numstep)]
     poles = []
     t0 = times[0]
     for t in times:
@@ -84,15 +122,20 @@ def GetEphemTraj(
     Center="SOLAR SYSTEM BARYCENTER",
     useET=False,
 ):
+    """
+    Notes
+    -----
+    ``startJD``/``endJD`` are interpreted as TDB-based Julian Dates (or, when
+    ``useET=True``, TDB-based ET seconds); the linear JD->ET conversion is
+    exact only for TDB. UTC-based JDs are offset by ~69 s (leap seconds +
+    32.184 s).
+    """
 
     # Option for use of ET as input to function.
     if not useET:
-        times = [
-            dt.JD_SPJ2000D(x * (endJD - startJD) / numstep + startJD)
-            for x in range(numstep)
-        ]
+        times = [dt.JD_SPJ2000D(jd) for jd in _sample_jds(startJD, endJD, numstep)]
     else:
-        times = [startJD + (endJD - startJD) * x / numstep for x in range(numstep)]
+        times = _sample_jds(startJD, endJD, numstep)
 
     states = []
     t0 = times[0]
