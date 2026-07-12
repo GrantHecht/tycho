@@ -2256,16 +2256,27 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                         main_ctrl = this->make_worker_controller();
                         main_na = 0;
                         main_nr = 0;
-                        // Use integrate_stm_core (discarding the STM) so the
-                        // main thread exercises the same FP arithmetic as the
-                        // workers. xs[i+1] becomes worker (i+1)'s starting
-                        // state; if it diverged from worker i's xf in FP, the
-                        // chain-rule product in jxall would reflect sensitivity
-                        // at a mismatched linearization point. Identical
-                        // codepaths ⇒ bit-identical xs ⇒ exact chaining.
-                        auto stm_result =
-                            this->integrate_stm_core(xs[i], ts[i + 1], main_ctrl, main_na, main_nr);
-                        xs[i + 1] = std::get<0>(stm_result);
+                        // Use integrate_dense_core directly instead of
+                        // integrate_stm_core: the main thread only needs
+                        // xs[i+1] to hand worker (i+1) a bit-identical start
+                        // state, and integrate_stm_core is exactly
+                        // integrate_dense_core(...).back() plus a
+                        // calculate_jacobian(xs) call whose STM is discarded
+                        // here (see integrate_stm_core's definition above) --
+                        // that discarded Jacobian is the dominant extra cost
+                        // (~IR x the propagation cost), so skipping it removes
+                        // nearly the entire redundant main-thread STM workload
+                        // this loop was paying for. xs[i+1] becomes worker
+                        // (i+1)'s starting state; if it diverged from worker
+                        // i's xf in FP, the chain-rule product in jxall would
+                        // reflect sensitivity at a mismatched linearization
+                        // point. integrate_dense_core is the same propagation
+                        // call integrate_stm_core makes internally ⇒
+                        // bit-identical xs ⇒ exact chaining, without the
+                        // discarded Jacobian.
+                        auto dense_result = this->integrate_dense_core(
+                            xs[i], ts[i + 1], main_ctrl, main_na, main_nr);
+                        xs[i + 1] = dense_result.back();
                         total_main_na += main_na;
                         total_main_nr += main_nr;
                     }
