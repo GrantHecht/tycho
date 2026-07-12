@@ -19,6 +19,7 @@
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -537,7 +538,12 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
                 }
                 stepper_.seed_fsal(fxf);
             }
-            prev_event_vals = next_event_vals;
+            // next_event_vals is unconditionally overwritten element-by-
+            // element (setZero() + vf.compute()) at the top of the next
+            // check_crossings() call, so its post-swap stale contents are
+            // never read -- std::swap avoids the copy-assignment
+            // (INTEGRATORS §2.6).
+            std::swap(prev_event_vals, next_event_vals);
 
             if (storestates) {
                 if (storemidpoints) {
