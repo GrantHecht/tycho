@@ -378,7 +378,9 @@ TEST(KeplerEdgeCases, EllipticNearParabolicNowConverges) {
 
 TEST(KeplerEdgeCases, EllipticDegenerateInputPoisonsOutput) {
     // The Markley starter closes the near-parabolic divergence band (probe: no
-    // finite e < 1 input poisons, down to e = 1-1e-16), so the elliptic poison
+    // finite e < 1 input poisons, down to e = 1-1e-16, under normal math; the
+    // production fast-math build retains ~5 fail-safe poison cells at
+    // sub-picoradian M below any physical relevance), so the elliptic poison
     // path now guards only genuinely degenerate input. A non-finite mean
     // anomaly (NaN M) can never satisfy |dE| < 1e-12 -- every Newton step is
     // NaN -- so MAXITERS_ELLIPTIC is exhausted and the whole output is

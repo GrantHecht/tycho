@@ -18,8 +18,7 @@
 //
 // Every construction below was verified against the actual header source at
 // HEAD (line numbers cited in each benchmark's comment), not inferred from
-// the review docs alone. See .superpowers/sdd/task-2-report.md for the full
-// per-bench path-verification writeup.
+// the review docs alone.
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "tycho/detail/vf/scaling/io_scaled.h"
@@ -289,9 +288,7 @@ static void BM_VF_DynamicODE_JGH(benchmark::State &state) {
     // the call shape of `BM_VF_MinMax_Generic_JGH` above). This is the only
     // call shape that reaches the JGH-only heap locals flagged by
     // VF_REVIEW/dossier item 2 but left uncovered by `_Compute`/`_Jacobian`
-    // above (flagged as a deferred follow-up in
-    // .superpowers/sdd/task-2-report.md's "Deferred to controller checkpoint"
-    // section) -- verified by reading both headers at HEAD:
+    // above -- verified by reading both headers at HEAD:
     //   - cwise_operators.h:1467-1510
     //     (`CwiseFunctionOperator::compute_jacobian_adjointgradient_adjointhessian_impl`):
     //     `hxdiag` is heap-resized under the same `if constexpr
