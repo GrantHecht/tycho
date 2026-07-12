@@ -14,6 +14,8 @@
 
 #include "tycho/detail/optimal_control/transcription/lgl_interp_table.h"
 
+#include <cassert>
+
 void tycho::oc::LGLInterpTable::set_method(TranscriptionModes m) {
     this->method_ = m;
     switch (this->method_) {
@@ -94,6 +96,18 @@ void tycho::oc::LGLInterpTable::set_method(TranscriptionModes m) {
         break;
     }
     }
+
+    // Debug-mode tie-back: interp_block_gen/interp_block_deriv_gen/
+    // interp_block_deriv2_gen (lgl_interp_table.h) size their
+    // MaxVector<Scalar, kMaxLGLWeightRows> stack buffers to kMaxLGLWeightRows
+    // (statically derived from LGLCoeffs<4>::Order, the highest-order LGL7
+    // specialization). This switch is set_method()'s only writer of
+    // x_weights_/dx_weights_ -- if a future case populates more rows than
+    // kMaxLGLWeightRows without bumping the constant, those buffers would
+    // silently overflow their fixed-max-size storage (UB under NDEBUG).
+    assert(this->x_weights_.rows() <= kMaxLGLWeightRows &&
+          "LGLInterpTable::set_method: x_weights_.rows() exceeds kMaxLGLWeightRows -- bump "
+          "kMaxLGLWeightRows (lgl_interp_table.h) in lockstep with any new higher-order LGL mode");
 }
 
 std::vector<Eigen::VectorXd> tycho::oc::LGLInterpTable::new_error_integral() {

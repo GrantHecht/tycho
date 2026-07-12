@@ -1408,14 +1408,14 @@ struct CwiseFunctionOperator : VectorFunction<Derived, Func::IRC, Func::ORC> {
     template <class InType, class OutType>
     inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
         typedef typename InType::Scalar Scalar;
-        Output<Scalar> fxt;
 
-        if constexpr (Func::OutputIsDynamic) {
-            fxt.resize(this->func_.output_rows());
-        }
+        auto Impl = [&](auto &fxt) {
+            this->func_.compute(x, fxt);
+            this->derived().cwise_compute(fxt, fx_);
+        };
 
-        this->func_.compute(x, fxt);
-        this->derived().cwise_compute(fxt, fx_);
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Output<Scalar>>(this->func_.output_rows(), 1));
     }
     /// @internal
     /// @brief Evaluate the transform and its Jacobian via the chain rule.
@@ -1431,23 +1431,21 @@ struct CwiseFunctionOperator : VectorFunction<Derived, Func::IRC, Func::ORC> {
                                       CMatRef<JacType> jx_) const {
         typedef typename InType::Scalar Scalar;
 
-        Output<Scalar> fxt;
-        Output<Scalar> jxdiag;
+        auto Impl = [&](auto &fxt, auto &jxdiag) {
+            this->func_.compute_jacobian(x, fxt, jx_);
+            this->derived().cwise_compute_jacobian(fxt, fx_, jxdiag);
+            if constexpr (Func::ORC == 1) {
+                this->func_.right_jacobian_product(jx_, jxdiag, jx_, DirectAssignment(),
+                                                   std::bool_constant<true>());
+            } else {
+                this->func_.right_jacobian_product(jx_, jxdiag.asDiagonal(), jx_,
+                                                   DirectAssignment(), std::bool_constant<true>());
+            }
+        };
 
-        if constexpr (Func::OutputIsDynamic) {
-            fxt.resize(this->func_.output_rows());
-            jxdiag.resize(this->func_.output_rows());
-        }
-
-        this->func_.compute_jacobian(x, fxt, jx_);
-        this->derived().cwise_compute_jacobian(fxt, fx_, jxdiag);
-        if constexpr (Func::ORC == 1) {
-            this->func_.right_jacobian_product(jx_, jxdiag, jx_, DirectAssignment(),
-                                               std::bool_constant<true>());
-        } else {
-            this->func_.right_jacobian_product(jx_, jxdiag.asDiagonal(), jx_, DirectAssignment(),
-                                               std::bool_constant<true>());
-        }
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Output<Scalar>>(this->func_.output_rows(), 1),
+            tycho::utils::TempSpec<Output<Scalar>>(this->func_.output_rows(), 1));
     }
     /// @internal
     /// @brief Evaluate the transform, Jacobian, adjoint gradient, and adjoint Hessian.
@@ -1475,38 +1473,36 @@ struct CwiseFunctionOperator : VectorFunction<Derived, Func::IRC, Func::ORC> {
         // VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
         MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
-        Output<Scalar> fxt;
-        Output<Scalar> jxdiag;
-        Output<Scalar> hxdiag;
+        auto Impl = [&](auto &fxt, auto &jxdiag, auto &hxdiag, auto &adjtemp) {
+            this->func_.compute(x, fxt);
+            this->derived().cwise_compute_jacobian_hessian(fxt, fx_, jxdiag, hxdiag);
 
-        if constexpr (Func::OutputIsDynamic) {
-            fxt.resize(this->func_.output_rows());
-            jxdiag.resize(this->func_.output_rows());
-            hxdiag.resize(this->func_.output_rows());
-        }
+            fxt.setZero();
+            adjtemp = jxdiag.cwiseProduct(adjvars);
+            hxdiag = hxdiag.cwiseProduct(adjvars);
+            this->func_.compute_jacobian_adjointgradient_adjointhessian(x, fxt, jx_, adjgrad_,
+                                                                        adjhess_, adjtemp);
+            if constexpr (Func::ORC == 1) {
 
-        this->func_.compute(x, fxt);
-        this->derived().cwise_compute_jacobian_hessian(fxt, fx_, jxdiag, hxdiag);
+                this->func_.symetric_jacobian_product(adjhess, hxdiag, jx, PlusEqualsAssignment(),
+                                                      std::bool_constant<false>());
 
-        fxt.setZero();
-        Output<Scalar> adjtemp = jxdiag.cwiseProduct(adjvars);
-        hxdiag = hxdiag.cwiseProduct(adjvars);
-        this->func_.compute_jacobian_adjointgradient_adjointhessian(x, fxt, jx_, adjgrad_, adjhess_,
-                                                                    adjtemp);
-        if constexpr (Func::ORC == 1) {
+                this->func_.right_jacobian_product(jx_, jxdiag, jx, DirectAssignment(),
+                                                   std::bool_constant<true>());
+            } else {
+                this->func_.symetric_jacobian_product(adjhess, hxdiag.asDiagonal(), jx,
+                                                      PlusEqualsAssignment(),
+                                                      std::bool_constant<false>());
+                this->func_.right_jacobian_product(jx_, jxdiag.asDiagonal(), jx,
+                                                   DirectAssignment(), std::bool_constant<true>());
+            }
+        };
 
-            this->func_.symetric_jacobian_product(adjhess, hxdiag, jx, PlusEqualsAssignment(),
-                                                  std::bool_constant<false>());
-
-            this->func_.right_jacobian_product(jx_, jxdiag, jx, DirectAssignment(),
-                                               std::bool_constant<true>());
-        } else {
-            this->func_.symetric_jacobian_product(adjhess, hxdiag.asDiagonal(), jx,
-                                                  PlusEqualsAssignment(),
-                                                  std::bool_constant<false>());
-            this->func_.right_jacobian_product(jx_, jxdiag.asDiagonal(), jx, DirectAssignment(),
-                                               std::bool_constant<true>());
-        }
+        tycho::utils::BumpAllocator::allocate_run(
+            Impl, tycho::utils::TempSpec<Output<Scalar>>(this->func_.output_rows(), 1),
+            tycho::utils::TempSpec<Output<Scalar>>(this->func_.output_rows(), 1),
+            tycho::utils::TempSpec<Output<Scalar>>(this->func_.output_rows(), 1),
+            tycho::utils::TempSpec<Output<Scalar>>(this->func_.output_rows(), 1));
     }
 };
 

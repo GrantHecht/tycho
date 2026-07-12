@@ -141,6 +141,7 @@ struct StaticScaled_Impl
     /// @param f  Function to wrap.
     StaticScaled_Impl(Func f) : func_(std::move(f)) {
         this->set_io_rows(this->func_.input_rows(), this->func_.output_rows());
+        this->set_input_domain(this->input_rows(), {this->func_.input_domain()});
     }
     /// @internal
     /// @brief Evaluates the wrapped function and scales the output by `Value::value`.
@@ -599,15 +600,22 @@ struct RowScaled_Impl
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
 
-        auto Impl = [&](auto &scales) {
-            scales = this->row_scale_values_.template cast<Scalar>();
+        if constexpr (std::is_same_v<Scalar, double>) {
+            // Scalar == double: row_scale_values_ IS already the right type, so
+            // skip the arena temp + cast<Scalar>() copy and use it directly.
             this->func_.compute(x, fx_);
-            fx = fx.cwiseProduct(scales);
-        };
+            fx = fx.cwiseProduct(this->row_scale_values_);
+        } else {
+            auto Impl = [&](auto &scales) {
+                scales = this->row_scale_values_.template cast<Scalar>();
+                this->func_.compute(x, fx_);
+                fx = fx.cwiseProduct(scales);
+            };
 
-        const int orows = this->output_rows();
-        tycho::utils::BumpAllocator::allocate_run(Impl,
-                                                  tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
+            const int orows = this->output_rows();
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
+        }
     }
     /// @internal
     /// @brief Evaluates value and Jacobian with per-row scaling applied.
@@ -625,18 +633,25 @@ struct RowScaled_Impl
         VecRef<OutType> fx = fx_.const_cast_derived();
         MatRef<JacType> jx = jx_.const_cast_derived();
 
-        auto Impl = [&](auto &scales) {
-            scales = this->row_scale_values_.template cast<Scalar>();
-
+        if constexpr (std::is_same_v<Scalar, double>) {
             this->func_.compute_jacobian(x, fx_, jx_);
-            fx = fx.cwiseProduct(scales);
-            this->func_.right_jacobian_product(jx, scales.asDiagonal(), jx, DirectAssignment(),
-                                               std::bool_constant<true>());
-        };
+            fx = fx.cwiseProduct(this->row_scale_values_);
+            this->func_.right_jacobian_product(jx, this->row_scale_values_.asDiagonal(), jx,
+                                               DirectAssignment(), std::bool_constant<true>());
+        } else {
+            auto Impl = [&](auto &scales) {
+                scales = this->row_scale_values_.template cast<Scalar>();
 
-        const int orows = this->output_rows();
-        tycho::utils::BumpAllocator::allocate_run(Impl,
-                                                  tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
+                this->func_.compute_jacobian(x, fx_, jx_);
+                fx = fx.cwiseProduct(scales);
+                this->func_.right_jacobian_product(jx, scales.asDiagonal(), jx, DirectAssignment(),
+                                                   std::bool_constant<true>());
+            };
+
+            const int orows = this->output_rows();
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
+        }
     }
     /// @internal
     /// @brief Evaluates value, Jacobian, adjoint gradient, and Hessian, row-scaled.
@@ -668,21 +683,37 @@ struct RowScaled_Impl
         VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
         MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
-        auto Impl = [&](auto &scales, auto &adjv_scaled) {
-            scales = this->row_scale_values_.template cast<Scalar>();
-            adjv_scaled = adjvars.cwiseProduct(scales);
-
-            this->func_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
-                                                                        adjhess_, adjv_scaled);
-            fx = fx.cwiseProduct(scales);
-            this->func_.right_jacobian_product(jx, scales.asDiagonal(), jx, DirectAssignment(),
-                                               std::bool_constant<true>());
-        };
-
         const int orows = this->output_rows();
-        tycho::utils::BumpAllocator::allocate_run(Impl,
-                                                  tycho::utils::TempSpec<Output<Scalar>>(orows, 1),
-                                                  tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
+        if constexpr (std::is_same_v<Scalar, double>) {
+            // adjv_scaled still needs an arena buffer (fresh product, not a
+            // simple forward), but row_scale_values_ needs no cast/copy.
+            auto Impl = [&](auto &adjv_scaled) {
+                adjv_scaled = adjvars.cwiseProduct(this->row_scale_values_);
+
+                this->func_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
+                                                                            adjhess_, adjv_scaled);
+                fx = fx.cwiseProduct(this->row_scale_values_);
+                this->func_.right_jacobian_product(jx, this->row_scale_values_.asDiagonal(), jx,
+                                                   DirectAssignment(), std::bool_constant<true>());
+            };
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
+        } else {
+            auto Impl = [&](auto &scales, auto &adjv_scaled) {
+                scales = this->row_scale_values_.template cast<Scalar>();
+                adjv_scaled = adjvars.cwiseProduct(scales);
+
+                this->func_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
+                                                                            adjhess_, adjv_scaled);
+                fx = fx.cwiseProduct(scales);
+                this->func_.right_jacobian_product(jx, scales.asDiagonal(), jx, DirectAssignment(),
+                                                   std::bool_constant<true>());
+            };
+
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, tycho::utils::TempSpec<Output<Scalar>>(orows, 1),
+                tycho::utils::TempSpec<Output<Scalar>>(orows, 1));
+        }
     }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -851,29 +882,46 @@ struct MatrixScaled_Impl
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
 
-        if (NoTemp) {
-            auto Impl = [&](auto &mattmp) {
+        if constexpr (std::is_same_v<Scalar, double>) {
+            // Scalar == double: `mat` IS already the right type, so skip the
+            // arena temp + cast<Scalar>() copy and use it directly.
+            if (NoTemp) {
                 this->func_.compute(x, fx_);
-                mattmp = this->mat.template cast<Scalar>();
-                fx = (mattmp * fx).eval();
-            };
-            tycho::utils::BumpAllocator::allocate_run(
-                Impl, tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
-                                                              this->func_.output_rows()));
+                fx = (this->mat * fx).eval();
+            } else {
+                auto Impl = [&](auto &fxtmp) {
+                    this->func_.compute(x, fxtmp);
+                    fx = (this->mat * fxtmp);
+                };
+                tycho::utils::BumpAllocator::allocate_run(
+                    Impl, tycho::utils::TempSpec<typename Func::template Output<Scalar>>(
+                              this->func_.output_rows(), 1));
+            }
         } else {
+            if (NoTemp) {
+                auto Impl = [&](auto &mattmp) {
+                    this->func_.compute(x, fx_);
+                    mattmp = this->mat.template cast<Scalar>();
+                    fx = (mattmp * fx).eval();
+                };
+                tycho::utils::BumpAllocator::allocate_run(
+                    Impl, tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
+                                                                  this->func_.output_rows()));
+            } else {
 
-            auto Impl = [&](auto &mattmp, auto &fxtmp) {
-                this->func_.compute(x, fxtmp);
-                mattmp = this->mat.template cast<Scalar>();
-                fx = (mattmp * fxtmp);
-            };
+                auto Impl = [&](auto &mattmp, auto &fxtmp) {
+                    this->func_.compute(x, fxtmp);
+                    mattmp = this->mat.template cast<Scalar>();
+                    fx = (mattmp * fxtmp);
+                };
 
-            tycho::utils::BumpAllocator::allocate_run(
-                Impl,
-                tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
-                                                        this->func_.output_rows()),
-                tycho::utils::TempSpec<typename Func::template Output<Scalar>>(
-                    this->func_.output_rows(), 1));
+                tycho::utils::BumpAllocator::allocate_run(
+                    Impl,
+                    tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
+                                                            this->func_.output_rows()),
+                    tycho::utils::TempSpec<typename Func::template Output<Scalar>>(
+                        this->func_.output_rows(), 1));
+            }
         }
     }
     /// @internal
@@ -892,35 +940,57 @@ struct MatrixScaled_Impl
         VecRef<OutType> fx = fx_.const_cast_derived();
         MatRef<JacType> jx = jx_.const_cast_derived();
 
-        if (NoTemp) {
-            auto Impl = [&](auto &mattmp) {
+        if constexpr (std::is_same_v<Scalar, double>) {
+            if (NoTemp) {
                 this->func_.compute_jacobian(x, fx_, jx_);
-                mattmp = this->mat.template cast<Scalar>();
-                fx = (mattmp * fx).eval();
-                this->func_.right_jacobian_product(jx, mattmp, jx, DirectAssignment(),
+                fx = (this->mat * fx).eval();
+                this->func_.right_jacobian_product(jx, this->mat, jx, DirectAssignment(),
                                                    std::bool_constant<true>());
-            };
-            tycho::utils::BumpAllocator::allocate_run(
-                Impl, tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
-                                                              this->func_.output_rows()));
+            } else {
+                auto Impl = [&](auto &fxtmp, auto &jxtmp) {
+                    this->func_.compute_jacobian(x, fxtmp, jxtmp);
+                    fx = (this->mat * fxtmp);
+                    this->func_.right_jacobian_product(jx, this->mat, jxtmp, DirectAssignment(),
+                                                       std::bool_constant<false>());
+                };
+                tycho::utils::BumpAllocator::allocate_run(
+                    Impl,
+                    tycho::utils::TempSpec<typename Func::template Output<Scalar>>(
+                        this->func_.output_rows(), 1),
+                    tycho::utils::TempSpec<typename Func::template Jacobian<Scalar>>(
+                        this->func_.output_rows(), this->func_.input_rows()));
+            }
         } else {
+            if (NoTemp) {
+                auto Impl = [&](auto &mattmp) {
+                    this->func_.compute_jacobian(x, fx_, jx_);
+                    mattmp = this->mat.template cast<Scalar>();
+                    fx = (mattmp * fx).eval();
+                    this->func_.right_jacobian_product(jx, mattmp, jx, DirectAssignment(),
+                                                       std::bool_constant<true>());
+                };
+                tycho::utils::BumpAllocator::allocate_run(
+                    Impl, tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
+                                                                  this->func_.output_rows()));
+            } else {
 
-            auto Impl = [&](auto &mattmp, auto &fxtmp, auto &jxtmp) {
-                this->func_.compute_jacobian(x, fxtmp, jxtmp);
-                mattmp = this->mat.template cast<Scalar>();
-                fx = (mattmp * fxtmp);
-                this->func_.right_jacobian_product(jx, mattmp, jxtmp, DirectAssignment(),
-                                                   std::bool_constant<false>());
-            };
+                auto Impl = [&](auto &mattmp, auto &fxtmp, auto &jxtmp) {
+                    this->func_.compute_jacobian(x, fxtmp, jxtmp);
+                    mattmp = this->mat.template cast<Scalar>();
+                    fx = (mattmp * fxtmp);
+                    this->func_.right_jacobian_product(jx, mattmp, jxtmp, DirectAssignment(),
+                                                       std::bool_constant<false>());
+                };
 
-            tycho::utils::BumpAllocator::allocate_run(
-                Impl,
-                tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
-                                                        this->func_.output_rows()),
-                tycho::utils::TempSpec<typename Func::template Output<Scalar>>(
-                    this->func_.output_rows(), 1),
-                tycho::utils::TempSpec<typename Func::template Jacobian<Scalar>>(
-                    this->func_.output_rows(), this->func_.input_rows()));
+                tycho::utils::BumpAllocator::allocate_run(
+                    Impl,
+                    tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
+                                                            this->func_.output_rows()),
+                    tycho::utils::TempSpec<typename Func::template Output<Scalar>>(
+                        this->func_.output_rows(), 1),
+                    tycho::utils::TempSpec<typename Func::template Jacobian<Scalar>>(
+                        this->func_.output_rows(), this->func_.input_rows()));
+            }
         }
     }
     /// @internal
@@ -953,47 +1023,82 @@ struct MatrixScaled_Impl
         VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
         MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
-        if (NoTemp) {
-            auto Impl = [&](auto &mattmp, auto &adjv_scaled) {
-                mattmp = this->mat.template cast<Scalar>();
-                adjv_scaled = (adjvars.transpose() * mattmp).transpose();
-                this->func_.compute_jacobian_adjointgradient_adjointhessian(x, fx_, jx_, adjgrad_,
-                                                                            adjhess_, adjv_scaled);
+        if constexpr (std::is_same_v<Scalar, double>) {
+            if (NoTemp) {
+                auto Impl = [&](auto &adjv_scaled) {
+                    adjv_scaled = (adjvars.transpose() * this->mat).transpose();
+                    this->func_.compute_jacobian_adjointgradient_adjointhessian(
+                        x, fx_, jx_, adjgrad_, adjhess_, adjv_scaled);
 
-                fx = (mattmp * fx).eval();
-                this->func_.right_jacobian_product(jx, mattmp, jx, DirectAssignment(),
-                                                   std::bool_constant<true>());
-            };
-            tycho::utils::BumpAllocator::allocate_run(
-                Impl,
-                tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
-                                                        this->func_.output_rows()),
-                tycho::utils::TempSpec<typename Func::template Output<Scalar>>(
-                    this->func_.output_rows(), 1)
+                    fx = (this->mat * fx).eval();
+                    this->func_.right_jacobian_product(jx, this->mat, jx, DirectAssignment(),
+                                                       std::bool_constant<true>());
+                };
+                tycho::utils::BumpAllocator::allocate_run(
+                    Impl, tycho::utils::TempSpec<typename Func::template Output<Scalar>>(
+                              this->func_.output_rows(), 1));
+            } else {
+                auto Impl = [&](auto &fxtmp, auto &jxtmp, auto &adjv_scaled) {
+                    adjv_scaled = (adjvars.transpose() * this->mat).transpose();
+                    this->func_.compute_jacobian_adjointgradient_adjointhessian(
+                        x, fxtmp, jxtmp, adjgrad_, adjhess_, adjv_scaled);
+                    fx = (this->mat * fxtmp);
+                    this->func_.right_jacobian_product(jx, this->mat, jxtmp, DirectAssignment(),
+                                                       std::bool_constant<false>());
+                };
 
-            );
+                tycho::utils::BumpAllocator::allocate_run(
+                    Impl,
+                    tycho::utils::TempSpec<typename Func::template Output<Scalar>>(
+                        this->func_.output_rows(), 1),
+                    tycho::utils::TempSpec<typename Func::template Jacobian<Scalar>>(
+                        this->func_.output_rows(), this->func_.input_rows()),
+                    tycho::utils::TempSpec<typename Func::template Output<Scalar>>(
+                        this->func_.output_rows(), 1));
+            }
         } else {
+            if (NoTemp) {
+                auto Impl = [&](auto &mattmp, auto &adjv_scaled) {
+                    mattmp = this->mat.template cast<Scalar>();
+                    adjv_scaled = (adjvars.transpose() * mattmp).transpose();
+                    this->func_.compute_jacobian_adjointgradient_adjointhessian(
+                        x, fx_, jx_, adjgrad_, adjhess_, adjv_scaled);
 
-            auto Impl = [&](auto &mattmp, auto &fxtmp, auto &jxtmp, auto &adjv_scaled) {
-                mattmp = this->mat.template cast<Scalar>();
-                adjv_scaled = (adjvars.transpose() * mattmp).transpose();
-                this->func_.compute_jacobian_adjointgradient_adjointhessian(
-                    x, fxtmp, jxtmp, adjgrad_, adjhess_, adjv_scaled);
-                fx = (mattmp * fxtmp);
-                this->func_.right_jacobian_product(jx, mattmp, jxtmp, DirectAssignment(),
-                                                   std::bool_constant<false>());
-            };
+                    fx = (mattmp * fx).eval();
+                    this->func_.right_jacobian_product(jx, mattmp, jx, DirectAssignment(),
+                                                       std::bool_constant<true>());
+                };
+                tycho::utils::BumpAllocator::allocate_run(
+                    Impl,
+                    tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
+                                                            this->func_.output_rows()),
+                    tycho::utils::TempSpec<typename Func::template Output<Scalar>>(
+                        this->func_.output_rows(), 1)
 
-            tycho::utils::BumpAllocator::allocate_run(
-                Impl,
-                tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
-                                                        this->func_.output_rows()),
-                tycho::utils::TempSpec<typename Func::template Output<Scalar>>(
-                    this->func_.output_rows(), 1),
-                tycho::utils::TempSpec<typename Func::template Jacobian<Scalar>>(
-                    this->func_.output_rows(), this->func_.input_rows()),
-                tycho::utils::TempSpec<typename Func::template Output<Scalar>>(
-                    this->func_.output_rows(), 1));
+                );
+            } else {
+
+                auto Impl = [&](auto &mattmp, auto &fxtmp, auto &jxtmp, auto &adjv_scaled) {
+                    mattmp = this->mat.template cast<Scalar>();
+                    adjv_scaled = (adjvars.transpose() * mattmp).transpose();
+                    this->func_.compute_jacobian_adjointgradient_adjointhessian(
+                        x, fxtmp, jxtmp, adjgrad_, adjhess_, adjv_scaled);
+                    fx = (mattmp * fxtmp);
+                    this->func_.right_jacobian_product(jx, mattmp, jxtmp, DirectAssignment(),
+                                                       std::bool_constant<false>());
+                };
+
+                tycho::utils::BumpAllocator::allocate_run(
+                    Impl,
+                    tycho::utils::TempSpec<MatType<Scalar>>(this->output_rows(),
+                                                            this->func_.output_rows()),
+                    tycho::utils::TempSpec<typename Func::template Output<Scalar>>(
+                        this->func_.output_rows(), 1),
+                    tycho::utils::TempSpec<typename Func::template Jacobian<Scalar>>(
+                        this->func_.output_rows(), this->func_.input_rows()),
+                    tycho::utils::TempSpec<typename Func::template Output<Scalar>>(
+                        this->func_.output_rows(), 1));
+            }
         }
     }
 };

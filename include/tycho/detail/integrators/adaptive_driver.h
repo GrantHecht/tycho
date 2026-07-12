@@ -19,6 +19,7 @@
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -387,8 +388,18 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
             // Snapshot FSAL cache so we can restore on reject — stepper.step()
             // unconditionally writes k_fsal_ at end-of-step, but the retry
             // must read f(xi) (not the stale f(xnext_rejected)) as its first
-            // stage.
-            auto fsal_saved = stepper_.snapshot_fsal();
+            // stage. Fixed-step mode takes no rejections (every
+            // restore_fsal() call site below is reached only from inside
+            // `if (cfg.adaptive)` branches), so the snapshot -- an
+            // ODEDeriv-sized copy of the FSAL cache, a heap allocation for
+            // dynamic-size ODEs -- is pure waste there every step
+            // (INTEGRATORS §2.4). Default-constructed (empty) when
+            // !cfg.adaptive; never read on that path.
+            using FsalSnap = typename Stepper<Alg, DODE, Scalar>::FsalSnapshot;
+            FsalSnap fsal_saved{};
+            if (cfg.adaptive) {
+                fsal_saved = stepper_.snapshot_fsal();
+            }
 
             if (storemidpoints || storederivs) {
                 stepper_.template step<true>(ode, xi, tnext, xnext, xnext_est, xnext_mid,
@@ -527,7 +538,12 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
                 }
                 stepper_.seed_fsal(fxf);
             }
-            prev_event_vals = next_event_vals;
+            // next_event_vals is unconditionally overwritten element-by-
+            // element (setZero() + vf.compute()) at the top of the next
+            // check_crossings() call, so its post-swap stale contents are
+            // never read -- std::swap avoids the copy-assignment
+            // (INTEGRATORS §2.6).
+            std::swap(prev_event_vals, next_event_vals);
 
             if (storestates) {
                 if (storemidpoints) {

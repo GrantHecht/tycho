@@ -509,18 +509,26 @@ struct TwoFunctionSum_Impl
             this->func2.compute_jacobian_adjointgradient_adjointhessian(
                 x, func2_fx, func2_jx, func2_adjgrad, func2_adjhess, adjvars);
 
+            // Func2::is_linear_function guard: a linear func2's own JGH impl
+            // writes a zero adjoint Hessian into func2_adjhess, so
+            // accumulating it into adjhess is a mathematical no-op -- skip
+            // the O(irows^2) accumulate. func2's own JGH call above is
+            // unchanged (still computes value/Jacobian/gradient identically),
+            // so this only removes wasted work, never changes a value.
             if constexpr (DoDifference) {
                 fx -= func2_fx;
                 this->func2.accumulate_jacobian(jx, func2_jx, MinusEqualsAssignment());
                 this->func2.accumulate_gradient(adjgrad, func2_adjgrad, MinusEqualsAssignment());
-                this->func2.accumulate_hessian(adjhess, func2_adjhess, MinusEqualsAssignment());
+                if constexpr (!Func2::is_linear_function)
+                    this->func2.accumulate_hessian(adjhess, func2_adjhess, MinusEqualsAssignment());
 
             } else {
                 fx += func2_fx;
                 this->func2.accumulate_jacobian(jx, func2_jx, PlusEqualsAssignment());
                 this->func2.accumulate_gradient(adjgrad, func2_adjgrad, PlusEqualsAssignment());
 
-                this->func2.accumulate_hessian(adjhess, func2_adjhess, PlusEqualsAssignment());
+                if constexpr (!Func2::is_linear_function)
+                    this->func2.accumulate_hessian(adjhess, func2_adjhess, PlusEqualsAssignment());
             }
         };
 
@@ -917,7 +925,11 @@ struct MultiFunctionSum_Impl
 
             this->func2.accumulate_jacobian(jx, func2_jx, PlusEqualsAssignment());
             this->func2.accumulate_gradient(adjgrad_, func2_adjgrad, PlusEqualsAssignment());
-            this->func2.accumulate_hessian(adjhess_, func2_adjhess, PlusEqualsAssignment());
+            // Func2::is_linear_function guard, matching the tail-loop pattern
+            // below: a linear func2 writes a zero adjoint Hessian, so
+            // accumulating it is a no-op -- skip it.
+            if constexpr (!Func2::is_linear_function)
+                this->func2.accumulate_hessian(adjhess_, func2_adjhess, PlusEqualsAssignment());
 
             tycho::utils::tuple_for_each(this->funcs, [&](const auto &funci) {
                 func2_fx.setZero();

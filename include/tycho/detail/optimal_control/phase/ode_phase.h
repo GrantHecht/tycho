@@ -738,12 +738,6 @@ template <class DODE> struct ODEPhase : ODEPhaseBase {
                 evec.setZero();
 
                 for (int j = 0; j < BlockSize - 1; j++) {
-                    evec += tmp_mat.col(start + j) / (BlockSize - 1);
-                }
-
-                evec.setZero();
-
-                for (int j = 0; j < BlockSize - 1; j++) {
                     double ti = Traj[start + j][this->t_var()];
                     double tn = Traj[start + j + 1][this->t_var()];
 

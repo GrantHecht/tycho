@@ -115,9 +115,14 @@ struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, 
                 }
             }
 
+            // .noalias(): M and MInv are distinct arena buffers (separate
+            // TempSpecs), so the outer product below cannot alias its
+            // destination -- skips the hidden temporary Eigen's default
+            // (aliasing-safe) product evaluation would otherwise allocate on
+            // every (i,j) pair.
             for (int i = 0; i < this->size; i++) {
                 for (int j = 0; j < this->size; j++) {
-                    M = MInv.col(j) * MInv.row(i);
+                    M.noalias() = MInv.col(j) * MInv.row(i);
                     for (int k = 0; k < this->size; k++) {
                         if constexpr (Major == Eigen::ColMajor) {
                             jx.col(i * this->size + j)
@@ -194,7 +199,7 @@ struct MatrixInverse : VectorFunction<MatrixInverse<Size, Major>, SZ_PROD<Size, 
             for (int i = 0; i < this->size; i++) {
 
                 for (int j = 0; j < this->size; j++) {
-                    M = MInv.col(j) * MInv.row(i);
+                    M.noalias() = MInv.col(j) * MInv.row(i);
                     for (int k = 0; k < this->size; k++) {
                         if constexpr (Major == Eigen::ColMajor) {
                             jx.col(i * this->size + j)

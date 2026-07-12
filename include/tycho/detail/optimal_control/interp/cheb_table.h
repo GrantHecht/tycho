@@ -425,11 +425,39 @@ struct ChebTable {
     /// @param out   Output buffer, length @c olen_.
     void eval_tensor_into(const MatType &coef, const double *xi, double *cur, double *next,
                           double *out) const {
-        for (int c = 0; c < olen_; ++c)
-            for (long r = 0; r < tsize_; ++r)
-                cur[long(c) * tsize_ + r] = coef(r, c);
-        double *a = cur, *b = next;
-        for (int ax = 0; ax < dim_; ++ax) {
+        // ax==0 reads coef's own storage directly instead of copying it into
+        // `cur` first: MatType is Eigen::Matrix<double,-1,-1> (ColMajor), so
+        // coef(r, c) already lives at offset r + c*tsize_ -- exactly the
+        // packed layout the copy loop used to build by hand. This pass is
+        // peeled out of the ax loop (rather than starting `a` at coef.data()
+        // and letting the generic loop swap it) so `a`/`b` stay ordinary
+        // (non-const) double* for ax>=1: after ax==0, `a`/`b` ping-pong
+        // strictly between the caller-owned cur/next scratch buffers and
+        // never re-alias coef's memory, so nothing ever writes back into the
+        // caller's coefficient matrix.
+        double *a, *b;
+        {
+            const int n = shape_[0] - 1;
+            const long stride0 = strides_[0];
+            const double xi_ax = xi[0];
+            const double *cc0 = coef.data();
+            for (int c = 0; c < olen_; ++c) {
+                const double *cc = cc0 + long(c) * tsize_;
+                double *nc = next + long(c) * tsize_;
+                for (long line = 0; line < stride0; ++line) {
+                    double b1 = 0.0, b2 = 0.0;
+                    for (int k = n; k >= 1; --k) {
+                        double bk = 2.0 * xi_ax * b1 - b2 + cc[line + long(k) * stride0];
+                        b2 = b1;
+                        b1 = bk;
+                    }
+                    nc[line] = cc[line] + xi_ax * b1 - b2;
+                }
+            }
+            a = next;
+            b = cur;
+        }
+        for (int ax = 1; ax < dim_; ++ax) {
             const int n = shape_[ax] - 1;
             const long stride0 = strides_[ax]; // == number of lines (outer)
             const double xi_ax = xi[ax];

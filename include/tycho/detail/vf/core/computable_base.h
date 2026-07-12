@@ -295,7 +295,13 @@ template <class Derived, int IR, int OR> struct ComputableBase : InputOutputSize
                     this->derived().compute_impl(x_r, fx_r);
                     for (int j = 0; j < ORR; j++)
                         fx[j][i] = fx_r[j];
-                    fx_r.setZero();
+                    // Re-zero fx_r before the NEXT lane only -- a partial-write
+                    // compute_impl override may rely on it starting zeroed
+                    // (same contract as the arena's per-allocation memset).
+                    // After the final lane fx_r is dead (never read again), so
+                    // that trailing zero-fill is pure waste; skip it.
+                    if (i + 1 < Scalar::SizeAtCompileTime)
+                        fx_r.setZero();
                 }
 
             } else {
