@@ -56,26 +56,6 @@ namespace tycho::solvers {
 using utils::TypeStorage;
 using vf::GenericFunction;
 
-// SBO_CAP for ConstraintBase/ObjectiveBase's TypeStorage (see ConstraintInterface /
-// ObjectiveInterface below).
-//
-// UTILS §3.1 sizing census (clang 21, x86-64 Linux, 2026-07): the hot NLP eval-loop
-// payloads — the per-interval collocation defects registered by ODEPhase — measure
-// ConstraintModel<LGLDefects<BrachODE,CS=2>> 104 B,
-// ConstraintModel<LGLDefects<GenericODE<GF<-1,-1>>,CS=2>> 112 B (the Python path),
-// and ConstraintModel<LGLDefects<PolarLTODE,CS=2>> 176 B; boundary-value /
-// objective expression payloads are 32-72 B. Cold payloads (one interface each,
-// evaluated once per solver callback with the per-application loop inside the
-// virtual call) are far larger: ObjectiveModel<LGLIntegral<...>> 832 B,
-// ConstraintModel<[Central]ShootingDefect<...>> 816-1376 B — those spill at any
-// economical cap. 192 is the smallest multiple of alignof(max_align_t) that keeps
-// every measured hot defect inline (the 176 B PolarLT-class defect spilled at the
-// previous default of 128, putting a heap hop in its eval-loop dispatch) while
-// leaving the >=816 B cold functors on the heap. Footprint cost:
-// sizeof(ConstraintInterface/ObjectiveInterface) grows 144 -> 208 B; a problem
-// holds a few dozen interfaces, so this is KBs.
-static constexpr std::size_t kSolverInterfaceSBOCap = 192;
-
 /*
  * Spec for vector function that can be used as a constraint inside of PSIOPT.
  */
@@ -150,7 +130,7 @@ struct SolverObjectiveSpec {
 // ==========================================================================
 
 struct ConstraintBase : SolverConstraintSpec::Concept, SizableSpec::Concept {
-    virtual void clone_into(TypeStorage<ConstraintBase, kSolverInterfaceSBOCap> &) const = 0;
+    virtual void clone_into(TypeStorage<ConstraintBase> &) const = 0;
 };
 
 template <typename T> struct ConstraintModel final : ConstraintBase {
@@ -211,7 +191,7 @@ template <typename T> struct ConstraintModel final : ConstraintBase {
         return data_.num_kkt_elements(dojac, dohess);
     }
 
-    void clone_into(TypeStorage<ConstraintBase, kSolverInterfaceSBOCap> &s) const override {
+    void clone_into(TypeStorage<ConstraintBase> &s) const override {
         s.emplace<ConstraintModel<T>>(data_);
     }
 };
@@ -220,7 +200,7 @@ struct ConstraintInterface;
 struct ObjectiveInterface;
 
 struct ConstraintInterface {
-    TypeStorage<ConstraintBase, kSolverInterfaceSBOCap> storage_;
+    TypeStorage<ConstraintBase> storage_;
 
     ConstraintInterface() = default;
 
@@ -298,7 +278,7 @@ struct ConstraintInterface {
 struct ObjectiveBase : SolverConstraintSpec::Concept,
                        SolverObjectiveSpec::Concept,
                        SizableSpec::Concept {
-    virtual void clone_into(TypeStorage<ObjectiveBase, kSolverInterfaceSBOCap> &) const = 0;
+    virtual void clone_into(TypeStorage<ObjectiveBase> &) const = 0;
 };
 
 template <typename T> struct ObjectiveModel final : ObjectiveBase {
@@ -380,13 +360,13 @@ template <typename T> struct ObjectiveModel final : ObjectiveBase {
                                          KKTLocks, data);
     }
 
-    void clone_into(TypeStorage<ObjectiveBase, kSolverInterfaceSBOCap> &s) const override {
+    void clone_into(TypeStorage<ObjectiveBase> &s) const override {
         s.emplace<ObjectiveModel<T>>(data_);
     }
 };
 
 struct ObjectiveInterface {
-    TypeStorage<ObjectiveBase, kSolverInterfaceSBOCap> storage_;
+    TypeStorage<ObjectiveBase> storage_;
 
     ObjectiveInterface() = default;
 
