@@ -1902,6 +1902,22 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
         const int IRR = (Base::IRC > 0) ? Base::IRC : this->input_rows();
         const int ORR = (Base::ORC > 0) ? Base::ORC : this->output_rows();
 
+        // Column-locking invariant (load-bearing): `Lock`/`UnLock` below key their mutex on
+        // `ActiveVar`, the *global* column of the local variable `i` currently being
+        // scattered (`data.v_loc(i, Apl)`), NOT on the specific physical (row, col) KKT slot
+        // being written. Writes from within a single partition need no mutual exclusion --
+        // each partition's scatter runs serially on one thread (parallel_sequence dispatches
+        // one task per partition; single-partition problems take no locks at all) -- so two
+        // elements of the SAME partition may legally claim the same physical slot under
+        // different lock columns. Cross-partition writers, however, are only serialized if
+        // they key on the same lock column and hence the same `ClashLocks` mutex: correctness
+        // requires that whenever two claimants in DIFFERENT partitions write the same
+        // physical (row, col) slot, both resolve to the same lock column. If a claimant ever
+        // locked the *other* endpoint of a physical pair that a second partition also writes,
+        // the two writes could proceed concurrently under different mutexes. This property is
+        // problem-dependent and is verified once per problem by the setup-time assertion in
+        // `NonLinearProgram::get_mat_space` (non_linear_program.cpp) -- never here, in the
+        // per-iteration scatter.
         auto Lock = [&](int var) {
             if (VarClashes[var] == -1) {
                 //// uncontested
