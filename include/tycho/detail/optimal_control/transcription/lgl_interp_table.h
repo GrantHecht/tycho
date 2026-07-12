@@ -971,7 +971,14 @@ struct LGLInterpTable {
     void interp_block_gen(Scalar t, const Eigen::MatrixBase<OutType> &fx,
                           const Eigen::MatrixBase<XtUBlockType> &xtublk,
                           const Eigen::MatrixBase<DXBlockType> &dxblk) const {
-        VectorX<Scalar> tpow(x_weights_.rows());
+        // Fixed-max-size (stack) buffer -- avoids a malloc/free pair on every
+        // interp_block_gen call (OC review 2.2). INVARIANT: LGL order is
+        // bounded at 7 (LGL7, x_weights_.rows() == 8; set_method's exhaustive
+        // switch is the only writer). MaxVector has NO heap fallback: resizing
+        // past 8 is an eigen_assert in Debug and silent stack overflow (UB)
+        // under NDEBUG -- any future higher-order LGL mode must bump this
+        // bound in all three interp_block_* kernels.
+        MaxVector<Scalar, 8> tpow(x_weights_.rows());
         tpow[0] = Scalar(1.0);
         for (int i = 1; i < x_weights_.rows(); i++) {
             tpow[i] = tpow[i - 1] * t;
@@ -996,7 +1003,7 @@ struct LGLInterpTable {
                 xtu_n.tail(this->u_vars_) =
                     xtublk.col(0).tail(this->u_vars_).template cast<Scalar>();
             } else {
-                VectorX<Scalar> utpow = tpow.head(u_weights_.rows());
+                MaxVector<Scalar, 8> utpow = tpow.head(u_weights_.rows());
                 for (int i = 0; i < this->block_size_; i++) {
                     Scalar usc = utpow.dot(this->u_weights_.col(i).template cast<Scalar>());
                     xtu_n.tail(this->u_vars_) +=
@@ -1021,9 +1028,11 @@ struct LGLInterpTable {
     void interp_block_deriv_gen(Scalar t, const Eigen::MatrixBase<OutType> &fx,
                                 const Eigen::MatrixBase<XtUBlockType> &xtublk,
                                 const Eigen::MatrixBase<DXBlockType> &dxblk) const {
-        VectorX<Scalar> tpow(x_weights_.rows());
+        // Fixed-max-size (stack) buffers -- see interp_block_gen() above
+        // (OC review 2.2); same bound (LGL order <= 7 -> rows() <= 8) applies.
+        MaxVector<Scalar, 8> tpow(x_weights_.rows());
         tpow[0] = Scalar(1.0);
-        VectorX<Scalar> tpow2(x_weights_.rows());
+        MaxVector<Scalar, 8> tpow2(x_weights_.rows());
         tpow2[0] = Scalar(0.0);
         tpow2[1] = Scalar(1.0);
         for (int i = 1; i < x_weights_.rows(); i++) {
@@ -1054,8 +1063,8 @@ struct LGLInterpTable {
         xtu_n.col(1)[axis_] = 1.0;
 
         if (this->u_vars_ > 0) {
-            VectorX<Scalar> utpow = tpow.head(u_weights_.rows());
-            VectorX<Scalar> utpow2 = tpow2.head(u_weights_.rows());
+            MaxVector<Scalar, 8> utpow = tpow.head(u_weights_.rows());
+            MaxVector<Scalar, 8> utpow2 = tpow2.head(u_weights_.rows());
 
             for (int i = 0; i < this->block_size_; i++) {
                 Scalar usc = utpow.dot(this->u_weights_.col(i).template cast<Scalar>());
@@ -1085,9 +1094,11 @@ struct LGLInterpTable {
     void interp_block_deriv2_gen(Scalar t, const Eigen::MatrixBase<OutType> &fx,
                                  const Eigen::MatrixBase<XtUBlockType> &xtublk,
                                  const Eigen::MatrixBase<DXBlockType> &dxblk) const {
-        VectorX<Scalar> tpow(x_weights_.rows());
+        // Fixed-max-size (stack) buffers -- see interp_block_gen() above
+        // (OC review 2.2); same bound (LGL order <= 7 -> rows() <= 8) applies.
+        MaxVector<Scalar, 8> tpow(x_weights_.rows());
         tpow[0] = Scalar(1.0);
-        VectorX<Scalar> tpow2(x_weights_.rows());
+        MaxVector<Scalar, 8> tpow2(x_weights_.rows());
         tpow2[0] = Scalar(0.0);
         tpow2[1] = Scalar(1.0);
         for (int i = 1; i < x_weights_.rows(); i++) {
@@ -1116,8 +1127,8 @@ struct LGLInterpTable {
         xtu_n.col(1)[axis_] = 1.0;
 
         if (this->u_vars_ > 0) {
-            VectorX<Scalar> utpow = tpow.head(u_weights_.rows());
-            VectorX<Scalar> utpow2 = tpow2.head(u_weights_.rows());
+            MaxVector<Scalar, 8> utpow = tpow.head(u_weights_.rows());
+            MaxVector<Scalar, 8> utpow2 = tpow2.head(u_weights_.rows());
 
             for (int i = 0; i < this->block_size_; i++) {
                 Scalar usc = utpow.dot(this->u_weights_.col(i).template cast<Scalar>());

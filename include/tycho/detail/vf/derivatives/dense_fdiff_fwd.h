@@ -181,33 +181,19 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::FDiff
     inline void adjointhessian(CVecRef<InType> x, CMatRef<AdjHessType> adjhess_,
                                CVecRef<AdjVarType> adjvars) const {
         typedef typename InType::Scalar Scalar;
-        MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
-
         Gradient<Scalar> ag(this->input_rows());
-        Gradient<Scalar> agi(this->input_rows());
         ag.setZero();
-        agi.setZero();
         this->adjointgradient(x, ag, adjvars);
-
-        Input<Scalar> xi = x;
-        for (int i = 0; i < this->input_rows(); i++) {
-            const Scalar h = Scalar(this->hess_fd_steps[i]) * detail::fd_step_scale(x[i]);
-            xi[i] += h;
-            const Scalar hr = xi[i] - x[i];
-            this->adjointgradient(xi, agi, adjvars);
-            for (int j = 0; j < this->input_rows(); j++) {
-                adjhess(j, i) = (agi[j] - ag[j]) / hr;
-            }
-            agi.setZero();
-            xi[i] = x[i];
-        }
-        adjhess = (adjhess + adjhess.transpose()).eval() * Scalar(0.5);
+        adjointhessian_from_gradient(x, adjhess_, adjvars, ag);
     }
 
     /// @brief Computes value, Jacobian, adjoint gradient, and adjoint Hessian.
     /// @internal
     /// Delegates value/Jacobian/adjoint-gradient to the base function, then forms the
-    /// adjoint Hessian via @ref adjointhessian.
+    /// adjoint Hessian via @ref adjointhessian_from_gradient, reusing the base-point
+    /// adjoint gradient just computed by `compute_jacobian_adjointgradient` instead of
+    /// recomputing it (which would cost another IR+1 primal evaluations under FD Jacobian
+    /// modes — see @ref adjointhessian_from_gradient).
     /// @tparam InType       Eigen type of the input vector @p x.
     /// @tparam OutType      Eigen type of the output value @p fx_.
     /// @tparam JacType      Eigen type of the Jacobian @p jx_.
@@ -228,7 +214,52 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::FDiff
         CVecRef<AdjGradType> adjgrad_, CMatRef<AdjHessType> adjhess_,
         CVecRef<AdjVarType> adjvars) const {
         this->derived().compute_jacobian_adjointgradient(x, fx_, jx_, adjgrad_, adjvars);
-        adjointhessian(x, adjhess_, adjvars);
+        adjointhessian_from_gradient(x, adjhess_, adjvars, adjgrad_);
+    }
+
+  private:
+    /// @brief Forms the adjoint Hessian by finite-differencing the adjoint gradient,
+    /// given the already-computed base-point adjoint gradient @p ag0.
+    ///
+    /// Shared by @ref adjointhessian (which computes @p ag0 itself) and
+    /// @ref compute_jacobian_adjointgradient_adjointhessian_impl (which passes through
+    /// the gradient its caller already computed), eliminating one redundant base-point
+    /// adjoint-gradient evaluation (IR+1 primal evals when the Jacobian mode is FD) per
+    /// combined Jacobian/adjoint-gradient/adjoint-Hessian call.
+    /// @tparam InType       Eigen type of the input vector @p x.
+    /// @tparam AdjHessType  Eigen type of the output adjoint Hessian @p adjhess_.
+    /// @tparam AdjVarType   Eigen type of the adjoint coefficient vector @p adjvars.
+    /// @tparam AdjGradType  Eigen type of the base-point adjoint gradient @p ag0.
+    /// @param x        Input vector at which to evaluate.
+    /// @param adjhess_ Output adjoint Hessian, written in place.
+    /// @param adjvars  Adjoint (Lagrange) coefficients weighting each output row.
+    /// @param ag0      Base-point adjoint gradient @f$ J(x)^\top \lambda @f$, already
+    ///                 evaluated at @p x with the same @p adjvars.
+    /// @pre @p ag0 must not alias @p adjhess_ (the Hessian is written while @p ag0 is
+    ///      still being read column-by-column).
+    template <class InType, class AdjHessType, class AdjVarType, class AdjGradType>
+    inline void adjointhessian_from_gradient(CVecRef<InType> x, CMatRef<AdjHessType> adjhess_,
+                                             CVecRef<AdjVarType> adjvars,
+                                             CVecRef<AdjGradType> ag0) const {
+        typedef typename InType::Scalar Scalar;
+        MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
+
+        Gradient<Scalar> agi(this->input_rows());
+        agi.setZero();
+
+        Input<Scalar> xi = x;
+        for (int i = 0; i < this->input_rows(); i++) {
+            const Scalar h = Scalar(this->hess_fd_steps[i]) * detail::fd_step_scale(x[i]);
+            xi[i] += h;
+            const Scalar hr = xi[i] - x[i];
+            this->adjointgradient(xi, agi, adjvars);
+            for (int j = 0; j < this->input_rows(); j++) {
+                adjhess(j, i) = (agi[j] - ag0[j]) / hr;
+            }
+            agi.setZero();
+            xi[i] = x[i];
+        }
+        adjhess = (adjhess + adjhess.transpose()).eval() * Scalar(0.5);
     }
 
   protected:

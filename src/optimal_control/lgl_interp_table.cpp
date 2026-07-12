@@ -143,10 +143,6 @@ std::vector<Eigen::VectorXd> tycho::oc::LGLInterpTable::new_error_integral() {
 
         double err;
         if (i > 0 && i < (this->num_blocks_ - 1)) {
-            err =
-                (yvecs.col(i) - yvecs.col(i - 1)).lpNorm<Eigen::Infinity>() / (hs[i] + hs[i - 1]) +
-                (yvecs.col(i) - yvecs.col(i + 1)).lpNorm<Eigen::Infinity>() / (hs[i] + hs[i + 1]);
-
             err = ((yvecs.col(i) - yvecs.col(i - 1)) / (hs[i] + hs[i - 1]) +
                    (yvecs.col(i) - yvecs.col(i + 1)) / (hs[i] + hs[i + 1]))
                       .lpNorm<Eigen::Infinity>();
