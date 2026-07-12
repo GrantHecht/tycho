@@ -149,7 +149,9 @@ struct ComparativeFunction<First, Rest...>
     inline void eval_all(CVecRef<InType> x, std::array<Scalar, NumOperands> &vals,
                          std::index_sequence<Is...>) const {
         Vector1<Scalar> tmp;
-        ((std::get<Is>(this->ops_).compute(x, tmp), vals[Is] = tmp[0]), ...);
+        // Operands may partial-write and rely on a zeroed output (same contract as
+        // computable_base.h), so tmp must be re-zeroed before each operand's compute().
+        ((tmp[0] = Scalar(0), std::get<Is>(this->ops_).compute(x, tmp), vals[Is] = tmp[0]), ...);
     }
 
     /// @internal
