@@ -99,11 +99,16 @@ struct ParsedInput
             this->func_.compute(x.segment(varlocs_[0], this->func_.input_rows()), fx_);
 
         } else {
-            typename Func::template Input<Scalar> xin(this->func_.input_rows());
-            for (int i = 0; i < this->func_.input_rows(); i++) {
-                xin[i] = x[this->varlocs_[i]];
-            }
-            this->func_.compute(xin, fx_);
+            auto Impl = [&](auto &xin) {
+                for (int i = 0; i < this->func_.input_rows(); i++) {
+                    xin[i] = x[this->varlocs_[i]];
+                }
+                this->func_.compute(xin, fx_);
+            };
+
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, tycho::utils::TempSpec<typename Func::template Input<Scalar>>(
+                          this->func_.input_rows(), 1));
         }
     }
     /// @brief Evaluate value and Jacobian, scattering columns to outer indices.
@@ -124,17 +129,22 @@ struct ParsedInput
             this->func_.compute_jacobian(x.segment(varlocs_[0], this->func_.input_rows()), fx_,
                                          jx.middleCols(varlocs_[0], this->func_.input_rows()));
         } else {
-            typename Func::template Input<Scalar> xin(this->func_.input_rows());
-            typename Func::template Jacobian<Scalar> jxin(this->func_.output_rows(),
-                                                          this->func_.input_rows());
-            jxin.setZero();
-            for (int i = 0; i < this->func_.input_rows(); i++) {
-                xin[i] = x[this->varlocs_[i]];
-            }
-            this->func_.compute_jacobian(xin, fx_, jxin);
-            for (int i = 0; i < this->func_.input_rows(); i++) {
-                jx.col(this->varlocs_[i]) += jxin.col(i);
-            }
+            auto Impl = [&](auto &xin, auto &jxin) {
+                for (int i = 0; i < this->func_.input_rows(); i++) {
+                    xin[i] = x[this->varlocs_[i]];
+                }
+                this->func_.compute_jacobian(xin, fx_, jxin);
+                for (int i = 0; i < this->func_.input_rows(); i++) {
+                    jx.col(this->varlocs_[i]) += jxin.col(i);
+                }
+            };
+
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl,
+                tycho::utils::TempSpec<typename Func::template Input<Scalar>>(
+                    this->func_.input_rows(), 1),
+                tycho::utils::TempSpec<typename Func::template Jacobian<Scalar>>(
+                    this->func_.output_rows(), this->func_.input_rows()));
         }
     }
     /// @brief Evaluate value, Jacobian, adjoint gradient, and adjoint Hessian.
@@ -176,32 +186,35 @@ struct ParsedInput
                 adjvars);
 
         } else {
-            typename Func::template Input<Scalar> xin(this->func_.input_rows());
-            typename Func::template Jacobian<Scalar> jxin(this->func_.output_rows(),
-                                                          this->func_.input_rows());
-            typename Func::template Gradient<Scalar> gxin(this->func_.input_rows());
-            typename Func::template Hessian<Scalar> hxin(this->func_.input_rows(),
-                                                         this->func_.input_rows());
-            jxin.setZero();
-            hxin.setZero();
-            gxin.setZero();
-
-            for (int i = 0; i < this->func_.input_rows(); i++) {
-                xin[i] = x[this->varlocs_[i]];
-            }
-
-            this->func_.compute_jacobian_adjointgradient_adjointhessian(xin, fx_, jxin, gxin, hxin,
-                                                                        adjvars);
-
-            for (int i = 0; i < this->func_.input_rows(); i++) {
-                jx.col(this->varlocs_[i]) += jxin.col(i);
-                adjgrad[this->varlocs_[i]] += gxin[i];
-            }
-            for (int i = 0; i < this->func_.input_rows(); i++) {
-                for (int j = 0; j < this->func_.input_rows(); j++) {
-                    adjhess(this->varlocs_[j], this->varlocs_[i]) += hxin(j, i);
+            auto Impl = [&](auto &xin, auto &jxin, auto &gxin, auto &hxin) {
+                for (int i = 0; i < this->func_.input_rows(); i++) {
+                    xin[i] = x[this->varlocs_[i]];
                 }
-            }
+
+                this->func_.compute_jacobian_adjointgradient_adjointhessian(xin, fx_, jxin, gxin,
+                                                                            hxin, adjvars);
+
+                for (int i = 0; i < this->func_.input_rows(); i++) {
+                    jx.col(this->varlocs_[i]) += jxin.col(i);
+                    adjgrad[this->varlocs_[i]] += gxin[i];
+                }
+                for (int i = 0; i < this->func_.input_rows(); i++) {
+                    for (int j = 0; j < this->func_.input_rows(); j++) {
+                        adjhess(this->varlocs_[j], this->varlocs_[i]) += hxin(j, i);
+                    }
+                }
+            };
+
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl,
+                tycho::utils::TempSpec<typename Func::template Input<Scalar>>(
+                    this->func_.input_rows(), 1),
+                tycho::utils::TempSpec<typename Func::template Jacobian<Scalar>>(
+                    this->func_.output_rows(), this->func_.input_rows()),
+                tycho::utils::TempSpec<typename Func::template Gradient<Scalar>>(
+                    this->func_.input_rows(), 1),
+                tycho::utils::TempSpec<typename Func::template Hessian<Scalar>>(
+                    this->func_.input_rows(), this->func_.input_rows()));
         }
     }
 
