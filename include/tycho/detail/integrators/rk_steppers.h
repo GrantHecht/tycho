@@ -241,7 +241,8 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
         MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         auto Impl = [&](auto &k_vals, auto &xtup, auto &k_jacs, auto &xi_jac, auto &kx_jacs,
-                        auto &xs, auto &k_grads, auto &k_hesses, auto &kx_mults, auto &ht_par) {
+                        auto &xs, auto &k_grads, auto &k_hesses, auto &kx_mults, auto &ht_par,
+                        auto &xijac_khess) {
             xtup = x.template segment<DODE::IRC>(0, this->ode_.input_rows());
 
             Scalar t0 = xtup[this->ode_.t_var()];
@@ -348,7 +349,20 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
 
                 k_vals[ip1] *= h;
 
-                adjhess += xi_jac.transpose() * k_hesses[ip1] * xi_jac;
+                // adjhess += xi_jac.transpose() * k_hesses[ip1] * xi_jac is a
+                // 3-matrix chained product (adjhess itself doesn't alias the
+                // RHS, but the chain still needs one intermediate to reduce
+                // to a 2-operand product). Without .noalias(), Eigen's
+                // default assignment-safety path additionally materializes
+                // the WHOLE product into a second temporary before adding it
+                // to adjhess -- two temporaries per stage. Precomputing the
+                // intermediate into a persistent (BumpAllocator-arena,
+                // reused every stage) named buffer with .noalias(), then
+                // accumulating via a direct .noalias() += (fused GEMM
+                // accumulate, no second temp), halves that to one
+                // (INTEGRATORS §2.5).
+                xijac_khess.noalias() = xi_jac.transpose() * k_hesses[ip1];
+                adjhess.noalias() += xijac_khess * xi_jac;
 
                 ht_par += (xi_jac.transpose() * k_grads[ip1]) * (1.0 / h);
             }
@@ -373,10 +387,17 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
             adjhess.row(this->input_rows() - 1) += ht_par.transpose();
 
             jx = xi_jac;
-            adjgrad = jx.transpose() * adjvars;
+            // adjgrad doesn't appear on the RHS -- no aliasing hazard, pure
+            // drop-in .noalias() (INTEGRATORS §2.5).
+            adjgrad.noalias() = jx.transpose() * adjvars;
         };
 
         using KXjacType = Eigen::Matrix<Scalar, DODE::XV, Base::IRC>;
+        // Shape of xi_jac.transpose() * k_hesses[ip1]: (this->input_rows() x
+        // this->ode_.input_rows()). NOT the same shape as Jacobian<Scalar>
+        // (which is pinned to (OR, IR) == (output_rows, input_rows)) -- needs
+        // its own compile-time-sized alias.
+        using XiJacKHessType = Eigen::Matrix<Scalar, Base::IRC, DODE::IRC>;
 
         BumpAllocator::allocate_run(
             Impl, ArrayOfTempSpecs<ODEDeriv<Scalar>, Stages>(this->ode_.output_rows(), 1),
@@ -390,7 +411,12 @@ struct RKStepper : VectorFunction<RKStepper<DODE, RKOp>, SZ_SUM<DODE::IRC, 1>::v
             ArrayOfTempSpecs<ODEHessian<Scalar>, Stages>(this->ode_.input_rows(),
                                                          this->ode_.input_rows()),
             ArrayOfTempSpecs<ODEState<Scalar>, Stages>(this->ode_.input_rows(), 1),
-            TempSpec<Input<Scalar>>(this->input_rows(), 1));
+            TempSpec<Input<Scalar>>(this->input_rows(), 1),
+            // xijac_khess: persistent scratch for the xi_jac.transpose() *
+            // k_hesses[ip1] intermediate in the adjhess accumulation above
+            // (INTEGRATORS §2.5) -- shape matches xi_jac.transpose() *
+            // k_hesses[ip1], i.e. (input_rows() x ode_.input_rows()).
+            TempSpec<XiJacKHessType>(this->input_rows(), this->ode_.input_rows()));
     }
 
     /// @brief Required by SolverBase; unreachable because RKStepper is never registered as a
