@@ -553,8 +553,13 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
                         for (int k = 0; k < ORR; k++)
                             jx(k, j)[i] = jx_r(k, j);
 
-                    fx_r.setZero();
-                    jx_r.setZero();
+                    // See computable_base.h::compute's identical comment: only
+                    // the NEXT lane needs fx_r/jx_r re-zeroed; skip on the
+                    // final lane where they are dead.
+                    if (i + 1 < Scalar::SizeAtCompileTime) {
+                        fx_r.setZero();
+                        jx_r.setZero();
+                    }
                 }
 
             } else {
@@ -752,10 +757,15 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
                         for (int k = 0; k < IRR; k++)
                             adjhess(k, j)[i] = hx_r(k, j);
 
-                    fx_r.setZero();
-                    jx_r.setZero();
-                    gx_r.setZero();
-                    hx_r.setZero();
+                    // See computable_base.h::compute's identical comment: only
+                    // the NEXT lane needs these re-zeroed; skip on the final
+                    // lane where they are dead.
+                    if (i + 1 < Scalar::SizeAtCompileTime) {
+                        fx_r.setZero();
+                        jx_r.setZero();
+                        gx_r.setZero();
+                        hx_r.setZero();
+                    }
                 }
 
             } else {

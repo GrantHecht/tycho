@@ -50,6 +50,15 @@ struct Elements : VectorFunction<Elements<IR, EL1, ELS...>, IR, 1 + sizeof...(EL
 
     /// @brief Marks the selection as a linear function.
     static constexpr bool is_linear_function = true;
+    /// @brief Marks the function as SuperScalar-vectorizable.
+    ///
+    /// The body is a pure gather/scatter (no transcendental calls, no
+    /// heap-allocating temps), so it is trivially safe under a batched
+    /// `Eigen::Array` SuperScalar Scalar -- the same shape as @ref Constant.
+    /// Without this flag every dynamic-IR SuperScalar call scalarizes into
+    /// `W` per-lane calls with per-lane heap temps instead of one direct
+    /// batched call.
+    static constexpr bool is_vectorizable = true;
     /// @internal
     /// @brief Copies each selected input component into the output.
     /// @tparam InType   Eigen input vector expression type.
