@@ -84,7 +84,6 @@ struct InterpTable3D {
     int zsize_;                ///< Number of Z grid nodes.
     double ztotal_;            ///< Total Z span.
     bool cache_alpha_ = false; ///< Whether per-cell tricubic coefficients are precomputed.
-    int cache_threads_ = 1;    ///< Threads used to populate the coefficient cache.
 
     /// @brief Default constructor; produces an empty table.
     InterpTable3D() {}

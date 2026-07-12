@@ -16,7 +16,6 @@
 #include <vector>
 
 #include "tycho/detail/optimal_control/interp/interp_type.h"
-#include "tycho/detail/utils/timer.h"
 #include "tycho/detail/vf/core/vector_function.h"
 
 namespace tycho::oc {
