@@ -1902,22 +1902,29 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
         const int IRR = (Base::IRC > 0) ? Base::IRC : this->input_rows();
         const int ORR = (Base::ORC > 0) ? Base::ORC : this->output_rows();
 
-        // Column-locking invariant (load-bearing): `Lock`/`UnLock` below key their mutex on
-        // `ActiveVar`, the *global* column of the local variable `i` currently being
-        // scattered (`data.v_loc(i, Apl)`), NOT on the specific physical (row, col) KKT slot
-        // being written. Writes from within a single partition need no mutual exclusion --
-        // each partition's scatter runs serially on one thread (parallel_sequence dispatches
-        // one task per partition; single-partition problems take no locks at all) -- so two
-        // elements of the SAME partition may legally claim the same physical slot under
-        // different lock columns. Cross-partition writers, however, are only serialized if
-        // they key on the same lock column and hence the same `ClashLocks` mutex: correctness
-        // requires that whenever two claimants in DIFFERENT partitions write the same
-        // physical (row, col) slot, both resolve to the same lock column. If a claimant ever
-        // locked the *other* endpoint of a physical pair that a second partition also writes,
-        // the two writes could proceed concurrently under different mutexes. This property is
-        // problem-dependent and is verified once per problem by the setup-time assertion in
-        // `NonLinearProgram::get_mat_space` (non_linear_program.cpp) -- never here, in the
-        // per-iteration scatter.
+        // Canonical-column lock protocol (load-bearing; see NonLinearProgram::get_mat_space
+        // in non_linear_program.cpp). A Hessian element couples the two *global* variables
+        // (v_loc(j), v_loc(i)); the sparsity routine stores the physical KKT slot it writes
+        // under the SMALLER of the two endpoints, min(row, col) (analyze_sparsity keeps the
+        // lower triangle: col <= row, value offset outerIndexPtr()[col]). Locking the outer
+        // variable v_loc(i) alone -- as this scatter historically did -- is unsafe: when
+        // v_loc(j) < v_loc(i) the symmetric partner in another partition iterates the pair in
+        // the opposite local order and would lock the *other* endpoint, so the two claimants
+        // of one physical double take different mutexes and their non-atomic += race. The fix:
+        // every element locks its slot's canonical column min(row, col). For the Jacobian
+        // block the row is a constraint row, which sorts above every variable column, so its
+        // canonical column is always ActiveVar == v_loc(i) -- unchanged from before.
+        //
+        // Writes within one partition need no mutual exclusion (each partition's scatter runs
+        // serially on one thread; single-partition problems take no locks at all -- `Lock` is
+        // a no-op for uncontested columns), so two elements of the SAME partition may still
+        // touch a slot under different canonical columns; that is serialized by the partition
+        // thread itself. At most ONE lock is held at any instant (a mirror element hands the
+        // lock from ActiveVar over to the smaller column and back), so the protocol is
+        // deadlock-free. Consecutive writes that share a canonical column reuse the held lock,
+        // so the common already-ordered case still costs exactly one lock per column. The
+        // setup-time assertion in get_mat_space verifies, once per problem, that every
+        // claimant of a slot resolves to this same canonical column.
         auto Lock = [&](int var) {
             if (VarClashes[var] == -1) {
                 //// uncontested
@@ -1937,23 +1944,48 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
 
         const bool uniquecon = data.unique_constraints_;
 
-        // bool uc = data.unique_constraints_;
+        // Hand the single held lock from column `cur` to column `want`, coalescing runs of
+        // writes that share a canonical column. Returns the now-held column. `cur == -1`
+        // means no lock is held; the held lock is released BEFORE the next is acquired, so a
+        // thread never holds two locks at once (no hold-and-wait -> deadlock-free).
+        auto Relock = [&](int cur, int want) {
+            if (want != cur) {
+                if (cur != -1)
+                    UnLock(cur);
+                Lock(want);
+            }
+            return want;
+        };
+
         for (int i = 0; i < IRR; i++) {
             ActiveVar = data.v_loc(i, Apl);
-            Lock(ActiveVar);
-            ///// insert hessian column symetrically
-            for (int j = i; j < IRR; j++) {
-                this->derived().add_hessian_elem(hx(j, i), j, i, mpt, lpt, freeloc);
+            int held = -1;
+            ///// insert hessian column symetrically -- each element under its canonical
+            ///// (min-endpoint) lock column min(v_loc(j), v_loc(i))
+            if constexpr (!LinearVF<Derived>) {
+                for (int j = i; j < IRR; j++) {
+                    const int rowvar = data.v_loc(j, Apl);
+                    const int lockcol = (rowvar < ActiveVar) ? rowvar : ActiveVar;
+                    held = Relock(held, lockcol);
+                    this->derived().add_hessian_elem(hx(j, i), j, i, mpt, lpt, freeloc);
+                }
             }
-            if (uniquecon)
-                UnLock(ActiveVar);
-            ///// insert jacobian column
+            ///// insert jacobian column -- canonical lock column is always ActiveVar
+            ///// (constraint rows sort above every variable column); unlocked when the
+            ///// constraint rows are unique to this application (no cross-partition clash)
+            if (uniquecon) {
+                if (held != -1)
+                    UnLock(held);
+                held = -1;
+            } else {
+                held = Relock(held, ActiveVar);
+            }
             for (int j = 0; j < ORR; j++) {
                 this->derived().add_jacobian_elem(jx(j, i), j, i, mpt, lpt, freeloc);
             }
             ///////////////////////////////////////////////////////////////////////////////
-            if (!uniquecon)
-                UnLock(ActiveVar);
+            if (held != -1)
+                UnLock(held);
         }
     }
 

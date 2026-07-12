@@ -175,73 +175,63 @@ void tycho::solvers::NonLinearProgram::get_mat_space() {
         this->kkt_coeff_part_ids_.segment(kkstart, kklen).setConstant(i);
     }
 
-    // One-time (setup-only) column-locking invariant check -- see the comment above and
-    // dense_function_base.h's kkt_fill_all. For every physical (row, col) slot, all
-    // claimants in DIFFERENT partitions must resolve to the same lock column (claimants
-    // within one partition are serialized by the partition thread itself, so their lock
-    // columns may legally differ). A claimant's lock column is always one of the slot's
-    // two endpoints, so per canonical slot (lo, hi) we track which partitions claimed it
-    // under lock column lo and which under lock column hi; a violation is a lo-side claim
-    // and a hi-side claim from two different partitions. Runs once per make_nlp(); never
-    // touched by the per-iteration scatter. Skipped when num_partitions_ == 1: the
-    // scatter takes no locks at all in that case.
+    // One-time (setup-only) canonical-column locking invariant check -- see the comment
+    // above and dense_function_base.h's kkt_fill_all. Every write of a physical KKT slot
+    // now locks the slot's CANONICAL column min(row, col) -- the same endpoint the sparsity
+    // routine (analyze_sparsity) stores the slot under. Because that lock column is a pure
+    // function of the physical slot, all claimants of a slot resolve to the same mutex and
+    // serialize; this check verifies that property holds by construction and guards against
+    // future drift between kkt_fill_all's keying and this clash detection. A claimant from a
+    // DIFFERENT partition that resolved a slot to a different lock column would race
+    // (claimants within one partition are serialized by the partition thread, so they are
+    // not compared). Runs once per make_nlp(); never touched by the per-iteration scatter.
+    // Skipped when num_partitions_ == 1: the scatter takes no locks at all in that case.
     if (this->num_partitions_ > 1) {
-        struct SlotClaims {
-            // First and second distinct partitions claiming with lock column == lo / hi.
-            int lo_part = -1, lo_part2 = -1;
-            int hi_part = -1, hi_part2 = -1;
+        struct SlotLock {
+            int lock_col; // canonical lock column claimed for this slot
+            int part;     // partition that first claimed it
         };
-        std::unordered_map<std::int64_t, SlotClaims> slot_claims;
-        slot_claims.reserve(this->num_user_kkt_elems_);
+        std::unordered_map<std::int64_t, SlotLock> slot_lock;
+        slot_lock.reserve(this->num_user_kkt_elems_);
         for (int i = 0; i < this->num_user_kkt_elems_; i++) {
             int row = this->kkt_coeff_rows_[i];
             int col = this->kkt_coeff_cols_[i];
             int part = this->kkt_coeff_part_ids_[i];
             int lo = std::min(row, col);
             int hi = std::max(row, col);
+            // Canonical lock column kkt_fill_all resolves this element to: min(row, col).
+            // (Hessian: min(v_loc(j), v_loc(i)); Jacobian: v_loc(i), since the constraint
+            // row sorts above every variable column. Both equal lo.)
+            int lock_col = lo;
             std::int64_t key =
                 (static_cast<std::int64_t>(lo) << 32) | static_cast<std::uint32_t>(hi);
-            SlotClaims &sc = slot_claims[key];
 
-            // Record this claim on its side (diagonal slots lo == hi use the lo side).
-            const bool on_lo_side = (col == lo);
-            int &p1 = on_lo_side ? sc.lo_part : sc.hi_part;
-            int &p2 = on_lo_side ? sc.lo_part2 : sc.hi_part2;
-            if (p1 == -1)
-                p1 = part;
-            else if (p1 != part && p2 == -1)
-                p2 = part;
-
-            // Cross-check against the other side: any other-side claim from a different
-            // partition is a violation. (o1 is the first other-side partition; if it
-            // matches ours, o2 -- the first other-side partition differing from o1 --
-            // must differ from ours too.)
-            if (lo != hi) {
-                int o1 = on_lo_side ? sc.hi_part : sc.lo_part;
-                int o2 = on_lo_side ? sc.hi_part2 : sc.lo_part2;
-                int other_part = (o1 != -1 && o1 != part) ? o1 : o2;
-                if (other_part != -1 && other_part != part) {
-                    int ocol = on_lo_side ? hi : lo;
-                    throw std::logic_error(fmt::format(
-                        "NonLinearProgram::get_mat_space: KKT column-locking invariant "
-                        "violated -- physical KKT slot (row={}, col={}) is claimed with "
-                        "lock column {} by partition {} and lock column {} by partition "
-                        "{}. kkt_fill_all's mutex protocol requires claimants in "
-                        "different partitions that share a physical slot to resolve to "
-                        "the same lock column, otherwise their writes are not serialized "
-                        "(see dense_function_base.h kkt_fill_all)",
-                        lo, hi, col, part, ocol, other_part));
-                }
+            auto [it, inserted] = slot_lock.try_emplace(key, SlotLock{lock_col, part});
+            if (!inserted && it->second.part != part && it->second.lock_col != lock_col) {
+                throw std::logic_error(fmt::format(
+                    "NonLinearProgram::get_mat_space: KKT canonical-column locking invariant "
+                    "violated -- physical KKT slot (row={}, col={}) is claimed with lock "
+                    "column {} by partition {} and lock column {} by partition {}. "
+                    "kkt_fill_all's mutex protocol requires claimants in different partitions "
+                    "that share a physical slot to resolve to the same canonical lock column "
+                    "min(row, col), otherwise their writes are not serialized "
+                    "(see dense_function_base.h kkt_fill_all)",
+                    lo, hi, it->second.lock_col, it->second.part, lock_col, part));
             }
         }
     }
 
+    // Mark a KKT column contested iff >= 2 partitions write a slot whose CANONICAL column
+    // min(row, col) is that column -- matching kkt_fill_all's lock key. (Historically this
+    // keyed on the raw recorded column kkt_coeff_cols_[i], i.e. the outer-loop variable,
+    // which mis-attributed mirror-order Hessian writes and left genuinely shared slots
+    // unlocked -- the race this fix closes.)
     Eigen::MatrixXi KKTclash(this->num_partitions_, this->kkt_dim_);
     KKTclash.setZero();
     for (int i = 0; i < this->num_user_kkt_elems_; i++) {
-        int col = this->kkt_coeff_cols_[i];
+        int lockcol = std::min(this->kkt_coeff_rows_[i], this->kkt_coeff_cols_[i]);
         int thrid = this->kkt_coeff_part_ids_[i];
-        KKTclash(thrid, col) = 1;
+        KKTclash(thrid, lockcol) = 1;
     }
 
     this->kkt_clashes_.resize(this->kkt_dim_);
