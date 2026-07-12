@@ -180,6 +180,58 @@ struct CentralShootingDefect
     DODE ode_;         ///< The ODE whose dynamics are shot.
     Integrator integ_; ///< The integrator providing STM integration.
 
+    /// @internal
+    /// @brief Per-instance scratch buffers reused across evaluations (OC §2.1 fix).
+    ///
+    /// `compute_impl`/`compute_jacobian_impl`/
+    /// `compute_jacobian_adjointgradient_adjointhessian_impl` and the batched
+    /// `compute_impl_v`/`compute_jacobian_impl_v`/`compute_all_impl_v` used to
+    /// declare fresh `std::vector`s on every call -- the O(segments x PSIOPT
+    /// iterations) hot path in the transcription layer. These are now
+    /// per-instance `mutable` scratch buffers that get `.resize()`d (not
+    /// freshly declared) each call: `std::vector::resize()` to an unchanged
+    /// size never reallocates, and `input_rows()`/`output_rows()`/
+    /// `ode_.input_rows()` are fixed once the defect is constructed, so after
+    /// the first (warm-up) call these buffers cost zero heap traffic.
+    ///
+    /// Thread-safety: `mutable` scratch on a `const`-qualified evaluation path
+    /// is only safe if no two threads ever call these methods on the *same*
+    /// instance concurrently. That holds here:
+    /// `ConstraintFunction::thread_split()` (constraint_function.h) partitions
+    /// the shooting constraints once, before the iterative solve, via
+    /// `TypeStorage::clone_into` (type_storage.h) -- a deep copy that gives
+    /// every partition (and hence every worker thread) its *own*
+    /// `CentralShootingDefect` instance, including independent copies of these
+    /// scratch buffers. Within a partition, `NonLinearProgram`'s KKT-eval loop
+    /// (non_linear_program.cpp) dispatches each partition's work via
+    /// `tycho::utils::parallel_sequence`, which enqueues one task per
+    /// partition and *joins all of them* before returning -- so the same
+    /// partition's defect instance is never invoked by two threads at once,
+    /// and there is a proper happens-before edge between one KKT-eval call and
+    /// the next. So this is genuinely per-instance, effectively
+    /// single-threaded state, not shared mutable state.
+    ///
+    /// `xs_scratch_`/`tfs_scratch_`/`lfs_scratch_` specifically must remain
+    /// plain `std::vector<ODEState<double>>`/`Eigen::VectorXd` (not
+    /// arena-backed `BumpAllocator` temporaries, unlike e.g.
+    /// `TrapezoidalDefects`) because they are passed by const-ref directly
+    /// into `Integrator::integrate`/`integrate_stm`/`integrate_stm2`, whose
+    /// public signature (owned by the integrators layer, out of scope for
+    /// this change) requires exactly that container type -- an
+    /// arena-allocated `Eigen::Map` temporary cannot bind there without a
+    /// copy that would defeat the purpose.
+    /// @endinternal
+    mutable std::vector<Input<double>> x1x2s_scratch_; ///< @internal Per-lane packed inputs.
+    mutable std::vector<Output<double>> l_scratch_;    ///< @internal Per-lane adjoint multipliers.
+    mutable std::vector<ODEState<double>>
+        xs_scratch_;                      ///< @internal Two-per-lane ODE states (integrator input).
+    mutable Eigen::VectorXd tfs_scratch_; ///< @internal Two-per-lane integration targets.
+    mutable std::vector<ODEState<double>>
+        lfs_scratch_; ///< @internal Two-per-lane ODE-sized multiplier seeds.
+    mutable std::vector<Output<double>> fxs_scratch_;   ///< @internal Per-lane defect residuals.
+    mutable std::vector<Jacobian<double>> jxs_scratch_; ///< @internal Per-lane Jacobians.
+    mutable std::vector<Hessian<double>> hxs_scratch_;  ///< @internal Per-lane adjoint Hessians.
+
     /// @brief Construct from an ODE and integrator and size the defect.
     /// @param ode    The ODE to shoot.
     /// @param integ  The integrator providing STM integration.
@@ -369,43 +421,40 @@ struct CentralShootingDefect
     /// @internal
     /// @brief Batched primal evaluation: integrate both arcs and difference them.
     /// @param X1X2s  Per-application packed two-endpoint inputs.
-    /// @return Per-application defect-residual vectors.
+    /// @return Per-application defect-residual vectors (reference to reused scratch storage;
+    ///   valid until the next call on this instance).
     /// @endinternal
-    std::vector<Output<double>> compute_impl_v(const std::vector<Input<double>> &X1X2s) const {
+    std::vector<Output<double>> &compute_impl_v(const std::vector<Input<double>> &X1X2s) const {
 
-        std::vector<ODEState<double>> Xs;
-        Eigen::VectorXd tfs;
-        std::vector<ODEState<double>> Xfs;
+        this->get_input_states_tfs(X1X2s, this->xs_scratch_, this->tfs_scratch_);
 
-        this->get_input_states_tfs(X1X2s, Xs, tfs);
+        auto Xfs = this->integ_.integrate(this->xs_scratch_, this->tfs_scratch_);
 
-        Xfs = this->integ_.integrate(Xs, tfs);
-
-        std::vector<Output<double>> fxs(X1X2s.size());
+        this->fxs_scratch_.resize(X1X2s.size());
 
         for (int i = 0; i < X1X2s.size(); i++) {
-            fxs[i] =
+            this->fxs_scratch_[i] =
                 Xfs[2 * i].head(this->ode_.x_vars()) - Xfs[2 * i + 1].head(this->ode_.x_vars());
         }
-        return fxs;
+        return this->fxs_scratch_;
     }
 
     /// @internal
     /// @brief Batched residual + Jacobian via the integrator state-transition matrices.
     /// @param X1X2s  Per-application packed two-endpoint inputs.
-    /// @return Tuple of per-application {defect residuals, Jacobians}.
+    /// @return Tuple of per-application {defect residuals, Jacobians} (references to reused
+    ///   scratch storage; valid until the next call on this instance).
     /// @endinternal
-    std::tuple<std::vector<Output<double>>, std::vector<Jacobian<double>>>
+    std::tuple<std::vector<Output<double>> &, std::vector<Jacobian<double>> &>
     compute_jacobian_impl_v(const std::vector<Input<double>> &X1X2s) const {
 
-        std::vector<ODEState<double>> Xs;
-        Eigen::VectorXd tfs;
+        this->get_input_states_tfs(X1X2s, this->xs_scratch_, this->tfs_scratch_);
+        auto Xfs_Jfs = this->integ_.integrate_stm(this->xs_scratch_, this->tfs_scratch_);
 
-        this->get_input_states_tfs(X1X2s, Xs, tfs);
-        auto Xfs_Jfs = this->integ_.integrate_stm(Xs, tfs);
-
-        std::vector<Output<double>> fxs(X1X2s.size());
-        std::vector<Jacobian<double>> jxs(X1X2s.size());
+        this->fxs_scratch_.resize(X1X2s.size());
+        this->jxs_scratch_.resize(X1X2s.size());
+        auto &fxs = this->fxs_scratch_;
+        auto &jxs = this->jxs_scratch_;
 
         Eigen::Matrix<double, DODE::XV, SZ_PROD<Integrator::IRC, 2>::value> IJac(
             ode_.output_rows(), integ_.input_rows() * 2);
@@ -443,32 +492,33 @@ struct CentralShootingDefect
 
             jxs[i].noalias() = IJac * XJac;
         }
-        return std::tuple{fxs, jxs};
+        return std::tuple<std::vector<Output<double>> &, std::vector<Jacobian<double>> &>{fxs, jxs};
     }
 
     /// @internal
     /// @brief Batched residual, Jacobian, and adjoint Hessian via first/second-order STMs.
     /// @param X1X2s  Per-application packed two-endpoint inputs.
     /// @param Ls     Per-application output multipliers.
-    /// @return Tuple of per-application {defect residuals, Jacobians, adjoint Hessians}.
+    /// @return Tuple of per-application {defect residuals, Jacobians, adjoint Hessians}
+    ///   (references to reused scratch storage; valid until the next call on this instance).
     /// @endinternal
-    std::tuple<std::vector<Output<double>>, std::vector<Jacobian<double>>,
-               std::vector<Hessian<double>>>
+    std::tuple<std::vector<Output<double>> &, std::vector<Jacobian<double>> &,
+               std::vector<Hessian<double>> &>
     compute_all_impl_v(const std::vector<Input<double>> &X1X2s,
                        const std::vector<Output<double>> &Ls) const {
 
-        std::vector<ODEState<double>> Xs;
-        Eigen::VectorXd tfs;
-        std::vector<ODEState<double>> Lfs;
+        this->get_input_states_tfs(X1X2s, this->xs_scratch_, this->tfs_scratch_);
+        this->get_lmults(Ls, this->lfs_scratch_);
 
-        this->get_input_states_tfs(X1X2s, Xs, tfs);
-        this->get_lmults(Ls, Lfs);
+        auto Xfs_Jfs_Hfs =
+            this->integ_.integrate_stm2(this->xs_scratch_, this->tfs_scratch_, this->lfs_scratch_);
 
-        auto Xfs_Jfs_Hfs = this->integ_.integrate_stm2(Xs, tfs, Lfs);
-
-        std::vector<Output<double>> fxs(X1X2s.size());
-        std::vector<Jacobian<double>> jxs(X1X2s.size());
-        std::vector<Hessian<double>> hxs(X1X2s.size());
+        this->fxs_scratch_.resize(X1X2s.size());
+        this->jxs_scratch_.resize(X1X2s.size());
+        this->hxs_scratch_.resize(X1X2s.size());
+        auto &fxs = this->fxs_scratch_;
+        auto &jxs = this->jxs_scratch_;
+        auto &hxs = this->hxs_scratch_;
 
         Eigen::Matrix<double, DODE::XV, SZ_PROD<Integrator::IRC, 2>::value> IJac(
             ode_.output_rows(), integ_.input_rows() * 2);
@@ -518,7 +568,8 @@ struct CentralShootingDefect
             jxs[i].noalias() = IJac * XJac;
             hxs[i].noalias() = XJac.transpose() * IHess * XJac;
         }
-        return std::tuple{fxs, jxs, hxs};
+        return std::tuple<std::vector<Output<double>> &, std::vector<Jacobian<double>> &,
+                          std::vector<Hessian<double>> &>{fxs, jxs, hxs};
     }
 
     /// @internal
@@ -533,15 +584,16 @@ struct CentralShootingDefect
         typedef typename InType::Scalar Scalar;
         VecRef<OutType> fx = fx_.const_cast_derived();
 
-        std::vector<Input<double>> X1X2s;
+        auto &X1X2s = this->x1x2s_scratch_;
 
         if constexpr (!Is_SuperScalar<Scalar>::value) {
-            X1X2s.push_back(x);
+            X1X2s.resize(1);
+            X1X2s[0] = x;
         } else {
             this->extract_scalar_inputs(x, X1X2s);
         }
 
-        auto fxs = this->compute_impl_v(X1X2s);
+        auto &fxs = this->compute_impl_v(X1X2s);
 
         if constexpr (!Is_SuperScalar<Scalar>::value) {
             fx = fxs.front();
@@ -569,10 +621,11 @@ struct CentralShootingDefect
         VecRef<OutType> fx = fx_.const_cast_derived();
         MatRef<JacType> jx = jx_.const_cast_derived();
 
-        std::vector<Input<double>> X1X2s;
+        auto &X1X2s = this->x1x2s_scratch_;
 
         if constexpr (!Is_SuperScalar<Scalar>::value) {
-            X1X2s.push_back(x);
+            X1X2s.resize(1);
+            X1X2s[0] = x;
         } else {
             this->extract_scalar_inputs(x, X1X2s);
         }
@@ -624,12 +677,14 @@ struct CentralShootingDefect
         VecRef<AdjGradType> adjgrad = adjgrad_.const_cast_derived();
         MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
-        std::vector<Input<double>> X1X2s;
-        std::vector<Output<double>> Lfs;
+        auto &X1X2s = this->x1x2s_scratch_;
+        auto &Lfs = this->l_scratch_;
 
         if constexpr (!Is_SuperScalar<Scalar>::value) {
-            X1X2s.push_back(x);
-            Lfs.push_back(adjvars);
+            X1X2s.resize(1);
+            X1X2s[0] = x;
+            Lfs.resize(1);
+            Lfs[0] = adjvars;
         } else {
             this->extract_scalar_inputs(x, X1X2s);
             this->extract_scalar_lmults(adjvars, Lfs);
