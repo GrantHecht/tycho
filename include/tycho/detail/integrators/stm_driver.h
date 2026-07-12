@@ -154,29 +154,9 @@ struct STMDriver {
         Eigen::MatrixXd jxall(output_rows, input_rows);
         jxall.setZero();
         jxall.leftCols(output_rows).setIdentity();
-        // Ping-pong scratch for the self-aliasing `jxall = jxall * jtwist`
-        // chain product below (INTEGRATORS §2.3): jxall appears on both
-        // sides of that product, so Eigen would otherwise insert an
-        // implicit full-size temporary every step to evaluate it safely.
-        // Writing into this pre-sized sibling buffer with `.noalias()` and
-        // swapping removes that per-step heap allocation while computing
-        // the exact same product Eigen would have (swap is an O(1)
-        // pointer exchange, not a copy).
-        Eigen::MatrixXd jxall_next(output_rows, input_rows);
 
         Eigen::MatrixXd hxall(input_rows, input_rows);
         hxall.setZero();
-        // Same ping-pong treatment for `hxall = jtwist.transpose() * hxall
-        // * jtwist`, a triple product with hxall self-aliased on both
-        // sides. Decomposed into two ordinary (non-aliasing) `.noalias()`
-        // products through `twisthx` -- `jtwist.transpose() * hxall` never
-        // aliases hxall_next, and the second product never aliases
-        // twisthx -- preserving the original left-to-right associativity
-        // (operator* is left-associative, so the original expression is
-        // already `(jtwist.transpose() * hxall) * jtwist`) and hence
-        // bit-identical arithmetic.
-        Eigen::MatrixXd hxall_next(input_rows, input_rows);
-        Eigen::MatrixXd twisthx(input_rows, input_rows);
 
         Eigen::VectorXd stepper_input(input_rows);
         Eigen::VectorXd stepper_grad(input_rows);
@@ -206,15 +186,12 @@ struct STMDriver {
                 stepper_adjvars);
 
             jtwist.topRows(output_rows) = stepper_jacobian;
-            jxall_next.noalias() = jxall * jtwist;
-            jxall.swap(jxall_next);
+            jxall = jxall * jtwist;
             if (i == 0) {
                 jxall.rightCols(1) = stepper_jacobian.rightCols(1);
             }
 
-            twisthx.noalias() = jtwist.transpose() * hxall;
-            hxall_next.noalias() = twisthx * jtwist;
-            hxall.swap(hxall_next);
+            hxall = jtwist.transpose() * hxall * jtwist;
             hxall += stepper_hessian;
             stepper_adjvars = stepper_grad.head(output_rows);
         }
@@ -267,14 +244,6 @@ struct STMDriver {
         Eigen::Matrix<tycho::DefaultSuperScalar, -1, -1> jxall_ss(output_rows, input_rows);
         Eigen::Matrix<tycho::DefaultSuperScalar, -1, -1> jtwist_ss(input_rows, input_rows);
         Eigen::Matrix<tycho::DefaultSuperScalar, -1, -1> hxall_ss(input_rows, input_rows);
-        // SuperScalar ping-pong scratch for the same self-aliasing jxall_ss/
-        // hxall_ss chain products as the scalar path above (INTEGRATORS
-        // §2.3) -- see the scalar-path comment for the aliasing rationale.
-        // Sized once outside the pack loop and reused across packs/steps;
-        // .noalias() writes never allocate.
-        Eigen::Matrix<tycho::DefaultSuperScalar, -1, -1> jxall_ss_next(output_rows, input_rows);
-        Eigen::Matrix<tycho::DefaultSuperScalar, -1, -1> hxall_ss_next(input_rows, input_rows);
-        Eigen::Matrix<tycho::DefaultSuperScalar, -1, -1> twisthx_ss(input_rows, input_rows);
 
         Eigen::MatrixXd jtwist(input_rows, input_rows);
         jtwist.setZero();
@@ -355,15 +324,12 @@ struct STMDriver {
                     stepper_hessian_ss, stepper_adjvars_ss);
 
                 jtwist_ss.topRows(output_rows) = stepper_jacobian_ss;
-                jxall_ss_next.noalias() = jxall_ss * jtwist_ss;
-                jxall_ss.swap(jxall_ss_next);
+                jxall_ss = jxall_ss * jtwist_ss;
                 if (i == 0) {
                     jxall_ss.rightCols(1) = stepper_jacobian_ss.rightCols(1);
                 }
 
-                twisthx_ss.noalias() = jtwist_ss.transpose() * hxall_ss;
-                hxall_ss_next.noalias() = twisthx_ss * jtwist_ss;
-                hxall_ss.swap(hxall_ss_next);
+                hxall_ss = jtwist_ss.transpose() * hxall_ss * jtwist_ss;
                 hxall_ss += stepper_hessian_ss;
                 stepper_adjvars_ss = stepper_grad_ss.head(output_rows);
             }
