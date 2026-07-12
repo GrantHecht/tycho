@@ -221,7 +221,10 @@ struct CentralShootingDefect
     /// arena-allocated `Eigen::Map` temporary cannot bind there without a
     /// copy that would defeat the purpose.
     /// @endinternal
-    mutable std::vector<Input<double>> x1x2s_scratch_; ///< @internal Per-lane packed inputs.
+    /// @internal Per-lane packed inputs. Shared by compute/jacobian/JGH entry
+    /// points — safe while each top-level call fully consumes it before
+    /// returning; do NOT delegate between those hooks while it is live.
+    mutable std::vector<Input<double>> x1x2s_scratch_;
     mutable std::vector<Output<double>> l_scratch_;    ///< @internal Per-lane adjoint multipliers.
     mutable std::vector<ODEState<double>>
         xs_scratch_;                      ///< @internal Two-per-lane ODE states (integrator input).
