@@ -1049,8 +1049,11 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
 
     Eigen::VectorXd Temp(this->kkt_dim_);
 
-    Eigen::VectorXd BestXSL;
-    Eigen::VectorXd BestRHS;
+    // Reserve-once: bind to persistent member scratch instead of a fresh empty
+    // local, so repeated alg_impl calls (one per phase) don't re-allocate from
+    // scratch when settings_.return_best_ is enabled.
+    Eigen::VectorXd &BestXSL = this->best_xsl_scratch_;
+    Eigen::VectorXd &BestRHS = this->best_rhs_scratch_;
     double BestCriteriaVal = 1.0e10;
     int BestIter = 0;
 

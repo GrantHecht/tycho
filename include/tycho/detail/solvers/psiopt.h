@@ -391,6 +391,14 @@ class PSIOPT {
     mutable Eigen::VectorXd stli_scratch_; ///< @internal complementarity() S.cwiseProduct(LI) buffer.
     Eigen::VectorXd hp_scratch_; ///< @internal barrier_hessian() LI.cwiseQuotient(S) buffer.
 
+    // alg_impl's return_best_ path (off by default, settings_.return_best_) copies
+    // the full XSL/RHS iterate on every improving iteration. Hoisted so repeated
+    // alg_impl calls (one per phase in run_phase_sequence) reuse the same backing
+    // store instead of starting from an empty vector each time; resize-on-assign
+    // is then a no-op once kkt_dim_ is stable across a solve.
+    Eigen::VectorXd best_xsl_scratch_; ///< @internal alg_impl() return_best_ XSL snapshot.
+    Eigen::VectorXd best_rhs_scratch_; ///< @internal alg_impl() return_best_ RHS snapshot.
+
     // --- KKT solver ---
 #ifdef USE_ACCELERATE_SPARSE
     Eigen::AccelerateLDLTTPP<Eigen::SparseMatrix<double, Eigen::RowMajor>, Eigen::Upper> kkt_sol_;
