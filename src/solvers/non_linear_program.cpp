@@ -12,12 +12,7 @@
 //   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
-#include <cstdint>
-#include <stdexcept>
-#include <unordered_map>
-
-#include <fmt/format.h>
-
+#include "tycho/detail/solvers/indexing_data.h"
 #include "tycho/detail/solvers/non_linear_program.h"
 #include "tycho/detail/utils/timer.h"
 
@@ -135,19 +130,19 @@ void tycho::solvers::NonLinearProgram::get_mat_space() {
      * need to be locked when multiple partitions are scattering into the KKT matrix. Allocates
      * kkt_locks_ mutexes based on this info.
      *
-     * Column-locking invariant: kkt_fill_all (dense_function_base.h) locks the mutex of the
-     * *global column* of the local variable currently being scattered (keyed on
-     * data.v_loc(i, Apl)), not the specific physical (row, col) slot being written. Writes
-     * within one partition need no mutual exclusion -- each partition's scatter runs
-     * serially on a single thread (parallel_sequence dispatches one task per partition) --
-     * so it is legal (and common) for two elements of the SAME partition to claim the same
-     * physical slot under different lock columns. Cross-partition writers, however, are
-     * only serialized if they key on the same lock column and hence the same kkt_locks_
-     * mutex: correctness requires that whenever two claimants in DIFFERENT partitions write
-     * the same physical (row, col) slot, both resolve to the same lock column. The check
-     * below verifies exactly that, once, at setup time (not in the per-iteration scatter).
-     * It is skipped for single-partition problems, where the scatter takes no locks at all
-     * (no column can be claimed by more than one partition, so kkt_clashes_ is all -1).
+     * Canonical-column locking protocol: every KKT scatter site (kkt_fill_all and
+     * kkt_fill_hess in dense_function_base.h) locks each element's mutex on the slot's
+     * canonical column -- tycho::solvers::kkt_canonical_lock_col(row, col), the smaller
+     * endpoint, which is the same endpoint analyze_sparsity stores the physical slot
+     * under. The clash detection below marks contested columns with that SAME shared
+     * keying function, so cross-partition claimants of one physical slot agree on the
+     * mutex BY CONSTRUCTION -- there is no per-site convention that can drift, and hence
+     * no runtime check (a claims-map assertion that once lived here verified min == min
+     * and was deleted as tautological; see kkt_canonical_lock_col's doc comment for the
+     * structural argument). Writes within one partition need no mutual exclusion -- each
+     * partition's scatter runs serially on a single thread (parallel_sequence dispatches
+     * one task per partition), and single-partition problems take no locks at all (no
+     * column can be claimed by more than one partition, so kkt_clashes_ is all -1).
      */
 
     int KKTfreeloc = 0;
@@ -176,14 +171,16 @@ void tycho::solvers::NonLinearProgram::get_mat_space() {
     }
 
     // Mark a KKT column contested iff >= 2 partitions write a slot whose CANONICAL column
-    // min(row, col) is that column -- matching kkt_fill_all's lock key. (Historically this
-    // keyed on the raw recorded column kkt_coeff_cols_[i], i.e. the outer-loop variable,
-    // which mis-attributed mirror-order Hessian writes and left genuinely shared slots
-    // unlocked -- the race this fix closes.)
+    // (kkt_canonical_lock_col(row, col), the smaller endpoint) is that column -- the same
+    // shared keying function every scatter site locks with, so a contested slot's writers
+    // all map to the mutex allocated here. (Historically this keyed on the raw recorded
+    // column kkt_coeff_cols_[i], i.e. the outer-loop variable, which mis-attributed
+    // mirror-order Hessian writes and left genuinely shared slots unlocked -- the race
+    // this keying closes.)
     Eigen::MatrixXi KKTclash(this->num_partitions_, this->kkt_dim_);
     KKTclash.setZero();
     for (int i = 0; i < this->num_user_kkt_elems_; i++) {
-        int lockcol = std::min(this->kkt_coeff_rows_[i], this->kkt_coeff_cols_[i]);
+        int lockcol = kkt_canonical_lock_col(this->kkt_coeff_rows_[i], this->kkt_coeff_cols_[i]);
         int thrid = this->kkt_coeff_part_ids_[i];
         KKTclash(thrid, lockcol) = 1;
     }
@@ -202,62 +199,6 @@ void tycho::solvers::NonLinearProgram::get_mat_space() {
     std::vector<std::mutex> kktemp(this->num_kkt_clashes_);
 
     this->kkt_locks_.swap(kktemp);
-
-    // One-time (setup-only) canonical-column locking invariant check -- see the comment
-    // above and dense_function_base.h's kkt_fill_all. Every write of a physical KKT slot
-    // locks the slot's CANONICAL column min(row, col) -- the same endpoint the sparsity
-    // routine (analyze_sparsity) stores the slot under. Because that lock column is a pure
-    // function of the physical slot, all claimants of a slot resolve to the same mutex and
-    // serialize; this check verifies that property holds by construction and guards against
-    // future drift between kkt_fill_all's keying and this clash detection. A claimant from a
-    // DIFFERENT partition that resolved a slot to a different lock column would race
-    // (claimants within one partition are serialized by the partition thread, so they are
-    // not compared). Runs once per make_nlp(); never touched by the per-iteration scatter.
-    // Skipped when num_partitions_ == 1: the scatter takes no locks at all in that case.
-    //
-    // Claims are collected ONLY for elements whose canonical column is contested
-    // (kkt_clashes_[lo] != -1); this is semantically exact, not an approximation. Every
-    // claimant of a slot records that slot's canonical column lo as its lock column, so a
-    // slot claimed by >= 2 partitions implies >= 2 partitions claim column lo, which the
-    // clash detection above then marks contested. Contrapositive: an uncontested canonical
-    // column means every slot canonicalizing to it has a single-partition claimant set --
-    // the cross-partition invariant is vacuous there, and skipping keeps this map to the
-    // tiny partition-boundary subset instead of scaling with total KKT elements.
-    if (this->num_partitions_ > 1) {
-        struct SlotLock {
-            int lock_col; // canonical lock column claimed for this slot
-            int part;     // partition that first claimed it
-        };
-        std::unordered_map<std::int64_t, SlotLock> slot_lock;
-        for (int i = 0; i < this->num_user_kkt_elems_; i++) {
-            int row = this->kkt_coeff_rows_[i];
-            int col = this->kkt_coeff_cols_[i];
-            int lo = std::min(row, col);
-            if (this->kkt_clashes_[lo] == -1)
-                continue; // uncontested canonical column: single-partition claimants only
-            int part = this->kkt_coeff_part_ids_[i];
-            int hi = std::max(row, col);
-            // Canonical lock column kkt_fill_all resolves this element to: min(row, col).
-            // (Hessian: min(v_loc(j), v_loc(i)); Jacobian: v_loc(i), since the constraint
-            // row sorts above every variable column. Both equal lo.)
-            int lock_col = lo;
-            std::int64_t key =
-                (static_cast<std::int64_t>(lo) << 32) | static_cast<std::uint32_t>(hi);
-
-            auto [it, inserted] = slot_lock.try_emplace(key, SlotLock{lock_col, part});
-            if (!inserted && it->second.part != part && it->second.lock_col != lock_col) {
-                throw std::logic_error(fmt::format(
-                    "NonLinearProgram::get_mat_space: KKT canonical-column locking invariant "
-                    "violated -- physical KKT slot (row={}, col={}) is claimed with lock "
-                    "column {} by partition {} and lock column {} by partition {}. "
-                    "kkt_fill_all's mutex protocol requires claimants in different partitions "
-                    "that share a physical slot to resolve to the same canonical lock column "
-                    "min(row, col), otherwise their writes are not serialized "
-                    "(see dense_function_base.h kkt_fill_all)",
-                    lo, hi, it->second.lock_col, it->second.part, lock_col, part));
-            }
-        }
-    }
 }
 
 void tycho::solvers::NonLinearProgram::get_rhs_space() {
