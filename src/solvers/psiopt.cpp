@@ -670,10 +670,16 @@ double tycho::solvers::PSIOPT::max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> 
 void tycho::solvers::PSIOPT::complementarity(Eigen::Ref<Eigen::VectorXd> S,
                                              Eigen::Ref<Eigen::VectorXd> LI, double &avgcomp,
                                              double &mincomp, double &maxcomp) const {
-    Eigen::VectorXd StLI = S.cwiseProduct(LI);
-    mincomp = StLI.minCoeff();
-    maxcomp = StLI.maxCoeff();
-    avgcomp = StLI.sum() / double(StLI.size());
+    // Buffer-hoist ONLY: keep the exact Eigen .sum()/minCoeff()/maxCoeff()
+    // reduction expressions unchanged. avgcomp feeds mu (see mpc_mu/loqo_mu
+    // call sites), so a hand-fused loop that reorders the sum could perturb
+    // the reduction by a ULP under fast-math and change iterates -- forbidden.
+    // This change only removes the per-call heap allocation of StLI.
+    this->stli_scratch_.resize(S.size());
+    this->stli_scratch_ = S.cwiseProduct(LI);
+    mincomp = this->stli_scratch_.minCoeff();
+    maxcomp = this->stli_scratch_.maxCoeff();
+    avgcomp = this->stli_scratch_.sum() / double(this->stli_scratch_.size());
 }
 
 double tycho::solvers::PSIOPT::barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu) const {
