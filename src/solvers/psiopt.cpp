@@ -1439,9 +1439,10 @@ double tycho::solvers::PSIOPT::ls_l1(double obj_scale, double mu, double prim_ob
 
     PenaltyTerms init = compute_penalties(xsl, rhs);
 
-    double sc = .1 + std::abs(vv - cv) / init.l2_;
-    if (init.l2_ == 0.0)
-        sc = 1.0;
+    // Branch-first: avoid computing a transient inf/nan when init.l2_ == 0.0
+    // (the division result is immediately discarded by the guard below anyway;
+    // final sc is bit-identical to the previous compute-then-overwrite order).
+    double sc = (init.l2_ == 0.0) ? 1.0 : .1 + std::abs(vv - cv) / init.l2_;
 
     double LangInit = prim_obj + barr_obj + init.l1_ + init.l2_ * sc;
 
@@ -1476,9 +1477,10 @@ double tycho::solvers::PSIOPT::ls_auglang(double obj_scale, double mu, double pr
 
     PenaltyTerms init = compute_penalties(xsl, rhs);
 
-    double sc = .01 + std::abs(vv - cv) / init.l2_;
-    if (init.l2_ == 0.0)
-        sc = 1.0;
+    // Branch-first: avoid computing a transient inf/nan when init.l2_ == 0.0
+    // (the division result is immediately discarded by the guard below anyway;
+    // final sc is bit-identical to the previous compute-then-overwrite order).
+    double sc = (init.l2_ == 0.0) ? 1.0 : .01 + std::abs(vv - cv) / init.l2_;
 
     double LangInit = prim_obj + barr_obj + init.l1_ + init.l2_ * sc;
 
