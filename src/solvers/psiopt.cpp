@@ -1142,7 +1142,14 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             switch (barmode) {
             case BarrierModes::PROBE:
                 this->barrier_gradient(v_xsl.iq_lmults(), v_rhs.dual_grad());
-                DXSL = -this->kkt_sol_.solve(RHS);
+                // Assign the Solve<> expression directly (hits Eigen's specialized
+                // Assignment<DstXprType, Solve<...>> and writes straight into DXSL,
+                // no temporary) then negate in place (elementwise, alias-safe) --
+                // avoids the extra kkt_dim_-sized temporary that
+                // `DXSL = -kkt_sol_.solve(RHS)` forces via Solve's
+                // EvalBeforeNestingBit when wrapped in a CwiseUnaryOp.
+                DXSL = this->kkt_sol_.solve(RHS);
+                DXSL = -DXSL;
                 this->max_primal_dual_step(v_xsl, v_dxsl, settings_.bound_fraction_, alphap,
                                            alphad);
                 Temp = XSL + DXSL;
@@ -1162,7 +1169,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             this->barrier_gradient(v_xsl.slacks(), v_xsl.iq_lmults(), mu, v_rhs.dual_grad());
         }
 
-        DXSL = -this->kkt_sol_.solve(RHS);
+        // See the solve-into comment above (PROBE case): direct assignment + in-place
+        // negate avoids the extra temporary that `-kkt_sol_.solve(RHS)` forces.
+        DXSL = this->kkt_sol_.solve(RHS);
+        DXSL = -DXSL;
         bool GoodStep = std::isfinite(DXSL.squaredNorm());
         if (this->inequal_cons_ > 0)
             this->max_primal_dual_step(v_xsl, v_dxsl, settings_.bound_fraction_, alphap, alphad);
@@ -1359,7 +1369,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
         print_finished("KKT-Matrix Analysis ");
     }
 
-    Eigen::VectorXd dx = -this->kkt_sol_.solve(RHS);
+    // See the solve-into comment in alg_impl: direct-assign + in-place negate
+    // avoids the extra temporary that `-kkt_sol_.solve(RHS)` forces.
+    Eigen::VectorXd dx = this->kkt_sol_.solve(RHS);
+    dx = -dx;
     KKTVector v_dx = kkt_view(dx);
 
     if (equal_cons_ > 0)
