@@ -364,7 +364,7 @@ void tycho::solvers::NonLinearProgram::eval_rhs(double ObjScale, ConstEigenRef<V
                                                 EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
                                                 EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI) {
 
-    std::vector<double> Vals(this->num_partitions_, 0.0);
+    this->vals_scratch_.assign(this->num_partitions_, 0.0);
     this->set_rhs_coeffs_zero();
 
     auto RHSevalOP = [&](int thrnum) {
@@ -375,12 +375,12 @@ void tycho::solvers::NonLinearProgram::eval_rhs(double ObjScale, ConstEigenRef<V
             Con.constraints_adjointgradient(X, LE, this->econ_coeffs(), this->agx_coeffs());
         for (auto &Con : this->part_iq_[thrnum])
             Con.constraints_adjointgradient(X, LI, this->icon_coeffs(), this->agx_coeffs());
-        Vals[thrnum] = localVal;
+        this->vals_scratch_[thrnum] = localVal;
     };
 
     tycho::utils::parallel_sequence(this->num_partitions_, RHSevalOP);
     for (int i = 0; i < this->num_partitions_; i++)
-        val += Vals[i];
+        val += this->vals_scratch_[i];
 
     this->fill_rhs(PGX, AGX, FXE, FXI);
 }
@@ -389,7 +389,7 @@ void tycho::solvers::NonLinearProgram::eval_ogc(double ObjScale, ConstEigenRef<V
                                                 double &val, EigenRef<VectorXd> PGX,
                                                 EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI) {
 
-    std::vector<double> Vals(this->num_partitions_, 0.0);
+    this->vals_scratch_.assign(this->num_partitions_, 0.0);
     this->set_rhs_coeffs_zero();
 
     auto OGCevalOP = [&](int thrnum) {
@@ -400,12 +400,12 @@ void tycho::solvers::NonLinearProgram::eval_ogc(double ObjScale, ConstEigenRef<V
             Con.constraints(X, this->econ_coeffs());
         for (auto &Con : this->part_iq_[thrnum])
             Con.constraints(X, this->icon_coeffs());
-        Vals[thrnum] = localVal;
+        this->vals_scratch_[thrnum] = localVal;
     };
 
     tycho::utils::parallel_sequence(this->num_partitions_, OGCevalOP);
     for (int i = 0; i < this->num_partitions_; i++)
-        val += Vals[i];
+        val += this->vals_scratch_[i];
 
     this->fill_pgx(PGX);
     this->fill_fxe(FXE);
@@ -416,7 +416,7 @@ void tycho::solvers::NonLinearProgram::eval_occ(double ObjScale, ConstEigenRef<V
                                                 double &val, EigenRef<VectorXd> FXE,
                                                 EigenRef<VectorXd> FXI) {
 
-    std::vector<double> Vals(this->num_partitions_, 0.0);
+    this->vals_scratch_.assign(this->num_partitions_, 0.0);
     this->set_con_coeffs_zero();
     auto OGCevalOP = [&](int thrnum) {
         double localVal = 0.0;
@@ -426,12 +426,12 @@ void tycho::solvers::NonLinearProgram::eval_occ(double ObjScale, ConstEigenRef<V
             Con.constraints(X, this->econ_coeffs());
         for (auto &Con : this->part_iq_[thrnum])
             Con.constraints(X, this->icon_coeffs());
-        Vals[thrnum] = localVal;
+        this->vals_scratch_[thrnum] = localVal;
     };
 
     tycho::utils::parallel_sequence(this->num_partitions_, OGCevalOP);
     for (int i = 0; i < this->num_partitions_; i++)
-        val += Vals[i];
+        val += this->vals_scratch_[i];
 
     this->fill_fxe(FXE);
     this->fill_fxi(FXI);
@@ -440,18 +440,18 @@ void tycho::solvers::NonLinearProgram::eval_occ(double ObjScale, ConstEigenRef<V
 void tycho::solvers::NonLinearProgram::eval_obj(double ObjScale, ConstEigenRef<VectorXd> X,
                                                 double &val) {
 
-    std::vector<double> Vals(this->num_partitions_, 0.0);
+    this->vals_scratch_.assign(this->num_partitions_, 0.0);
 
     auto OGCevalOP = [&](int thrnum) {
         double localVal = 0.0;
         for (auto &Obj : this->part_obj_[thrnum])
             Obj.objective(ObjScale, X, localVal);
-        Vals[thrnum] = localVal;
+        this->vals_scratch_[thrnum] = localVal;
     };
 
     tycho::utils::parallel_sequence(this->num_partitions_, OGCevalOP);
     for (int i = 0; i < this->num_partitions_; i++)
-        val += Vals[i];
+        val += this->vals_scratch_[i];
 }
 
 void tycho::solvers::NonLinearProgram::eval_kkt(
@@ -460,7 +460,7 @@ void tycho::solvers::NonLinearProgram::eval_kkt(
     EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
 
-    std::vector<double> Vals(this->num_partitions_, 0.0);
+    this->vals_scratch_.assign(this->num_partitions_, 0.0);
 
     this->set_rhs_coeffs_zero();
 
@@ -478,12 +478,12 @@ void tycho::solvers::NonLinearProgram::eval_kkt(
             Con.constraints_jacobian_adjointgradient_adjointhessian(
                 X, LI, this->icon_coeffs(), this->agx_coeffs(), KKTmat, this->kkt_locations_,
                 this->kkt_clashes_, this->kkt_locks_);
-        Vals[thrnum] = localVal;
+        this->vals_scratch_[thrnum] = localVal;
     };
 
     tycho::utils::parallel_sequence(this->num_partitions_, KKTevalOP);
     for (int i = 0; i < this->num_partitions_; i++)
-        val += Vals[i];
+        val += this->vals_scratch_[i];
 
     // NOTE: fill_solver_coeffs internally calls parallel_blocks, creating a nested
     // dispatch from the inline arm. Safe because: (1) the calling thread is the main
@@ -559,7 +559,7 @@ void tycho::solvers::NonLinearProgram::eval_aug(
     EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
 
-    std::vector<double> Vals(this->num_partitions_, 0.0);
+    this->vals_scratch_.assign(this->num_partitions_, 0.0);
     this->set_rhs_coeffs_zero();
 
     auto SOEevalOP = [&](int thrnum) {
@@ -574,12 +574,12 @@ void tycho::solvers::NonLinearProgram::eval_aug(
             Con.constraints_jacobian_adjointgradient(X, LI, this->icon_coeffs(), this->agx_coeffs(),
                                                      KKTmat, this->kkt_locations_,
                                                      this->kkt_clashes_, this->kkt_locks_);
-        Vals[thrnum] = localVal;
+        this->vals_scratch_[thrnum] = localVal;
     };
 
     tycho::utils::parallel_sequence(this->num_partitions_, SOEevalOP);
     for (int i = 0; i < this->num_partitions_; i++)
-        val += Vals[i];
+        val += this->vals_scratch_[i];
 
     // NOTE: nested dispatch from inline arm — see comment in eval_kkt.
     tycho::utils::parallel_task(
