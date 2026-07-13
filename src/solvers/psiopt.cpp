@@ -698,13 +698,14 @@ void tycho::solvers::PSIOPT::barrier_gradient(Eigen::Ref<Eigen::VectorXd> LI,
 void tycho::solvers::PSIOPT::barrier_hessian(Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
                                              Eigen::Ref<Eigen::VectorXd> S,
                                              Eigen::Ref<Eigen::VectorXd> LI, double mu) {
-    Eigen::VectorXd hp = LI.cwiseQuotient(S);
+    this->hp_scratch_.resize(S.size());
+    this->hp_scratch_ = LI.cwiseQuotient(S);
     for (int i = 0; i < this->inequal_cons_; i++) {
-        if (hp[i] < 0.0) {
-            hp[i] = mu / (S[i] * S[i]);
+        if (this->hp_scratch_[i] < 0.0) {
+            this->hp_scratch_[i] = mu / (S[i] * S[i]);
         }
     }
-    this->nlp_->assign_kkt_slack_hessian(hp, KKTmat);
+    this->nlp_->assign_kkt_slack_hessian(this->hp_scratch_, KKTmat);
 }
 
 double tycho::solvers::PSIOPT::loqo_mu(Eigen::Ref<Eigen::VectorXd> S,

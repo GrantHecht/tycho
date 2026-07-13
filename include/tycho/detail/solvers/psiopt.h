@@ -382,6 +382,15 @@ class PSIOPT {
     int inequal_cons_ = 0;
     int kkt_dim_ = 0;
 
+    // --- Reusable per-iteration scratch buffers (avoid per-call heap allocation) ---
+    // complementarity()/barrier_hessian() are only ever invoked serially from
+    // alg_impl's single-threaded control loop for this PSIOPT instance (no
+    // partition-level concurrency at this level -- that only happens inside
+    // NLP eval calls). Sized to inequal_cons_/slack_vars_ (resize-in-place;
+    // a no-op once the size matches, which it does for the lifetime of a solve).
+    mutable Eigen::VectorXd stli_scratch_; ///< @internal complementarity() S.cwiseProduct(LI) buffer.
+    Eigen::VectorXd hp_scratch_; ///< @internal barrier_hessian() LI.cwiseQuotient(S) buffer.
+
     // --- KKT solver ---
 #ifdef USE_ACCELERATE_SPARSE
     Eigen::AccelerateLDLTTPP<Eigen::SparseMatrix<double, Eigen::RowMajor>, Eigen::Upper> kkt_sol_;
