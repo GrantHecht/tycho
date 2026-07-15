@@ -1195,7 +1195,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             PreExitCode == ConvergenceFlags::ACCEPTABLE ||
             PreExitCode == ConvergenceFlags::DIVERGING) {
             // Converged/acceptable/(residual-)diverging before ever factorizing
-            // this iterate. The un-set fields -- mu_, barr_obj_, alpha_p/d/t_,
+            // this iterate. mu_ is set below (the loop's current barrier
+            // parameter -- the value this iterate was evaluated under -- is
+            // meaningful and display-only). The remaining un-set fields --
+            // barr_obj_, alpha_p/d/t_,
             // h_facs_, h_pert_/_cum_, p_pivots_, ls_iters_, merit_val_ -- stay at
             // IterateInfo's fresh per-iteration defaults (0, or 1.0 for the
             // alphas): there is no factorization, barrier update, or line search to
@@ -1208,6 +1211,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             // icon_inf_, and return_best_'s criteria switch below reads only
             // econ_inf_/icon_inf_/kkt_inf_/prim_obj_ -- all of which
             // fill_residual_info() already set correctly above).
+            iters.back().mu_ = mu;
             QPtimer.stop();
             ExitCode = PreExitCode;
 
