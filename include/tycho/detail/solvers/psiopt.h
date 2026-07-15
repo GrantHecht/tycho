@@ -388,7 +388,7 @@ class PSIOPT {
     // partition-level concurrency at this level -- that only happens inside
     // NLP eval calls). Sized to inequal_cons_/slack_vars_ (resize-in-place;
     // a no-op once the size matches, which it does for the lifetime of a solve).
-    mutable Eigen::VectorXd stli_scratch_; ///< @internal complementarity() S.cwiseProduct(LI) buffer.
+    mutable Eigen::VectorXd stli_scratch_; ///< @internal complementarity() S*LI buffer.
     Eigen::VectorXd hp_scratch_; ///< @internal barrier_hessian() LI.cwiseQuotient(S) buffer.
 
     // alg_impl's return_best_ path (off by default, settings_.return_best_) copies
