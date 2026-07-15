@@ -905,14 +905,7 @@ void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
                                       ConstEigenRef<VectorXd> XSL, double &val,
                                       EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
                                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-    // Zero-fill is order-independent (each write touches a distinct index, no
-    // reads), so parallelizing it cannot change any value -- provably
-    // identical to the serial std::fill_n it replaces.
-    double *kkt_vals = KKTmat.valuePtr();
-    auto zero_fill_op = [kkt_vals](int start, int stop) {
-        std::fill(kkt_vals + start, kkt_vals + stop, 0.0);
-    };
-    tycho::utils::parallel_blocks(KKTmat.nonZeros(), zero_fill_op, this->nlp_->num_partitions_);
+    std::fill_n(KKTmat.valuePtr(), KKTmat.nonZeros(), 0.0);
 
     switch (algmode) {
     case AlgorithmModes::OPT:
