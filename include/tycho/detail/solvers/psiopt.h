@@ -224,6 +224,14 @@ class PSIOPT {
         int factor_mem_ = 0;
         int factor_flops_ = 0;
 
+        // T6 (dead-status fix): the last non-Success status observed from
+        // kkt_sol_.info() by factor_impl(), across all phases run since the last
+        // reset_accumulators(). kkt_sol_.info() was previously computed by every
+        // Compute()/Refactor() call and never read anywhere; this field is purely
+        // observational (surfaced by print_exit_stats()) and does not feed back into
+        // any control-flow decision in factor_impl -- see the comment there.
+        Eigen::ComputationInfo last_kkt_info_ = Eigen::Success;
+
         // Only resets accumulated timing/iteration counters and the convergence flag.
         // primals_ and obj_val_ are overwritten unconditionally by alg_impl each
         // phase. eq_lmults_ and eq_cons_ are overwritten when equal_cons_ > 0;
@@ -239,6 +247,7 @@ class PSIOPT {
             print_time_ = 0;
             solver_init_time_ = 0;
             iter_num_ = 0;
+            last_kkt_info_ = Eigen::Success;
         }
     };
 

@@ -226,6 +226,17 @@ void tycho::solvers::PSIOPT::print_exit_stats(ConvergenceFlags ExitCode, const I
         fmt::print(" ICons Inf  : ");
         fmt::print(Icol, "{:<15.8e}\n", last.icon_inf_);
 
+        // T6 (dead-status fix): surface the last non-Success kkt_sol_.info() status
+        // observed across this run_phase_sequence() call, if any. Silent (matches
+        // today's output exactly) whenever every factorization reported Success --
+        // i.e. on every healthy solve in the examples suite.
+        if (this->result_.last_kkt_info_ != Eigen::Success) {
+            fmt::print(" KKT Factor Status : ");
+            fmt::print(fmt::fg(fmt::color::yellow), "{}\n",
+                       this->result_.last_kkt_info_ == Eigen::NumericalIssue ? "NumericalIssue"
+                                                                             : "InvalidInput");
+        }
+
         fmt::print("\n");
 
         Printtime(" NLP Function Evaluation Time : ", nlptime);

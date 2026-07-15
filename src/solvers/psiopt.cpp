@@ -988,6 +988,29 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
                            "Warning: Potential Rank Deficiency Detected\n");
         }
     };
+    // T6 (dead-status fix): kkt_sol_.info() was computed by every Compute()/
+    // Refactor() call below and never read anywhere -- a dead status. This records
+    // the last non-Success status into result_.last_kkt_info_ (surfaced only by
+    // print_exit_stats(), see psiopt_print.cpp) and, for hard failures only, emits
+    // an immediate diagnostic gated the same as the sibling RankDef()/perturbation-
+    // exhausted warnings in this function. NumericalIssue (Pardiso info -4/-7:
+    // zero/near-zero pivot; Accelerate factorization-failed/singular) is a NORMAL,
+    // expected condition while probing perturbations during inertia correction
+    // below -- printing on every occurrence would spam the console for any problem
+    // with an indefinite KKT system, so it is recorded but not printed by default.
+    // Purely observational: no return value or branch below is touched by this
+    // check.
+    auto CheckInfo = [&]() {
+        Eigen::ComputationInfo info = this->kkt_sol_.info();
+        if (info != Eigen::Success) {
+            this->result_.last_kkt_info_ = info;
+            if (info != Eigen::NumericalIssue && settings_.print_level_ < 3) {
+                fmt::print(fmt::fg(fmt::color::yellow),
+                           "Warning: KKT factorization reported a hard error (info={})\n",
+                           static_cast<int>(info));
+            }
+        }
+    };
     auto Perturb = [&](double p) {
         this->nlp_->perturb_kkt_p_diags(p, this->kkt_sol_.get_matrix());
     };
@@ -1000,6 +1023,7 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
             Refactor();
         else
             Compute();
+        CheckInfo();
         RankDef();
         IncEigs = Inertia();
         finalpert = 0.0;
@@ -1011,6 +1035,7 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
     for (int i = 0; i < settings_.max_refac_; i++) {
         Perturb(p);
         Refactor();
+        CheckInfo();
         RankDef();
         IncEigs = Inertia();
         finalpert = p;
