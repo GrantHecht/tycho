@@ -873,13 +873,25 @@ void tycho::solvers::PSIOPT::max_primal_dual_step(KKTVector &xsl, KKTVector &dxs
     alphad = Lmax;
 }
 
-void tycho::solvers::PSIOPT::fill_iter_info(KKTVector &xsl, KKTVector &rhs, double pobj,
-                                            double bobj, double mu, IterateInfo &iter) const {
+// PSIOPT 3.1: deliberately excludes barr_obj_/mu_/p_pivots_. barr_obj_ is only
+// evaluated by the caller AFTER the barrier-parameter update block (barrier_objective()
+// runs on the just-updated `mu`); for BarrierModes::PROBE that update itself needs the
+// KKT solve (mpc_mu() consumes the predictor DXSL). p_pivots_ similarly only reflects a
+// real value once this iteration's factor_impl() has run. All three are therefore NOT
+// "residuals" in the sense converge_check()/return_best_/print_exit_stats consume them
+// (none of those three read mu_/barr_obj_/p_pivots_ -- verified: converge_check() reads
+// only kkt_inf_/econ_inf_/icon_inf_/barr_inf_; return_best_ reads econ_inf_/icon_inf_/
+// kkt_inf_/prim_obj_; print_exit_stats reads prim_obj_/kkt_inf_/barr_inf_/econ_inf_/
+// icon_inf_). Every field this function DOES set is fully determined by rhs/xsl alone,
+// unconditionally available right after eval_nlp + the barrier/complementarity block --
+// before any factorization -- and provably unchanged for the remainder of the
+// iteration (RHS's prim_grad()/eq_cons()/iq_cons()/all_cons() blocks and XSL's
+// slacks()/iq_lmults()/eq_lmults() are not written again until `XSL += alpha*DXSL`,
+// which only executes strictly after this iteration's earliest possible break).
+void tycho::solvers::PSIOPT::fill_residual_info(KKTVector &xsl, KKTVector &rhs, double pobj,
+                                                IterateInfo &iter) const {
 
     iter.prim_obj_ = pobj;
-    iter.barr_obj_ = bobj;
-    iter.mu_ = mu;
-    iter.p_pivots_ = this->kkt_sol_.ppivs();
     iter.kkt_inf_ = rhs.prim_grad().lpNorm<Eigen::Infinity>();
 
     double avgcomp = 0;
@@ -904,6 +916,14 @@ void tycho::solvers::PSIOPT::fill_iter_info(KKTVector &xsl, KKTVector &rhs, doub
 
     if (equal_cons_ > 0 || inequal_cons_ > 0)
         iter.all_con_norm_err_ = rhs.all_cons().norm();
+}
+
+void tycho::solvers::PSIOPT::fill_iter_info(KKTVector &xsl, KKTVector &rhs, double pobj,
+                                            double bobj, double mu, IterateInfo &iter) const {
+    this->fill_residual_info(xsl, rhs, pobj, iter);
+    iter.barr_obj_ = bobj;
+    iter.mu_ = mu;
+    iter.p_pivots_ = this->kkt_sol_.ppivs();
 }
 
 void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
@@ -1151,6 +1171,93 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // Assemble KKT gradient and factorize with inertia correction
         QPtimer.start();
         v_rhs.prim_grad() += PGX;
+
+        // PSIOPT 3.1 (perf/review-9 "check convergence before factorizing the
+        // converged iterate"): every residual converge_check() consumes is now
+        // fully determined -- kkt_inf_ reads prim_grad() (just updated above; the
+        // barrier writes later this iteration target the *disjoint* dual_grad()
+        // block, see psiopt.h:472-473 for prim_grad()/dual_grad()'s segment
+        // boundaries), econ_inf_/icon_inf_ read eq_cons()/iq_cons() (set by
+        // eval_nlp + apply_reset_slacks above, before this point), and barr_inf_ is
+        // the complementarity(slacks, iq_lmults) computed above from XSL, which
+        // itself is not written again until `XSL += alpha*DXSL` below this loop's
+        // exit check -- i.e. strictly after this iteration's earliest possible
+        // break. So converge_check() sees byte-identical residual inputs whether
+        // it runs here or at its original post-line-search position: firing here
+        // cannot change WHICH verdict is reached, it only skips the
+        // factor+solve+line-search that a CONVERGED/ACCEPTABLE/DIVERGING iterate
+        // never needed (that work only ever feeds `XSL += alpha*DXSL`, which those
+        // three exit codes never reach).
+        this->fill_residual_info(v_xsl, v_rhs, prim_obj, Citer);
+        iters.push_back(Citer);
+        ConvergenceFlags PreExitCode = this->converge_check(iters);
+        if (PreExitCode == ConvergenceFlags::CONVERGED ||
+            PreExitCode == ConvergenceFlags::ACCEPTABLE ||
+            PreExitCode == ConvergenceFlags::DIVERGING) {
+            // Converged/acceptable/(residual-)diverging before ever factorizing
+            // this iterate. The un-set fields -- mu_, barr_obj_, alpha_p/d/t_,
+            // h_facs_, h_pert_/_cum_, p_pivots_, ls_iters_, merit_val_ -- stay at
+            // IterateInfo's fresh per-iteration defaults (0, or 1.0 for the
+            // alphas): there is no factorization, barrier update, or line search to
+            // report. This is the one accepted, cosmetic change versus today: the
+            // final printed row's Mu/Bar Obj/AlphaP/AlphaD/AlphaT/LS/PPS/HF/HPert
+            // columns read as defaults rather than a wasted factorization's real
+            // values. Nothing that feeds the verdict, the returned primals, or
+            // print_exit_stats reads any of those fields (converge_check() and
+            // print_exit_stats read only prim_obj_/kkt_inf_/barr_inf_/econ_inf_/
+            // icon_inf_, and return_best_'s criteria switch below reads only
+            // econ_inf_/icon_inf_/kkt_inf_/prim_obj_ -- all of which
+            // fill_residual_info() already set correctly above).
+            QPtimer.stop();
+            ExitCode = PreExitCode;
+
+            if (settings_.return_best_) {
+                double critval;
+                switch (settings_.best_criteria_) {
+                case BestCriteriaModes::ECONS:
+                    critval = iters.back().econ_inf_;
+                    break;
+                case BestCriteriaModes::ICONS:
+                    critval = iters.back().icon_inf_;
+                    break;
+                case BestCriteriaModes::KKT:
+                    critval = iters.back().kkt_inf_;
+                    break;
+                case BestCriteriaModes::OBJ:
+                    critval = iters.back().prim_obj_;
+                    break;
+                default:
+                    throw std::invalid_argument("Unknown BestCriteriaModes");
+                }
+                if (critval <= BestCriteriaVal || i == 0) {
+                    BestCriteriaVal = critval;
+                    BestXSL = XSL;
+                    BestRHS = RHS;
+                    BestIter = i;
+                }
+            }
+
+            if (this->late_callback_enabled_) {
+                CBtimer.start();
+                this->late_callback_(iters.back(), XSL, RHS);
+                CBtimer.stop();
+            }
+
+            if (settings_.print_level_ == 0) {
+                Printtimer.start();
+                this->print_last_iterate(iters);
+                Printtimer.stop();
+            }
+
+            if (ExitCode != ConvergenceFlags::CONVERGED && settings_.return_best_) {
+                XSL = BestXSL;
+                RHS = BestRHS;
+            }
+
+            this->result_.converge_flag_ = ExitCode;
+            break;
+        }
+        iters.pop_back();
 
         double nhpert = 0;
         // Display-only accumulator (PSIOPT 2.4): the cumulative inertia-perturbation

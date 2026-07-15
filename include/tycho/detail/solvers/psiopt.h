@@ -599,6 +599,16 @@ class PSIOPT {
                   Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
 
     // --- Convergence and stepping ---
+    // PSIOPT 3.1: the residual formulas shared by the pre-factorization early
+    // convergence check and the post-line-search fill_iter_info() call live here
+    // ONCE, so neither call site can drift out of sync. fill_residual_info() sets
+    // every IterateInfo field derivable from rhs/xsl alone (valid immediately after
+    // eval + the barrier/complementarity block, before any factorization). It
+    // deliberately does NOT set barr_obj_/mu_ (only settled once the barrier-
+    // parameter update runs, later this iteration) or p_pivots_ (kkt_sol_.ppivs(),
+    // which only reflects a real value once this iteration's factorization has
+    // actually run) -- see the definition in psiopt.cpp for the full rationale.
+    void fill_residual_info(KKTVector &xsl, KKTVector &rhs, double pobj, IterateInfo &iter) const;
     void fill_iter_info(KKTVector &xsl, KKTVector &rhs, double pobj, double bobj, double mu,
                         IterateInfo &iter) const;
     ConvergenceFlags converge_check(std::vector<IterateInfo> &iters);
