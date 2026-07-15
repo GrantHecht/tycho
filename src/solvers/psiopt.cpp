@@ -821,7 +821,12 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
 #ifdef USE_ACCELERATE_SPARSE
     accelerate_set_num_threads(settings_.qp_threads_);
 #else
-    mkl_set_num_threads(settings_.qp_threads_);
+    // Thread-local, not global: only the calling thread's Pardiso thread
+    // count is affected, so concurrent PSIOPT drivers in the same process
+    // (or on other threads) cannot clobber each other's setting. Return
+    // value (previous local count) is intentionally discarded — this is a
+    // fire-and-forget set, matching the prior global-setter semantics.
+    mkl_set_num_threads_local(settings_.qp_threads_);
 #endif
 
     this->nlp_->analyze_sparsity(this->kkt_sol_.get_matrix());
@@ -1659,12 +1664,33 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
     // Re-apply the QP threading setting on every solve entry, not just in
     // set_nlp() (which only runs on transcribe): a single-thread pin left on
     // this thread by another component (e.g. Jet's per-job pin — thread-local
-    // BLASSetThreading on macOS 15+) must not silently single-thread reused
-    // solves.
+    // BLASSetThreading on macOS 15+, or detail::MklLocalPinGuard in jet.h on
+    // the MKL side) must not silently single-thread reused solves.
+    //
+    // This re-apply is NOT redundant now that the MKL setter below is
+    // thread-local rather than global — if anything it is MORE load-bearing:
+    // a nonzero thread-local override takes priority over the process-global
+    // value on that thread until explicitly reset, so a *global* re-apply
+    // could never have actually overridden a lingering local pin in the
+    // first place. A solve driven through Jet::map runs jet_run() ->
+    // solve()/optimize() -> run_phase_sequence() on the pool worker thread
+    // *while still inside* detail::MklLocalPinGuard's scope (jet.h), which
+    // has pinned that thread's local MKL thread count to 1. The explicit
+    // thread-local set here is what makes this thread (whichever one is
+    // calling) actually run Pardiso with this driver's own qp_threads_,
+    // instead of silently inheriting whatever local value a previous
+    // occupant left behind. In the Jet::map case specifically,
+    // jet_initialize() forces qp_threads_ == 1 (via set_num_partitions(1, 1)),
+    // so this re-apply sets the local value to 1 — consistent with, and
+    // redundant to, the guard's own pin — but for any other thread reusing a
+    // pool worker outside of Jet, this call is what restores the driver's
+    // intended thread count on its own calling thread.
 #ifdef USE_ACCELERATE_SPARSE
     accelerate_set_num_threads(settings_.qp_threads_);
 #else
-    mkl_set_num_threads(settings_.qp_threads_);
+    // Return value (previous local count) intentionally discarded; see the
+    // set_nlp() call site above for the fire-and-forget rationale.
+    mkl_set_num_threads_local(settings_.qp_threads_);
 #endif
 
     if (settings_.print_level_ == 0)
