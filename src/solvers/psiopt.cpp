@@ -1071,6 +1071,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     Eigen::VectorXd RHS2(this->kkt_dim_);
     Eigen::VectorXd PGX(this->primal_vars_);
 
+    // Per-phase: print_exit_stats reports this phase's factorization status, so
+    // a status left over from an earlier phase in the sequence must not leak in.
+    this->result_.last_kkt_info_ = Eigen::Success;
+
     Eigen::VectorXd Temp(this->kkt_dim_);
 
     // Reserve-once: bind to persistent member scratch instead of a fresh empty

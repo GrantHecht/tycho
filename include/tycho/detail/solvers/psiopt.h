@@ -225,8 +225,9 @@ class PSIOPT {
         int factor_flops_ = 0;
 
         // T6 (dead-status fix): the last non-Success status observed from
-        // kkt_sol_.info() by factor_impl(), across all phases run since the last
-        // reset_accumulators(). kkt_sol_.info() was previously computed by every
+        // kkt_sol_.info() by factor_impl() within the CURRENT phase (alg_impl
+        // resets it on entry, so print_exit_stats reports per-phase status).
+        // kkt_sol_.info() was previously computed by every
         // Compute()/Refactor() call and never read anywhere; this field is purely
         // observational (surfaced by print_exit_stats()) and does not feed back into
         // any control-flow decision in factor_impl -- see the comment there.
