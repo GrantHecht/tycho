@@ -154,15 +154,19 @@ void tycho::solvers::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &
     fmt::print(Icol, "{:>10.4e}", last.icon_inf_);
     chash(IHashcol);
 
+    // PSIOPT 2.4 (display-only carve-out): the HPert column shows the CUMULATIVE
+    // perturbation total (h_pert_cum_), not the last delta (h_pert_). h_pert_
+    // itself is untouched and still feeds the Hpert0 warm-start in alg_impl() --
+    // only this print statement's source field changed.
     if (settings_.wide_console_) {
         fmt::print(
             "{:>9.3e}|{:>9.3e}|{:>8.2e}|{:>8.2e}|{:>8.2e}|{:>10.3e}|{:>3}|{:>3}|{:>3}|{:>6.1e}|\n",
             last.max_e_mult_, last.max_i_mult_, last.alpha_p_, last.alpha_d_, last.alpha_t_,
-            last.merit_val_, last.ls_iters_, last.p_pivots_, last.h_facs_, last.h_pert_);
+            last.merit_val_, last.ls_iters_, last.p_pivots_, last.h_facs_, last.h_pert_cum_);
     } else {
         fmt::print("{:>8.2e}|{:>8.2e}|{:>2}|{:>5}|{:>2}|{:>6.1e}|\n", last.alpha_t_ * last.alpha_p_,
                    last.alpha_t_ * last.alpha_d_, last.ls_iters_, last.p_pivots_, last.h_facs_,
-                   last.h_pert_);
+                   last.h_pert_cum_);
     }
 }
 

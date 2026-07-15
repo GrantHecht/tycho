@@ -977,7 +977,7 @@ tycho::ConvergenceFlags tycho::solvers::PSIOPT::converge_check(std::vector<Itera
 // perturb the primal diagonal by increasing amounts until correct inertia is
 // achieved or max_refac_ attempts are exhausted.
 int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt, double incpurt0,
-                                        double incpurt, double &finalpert) {
+                                        double incpurt, double &finalpert, double &cumpert) {
     auto Inertia = [&]() {
         return this->kkt_sol_.neigs() - (this->equal_cons_ + this->inequal_cons_);
     };
@@ -1017,6 +1017,7 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
     auto Refactor = [&]() { this->kkt_sol_.refactorize_internal(); };
     auto Compute = [&]() { this->kkt_sol_.compute_internal(); };
     int IncEigs;
+    cumpert = 0.0;
 
     if (Zfac || docompute) {
         if (!docompute)
@@ -1034,6 +1035,11 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
 
     for (int i = 0; i < settings_.max_refac_; i++) {
         Perturb(p);
+        // Display-only accumulator (PSIOPT 2.4): the running sum of every
+        // Perturb() delta applied so far this call -- i.e. the actual total added
+        // to the KKT diagonal. Tracked purely for the HPert column; `finalpert`
+        // below (the last delta, consumed by the Hpert0 warm-start) is untouched.
+        cumpert += p;
         Refactor();
         CheckInfo();
         RankDef();
@@ -1138,6 +1144,11 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         v_rhs.prim_grad() += PGX;
 
         double nhpert = 0;
+        // Display-only accumulator (PSIOPT 2.4): the cumulative inertia-perturbation
+        // total for this iteration's factor_impl() call, for the HPert table column.
+        // Kept fully separate from nhpert (the last delta), which alone feeds the
+        // Hpert0 warm-start below -- see the comment at that read site.
+        double nhpert_cum = 0;
         double Incr = settings_.incr_h_;
         double Incr2 = settings_.incr_h_;
         if (FirstPert)
@@ -1160,17 +1171,21 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             Zfac = !cycling;
         }
 
-        Citer.h_facs_ = this->factor_impl(false, Zfac, Hpert0, Incr, Incr2, nhpert);
+        Citer.h_facs_ = this->factor_impl(false, Zfac, Hpert0, Incr, Incr2, nhpert, nhpert_cum);
         // Note: if factor_impl exhausted all perturbation attempts (h_facs_ == max_refac_),
         // we proceed rather than aborting. The line search evaluates actual function values
         // and will reject truly bad steps by reducing alpha. Forcing GoodStep=false here
         // would be an algorithmic change that could break existing convergence behavior.
 
         if (Citer.h_facs_ > 0) {
+            // Hpert0 warm-start MUST keep consuming nhpert (the last perturbation
+            // DELTA) byte-identically -- do not substitute nhpert_cum here (see
+            // PSIOPT 2.4 comment above nhpert_cum's declaration).
             Hpert0 = std::max(settings_.delta_h_, nhpert * settings_.decr_h_);
             FirstPert = false;
         }
         Citer.h_pert_ = nhpert;
+        Citer.h_pert_cum_ = nhpert_cum;
 
         // Update barrier parameter and compute search direction
         if (this->inequal_cons_ > 0) {

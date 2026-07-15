@@ -549,8 +549,15 @@ class PSIOPT {
                           const PenaltyTerms &init) const;
 
     // --- KKT factorization (defined in psiopt.cpp) ---
+    // `finalpert` is the last perturbation DELTA applied via Perturb() -- this is
+    // the exact value alg_impl's Hpert0 warm-start consumes today and must keep
+    // consuming byte-identically (see the comment at its call site). `cumpert` is
+    // a separate, display-only accumulator: the running SUM of every Perturb()
+    // delta applied during this call (i.e. the actual total added to the KKT
+    // diagonal), used only for the HPert iteration-table column. Neither
+    // `finalpert` nor any control-flow decision in factor_impl reads `cumpert`.
     int factor_impl(bool docompute, bool ZFac, double ipurt, double incpurt0, double incpurt,
-                    double &finalpert);
+                    double &finalpert, double &cumpert);
 
     bool analyze_kkt_matrix();
 

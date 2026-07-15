@@ -39,6 +39,14 @@ struct IterateInfo {
     double h_pert_ = 0;
     int h_facs_ = 0;
 
+    // PSIOPT 2.4 (display-only carve-out): the running total of every inertia-
+    // perturbation delta applied to the KKT diagonal during this iteration's
+    // factor_impl() call (i.e. the actual cumulative perturbation, as opposed to
+    // h_pert_ above, which is only the LAST delta). Split into its own field so the
+    // HPert table column can show the cumulative total without touching h_pert_'s
+    // existing meaning or its Hpert0 warm-start producer/consumer in alg_impl().
+    double h_pert_cum_ = 0;
+
     double kkt_norm_err_ = 0;
     double barr_norm_err_ = 0;
     double econ_norm_err_ = 0;
