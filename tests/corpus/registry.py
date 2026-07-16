@@ -21,4 +21,13 @@ ALL_PROBLEMS: list[str] = [
     "deg_zero_objective",
     "deg_redundant_defects",
     "deg_near_infeasible",
+    # --- Task 3: in-domain hard tier ---
+    "hard_vanderpol",
+    "hard_brach_coldstart",
+    "hard_brach_illscaled",
+    "hard_zermelo_wrongbasin",
+    "hard_mountaincar_badguess",
+    "hard_lowthrust_badguess",
+    "hard_cartpole_tightbounds",
+    "hard_hypersens_stiff",
 ]
