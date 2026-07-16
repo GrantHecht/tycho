@@ -246,6 +246,62 @@ One JSON object per line, one line per (problem, repeat):
   wall-clock read in the whole system, and it lives in the parent, never in
   a problem module's `build_and_solve`.
 
+## Literature tier (Task 4)
+
+The literature tier's problems (`lit_*.py`) are small, static (dynamics-free)
+NLPs from the optimization literature, each chosen because a specific class
+of NLP algorithm is documented to struggle on it (jamming, the Maratos
+effect, a failed constraint qualification, bad scaling, merit-function
+cycling). Unlike the degenerate/hard tiers, these are NOT built as an
+`ODEBase` + `phase()` with trivial dynamics -- tychopy exposes a first-class
+static-NLP container, `tychopy.solvers.OptimizationProblem` (mirrored 1:1
+from `_tychopy.solvers.OptimizationProblem`; see
+`tychopy/_stubs/_tychopy/solvers.pyi` and its exerciser at
+`tychopy/test/test_FullProblems/test_RosenBrock.py`), so every `lit_*`
+module uses that directly instead of a workaround phase:
+
+```python
+prob = tychopy.solvers.OptimizationProblem()
+prob.set_vars([...])                          # initial guess, plain list/ndarray
+prob.add_objective(scalar_func, [indices])     # optional -- omit entirely for
+                                                # a pure-feasibility problem
+prob.add_equal_con(vector_func, [indices])     # g(x) == 0
+prob.add_inequal_con(vector_func, [indices])   # g(x) <= 0  (see below)
+flag = prob.optimize()
+prob.return_vars()
+```
+
+`add_objective`/`add_equal_con`/`add_inequal_con` each take a
+`tychopy.vector_functions` expression (built from `Arguments(n)`, exactly
+as in phase-based constraints) and a list of variable indices into the flat
+vector passed to `set_vars`; the expression's input width must equal
+`len(indices)`. There is no separate variable-bounds API on
+`OptimizationProblem` (unlike `Phase`'s `add_lu_var_bound` etc.) -- simple
+bounds like `x_i >= 0` are encoded as ordinary inequality constraints
+(`-x_i <= 0`).
+
+**Inequality sign convention**: PSIOPT's `add_inequal_con` (both on `Phase`
+and on `OptimizationProblem`) requires the constraint function to be
+`<= 0` at a feasible point -- confirmed in
+`doc-legacy/tutorials/PhaseGuide.rst`, "Inequality Constraints" section:
+"we assume our function is in the feasible region whenever its value is
+negative." A literature-problem constraint stated as `h(x) >= 0` in its
+source is therefore encoded here as `-h(x) <= 0`.
+
+Every `lit_*` module's docstring records: the full citation for its source,
+the exact verified formulation (quoted from the source where the source
+was directly readable, or from a secondary source that itself quotes the
+primary verbatim, when the primary was paywalled/unreachable), where it was
+verified (URL and/or edition), and any correction made to the Task 4
+brief's starting formula. `lit_cycling.py` (the Chamberlain, Powell,
+Lemarechal, Pedersen 1982 watchdog-paper cycling example) is **not**
+present: the paper (Mathematical Programming Study 16, 1982) is paywalled
+on SpringerLink with no accessible preprint, and no secondary source found
+reproduces its actual motivating example (as opposed to merely citing the
+paper's existence/topic) -- per the binding rule for this task, the
+problem was skipped rather than implemented from memory. The corpus's
+target range is 15-25 problems; 17 without it is within range.
+
 ## Task 1 stub problems (throwaway)
 
 `stub_converges.py` and `stub_fails.py` are **not** real corpus problems —

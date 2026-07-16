@@ -30,4 +30,15 @@ ALL_PROBLEMS: list[str] = [
     "hard_lowthrust_badguess",
     "hard_cartpole_tightbounds",
     "hard_hypersens_stiff",
+    # --- Task 4: literature tier ---
+    # lit_cycling (Chamberlain-Powell-Lemarechal-Pedersen 1982 watchdog-paper
+    # cycling example) is deliberately NOT registered: the paper is
+    # paywalled and no accessible reproduction of its actual motivating
+    # example (as opposed to just its topic) was found. See
+    # tests/corpus/README.md, "Literature tier" section, for the record of
+    # what was checked. Corpus target is 15-25; 17 without it is fine.
+    "lit_wb2000",
+    "lit_maratos",
+    "lit_hs13",
+    "lit_powell_badscaled",
 ]
