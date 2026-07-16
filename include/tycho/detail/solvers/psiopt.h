@@ -52,6 +52,16 @@ namespace tycho::solvers {
 using tycho::ConstEigenRef;
 using tycho::EigenRef;
 
+// E2 G1 globalization extraction: PSIOPT owns its step-acceptance strategy
+// through a std::unique_ptr<AcceptanceStrategy>. Only the forward declaration
+// is needed here (the complete type lives in
+// detail/solvers/globalization/acceptance_strategy.h, which includes THIS
+// header — so psiopt.h must not include it back). Because the member is a
+// unique_ptr to this incomplete type, PSIOPT's constructors and destructor are
+// declared here and defined out-of-line in psiopt.cpp, where the concrete
+// ClassicMeritAcceptance is complete.
+class AcceptanceStrategy;
+
 class PSIOPT {
   public:
     enum class BarrierModes { PROBE, LOQO };
@@ -268,14 +278,14 @@ class PSIOPT {
     using LateCallBackType =
         std::function<int(const IterateInfo &, ConstEigenRef<VectorXd>, ConstEigenRef<VectorXd>)>;
 
-    // --- Constructors ---
-    PSIOPT() {
-        settings_.qp_threads_ = std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count());
-    }
-    PSIOPT(std::shared_ptr<NonLinearProgram> np) {
-        settings_.qp_threads_ = std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count());
-        this->set_nlp(np);
-    }
+    // --- Constructors / destructor ---
+    // Defined out-of-line in psiopt.cpp: the unique_ptr<AcceptanceStrategy>
+    // member forces even the constructors' exception-cleanup paths (and the
+    // destructor) to see the complete AcceptanceStrategy type, which is only
+    // available in the .cpp. Bodies are otherwise unchanged.
+    PSIOPT();
+    PSIOPT(std::shared_ptr<NonLinearProgram> np);
+    ~PSIOPT();
 
     // --- Accessors ---
     /// Returns a mutable reference to the settings struct. Direct writes bypass
@@ -390,6 +400,13 @@ class PSIOPT {
     Settings settings_;
     SolveResult result_;
     std::shared_ptr<NonLinearProgram> nlp_;
+
+    // E2 G1: classic merit line-search acceptance, extracted from the former
+    // ls_impl/ls_lang/ls_l1/ls_auglang bodies (now ClassicMeritAcceptance). Held
+    // through the AcceptanceStrategy interface (forward-declared above); rebuilt
+    // by set_nlp() wired to a SolverContext view of this solver. Never null once
+    // set_nlp has run, which run_phase_sequence guarantees before any solve.
+    std::unique_ptr<AcceptanceStrategy> acceptance_;
 
     // QP parameter setup — called automatically by set_nlp()
     void set_qp_params();
@@ -526,37 +543,11 @@ class PSIOPT {
 
     Eigen::VectorXd init_impl(const Eigen::VectorXd &x, double Mu, bool docompute);
 
-    // --- Line search (defined in psiopt.cpp) ---
-    double ls_impl(LineSearchModes lsmode, double obj_scale, double Mu, double prim_obj,
-                   double barr_obj, Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL,
-                   Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS, Eigen::VectorXd &RHS2,
-                   IterateInfo &Citer, const std::vector<IterateInfo> &iters);
-
-    double ls_lang(double obj_scale, double mu, double prim_obj, double barr_obj, KKTVector &xsl,
-                   KKTVector &dxsl, KKTVector &xsl2, KKTVector &rhs, KKTVector &rhs2,
-                   IterateInfo &citer);
-
-    double ls_l1(double obj_scale, double mu, double prim_obj, double barr_obj, KKTVector &xsl,
-                 KKTVector &dxsl, KKTVector &xsl2, KKTVector &rhs, KKTVector &rhs2,
-                 IterateInfo &citer);
-
-    double ls_auglang(double obj_scale, double mu, double prim_obj, double barr_obj, KKTVector &xsl,
-                      KKTVector &dxsl, KKTVector &xsl2, KKTVector &rhs, KKTVector &rhs2,
-                      IterateInfo &citer);
-
-    // --- Line search shared helpers ---
-    struct PenaltyTerms {
-        double l1_, l2_, linf_;
-    };
-
-    void eval_trial_point_occ(double obj_scale, double mu, double alpha, KKTVector &xsl,
-                              KKTVector &dxsl, KKTVector &xsl2, KKTVector &rhs2, double &ptest,
-                              double &btest);
-
-    PenaltyTerms compute_penalties(KKTVector &xsl, KKTVector &rhs) const;
-
-    bool secondary_accept(double ptest, double prim_obj, const PenaltyTerms &test,
-                          const PenaltyTerms &init) const;
+    // --- Line search ---
+    // The classic merit line search (former ls_impl/ls_lang/ls_l1/ls_auglang and
+    // their eval_trial_point_occ/compute_penalties/secondary_accept helpers) was
+    // extracted verbatim into ClassicMeritAcceptance (E2 G1, Task 2); alg_impl
+    // now calls acceptance_->classic_line_search(...).
 
     // --- KKT factorization (defined in psiopt.cpp) ---
     // `finalpert` is the last perturbation DELTA applied via Perturb() -- this is
