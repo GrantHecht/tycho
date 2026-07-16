@@ -69,7 +69,7 @@ class BarrierGovernor {
     // implementation that blends with the previous mu (G4, Fiacco-McCormick
     // rule); G1's free-mode PROBE/LOQO oracles do not read it (they compute
     // an entirely new mu from avgcomp/mincomp, then the common tail clamps
-    // it against ctx.settings.min_mu_/max_mu_) — unused on the classic path,
+    // it against ctx.settings_.min_mu_/max_mu_) — unused on the classic path,
     // analogous to AcceptanceStrategy's generic-interface stubs.
     //
     // Returns the new (already-clamped) mu; barr_obj is an out-parameter

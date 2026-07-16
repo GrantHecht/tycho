@@ -59,7 +59,7 @@ namespace tycho::solvers {
 // The concrete sparse KKT factorization type, mirroring PSIOPT::kkt_sol_'s
 // declaration (psiopt.h) exactly — same macro guard, same template
 // arguments. Components never choose or construct this type; they only ever
-// see it through SolverContext::kkt_solver, driving solves/refactors that
+// see it through SolverContext::kkt_solver_, driving solves/refactors that
 // PSIOPT itself still owns.
 #ifdef USE_ACCELERATE_SPARSE
 using KktSolverType =
@@ -82,14 +82,14 @@ struct SolverContext {
     // Acceptance (eval_trial_point_occ/eval_rhs) and BarrierGovernor
     // (barrier_hessian) call sites once wired. Raw, non-owning pointer:
     // PSIOPT retains the owning std::shared_ptr<NonLinearProgram>.
-    NonLinearProgram *nlp;
+    NonLinearProgram *nlp_;
 
     // dossier §6: `kkt_sol_` — "factor_impl, all solves, ppivs/neigs/peigs" —
     // read (solve) by BarrierGovernor's PROBE predictor solve and by the
     // (not-yet-extracted) main step solve; written (factor/refactor) by
     // RecoveryChain's future inertia-ladder dispatch. Reference: PSIOPT
     // retains ownership of the actual Eigen solver object.
-    KktSolverType &kkt_solver;
+    KktSolverType &kkt_solver_;
 
     // dossier §6: `settings_.*` rows — every globalization component reads a
     // disjoint subset (max_ls_iters_/alpha_red_ -> Acceptance;
@@ -100,31 +100,31 @@ struct SolverContext {
     // convergence checking). Bundled as one const reference rather than
     // split per-component to match the "no wiring yet" scope of Task 1 — no
     // component reads through it until Task 2+.
-    const PSIOPT::Settings &settings;
+    const PSIOPT::Settings &settings_;
 
     // --- Problem dimensions (dossier §6: "shared (immutable during solve)") ---
     // References (not copies) into PSIOPT's own dimension members: they are
     // fixed for the lifetime of a solve, but SolverContext never takes a
     // snapshot — it always observes the live value.
-    const int &primal_vars;
-    const int &slack_vars;
-    const int &equal_cons;
-    const int &inequal_cons;
-    const int &kkt_dim;
+    const int &primal_vars_;
+    const int &slack_vars_;
+    const int &equal_cons_;
+    const int &inequal_cons_;
+    const int &kkt_dim_;
 
     // --- Reusable scratch buffers (dossier §6, "prospective owner" column) ---
     // stli_scratch_ / hp_scratch_: BarrierGovernor (complementarity() and
     // barrier_hessian()'s internal buffers, both read+write by the function
     // that owns them today; PSIOPT keeps the backing storage to avoid
     // per-call heap allocation, see psiopt.h:404-411).
-    Eigen::VectorXd &stli_scratch;
-    Eigen::VectorXd &hp_scratch;
+    Eigen::VectorXd &stli_scratch_;
+    Eigen::VectorXd &hp_scratch_;
 
     // best_xsl_scratch_ / best_rhs_scratch_: RecoveryChain (the return_best_
     // snapshot/restore machinery, psiopt.h:413-419). Read+write once the
     // best-iterate blocks are extracted (not in Task 1).
-    Eigen::VectorXd &best_xsl_scratch;
-    Eigen::VectorXd &best_rhs_scratch;
+    Eigen::VectorXd &best_xsl_scratch_;
+    Eigen::VectorXd &best_rhs_scratch_;
 };
 
 } // namespace tycho::solvers

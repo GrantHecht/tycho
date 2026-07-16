@@ -41,7 +41,7 @@ class RestorationStrategy {
 
     // Enter restoration mode. `reference` is the (θ,f) pair of the point
     // restoration was entered from (spec §4 G5b's exit test compares against
-    // it: "θ <= 0.9*θ_entry"); ctx gives access to the live NLP/settings a
+    // it: "θ <= 0.9*θ_entry"); ctx gives access to the live NLP/settings_ a
     // restoration sub-problem needs to construct itself.
     virtual void enter_restoration(const ProgressMeasures &reference, SolverContext &ctx) = 0;
 

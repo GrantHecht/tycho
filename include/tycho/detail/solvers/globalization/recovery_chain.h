@@ -61,7 +61,7 @@ class RecoveryChain {
     // `iters[...].h_facs_`, establishing precedent for recovery-adjacent
     // code needing history access, though that specific heuristic itself
     // stays in factor_impl per the scope note above). SolverContext gives
-    // access to settings (delta_h_/incr_h_/decr_h_/max_refac_ govern the
+    // access to settings_ (delta_h_/incr_h_/decr_h_/max_refac_ govern the
     // ladder a future inertia_mode shares state with) and the KKT solver a
     // SOC re-solve would reuse.
     virtual Action on_step_rejected(IterateInfo &Citer, const std::vector<IterateInfo> &iters,

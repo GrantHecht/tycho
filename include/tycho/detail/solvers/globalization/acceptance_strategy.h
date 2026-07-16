@@ -23,8 +23,8 @@
 // own (no XSL/DXSL/mu/iterate history members). Every quantity it needs is
 // either passed as an explicit per-call parameter (the per-iteration
 // transients: obj_scale, mu, prim_obj, barr_obj, the working vectors) or
-// reached through a SolverContext reference passed to the call (settings,
-// dims, nlp) — never cached across calls. reset() is the μ-event/phase-
+// reached through a SolverContext reference passed to the call (settings_,
+// dims, nlp_) — never cached across calls. reset() is the μ-event/phase-
 // change hook: called whenever PSIOPT starts a new phase (run_phase_sequence)
 // or the barrier parameter is reset, so a stateful G2+ strategy (e.g. a
 // filter that must clear its (θ,f) pairs) has a defined place to do it. G1's

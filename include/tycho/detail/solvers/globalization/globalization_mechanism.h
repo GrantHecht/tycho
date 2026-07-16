@@ -65,7 +65,7 @@ class GlobalizationMechanism {
     // note); XSL/DXSL/XSL2/RHS/RHS2 are therefore the same raw
     // Eigen::VectorXd blocks ls_impl/max_primal_dual_step operate on today.
     // bfrac and pd_step_strategy_ (today's max_primal_dual_step inputs) are
-    // NOT separate parameters here — they are read from `ctx.settings`
+    // NOT separate parameters here — they are read from `ctx.settings_`
     // (bound_fraction_ / pd_step_strategy_), since they are persistent
     // Settings, not per-iteration transients.
     //
