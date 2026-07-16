@@ -151,8 +151,14 @@ class PSIOPT {
         QPAlgModes qp_alg_ = QPAlgModes::Classic;
         QPOrderingModes qp_ord_ = QPOrderingModes::METIS;
         QPPivotModes qp_pivot_strategy_ = QPPivotModes::TwoByTwo;
+        // MKL Pardiso weighted matching (iparm[12]) / MPS scaling (iparm[10]), 0/1 flags.
+        // (matching=1, scaling=1) is MKL's documented recommendation for highly indefinite
+        // symmetric matrices (e.g. interior-point saddle-point KKT systems), and measured
+        // -16% wall on PolarLT (128/256seg) with perturbed pivots 95/120 -> 0/7 and unchanged
+        // iteration counts (docs/dev/analysis/2026-07-pr9-pardiso-options.md). Set scaling_ = 0
+        // to restore pre-PR-10 behavior.
         int qp_matching_ = 1;
-        int qp_scaling_ = 0;
+        int qp_scaling_ = 1;
         int qp_pivot_perturb_ = 8;
         int qp_ref_steps_ = 0;
         int qp_par_solve_ = 0;
