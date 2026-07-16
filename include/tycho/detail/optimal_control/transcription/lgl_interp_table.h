@@ -60,7 +60,7 @@ using vf::GenericFunction;
 /// rows for @c CS in @c {2,3,4} (LGL3/LGL5/LGL7); LGL7 (@c CS=4, @c Order=7) is
 /// the highest-order case today, so this is tied directly to
 /// @c LGLCoeffs<4>::Order rather than duplicated as a bare literal.
-/// @ref interp_block_gen, @ref LGLInterpTable::interp_block_deriv_gen, and
+/// @ref LGLInterpTable::interp_block_gen, @ref LGLInterpTable::interp_block_deriv_gen, and
 /// @ref LGLInterpTable::interp_block_deriv2_gen size their
 /// @c MaxVector<Scalar,kMaxLGLWeightRows> stack buffers to this bound
 /// (fixed-max-size, no heap fallback -- see the invariant comment at each
