@@ -26,6 +26,22 @@
 #include "tycho/detail/solvers/solver_init.h"
 #include "tycho/detail/utils/timer.h"
 
+// E2 G1 globalization component interfaces (scaffolding only — see
+// docs/superpowers/specs/2026-07-16-e2-psiopt-globalization-design.md §3).
+// Not wired to anything below yet; included here (rather than from
+// psiopt.h) so this, the actual TU that builds PSIOPT, exercises them on
+// every build without psiopt.h having to include a directory of headers
+// that themselves need the complete PSIOPT class (a circular-include
+// arrangement that is fragile for the "middle" headers below — see the
+// include-discipline note in solver_context.h). Dependency-ordered.
+#include "tycho/detail/solvers/globalization/progress_measures.h"
+#include "tycho/detail/solvers/globalization/solver_context.h"
+#include "tycho/detail/solvers/globalization/acceptance_strategy.h"
+#include "tycho/detail/solvers/globalization/globalization_mechanism.h"
+#include "tycho/detail/solvers/globalization/barrier_governor.h"
+#include "tycho/detail/solvers/globalization/recovery_chain.h"
+#include "tycho/detail/solvers/globalization/restoration.h"
+
 #ifndef USE_ACCELERATE_SPARSE
 #include <mkl.h>
 #endif
