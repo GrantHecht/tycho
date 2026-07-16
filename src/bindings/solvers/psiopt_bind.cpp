@@ -191,6 +191,8 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     BIND_SETTINGS_RW(obj, "force_qp_analysis", force_qp_analysis_, "");
     BIND_SETTINGS_VALIDATED(obj, "qp_ref_steps", qp_ref_steps_, set_qp_ref_steps, "");
     BIND_SETTINGS_VALIDATED(obj, "qp_pivot_perturb", qp_pivot_perturb_, set_qp_pivot_perturb, "");
+    BIND_SETTINGS_VALIDATED(obj, "qp_matching", qp_matching_, set_qp_matching, "");
+    BIND_SETTINGS_VALIDATED(obj, "qp_scaling", qp_scaling_, set_qp_scaling, "");
     BIND_SETTINGS_VALIDATED(obj, "qp_threads", qp_threads_, set_qp_threads, "");
     BIND_SETTINGS_RW(obj, "qp_pivot_strategy", qp_pivot_strategy_, "");
 

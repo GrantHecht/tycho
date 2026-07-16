@@ -414,6 +414,18 @@ void tycho::solvers::PSIOPT::set_qp_par_solve(int v) {
     settings_.qp_par_solve_ = v;
 }
 
+void tycho::solvers::PSIOPT::set_qp_matching(int v) {
+    if (v != 0 && v != 1)
+        throw std::invalid_argument(fmt::format("qp_matching must be 0 or 1, got {}", v));
+    settings_.qp_matching_ = v;
+}
+
+void tycho::solvers::PSIOPT::set_qp_scaling(int v) {
+    if (v != 0 && v != 1)
+        throw std::invalid_argument(fmt::format("qp_scaling must be 0 or 1, got {}", v));
+    settings_.qp_scaling_ = v;
+}
+
 void tycho::solvers::PSIOPT::set_obj_scale(double scale) {
     if (!std::isfinite(scale) || scale == 0.0)
         throw std::invalid_argument(
@@ -534,6 +546,12 @@ void tycho::solvers::PSIOPT::Settings::validate() const {
     if (qp_par_solve_ != 0 && qp_par_solve_ != 1)
         throw std::invalid_argument(
             fmt::format("qp_par_solve must be 0 or 1, got {}", qp_par_solve_));
+    if (qp_matching_ != 0 && qp_matching_ != 1)
+        throw std::invalid_argument(
+            fmt::format("qp_matching must be 0 or 1, got {}", qp_matching_));
+    if (qp_scaling_ != 0 && qp_scaling_ != 1)
+        throw std::invalid_argument(
+            fmt::format("qp_scaling must be 0 or 1, got {}", qp_scaling_));
 
     // --- Objective ---
     if (!std::isfinite(obj_scale_) || obj_scale_ == 0.0)

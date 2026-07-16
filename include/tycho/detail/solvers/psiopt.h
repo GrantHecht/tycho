@@ -151,6 +151,13 @@ class PSIOPT {
         QPAlgModes qp_alg_ = QPAlgModes::Classic;
         QPOrderingModes qp_ord_ = QPOrderingModes::METIS;
         QPPivotModes qp_pivot_strategy_ = QPPivotModes::TwoByTwo;
+        // MKL Pardiso weighted matching (iparm[12]) / MPS scaling (iparm[10]), 0/1 flags.
+        // Matching stays ON by default; scaling stays OFF by default. Enabling scaling
+        // (qp_scaling=1) measured -16% wall on PolarLT-class collocation problems and drops
+        // perturbed pivots 95/120 -> ~0, but on the full example suite it deterministically
+        // degraded convergence elsewhere (Delta3Launch CONVERGED->ACCEPTABLE, TopputtoLowThrust
+        // 5.4x iterations, intermittent MultiSpacecraft divergence) — see
+        // docs/dev/analysis/2026-07-pr9-pardiso-options.md. Opt in via the qp_scaling knob.
         int qp_matching_ = 1;
         int qp_scaling_ = 0;
         int qp_pivot_perturb_ = 8;
@@ -334,6 +341,8 @@ class PSIOPT {
     void set_neg_slack_reset(double val);
     void set_qp_threads(int n);
     void set_qp_pivot_perturb(int v);
+    void set_qp_matching(int v);
+    void set_qp_scaling(int v);
     void set_qp_ref_steps(int v);
     void set_qp_par_solve(int v);
     void set_obj_scale(double scale);

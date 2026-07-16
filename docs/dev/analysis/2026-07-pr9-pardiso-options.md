@@ -167,3 +167,35 @@ was observed here. The flip should be its own PR with:
 - Single machine (Zen 3, AVX2), single MKL version (2026.0), `qp_threads_=8`. The two-level
   conclusion in particular ("no effect") should be rechecked if tycho is ever run with
   substantially larger KKT systems or ≥ 16 Pardiso threads.
+
+## 2026-07-16 full-suite follow-up (PR 10 gate) — default flip dropped
+
+**Method:** PR 10 branch flipped `qp_scaling_` 0→1; full CA gate ran on all 34 examples + ctest
++ pytest + CBWR iteration audit ×2 + 7-rep benches, at `main` = `5b679450`.
+
+**Perf (7-rep medians, confirms the two-family study):** `PolarLT_128seg` 82.28→69.18 ms
+(−15.9 %), `PolarLT_128seg_MTMetis` 81.70→67.59 ms (−17.3 %), `PolarLT_256seg` 149.59→125.88 ms
+(−15.8 %); `Brach_16seg` +2.2 %, `Brach_32seg` +2.1 %, `Brach_32seg_MTMetis` +1.8 % (small
+consistent cost; the study had called Brach neutral).
+
+**Convergence regressions (all reproduced deterministically unless noted):**
+
+- `test_Delta3Launch` CONVERGED→ACCEPTABLE in 4 transcription combos
+  (HighestOrderSpline/BlockConstant × LGL3/LGL7/Trapezoidal subset), identical across 3 runs.
+- `TopputtoLowThrust` 203→1102 iterations (5.4×), stable across two CBWR captures.
+- `cpp_example_multi_spacecraft_opt_builder` intermittently DIVERGES (PASS/FAIL/PASS reruns;
+  KKT Inf ~9e28 at the `ltacc=0.005` continuation step).
+- `MultiSpacecraftOptimization.py` repeat-to-repeat iteration spread widened from 1928/1814
+  (main) to 1665/2685 (branch).
+
+**Other deterministic iteration deltas:** regressions — `OptimalDocking` 276→305,
+`MultiPhaseCannon` 15→18, `Zermelo` 1096→1131; improvements — `BrysonDenham` 30→26,
+`FreeFlyingRobot` 38→34, `MultiPhaseZermelo` 577→571, `DionysusLowThrust` 59→53. All 34 Python
+examples still passed end-to-end.
+
+**Conclusion:** the two-family study's "iterations bit-identical" did not generalize — scaling
+alters pivoting broadly. Default stays (`matching=1`, `scaling=0`). `(1, 1)` ships as a
+per-problem opt-in via the new `qp_scaling` Python knob; recommended for PolarLT-class
+(many-perturbed-pivot) problems. Revisit under the E2 program once globalization/recovery
+machinery exists to catch scaling-induced failures (the E2 G0 corpus should include the
+Delta3/Topputto/MSO configurations as evidence problems).
