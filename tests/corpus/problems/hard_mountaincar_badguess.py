@@ -56,6 +56,9 @@ several manual probing runs (hitting ``max_iters`` deterministically on
 both stages), but the objective value at that point is NOT guaranteed
 byte-identical run to run. This is documented here rather than fought, per
 the brief's guidance for the (separately) noisy SimpleLowThrust parent.
+
+Deviation from parent: ``phase.optimizer.set_print_level(1)`` omitted
+(cosmetic; harness iteration instrument unaffected at print_level<2).
 """
 
 import numpy as np

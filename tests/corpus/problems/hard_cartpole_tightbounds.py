@@ -44,6 +44,9 @@ SimpleLowThrust/MountainCar/Zermelo (which changes iteration counts and
 objectives at a macroscopically visible level) and does not affect the
 harness's reported ``iterations``/``flag``, only the least-significant
 digits of ``objective``.
+
+Deviation from parent: ``phase.optimizer.set_print_level(1)`` omitted
+(cosmetic; harness iteration instrument unaffected at print_level<2).
 """
 
 import numpy as np

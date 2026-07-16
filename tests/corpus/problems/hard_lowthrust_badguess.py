@@ -44,6 +44,9 @@ variant is fully deterministic in practice: it fails on iteration 1,
 before any of the numerically sensitive accumulated-solve-path behavior
 that makes the parent's own multi-solve sequence noisy has a chance to
 manifest.
+
+Deviation from parent: ``phase.optimizer.set_print_level(1)`` omitted
+(cosmetic; harness iteration instrument unaffected at print_level<2).
 """
 
 import numpy as np
