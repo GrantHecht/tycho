@@ -1,85 +1,105 @@
 """tests/corpus/problems/deg_redundant_defects.py — E2 G0 degenerate tier.
 
-Baseline problem: a double-integrator rest-to-rest maneuver.
+Baseline problem: a double-integrator rest-to-rest maneuver, extended with
+one inert "shadow" state that mirrors the velocity exactly.
 
-    states:   x, v
+    states:   x, v, w
     control:  u
-    dynamics: xdot = v, vdot = u
+    dynamics: xdot = v, vdot = u, wdot = u   (w integrates the SAME control
+                                               input as v)
     t in [0, 1], LGL3 collocation, 32 segments
 
-    boundary conditions: x(0) = 0, v(0) = 0, x(1) = 1, v(1) = 0, t(1) = 1
+    boundary conditions: x(0) = 0, v(0) = 0, w(0) = 0, t(0) = 0,
+                          x(1) = 1, v(1) = 0, t(1) = 1
+                          (w is deliberately left UNconstrained at Back —
+                          see the redundancy argument below)
     objective: minimize 0.5 * integral(u^2) dt
 
-Note on time: the phase's node "t" (index 2 of [x, v, t, u]) is itself a
+Note on time: the phase's node "t" (index 3 of [x, v, w, t, u]) is itself a
 free decision variable in this collocation formulation, not automatically
 tied to [0, 1] just because the initial guess spans that range, so t is
 pinned explicitly at Front (t = 0) and Back (t = 1) to match the brief's
-stated "t in [0, 1]" fixed-duration setup — this matters a great deal
-here specifically, since the u*(t) = 6 - 12t derivation below assumes a
-genuinely fixed T = 1; verified empirically that an un-pinned Back time
-lets the objective collapse toward 0 by silently stretching the effective
-transfer duration, invalidating the derivation.
+stated "t in [0, 1]" fixed-duration setup (an un-pinned Back time was
+verified, in the sibling module ``deg_dup_equality``, to let PSIOPT
+silently rescale the effective transfer duration instead).
 
-Perturbation: an algebraic "Path" equality constraint (applied at every
-collocation node, not just a boundary) is added TWICE, identically,
-producing exact duplicate Jacobian rows *interior* to the problem rather
-than at a single boundary node (contrast with ``deg_dup_equality``, whose
-duplication is a single boundary-node row pair).
+Perturbation, and why this replaces an earlier construction: an earlier
+version of this module added the path constraint ``u - (6 - 12*t) = 0``,
+i.e. this problem's own closed-form minimum-energy optimal control,
+derived via Pontryagin's minimum principle from the *objective's*
+stationarity condition. On review that was rejected as the wrong kind of
+degeneracy: that row is satisfied by exactly ONE trajectory (the
+optimum), not by every feasible trajectory, so it is not "structurally
+redundant given the dynamics" — it is redundant only at the solution,
+which made it (a) misleading as a "redundant defects" case and (b) a
+near-duplicate of ``deg_dup_equality``'s exact-row-duplication test in
+everything but name once the optimizer converged.
 
-Why this particular path constraint (not the trivial ``v - v = 0``, which
-the Task 2 brief explicitly rules out because it is an all-zero Jacobian
-row, a different and uninteresting degeneracy): the constraint pins the
-control exactly to this problem's own closed-form minimum-energy optimal
-profile, which is genuinely a *linear* function of (u, t) — i.e. a linear
-combination of quantities already fully determined by the linear dynamics
-defects plus boundary conditions plus the quadratic objective's first-order
-optimality condition. Deriving it (Pontryagin minimum principle):
+This version instead adds a genuinely dynamics-implied redundant row via
+a shadow state. Extend the ODE with a third state w whose dynamics are
+IDENTICAL to v's (wdot = u = vdot), and pin w(0) = v(0) = 0 at Front.
+Then for ANY feasible trajectory (any u(t) satisfying the dynamics
+defects and these initial conditions, not just the optimal one):
 
-    H = u^2/2 + lambda_x * v + lambda_v * u
-    dH/du = 0        => u = -lambda_v
-    lambda_x' = -dH/dx = 0             => lambda_x(t) = c1            (const)
-    lambda_v' = -dH/dv = -lambda_x     => lambda_v(t) = c2 - c1*t
-    u(t) = -lambda_v(t) = c1*t - c2
+    d/dt (w - v) = wdot - vdot = u - u = 0   for every t,
 
-Integrating twice with x(0) = v(0) = 0:
-    v(t) = c1*t^2/2 - c2*t
-    x(t) = c1*t^3/6 - c2*t^2/2
+so w(t) - v(t) is constant, and w(0) - v(0) = 0 fixes that constant at
+zero: w(t) = v(t) identically, for every feasible control, everywhere on
+the path. Concretely, in the NLP: the "Path" equality constraint
 
-Applying v(1) = 0 and x(1) = 1:
-    v(1) = 0:  c1/2 - c2 = 0           => c2 = c1/2
-    x(1) = 1:  c1/6 - c2/2 = 1         => c1*(1/6 - 1/4) = 1 => c1 = -12
-    => c2 = -6
+    w - v = 0
 
-So the (unique) unconstrained optimum's control is exactly
+added at every collocation node is implied purely by (i) the two
+defect-constraint blocks for v and w, which are literally the same
+integration of the same control input, and (ii) the shared w(0) = v(0) =
+0 initial condition — with no reference to the objective at all. This is
+exactly the "redundant interior rows" pathology the brief asks for at
+scale: rows that are never binding and never informative for the entire
+feasible manifold, not just at one distinguished (optimal) point.
 
-    u*(t) = c1*t - c2 = -12*t + 6 = 6 - 12*t
+At 32 LGL3 segments the path region is evaluated at every node — LGL3 has
+2 collocation sub-nodes per segment sharing segment endpoints, giving
+2*32 + 1 = 65 nodes — so this adds 65 new equality rows, and (unlike the
+old construction, where duplicating one already-meaningful row left the
+Jacobian rank-deficient by one row per node but that one row was still
+individually informative pre-duplication) ALL 65 of these rows are
+individually redundant: each is a linear combination of rows already
+present (defects for v and w, plus the Front IC block), contributing zero
+new information to the KKT system at any feasible point.
 
-Since this is an affine (degree-1) function of t, it is exactly
-representable regardless of the polynomial degree LGL3 uses to interpolate
-u within a segment — pinning u(t_k) = 6 - 12*t_k at every node via a "Path"
-equality constraint does not change the feasible optimum (it is already
-satisfied by the true solution) or the achievable objective (analytically,
-integral(u^2)/2 dt = integral_0^1 (6-12t)^2/2 dt = 6.0). It purely adds one
-new, exactly-linear, genuinely-implied-by-the-rest-of-the-problem equality
-row per node. Adding the SAME ``add_equal_con`` call a second time,
-verbatim, then produces an exact duplicate of that new row at every one of
-the ~65 LGL3 nodes (32 segments): the constraint Jacobian is exactly
-rank-deficient by one row per node, entirely interior to the path (not at
-a single boundary node as in ``deg_dup_equality``).
+Contrast with ``deg_dup_equality``: that module's degeneracy is a
+byte-for-byte VERBATIM duplicate of a single existing row set — the same
+``add_boundary_value("Back", ...)`` call issued twice, producing 3 exact
+duplicate row pairs confined to the boundary. This module's degeneracy is
+a single NEW, distinct constraint (w - v, referencing a variable that
+appears nowhere else in the Jacobian) that is nonetheless analytically
+implied by the rest of the problem (dynamics + initial conditions) at
+every one of 65 interior/path nodes — a structurally different failure
+mode (implied-by-dynamics row, not literal duplication) and two orders of
+magnitude more redundant rows (65 vs. 3).
+
+Expected solution: x, v, u, and the objective are unaffected by w, which
+is entirely inert (it does not appear in the objective, the boundary
+conditions besides its own Front pin, or any other constraint) — the
+well-posed baseline solution (min 0.5 * integral(u^2), analytic optimum
+6.0) should be recovered exactly as before.
 
 Observed on defaults 2026-07-16: CONVERGED, 3 iterations, objective
-6.01172 (matching the analytic 6.0 optimum, confirming the derivation
-above is correctly implemented). This is a FINDING TO REPORT
-PROMINENTLY, not hidden: like ``deg_dup_equality``, this exact-duplicate-
-row pathology does NOT genuinely manifest as non-convergence — PSIOPT's
-KKT factorization tolerates the interior rank deficiency (one duplicate
-row per one of the ~65 LGL3 nodes across 32 segments) just as readily as
-the single-boundary-row duplication in ``deg_dup_equality``, converging
-in the same handful of iterations as the well-posed baseline. Taken
-together, both duplicate-row degenerate modules suggest PSIOPT's default
-Pardiso pivoting/regularization path is already robust to plain exact
-row duplication, whether at the boundary or replicated across the entire
-interior path.
+6.01150 (matching the analytic 6.0 minimum-energy optimum to 3 sig
+figs, confirming w's inertness and that the shadow-state redundant rows
+did not change the achievable objective). This is a FINDING TO REPORT
+PROMINENTLY, not hidden: like ``deg_dup_equality``, this dynamics-implied
+redundant-row pathology does NOT genuinely manifest as non-convergence —
+PSIOPT's KKT factorization tolerates 65 structurally-redundant interior
+rows (an exact rank deficiency of 65 in the constraint Jacobian, at every
+LGL3 node across 32 segments) about as readily as the well-posed
+baseline, converging in the same handful of iterations (3, matching both
+the sibling boundary-duplication module and the well-posed baseline).
+Useful negative result
+for future E2 work: PSIOPT's default Pardiso pivoting/regularization path
+appears robust not only to verbatim duplicate rows (``deg_dup_equality``)
+but also to a much larger block of rows that are merely *implied* by
+other constraints rather than copied from them.
 """
 
 import numpy as np
@@ -96,19 +116,22 @@ TIMEOUT = 30
 
 class _DoubleIntegrator(oc.ODEBase):
     def __init__(self):
-        XVars = 2
+        XVars = 3
         UVars = 1
         args = oc.ODEArguments(XVars, UVars)
         v = args.x_vec()[1]
         u = args.u_vec()[0]
-        ode = vf.stack([v, u])
+        # wdot = u = vdot: w is a shadow state that integrates the exact
+        # same control input as v, so w(t) = v(t) identically once w(0) =
+        # v(0) is pinned (see module docstring for the full argument).
+        ode = vf.stack([v, u, u])
         super().__init__(ode, XVars, UVars)
 
 
 def _initial_guess(n=100):
     ts = np.linspace(0.0, 1.0, n)
     xs = np.linspace(0.0, 1.0, n)
-    return [[x, 0.0, t, 0.0] for x, t in zip(xs, ts)]
+    return [[x, 0.0, 0.0, t, 0.0] for x, t in zip(xs, ts)]
 
 
 def build_and_solve(configure) -> dict:
@@ -120,23 +143,23 @@ def build_and_solve(configure) -> dict:
     ig = _initial_guess()
 
     phase = ode.phase("LGL3", ig, 32)
-    # Indices are [x, v, t, u]; t is pinned at both ends so the phase is a
-    # genuinely fixed-duration (T=1) transfer — required for the u*(t) =
-    # 6 - 12t closed-form derivation above to actually apply (an un-pinned
-    # Back time is itself a free decision variable in this collocation
-    # formulation and lets PSIOPT silently rescale the effective transfer
-    # duration, which was verified empirically to break the derivation).
-    phase.add_boundary_value("Front", range(0, 3), [0.0, 0.0, 0.0])
-    phase.add_boundary_value("Back", range(0, 3), [1.0, 0.0, 1.0])
-    phase.add_integral_objective((Args(1)[0] ** 2) / 2, [3])
+    # Indices are [x, v, w, t, u]; t is pinned at both ends so the phase is
+    # a genuinely fixed-duration (T=1) transfer (the collocation mesh's
+    # node "t" is itself a free decision variable unless explicitly
+    # bounded). w(0) is pinned to 0 alongside x(0), v(0) — this is the
+    # initial-condition half of the w(t) = v(t) redundancy argument above.
+    # w is deliberately left unconstrained at Back: its terminal value is
+    # implied by the dynamics, not asserted.
+    phase.add_boundary_value("Front", range(0, 4), [0.0, 0.0, 0.0, 0.0])
+    phase.add_boundary_value("Back", [0, 1, 3], [1.0, 0.0, 1.0])
+    phase.add_integral_objective((Args(1)[0] ** 2) / 2, [4])
 
-    # u - (6 - 12*t) == 0, i.e. u == closed-form min-energy optimal
-    # control. Genuinely implied by the rest of the problem (see
-    # derivation above) — added, then duplicated verbatim, to force an
-    # exact duplicate Jacobian row at every node interior to the path.
-    node_indices = [0, 1, 2, 3]  # [x, v, t, u]
-    redundant_row = Args(4)[3] - 6.0 + 12.0 * Args(4)[2]
-    phase.add_equal_con("Path", redundant_row, node_indices)
+    # w - v == 0 at every node. Genuinely implied by the v/w defect blocks
+    # plus the shared Front initial condition (see derivation above) — not
+    # asserted as a duplicate of any existing row, and true for every
+    # feasible trajectory, not just the optimal one.
+    node_indices = [1, 2]  # [v, w]
+    redundant_row = Args(2)[1] - Args(2)[0]  # w - v
     phase.add_equal_con("Path", redundant_row, node_indices)
 
     configure(phase.optimizer)
