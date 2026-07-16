@@ -340,6 +340,8 @@ class PSIOPT {
     void set_neg_slack_reset(double val);
     void set_qp_threads(int n);
     void set_qp_pivot_perturb(int v);
+    void set_qp_matching(int v);
+    void set_qp_scaling(int v);
     void set_qp_ref_steps(int v);
     void set_qp_par_solve(int v);
     void set_obj_scale(double scale);
