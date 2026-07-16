@@ -302,28 +302,18 @@ paper's existence/topic) -- per the binding rule for this task, the
 problem was skipped rather than implemented from memory. The corpus's
 target range is 15-25 problems; 17 without it is within range.
 
-## Task 1 stub problems (throwaway)
+## Smoke-test end-to-end case (Task 5)
 
-`stub_converges.py` and `stub_fails.py` are **not** real corpus problems —
-they exist solely so Task 1 has something end-to-end to exercise the
-harness and the smoke test against, before any real degenerate/hard/
-literature problem lands (Tasks 2-4). Task 5 deletes both and points the
-smoke test's end-to-end case at two real (fast) corpus problems instead.
-
-Both are the same small double-integrator boundary-value problem
-(states `x, v`; control `u`; `xdot = v`, `vdot = u`; `t in [0, 1]`; LGL3,
-8 segments; objective `0.5 * integral(u^2) dt`):
-
-- `stub_converges.py`: rest-to-rest, `x: 0 -> 1`, `v: 0 -> 0`. Converges in
-  a handful of iterations on defaults (observed: `CONVERGED`, 73
-  iterations).
-- `stub_fails.py`: same, plus a second, independent, *conflicting* terminal
-  equality constraint on `x(1)` (`x(1) = 1.0` **and** `x(1) = 2.0`),
-  making the NLP infeasible by construction. Observed on defaults
-  2026-07-16: `NOTCONVERGED` (hits `max_iters`, econ infeasibility plateaus
-  around `1e-3`, well outside PSIOPT's acceptable-equality-constraint
-  tolerance) -> harness `status: "failed"`. An earlier revision used a much
-  smaller conflict gap (`1.0` vs `1.001`); that residual fell *inside* the
-  default acceptable-equality tolerance and PSIOPT reported `ACCEPTABLE`
-  instead of a true failure — the gap was widened specifically so the
-  stub's failure mode is unambiguous.
+The smoke test's harness end-to-end check
+(`test_harness_end_to_end_fast_problems` in
+`tychopy/test/test_corpus_smoke.py`) originally ran against two Task 1
+throwaway stub problems (`stub_converges.py` / `stub_fails.py`) that existed
+solely to exercise the harness before any real corpus problem landed. Task 5
+deleted both stubs (removed from `registry.py` and from
+`tests/corpus/problems/`) now that the real degenerate/hard/literature tiers
+exist, and repointed the smoke test at the two fastest real problems instead:
+`deg_dup_equality` (converges in 3 iterations, ~1 s) and `hard_vanderpol`
+(diverges in 1 iteration, ~1 s — the fastest genuine failure in the corpus;
+the other candidate failures in the degenerate tier grind through the full
+500-iteration `max_iters` cap before reporting `NOTCONVERGED`). See those
+two modules' docstrings for their own problem descriptions.

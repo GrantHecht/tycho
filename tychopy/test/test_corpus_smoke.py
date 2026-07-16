@@ -43,24 +43,35 @@ def test_problem_contract(module_name):
     )
 
 
-def test_harness_end_to_end_stub_filter(tmp_path):
-    """The harness runs both Task 1 stubs and records the expected statuses."""
-    out_path = tmp_path / "stub_results.jsonl"
-    proc = subprocess.run(
-        [sys.executable, str(RUN_CORPUS), "--filter", "stub", "--out", str(out_path)],
-        cwd=str(REPO_ROOT),
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    assert proc.returncode == 0, f"harness exited {proc.returncode}\n{proc.stderr}"
+def test_harness_end_to_end_fast_problems(tmp_path):
+    """The harness runs end-to-end and records the expected statuses.
 
-    lines = out_path.read_text(encoding="utf-8").strip().splitlines()
-    assert len(lines) == 2, f"expected 2 corpus records, got {len(lines)}: {lines}"
+    Uses the two fastest real corpus problems instead of the Task 1
+    throwaway stubs (deleted in Task 5): ``deg_dup_equality`` (converges in
+    3 iterations, ~1 s) and ``hard_vanderpol`` (diverges in 1 iteration,
+    ~1 s — the fastest genuine failure in the corpus; the other degenerate-
+    tier failures grind through the full 500-iteration ``max_iters`` cap).
+    Each is run in its own ``--filter`` invocation since the two problem
+    names share no common substring.
+    """
+    by_problem = {}
+    for name in ("deg_dup_equality", "hard_vanderpol"):
+        out_path = tmp_path / f"{name}_result.jsonl"
+        proc = subprocess.run(
+            [sys.executable, str(RUN_CORPUS), "--filter", name, "--out", str(out_path)],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert proc.returncode == 0, f"harness exited {proc.returncode}\n{proc.stderr}"
 
-    records = [json.loads(line) for line in lines]
-    by_problem = {r["problem"]: r for r in records}
-    assert set(by_problem) == {"stub_converges", "stub_fails"}
+        lines = out_path.read_text(encoding="utf-8").strip().splitlines()
+        assert len(lines) == 1, f"expected 1 corpus record for {name}, got {len(lines)}: {lines}"
 
-    assert by_problem["stub_converges"]["status"] == "converged"
-    assert by_problem["stub_fails"]["status"] in {"failed", "diverged", "error"}
+        record = json.loads(lines[0])
+        assert record["problem"] == name
+        by_problem[name] = record
+
+    assert by_problem["deg_dup_equality"]["status"] == "converged"
+    assert by_problem["hard_vanderpol"]["status"] == "diverged"

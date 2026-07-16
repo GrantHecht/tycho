@@ -5,16 +5,13 @@ Both the harness (``scripts/run_corpus.py``) and the smoke test
 A module under ``tests/corpus/problems/`` is part of the corpus if and only
 if its (bare, no-package-prefix) name appears in this list.
 
-Order is tier-grouped: degenerate, then hard, then literature. Later G0
-tasks append to this list as their modules land; nothing here is deleted
-except the Task 1 throwaway stubs, which Task 5 removes once real corpus
-problems exist.
+Order is tier-grouped: degenerate, then hard, then literature. The Task 1
+throwaway stubs (``stub_converges``/``stub_fails``) that used to head this
+list were removed in Task 5 once the real degenerate/hard/literature tiers
+below existed to exercise the harness instead.
 """
 
 ALL_PROBLEMS: list[str] = [
-    # --- Task 1 throwaway stubs (deleted in Task 5) ---
-    "stub_converges",
-    "stub_fails",
     # --- Task 2: degenerate tier ---
     "deg_dup_equality",
     "deg_conflicting_equality",
