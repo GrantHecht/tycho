@@ -67,7 +67,9 @@ def test_harness_end_to_end_fast_problems(tmp_path):
         assert proc.returncode == 0, f"harness exited {proc.returncode}\n{proc.stderr}"
 
         lines = out_path.read_text(encoding="utf-8").strip().splitlines()
-        assert len(lines) == 1, f"expected 1 corpus record for {name}, got {len(lines)}: {lines}"
+        assert len(lines) == 1, (
+            f"expected 1 corpus record for {name}, got {len(lines)}: {lines}"
+        )
 
         record = json.loads(lines[0])
         assert record["problem"] == name
