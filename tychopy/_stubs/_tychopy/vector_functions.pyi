@@ -13264,11 +13264,14 @@ class InterpTable2D:
     are evaluated analytically.
 
     Available interpolation kinds: ``"cubic"`` (default, bicubic) and ``"linear"``
-    (bilinear).
+    (bilinear).  The ``cache`` option pre-computes and stores the per-cell bicubic
+    coefficient matrices to accelerate repeated evaluations; it defaults to
+    ``True`` since a 2-D cell's coefficient matrix is small (128 B) and the cell
+    count grows only as O(Nx*Ny).
     """
 
     @overload
-    def __init__(self, xs: numpy.ndarray, ys: numpy.ndarray, z: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='C')], kind: str = 'cubic') -> None:
+    def __init__(self, xs: numpy.ndarray, ys: numpy.ndarray, z: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='C')], kind: str = 'cubic', cache: bool = True) -> None:
         """
         Construct a 2-D interpolation table.
 
@@ -13284,10 +13287,15 @@ class InterpTable2D:
             Scalar values on the ``(xs, ys)`` grid in row-major order.
         kind : str, optional
             Interpolation method: ``"cubic"`` (default) or ``"linear"``.
+        cache : bool, optional
+            If ``True`` (default), pre-compute and cache all per-cell bicubic
+            coefficient matrices at construction time.  Speeds up repeated queries
+            at a modest memory cost (128 B per grid cell).  Pass ``False`` to opt
+            out for very large or memory-constrained tables.
         """
 
     @overload
-    def __init__(self, xs: numpy.ndarray, ys: numpy.ndarray, z: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='C')], kind: InterpType = InterpType.Cubic) -> None: ...
+    def __init__(self, xs: numpy.ndarray, ys: numpy.ndarray, z: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='C')], kind: InterpType = InterpType.Cubic, cache: bool = True) -> None: ...
 
     @overload
     def interp(self, x: float, y: float) -> float:

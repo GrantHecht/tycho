@@ -224,6 +224,15 @@ class PSIOPT {
         int factor_mem_ = 0;
         int factor_flops_ = 0;
 
+        // T6 (dead-status fix): the last non-Success status observed from
+        // kkt_sol_.info() by factor_impl() within the CURRENT phase (alg_impl
+        // resets it on entry, so print_exit_stats reports per-phase status).
+        // kkt_sol_.info() was previously computed by every
+        // Compute()/Refactor() call and never read anywhere; this field is purely
+        // observational (surfaced by print_exit_stats()) and does not feed back into
+        // any control-flow decision in factor_impl -- see the comment there.
+        Eigen::ComputationInfo last_kkt_info_ = Eigen::Success;
+
         // Only resets accumulated timing/iteration counters and the convergence flag.
         // primals_ and obj_val_ are overwritten unconditionally by alg_impl each
         // phase. eq_lmults_ and eq_cons_ are overwritten when equal_cons_ > 0;
@@ -239,6 +248,7 @@ class PSIOPT {
             print_time_ = 0;
             solver_init_time_ = 0;
             iter_num_ = 0;
+            last_kkt_info_ = Eigen::Success;
         }
     };
 
@@ -382,6 +392,23 @@ class PSIOPT {
     int inequal_cons_ = 0;
     int kkt_dim_ = 0;
 
+    // --- Reusable per-iteration scratch buffers (avoid per-call heap allocation) ---
+    // complementarity()/barrier_hessian() are only ever invoked serially from
+    // alg_impl's single-threaded control loop for this PSIOPT instance (no
+    // partition-level concurrency at this level -- that only happens inside
+    // NLP eval calls). Sized to inequal_cons_/slack_vars_ (resize-in-place;
+    // a no-op once the size matches, which it does for the lifetime of a solve).
+    mutable Eigen::VectorXd stli_scratch_; ///< @internal complementarity() S*LI buffer.
+    Eigen::VectorXd hp_scratch_; ///< @internal barrier_hessian() LI.cwiseQuotient(S) buffer.
+
+    // alg_impl's return_best_ path (off by default, settings_.return_best_) copies
+    // the full XSL/RHS iterate on every improving iteration. Hoisted so repeated
+    // alg_impl calls (one per phase in run_phase_sequence) reuse the same backing
+    // store instead of starting from an empty vector each time; resize-on-assign
+    // is then a no-op once kkt_dim_ is stable across a solve.
+    Eigen::VectorXd best_xsl_scratch_; ///< @internal alg_impl() return_best_ XSL snapshot.
+    Eigen::VectorXd best_rhs_scratch_; ///< @internal alg_impl() return_best_ RHS snapshot.
+
     // --- KKT solver ---
 #ifdef USE_ACCELERATE_SPARSE
     Eigen::AccelerateLDLTTPP<Eigen::SparseMatrix<double, Eigen::RowMajor>, Eigen::Upper> kkt_sol_;
@@ -523,8 +550,15 @@ class PSIOPT {
                           const PenaltyTerms &init) const;
 
     // --- KKT factorization (defined in psiopt.cpp) ---
+    // `finalpert` is the last perturbation DELTA applied via Perturb() -- this is
+    // the exact value alg_impl's Hpert0 warm-start consumes today and must keep
+    // consuming byte-identically (see the comment at its call site). `cumpert` is
+    // a separate, display-only accumulator: the running SUM of every Perturb()
+    // delta applied during this call (i.e. the actual total added to the KKT
+    // diagonal), used only for the HPert iteration-table column. Neither
+    // `finalpert` nor any control-flow decision in factor_impl reads `cumpert`.
     int factor_impl(bool docompute, bool ZFac, double ipurt, double incpurt0, double incpurt,
-                    double &finalpert);
+                    double &finalpert, double &cumpert);
 
     bool analyze_kkt_matrix();
 
@@ -565,6 +599,16 @@ class PSIOPT {
                   Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
 
     // --- Convergence and stepping ---
+    // PSIOPT 3.1: the residual formulas shared by the pre-factorization early
+    // convergence check and the post-line-search fill_iter_info() call live here
+    // ONCE, so neither call site can drift out of sync. fill_residual_info() sets
+    // every IterateInfo field derivable from rhs/xsl alone (valid immediately after
+    // eval + the barrier/complementarity block, before any factorization). It
+    // deliberately does NOT set barr_obj_/mu_ (only settled once the barrier-
+    // parameter update runs, later this iteration) or p_pivots_ (kkt_sol_.ppivs(),
+    // which only reflects a real value once this iteration's factorization has
+    // actually run) -- see the definition in psiopt.cpp for the full rationale.
+    void fill_residual_info(KKTVector &xsl, KKTVector &rhs, double pobj, IterateInfo &iter) const;
     void fill_iter_info(KKTVector &xsl, KKTVector &rhs, double pobj, double bobj, double mu,
                         IterateInfo &iter) const;
     ConvergenceFlags converge_check(std::vector<IterateInfo> &iters);

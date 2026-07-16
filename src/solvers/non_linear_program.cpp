@@ -12,6 +12,7 @@
 //   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
+#include "tycho/detail/solvers/indexing_data.h"
 #include "tycho/detail/solvers/non_linear_program.h"
 #include "tycho/detail/utils/timer.h"
 
@@ -128,6 +129,20 @@ void tycho::solvers::NonLinearProgram::get_mat_space() {
      * will be operating on it, then from this info calculates which columns/rows of the KKT matrix
      * need to be locked when multiple partitions are scattering into the KKT matrix. Allocates
      * kkt_locks_ mutexes based on this info.
+     *
+     * Canonical-column locking protocol: every KKT scatter site (kkt_fill_all and
+     * kkt_fill_hess in dense_function_base.h) locks each element's mutex on the slot's
+     * canonical column -- tycho::solvers::kkt_canonical_lock_col(row, col), the smaller
+     * endpoint, which is the same endpoint analyze_sparsity stores the physical slot
+     * under. The clash detection below marks contested columns with that SAME shared
+     * keying function, so cross-partition claimants of one physical slot agree on the
+     * mutex BY CONSTRUCTION -- there is no per-site convention that can drift, and hence
+     * no runtime check (a claims-map assertion that once lived here verified min == min
+     * and was deleted as tautological; see kkt_canonical_lock_col's doc comment for the
+     * structural argument). Writes within one partition need no mutual exclusion -- each
+     * partition's scatter runs serially on a single thread (parallel_sequence dispatches
+     * one task per partition), and single-partition problems take no locks at all (no
+     * column can be claimed by more than one partition, so kkt_clashes_ is all -1).
      */
 
     int KKTfreeloc = 0;
@@ -155,12 +170,19 @@ void tycho::solvers::NonLinearProgram::get_mat_space() {
         this->kkt_coeff_part_ids_.segment(kkstart, kklen).setConstant(i);
     }
 
+    // Mark a KKT column contested iff >= 2 partitions write a slot whose CANONICAL column
+    // (kkt_canonical_lock_col(row, col), the smaller endpoint) is that column -- the same
+    // shared keying function every scatter site locks with, so a contested slot's writers
+    // all map to the mutex allocated here. (Historically this keyed on the raw recorded
+    // column kkt_coeff_cols_[i], i.e. the outer-loop variable, which mis-attributed
+    // mirror-order Hessian writes and left genuinely shared slots unlocked -- the race
+    // this keying closes.)
     Eigen::MatrixXi KKTclash(this->num_partitions_, this->kkt_dim_);
     KKTclash.setZero();
     for (int i = 0; i < this->num_user_kkt_elems_; i++) {
-        int col = this->kkt_coeff_cols_[i];
+        int lockcol = kkt_canonical_lock_col(this->kkt_coeff_rows_[i], this->kkt_coeff_cols_[i]);
         int thrid = this->kkt_coeff_part_ids_[i];
-        KKTclash(thrid, col) = 1;
+        KKTclash(thrid, lockcol) = 1;
     }
 
     this->kkt_clashes_.resize(this->kkt_dim_);
@@ -342,7 +364,7 @@ void tycho::solvers::NonLinearProgram::eval_rhs(double ObjScale, ConstEigenRef<V
                                                 EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
                                                 EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI) {
 
-    std::vector<double> Vals(this->num_partitions_, 0.0);
+    this->vals_scratch_.assign(this->num_partitions_, 0.0);
     this->set_rhs_coeffs_zero();
 
     auto RHSevalOP = [&](int thrnum) {
@@ -353,12 +375,12 @@ void tycho::solvers::NonLinearProgram::eval_rhs(double ObjScale, ConstEigenRef<V
             Con.constraints_adjointgradient(X, LE, this->econ_coeffs(), this->agx_coeffs());
         for (auto &Con : this->part_iq_[thrnum])
             Con.constraints_adjointgradient(X, LI, this->icon_coeffs(), this->agx_coeffs());
-        Vals[thrnum] = localVal;
+        this->vals_scratch_[thrnum] = localVal;
     };
 
     tycho::utils::parallel_sequence(this->num_partitions_, RHSevalOP);
     for (int i = 0; i < this->num_partitions_; i++)
-        val += Vals[i];
+        val += this->vals_scratch_[i];
 
     this->fill_rhs(PGX, AGX, FXE, FXI);
 }
@@ -367,7 +389,7 @@ void tycho::solvers::NonLinearProgram::eval_ogc(double ObjScale, ConstEigenRef<V
                                                 double &val, EigenRef<VectorXd> PGX,
                                                 EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI) {
 
-    std::vector<double> Vals(this->num_partitions_, 0.0);
+    this->vals_scratch_.assign(this->num_partitions_, 0.0);
     this->set_rhs_coeffs_zero();
 
     auto OGCevalOP = [&](int thrnum) {
@@ -378,12 +400,12 @@ void tycho::solvers::NonLinearProgram::eval_ogc(double ObjScale, ConstEigenRef<V
             Con.constraints(X, this->econ_coeffs());
         for (auto &Con : this->part_iq_[thrnum])
             Con.constraints(X, this->icon_coeffs());
-        Vals[thrnum] = localVal;
+        this->vals_scratch_[thrnum] = localVal;
     };
 
     tycho::utils::parallel_sequence(this->num_partitions_, OGCevalOP);
     for (int i = 0; i < this->num_partitions_; i++)
-        val += Vals[i];
+        val += this->vals_scratch_[i];
 
     this->fill_pgx(PGX);
     this->fill_fxe(FXE);
@@ -394,7 +416,7 @@ void tycho::solvers::NonLinearProgram::eval_occ(double ObjScale, ConstEigenRef<V
                                                 double &val, EigenRef<VectorXd> FXE,
                                                 EigenRef<VectorXd> FXI) {
 
-    std::vector<double> Vals(this->num_partitions_, 0.0);
+    this->vals_scratch_.assign(this->num_partitions_, 0.0);
     this->set_con_coeffs_zero();
     auto OGCevalOP = [&](int thrnum) {
         double localVal = 0.0;
@@ -404,12 +426,12 @@ void tycho::solvers::NonLinearProgram::eval_occ(double ObjScale, ConstEigenRef<V
             Con.constraints(X, this->econ_coeffs());
         for (auto &Con : this->part_iq_[thrnum])
             Con.constraints(X, this->icon_coeffs());
-        Vals[thrnum] = localVal;
+        this->vals_scratch_[thrnum] = localVal;
     };
 
     tycho::utils::parallel_sequence(this->num_partitions_, OGCevalOP);
     for (int i = 0; i < this->num_partitions_; i++)
-        val += Vals[i];
+        val += this->vals_scratch_[i];
 
     this->fill_fxe(FXE);
     this->fill_fxi(FXI);
@@ -418,18 +440,18 @@ void tycho::solvers::NonLinearProgram::eval_occ(double ObjScale, ConstEigenRef<V
 void tycho::solvers::NonLinearProgram::eval_obj(double ObjScale, ConstEigenRef<VectorXd> X,
                                                 double &val) {
 
-    std::vector<double> Vals(this->num_partitions_, 0.0);
+    this->vals_scratch_.assign(this->num_partitions_, 0.0);
 
     auto OGCevalOP = [&](int thrnum) {
         double localVal = 0.0;
         for (auto &Obj : this->part_obj_[thrnum])
             Obj.objective(ObjScale, X, localVal);
-        Vals[thrnum] = localVal;
+        this->vals_scratch_[thrnum] = localVal;
     };
 
     tycho::utils::parallel_sequence(this->num_partitions_, OGCevalOP);
     for (int i = 0; i < this->num_partitions_; i++)
-        val += Vals[i];
+        val += this->vals_scratch_[i];
 }
 
 void tycho::solvers::NonLinearProgram::eval_kkt(
@@ -438,7 +460,7 @@ void tycho::solvers::NonLinearProgram::eval_kkt(
     EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
 
-    std::vector<double> Vals(this->num_partitions_, 0.0);
+    this->vals_scratch_.assign(this->num_partitions_, 0.0);
 
     this->set_rhs_coeffs_zero();
 
@@ -456,12 +478,12 @@ void tycho::solvers::NonLinearProgram::eval_kkt(
             Con.constraints_jacobian_adjointgradient_adjointhessian(
                 X, LI, this->icon_coeffs(), this->agx_coeffs(), KKTmat, this->kkt_locations_,
                 this->kkt_clashes_, this->kkt_locks_);
-        Vals[thrnum] = localVal;
+        this->vals_scratch_[thrnum] = localVal;
     };
 
     tycho::utils::parallel_sequence(this->num_partitions_, KKTevalOP);
     for (int i = 0; i < this->num_partitions_; i++)
-        val += Vals[i];
+        val += this->vals_scratch_[i];
 
     // NOTE: fill_solver_coeffs internally calls parallel_blocks, creating a nested
     // dispatch from the inline arm. Safe because: (1) the calling thread is the main
@@ -537,7 +559,7 @@ void tycho::solvers::NonLinearProgram::eval_aug(
     EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
 
-    std::vector<double> Vals(this->num_partitions_, 0.0);
+    this->vals_scratch_.assign(this->num_partitions_, 0.0);
     this->set_rhs_coeffs_zero();
 
     auto SOEevalOP = [&](int thrnum) {
@@ -552,12 +574,12 @@ void tycho::solvers::NonLinearProgram::eval_aug(
             Con.constraints_jacobian_adjointgradient(X, LI, this->icon_coeffs(), this->agx_coeffs(),
                                                      KKTmat, this->kkt_locations_,
                                                      this->kkt_clashes_, this->kkt_locks_);
-        Vals[thrnum] = localVal;
+        this->vals_scratch_[thrnum] = localVal;
     };
 
     tycho::utils::parallel_sequence(this->num_partitions_, SOEevalOP);
     for (int i = 0; i < this->num_partitions_; i++)
-        val += Vals[i];
+        val += this->vals_scratch_[i];
 
     // NOTE: nested dispatch from inline arm — see comment in eval_kkt.
     tycho::utils::parallel_task(

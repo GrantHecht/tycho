@@ -190,10 +190,10 @@ struct DenseSecondDerivatives<Derived, IR, OR, JMode, DenseDerivativeMode::FDiff
     /// @brief Computes value, Jacobian, adjoint gradient, and adjoint Hessian.
     /// @internal
     /// Delegates value/Jacobian/adjoint-gradient to the base function, then forms the
-    /// adjoint Hessian via @ref adjointhessian_from_gradient, reusing the base-point
+    /// adjoint Hessian via `adjointhessian_from_gradient()`, reusing the base-point
     /// adjoint gradient just computed by `compute_jacobian_adjointgradient` instead of
     /// recomputing it (which would cost another IR+1 primal evaluations under FD Jacobian
-    /// modes — see @ref adjointhessian_from_gradient).
+    /// modes — see `adjointhessian_from_gradient()`).
     /// @tparam InType       Eigen type of the input vector @p x.
     /// @tparam OutType      Eigen type of the output value @p fx_.
     /// @tparam JacType      Eigen type of the Jacobian @p jx_.

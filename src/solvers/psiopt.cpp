@@ -670,10 +670,16 @@ double tycho::solvers::PSIOPT::max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> 
 void tycho::solvers::PSIOPT::complementarity(Eigen::Ref<Eigen::VectorXd> S,
                                              Eigen::Ref<Eigen::VectorXd> LI, double &avgcomp,
                                              double &mincomp, double &maxcomp) const {
-    Eigen::VectorXd StLI = S.cwiseProduct(LI);
-    mincomp = StLI.minCoeff();
-    maxcomp = StLI.maxCoeff();
-    avgcomp = StLI.sum() / double(StLI.size());
+    // Buffer-hoist ONLY: keep the exact Eigen .sum()/minCoeff()/maxCoeff()
+    // reduction expressions unchanged. avgcomp feeds mu (see mpc_mu/loqo_mu
+    // call sites), so a hand-fused loop that reorders the sum could perturb
+    // the reduction by a ULP under fast-math and change iterates -- forbidden.
+    // This change only removes the per-call heap allocation of StLI.
+    this->stli_scratch_.resize(S.size());
+    this->stli_scratch_ = S.cwiseProduct(LI);
+    mincomp = this->stli_scratch_.minCoeff();
+    maxcomp = this->stli_scratch_.maxCoeff();
+    avgcomp = this->stli_scratch_.sum() / double(this->stli_scratch_.size());
 }
 
 double tycho::solvers::PSIOPT::barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu) const {
@@ -698,13 +704,14 @@ void tycho::solvers::PSIOPT::barrier_gradient(Eigen::Ref<Eigen::VectorXd> LI,
 void tycho::solvers::PSIOPT::barrier_hessian(Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
                                              Eigen::Ref<Eigen::VectorXd> S,
                                              Eigen::Ref<Eigen::VectorXd> LI, double mu) {
-    Eigen::VectorXd hp = LI.cwiseQuotient(S);
+    this->hp_scratch_.resize(S.size());
+    this->hp_scratch_ = LI.cwiseQuotient(S);
     for (int i = 0; i < this->inequal_cons_; i++) {
-        if (hp[i] < 0.0) {
-            hp[i] = mu / (S[i] * S[i]);
+        if (this->hp_scratch_[i] < 0.0) {
+            this->hp_scratch_[i] = mu / (S[i] * S[i]);
         }
     }
-    this->nlp_->assign_kkt_slack_hessian(hp, KKTmat);
+    this->nlp_->assign_kkt_slack_hessian(this->hp_scratch_, KKTmat);
 }
 
 double tycho::solvers::PSIOPT::loqo_mu(Eigen::Ref<Eigen::VectorXd> S,
@@ -814,7 +821,12 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
 #ifdef USE_ACCELERATE_SPARSE
     accelerate_set_num_threads(settings_.qp_threads_);
 #else
-    mkl_set_num_threads(settings_.qp_threads_);
+    // Thread-local, not global: only the calling thread's Pardiso thread
+    // count is affected, so concurrent PSIOPT drivers in the same process
+    // (or on other threads) cannot clobber each other's setting. Return
+    // value (previous local count) is intentionally discarded — this is a
+    // fire-and-forget set, matching the prior global-setter semantics.
+    mkl_set_num_threads_local(settings_.qp_threads_);
 #endif
 
     this->nlp_->analyze_sparsity(this->kkt_sol_.get_matrix());
@@ -861,13 +873,25 @@ void tycho::solvers::PSIOPT::max_primal_dual_step(KKTVector &xsl, KKTVector &dxs
     alphad = Lmax;
 }
 
-void tycho::solvers::PSIOPT::fill_iter_info(KKTVector &xsl, KKTVector &rhs, double pobj,
-                                            double bobj, double mu, IterateInfo &iter) const {
+// PSIOPT 3.1: deliberately excludes barr_obj_/mu_/p_pivots_. barr_obj_ is only
+// evaluated by the caller AFTER the barrier-parameter update block (barrier_objective()
+// runs on the just-updated `mu`); for BarrierModes::PROBE that update itself needs the
+// KKT solve (mpc_mu() consumes the predictor DXSL). p_pivots_ similarly only reflects a
+// real value once this iteration's factor_impl() has run. All three are therefore NOT
+// "residuals" in the sense converge_check()/return_best_/print_exit_stats consume them
+// (none of those three read mu_/barr_obj_/p_pivots_ -- verified: converge_check() reads
+// only kkt_inf_/econ_inf_/icon_inf_/barr_inf_; return_best_ reads econ_inf_/icon_inf_/
+// kkt_inf_/prim_obj_; print_exit_stats reads prim_obj_/kkt_inf_/barr_inf_/econ_inf_/
+// icon_inf_). Every field this function DOES set is fully determined by rhs/xsl alone,
+// unconditionally available right after eval_nlp + the barrier/complementarity block --
+// before any factorization -- and provably unchanged for the remainder of the
+// iteration (RHS's prim_grad()/eq_cons()/iq_cons()/all_cons() blocks and XSL's
+// slacks()/iq_lmults()/eq_lmults() are not written again until `XSL += alpha*DXSL`,
+// which only executes strictly after this iteration's earliest possible break).
+void tycho::solvers::PSIOPT::fill_residual_info(KKTVector &xsl, KKTVector &rhs, double pobj,
+                                                IterateInfo &iter) const {
 
     iter.prim_obj_ = pobj;
-    iter.barr_obj_ = bobj;
-    iter.mu_ = mu;
-    iter.p_pivots_ = this->kkt_sol_.ppivs();
     iter.kkt_inf_ = rhs.prim_grad().lpNorm<Eigen::Infinity>();
 
     double avgcomp = 0;
@@ -892,6 +916,14 @@ void tycho::solvers::PSIOPT::fill_iter_info(KKTVector &xsl, KKTVector &rhs, doub
 
     if (equal_cons_ > 0 || inequal_cons_ > 0)
         iter.all_con_norm_err_ = rhs.all_cons().norm();
+}
+
+void tycho::solvers::PSIOPT::fill_iter_info(KKTVector &xsl, KKTVector &rhs, double pobj,
+                                            double bobj, double mu, IterateInfo &iter) const {
+    this->fill_residual_info(xsl, rhs, pobj, iter);
+    iter.barr_obj_ = bobj;
+    iter.mu_ = mu;
+    iter.p_pivots_ = this->kkt_sol_.ppivs();
 }
 
 void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
@@ -970,7 +1002,7 @@ tycho::ConvergenceFlags tycho::solvers::PSIOPT::converge_check(std::vector<Itera
 // perturb the primal diagonal by increasing amounts until correct inertia is
 // achieved or max_refac_ attempts are exhausted.
 int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt, double incpurt0,
-                                        double incpurt, double &finalpert) {
+                                        double incpurt, double &finalpert, double &cumpert) {
     auto Inertia = [&]() {
         return this->kkt_sol_.neigs() - (this->equal_cons_ + this->inequal_cons_);
     };
@@ -981,18 +1013,43 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
                            "Warning: Potential Rank Deficiency Detected\n");
         }
     };
+    // T6 (dead-status fix): kkt_sol_.info() was computed by every Compute()/
+    // Refactor() call below and never read anywhere -- a dead status. This records
+    // the last non-Success status into result_.last_kkt_info_ (surfaced only by
+    // print_exit_stats(), see psiopt_print.cpp) and, for hard failures only, emits
+    // an immediate diagnostic gated the same as the sibling RankDef()/perturbation-
+    // exhausted warnings in this function. NumericalIssue (Pardiso info -4/-7:
+    // zero/near-zero pivot; Accelerate factorization-failed/singular) is a NORMAL,
+    // expected condition while probing perturbations during inertia correction
+    // below -- printing on every occurrence would spam the console for any problem
+    // with an indefinite KKT system, so it is recorded but not printed by default.
+    // Purely observational: no return value or branch below is touched by this
+    // check.
+    auto CheckInfo = [&]() {
+        Eigen::ComputationInfo info = this->kkt_sol_.info();
+        if (info != Eigen::Success) {
+            this->result_.last_kkt_info_ = info;
+            if (info != Eigen::NumericalIssue && settings_.print_level_ < 3) {
+                fmt::print(fmt::fg(fmt::color::yellow),
+                           "Warning: KKT factorization reported a hard error (info={})\n",
+                           static_cast<int>(info));
+            }
+        }
+    };
     auto Perturb = [&](double p) {
         this->nlp_->perturb_kkt_p_diags(p, this->kkt_sol_.get_matrix());
     };
     auto Refactor = [&]() { this->kkt_sol_.refactorize_internal(); };
     auto Compute = [&]() { this->kkt_sol_.compute_internal(); };
     int IncEigs;
+    cumpert = 0.0;
 
     if (Zfac || docompute) {
         if (!docompute)
             Refactor();
         else
             Compute();
+        CheckInfo();
         RankDef();
         IncEigs = Inertia();
         finalpert = 0.0;
@@ -1003,7 +1060,13 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
 
     for (int i = 0; i < settings_.max_refac_; i++) {
         Perturb(p);
+        // Display-only accumulator (PSIOPT 2.4): the running sum of every
+        // Perturb() delta applied so far this call -- i.e. the actual total added
+        // to the KKT diagonal. Tracked purely for the HPert column; `finalpert`
+        // below (the last delta, consumed by the Hpert0 warm-start) is untouched.
+        cumpert += p;
         Refactor();
+        CheckInfo();
         RankDef();
         IncEigs = Inertia();
         finalpert = p;
@@ -1033,10 +1096,17 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     Eigen::VectorXd RHS2(this->kkt_dim_);
     Eigen::VectorXd PGX(this->primal_vars_);
 
+    // Per-phase: print_exit_stats reports this phase's factorization status, so
+    // a status left over from an earlier phase in the sequence must not leak in.
+    this->result_.last_kkt_info_ = Eigen::Success;
+
     Eigen::VectorXd Temp(this->kkt_dim_);
 
-    Eigen::VectorXd BestXSL;
-    Eigen::VectorXd BestRHS;
+    // Reserve-once: bind to persistent member scratch instead of a fresh empty
+    // local, so repeated alg_impl calls (one per phase) don't re-allocate from
+    // scratch when settings_.return_best_ is enabled.
+    Eigen::VectorXd &BestXSL = this->best_xsl_scratch_;
+    Eigen::VectorXd &BestRHS = this->best_rhs_scratch_;
     double BestCriteriaVal = 1.0e10;
     int BestIter = 0;
 
@@ -1102,7 +1172,103 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         QPtimer.start();
         v_rhs.prim_grad() += PGX;
 
+        // PSIOPT 3.1 (perf/review-9 "check convergence before factorizing the
+        // converged iterate"): every residual converge_check() consumes is now
+        // fully determined -- kkt_inf_ reads prim_grad() (just updated above; the
+        // barrier writes later this iteration target the *disjoint* dual_grad()
+        // block, see psiopt.h:472-473 for prim_grad()/dual_grad()'s segment
+        // boundaries), econ_inf_/icon_inf_ read eq_cons()/iq_cons() (set by
+        // eval_nlp + apply_reset_slacks above, before this point), and barr_inf_ is
+        // the complementarity(slacks, iq_lmults) computed above from XSL, which
+        // itself is not written again until `XSL += alpha*DXSL` below this loop's
+        // exit check -- i.e. strictly after this iteration's earliest possible
+        // break. So converge_check() sees byte-identical residual inputs whether
+        // it runs here or at its original post-line-search position: firing here
+        // cannot change WHICH verdict is reached, it only skips the
+        // factor+solve+line-search that a CONVERGED/ACCEPTABLE/DIVERGING iterate
+        // never needed (that work only ever feeds `XSL += alpha*DXSL`, which those
+        // three exit codes never reach).
+        this->fill_residual_info(v_xsl, v_rhs, prim_obj, Citer);
+        iters.push_back(Citer);
+        ConvergenceFlags PreExitCode = this->converge_check(iters);
+        if (PreExitCode == ConvergenceFlags::CONVERGED ||
+            PreExitCode == ConvergenceFlags::ACCEPTABLE ||
+            PreExitCode == ConvergenceFlags::DIVERGING) {
+            // Converged/acceptable/(residual-)diverging before ever factorizing
+            // this iterate. mu_ is set below (the loop's current barrier
+            // parameter -- the value this iterate was evaluated under -- is
+            // meaningful and display-only). The remaining un-set fields --
+            // barr_obj_, alpha_p/d/t_,
+            // h_facs_, h_pert_/_cum_, p_pivots_, ls_iters_, merit_val_ -- stay at
+            // IterateInfo's fresh per-iteration defaults (0, or 1.0 for the
+            // alphas): there is no factorization, barrier update, or line search to
+            // report. This is the one accepted, cosmetic change versus today: the
+            // final printed row's Mu/Bar Obj/AlphaP/AlphaD/AlphaT/LS/PPS/HF/HPert
+            // columns read as defaults rather than a wasted factorization's real
+            // values. Nothing that feeds the verdict, the returned primals, or
+            // print_exit_stats reads any of those fields (converge_check() and
+            // print_exit_stats read only prim_obj_/kkt_inf_/barr_inf_/econ_inf_/
+            // icon_inf_, and return_best_'s criteria switch below reads only
+            // econ_inf_/icon_inf_/kkt_inf_/prim_obj_ -- all of which
+            // fill_residual_info() already set correctly above).
+            iters.back().mu_ = mu;
+            QPtimer.stop();
+            ExitCode = PreExitCode;
+
+            if (settings_.return_best_) {
+                double critval;
+                switch (settings_.best_criteria_) {
+                case BestCriteriaModes::ECONS:
+                    critval = iters.back().econ_inf_;
+                    break;
+                case BestCriteriaModes::ICONS:
+                    critval = iters.back().icon_inf_;
+                    break;
+                case BestCriteriaModes::KKT:
+                    critval = iters.back().kkt_inf_;
+                    break;
+                case BestCriteriaModes::OBJ:
+                    critval = iters.back().prim_obj_;
+                    break;
+                default:
+                    throw std::invalid_argument("Unknown BestCriteriaModes");
+                }
+                if (critval <= BestCriteriaVal || i == 0) {
+                    BestCriteriaVal = critval;
+                    BestXSL = XSL;
+                    BestRHS = RHS;
+                    BestIter = i;
+                }
+            }
+
+            if (this->late_callback_enabled_) {
+                CBtimer.start();
+                this->late_callback_(iters.back(), XSL, RHS);
+                CBtimer.stop();
+            }
+
+            if (settings_.print_level_ == 0) {
+                Printtimer.start();
+                this->print_last_iterate(iters);
+                Printtimer.stop();
+            }
+
+            if (ExitCode != ConvergenceFlags::CONVERGED && settings_.return_best_) {
+                XSL = BestXSL;
+                RHS = BestRHS;
+            }
+
+            this->result_.converge_flag_ = ExitCode;
+            break;
+        }
+        iters.pop_back();
+
         double nhpert = 0;
+        // Display-only accumulator (PSIOPT 2.4): the cumulative inertia-perturbation
+        // total for this iteration's factor_impl() call, for the HPert table column.
+        // Kept fully separate from nhpert (the last delta), which alone feeds the
+        // Hpert0 warm-start below -- see the comment at that read site.
+        double nhpert_cum = 0;
         double Incr = settings_.incr_h_;
         double Incr2 = settings_.incr_h_;
         if (FirstPert)
@@ -1125,24 +1291,35 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             Zfac = !cycling;
         }
 
-        Citer.h_facs_ = this->factor_impl(false, Zfac, Hpert0, Incr, Incr2, nhpert);
+        Citer.h_facs_ = this->factor_impl(false, Zfac, Hpert0, Incr, Incr2, nhpert, nhpert_cum);
         // Note: if factor_impl exhausted all perturbation attempts (h_facs_ == max_refac_),
         // we proceed rather than aborting. The line search evaluates actual function values
         // and will reject truly bad steps by reducing alpha. Forcing GoodStep=false here
         // would be an algorithmic change that could break existing convergence behavior.
 
         if (Citer.h_facs_ > 0) {
+            // Hpert0 warm-start MUST keep consuming nhpert (the last perturbation
+            // DELTA) byte-identically -- do not substitute nhpert_cum here (see
+            // PSIOPT 2.4 comment above nhpert_cum's declaration).
             Hpert0 = std::max(settings_.delta_h_, nhpert * settings_.decr_h_);
             FirstPert = false;
         }
         Citer.h_pert_ = nhpert;
+        Citer.h_pert_cum_ = nhpert_cum;
 
         // Update barrier parameter and compute search direction
         if (this->inequal_cons_ > 0) {
             switch (barmode) {
             case BarrierModes::PROBE:
                 this->barrier_gradient(v_xsl.iq_lmults(), v_rhs.dual_grad());
-                DXSL = -this->kkt_sol_.solve(RHS);
+                // Assign the Solve<> expression directly (hits Eigen's specialized
+                // Assignment<DstXprType, Solve<...>> and writes straight into DXSL,
+                // no temporary) then negate in place (elementwise, alias-safe) --
+                // avoids the extra kkt_dim_-sized temporary that
+                // `DXSL = -kkt_sol_.solve(RHS)` forces via Solve's
+                // EvalBeforeNestingBit when wrapped in a CwiseUnaryOp.
+                DXSL = this->kkt_sol_.solve(RHS);
+                DXSL = -DXSL;
                 this->max_primal_dual_step(v_xsl, v_dxsl, settings_.bound_fraction_, alphap,
                                            alphad);
                 Temp = XSL + DXSL;
@@ -1162,7 +1339,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             this->barrier_gradient(v_xsl.slacks(), v_xsl.iq_lmults(), mu, v_rhs.dual_grad());
         }
 
-        DXSL = -this->kkt_sol_.solve(RHS);
+        // See the solve-into comment above (PROBE case): direct assignment + in-place
+        // negate avoids the extra temporary that `-kkt_sol_.solve(RHS)` forces.
+        DXSL = this->kkt_sol_.solve(RHS);
+        DXSL = -DXSL;
         bool GoodStep = std::isfinite(DXSL.squaredNorm());
         if (this->inequal_cons_ > 0)
             this->max_primal_dual_step(v_xsl, v_dxsl, settings_.bound_fraction_, alphap, alphad);
@@ -1359,7 +1539,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
         print_finished("KKT-Matrix Analysis ");
     }
 
-    Eigen::VectorXd dx = -this->kkt_sol_.solve(RHS);
+    // See the solve-into comment in alg_impl: direct-assign + in-place negate
+    // avoids the extra temporary that `-kkt_sol_.solve(RHS)` forces.
+    Eigen::VectorXd dx = this->kkt_sol_.solve(RHS);
+    dx = -dx;
     KKTVector v_dx = kkt_view(dx);
 
     if (equal_cons_ > 0)
@@ -1439,9 +1622,10 @@ double tycho::solvers::PSIOPT::ls_l1(double obj_scale, double mu, double prim_ob
 
     PenaltyTerms init = compute_penalties(xsl, rhs);
 
-    double sc = .1 + std::abs(vv - cv) / init.l2_;
-    if (init.l2_ == 0.0)
-        sc = 1.0;
+    // Branch-first: avoid computing a transient inf/nan when init.l2_ == 0.0
+    // (the division result is immediately discarded by the guard below anyway;
+    // final sc is bit-identical to the previous compute-then-overwrite order).
+    double sc = (init.l2_ == 0.0) ? 1.0 : .1 + std::abs(vv - cv) / init.l2_;
 
     double LangInit = prim_obj + barr_obj + init.l1_ + init.l2_ * sc;
 
@@ -1476,9 +1660,10 @@ double tycho::solvers::PSIOPT::ls_auglang(double obj_scale, double mu, double pr
 
     PenaltyTerms init = compute_penalties(xsl, rhs);
 
-    double sc = .01 + std::abs(vv - cv) / init.l2_;
-    if (init.l2_ == 0.0)
-        sc = 1.0;
+    // Branch-first: avoid computing a transient inf/nan when init.l2_ == 0.0
+    // (the division result is immediately discarded by the guard below anyway;
+    // final sc is bit-identical to the previous compute-then-overwrite order).
+    double sc = (init.l2_ == 0.0) ? 1.0 : .01 + std::abs(vv - cv) / init.l2_;
 
     double LangInit = prim_obj + barr_obj + init.l1_ + init.l2_ * sc;
 
@@ -1590,12 +1775,33 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
     // Re-apply the QP threading setting on every solve entry, not just in
     // set_nlp() (which only runs on transcribe): a single-thread pin left on
     // this thread by another component (e.g. Jet's per-job pin — thread-local
-    // BLASSetThreading on macOS 15+) must not silently single-thread reused
-    // solves.
+    // BLASSetThreading on macOS 15+, or detail::MklLocalPinGuard in jet.h on
+    // the MKL side) must not silently single-thread reused solves.
+    //
+    // This re-apply is NOT redundant now that the MKL setter below is
+    // thread-local rather than global — if anything it is MORE load-bearing:
+    // a nonzero thread-local override takes priority over the process-global
+    // value on that thread until explicitly reset, so a *global* re-apply
+    // could never have actually overridden a lingering local pin in the
+    // first place. A solve driven through Jet::map runs jet_run() ->
+    // solve()/optimize() -> run_phase_sequence() on the pool worker thread
+    // *while still inside* detail::MklLocalPinGuard's scope (jet.h), which
+    // has pinned that thread's local MKL thread count to 1. The explicit
+    // thread-local set here is what makes this thread (whichever one is
+    // calling) actually run Pardiso with this driver's own qp_threads_,
+    // instead of silently inheriting whatever local value a previous
+    // occupant left behind. In the Jet::map case specifically,
+    // jet_initialize() forces qp_threads_ == 1 (via set_num_partitions(1, 1)),
+    // so this re-apply sets the local value to 1 — consistent with, and
+    // redundant to, the guard's own pin — but for any other thread reusing a
+    // pool worker outside of Jet, this call is what restores the driver's
+    // intended thread count on its own calling thread.
 #ifdef USE_ACCELERATE_SPARSE
     accelerate_set_num_threads(settings_.qp_threads_);
 #else
-    mkl_set_num_threads(settings_.qp_threads_);
+    // Return value (previous local count) intentionally discarded; see the
+    // set_nlp() call site above for the fire-and-forget rationale.
+    mkl_set_num_threads_local(settings_.qp_threads_);
 #endif
 
     if (settings_.print_level_ == 0)

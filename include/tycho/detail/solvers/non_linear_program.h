@@ -348,6 +348,20 @@ struct NonLinearProgram {
             target[sourcelocs[i]] += source[i];
         }
     }
+
+    /// <summary>
+    /// Per-partition objective/value accumulator scratch, shared across
+    /// eval_rhs/eval_ogc/eval_occ/eval_obj/eval_kkt/eval_aug. Each of those
+    /// entry points is only ever invoked serially on this NLP instance -- a
+    /// single NLP is inside at most one alg_impl call at a time (PSIOPT's
+    /// outer control loop is single-threaded; the only concurrency is the
+    /// parallel_sequence dispatch *within* one call, which writes disjoint
+    /// vals_scratch_[thrnum] entries, exactly as the old per-call local
+    /// `Vals` vector did). Resized in place (assign() re-zeros without a
+    /// realloc once sized to num_partitions_).
+    /// </summary>
+    std::vector<double> vals_scratch_;
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

@@ -49,6 +49,22 @@
 
 namespace tycho::solvers {
 
+/// @brief Canonical KKT lock column for the physical slot coupling global indices
+/// @p a and @p b: the smaller of the two.
+///
+/// The KKT sparsity routine (NonLinearProgram::analyze_sparsity) canonicalizes every
+/// element to the lower triangle (col <= row) and stores its value offset under the
+/// SMALLER endpoint, so both mirror orderings of a symmetric Hessian pair collapse to
+/// one physical double filed under min(a, b). Any two writers of that double are only
+/// serialized if they take the same mutex, so every KKT scatter site
+/// (DenseFunctionBase::kkt_fill_all / kkt_fill_hess) keys its per-element lock on this
+/// function, and NonLinearProgram::get_mat_space marks contested columns (and sizes
+/// kkt_locks_) with this same function. Because all claimants of a slot derive their
+/// lock column from this single shared keying, cross-partition agreement is structural
+/// -- there is no per-site convention that can drift. Do NOT introduce a second keying
+/// convention at any of those sites.
+inline constexpr int kkt_canonical_lock_col(int a, int b) { return (a < b) ? a : b; }
+
 struct SolverIndexingData {
     using MatrixXi = Eigen::MatrixXi;
     using VectorXi = Eigen::VectorXi;
