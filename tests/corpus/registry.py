@@ -15,4 +15,10 @@ ALL_PROBLEMS: list[str] = [
     # --- Task 1 throwaway stubs (deleted in Task 5) ---
     "stub_converges",
     "stub_fails",
+    # --- Task 2: degenerate tier ---
+    "deg_dup_equality",
+    "deg_conflicting_equality",
+    "deg_zero_objective",
+    "deg_redundant_defects",
+    "deg_near_infeasible",
 ]
