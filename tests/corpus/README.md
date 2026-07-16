@@ -23,7 +23,7 @@ conda activate tycho
 # Or: conda run -n tycho python scripts/run_corpus.py ...
 
 python scripts/run_corpus.py                                   # run everything registered
-python scripts/run_corpus.py --filter stub                     # only modules matching a substring
+python scripts/run_corpus.py --filter deg                      # only modules matching a substring
 python scripts/run_corpus.py --out results.jsonl                # custom output path
 python scripts/run_corpus.py --config max_iters=200 kkt_tol=1e-8  # tweak the optimizer
 python scripts/run_corpus.py --cbwr --repeat 2                 # determinism check

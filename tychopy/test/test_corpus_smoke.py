@@ -2,7 +2,8 @@
 
 Verifies the problem-module contract documented in tests/corpus/README.md
 holds for every module registered in tests/corpus/registry.py, and that the
-harness (scripts/run_corpus.py) runs end-to-end on the Task 1 stub problems.
+harness (scripts/run_corpus.py) runs end-to-end on two fast real problems
+(one converging, one diverging).
 
 This is the only pytest-gated piece of the corpus: the corpus problems
 themselves are expected to fail/diverge on today's PSIOPT defaults and are
