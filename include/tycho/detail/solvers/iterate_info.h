@@ -71,12 +71,17 @@ struct IterateInfo {
     //                             trial (-1 if the step was accepted with no
     //                             rejection).
     //   theta_at_first_rejection_ — constraint infeasibility (L2) at that first
-    //                             rejected trial (0 if no rejection was
-    //                             recorded, or for the LANG variant, which
-    //                             materializes no infeasibility scalar).
+    //                             rejected trial. -1.0 means UNAVAILABLE: no
+    //                             rejection was recorded, or the LANG variant
+    //                             ran (it materializes no infeasibility
+    //                             scalar). A real infeasibility is always
+    //                             >= 0, so consumers (e.g. a second-order
+    //                             correction trigger) must treat any negative
+    //                             value as "skip theta-based logic" rather
+    //                             than as a feasible reading.
     bool accepted_ = false;
     int first_rejection_iter_ = -1;
-    double theta_at_first_rejection_ = 0.0;
+    double theta_at_first_rejection_ = -1.0;
 };
 
 } // namespace tycho::solvers
