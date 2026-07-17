@@ -17,9 +17,11 @@
 // The implementation shipped alongside it (NoopRecovery, noop_recovery.h) is
 // an empty chain that always returns kAcceptAsIs, i.e. today's behavior: the
 // capped backtrack's surviving alpha is simply taken forward (PSIOPT has no
-// post-rejection recovery today; there is no give-up branch at this point).
-// A future change fills in the real SOC -> extended-backtrack ->
-// watchdog -> feasibility-switch dispatch.
+// post-rejection recovery by default; there is no give-up branch at this
+// point). SocRecovery (soc.h) is the first live implementor: an opt-in
+// (Settings::max_soc_ > 0) second-order correction that re-solves on the live
+// factorization and returns kRetry with a corrected step. Extended-backtrack,
+// watchdog revert, and the feasibility switch remain future links.
 //
 // Ownership rule: a RecoveryChain holds NO solver state (no persistent
 // watchdog counters, etc. until a live recovery dispatcher actually needs
@@ -31,8 +33,16 @@
 
 #include <vector>
 
+#include <Eigen/Core>
+
+#include "tycho/detail/solvers/globalization/acceptance_strategy.h"
+#include "tycho/detail/solvers/globalization/globalization_mechanism.h"
 #include "tycho/detail/solvers/globalization/solver_context.h"
 #include "tycho/detail/solvers/iterate_info.h"
+// PSIOPT::LineSearchModes (forwarded to the acceptance re-test during a
+// second-order correction) requires the complete PSIOPT class; pulled in
+// transitively via the two globalization headers above, which already include
+// psiopt.h. See solver_context.h's one-directional include-discipline note.
 
 namespace tycho::solvers {
 
@@ -56,18 +66,44 @@ class RecoveryChain {
     //                        there is no give-up branch in the current loop.
     enum class Action { kAcceptAsIs, kRetry, kSwitchToFeasibility, kGiveUp };
 
-    // Citer is the just-rejected iterate's record (mutable: a real
-    // implementation may annotate it, e.g. marking that a SOC correction
-    // ran); `iters` is the read-only iteration history a chain link may
-    // consult (the Zfac heuristic already reads
-    // `iters[...].h_facs_`, establishing precedent for recovery-adjacent
-    // code needing history access, though that specific heuristic itself
-    // stays in factor_impl per the scope note above). SolverContext gives
-    // access to settings_ (delta_h_/incr_h_/decr_h_/max_refac_ govern the
-    // ladder a future inertia_mode shares state with) and the KKT solver a
-    // SOC re-solve would reuse.
+    // Citer is the just-rejected iterate's record (mutable: an implementation
+    // may annotate it, e.g. stamping accepted_ when a correction is taken, and
+    // reads its trigger signals first_rejection_iter_/theta_at_first_rejection_);
+    // `iters` is the read-only iteration history a chain link may consult (the
+    // Zfac heuristic already reads `iters[...].h_facs_`, establishing precedent
+    // for recovery-adjacent code needing history access, though that specific
+    // heuristic itself stays in factor_impl per the scope note above).
+    // SolverContext gives access to settings_ (max_soc_ governs the SOC cap),
+    // nlp_ (constraint evaluation at a trial point), and the still-LIVE KKT
+    // factorization the second-order correction re-solves against (no refactor).
+    //
+    // The remaining parameters are the live per-iteration working set (the same
+    // objects compute_step just operated on, threaded verbatim so a recovery
+    // link can build and re-test a corrected step):
+    //   acceptance/mechanism        — re-run the full acceptance backtrack, and
+    //                                 the fraction-to-boundary scaling, on a
+    //                                 corrected direction.
+    //   lsmode/obj_scale/mu/prim_obj/barr_obj — the merit transients forwarded
+    //                                 to that re-test.
+    //   XSL/DXSL/XSL2/RHS/RHS2       — the KKT-layout state and scratch blocks.
+    //                                 A link that returns kRetry must leave the
+    //                                 accepted corrected step in DXSL (and its
+    //                                 length in `alpha`) so alg_impl's
+    //                                 `XSL += alpha*DXSL` commit applies it; on
+    //                                 any other Action DXSL/alpha are left as
+    //                                 compute_step produced them.
+    //   alpha/alphap/alphad         — the accepted step length and the
+    //                                 fraction-to-boundary primal/dual lengths.
+    //   soc_steps                   — accumulator a link increments once per
+    //                                 correction back-substitution (diagnostic).
     virtual Action on_step_rejected(IterateInfo &Citer, const std::vector<IterateInfo> &iters,
-                                     SolverContext &ctx) = 0;
+                                     SolverContext &ctx, AcceptanceStrategy &acceptance,
+                                     GlobalizationMechanism &mechanism,
+                                     PSIOPT::LineSearchModes lsmode, double obj_scale, double mu,
+                                     double prim_obj, double barr_obj, Eigen::VectorXd &XSL,
+                                     Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2,
+                                     Eigen::VectorXd &RHS, Eigen::VectorXd &RHS2, double &alpha,
+                                     double &alphap, double &alphad, int &soc_steps) = 0;
 
     // μ-event / phase-change reset hook — see the ownership-rule note above.
     virtual void reset() = 0;

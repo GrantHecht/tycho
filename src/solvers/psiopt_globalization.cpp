@@ -31,9 +31,11 @@
 #include "tycho/detail/solvers/globalization/backtracking_line_search.h"
 #include "tycho/detail/solvers/globalization/classic_adaptive_governor.h"
 #include "tycho/detail/solvers/globalization/merit_acceptance.h"
+#include "tycho/detail/solvers/globalization/soc.h"
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 
 namespace tycho::solvers {
@@ -545,6 +547,153 @@ double ClassicAdaptiveGovernor::update_barrier(PSIOPT::BarrierModes barmode, dou
     barr_obj = this->barrier_objective(v_xsl.slacks(), mu, ctx);
     this->barrier_gradient(v_xsl.slacks(), v_xsl.iq_lmults(), mu, v_rhs.dual_grad());
     return mu;
+}
+
+// ============================================================================
+// SocRecovery — second-order correction (Wächter & Biegler 2006, §2.4). Only
+// reached when SOC is enabled (max_soc_ > 0, so set_nlp built a SocRecovery)
+// AND the line search rejected a usable step (the recovery-dispatch gate). See
+// globalization/soc.h for the algorithm overview and the trigger/termination
+// predicates driven below.
+// ============================================================================
+
+void SocRecovery::eval_trial_constraints(SolverContext &ctx, double obj_scale,
+                                         const Eigen::VectorXd &XSL, const Eigen::VectorXd &dir,
+                                         double alpha, Eigen::VectorXd &xsl2_scratch,
+                                         Eigen::VectorXd &cons_out) {
+    const int pv = ctx.primal_vars_;
+    const int sv = ctx.slack_vars_;
+    const int ec = ctx.equal_cons_;
+    const int ic = ctx.inequal_cons_;
+
+    xsl2_scratch = XSL + alpha * dir;
+
+    double val = 0.0;
+    cons_out.setZero();
+    ctx.nlp_->eval_occ(obj_scale, xsl2_scratch.head(pv), val, cons_out.head(ec), cons_out.tail(ic));
+
+    // Slack reset on the inequality block against the trial slacks — the same
+    // convention ClassicMeritAcceptance::apply_reset_slacks / alg_impl's RHS
+    // assembly use, so cons_out is directly comparable to RHS.all_cons().
+    auto S = xsl2_scratch.segment(pv, sv);
+    auto FXI = cons_out.tail(ic);
+    for (int i = 0; i < sv; i++) {
+        double fxi = FXI[i];
+        double si = S[i];
+        if (si < ctx.settings_.neg_slack_reset_) {
+            si = ctx.settings_.neg_slack_reset_;
+        }
+        if (fxi < 0.0) {
+            FXI[i] = 0.0;
+            S[i] = std::max(std::abs(fxi), ctx.settings_.neg_slack_reset_);
+        } else {
+            FXI[i] += si;
+        }
+    }
+}
+
+RecoveryChain::Action SocRecovery::on_step_rejected(
+    IterateInfo &Citer, const std::vector<IterateInfo> &iters, SolverContext &ctx,
+    AcceptanceStrategy &acceptance, GlobalizationMechanism &mechanism,
+    PSIOPT::LineSearchModes lsmode, double obj_scale, double mu, double prim_obj, double barr_obj,
+    Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
+    Eigen::VectorXd &RHS2, double &alpha, double &alphap, double &alphad, int &soc_steps) {
+    const int max_soc = ctx.settings_.max_soc_;
+    if (max_soc <= 0)
+        return Action::kAcceptAsIs; // defensive: SocRecovery is only built when max_soc_ > 0.
+
+    const int ncons = ctx.equal_cons_ + ctx.inequal_cons_;
+
+    // Current-iterate constraint violation: the same squared-L2 all_cons
+    // quantity theta_at_first_rejection_ records (RHS's inequality block already
+    // carries the merit slack reset — see the RHS assembly in psiopt.cpp).
+    const double current_infeasibility = RHS.tail(ncons).squaredNorm();
+    if (!soc_should_trigger(Citer, current_infeasibility))
+        return Action::kAcceptAsIs;
+
+    // Snapshot the fraction-to-boundary lengths so a rejected correction leaves
+    // no diagnostic residue: only an accepted (kRetry) correction keeps the
+    // corrected step's alphap/alphad.
+    const double alphap_orig = alphap;
+    const double alphad_orig = alphad;
+
+    // Correction-loop scratch (local — SocRecovery holds no state).
+    Eigen::VectorXd rhs_soc(RHS.size());
+    Eigen::VectorXd dxsl_soc(DXSL.size());
+    Eigen::VectorXd trial_cons(ncons);
+
+    // Accumulated corrected constraint block c_soc. Seed from the first rejected
+    // trial (paper: c_soc = alpha_0*c_k + c(x_k + alpha_0*d_k); the classic first
+    // trial used alpha_0 = 1 on the already fraction-to-boundary-scaled DXSL).
+    Eigen::VectorXd c_soc(ncons);
+    eval_trial_constraints(ctx, obj_scale, XSL, DXSL, 1.0, XSL2, trial_cons);
+    c_soc = RHS.tail(ncons) + trial_cons;
+
+    auto do_correction = [&](int /*correction_index*/, double /*prev_violation*/) {
+        // Corrected RHS: reuse the factored RHS (objective block unchanged) and
+        // overwrite only the constraint block with the accumulated c_soc.
+        rhs_soc = RHS;
+        rhs_soc.tail(ncons) = c_soc;
+
+        // Correction on the LIVE factorization — one back-substitution, no
+        // refactor. Same sign convention as the main step (DXSL = -solve(RHS)).
+        dxsl_soc = ctx.kkt_solver_.solve(rhs_soc);
+        dxsl_soc = -dxsl_soc;
+        if (!std::isfinite(dxsl_soc.squaredNorm()))
+            return SocCorrectionOutcome{false, std::numeric_limits<double>::infinity()};
+
+        // Fraction-to-boundary scale the corrected direction, exactly as the
+        // classic path scales DXSL before its backtrack (mechanism's shared
+        // entry point, guarded identically on inequal_cons_ > 0).
+        if (ctx.inequal_cons_ > 0)
+            mechanism.max_primal_dual_step(XSL, dxsl_soc, ctx.settings_.bound_fraction_, alphap,
+                                           alphad, ctx);
+
+        // Re-run the full acceptance backtrack on the corrected direction. A
+        // fresh IterateInfo captures the verdict and, on rejection, the first
+        // corrected trial's L2 infeasibility (theta_at_first_rejection_) without
+        // clobbering Citer's recorded signals.
+        IterateInfo trial_iter;
+        const double alpha_soc =
+            acceptance.classic_line_search(lsmode, obj_scale, mu, prim_obj, barr_obj, XSL, dxsl_soc,
+                                           XSL2, RHS, RHS2, trial_iter, iters);
+
+        if (trial_iter.accepted_) {
+            // Commit the corrected step in place: alg_impl's XSL += alpha*DXSL
+            // applies it. Stamp Citer so the recorded iterate reflects the taken
+            // (corrected) step rather than the rejected one.
+            DXSL = dxsl_soc;
+            alpha = alpha_soc;
+            Citer.accepted_ = true;
+            Citer.ls_iters_ = trial_iter.ls_iters_;
+            Citer.merit_val_ = trial_iter.merit_val_;
+            return SocCorrectionOutcome{true, 0.0};
+        }
+
+        // Rejected. Without an infeasibility reading (theta < 0) SOC cannot
+        // measure progress; stop.
+        const double trial_violation = trial_iter.theta_at_first_rejection_;
+        if (trial_violation < 0.0)
+            return SocCorrectionOutcome{false, std::numeric_limits<double>::infinity()};
+
+        // Accumulate for a possible next round:
+        // c_soc <- alpha_soc*c_soc + c(x_k + alpha_soc*d_soc).
+        eval_trial_constraints(ctx, obj_scale, XSL, dxsl_soc, alpha_soc, XSL2, trial_cons);
+        c_soc = alpha_soc * c_soc + trial_cons;
+        return SocCorrectionOutcome{false, trial_violation};
+    };
+
+    const Action action =
+        soc_run_loop(Citer.theta_at_first_rejection_, max_soc, soc_steps, do_correction);
+
+    if (action != Action::kRetry) {
+        // Reverting to the originally-rejected step: restore the diagnostic
+        // fraction-to-boundary lengths (DXSL/alpha were never touched on a
+        // rejected correction).
+        alphap = alphap_orig;
+        alphad = alphad_orig;
+    }
+    return action;
 }
 
 } // namespace tycho::solvers

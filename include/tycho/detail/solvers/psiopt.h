@@ -124,7 +124,13 @@ class PSIOPT {
         int max_ls_iters_ = 2;
         int max_acc_iters_ = 50;
         int max_refac_ = 15;
-        int max_soc_ = 1;       // reserved — second-order correction, not currently implemented
+        // Maximum second-order corrections attempted after a first-trial
+        // rejection (Wächter & Biegler 2006, §2.4). 0 = off (default): the
+        // solver behaves exactly as it did before SOC existed. Set > 0 to opt
+        // in; the recommended enable value is 4 (kSocRecommendedMaxCorrections
+        // in globalization/soc.h).
+        int max_soc_ = 0;
+
         int max_feas_rest_ = 2; // reserved — feasibility restoration, not currently implemented
 
         // --- Convergence tolerances ---
@@ -261,6 +267,13 @@ class PSIOPT {
         int factor_mem_ = 0;
         int factor_flops_ = 0;
 
+        // Number of second-order correction back-substitutions performed across
+        // the whole solve (one per correction attempt; each costs a single
+        // constraint evaluation + one back-substitution on the live
+        // factorization). Always 0 when SOC is off (max_soc_ == 0). Reset per
+        // solve alongside the other accumulators.
+        int soc_steps_taken_ = 0;
+
         // T6 (dead-status fix): the last non-Success status observed from
         // kkt_sol_.info() by factor_impl() within the CURRENT phase (alg_impl
         // resets it on entry, so print_exit_stats reports per-phase status).
@@ -286,6 +299,7 @@ class PSIOPT {
             solver_init_time_ = 0;
             iter_num_ = 0;
             last_kkt_info_ = Eigen::Success;
+            soc_steps_taken_ = 0;
         }
     };
 

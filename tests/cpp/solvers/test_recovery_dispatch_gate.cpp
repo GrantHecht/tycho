@@ -17,6 +17,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "tycho/detail/solvers/globalization/acceptance_strategy.h"
+#include "tycho/detail/solvers/globalization/globalization_mechanism.h"
 #include "tycho/detail/solvers/globalization/recovery_chain.h"
 #include "tycho/detail/solvers/globalization/solver_context.h"
 #include "tycho/detail/solvers/iterate_info.h"
@@ -30,6 +31,7 @@
 namespace {
 
 using tycho::solvers::AcceptanceStrategy;
+using tycho::solvers::GlobalizationMechanism;
 using tycho::solvers::IterateInfo;
 using tycho::solvers::KktSolverType;
 using tycho::solvers::ProgressMeasures;
@@ -69,12 +71,17 @@ class StubAcceptance : public AcceptanceStrategy {
 };
 
 // Recording RecoveryChain: counts hook invocations so the test can assert the
-// gate fires it exactly when expected. Returns kAcceptAsIs (today's only wired
-// behavior) and touches none of its arguments.
+// gate fires it exactly when expected. Returns kAcceptAsIs and touches none of
+// its arguments (this test exercises the dispatch GATE, not the correction
+// itself — see test_soc.cpp for the SOC policy).
 class RecordingRecovery : public RecoveryChain {
   public:
-    Action on_step_rejected(IterateInfo &, const std::vector<IterateInfo> &,
-                            SolverContext &) override {
+    Action on_step_rejected(IterateInfo &, const std::vector<IterateInfo> &, SolverContext &,
+                            AcceptanceStrategy &, GlobalizationMechanism &,
+                            PSIOPT::LineSearchModes, double, double, double, double,
+                            Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &,
+                            Eigen::VectorXd &, Eigen::VectorXd &, double &, double &, double &,
+                            int &) override {
         ++calls_;
         return Action::kAcceptAsIs;
     }
@@ -83,12 +90,35 @@ class RecordingRecovery : public RecoveryChain {
     int calls_ = 0;
 };
 
+// Inert GlobalizationMechanism: RecordingRecovery ignores it, so its bodies are
+// never reached; present only to satisfy the on_step_rejected signature.
+class UnusedMechanism : public GlobalizationMechanism {
+  public:
+    double compute_step(PSIOPT::LineSearchModes, double, double, double, double, Eigen::VectorXd &,
+                        Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &,
+                        AcceptanceStrategy &, double &, double &, IterateInfo &,
+                        const std::vector<IterateInfo> &, SolverContext &) override {
+        return 1.0;
+    }
+    void max_primal_dual_step(Eigen::VectorXd &, Eigen::VectorXd &, double, double &, double &,
+                              const SolverContext &) override {}
+    void reset() override {}
+};
+
 // Faithful replica of alg_impl's recovery-hook wiring: dispatch only when the
-// shared gate predicate says so.
+// shared gate predicate says so. The extra working-set arguments are inert here
+// (RecordingRecovery ignores them) and bound to local dummies.
 void drive_gate(bool good_step, IterateInfo &citer, RecoveryChain &recovery,
-                const std::vector<IterateInfo> &iters, SolverContext &ctx) {
+                AcceptanceStrategy &acceptance, const std::vector<IterateInfo> &iters,
+                SolverContext &ctx) {
     if (should_dispatch_recovery(good_step, citer)) {
-        recovery.on_step_rejected(citer, iters, ctx);
+        UnusedMechanism mechanism;
+        Eigen::VectorXd v;
+        double alpha = 1.0, alphap = 1.0, alphad = 1.0;
+        int soc_steps = 0;
+        recovery.on_step_rejected(citer, iters, ctx, acceptance, mechanism,
+                                  PSIOPT::LineSearchModes::AUGLANG, 1.0, 1e-3, 0.0, 0.0, v, v, v, v,
+                                  v, alpha, alphap, alphad, soc_steps);
     }
 }
 
@@ -131,7 +161,7 @@ TEST(RecoveryDispatchGate, StubAcceptanceDrivesHook) {
         acceptance.classic_line_search(PSIOPT::LineSearchModes::AUGLANG, 1.0, 1e-3, 0.0, 0.0, v, v,
                                        v, v, v, citer, iters);
         EXPECT_FALSE(citer.accepted_);
-        drive_gate(/*good_step=*/true, citer, recovery, iters, ctx);
+        drive_gate(/*good_step=*/true, citer, recovery, acceptance, iters, ctx);
         EXPECT_EQ(recovery.calls_, 1);
     }
 
@@ -143,7 +173,7 @@ TEST(RecoveryDispatchGate, StubAcceptanceDrivesHook) {
         acceptance.classic_line_search(PSIOPT::LineSearchModes::AUGLANG, 1.0, 1e-3, 0.0, 0.0, v, v,
                                        v, v, v, citer, iters);
         EXPECT_TRUE(citer.accepted_);
-        drive_gate(/*good_step=*/true, citer, recovery, iters, ctx);
+        drive_gate(/*good_step=*/true, citer, recovery, acceptance, iters, ctx);
         EXPECT_EQ(recovery.calls_, 0);
     }
 
@@ -152,9 +182,10 @@ TEST(RecoveryDispatchGate, StubAcceptanceDrivesHook) {
     // because GoodStep is false.
     {
         RecordingRecovery recovery;
-        IterateInfo citer; // no line search ran
+        StubAcceptance acceptance(/*accept=*/false); // never reached (gate stays silent)
+        IterateInfo citer;                           // no line search ran
         EXPECT_FALSE(citer.accepted_);
-        drive_gate(/*good_step=*/false, citer, recovery, iters, ctx);
+        drive_gate(/*good_step=*/false, citer, recovery, acceptance, iters, ctx);
         EXPECT_EQ(recovery.calls_, 0);
     }
 }

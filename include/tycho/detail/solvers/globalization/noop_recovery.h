@@ -43,8 +43,18 @@ class NoopRecovery : public RecoveryChain {
   public:
     NoopRecovery() = default;
 
+    // Pure no-op: ignores every argument (Citer/iters/ctx and the entire
+    // threaded working set) and unconditionally accepts the step as-is, so the
+    // default solve path is bit-identical to pre-recovery behavior.
     Action on_step_rejected(IterateInfo & /*Citer*/, const std::vector<IterateInfo> & /*iters*/,
-                            SolverContext & /*ctx*/) override {
+                            SolverContext & /*ctx*/, AcceptanceStrategy & /*acceptance*/,
+                            GlobalizationMechanism & /*mechanism*/,
+                            PSIOPT::LineSearchModes /*lsmode*/, double /*obj_scale*/, double /*mu*/,
+                            double /*prim_obj*/, double /*barr_obj*/, Eigen::VectorXd & /*XSL*/,
+                            Eigen::VectorXd & /*DXSL*/, Eigen::VectorXd & /*XSL2*/,
+                            Eigen::VectorXd & /*RHS*/, Eigen::VectorXd & /*RHS2*/,
+                            double & /*alpha*/, double & /*alphap*/, double & /*alphad*/,
+                            int & /*soc_steps*/) override {
         return Action::kAcceptAsIs;
     }
 

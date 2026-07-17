@@ -42,6 +42,7 @@
 #include "tycho/detail/solvers/globalization/merit_acceptance.h"
 #include "tycho/detail/solvers/globalization/recovery_chain.h"
 #include "tycho/detail/solvers/globalization/noop_recovery.h"
+#include "tycho/detail/solvers/globalization/soc.h"
 #include "tycho/detail/solvers/globalization/restoration.h"
 
 #ifndef USE_ACCELERATE_SPARSE
@@ -843,11 +844,18 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
     // the SolverContext view and passes *mechanism_ to update_barrier.
     this->governor_ = std::make_unique<ClassicAdaptiveGovernor>();
 
-    // The post-rejection recovery chain. The NoopRecovery implementation
-    // shipped today is stateless (holds no solver state, per RecoveryChain's ownership rule)
-    // and always returns kAcceptAsIs, so it needs no context at construction;
-    // alg_impl builds the SolverContext view it passes to on_step_rejected.
-    this->recovery_ = std::make_unique<NoopRecovery>();
+    // The post-rejection recovery chain. Both implementations are stateless
+    // (hold no solver state, per RecoveryChain's ownership rule) and need no
+    // context at construction; alg_impl builds the SolverContext view and passes
+    // the live working set to on_step_rejected. Default (max_soc_ == 0, off) is
+    // NoopRecovery, which always returns kAcceptAsIs so the solve path is
+    // bit-identical to its pre-SOC behavior. Opt in (max_soc_ > 0) to install
+    // SocRecovery's second-order correction.
+    if (this->settings_.max_soc_ > 0) {
+        this->recovery_ = std::make_unique<SocRecovery>();
+    } else {
+        this->recovery_ = std::make_unique<NoopRecovery>();
+    }
 
     this->set_qp_params();
 #ifdef USE_ACCELERATE_SPARSE
@@ -1343,11 +1351,15 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         bool GoodStep = std::isfinite(DXSL.squaredNorm());
         QPtimer.stop();
 
-        // Line search
+        // Line search. lsobjscale is hoisted out of the GoodStep block below so
+        // the recovery-chain hook can forward the identical merit objective
+        // scale (obj_scale * lsobjscale) to its acceptance re-test; its value is
+        // a pure select on algmode (0.0 for SOE/OPTNO, else 1.0), so hoisting the
+        // declaration does not change the value passed to compute_step.
+        double lsobjscale =
+            algmode == AlgorithmModes::SOE || algmode == AlgorithmModes::OPTNO ? 0.0 : 1.0;
         Funtimer.start();
         if (GoodStep) {
-            double lsobjscale =
-                algmode == AlgorithmModes::SOE || algmode == AlgorithmModes::OPTNO ? 0.0 : 1.0;
             // compute_step fuses the fraction-to-boundary scaling (former
             // `if (inequal_cons_ > 0) max_primal_dual_step(...)`, now guarded
             // identically inside compute_step and MUTATING DXSL in place) and
@@ -1380,22 +1392,35 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // runs no line search) is excluded too. On the default solve path every
         // step is accepted, so the hook is never invoked at all.
         //
-        // This wiring is a pure no-op by construction: recovery_ is always a
-        // NoopRecovery (set_nlp), whose on_step_rejected() unconditionally
-        // returns kAcceptAsIs and touches no state (Citer/iters/ctx passed
-        // read/write per the interface but NoopRecovery never reads or
-        // mutates them). The assert below documents -- and, in a debug
-        // build, enforces -- that no other Action is reachable here yet; no
-        // switch/branch exists on the result, so today's control flow below
-        // (whatever alpha compute_step produced, or the h_facs_ = -1 !GoodStep
-        // path) is provably unchanged whether or not the hook fires and
-        // regardless of what it returns.
+        // By default recovery_ is a NoopRecovery (set_nlp installs it whenever
+        // max_soc_ == 0), whose on_step_rejected() unconditionally returns
+        // kAcceptAsIs and touches no state, so the kAcceptAsIs branch below is
+        // exactly today's control flow (take whatever alpha/DXSL compute_step
+        // produced). When SOC is enabled (max_soc_ > 0) recovery_ is a
+        // SocRecovery, which may instead return kRetry after replacing DXSL/alpha
+        // (and alphap/alphad) in place with an accepted corrected step — applied
+        // by the XSL += alpha*DXSL commit below.
         if (should_dispatch_recovery(GoodStep, Citer)) {
-            const RecoveryChain::Action recovery_action =
-                this->recovery_->on_step_rejected(Citer, iters, ctx);
-            assert(recovery_action == RecoveryChain::Action::kAcceptAsIs &&
-                   "only NoopRecovery is wired; kAcceptAsIs is the only reachable Action");
-            (void)recovery_action;
+            const RecoveryChain::Action recovery_action = this->recovery_->on_step_rejected(
+                Citer, iters, ctx, *acceptance_, *mechanism_, lsmode, obj_scale * lsobjscale, mu,
+                prim_obj, barr_obj, XSL, DXSL, Temp, RHS, RHS2, alpha, alphap, alphad,
+                this->result_.soc_steps_taken_);
+            switch (recovery_action) {
+            case RecoveryChain::Action::kAcceptAsIs:
+                // Take the step compute_step produced (DXSL/alpha unchanged).
+                break;
+            case RecoveryChain::Action::kRetry:
+                // SocRecovery committed the corrected step into DXSL/alpha.
+                break;
+            case RecoveryChain::Action::kSwitchToFeasibility:
+                throw std::logic_error(
+                    "PSIOPT: recovery requested a feasibility-restoration switch, but no "
+                    "restoration strategy exists yet (no recovery link can produce this Action)");
+            case RecoveryChain::Action::kGiveUp:
+                throw std::logic_error(
+                    "PSIOPT: recovery gave up on the step, but no give-up handling exists yet "
+                    "(no recovery link can produce this Action)");
+            }
         }
 
         Citer.alpha_p_ = alphap;
