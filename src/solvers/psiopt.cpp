@@ -38,6 +38,7 @@
 #include "tycho/detail/solvers/globalization/solver_context.h"
 #include "tycho/detail/solvers/globalization/acceptance_strategy.h"
 #include "tycho/detail/solvers/globalization/globalization_mechanism.h"
+#include "tycho/detail/solvers/globalization/backtracking_line_search.h"
 #include "tycho/detail/solvers/globalization/barrier_governor.h"
 #include "tycho/detail/solvers/globalization/merit_acceptance.h"
 #include "tycho/detail/solvers/globalization/recovery_chain.h"
@@ -688,19 +689,8 @@ void tycho::solvers::PSIOPT::apply_reset_slacks(Eigen::Ref<Eigen::VectorXd> S,
     }
 }
 
-double tycho::solvers::PSIOPT::max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> SLI,
-                                                    Eigen::Ref<Eigen::VectorXd> dSLI,
-                                                    double bfrac) const {
-    double alpha = 1.0;
-    for (int i = 0; i < this->inequal_cons_; i++) {
-        if (dSLI[i] < -bfrac * SLI[i]) {
-            double an = -bfrac * SLI[i] / dSLI[i];
-            if (an < alpha)
-                alpha = an;
-        }
-    }
-    return alpha;
-}
+// max_step_to_boundary was extracted verbatim into BacktrackingLineSearch
+// (E2 G1 Task 3, src/solvers/psiopt_globalization.cpp).
 
 void tycho::solvers::PSIOPT::complementarity(Eigen::Ref<Eigen::VectorXd> S,
                                              Eigen::Ref<Eigen::VectorXd> LI, double &avgcomp,
@@ -839,10 +829,11 @@ void tycho::solvers::PSIOPT::ensure_solver_initialized() {
 }
 
 // E2 G1: constructors and destructor are defined here (not inline in the
-// header) because the std::unique_ptr<AcceptanceStrategy> member needs the
-// complete AcceptanceStrategy type for its destructor — reached through both
-// the destructor and the constructors' exception-cleanup paths. Bodies are the
-// former header-inline bodies, unchanged.
+// header) because the std::unique_ptr<AcceptanceStrategy> and
+// std::unique_ptr<GlobalizationMechanism> members need their complete concrete
+// types for their destructors — reached through both the destructor and the
+// constructors' exception-cleanup paths. Bodies are the former header-inline
+// bodies, unchanged.
 tycho::solvers::PSIOPT::PSIOPT() {
     settings_.qp_threads_ = std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count());
 }
@@ -881,6 +872,13 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
                       this->stli_scratch_, this->hp_scratch_, this->best_xsl_scratch_,
                       this->best_rhs_scratch_});
 
+    // E2 G1 Task 3: the step-length globalization mechanism. Stateless (holds
+    // NO solver state per GlobalizationMechanism's ownership rule) — every call
+    // receives the live SolverContext as an explicit parameter — so it is
+    // constructed with no context here; alg_impl builds the SolverContext view
+    // it passes to compute_step / max_primal_dual_step.
+    this->mechanism_ = std::make_unique<BacktrackingLineSearch>();
+
     this->set_qp_params();
 #ifdef USE_ACCELERATE_SPARSE
     accelerate_set_num_threads(settings_.qp_threads_);
@@ -902,40 +900,10 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
     this->qp_analyzed_ = false;
 }
 
-void tycho::solvers::PSIOPT::max_primal_dual_step(KKTVector &xsl, KKTVector &dxsl, double bfrac,
-                                                  double &alphap, double &alphad) {
-    double Smax = this->max_step_to_boundary(xsl.slacks(), dxsl.slacks(), bfrac);
-    double Lmax = this->max_step_to_boundary(xsl.iq_lmults(), dxsl.iq_lmults(), bfrac);
-
-    double primstep = Smax;
-    double slackstep = Smax;
-    double eqmultstep = Smax;
-    double iqmultstep = Lmax;
-
-    if (settings_.pd_step_strategy_ == PDStepStrategies::PrimSlackEq_Iq) {
-    } else if (settings_.pd_step_strategy_ == PDStepStrategies::AllMinimum) {
-        double step = std::min(Smax, Lmax);
-        primstep = step;
-        slackstep = step;
-        eqmultstep = step;
-        iqmultstep = step;
-    } else if (settings_.pd_step_strategy_ == PDStepStrategies::PrimSlack_EqIq) {
-        eqmultstep = Lmax;
-    } else if (settings_.pd_step_strategy_ == PDStepStrategies::MaxEq) {
-        double step = std::max(Smax, Lmax);
-        eqmultstep = step;
-    }
-    dxsl.primals() *= primstep;
-    if (inequal_cons_ > 0)
-        dxsl.slacks() *= slackstep;
-    if (equal_cons_ > 0)
-        dxsl.eq_lmults() *= eqmultstep;
-    if (inequal_cons_ > 0)
-        dxsl.iq_lmults() *= iqmultstep;
-
-    alphap = Smax;
-    alphad = Lmax;
-}
+// max_primal_dual_step was extracted verbatim into BacktrackingLineSearch
+// (E2 G1 Task 3, src/solvers/psiopt_globalization.cpp). alg_impl drives it
+// through mechanism_ (fused into compute_step on the main path; via the public
+// method at the PROBE predictor call site).
 
 // PSIOPT 3.1: deliberately excludes barr_obj_/mu_/p_pivots_. barr_obj_ is only
 // evaluated by the caller AFTER the barrier-parameter update block (barrier_objective()
@@ -1182,6 +1150,15 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     KKTVector v_dxsl = kkt_view(DXSL);
     KKTVector v_temp = kkt_view(Temp);
 
+    // E2 G1 Task 3: references-only view of this solver, passed to the
+    // step-length mechanism (mechanism_) at its call sites below. Built once
+    // here (dims/settings/scratch are stable for the solve); it must not
+    // outlive this alg_impl frame or the PSIOPT members it references.
+    SolverContext ctx{this->nlp_.get(),    this->kkt_sol_,          this->settings_,
+                      this->primal_vars_,  this->slack_vars_,       this->equal_cons_,
+                      this->inequal_cons_, this->kkt_dim_,          this->stli_scratch_,
+                      this->hp_scratch_,   this->best_xsl_scratch_, this->best_rhs_scratch_};
+
     tycho::utils::Timer Runtimer;
     tycho::utils::Timer Funtimer;
     tycho::utils::Timer QPtimer;
@@ -1384,8 +1361,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 // EvalBeforeNestingBit when wrapped in a CwiseUnaryOp.
                 DXSL = this->kkt_sol_.solve(RHS);
                 DXSL = -DXSL;
-                this->max_primal_dual_step(v_xsl, v_dxsl, settings_.bound_fraction_, alphap,
-                                           alphad);
+                mechanism_->max_primal_dual_step(XSL, DXSL, settings_.bound_fraction_, alphap,
+                                                 alphad, ctx);
                 Temp = XSL + DXSL;
                 mu = this->mpc_mu(v_temp.slacks(), v_temp.iq_lmults(), avgcomp, mincomp);
 
@@ -1408,8 +1385,6 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         DXSL = this->kkt_sol_.solve(RHS);
         DXSL = -DXSL;
         bool GoodStep = std::isfinite(DXSL.squaredNorm());
-        if (this->inequal_cons_ > 0)
-            this->max_primal_dual_step(v_xsl, v_dxsl, settings_.bound_fraction_, alphap, alphad);
         QPtimer.stop();
 
         // Line search
@@ -1417,9 +1392,15 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         if (GoodStep) {
             double lsobjscale =
                 algmode == AlgorithmModes::SOE || algmode == AlgorithmModes::OPTNO ? 0.0 : 1.0;
-            alpha = acceptance_->classic_line_search(lsmode, obj_scale * lsobjscale, mu, prim_obj,
-                                                     barr_obj, XSL, DXSL, Temp, RHS, RHS2, Citer,
-                                                     iters);
+            // compute_step fuses the fraction-to-boundary scaling (former
+            // `if (inequal_cons_ > 0) max_primal_dual_step(...)`, now guarded
+            // identically inside compute_step and MUTATING DXSL in place) and
+            // the acceptance backtrack on the scaled DXSL. This is the riskiest
+            // FP-order seam (dossier §2/§8): negate -> block-scale by
+            // alphap/alphad -> `xsl + alpha*dxsl` trial -> `XSL += alpha*DXSL`.
+            alpha = mechanism_->compute_step(lsmode, obj_scale * lsobjscale, mu, prim_obj, barr_obj,
+                                             XSL, DXSL, Temp, RHS, RHS2, *acceptance_, alphap,
+                                             alphad, Citer, iters, ctx);
 
         } else {
             Citer.h_facs_ = -1;

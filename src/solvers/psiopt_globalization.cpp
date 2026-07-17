@@ -14,8 +14,14 @@
 // helpers (eval_rhs, apply_reset_slacks, barrier_objective, barrier_gradient)
 // are verbatim copies of the identically-named PSIOPT methods, reading
 // through ctx_ (see merit_acceptance.h's byte-identity design note).
+//
+// E2 G1 Task 3 also lands here: BacktrackingLineSearch (the step-length
+// mechanism) — verbatim today's max_step_to_boundary / max_primal_dual_step,
+// reading through the SolverContext passed to each call. See
+// backtracking_line_search.h's riskiest-seam design note.
 // =============================================================================
 
+#include "tycho/detail/solvers/globalization/backtracking_line_search.h"
 #include "tycho/detail/solvers/globalization/merit_acceptance.h"
 
 #include <algorithm>
@@ -304,6 +310,87 @@ double ClassicMeritAcceptance::classic_line_search(PSIOPT::LineSearchModes lsmod
     default:
         throw std::invalid_argument("Unknown LineSearchMode");
     }
+}
+
+// ============================================================================
+// BacktrackingLineSearch — step-length mechanism (E2 G1 Task 3). max_step_to_
+// boundary and max_primal_dual_step are moved VERBATIM from src/solvers/
+// psiopt.cpp (statement order and operand order preserved exactly — the merge
+// gate is a bit-identical CBWR iteration-count comparison). The only edits are
+// context-plumbing renames: former PSIOPT member reads (settings_.pd_step_
+// strategy_, inequal_cons_, equal_cons_) now go through the SolverContext
+// reference `ctx`, and the KKTVector view over the raw XSL/DXSL blocks is
+// reconstructed inside max_primal_dual_step (the caller used to build and pass
+// it). See backtracking_line_search.h's riskiest-seam design note.
+// ============================================================================
+
+double BacktrackingLineSearch::max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> SLI,
+                                                    Eigen::Ref<Eigen::VectorXd> dSLI, double bfrac,
+                                                    const SolverContext &ctx) const {
+    double alpha = 1.0;
+    for (int i = 0; i < ctx.inequal_cons_; i++) {
+        if (dSLI[i] < -bfrac * SLI[i]) {
+            double an = -bfrac * SLI[i] / dSLI[i];
+            if (an < alpha)
+                alpha = an;
+        }
+    }
+    return alpha;
+}
+
+void BacktrackingLineSearch::max_primal_dual_step(Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL,
+                                                  double bfrac, double &alphap, double &alphad,
+                                                  const SolverContext &ctx) {
+    KKTVector xsl = kkt_view(XSL, ctx);
+    KKTVector dxsl = kkt_view(DXSL, ctx);
+    double Smax = this->max_step_to_boundary(xsl.slacks(), dxsl.slacks(), bfrac, ctx);
+    double Lmax = this->max_step_to_boundary(xsl.iq_lmults(), dxsl.iq_lmults(), bfrac, ctx);
+
+    double primstep = Smax;
+    double slackstep = Smax;
+    double eqmultstep = Smax;
+    double iqmultstep = Lmax;
+
+    if (ctx.settings_.pd_step_strategy_ == PSIOPT::PDStepStrategies::PrimSlackEq_Iq) {
+    } else if (ctx.settings_.pd_step_strategy_ == PSIOPT::PDStepStrategies::AllMinimum) {
+        double step = std::min(Smax, Lmax);
+        primstep = step;
+        slackstep = step;
+        eqmultstep = step;
+        iqmultstep = step;
+    } else if (ctx.settings_.pd_step_strategy_ == PSIOPT::PDStepStrategies::PrimSlack_EqIq) {
+        eqmultstep = Lmax;
+    } else if (ctx.settings_.pd_step_strategy_ == PSIOPT::PDStepStrategies::MaxEq) {
+        double step = std::max(Smax, Lmax);
+        eqmultstep = step;
+    }
+    dxsl.primals() *= primstep;
+    if (ctx.inequal_cons_ > 0)
+        dxsl.slacks() *= slackstep;
+    if (ctx.equal_cons_ > 0)
+        dxsl.eq_lmults() *= eqmultstep;
+    if (ctx.inequal_cons_ > 0)
+        dxsl.iq_lmults() *= iqmultstep;
+
+    alphap = Smax;
+    alphad = Lmax;
+}
+
+// compute_step fuses the fraction-to-boundary scaling and the acceptance
+// backtrack (dossier §2/§8 riskiest seam): max_primal_dual_step MUTATES DXSL in
+// place — guarded exactly as the original alg_impl main-path call
+// (`if (inequal_cons_ > 0)`) — and the acceptance strategy then backtracks a
+// scalar alpha on the already-scaled DXSL.
+double BacktrackingLineSearch::compute_step(
+    PSIOPT::LineSearchModes lsmode, double obj_scale, double mu, double prim_obj, double barr_obj,
+    Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
+    Eigen::VectorXd &RHS2, AcceptanceStrategy &acceptance, double &alphap, double &alphad,
+    IterateInfo &Citer, const std::vector<IterateInfo> &iters, SolverContext &ctx) {
+    if (ctx.inequal_cons_ > 0)
+        this->max_primal_dual_step(XSL, DXSL, ctx.settings_.bound_fraction_, alphap, alphad, ctx);
+
+    return acceptance.classic_line_search(lsmode, obj_scale, mu, prim_obj, barr_obj, XSL, DXSL,
+                                          XSL2, RHS, RHS2, Citer, iters);
 }
 
 } // namespace tycho::solvers

@@ -60,7 +60,13 @@ using tycho::EigenRef;
 // unique_ptr to this incomplete type, PSIOPT's constructors and destructor are
 // declared here and defined out-of-line in psiopt.cpp, where the concrete
 // ClassicMeritAcceptance is complete.
+//
+// E2 G1 Task 3: PSIOPT likewise owns its step-length globalization mechanism
+// through a std::unique_ptr<GlobalizationMechanism> (concrete type
+// BacktrackingLineSearch, complete only in psiopt.cpp). Same forward-declare +
+// out-of-line ctor/dtor discipline as AcceptanceStrategy above.
 class AcceptanceStrategy;
+class GlobalizationMechanism;
 
 class PSIOPT {
   public:
@@ -408,6 +414,14 @@ class PSIOPT {
     // set_nlp has run, which run_phase_sequence guarantees before any solve.
     std::unique_ptr<AcceptanceStrategy> acceptance_;
 
+    // E2 G1 Task 3: step-length globalization mechanism, extracted from the
+    // former max_primal_dual_step/max_step_to_boundary bodies (now
+    // BacktrackingLineSearch). Held through the GlobalizationMechanism interface
+    // (forward-declared above); rebuilt by set_nlp() alongside acceptance_.
+    // Never null once set_nlp has run, which run_phase_sequence guarantees
+    // before any solve.
+    std::unique_ptr<GlobalizationMechanism> mechanism_;
+
     // QP parameter setup — called automatically by set_nlp()
     void set_qp_params();
 
@@ -546,8 +560,11 @@ class PSIOPT {
     // --- Line search ---
     // The classic merit line search (former ls_impl/ls_lang/ls_l1/ls_auglang and
     // their eval_trial_point_occ/compute_penalties/secondary_accept helpers) was
-    // extracted verbatim into ClassicMeritAcceptance (E2 G1, Task 2); alg_impl
-    // now calls acceptance_->classic_line_search(...).
+    // extracted verbatim into ClassicMeritAcceptance (E2 G1, Task 2); the
+    // fraction-to-boundary step-length (former max_primal_dual_step/
+    // max_step_to_boundary) was extracted verbatim into BacktrackingLineSearch
+    // (E2 G1, Task 3). alg_impl now drives both through mechanism_->compute_step
+    // (which fuses the step scaling and acceptance backtrack).
 
     // --- KKT factorization (defined in psiopt.cpp) ---
     // `finalpert` is the last perturbation DELTA applied via Perturb() -- this is
@@ -566,8 +583,8 @@ class PSIOPT {
 
     // --- Barrier math helpers (defined in psiopt.cpp) ---
     void apply_reset_slacks(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> FXI) const;
-    double max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> SLI, Eigen::Ref<Eigen::VectorXd> dSLI,
-                                double bfrac) const;
+    // max_step_to_boundary was extracted verbatim into BacktrackingLineSearch
+    // (E2 G1 Task 3); it is now a private helper of that mechanism.
     void complementarity(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI,
                          double &avgcomp, double &mincomp, double &maxcomp) const;
     double barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu) const;
@@ -612,8 +629,10 @@ class PSIOPT {
     void fill_iter_info(KKTVector &xsl, KKTVector &rhs, double pobj, double bobj, double mu,
                         IterateInfo &iter) const;
     ConvergenceFlags converge_check(std::vector<IterateInfo> &iters);
-    void max_primal_dual_step(KKTVector &xsl, KKTVector &dxsl, double bfrac, double &alphap,
-                              double &alphad);
+    // max_primal_dual_step was extracted verbatim into BacktrackingLineSearch
+    // (E2 G1 Task 3); alg_impl now drives it through mechanism_ (fused into
+    // compute_step on the main path, and via the public method at the PROBE
+    // predictor call site).
 
     // --- Printing methods ---
     static void print_psiopt();

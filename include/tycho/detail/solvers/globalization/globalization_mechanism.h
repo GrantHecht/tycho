@@ -83,6 +83,25 @@ class GlobalizationMechanism {
                                  IterateInfo &Citer, const std::vector<IterateInfo> &iters,
                                  SolverContext &ctx) = 0;
 
+    // Fraction-to-boundary primal/dual step (today's max_primal_dual_step,
+    // dossier §2), exposed on the interface so alg_impl's BarrierModes::PROBE
+    // predictor block can drive the SAME step-scaling through the mechanism_
+    // base pointer WITHOUT the acceptance backtrack (compute_step's second
+    // half). PROBE's mpc_mu() consumes a predictor DXSL that has already been
+    // scaled to the boundary (dossier §3, psiopt.cpp:1323-1324); that scaling
+    // is barrier/IPM logic independent of the globalization strategy, so it
+    // belongs on this interface (a future TR mechanism, spec §4 G7, must
+    // likewise provide it for PROBE). Reconstructs the KKTVector view over the
+    // raw XSL/DXSL blocks internally and MUTATES DXSL in place; bfrac, the
+    // problem dims, and pd_step_strategy_ are read from `ctx`. alphap/alphad
+    // are out-parameters (today's max_primal_dual_step out-params).
+    //
+    // NOTE: compute_step already applies this step (guarded by
+    // inequal_cons_ > 0) as its first half; this standalone entry point exists
+    // ONLY for the PROBE predictor, which needs the scaling without a backtrack.
+    virtual void max_primal_dual_step(Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, double bfrac,
+                                       double &alphap, double &alphad, const SolverContext &ctx) = 0;
+
     // μ-event / phase-change reset hook — see the ownership-rule note above.
     virtual void reset() = 0;
 };
