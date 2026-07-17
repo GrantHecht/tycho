@@ -65,8 +65,14 @@ using tycho::EigenRef;
 // through a std::unique_ptr<GlobalizationMechanism> (concrete type
 // BacktrackingLineSearch, complete only in psiopt.cpp). Same forward-declare +
 // out-of-line ctor/dtor discipline as AcceptanceStrategy above.
+//
+// E2 G1 Task 4: PSIOPT owns its barrier-parameter governor through a
+// std::unique_ptr<BarrierGovernor> (concrete type ClassicAdaptiveGovernor,
+// complete only in psiopt.cpp). Same forward-declare + out-of-line ctor/dtor
+// discipline.
 class AcceptanceStrategy;
 class GlobalizationMechanism;
+class BarrierGovernor;
 
 class PSIOPT {
   public:
@@ -422,6 +428,14 @@ class PSIOPT {
     // before any solve.
     std::unique_ptr<GlobalizationMechanism> mechanism_;
 
+    // E2 G1 Task 4: barrier-parameter governor, extracted from the former
+    // PROBE/LOQO barmode switch + loqo_mu/mpc_mu bodies (now
+    // ClassicAdaptiveGovernor). Held through the BarrierGovernor interface
+    // (forward-declared above); rebuilt by set_nlp() alongside acceptance_/
+    // mechanism_. Never null once set_nlp has run, which run_phase_sequence
+    // guarantees before any solve.
+    std::unique_ptr<BarrierGovernor> governor_;
+
     // QP parameter setup — called automatically by set_nlp()
     void set_qp_params();
 
@@ -593,10 +607,14 @@ class PSIOPT {
     void barrier_gradient(Eigen::Ref<Eigen::VectorXd> LI, Eigen::Ref<Eigen::VectorXd> AGS) const;
     void barrier_hessian(Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
                          Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double mu);
-    double loqo_mu(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
-                   double mincomp) const;
-    double mpc_mu(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
-                  double mincomp) const;
+    // loqo_mu / mpc_mu were extracted verbatim into ClassicAdaptiveGovernor
+    // (E2 G1 Task 4, src/solvers/psiopt_globalization.cpp); the barrier-
+    // parameter update now runs through governor_->update_barrier(). The
+    // barrier_objective()/barrier_gradient() helpers above are retained for now
+    // (PSIOPT no longer calls them after Task 4; a later G-task that
+    // consolidates the duplicated globalization helpers should remove the dead
+    // copies). complementarity() STAYS — it is still called from the evaluate
+    // stage (its maxcomp output feeds converge_check's barr_inf_).
 
     // --- NLP eval dispatch methods (defined in psiopt.cpp) ---
     void eval_kkt(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,

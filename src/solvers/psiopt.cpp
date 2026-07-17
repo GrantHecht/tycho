@@ -40,6 +40,7 @@
 #include "tycho/detail/solvers/globalization/globalization_mechanism.h"
 #include "tycho/detail/solvers/globalization/backtracking_line_search.h"
 #include "tycho/detail/solvers/globalization/barrier_governor.h"
+#include "tycho/detail/solvers/globalization/classic_adaptive_governor.h"
 #include "tycho/detail/solvers/globalization/merit_acceptance.h"
 #include "tycho/detail/solvers/globalization/recovery_chain.h"
 #include "tycho/detail/solvers/globalization/restoration.h"
@@ -739,23 +740,9 @@ void tycho::solvers::PSIOPT::barrier_hessian(Eigen::SparseMatrix<double, Eigen::
     this->nlp_->assign_kkt_slack_hessian(this->hp_scratch_, KKTmat);
 }
 
-double tycho::solvers::PSIOPT::loqo_mu(Eigen::Ref<Eigen::VectorXd> S,
-                                       Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
-                                       double mincomp) const {
-    double eta = mincomp / avgcomp;
-    double sigmat = .1 * std::pow(0.05 * (1.0 - eta) / eta, 3);
-    double sigma = std::min(0.8, std::abs(sigmat));
-    return sigma * avgcomp;
-}
-
-double tycho::solvers::PSIOPT::mpc_mu(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI,
-                                      double avgcomp, double mincomp) const {
-    double navgcomp = 0;
-    double nmincomp = 0;
-    double nmaxcomp = 0;
-    this->complementarity(S, LI, navgcomp, nmincomp, nmaxcomp);
-    return std::pow(navgcomp / avgcomp, 3) * avgcomp;
-}
+// loqo_mu / mpc_mu were extracted verbatim into ClassicAdaptiveGovernor
+// (E2 G1 Task 4, src/solvers/psiopt_globalization.cpp); the barrier-parameter
+// update now runs through governor_->update_barrier().
 
 // =============================================================================
 // NLP eval dispatch methods
@@ -829,11 +816,11 @@ void tycho::solvers::PSIOPT::ensure_solver_initialized() {
 }
 
 // E2 G1: constructors and destructor are defined here (not inline in the
-// header) because the std::unique_ptr<AcceptanceStrategy> and
-// std::unique_ptr<GlobalizationMechanism> members need their complete concrete
-// types for their destructors — reached through both the destructor and the
-// constructors' exception-cleanup paths. Bodies are the former header-inline
-// bodies, unchanged.
+// header) because the std::unique_ptr<AcceptanceStrategy>,
+// std::unique_ptr<GlobalizationMechanism>, and std::unique_ptr<BarrierGovernor>
+// members need their complete concrete types for their destructors — reached
+// through both the destructor and the constructors' exception-cleanup paths.
+// Bodies are the former header-inline bodies, unchanged.
 tycho::solvers::PSIOPT::PSIOPT() {
     settings_.qp_threads_ = std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count());
 }
@@ -878,6 +865,13 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
     // constructed with no context here; alg_impl builds the SolverContext view
     // it passes to compute_step / max_primal_dual_step.
     this->mechanism_ = std::make_unique<BacktrackingLineSearch>();
+
+    // E2 G1 Task 4: the barrier-parameter governor. Stateless (holds NO solver
+    // state per BarrierGovernor's ownership rule) — every update_barrier() call
+    // receives the live SolverContext and the GlobalizationMechanism as explicit
+    // parameters — so it is constructed with no context here; alg_impl builds
+    // the SolverContext view and passes *mechanism_ to update_barrier.
+    this->governor_ = std::make_unique<ClassicAdaptiveGovernor>();
 
     this->set_qp_params();
 #ifdef USE_ACCELERATE_SPARSE
@@ -1148,7 +1142,9 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     KKTVector v_xsl = kkt_view(XSL);
     KKTVector v_rhs = kkt_view(RHS);
     KKTVector v_dxsl = kkt_view(DXSL);
-    KKTVector v_temp = kkt_view(Temp);
+    // v_temp: the former PROBE-predictor view (Temp = XSL + DXSL -> mpc_mu) moved
+    // into ClassicAdaptiveGovernor (E2 G1 Task 4), which rebuilds it internally
+    // from the raw Temp block; no alg_impl caller remains.
 
     // E2 G1 Task 3: references-only view of this solver, passed to the
     // step-length mechanism (mechanism_) at its call sites below. Built once
@@ -1348,40 +1344,24 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         Citer.h_pert_ = nhpert;
         Citer.h_pert_cum_ = nhpert_cum;
 
-        // Update barrier parameter and compute search direction
+        // Update barrier parameter and compute search direction. The whole
+        // PROBE/LOQO switch + common clamp/objective/gradient tail is now
+        // ClassicAdaptiveGovernor::update_barrier (E2 G1 Task 4); the
+        // `if (inequal_cons_ > 0)` guard stays here, exactly as the block was
+        // guarded before extraction, so the governor is invoked only when there
+        // are inequality constraints (barrier terms). The PROBE predictor's KKT
+        // solve moves INTO the governor; the REAL step solve below (a distinct
+        // second solve) stays here. avgcomp/mincomp feed the mu oracles;
+        // *mechanism_ lets the PROBE predictor reuse the Task-3 step-scaling.
         if (this->inequal_cons_ > 0) {
-            switch (barmode) {
-            case BarrierModes::PROBE:
-                this->barrier_gradient(v_xsl.iq_lmults(), v_rhs.dual_grad());
-                // Assign the Solve<> expression directly (hits Eigen's specialized
-                // Assignment<DstXprType, Solve<...>> and writes straight into DXSL,
-                // no temporary) then negate in place (elementwise, alias-safe) --
-                // avoids the extra kkt_dim_-sized temporary that
-                // `DXSL = -kkt_sol_.solve(RHS)` forces via Solve's
-                // EvalBeforeNestingBit when wrapped in a CwiseUnaryOp.
-                DXSL = this->kkt_sol_.solve(RHS);
-                DXSL = -DXSL;
-                mechanism_->max_primal_dual_step(XSL, DXSL, settings_.bound_fraction_, alphap,
-                                                 alphad, ctx);
-                Temp = XSL + DXSL;
-                mu = this->mpc_mu(v_temp.slacks(), v_temp.iq_lmults(), avgcomp, mincomp);
-
-                break;
-            case BarrierModes::LOQO:
-                mu = this->loqo_mu(v_xsl.slacks(), v_xsl.iq_lmults(), avgcomp, mincomp);
-                break;
-            default:
-                throw std::invalid_argument("Unknown BarrierMode");
-            }
-
-            mu = std::max(mu, settings_.min_mu_);
-            mu = std::min(mu, settings_.max_mu_);
-            barr_obj = this->barrier_objective(v_xsl.slacks(), mu);
-            this->barrier_gradient(v_xsl.slacks(), v_xsl.iq_lmults(), mu, v_rhs.dual_grad());
+            mu = governor_->update_barrier(barmode, mu, avgcomp, mincomp, XSL, RHS, DXSL, Temp,
+                                           *mechanism_, ctx, barr_obj);
         }
 
-        // See the solve-into comment above (PROBE case): direct assignment + in-place
-        // negate avoids the extra temporary that `-kkt_sol_.solve(RHS)` forces.
+        // The REAL step solve (distinct from the PROBE predictor solve, which
+        // moved into ClassicAdaptiveGovernor::update_barrier — see its solve-into
+        // comment): direct assignment + in-place negate avoids the extra
+        // temporary that `-kkt_sol_.solve(RHS)` forces.
         DXSL = this->kkt_sol_.solve(RHS);
         DXSL = -DXSL;
         bool GoodStep = std::isfinite(DXSL.squaredNorm());

@@ -19,9 +19,17 @@
 // mechanism) — verbatim today's max_step_to_boundary / max_primal_dual_step,
 // reading through the SolverContext passed to each call. See
 // backtracking_line_search.h's riskiest-seam design note.
+//
+// E2 G1 Task 4 also lands here: ClassicAdaptiveGovernor (the barrier-parameter
+// update) — verbatim today's PROBE/LOQO barmode switch + common clamp/objective/
+// gradient tail, plus the loqo_mu / mpc_mu oracles and verbatim copies of the
+// barrier_* / complementarity helpers it consumes (the complementarity copy is
+// TOKEN-IDENTICAL including its ULP-load-bearing .sum() warning). See
+// classic_adaptive_governor.h's PROBE-impurity design note.
 // =============================================================================
 
 #include "tycho/detail/solvers/globalization/backtracking_line_search.h"
+#include "tycho/detail/solvers/globalization/classic_adaptive_governor.h"
 #include "tycho/detail/solvers/globalization/merit_acceptance.h"
 
 #include <algorithm>
@@ -391,6 +399,124 @@ double BacktrackingLineSearch::compute_step(
 
     return acceptance.classic_line_search(lsmode, obj_scale, mu, prim_obj, barr_obj, XSL, DXSL,
                                           XSL2, RHS, RHS2, Citer, iters);
+}
+
+// ============================================================================
+// ClassicAdaptiveGovernor — barrier-parameter update (E2 G1 Task 4). The
+// PROBE/LOQO barmode switch + common clamp/objective/gradient tail and the
+// loqo_mu / mpc_mu oracles are moved VERBATIM from src/solvers/psiopt.cpp
+// (statement order and operand order preserved exactly — the merge gate is a
+// bit-identical CBWR iteration-count comparison). The only edits are context-
+// plumbing renames: former PSIOPT member reads (kkt_sol_ -> ctx.kkt_solver_,
+// settings_/dims -> ctx.*) and the mechanism_ base pointer -> the mechanism
+// reference parameter. The barrier_* / complementarity helpers below are
+// verbatim copies of the identically-named PSIOPT methods (the complementarity
+// copy is TOKEN-IDENTICAL including its ULP warning). See classic_adaptive_
+// governor.h's PROBE-impurity and byte-identity design notes.
+// ============================================================================
+
+void ClassicAdaptiveGovernor::complementarity(Eigen::Ref<Eigen::VectorXd> S,
+                                              Eigen::Ref<Eigen::VectorXd> LI, double &avgcomp,
+                                              double &mincomp, double &maxcomp,
+                                              const SolverContext &ctx) const {
+    // Buffer-hoist ONLY: keep the exact Eigen .sum()/minCoeff()/maxCoeff()
+    // reduction expressions unchanged. avgcomp feeds mu (see mpc_mu/loqo_mu
+    // call sites), so a hand-fused loop that reorders the sum could perturb
+    // the reduction by a ULP under fast-math and change iterates -- forbidden.
+    // This change only removes the per-call heap allocation of StLI.
+    ctx.stli_scratch_.resize(S.size());
+    ctx.stli_scratch_ = S.cwiseProduct(LI);
+    mincomp = ctx.stli_scratch_.minCoeff();
+    maxcomp = ctx.stli_scratch_.maxCoeff();
+    avgcomp = ctx.stli_scratch_.sum() / double(ctx.stli_scratch_.size());
+}
+
+double ClassicAdaptiveGovernor::barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu,
+                                                  const SolverContext &ctx) const {
+    double psi = 0;
+    for (int i = 0; i < ctx.inequal_cons_; i++) {
+        psi += -mu * std::log(S[i]);
+    }
+    return psi;
+}
+
+void ClassicAdaptiveGovernor::barrier_gradient(Eigen::Ref<Eigen::VectorXd> S,
+                                               Eigen::Ref<Eigen::VectorXd> LI, double mu,
+                                               Eigen::Ref<Eigen::VectorXd> AGS) const {
+    AGS = LI - mu * (S.cwiseInverse());
+}
+
+void ClassicAdaptiveGovernor::barrier_gradient(Eigen::Ref<Eigen::VectorXd> LI,
+                                               Eigen::Ref<Eigen::VectorXd> AGS) const {
+    AGS = LI;
+}
+
+double ClassicAdaptiveGovernor::loqo_mu(Eigen::Ref<Eigen::VectorXd> S,
+                                        Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
+                                        double mincomp) const {
+    double eta = mincomp / avgcomp;
+    double sigmat = .1 * std::pow(0.05 * (1.0 - eta) / eta, 3);
+    double sigma = std::min(0.8, std::abs(sigmat));
+    return sigma * avgcomp;
+}
+
+double ClassicAdaptiveGovernor::mpc_mu(Eigen::Ref<Eigen::VectorXd> S,
+                                       Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
+                                       double mincomp, const SolverContext &ctx) const {
+    double navgcomp = 0;
+    double nmincomp = 0;
+    double nmaxcomp = 0;
+    this->complementarity(S, LI, navgcomp, nmincomp, nmaxcomp, ctx);
+    return std::pow(navgcomp / avgcomp, 3) * avgcomp;
+}
+
+// Verbatim today's psiopt.cpp barmode switch (the former `if (inequal_cons_ > 0)`
+// body): the guard stays at the alg_impl call site, so update_barrier assumes
+// inequal_cons_ > 0. The predictor's alphap/alphad are locals here (discarded —
+// see the divergence-path note in the header).
+double ClassicAdaptiveGovernor::update_barrier(PSIOPT::BarrierModes barmode, double mu_in,
+                                               double avgcomp, double mincomp, Eigen::VectorXd &XSL,
+                                               Eigen::VectorXd &RHS, Eigen::VectorXd &DXSL,
+                                               Eigen::VectorXd &Temp,
+                                               GlobalizationMechanism &mechanism,
+                                               SolverContext &ctx, double &barr_obj) {
+    KKTVector v_xsl = kkt_view(XSL, ctx);
+    KKTVector v_rhs = kkt_view(RHS, ctx);
+    KKTVector v_temp = kkt_view(Temp, ctx);
+
+    double mu = mu_in;
+    double alphap = 1.0; // predictor fraction-to-boundary steps — discarded (see header).
+    double alphad = 1.0;
+
+    switch (barmode) {
+    case PSIOPT::BarrierModes::PROBE:
+        this->barrier_gradient(v_xsl.iq_lmults(), v_rhs.dual_grad());
+        // Assign the Solve<> expression directly (hits Eigen's specialized
+        // Assignment<DstXprType, Solve<...>> and writes straight into DXSL,
+        // no temporary) then negate in place (elementwise, alias-safe) --
+        // avoids the extra kkt_dim_-sized temporary that
+        // `DXSL = -kkt_sol_.solve(RHS)` forces via Solve's
+        // EvalBeforeNestingBit when wrapped in a CwiseUnaryOp.
+        DXSL = ctx.kkt_solver_.solve(RHS);
+        DXSL = -DXSL;
+        mechanism.max_primal_dual_step(XSL, DXSL, ctx.settings_.bound_fraction_, alphap, alphad,
+                                       ctx);
+        Temp = XSL + DXSL;
+        mu = this->mpc_mu(v_temp.slacks(), v_temp.iq_lmults(), avgcomp, mincomp, ctx);
+
+        break;
+    case PSIOPT::BarrierModes::LOQO:
+        mu = this->loqo_mu(v_xsl.slacks(), v_xsl.iq_lmults(), avgcomp, mincomp);
+        break;
+    default:
+        throw std::invalid_argument("Unknown BarrierMode");
+    }
+
+    mu = std::max(mu, ctx.settings_.min_mu_);
+    mu = std::min(mu, ctx.settings_.max_mu_);
+    barr_obj = this->barrier_objective(v_xsl.slacks(), mu, ctx);
+    this->barrier_gradient(v_xsl.slacks(), v_xsl.iq_lmults(), mu, v_rhs.dual_grad());
+    return mu;
 }
 
 } // namespace tycho::solvers
