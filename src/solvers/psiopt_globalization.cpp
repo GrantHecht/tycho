@@ -53,7 +53,7 @@ bool ClassicMeritAcceptance::is_iterate_acceptable(const ProgressMeasures &curre
     (void)objective_multiplier;
     throw std::logic_error("ClassicMeritAcceptance::is_iterate_acceptable is unused on the classic "
                            "merit path (acceptance is fused inside classic_line_search); it is "
-                           "driven only by G2+ filter/funnel strategies");
+                           "driven only by a future filter/funnel/WMNO acceptance strategy");
 }
 
 bool ClassicMeritAcceptance::is_infeasibility_sufficiently_reduced(
@@ -62,7 +62,7 @@ bool ClassicMeritAcceptance::is_infeasibility_sufficiently_reduced(
     (void)trial;
     throw std::logic_error(
         "ClassicMeritAcceptance::is_infeasibility_sufficiently_reduced is unused "
-        "on the classic merit path; it is driven only by a G5 restoration "
+        "on the classic merit path; it is driven only by a future feasibility-restoration "
         "strategy");
 }
 

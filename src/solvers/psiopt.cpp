@@ -26,8 +26,7 @@
 #include "tycho/detail/solvers/solver_init.h"
 #include "tycho/detail/utils/timer.h"
 
-// Globalization component interfaces (scaffolding only). Not wired to
-// anything below yet; included here (rather than from
+// Globalization component interfaces. Included here (rather than from
 // psiopt.h) so this, the actual TU that builds PSIOPT, exercises them on
 // every build without psiopt.h having to include a directory of headers
 // that themselves need the complete PSIOPT class (a circular-include
@@ -1392,7 +1391,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         const RecoveryChain::Action recovery_action =
             this->recovery_->on_step_rejected(Citer, iters, ctx);
         assert(recovery_action == RecoveryChain::Action::kAcceptAsIs &&
-               "G1 wires only NoopRecovery; kAcceptAsIs is the only reachable Action");
+               "only NoopRecovery is wired; kAcceptAsIs is the only reachable Action");
         (void)recovery_action;
 
         Citer.alpha_p_ = alphap;
