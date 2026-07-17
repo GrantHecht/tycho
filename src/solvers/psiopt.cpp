@@ -708,25 +708,6 @@ void tycho::solvers::PSIOPT::complementarity(Eigen::Ref<Eigen::VectorXd> S,
     avgcomp = this->stli_scratch_.sum() / double(this->stli_scratch_.size());
 }
 
-double tycho::solvers::PSIOPT::barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu) const {
-    double psi = 0;
-    for (int i = 0; i < this->inequal_cons_; i++) {
-        psi += -mu * std::log(S[i]);
-    }
-    return psi;
-}
-
-void tycho::solvers::PSIOPT::barrier_gradient(Eigen::Ref<Eigen::VectorXd> S,
-                                              Eigen::Ref<Eigen::VectorXd> LI, double mu,
-                                              Eigen::Ref<Eigen::VectorXd> AGS) const {
-    AGS = LI - mu * (S.cwiseInverse());
-}
-
-void tycho::solvers::PSIOPT::barrier_gradient(Eigen::Ref<Eigen::VectorXd> LI,
-                                              Eigen::Ref<Eigen::VectorXd> AGS) const {
-    AGS = LI;
-}
-
 void tycho::solvers::PSIOPT::barrier_hessian(Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
                                              Eigen::Ref<Eigen::VectorXd> S,
                                              Eigen::Ref<Eigen::VectorXd> LI, double mu) {
@@ -786,16 +767,6 @@ void tycho::solvers::PSIOPT::eval_soe(double obj_scale, ConstEigenRef<VectorXd> 
         XSL.tail(inequal_cons_), val, GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
         AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_), AGXS_FX.tail(inequal_cons_),
         KKTmat);
-}
-
-void tycho::solvers::PSIOPT::eval_rhs(double obj_scale,
-                                      const Eigen::Ref<const Eigen::VectorXd> &XSL, double &val,
-                                      Eigen::Ref<Eigen::VectorXd> GX,
-                                      Eigen::Ref<Eigen::VectorXd> AGXS_FX) {
-    this->nlp_->eval_rhs(
-        obj_scale, XSL.head(primal_vars_), XSL.segment(primal_vars_ + slack_vars_, equal_cons_),
-        XSL.tail(inequal_cons_), val, GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
-        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_), AGXS_FX.tail(inequal_cons_));
 }
 
 // =============================================================================
@@ -1147,10 +1118,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     // Create KKTVector views over the working vectors
     KKTVector v_xsl = kkt_view(XSL);
     KKTVector v_rhs = kkt_view(RHS);
-    KKTVector v_dxsl = kkt_view(DXSL);
-    // v_temp: the former PROBE-predictor view (Temp = XSL + DXSL -> mpc_mu) moved
-    // into ClassicAdaptiveGovernor, which rebuilds it internally
-    // from the raw Temp block; no alg_impl caller remains.
+    // v_dxsl / v_temp: the former view over DXSL and the PROBE-predictor view
+    // (Temp = XSL + DXSL -> mpc_mu) moved into ClassicAdaptiveGovernor, which
+    // rebuilds them internally from the raw DXSL/Temp blocks; no alg_impl
+    // caller remains.
 
     // References-only view of this solver, passed to the
     // step-length mechanism (mechanism_) at its call sites below. Built once

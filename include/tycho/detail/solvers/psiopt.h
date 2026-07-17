@@ -620,21 +620,16 @@ class PSIOPT {
     // it is now a private helper of that mechanism.
     void complementarity(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI,
                          double &avgcomp, double &mincomp, double &maxcomp) const;
-    double barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu) const;
-    void barrier_gradient(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double mu,
-                          Eigen::Ref<Eigen::VectorXd> AGS) const;
-    void barrier_gradient(Eigen::Ref<Eigen::VectorXd> LI, Eigen::Ref<Eigen::VectorXd> AGS) const;
     void barrier_hessian(Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
                          Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double mu);
     // loqo_mu / mpc_mu were extracted verbatim into ClassicAdaptiveGovernor
     // (src/solvers/psiopt_globalization.cpp); the barrier-
     // parameter update now runs through governor_->update_barrier(). The
-    // barrier_objective()/barrier_gradient() helpers above are retained for now
-    // (PSIOPT no longer calls them now that the barrier-parameter update has
-    // moved to the governor; a future change that
-    // consolidates the duplicated globalization helpers should remove the dead
-    // copies). complementarity() STAYS — it is still called from the evaluate
-    // stage (its maxcomp output feeds converge_check's barr_inf_).
+    // barrier_objective()/barrier_gradient() helpers formerly declared here were
+    // dead after that extraction (PSIOPT no longer called them) and have been
+    // removed; ClassicMeritAcceptance and ClassicAdaptiveGovernor each carry
+    // their own copies. complementarity() STAYS — it is still called from the
+    // evaluate stage (its maxcomp output feeds converge_check's barr_inf_).
 
     // --- NLP eval dispatch methods (defined in psiopt.cpp) ---
     void eval_kkt(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
@@ -646,8 +641,6 @@ class PSIOPT {
                   EigenRef<VectorXd> AGXS_FX, Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
     void eval_soe(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
                   EigenRef<VectorXd> AGXS_FX, Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
-    void eval_rhs(double obj_scale, const Eigen::Ref<const Eigen::VectorXd> &XSL, double &val,
-                  Eigen::Ref<Eigen::VectorXd> GX, Eigen::Ref<Eigen::VectorXd> AGXS_FX);
 
     void eval_nlp(AlgorithmModes algmode, double obj_scale, ConstEigenRef<VectorXd> XSL,
                   double &val, EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
