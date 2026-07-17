@@ -99,6 +99,16 @@ class GlobalizationMechanism {
     // NOTE: compute_step already applies this step (guarded by
     // inequal_cons_ > 0) as its first half; this standalone entry point exists
     // ONLY for the PROBE predictor, which needs the scaling without a backtrack.
+    // In G4 the BarrierGovernor takes over the PROBE predictor block and becomes
+    // the second caller of this entry point (same operands, same position).
+    //
+    // Divergence-path note (Task 3 review): this call runs inside alg_impl's
+    // GoodStep branch; pre-extraction it ran unconditionally. On a non-finite
+    // DXSL the old code could record alpha_p_/alpha_d_ values derived from
+    // -Inf/NaN entries (e.g. 0.0) on the terminal DIVERGING iterate, where the
+    // new code records the 1.0 init values. Print-only exposure on diverging
+    // runs; iterates, mu, and iteration counts are unaffected (DXSL is
+    // discarded before the state commit on that path).
     virtual void max_primal_dual_step(Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, double bfrac,
                                        double &alphap, double &alphad, const SolverContext &ctx) = 0;
 
