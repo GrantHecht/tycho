@@ -43,6 +43,7 @@
 #include "tycho/detail/solvers/globalization/classic_adaptive_governor.h"
 #include "tycho/detail/solvers/globalization/merit_acceptance.h"
 #include "tycho/detail/solvers/globalization/recovery_chain.h"
+#include "tycho/detail/solvers/globalization/noop_recovery.h"
 #include "tycho/detail/solvers/globalization/restoration.h"
 
 #ifndef USE_ACCELERATE_SPARSE
@@ -873,6 +874,12 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
     // the SolverContext view and passes *mechanism_ to update_barrier.
     this->governor_ = std::make_unique<ClassicAdaptiveGovernor>();
 
+    // E2 G1 Task 5: the post-rejection recovery chain. G1's NoopRecovery is
+    // stateless (holds no solver state, per RecoveryChain's ownership rule)
+    // and always returns kAcceptAsIs, so it needs no context at construction;
+    // alg_impl builds the SolverContext view it passes to on_step_rejected.
+    this->recovery_ = std::make_unique<NoopRecovery>();
+
     this->set_qp_params();
 #ifdef USE_ACCELERATE_SPARSE
     accelerate_set_num_threads(settings_.qp_threads_);
@@ -1387,6 +1394,28 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         }
 
         Funtimer.stop();
+
+        // E2 G1 Task 5: recovery-chain hook. This is where a rejected step's
+        // recovery gets a say -- in G2 this is the SOC -> extended-backtrack
+        // -> watchdog-revert -> feasibility-switch dispatch point (spec §4);
+        // the inertia/perturbation ladder above (factor_impl's Zfac cycling +
+        // escalation) is a SEPARATE mechanism and stays out of this chain
+        // until G6 (inertia_mode) -- it is NOT invoked or bypassed here.
+        //
+        // G1 wiring is a pure no-op by construction: recovery_ is always a
+        // NoopRecovery (set_nlp), whose on_step_rejected() unconditionally
+        // returns kAcceptAsIs and touches no state (Citer/iters/ctx passed
+        // read/write per the interface but NoopRecovery never reads or
+        // mutates them). The assert below documents -- and, in a debug
+        // build, enforces -- that no other Action is reachable here yet; no
+        // switch/branch exists on the result, so today's control flow below
+        // (whatever alpha compute_step produced, or the h_facs_ = -1 !GoodStep
+        // path) is provably unchanged regardless of what this call returns.
+        const RecoveryChain::Action recovery_action =
+            this->recovery_->on_step_rejected(Citer, iters, ctx);
+        assert(recovery_action == RecoveryChain::Action::kAcceptAsIs &&
+               "G1 wires only NoopRecovery; kAcceptAsIs is the only reachable Action");
+        (void)recovery_action;
 
         Citer.alpha_p_ = alphap;
         Citer.alpha_d_ = alphad;

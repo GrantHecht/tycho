@@ -70,9 +70,17 @@ using tycho::EigenRef;
 // std::unique_ptr<BarrierGovernor> (concrete type ClassicAdaptiveGovernor,
 // complete only in psiopt.cpp). Same forward-declare + out-of-line ctor/dtor
 // discipline.
+//
+// E2 G1 Task 5: PSIOPT owns its post-rejection recovery chain through a
+// std::unique_ptr<RecoveryChain> (concrete type NoopRecovery, complete only in
+// psiopt.cpp). Same forward-declare + out-of-line ctor/dtor discipline. G1's
+// NoopRecovery always returns kAcceptAsIs; the alg_impl call site is
+// provably inert (see noop_recovery.h and the call-site comment in
+// alg_impl) — no real recovery dispatch exists until G2.
 class AcceptanceStrategy;
 class GlobalizationMechanism;
 class BarrierGovernor;
+class RecoveryChain;
 
 class PSIOPT {
   public:
@@ -435,6 +443,16 @@ class PSIOPT {
     // mechanism_. Never null once set_nlp has run, which run_phase_sequence
     // guarantees before any solve.
     std::unique_ptr<BarrierGovernor> governor_;
+
+    // E2 G1 Task 5: post-rejection recovery chain, extracted-as-a-hook (no
+    // prior code existed for this — G1 wires the hook point with a no-op
+    // implementation). Held through the RecoveryChain interface
+    // (forward-declared above); rebuilt by set_nlp() alongside acceptance_/
+    // mechanism_/governor_. Never null once set_nlp has run, which
+    // run_phase_sequence guarantees before any solve. G1's NoopRecovery always
+    // returns kAcceptAsIs and is stateless; G2 replaces the concrete type with
+    // a real SOC/extended-backtrack/watchdog/feasibility-switch dispatcher.
+    std::unique_ptr<RecoveryChain> recovery_;
 
     // QP parameter setup — called automatically by set_nlp()
     void set_qp_params();
