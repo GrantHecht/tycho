@@ -16,10 +16,11 @@
 // what this interface wraps — it stays inside PSIOPT::factor_impl until G6
 // (inertia_mode, spec §4). This interface is the POST-REJECTION dispatcher:
 // what to do once a trial step has already been rejected by an
-// AcceptanceStrategy. G1's implementation (not part of this task) is an
-// empty chain that always returns kGiveUp, i.e. today's behavior (PSIOPT has
-// no post-rejection recovery today; a rejected step's only recourse is the
-// next full iteration). G2 fills in the real SOC -> extended-backtrack ->
+// AcceptanceStrategy. G1's implementation (NoopRecovery, noop_recovery.h) is
+// an empty chain that always returns kAcceptAsIs, i.e. today's behavior: the
+// capped backtrack's surviving alpha is simply taken forward (PSIOPT has no
+// post-rejection recovery today; there is no give-up branch at this point).
+// G2 fills in the real SOC -> extended-backtrack ->
 // watchdog -> feasibility-switch dispatch (spec §4).
 //
 // Ownership rule: a RecoveryChain holds NO solver state (no persistent
