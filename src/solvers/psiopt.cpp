@@ -1402,6 +1402,13 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // escalation) is a SEPARATE mechanism and stays out of this chain
         // until G6 (inertia_mode) -- it is NOT invoked or bypassed here.
         //
+        // NOTE (G2 gating requirement, Task 5 review): this call is
+        // UNCONDITIONAL -- it fires on accepted full steps too, not only on
+        // rejections, despite the interface name. Harmless for the no-op, but
+        // a live G2 dispatcher MUST gate on an actual rejection (e.g.
+        // ls_iters_ > 0 with the merit test failed, or !GoodStep) before
+        // taking any Action other than kAcceptAsIs.
+        //
         // G1 wiring is a pure no-op by construction: recovery_ is always a
         // NoopRecovery (set_nlp), whose on_step_rejected() unconditionally
         // returns kAcceptAsIs and touches no state (Citer/iters/ctx passed

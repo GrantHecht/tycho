@@ -52,7 +52,10 @@ class RecoveryChain {
     //                        correction or an extended-backtrack step).
     //   kSwitchToFeasibility — hand off to a restoration strategy (inert
     //                        until G5's RestorationStrategy exists, spec §4).
-    //   kGiveUp            — no recovery available; today's only behavior.
+    //   kGiveUp            — no recovery available. NOTE: today's classic
+    //                        behavior is kAcceptAsIs (NoopRecovery) — the
+    //                        capped backtrack's surviving alpha is taken;
+    //                        there is no give-up branch in the current loop.
     enum class Action { kAcceptAsIs, kRetry, kSwitchToFeasibility, kGiveUp };
 
     // Citer is the just-rejected iterate's record (mutable: a real
