@@ -73,4 +73,15 @@ class RecoveryChain {
     virtual void reset() = 0;
 };
 
+// Recovery-dispatch gate. The RecoveryChain hook is driven only when the trial
+// step was actually rejected by the acceptance strategy (the line search's
+// out-signal reports not-accepted) AND the KKT step direction was usable
+// (good_step). An accepted step — full or backtracked — never reaches the hook,
+// and the non-finite-direction path (which runs no line search) is excluded
+// too. Factored out of alg_impl so the gate condition has a single definition,
+// callable in isolation by the unit test that guards it.
+inline bool should_dispatch_recovery(bool good_step, const IterateInfo &citer) {
+    return good_step && !citer.accepted_;
+}
+
 } // namespace tycho::solvers

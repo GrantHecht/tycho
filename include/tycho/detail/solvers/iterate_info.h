@@ -57,6 +57,26 @@ struct IterateInfo {
     double max_e_mult_ = 0;
     double max_i_mult_ = 0;
     double merit_val_ = 0.0;
+
+    // Line-search acceptance outcome. Write-only diagnostic signal recorded by
+    // the merit line search at the point it decides accept vs. reject; not
+    // consumed on the classic solve path except by the recovery-dispatch gate
+    // in alg_impl (which reads accepted_). These fields are NOT printed — the
+    // iteration table formats an explicit field list (see psiopt_print.cpp) —
+    // so adding them leaves console output byte-identical.
+    //   accepted_               — did the merit test accept a step this line
+    //                             search (false if every backtrack was
+    //                             rejected, i.e. the search exhausted).
+    //   first_rejection_iter_   — backtracking index of the first rejected
+    //                             trial (-1 if the step was accepted with no
+    //                             rejection).
+    //   theta_at_first_rejection_ — constraint infeasibility (L2) at that first
+    //                             rejected trial (0 if no rejection was
+    //                             recorded, or for the LANG variant, which
+    //                             materializes no infeasibility scalar).
+    bool accepted_ = false;
+    int first_rejection_iter_ = -1;
+    double theta_at_first_rejection_ = 0.0;
 };
 
 } // namespace tycho::solvers

@@ -165,10 +165,18 @@ double ClassicMeritAcceptance::ls_lang(double obj_scale, double mu, double prim_
         double LangTest = ptest + btest + xsl2.lmults().dot(rhs2.all_cons());
         if (LangTest < LangInit) {
             citer.ls_iters_ = j;
+            citer.accepted_ = true;
             break;
         } else {
             citer.ls_iters_ = j + 1;
             alpha = alpha / ctx_.settings_.alpha_red_;
+            // Signal-only: record the first rejection's backtracking index.
+            // The self-referential select keeps the first value (the LANG
+            // variant computes no infeasibility scalar, so theta is left at its
+            // default). Writes touch only the diagnostic signal fields; no
+            // classic line-search state is read or modified here.
+            citer.first_rejection_iter_ =
+                citer.first_rejection_iter_ < 0 ? j : citer.first_rejection_iter_;
         }
     }
     return alpha;
@@ -202,10 +210,19 @@ double ClassicMeritAcceptance::ls_l1(double obj_scale, double mu, double prim_ob
         citer.merit_val_ = LangTest;
         if (LangTest < LangInit || secondary_accept(ptest, prim_obj, test, init)) {
             citer.ls_iters_ = j;
+            citer.accepted_ = true;
             break;
         } else {
             citer.ls_iters_ = j + 1;
             alpha = alpha / ctx_.settings_.alpha_red_;
+            // Signal-only: record the first rejection's index and the trial's
+            // already-computed L2 infeasibility (test.l2_). The self-referential
+            // selects keep the first values. Writes touch only the diagnostic
+            // signal fields; no classic line-search state is read or modified.
+            citer.theta_at_first_rejection_ =
+                citer.first_rejection_iter_ < 0 ? test.l2_ : citer.theta_at_first_rejection_;
+            citer.first_rejection_iter_ =
+                citer.first_rejection_iter_ < 0 ? j : citer.first_rejection_iter_;
         }
     }
     return alpha;
@@ -268,10 +285,19 @@ double ClassicMeritAcceptance::ls_auglang(double obj_scale, double mu, double pr
         citer.merit_val_ = LangTest;
         if (LangTest < LangInit || secondary_accept(ptest, prim_obj, test, init)) {
             citer.ls_iters_ = j;
+            citer.accepted_ = true;
             break;
         } else {
             citer.ls_iters_ = j + 1;
             alpha = alpha / ctx_.settings_.alpha_red_;
+            // Signal-only: record the first rejection's index and the trial's
+            // already-computed L2 penalty (TestL2Pen). The self-referential
+            // selects keep the first values. Writes touch only the diagnostic
+            // signal fields; no classic line-search state is read or modified.
+            citer.theta_at_first_rejection_ =
+                citer.first_rejection_iter_ < 0 ? TestL2Pen : citer.theta_at_first_rejection_;
+            citer.first_rejection_iter_ =
+                citer.first_rejection_iter_ < 0 ? j : citer.first_rejection_iter_;
         }
     }
     return alpha;
@@ -314,6 +340,8 @@ double ClassicMeritAcceptance::classic_line_search(PSIOPT::LineSearchModes lsmod
                           Citer);
     case PSIOPT::LineSearchModes::NOLS:
         Citer.ls_iters_ = 0;
+        // No line search runs: the full step is taken, i.e. accepted.
+        Citer.accepted_ = true;
         return 1.0;
     default:
         throw std::invalid_argument("Unknown LineSearchMode");

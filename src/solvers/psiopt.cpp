@@ -1372,12 +1372,13 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // stays out of this chain until the proximal-regularization inertia
         // mode is implemented -- it is NOT invoked or bypassed here.
         //
-        // NOTE (recovery-dispatch gating requirement): this call is
-        // UNCONDITIONAL -- it fires on accepted full steps too, not only on
-        // rejections, despite the interface name. Harmless for the no-op, but
-        // a live recovery dispatcher MUST gate on an actual rejection (e.g.
-        // ls_iters_ > 0 with the merit test failed, or !GoodStep) before
-        // taking any Action other than kAcceptAsIs.
+        // The call is GATED on an actual rejection: should_dispatch_recovery
+        // fires the hook only when the line search reported the trial step
+        // not-accepted (Citer.accepted_ == false, set by the merit test) AND the
+        // KKT step direction was usable (GoodStep). An accepted step -- full or
+        // backtracked -- never reaches the hook, and the !GoodStep path (which
+        // runs no line search) is excluded too. On the default solve path every
+        // step is accepted, so the hook is never invoked at all.
         //
         // This wiring is a pure no-op by construction: recovery_ is always a
         // NoopRecovery (set_nlp), whose on_step_rejected() unconditionally
@@ -1387,12 +1388,15 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // build, enforces -- that no other Action is reachable here yet; no
         // switch/branch exists on the result, so today's control flow below
         // (whatever alpha compute_step produced, or the h_facs_ = -1 !GoodStep
-        // path) is provably unchanged regardless of what this call returns.
-        const RecoveryChain::Action recovery_action =
-            this->recovery_->on_step_rejected(Citer, iters, ctx);
-        assert(recovery_action == RecoveryChain::Action::kAcceptAsIs &&
-               "only NoopRecovery is wired; kAcceptAsIs is the only reachable Action");
-        (void)recovery_action;
+        // path) is provably unchanged whether or not the hook fires and
+        // regardless of what it returns.
+        if (should_dispatch_recovery(GoodStep, Citer)) {
+            const RecoveryChain::Action recovery_action =
+                this->recovery_->on_step_rejected(Citer, iters, ctx);
+            assert(recovery_action == RecoveryChain::Action::kAcceptAsIs &&
+                   "only NoopRecovery is wired; kAcceptAsIs is the only reachable Action");
+            (void)recovery_action;
+        }
 
         Citer.alpha_p_ = alphap;
         Citer.alpha_d_ = alphad;
