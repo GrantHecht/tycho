@@ -52,6 +52,36 @@ namespace tycho::solvers {
 using tycho::ConstEigenRef;
 using tycho::EigenRef;
 
+// E2 G1 globalization extraction: PSIOPT owns its step-acceptance strategy
+// through a std::unique_ptr<AcceptanceStrategy>. Only the forward declaration
+// is needed here (the complete type lives in
+// detail/solvers/globalization/acceptance_strategy.h, which includes THIS
+// header — so psiopt.h must not include it back). Because the member is a
+// unique_ptr to this incomplete type, PSIOPT's constructors and destructor are
+// declared here and defined out-of-line in psiopt.cpp, where the concrete
+// ClassicMeritAcceptance is complete.
+//
+// E2 G1 Task 3: PSIOPT likewise owns its step-length globalization mechanism
+// through a std::unique_ptr<GlobalizationMechanism> (concrete type
+// BacktrackingLineSearch, complete only in psiopt.cpp). Same forward-declare +
+// out-of-line ctor/dtor discipline as AcceptanceStrategy above.
+//
+// E2 G1 Task 4: PSIOPT owns its barrier-parameter governor through a
+// std::unique_ptr<BarrierGovernor> (concrete type ClassicAdaptiveGovernor,
+// complete only in psiopt.cpp). Same forward-declare + out-of-line ctor/dtor
+// discipline.
+//
+// E2 G1 Task 5: PSIOPT owns its post-rejection recovery chain through a
+// std::unique_ptr<RecoveryChain> (concrete type NoopRecovery, complete only in
+// psiopt.cpp). Same forward-declare + out-of-line ctor/dtor discipline. G1's
+// NoopRecovery always returns kAcceptAsIs; the alg_impl call site is
+// provably inert (see noop_recovery.h and the call-site comment in
+// alg_impl) — no real recovery dispatch exists until G2.
+class AcceptanceStrategy;
+class GlobalizationMechanism;
+class BarrierGovernor;
+class RecoveryChain;
+
 class PSIOPT {
   public:
     enum class BarrierModes { PROBE, LOQO };
@@ -268,14 +298,14 @@ class PSIOPT {
     using LateCallBackType =
         std::function<int(const IterateInfo &, ConstEigenRef<VectorXd>, ConstEigenRef<VectorXd>)>;
 
-    // --- Constructors ---
-    PSIOPT() {
-        settings_.qp_threads_ = std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count());
-    }
-    PSIOPT(std::shared_ptr<NonLinearProgram> np) {
-        settings_.qp_threads_ = std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count());
-        this->set_nlp(np);
-    }
+    // --- Constructors / destructor ---
+    // Defined out-of-line in psiopt.cpp: the unique_ptr<AcceptanceStrategy>
+    // member forces even the constructors' exception-cleanup paths (and the
+    // destructor) to see the complete AcceptanceStrategy type, which is only
+    // available in the .cpp. Bodies are otherwise unchanged.
+    PSIOPT();
+    PSIOPT(std::shared_ptr<NonLinearProgram> np);
+    ~PSIOPT();
 
     // --- Accessors ---
     /// Returns a mutable reference to the settings struct. Direct writes bypass
@@ -390,6 +420,39 @@ class PSIOPT {
     Settings settings_;
     SolveResult result_;
     std::shared_ptr<NonLinearProgram> nlp_;
+
+    // E2 G1: classic merit line-search acceptance, extracted from the former
+    // ls_impl/ls_lang/ls_l1/ls_auglang bodies (now ClassicMeritAcceptance). Held
+    // through the AcceptanceStrategy interface (forward-declared above); rebuilt
+    // by set_nlp() wired to a SolverContext view of this solver. Never null once
+    // set_nlp has run, which run_phase_sequence guarantees before any solve.
+    std::unique_ptr<AcceptanceStrategy> acceptance_;
+
+    // E2 G1 Task 3: step-length globalization mechanism, extracted from the
+    // former max_primal_dual_step/max_step_to_boundary bodies (now
+    // BacktrackingLineSearch). Held through the GlobalizationMechanism interface
+    // (forward-declared above); rebuilt by set_nlp() alongside acceptance_.
+    // Never null once set_nlp has run, which run_phase_sequence guarantees
+    // before any solve.
+    std::unique_ptr<GlobalizationMechanism> mechanism_;
+
+    // E2 G1 Task 4: barrier-parameter governor, extracted from the former
+    // PROBE/LOQO barmode switch + loqo_mu/mpc_mu bodies (now
+    // ClassicAdaptiveGovernor). Held through the BarrierGovernor interface
+    // (forward-declared above); rebuilt by set_nlp() alongside acceptance_/
+    // mechanism_. Never null once set_nlp has run, which run_phase_sequence
+    // guarantees before any solve.
+    std::unique_ptr<BarrierGovernor> governor_;
+
+    // E2 G1 Task 5: post-rejection recovery chain, extracted-as-a-hook (no
+    // prior code existed for this — G1 wires the hook point with a no-op
+    // implementation). Held through the RecoveryChain interface
+    // (forward-declared above); rebuilt by set_nlp() alongside acceptance_/
+    // mechanism_/governor_. Never null once set_nlp has run, which
+    // run_phase_sequence guarantees before any solve. G1's NoopRecovery always
+    // returns kAcceptAsIs and is stateless; G2 replaces the concrete type with
+    // a real SOC/extended-backtrack/watchdog/feasibility-switch dispatcher.
+    std::unique_ptr<RecoveryChain> recovery_;
 
     // QP parameter setup — called automatically by set_nlp()
     void set_qp_params();
@@ -526,37 +589,14 @@ class PSIOPT {
 
     Eigen::VectorXd init_impl(const Eigen::VectorXd &x, double Mu, bool docompute);
 
-    // --- Line search (defined in psiopt.cpp) ---
-    double ls_impl(LineSearchModes lsmode, double obj_scale, double Mu, double prim_obj,
-                   double barr_obj, Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL,
-                   Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS, Eigen::VectorXd &RHS2,
-                   IterateInfo &Citer, const std::vector<IterateInfo> &iters);
-
-    double ls_lang(double obj_scale, double mu, double prim_obj, double barr_obj, KKTVector &xsl,
-                   KKTVector &dxsl, KKTVector &xsl2, KKTVector &rhs, KKTVector &rhs2,
-                   IterateInfo &citer);
-
-    double ls_l1(double obj_scale, double mu, double prim_obj, double barr_obj, KKTVector &xsl,
-                 KKTVector &dxsl, KKTVector &xsl2, KKTVector &rhs, KKTVector &rhs2,
-                 IterateInfo &citer);
-
-    double ls_auglang(double obj_scale, double mu, double prim_obj, double barr_obj, KKTVector &xsl,
-                      KKTVector &dxsl, KKTVector &xsl2, KKTVector &rhs, KKTVector &rhs2,
-                      IterateInfo &citer);
-
-    // --- Line search shared helpers ---
-    struct PenaltyTerms {
-        double l1_, l2_, linf_;
-    };
-
-    void eval_trial_point_occ(double obj_scale, double mu, double alpha, KKTVector &xsl,
-                              KKTVector &dxsl, KKTVector &xsl2, KKTVector &rhs2, double &ptest,
-                              double &btest);
-
-    PenaltyTerms compute_penalties(KKTVector &xsl, KKTVector &rhs) const;
-
-    bool secondary_accept(double ptest, double prim_obj, const PenaltyTerms &test,
-                          const PenaltyTerms &init) const;
+    // --- Line search ---
+    // The classic merit line search (former ls_impl/ls_lang/ls_l1/ls_auglang and
+    // their eval_trial_point_occ/compute_penalties/secondary_accept helpers) was
+    // extracted verbatim into ClassicMeritAcceptance (E2 G1, Task 2); the
+    // fraction-to-boundary step-length (former max_primal_dual_step/
+    // max_step_to_boundary) was extracted verbatim into BacktrackingLineSearch
+    // (E2 G1, Task 3). alg_impl now drives both through mechanism_->compute_step
+    // (which fuses the step scaling and acceptance backtrack).
 
     // --- KKT factorization (defined in psiopt.cpp) ---
     // `finalpert` is the last perturbation DELTA applied via Perturb() -- this is
@@ -575,8 +615,8 @@ class PSIOPT {
 
     // --- Barrier math helpers (defined in psiopt.cpp) ---
     void apply_reset_slacks(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> FXI) const;
-    double max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> SLI, Eigen::Ref<Eigen::VectorXd> dSLI,
-                                double bfrac) const;
+    // max_step_to_boundary was extracted verbatim into BacktrackingLineSearch
+    // (E2 G1 Task 3); it is now a private helper of that mechanism.
     void complementarity(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI,
                          double &avgcomp, double &mincomp, double &maxcomp) const;
     double barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu) const;
@@ -585,10 +625,14 @@ class PSIOPT {
     void barrier_gradient(Eigen::Ref<Eigen::VectorXd> LI, Eigen::Ref<Eigen::VectorXd> AGS) const;
     void barrier_hessian(Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
                          Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double mu);
-    double loqo_mu(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
-                   double mincomp) const;
-    double mpc_mu(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
-                  double mincomp) const;
+    // loqo_mu / mpc_mu were extracted verbatim into ClassicAdaptiveGovernor
+    // (E2 G1 Task 4, src/solvers/psiopt_globalization.cpp); the barrier-
+    // parameter update now runs through governor_->update_barrier(). The
+    // barrier_objective()/barrier_gradient() helpers above are retained for now
+    // (PSIOPT no longer calls them after Task 4; a later G-task that
+    // consolidates the duplicated globalization helpers should remove the dead
+    // copies). complementarity() STAYS — it is still called from the evaluate
+    // stage (its maxcomp output feeds converge_check's barr_inf_).
 
     // --- NLP eval dispatch methods (defined in psiopt.cpp) ---
     void eval_kkt(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
@@ -621,8 +665,10 @@ class PSIOPT {
     void fill_iter_info(KKTVector &xsl, KKTVector &rhs, double pobj, double bobj, double mu,
                         IterateInfo &iter) const;
     ConvergenceFlags converge_check(std::vector<IterateInfo> &iters);
-    void max_primal_dual_step(KKTVector &xsl, KKTVector &dxsl, double bfrac, double &alphap,
-                              double &alphad);
+    // max_primal_dual_step was extracted verbatim into BacktrackingLineSearch
+    // (E2 G1 Task 3); alg_impl now drives it through mechanism_ (fused into
+    // compute_step on the main path, and via the public method at the PROBE
+    // predictor call site).
 
     // --- Printing methods ---
     static void print_psiopt();

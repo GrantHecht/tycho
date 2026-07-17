@@ -26,6 +26,26 @@
 #include "tycho/detail/solvers/solver_init.h"
 #include "tycho/detail/utils/timer.h"
 
+// E2 G1 globalization component interfaces (scaffolding only — see
+// docs/superpowers/specs/2026-07-16-e2-psiopt-globalization-design.md §3).
+// Not wired to anything below yet; included here (rather than from
+// psiopt.h) so this, the actual TU that builds PSIOPT, exercises them on
+// every build without psiopt.h having to include a directory of headers
+// that themselves need the complete PSIOPT class (a circular-include
+// arrangement that is fragile for the "middle" headers below — see the
+// include-discipline note in solver_context.h). Dependency-ordered.
+#include "tycho/detail/solvers/globalization/progress_measures.h"
+#include "tycho/detail/solvers/globalization/solver_context.h"
+#include "tycho/detail/solvers/globalization/acceptance_strategy.h"
+#include "tycho/detail/solvers/globalization/globalization_mechanism.h"
+#include "tycho/detail/solvers/globalization/backtracking_line_search.h"
+#include "tycho/detail/solvers/globalization/barrier_governor.h"
+#include "tycho/detail/solvers/globalization/classic_adaptive_governor.h"
+#include "tycho/detail/solvers/globalization/merit_acceptance.h"
+#include "tycho/detail/solvers/globalization/recovery_chain.h"
+#include "tycho/detail/solvers/globalization/noop_recovery.h"
+#include "tycho/detail/solvers/globalization/restoration.h"
+
 #ifndef USE_ACCELERATE_SPARSE
 #include <mkl.h>
 #endif
@@ -671,19 +691,8 @@ void tycho::solvers::PSIOPT::apply_reset_slacks(Eigen::Ref<Eigen::VectorXd> S,
     }
 }
 
-double tycho::solvers::PSIOPT::max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> SLI,
-                                                    Eigen::Ref<Eigen::VectorXd> dSLI,
-                                                    double bfrac) const {
-    double alpha = 1.0;
-    for (int i = 0; i < this->inequal_cons_; i++) {
-        if (dSLI[i] < -bfrac * SLI[i]) {
-            double an = -bfrac * SLI[i] / dSLI[i];
-            if (an < alpha)
-                alpha = an;
-        }
-    }
-    return alpha;
-}
+// max_step_to_boundary was extracted verbatim into BacktrackingLineSearch
+// (E2 G1 Task 3, src/solvers/psiopt_globalization.cpp).
 
 void tycho::solvers::PSIOPT::complementarity(Eigen::Ref<Eigen::VectorXd> S,
                                              Eigen::Ref<Eigen::VectorXd> LI, double &avgcomp,
@@ -732,23 +741,9 @@ void tycho::solvers::PSIOPT::barrier_hessian(Eigen::SparseMatrix<double, Eigen::
     this->nlp_->assign_kkt_slack_hessian(this->hp_scratch_, KKTmat);
 }
 
-double tycho::solvers::PSIOPT::loqo_mu(Eigen::Ref<Eigen::VectorXd> S,
-                                       Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
-                                       double mincomp) const {
-    double eta = mincomp / avgcomp;
-    double sigmat = .1 * std::pow(0.05 * (1.0 - eta) / eta, 3);
-    double sigma = std::min(0.8, std::abs(sigmat));
-    return sigma * avgcomp;
-}
-
-double tycho::solvers::PSIOPT::mpc_mu(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI,
-                                      double avgcomp, double mincomp) const {
-    double navgcomp = 0;
-    double nmincomp = 0;
-    double nmaxcomp = 0;
-    this->complementarity(S, LI, navgcomp, nmincomp, nmaxcomp);
-    return std::pow(navgcomp / avgcomp, 3) * avgcomp;
-}
+// loqo_mu / mpc_mu were extracted verbatim into ClassicAdaptiveGovernor
+// (E2 G1 Task 4, src/solvers/psiopt_globalization.cpp); the barrier-parameter
+// update now runs through governor_->update_barrier().
 
 // =============================================================================
 // NLP eval dispatch methods
@@ -821,6 +816,23 @@ void tycho::solvers::PSIOPT::ensure_solver_initialized() {
     }
 }
 
+// E2 G1: constructors and destructor are defined here (not inline in the
+// header) because the std::unique_ptr<AcceptanceStrategy>,
+// std::unique_ptr<GlobalizationMechanism>, and std::unique_ptr<BarrierGovernor>
+// members need their complete concrete types for their destructors — reached
+// through both the destructor and the constructors' exception-cleanup paths.
+// Bodies are the former header-inline bodies, unchanged.
+tycho::solvers::PSIOPT::PSIOPT() {
+    settings_.qp_threads_ = std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count());
+}
+
+tycho::solvers::PSIOPT::PSIOPT(std::shared_ptr<NonLinearProgram> np) {
+    settings_.qp_threads_ = std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count());
+    this->set_nlp(np);
+}
+
+tycho::solvers::PSIOPT::~PSIOPT() = default;
+
 void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
     if (!np)
         throw std::invalid_argument("PSIOPT::set_nlp: NonLinearProgram pointer must not be null");
@@ -835,6 +847,39 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
             fmt::format("PSIOPT::set_nlp: NLP kkt_dim ({}) != primal_vars ({}) + slack_vars ({}) "
                         "+ equal_cons ({}) + inequal_cons ({})",
                         kkt_dim_, primal_vars_, slack_vars_, equal_cons_, inequal_cons_));
+
+    // E2 G1: (re)build the classic merit acceptance strategy wired to a
+    // SolverContext view of this solver. Rebuilt here (rather than once in the
+    // constructor) so the SolverContext's captured nlp_ raw pointer tracks the
+    // NLP just installed; dims/settings/scratch are captured by reference and
+    // stay live. PSIOPT owns acceptance_, so the SolverContext's references
+    // cannot outlive their referents.
+    this->acceptance_ = std::make_unique<ClassicMeritAcceptance>(
+        SolverContext{this->nlp_.get(), this->kkt_sol_, this->settings_, this->primal_vars_,
+                      this->slack_vars_, this->equal_cons_, this->inequal_cons_, this->kkt_dim_,
+                      this->stli_scratch_, this->hp_scratch_, this->best_xsl_scratch_,
+                      this->best_rhs_scratch_});
+
+    // E2 G1 Task 3: the step-length globalization mechanism. Stateless (holds
+    // NO solver state per GlobalizationMechanism's ownership rule) — every call
+    // receives the live SolverContext as an explicit parameter — so it is
+    // constructed with no context here; alg_impl builds the SolverContext view
+    // it passes to compute_step / max_primal_dual_step.
+    this->mechanism_ = std::make_unique<BacktrackingLineSearch>();
+
+    // E2 G1 Task 4: the barrier-parameter governor. Stateless (holds NO solver
+    // state per BarrierGovernor's ownership rule) — every update_barrier() call
+    // receives the live SolverContext and the GlobalizationMechanism as explicit
+    // parameters — so it is constructed with no context here; alg_impl builds
+    // the SolverContext view and passes *mechanism_ to update_barrier.
+    this->governor_ = std::make_unique<ClassicAdaptiveGovernor>();
+
+    // E2 G1 Task 5: the post-rejection recovery chain. G1's NoopRecovery is
+    // stateless (holds no solver state, per RecoveryChain's ownership rule)
+    // and always returns kAcceptAsIs, so it needs no context at construction;
+    // alg_impl builds the SolverContext view it passes to on_step_rejected.
+    this->recovery_ = std::make_unique<NoopRecovery>();
+
     this->set_qp_params();
 #ifdef USE_ACCELERATE_SPARSE
     accelerate_set_num_threads(settings_.qp_threads_);
@@ -856,40 +901,10 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
     this->qp_analyzed_ = false;
 }
 
-void tycho::solvers::PSIOPT::max_primal_dual_step(KKTVector &xsl, KKTVector &dxsl, double bfrac,
-                                                  double &alphap, double &alphad) {
-    double Smax = this->max_step_to_boundary(xsl.slacks(), dxsl.slacks(), bfrac);
-    double Lmax = this->max_step_to_boundary(xsl.iq_lmults(), dxsl.iq_lmults(), bfrac);
-
-    double primstep = Smax;
-    double slackstep = Smax;
-    double eqmultstep = Smax;
-    double iqmultstep = Lmax;
-
-    if (settings_.pd_step_strategy_ == PDStepStrategies::PrimSlackEq_Iq) {
-    } else if (settings_.pd_step_strategy_ == PDStepStrategies::AllMinimum) {
-        double step = std::min(Smax, Lmax);
-        primstep = step;
-        slackstep = step;
-        eqmultstep = step;
-        iqmultstep = step;
-    } else if (settings_.pd_step_strategy_ == PDStepStrategies::PrimSlack_EqIq) {
-        eqmultstep = Lmax;
-    } else if (settings_.pd_step_strategy_ == PDStepStrategies::MaxEq) {
-        double step = std::max(Smax, Lmax);
-        eqmultstep = step;
-    }
-    dxsl.primals() *= primstep;
-    if (inequal_cons_ > 0)
-        dxsl.slacks() *= slackstep;
-    if (equal_cons_ > 0)
-        dxsl.eq_lmults() *= eqmultstep;
-    if (inequal_cons_ > 0)
-        dxsl.iq_lmults() *= iqmultstep;
-
-    alphap = Smax;
-    alphad = Lmax;
-}
+// max_primal_dual_step was extracted verbatim into BacktrackingLineSearch
+// (E2 G1 Task 3, src/solvers/psiopt_globalization.cpp). alg_impl drives it
+// through mechanism_ (fused into compute_step on the main path; via the public
+// method at the PROBE predictor call site).
 
 // PSIOPT 3.1: deliberately excludes barr_obj_/mu_/p_pivots_. barr_obj_ is only
 // evaluated by the caller AFTER the barrier-parameter update block (barrier_objective()
@@ -1134,7 +1149,18 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     KKTVector v_xsl = kkt_view(XSL);
     KKTVector v_rhs = kkt_view(RHS);
     KKTVector v_dxsl = kkt_view(DXSL);
-    KKTVector v_temp = kkt_view(Temp);
+    // v_temp: the former PROBE-predictor view (Temp = XSL + DXSL -> mpc_mu) moved
+    // into ClassicAdaptiveGovernor (E2 G1 Task 4), which rebuilds it internally
+    // from the raw Temp block; no alg_impl caller remains.
+
+    // E2 G1 Task 3: references-only view of this solver, passed to the
+    // step-length mechanism (mechanism_) at its call sites below. Built once
+    // here (dims/settings/scratch are stable for the solve); it must not
+    // outlive this alg_impl frame or the PSIOPT members it references.
+    SolverContext ctx{this->nlp_.get(),    this->kkt_sol_,          this->settings_,
+                      this->primal_vars_,  this->slack_vars_,       this->equal_cons_,
+                      this->inequal_cons_, this->kkt_dim_,          this->stli_scratch_,
+                      this->hp_scratch_,   this->best_xsl_scratch_, this->best_rhs_scratch_};
 
     tycho::utils::Timer Runtimer;
     tycho::utils::Timer Funtimer;
@@ -1325,45 +1351,27 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         Citer.h_pert_ = nhpert;
         Citer.h_pert_cum_ = nhpert_cum;
 
-        // Update barrier parameter and compute search direction
+        // Update barrier parameter and compute search direction. The whole
+        // PROBE/LOQO switch + common clamp/objective/gradient tail is now
+        // ClassicAdaptiveGovernor::update_barrier (E2 G1 Task 4); the
+        // `if (inequal_cons_ > 0)` guard stays here, exactly as the block was
+        // guarded before extraction, so the governor is invoked only when there
+        // are inequality constraints (barrier terms). The PROBE predictor's KKT
+        // solve moves INTO the governor; the REAL step solve below (a distinct
+        // second solve) stays here. avgcomp/mincomp feed the mu oracles;
+        // *mechanism_ lets the PROBE predictor reuse the Task-3 step-scaling.
         if (this->inequal_cons_ > 0) {
-            switch (barmode) {
-            case BarrierModes::PROBE:
-                this->barrier_gradient(v_xsl.iq_lmults(), v_rhs.dual_grad());
-                // Assign the Solve<> expression directly (hits Eigen's specialized
-                // Assignment<DstXprType, Solve<...>> and writes straight into DXSL,
-                // no temporary) then negate in place (elementwise, alias-safe) --
-                // avoids the extra kkt_dim_-sized temporary that
-                // `DXSL = -kkt_sol_.solve(RHS)` forces via Solve's
-                // EvalBeforeNestingBit when wrapped in a CwiseUnaryOp.
-                DXSL = this->kkt_sol_.solve(RHS);
-                DXSL = -DXSL;
-                this->max_primal_dual_step(v_xsl, v_dxsl, settings_.bound_fraction_, alphap,
-                                           alphad);
-                Temp = XSL + DXSL;
-                mu = this->mpc_mu(v_temp.slacks(), v_temp.iq_lmults(), avgcomp, mincomp);
-
-                break;
-            case BarrierModes::LOQO:
-                mu = this->loqo_mu(v_xsl.slacks(), v_xsl.iq_lmults(), avgcomp, mincomp);
-                break;
-            default:
-                throw std::invalid_argument("Unknown BarrierMode");
-            }
-
-            mu = std::max(mu, settings_.min_mu_);
-            mu = std::min(mu, settings_.max_mu_);
-            barr_obj = this->barrier_objective(v_xsl.slacks(), mu);
-            this->barrier_gradient(v_xsl.slacks(), v_xsl.iq_lmults(), mu, v_rhs.dual_grad());
+            mu = governor_->update_barrier(barmode, mu, avgcomp, mincomp, XSL, RHS, DXSL, Temp,
+                                           *mechanism_, ctx, barr_obj);
         }
 
-        // See the solve-into comment above (PROBE case): direct assignment + in-place
-        // negate avoids the extra temporary that `-kkt_sol_.solve(RHS)` forces.
+        // The REAL step solve (distinct from the PROBE predictor solve, which
+        // moved into ClassicAdaptiveGovernor::update_barrier — see its solve-into
+        // comment): direct assignment + in-place negate avoids the extra
+        // temporary that `-kkt_sol_.solve(RHS)` forces.
         DXSL = this->kkt_sol_.solve(RHS);
         DXSL = -DXSL;
         bool GoodStep = std::isfinite(DXSL.squaredNorm());
-        if (this->inequal_cons_ > 0)
-            this->max_primal_dual_step(v_xsl, v_dxsl, settings_.bound_fraction_, alphap, alphad);
         QPtimer.stop();
 
         // Line search
@@ -1371,14 +1379,50 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         if (GoodStep) {
             double lsobjscale =
                 algmode == AlgorithmModes::SOE || algmode == AlgorithmModes::OPTNO ? 0.0 : 1.0;
-            alpha = ls_impl(lsmode, obj_scale * lsobjscale, mu, prim_obj, barr_obj, XSL, DXSL, Temp,
-                            RHS, RHS2, Citer, iters);
+            // compute_step fuses the fraction-to-boundary scaling (former
+            // `if (inequal_cons_ > 0) max_primal_dual_step(...)`, now guarded
+            // identically inside compute_step and MUTATING DXSL in place) and
+            // the acceptance backtrack on the scaled DXSL. This is the riskiest
+            // FP-order seam (dossier §2/§8): negate -> block-scale by
+            // alphap/alphad -> `xsl + alpha*dxsl` trial -> `XSL += alpha*DXSL`.
+            alpha = mechanism_->compute_step(lsmode, obj_scale * lsobjscale, mu, prim_obj, barr_obj,
+                                             XSL, DXSL, Temp, RHS, RHS2, *acceptance_, alphap,
+                                             alphad, Citer, iters, ctx);
 
         } else {
             Citer.h_facs_ = -1;
         }
 
         Funtimer.stop();
+
+        // E2 G1 Task 5: recovery-chain hook. This is where a rejected step's
+        // recovery gets a say -- in G2 this is the SOC -> extended-backtrack
+        // -> watchdog-revert -> feasibility-switch dispatch point (spec §4);
+        // the inertia/perturbation ladder above (factor_impl's Zfac cycling +
+        // escalation) is a SEPARATE mechanism and stays out of this chain
+        // until G6 (inertia_mode) -- it is NOT invoked or bypassed here.
+        //
+        // NOTE (G2 gating requirement, Task 5 review): this call is
+        // UNCONDITIONAL -- it fires on accepted full steps too, not only on
+        // rejections, despite the interface name. Harmless for the no-op, but
+        // a live G2 dispatcher MUST gate on an actual rejection (e.g.
+        // ls_iters_ > 0 with the merit test failed, or !GoodStep) before
+        // taking any Action other than kAcceptAsIs.
+        //
+        // G1 wiring is a pure no-op by construction: recovery_ is always a
+        // NoopRecovery (set_nlp), whose on_step_rejected() unconditionally
+        // returns kAcceptAsIs and touches no state (Citer/iters/ctx passed
+        // read/write per the interface but NoopRecovery never reads or
+        // mutates them). The assert below documents -- and, in a debug
+        // build, enforces -- that no other Action is reachable here yet; no
+        // switch/branch exists on the result, so today's control flow below
+        // (whatever alpha compute_step produced, or the h_facs_ = -1 !GoodStep
+        // path) is provably unchanged regardless of what this call returns.
+        const RecoveryChain::Action recovery_action =
+            this->recovery_->on_step_rejected(Citer, iters, ctx);
+        assert(recovery_action == RecoveryChain::Action::kAcceptAsIs &&
+               "G1 wires only NoopRecovery; kAcceptAsIs is the only reachable Action");
+        (void)recovery_action;
 
         Citer.alpha_p_ = alphap;
         Citer.alpha_d_ = alphad;
@@ -1570,209 +1614,6 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     this->nlp_->set_primal_diags(0.0);
 
     return XSL;
-}
-
-// ============================================================================
-// Line search — shared helpers
-// ============================================================================
-
-void tycho::solvers::PSIOPT::eval_trial_point_occ(double obj_scale, double mu, double alpha,
-                                                  KKTVector &xsl, KKTVector &dxsl, KKTVector &xsl2,
-                                                  KKTVector &rhs2, double &ptest, double &btest) {
-    xsl2.data() = xsl.data() + alpha * dxsl.data();
-    rhs2.data().setZero();
-    this->nlp_->eval_occ(obj_scale, xsl2.primals(), ptest, rhs2.eq_cons(), rhs2.iq_cons());
-    this->apply_reset_slacks(xsl2.slacks(), rhs2.iq_cons());
-    btest = this->barrier_objective(xsl2.slacks(), mu);
-}
-
-auto tycho::solvers::PSIOPT::compute_penalties(KKTVector &xsl, KKTVector &rhs) const
-    -> PenaltyTerms {
-    return {xsl.lmults().cwiseAbs().dot(rhs.all_cons().cwiseAbs()), rhs.all_cons().squaredNorm(),
-            rhs.all_cons().template lpNorm<Eigen::Infinity>()};
-}
-
-bool tycho::solvers::PSIOPT::secondary_accept(double ptest, double prim_obj,
-                                              const PenaltyTerms &test,
-                                              const PenaltyTerms &init) const {
-    return (ptest < prim_obj && test.l2_ < init.l2_) ||
-           (ptest < prim_obj && test.linf_ < init.linf_);
-}
-
-// ============================================================================
-// Line search — variant implementations
-// ============================================================================
-
-double tycho::solvers::PSIOPT::ls_lang(double obj_scale, double mu, double prim_obj,
-                                       double barr_obj, KKTVector &xsl, KKTVector &dxsl,
-                                       KKTVector &xsl2, KKTVector &rhs, KKTVector &rhs2,
-                                       IterateInfo &citer) {
-    double alpha = 1.0;
-    double LangInit = prim_obj + barr_obj + xsl.lmults().dot(rhs.all_cons());
-
-    for (int j = 0; j < settings_.max_ls_iters_; j++) {
-        double ptest = 0;
-        double btest = 0;
-        xsl2.data() = xsl.data() + alpha * dxsl.data();
-        rhs2.data().setZero();
-        this->eval_rhs(obj_scale, xsl2.data(), ptest, rhs2.data(), rhs2.data());
-        this->apply_reset_slacks(xsl2.slacks(), rhs2.iq_cons());
-        btest = this->barrier_objective(xsl2.slacks(), mu);
-        this->barrier_gradient(xsl2.slacks(), xsl2.iq_lmults(), mu, rhs2.dual_grad());
-        double LangTest = ptest + btest + xsl2.lmults().dot(rhs2.all_cons());
-        if (LangTest < LangInit) {
-            citer.ls_iters_ = j;
-            break;
-        } else {
-            citer.ls_iters_ = j + 1;
-            alpha = alpha / settings_.alpha_red_;
-        }
-    }
-    return alpha;
-}
-
-double tycho::solvers::PSIOPT::ls_l1(double obj_scale, double mu, double prim_obj, double barr_obj,
-                                     KKTVector &xsl, KKTVector &dxsl, KKTVector &xsl2,
-                                     KKTVector &rhs, KKTVector &rhs2, IterateInfo &citer) {
-    double alpha = 1.0;
-    double vv = rhs.prim_dual_grad().dot(dxsl.primals_slacks());
-    double cv = dxsl.lmults().dot(rhs.all_cons());
-
-    PenaltyTerms init = compute_penalties(xsl, rhs);
-
-    // Branch-first: avoid computing a transient inf/nan when init.l2_ == 0.0
-    // (the division result is immediately discarded by the guard below anyway;
-    // final sc is bit-identical to the previous compute-then-overwrite order).
-    double sc = (init.l2_ == 0.0) ? 1.0 : .1 + std::abs(vv - cv) / init.l2_;
-
-    double LangInit = prim_obj + barr_obj + init.l1_ + init.l2_ * sc;
-
-    for (int j = 0; j < settings_.max_ls_iters_; j++) {
-        double ptest = 0;
-        double btest = 0;
-        eval_trial_point_occ(obj_scale, mu, alpha, xsl, dxsl, xsl2, rhs2, ptest, btest);
-
-        double LangTest = ptest + btest;
-        PenaltyTerms test = compute_penalties(xsl, rhs2);
-        LangTest += test.l1_ + test.l2_ * sc;
-
-        citer.merit_val_ = LangTest;
-        if (LangTest < LangInit || secondary_accept(ptest, prim_obj, test, init)) {
-            citer.ls_iters_ = j;
-            break;
-        } else {
-            citer.ls_iters_ = j + 1;
-            alpha = alpha / settings_.alpha_red_;
-        }
-    }
-    return alpha;
-}
-
-double tycho::solvers::PSIOPT::ls_auglang(double obj_scale, double mu, double prim_obj,
-                                          double barr_obj, KKTVector &xsl, KKTVector &dxsl,
-                                          KKTVector &xsl2, KKTVector &rhs, KKTVector &rhs2,
-                                          IterateInfo &citer) {
-    double alpha = 1.0;
-    double vv = rhs.prim_dual_grad().dot(dxsl.primals_slacks());
-    double cv = dxsl.lmults().dot(rhs.all_cons());
-
-    PenaltyTerms init = compute_penalties(xsl, rhs);
-
-    // Branch-first: avoid computing a transient inf/nan when init.l2_ == 0.0
-    // (the division result is immediately discarded by the guard below anyway;
-    // final sc is bit-identical to the previous compute-then-overwrite order).
-    double sc = (init.l2_ == 0.0) ? 1.0 : .01 + std::abs(vv - cv) / init.l2_;
-
-    double LangInit = prim_obj + barr_obj + init.l1_ + init.l2_ * sc;
-
-    for (int j = 0; j < settings_.max_ls_iters_; j++) {
-        double ptest = 0;
-        double btest = 0;
-        eval_trial_point_occ(obj_scale, mu, alpha, xsl, dxsl, xsl2, rhs2, ptest, btest);
-
-        double LangTest = ptest + btest;
-
-        // Tolerance-filtered L1 penalty
-        double TestL1Pen = 0;
-        for (int i = 0; i < this->equal_cons_; i++) {
-            double eqerr = std::abs(rhs2.eq_cons()[i]);
-            double eqmul = std::abs(xsl.eq_lmults()[i]);
-            if (eqerr > settings_.econ_tol_ * 10) {
-                TestL1Pen += eqerr * eqmul;
-            }
-        }
-        for (int i = 0; i < this->inequal_cons_; i++) {
-            double iqerr = std::abs(rhs2.iq_cons()[i]);
-            double iqmul = std::abs(xsl.iq_lmults()[i]);
-            if (iqerr > settings_.icon_tol_ * 10) {
-                TestL1Pen += iqerr * iqmul;
-            }
-        }
-
-        double TestL2Pen = rhs2.all_cons().squaredNorm();
-        double TestLinfPenalty = rhs2.all_cons().template lpNorm<Eigen::Infinity>();
-
-        // Zero L2 when within tolerance threshold
-        if (TestL2Pen < settings_.econ_tol_ * settings_.econ_tol_ * equal_cons_ +
-                            settings_.icon_tol_ * settings_.icon_tol_ * inequal_cons_) {
-            TestL2Pen = 0;
-        }
-
-        LangTest += TestL1Pen + TestL2Pen * sc;
-
-        PenaltyTerms test{TestL1Pen, TestL2Pen, TestLinfPenalty};
-        citer.merit_val_ = LangTest;
-        if (LangTest < LangInit || secondary_accept(ptest, prim_obj, test, init)) {
-            citer.ls_iters_ = j;
-            break;
-        } else {
-            citer.ls_iters_ = j + 1;
-            alpha = alpha / settings_.alpha_red_;
-        }
-    }
-    return alpha;
-}
-
-// ============================================================================
-// Line search — dispatcher
-// ============================================================================
-
-double tycho::solvers::PSIOPT::ls_impl(LineSearchModes lsmode, double obj_scale, double mu,
-                                       double prim_obj, double barr_obj, Eigen::VectorXd &XSL,
-                                       Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2,
-                                       Eigen::VectorXd &RHS, Eigen::VectorXd &RHS2,
-                                       IterateInfo &Citer, const std::vector<IterateInfo> &iters) {
-    // Line search exhaustion (all max_ls_iters_ attempts fail the merit test) is
-    // signaled by Citer.ls_iters_ == max_ls_iters_ in the iteration table.
-    // On success, ls_iters_ records the 0-based index of the accepted step (j).
-    // On failure, ls_iters_ is set to j+1 (attempts exhausted so far), reaching
-    // max_ls_iters_ when all attempts are exhausted. This convention is shared by
-    // ls_lang, ls_l1, and ls_auglang.
-    // The best alpha found is still returned; alg_impl's convergence check determines
-    // whether the overall iteration should continue or terminate.
-
-    KKTVector v_xsl = kkt_view(XSL);
-    KKTVector v_dxsl = kkt_view(DXSL);
-    KKTVector v_xsl2 = kkt_view(XSL2);
-    KKTVector v_rhs = kkt_view(RHS);
-    KKTVector v_rhs2 = kkt_view(RHS2);
-
-    switch (lsmode) {
-    case LineSearchModes::LANG:
-        return ls_lang(obj_scale, mu, prim_obj, barr_obj, v_xsl, v_dxsl, v_xsl2, v_rhs, v_rhs2,
-                       Citer);
-    case LineSearchModes::L1:
-        return ls_l1(obj_scale, mu, prim_obj, barr_obj, v_xsl, v_dxsl, v_xsl2, v_rhs, v_rhs2,
-                     Citer);
-    case LineSearchModes::AUGLANG:
-        return ls_auglang(obj_scale, mu, prim_obj, barr_obj, v_xsl, v_dxsl, v_xsl2, v_rhs, v_rhs2,
-                          Citer);
-    case LineSearchModes::NOLS:
-        Citer.ls_iters_ = 0;
-        return 1.0;
-    default:
-        throw std::invalid_argument("Unknown LineSearchMode");
-    }
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd &x,
