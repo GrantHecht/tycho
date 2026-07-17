@@ -2,10 +2,8 @@
 // Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 // =============================================================================
 //
-// Part of the E2 G1 globalization extraction (Task 2). Spec:
-// docs/superpowers/specs/2026-07-16-e2-psiopt-globalization-design.md §3.
-// Ground-truth recon: docs/superpowers/plans/2026-07-16-e2-g1-dossier.md §2
-// ("Line search & merit") and §8 ("Separability verdict — AcceptanceStrategy").
+// Part of the globalization component extraction: this is the line search &
+// merit acceptance component.
 //
 // ClassicMeritAcceptance implements AcceptanceStrategy::classic_line_search by
 // hosting today's PSIOPT::ls_impl dispatcher plus the ls_lang / ls_l1 /
@@ -21,19 +19,20 @@
 //   The moved merit bodies call four tiny PSIOPT barrier/eval helpers
 //   (eval_rhs, apply_reset_slacks, barrier_objective, barrier_gradient) and
 //   use PSIOPT's KKTVector segment views + PenaltyTerms value type. Those are
-//   private to PSIOPT and — per Task 1's architecture (acceptance_strategy.h
-//   and solver_context.h) — a non-member, non-friend AcceptanceStrategy may
-//   reach PSIOPT state ONLY through SolverContext (nlp_/settings_/dims/scratch
-//   references). Every one of those four helpers is a pure function of exactly
-//   those SolverContext members, so each is reproduced here VERBATIM (same
-//   statement order, same operand order — see the definitions in the .cpp) as
-//   a private method reading through `ctx_`, and KKTVector/PenaltyTerms are
-//   reproduced verbatim as private nested types. This is the "reconstructs
-//   KKTVector-equivalent segment views internally from SolverContext's dims"
-//   path acceptance_strategy.h anticipates. The duplication is deliberate and
-//   FP-safe (identical source under identical TU flags -> identical codegen);
-//   a later G-task that also extracts the barrier governor should consolidate
-//   these helpers into one shared home.
+//   private to PSIOPT and — per this component architecture
+//   (acceptance_strategy.h and solver_context.h) — a non-member, non-friend
+//   AcceptanceStrategy may reach PSIOPT state ONLY through SolverContext
+//   (nlp_/settings_/dims/scratch references). Every one of those four helpers
+//   is a pure function of exactly those SolverContext members, so each is
+//   reproduced here VERBATIM (same statement order, same operand order — see
+//   the definitions in the .cpp) as a private method reading through `ctx_`,
+//   and KKTVector/PenaltyTerms are reproduced verbatim as private nested
+//   types. This is the "reconstructs KKTVector-equivalent segment views
+//   internally from SolverContext's dims" path acceptance_strategy.h
+//   anticipates. The duplication is deliberate and FP-safe (identical source
+//   under identical TU flags -> identical codegen); a future change that also
+//   extracts the barrier governor should consolidate these helpers into one
+//   shared home.
 
 #pragma once
 
@@ -69,10 +68,11 @@ class ClassicMeritAcceptance : public AcceptanceStrategy {
 
     // --- Generic interface (unused on the classic merit path) ---
     // The classic acceptance test is fused inside classic_line_search's
-    // backtracking loop (dossier §2); these generic (θ, f) hooks are driven
-    // only by G2+ filter/funnel/WMNO strategies. Reaching them on the classic
-    // path is a wiring bug, so they throw (T6: never a silent wrong return)
-    // rather than fabricate an answer. G2 gives them real bodies.
+    // backtracking loop; these generic (θ, f) hooks are driven only by future
+    // filter/funnel/WMNO strategies. Reaching them on the classic path is a
+    // wiring bug, so they throw (T6: never a silent wrong return) rather than
+    // fabricate an answer. A future filter/funnel acceptance strategy gives
+    // them real bodies.
     bool is_iterate_acceptable(const ProgressMeasures &current, const ProgressMeasures &trial,
                                const ProgressMeasures &predicted_reduction,
                                double objective_multiplier) override;
@@ -80,7 +80,7 @@ class ClassicMeritAcceptance : public AcceptanceStrategy {
                                                const ProgressMeasures &trial) const override;
 
     // μ-event / phase-change hook — no-op: the classic merit test carries no
-    // persistent state across iterations (dossier §8 / acceptance_strategy.h).
+    // persistent state across iterations (see acceptance_strategy.h).
     void reset() override {}
 
     // --- Classic fused entry point (verbatim today's PSIOPT::ls_impl) ---

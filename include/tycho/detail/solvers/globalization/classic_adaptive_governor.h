@@ -2,10 +2,8 @@
 // Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 // =============================================================================
 //
-// Part of the E2 G1 globalization extraction (Task 4). Spec:
-// docs/superpowers/specs/2026-07-16-e2-psiopt-globalization-design.md §3.
-// Ground-truth recon: docs/superpowers/plans/2026-07-16-e2-g1-dossier.md §3
-// ("Barrier update") and §8 ("Separability verdict — BarrierGovernor").
+// Part of the globalization component extraction: this is the barrier-update
+// component.
 //
 // ClassicAdaptiveGovernor implements BarrierGovernor::update_barrier by hosting
 // today's PROBE/LOQO barrier-parameter block (psiopt.cpp barmode switch: the
@@ -18,11 +16,11 @@
 // ctx.*) and the mechanism_ base pointer -> the mechanism reference parameter.
 // Definitions live in src/solvers/psiopt_globalization.cpp.
 //
-// PROBE-impurity design note (dossier §3):
+// PROBE-impurity design note:
 //   PROBE's mu update is NOT a pure function of (mu_in, avgcomp, mincomp). It
 //   runs a predictor KKT solve into DXSL (DXSL = -ctx.kkt_solver_.solve(RHS)),
 //   scales that predictor DXSL to the fraction-to-boundary via the
-//   GlobalizationMechanism (mechanism.max_primal_dual_step — the SAME Task-3
+//   GlobalizationMechanism (mechanism.max_primal_dual_step — the SAME
 //   entry point the main-path step uses; see globalization_mechanism.h), forms
 //   the predictor point Temp = XSL + DXSL, and computes
 //   mpc_mu(Temp.slacks(), Temp.iq_lmults(), ...). All of that predictor state
@@ -34,7 +32,7 @@
 //   corrector dual gradient written into RHS's dual_grad() block by the common
 //   tail (which the real solve then consumes).
 //
-//   Divergence-path note (mirrors backtracking_line_search.h / Task 3): the
+//   Divergence-path note (mirrors backtracking_line_search.h): the
 //   predictor max_primal_dual_step writes its alphap/alphad into locals that
 //   are discarded (the BarrierGovernor interface surfaces no alpha out-params).
 //   Pre-extraction the predictor wrote alg_impl's shared alphap/alphad; on the
@@ -60,14 +58,15 @@
 //   PSIOPT::complementarity INCLUDING its ULP warning: its .sum() reduction
 //   feeds mu (via mpc_mu), so the reduction order must NOT be reordered. The
 //   nested KKTVector and PenaltyTerms-free layout mirror the sibling components;
-//   a later G-task that consolidates the globalization helpers should share one
-//   copy.
+//   a future change that consolidates the globalization helpers should share
+//   one copy.
 //
 // Ownership rule: ClassicAdaptiveGovernor holds NO solver state (matches the
 // BarrierGovernor ownership rule — mu is passed in and returned, never cached).
 // Every quantity it needs is either an explicit per-call parameter or reached
 // through the SolverContext reference passed to the call. reset() is a no-op
-// (G1 has no monotone-mode bookkeeping to clear; G4 gives it a real body).
+// (this component has no monotone-mode bookkeeping to clear; a future
+// free<->monotone barrier governor gives it a real body).
 
 #pragma once
 
@@ -92,7 +91,7 @@ namespace tycho::solvers {
 // Stateless (holds NO solver state, per BarrierGovernor's ownership rule).
 // Constructed once by PSIOPT::set_nlp; every call receives the live
 // SolverContext view of the solver and the GlobalizationMechanism as explicit
-// parameters. Always reports in_monotone_mode() == false (G1 free-mode only).
+// parameters. Always reports in_monotone_mode() == false (free-mode only).
 // =============================================================================
 class ClassicAdaptiveGovernor : public BarrierGovernor {
   public:
@@ -109,7 +108,7 @@ class ClassicAdaptiveGovernor : public BarrierGovernor {
                           double &barr_obj) override;
 
     // μ-event / phase-change hook — no-op: the classic PROBE/LOQO oracles carry
-    // no persistent state across iterations (G1 free mode; see barrier_governor.h).
+    // no persistent state across iterations (free mode; see barrier_governor.h).
     void reset() override {}
 
   private:

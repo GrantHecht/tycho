@@ -26,9 +26,8 @@
 #include "tycho/detail/solvers/solver_init.h"
 #include "tycho/detail/utils/timer.h"
 
-// E2 G1 globalization component interfaces (scaffolding only — see
-// docs/superpowers/specs/2026-07-16-e2-psiopt-globalization-design.md §3).
-// Not wired to anything below yet; included here (rather than from
+// Globalization component interfaces (scaffolding only). Not wired to
+// anything below yet; included here (rather than from
 // psiopt.h) so this, the actual TU that builds PSIOPT, exercises them on
 // every build without psiopt.h having to include a directory of headers
 // that themselves need the complete PSIOPT class (a circular-include
@@ -692,7 +691,7 @@ void tycho::solvers::PSIOPT::apply_reset_slacks(Eigen::Ref<Eigen::VectorXd> S,
 }
 
 // max_step_to_boundary was extracted verbatim into BacktrackingLineSearch
-// (E2 G1 Task 3, src/solvers/psiopt_globalization.cpp).
+// (src/solvers/psiopt_globalization.cpp).
 
 void tycho::solvers::PSIOPT::complementarity(Eigen::Ref<Eigen::VectorXd> S,
                                              Eigen::Ref<Eigen::VectorXd> LI, double &avgcomp,
@@ -742,7 +741,7 @@ void tycho::solvers::PSIOPT::barrier_hessian(Eigen::SparseMatrix<double, Eigen::
 }
 
 // loqo_mu / mpc_mu were extracted verbatim into ClassicAdaptiveGovernor
-// (E2 G1 Task 4, src/solvers/psiopt_globalization.cpp); the barrier-parameter
+// (src/solvers/psiopt_globalization.cpp); the barrier-parameter
 // update now runs through governor_->update_barrier().
 
 // =============================================================================
@@ -816,7 +815,7 @@ void tycho::solvers::PSIOPT::ensure_solver_initialized() {
     }
 }
 
-// E2 G1: constructors and destructor are defined here (not inline in the
+// Constructors and destructor are defined here (not inline in the
 // header) because the std::unique_ptr<AcceptanceStrategy>,
 // std::unique_ptr<GlobalizationMechanism>, and std::unique_ptr<BarrierGovernor>
 // members need their complete concrete types for their destructors — reached
@@ -848,7 +847,7 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
                         "+ equal_cons ({}) + inequal_cons ({})",
                         kkt_dim_, primal_vars_, slack_vars_, equal_cons_, inequal_cons_));
 
-    // E2 G1: (re)build the classic merit acceptance strategy wired to a
+    // (Re)build the classic merit acceptance strategy wired to a
     // SolverContext view of this solver. Rebuilt here (rather than once in the
     // constructor) so the SolverContext's captured nlp_ raw pointer tracks the
     // NLP just installed; dims/settings/scratch are captured by reference and
@@ -860,22 +859,22 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
                       this->stli_scratch_, this->hp_scratch_, this->best_xsl_scratch_,
                       this->best_rhs_scratch_});
 
-    // E2 G1 Task 3: the step-length globalization mechanism. Stateless (holds
+    // The step-length globalization mechanism. Stateless (holds
     // NO solver state per GlobalizationMechanism's ownership rule) — every call
     // receives the live SolverContext as an explicit parameter — so it is
     // constructed with no context here; alg_impl builds the SolverContext view
     // it passes to compute_step / max_primal_dual_step.
     this->mechanism_ = std::make_unique<BacktrackingLineSearch>();
 
-    // E2 G1 Task 4: the barrier-parameter governor. Stateless (holds NO solver
+    // The barrier-parameter governor. Stateless (holds NO solver
     // state per BarrierGovernor's ownership rule) — every update_barrier() call
     // receives the live SolverContext and the GlobalizationMechanism as explicit
     // parameters — so it is constructed with no context here; alg_impl builds
     // the SolverContext view and passes *mechanism_ to update_barrier.
     this->governor_ = std::make_unique<ClassicAdaptiveGovernor>();
 
-    // E2 G1 Task 5: the post-rejection recovery chain. G1's NoopRecovery is
-    // stateless (holds no solver state, per RecoveryChain's ownership rule)
+    // The post-rejection recovery chain. The NoopRecovery implementation
+    // shipped today is stateless (holds no solver state, per RecoveryChain's ownership rule)
     // and always returns kAcceptAsIs, so it needs no context at construction;
     // alg_impl builds the SolverContext view it passes to on_step_rejected.
     this->recovery_ = std::make_unique<NoopRecovery>();
@@ -902,11 +901,11 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
 }
 
 // max_primal_dual_step was extracted verbatim into BacktrackingLineSearch
-// (E2 G1 Task 3, src/solvers/psiopt_globalization.cpp). alg_impl drives it
+// (src/solvers/psiopt_globalization.cpp). alg_impl drives it
 // through mechanism_ (fused into compute_step on the main path; via the public
 // method at the PROBE predictor call site).
 
-// PSIOPT 3.1: deliberately excludes barr_obj_/mu_/p_pivots_. barr_obj_ is only
+// fill_residual_info() deliberately excludes barr_obj_/mu_/p_pivots_. barr_obj_ is only
 // evaluated by the caller AFTER the barrier-parameter update block (barrier_objective()
 // runs on the just-updated `mu`); for BarrierModes::PROBE that update itself needs the
 // KKT solve (mpc_mu() consumes the predictor DXSL). p_pivots_ similarly only reflects a
@@ -1093,7 +1092,7 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
 
     for (int i = 0; i < settings_.max_refac_; i++) {
         Perturb(p);
-        // Display-only accumulator (PSIOPT 2.4): the running sum of every
+        // Display-only accumulator: the running sum of every
         // Perturb() delta applied so far this call -- i.e. the actual total added
         // to the KKT diagonal. Tracked purely for the HPert column; `finalpert`
         // below (the last delta, consumed by the Hpert0 warm-start) is untouched.
@@ -1150,10 +1149,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     KKTVector v_rhs = kkt_view(RHS);
     KKTVector v_dxsl = kkt_view(DXSL);
     // v_temp: the former PROBE-predictor view (Temp = XSL + DXSL -> mpc_mu) moved
-    // into ClassicAdaptiveGovernor (E2 G1 Task 4), which rebuilds it internally
+    // into ClassicAdaptiveGovernor, which rebuilds it internally
     // from the raw Temp block; no alg_impl caller remains.
 
-    // E2 G1 Task 3: references-only view of this solver, passed to the
+    // References-only view of this solver, passed to the
     // step-length mechanism (mechanism_) at its call sites below. Built once
     // here (dims/settings/scratch are stable for the solve); it must not
     // outlive this alg_impl frame or the PSIOPT members it references.
@@ -1216,8 +1215,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         QPtimer.start();
         v_rhs.prim_grad() += PGX;
 
-        // PSIOPT 3.1 (perf/review-9 "check convergence before factorizing the
-        // converged iterate"): every residual converge_check() consumes is now
+        // Check convergence before factorizing the converged iterate: every
+        // residual converge_check() consumes is now
         // fully determined -- kkt_inf_ reads prim_grad() (just updated above; the
         // barrier writes later this iteration target the *disjoint* dual_grad()
         // block, see psiopt.h:472-473 for prim_grad()/dual_grad()'s segment
@@ -1308,7 +1307,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         iters.pop_back();
 
         double nhpert = 0;
-        // Display-only accumulator (PSIOPT 2.4): the cumulative inertia-perturbation
+        // Display-only accumulator: the cumulative inertia-perturbation
         // total for this iteration's factor_impl() call, for the HPert table column.
         // Kept fully separate from nhpert (the last delta), which alone feeds the
         // Hpert0 warm-start below -- see the comment at that read site.
@@ -1344,7 +1343,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         if (Citer.h_facs_ > 0) {
             // Hpert0 warm-start MUST keep consuming nhpert (the last perturbation
             // DELTA) byte-identically -- do not substitute nhpert_cum here (see
-            // PSIOPT 2.4 comment above nhpert_cum's declaration).
+            // the display-only-accumulator comment above nhpert_cum's declaration).
             Hpert0 = std::max(settings_.delta_h_, nhpert * settings_.decr_h_);
             FirstPert = false;
         }
@@ -1353,13 +1352,13 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
 
         // Update barrier parameter and compute search direction. The whole
         // PROBE/LOQO switch + common clamp/objective/gradient tail is now
-        // ClassicAdaptiveGovernor::update_barrier (E2 G1 Task 4); the
+        // ClassicAdaptiveGovernor::update_barrier; the
         // `if (inequal_cons_ > 0)` guard stays here, exactly as the block was
         // guarded before extraction, so the governor is invoked only when there
         // are inequality constraints (barrier terms). The PROBE predictor's KKT
         // solve moves INTO the governor; the REAL step solve below (a distinct
         // second solve) stays here. avgcomp/mincomp feed the mu oracles;
-        // *mechanism_ lets the PROBE predictor reuse the Task-3 step-scaling.
+        // *mechanism_ lets the PROBE predictor reuse the step-scaling.
         if (this->inequal_cons_ > 0) {
             mu = governor_->update_barrier(barmode, mu, avgcomp, mincomp, XSL, RHS, DXSL, Temp,
                                            *mechanism_, ctx, barr_obj);
@@ -1383,7 +1382,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             // `if (inequal_cons_ > 0) max_primal_dual_step(...)`, now guarded
             // identically inside compute_step and MUTATING DXSL in place) and
             // the acceptance backtrack on the scaled DXSL. This is the riskiest
-            // FP-order seam (dossier §2/§8): negate -> block-scale by
+            // FP-order seam: negate -> block-scale by
             // alphap/alphad -> `xsl + alpha*dxsl` trial -> `XSL += alpha*DXSL`.
             alpha = mechanism_->compute_step(lsmode, obj_scale * lsobjscale, mu, prim_obj, barr_obj,
                                              XSL, DXSL, Temp, RHS, RHS2, *acceptance_, alphap,
@@ -1395,21 +1394,22 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
 
         Funtimer.stop();
 
-        // E2 G1 Task 5: recovery-chain hook. This is where a rejected step's
-        // recovery gets a say -- in G2 this is the SOC -> extended-backtrack
-        // -> watchdog-revert -> feasibility-switch dispatch point (spec §4);
-        // the inertia/perturbation ladder above (factor_impl's Zfac cycling +
-        // escalation) is a SEPARATE mechanism and stays out of this chain
-        // until G6 (inertia_mode) -- it is NOT invoked or bypassed here.
+        // Recovery-chain hook. This is where a rejected step's
+        // recovery gets a say -- a live recovery dispatcher would implement the
+        // SOC -> extended-backtrack -> watchdog-revert -> feasibility-switch
+        // dispatch from this point; the inertia/perturbation ladder above
+        // (factor_impl's Zfac cycling + escalation) is a SEPARATE mechanism and
+        // stays out of this chain until the proximal-regularization inertia
+        // mode is implemented -- it is NOT invoked or bypassed here.
         //
-        // NOTE (G2 gating requirement, Task 5 review): this call is
+        // NOTE (recovery-dispatch gating requirement): this call is
         // UNCONDITIONAL -- it fires on accepted full steps too, not only on
         // rejections, despite the interface name. Harmless for the no-op, but
-        // a live G2 dispatcher MUST gate on an actual rejection (e.g.
+        // a live recovery dispatcher MUST gate on an actual rejection (e.g.
         // ls_iters_ > 0 with the merit test failed, or !GoodStep) before
         // taking any Action other than kAcceptAsIs.
         //
-        // G1 wiring is a pure no-op by construction: recovery_ is always a
+        // This wiring is a pure no-op by construction: recovery_ is always a
         // NoopRecovery (set_nlp), whose on_step_rejected() unconditionally
         // returns kAcceptAsIs and touches no state (Citer/iters/ctx passed
         // read/write per the interface but NoopRecovery never reads or

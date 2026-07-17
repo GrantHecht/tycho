@@ -2,22 +2,18 @@
 // Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 // =============================================================================
 //
-// Part of the E2 G1 globalization extraction. Spec:
-// docs/superpowers/specs/2026-07-16-e2-psiopt-globalization-design.md §3
-// ("Component architecture (G1)": "Interface adapted from Uno (source-
-// verified)"). Ground-truth recon: docs/superpowers/plans/2026-07-16-e2-g1-
-// dossier.md §2 ("Line search & merit") and §8 ("Separability verdict —
-// AcceptanceStrategy").
+// Part of the globalization component extraction: this is the acceptance-
+// strategy component (line search & merit), whose interface shape is adapted
+// from Uno (source-verified).
 //
-// G1 (this file): pure interface declaration, no implementation anywhere in
-// this header. `classic_line_search` is the one exception with a body (see
+// This file: pure interface declaration, no implementation anywhere in this
+// header. `classic_line_search` is the one exception with a body (see
 // below) — a throwing default, not real behavior. The generic
 // is_iterate_acceptable()/is_infeasibility_sufficiently_reduced() surface
-// exists for G2+ filter/funnel/WMNO strategies (spec §4, G2/G3); Task 2's
-// ClassicMeritAcceptance (a separate merit_acceptance.h, not created by this
-// task) stubs those two methods with "unused on classic path" bodies and
-// implements classic_line_search verbatim from today's ls_impl/ls_lang/
-// ls_l1/ls_auglang (dossier §2).
+// exists for future filter/funnel/WMNO strategies; ClassicMeritAcceptance (a
+// separate merit_acceptance.h) stubs those two methods with "unused on
+// classic path" bodies and implements classic_line_search verbatim from
+// today's ls_impl/ls_lang/ls_l1/ls_auglang.
 //
 // Ownership rule: an AcceptanceStrategy instance holds NO solver state of its
 // own (no XSL/DXSL/mu/iterate history members). Every quantity it needs is
@@ -26,9 +22,9 @@
 // reached through a SolverContext reference passed to the call (settings_,
 // dims, nlp_) — never cached across calls. reset() is the μ-event/phase-
 // change hook: called whenever PSIOPT starts a new phase (run_phase_sequence)
-// or the barrier parameter is reset, so a stateful G2+ strategy (e.g. a
-// filter that must clear its (θ,f) pairs) has a defined place to do it. G1's
-// eventual ClassicMeritAcceptance implementation of reset() is a no-op (the
+// or the barrier parameter is reset, so a stateful future acceptance strategy
+// (e.g. a filter that must clear its (θ,f) pairs) has a defined place to do
+// it. The ClassicMeritAcceptance implementation of reset() is a no-op (the
 // classic merit test carries no persistent state across iterations today).
 
 #pragma once
@@ -57,37 +53,37 @@ class AcceptanceStrategy {
   public:
     virtual ~AcceptanceStrategy() = default;
 
-    // --- Generic interface (G2+ strategies implement these for real) ---
+    // --- Generic interface (future strategies implement these for real) ---
     // Filter/funnel/WMNO acceptance tests: is the trial point's (θ, f)
     // pair acceptable relative to the current iterate, given what the step
-    // model predicted? G1's ClassicMeritAcceptance stubs this with a
-    // documented "unused on classic path" body (today's classic acceptance
-    // is entirely inside classic_line_search's fused loop+test, dossier §2);
-    // it is not driven from anywhere until a G2+ strategy is selected.
+    // model predicted? ClassicMeritAcceptance stubs this with a documented
+    // "unused on classic path" body (today's classic acceptance is entirely
+    // inside classic_line_search's fused loop+test); it is not driven from
+    // anywhere until a filter/funnel/WMNO strategy is selected.
     virtual bool is_iterate_acceptable(const ProgressMeasures &current,
                                         const ProgressMeasures &trial,
                                         const ProgressMeasures &predicted_reduction,
                                         double objective_multiplier) = 0;
 
-    // Restoration-exit test (spec §4, G5): has infeasibility been reduced
-    // enough (relative to `reference`, the point restoration was entered
-    // from) to leave restoration mode? Unused until G5 lands a restoration
-    // strategy that calls it.
+    // Restoration-exit test: has infeasibility been reduced enough (relative
+    // to `reference`, the point restoration was entered from) to leave
+    // restoration mode? Unused until a feasibility-restoration strategy lands
+    // that calls it.
     virtual bool is_infeasibility_sufficiently_reduced(const ProgressMeasures &reference,
                                                         const ProgressMeasures &trial) const = 0;
 
     // μ-event / phase-change reset hook — see the ownership-rule note above.
     virtual void reset() = 0;
 
-    // Mode-switch notifications (spec §4, restoration handoff); default
-    // no-op so G1's classic path and any strategy that doesn't care about
-    // the switch need not override them.
+    // Mode-switch notifications (restoration handoff); default no-op so the
+    // classic path and any strategy that doesn't care about the switch need
+    // not override them.
     virtual void notify_switch_to_feasibility(const ProgressMeasures &) {}
     virtual void notify_switch_to_optimality(const ProgressMeasures &) {}
 
     // --- Classic fused entry point ---
     // Signature mirrors today's private PSIOPT::ls_impl dispatcher exactly
-    // (psiopt.h:530-533, dossier §2) — NOT the private per-variant
+    // (psiopt.h:530-533) — NOT the private per-variant
     // ls_lang/ls_l1/ls_auglang signatures, which take PSIOPT::KKTVector
     // views. KKTVector is a private nested class of PSIOPT (psiopt.h:448)
     // and is not name-accessible from a non-member, non-friend type such as
@@ -102,14 +98,13 @@ class AcceptanceStrategy {
     // Loop + merit test fused together (not split into separate "step" and
     // "accept" calls) because today's ls_lang/ls_l1/ls_auglang each run their
     // own backtracking loop with the merit test as the loop's own exit
-    // condition (dossier §2) — splitting them would require re-deriving the
-    // per-variant trial-point evaluation (eval_rhs for LANG vs.
-    // eval_trial_point_occ for L1/AUGLANG) at a new seam, which risks
-    // reordering the FP operations the CBWR gate depends on. Returns the
-    // accepted step-length alpha.
+    // condition — splitting them would require re-deriving the per-variant
+    // trial-point evaluation (eval_rhs for LANG vs. eval_trial_point_occ for
+    // L1/AUGLANG) at a new seam, which risks reordering the FP operations the
+    // CBWR gate depends on. Returns the accepted step-length alpha.
     //
-    // NOT pure: only a ClassicMeritAcceptance implementation (a future
-    // merit_acceptance.h, not part of Task 1) overrides this. Generic G2+
+    // NOT pure: only the ClassicMeritAcceptance implementation (defined in
+    // merit_acceptance.h) overrides this. Generic future acceptance
     // strategies are driven purely through is_iterate_acceptable() and never
     // call this entry point, so the default body is a T6-style logic error,
     // not a silent fallback.

@@ -2,7 +2,7 @@
 // Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 // =============================================================================
 //
-// E2 G1 globalization extraction (Task 2): definitions for
+// Part of the globalization component extraction: definitions for
 // ClassicMeritAcceptance. The classic_line_search dispatcher and the
 // ls_lang / ls_l1 / ls_auglang merit variants plus their
 // eval_trial_point_occ / compute_penalties / secondary_accept helpers are
@@ -15,12 +15,12 @@
 // are verbatim copies of the identically-named PSIOPT methods, reading
 // through ctx_ (see merit_acceptance.h's byte-identity design note).
 //
-// E2 G1 Task 3 also lands here: BacktrackingLineSearch (the step-length
+// This file also hosts BacktrackingLineSearch (the step-length
 // mechanism) — verbatim today's max_step_to_boundary / max_primal_dual_step,
 // reading through the SolverContext passed to each call. See
 // backtracking_line_search.h's riskiest-seam design note.
 //
-// E2 G1 Task 4 also lands here: ClassicAdaptiveGovernor (the barrier-parameter
+// This file also hosts ClassicAdaptiveGovernor (the barrier-parameter
 // update) — verbatim today's PROBE/LOQO barmode switch + common clamp/objective/
 // gradient tail, plus the loqo_mu / mpc_mu oracles and verbatim copies of the
 // barrier_* / complementarity helpers it consumes (the complementarity copy is
@@ -40,8 +40,8 @@ namespace tycho::solvers {
 
 // ============================================================================
 // Generic interface — unused on the classic merit path (see header). T6:
-// these throw rather than return a fabricated answer; G2 gives them real
-// bodies when a filter/funnel strategy actually drives them.
+// these throw rather than return a fabricated answer; a future filter/funnel
+// strategy gives them real bodies when it actually drives them.
 // ============================================================================
 bool ClassicMeritAcceptance::is_iterate_acceptable(const ProgressMeasures &current,
                                                    const ProgressMeasures &trial,
@@ -321,7 +321,7 @@ double ClassicMeritAcceptance::classic_line_search(PSIOPT::LineSearchModes lsmod
 }
 
 // ============================================================================
-// BacktrackingLineSearch — step-length mechanism (E2 G1 Task 3). max_step_to_
+// BacktrackingLineSearch — step-length mechanism. max_step_to_
 // boundary and max_primal_dual_step are moved VERBATIM from src/solvers/
 // psiopt.cpp (statement order and operand order preserved exactly — the merge
 // gate is a bit-identical CBWR iteration-count comparison). The only edits are
@@ -385,7 +385,7 @@ void BacktrackingLineSearch::max_primal_dual_step(Eigen::VectorXd &XSL, Eigen::V
 }
 
 // compute_step fuses the fraction-to-boundary scaling and the acceptance
-// backtrack (dossier §2/§8 riskiest seam): max_primal_dual_step MUTATES DXSL in
+// backtrack (riskiest seam): max_primal_dual_step MUTATES DXSL in
 // place — guarded exactly as the original alg_impl main-path call
 // (`if (inequal_cons_ > 0)`) — and the acceptance strategy then backtracks a
 // scalar alpha on the already-scaled DXSL.
@@ -402,7 +402,7 @@ double BacktrackingLineSearch::compute_step(
 }
 
 // ============================================================================
-// ClassicAdaptiveGovernor — barrier-parameter update (E2 G1 Task 4). The
+// ClassicAdaptiveGovernor — barrier-parameter update. The
 // PROBE/LOQO barmode switch + common clamp/objective/gradient tail and the
 // loqo_mu / mpc_mu oracles are moved VERBATIM from src/solvers/psiopt.cpp
 // (statement order and operand order preserved exactly — the merge gate is a
