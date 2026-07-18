@@ -95,7 +95,10 @@
 //     path, so an F-type step is accepted on switching + Armijo alone, without
 //     a funnel-width check — the same structure the Wächter–Biegler filter
 //     companion uses. The H-type verdict above therefore carries the full
-//     within-the-funnel gate.
+//     within-the-funnel gate. As a result, an f-type step is bounded only by
+//     theta_max, so the violation may transiently exceed the funnel width on
+//     f-type accepts; the strict funnel invariant (every accepted iterate inside
+//     the funnel) is enforced on h-type steps only.
 //   • Uno's optional "acceptable with respect to the current iterate" refinement
 //     (options funnel_gamma, funnel_require_acceptance_wrt_current_iterate) is
 //     OFF by default (funnel_require_acceptance_wrt_current_iterate = false) and

@@ -40,7 +40,6 @@ namespace {
 
 using tycho::solvers::FunnelAcceptance;
 using tycho::solvers::kFunnelBeta;
-using tycho::solvers::kFunnelInfeasibilityFactor;
 using tycho::solvers::kFunnelInitialUpperBound;
 using tycho::solvers::kFunnelKappa;
 using tycho::solvers::ProgressMeasures;
