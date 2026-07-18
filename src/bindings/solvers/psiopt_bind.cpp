@@ -74,6 +74,18 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     obj.def("set_max_acc_iters", &PSIOPT::set_max_acc_iters);
     obj.def("set_max_ls_iters", &PSIOPT::set_max_ls_iters);
 
+    BIND_SETTINGS_VALIDATED(
+        obj, "max_soc", max_soc_, set_max_soc,
+        "Maximum number of second-order correction steps attempted after a rejected trial "
+        "step. 0 (default) disables second-order correction entirely, so the solver behaves "
+        "exactly as it did before this feature existed; the recommended enable value is 4 "
+        "(Wachter & Biegler 2006).");
+    BIND_SETTINGS_VALIDATED(
+        obj, "ls_extended_iters", ls_extended_iters_, set_ls_extended_iters,
+        "Extra backtracking trials allowed on the classic line-search ladder once the normal "
+        "cap and second-order correction (if enabled) are exhausted. 0 (default) disables "
+        "extended backtracking entirely.");
+
     BIND_SETTINGS_VALIDATED(obj, "alpha_red", alpha_red_, set_alpha_red, "");
     obj.def("set_alpha_red", &PSIOPT::set_alpha_red);
 
@@ -92,6 +104,22 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     BIND_RESULT_RO(obj, "last_iter_num", iter_num_, "");
     BIND_RESULT_RO(obj, "last_obj_val", obj_val_);
     BIND_RESULT_RO(obj, "last_primals", primals_, "");
+
+    BIND_RESULT_RO(obj, "last_soc_steps", soc_steps_taken_,
+                   "Number of second-order correction back-substitutions performed during the most "
+                   "recent solve. Always 0 unless max_soc is set > 0.");
+    BIND_RESULT_RO(obj, "last_watchdog_activations", watchdog_activations_,
+                   "Number of times the watchdog recovery heuristic armed during the most recent "
+                   "solve. Always 0 unless watchdog is enabled.");
+    obj.def_prop_ro(
+        "last_recovery_depth_histogram",
+        [](const PSIOPT &self) {
+            const auto &h = self.result().recovery_depth_histogram_;
+            return std::vector<int>(h.begin(), h.end());
+        },
+        "Counts of how each rejected step's recovery was resolved during the most recent "
+        "solve, as a 4-element list: [second-order correction, extended backtracking, "
+        "watchdog, unresolved].");
 
     BIND_SETTINGS_VALIDATED(obj, "obj_scale", obj_scale_, set_obj_scale, "");
     BIND_SETTINGS_VALIDATED(obj, "print_level", print_level_, set_print_level, "");
@@ -187,6 +215,25 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     obj.def("set_soe_ls_mode", nb::overload_cast<LineSearchModes>(&PSIOPT::set_soe_ls_mode));
     obj.def("set_soe_ls_mode", nb::overload_cast<const std::string &>(&PSIOPT::set_soe_ls_mode));
 
+    // --- Step-acceptance / recovery strategy ---
+    BIND_SETTINGS_RW(
+        obj, "acceptance_strategy", acceptance_strategy_,
+        "Step-acceptance strategy: classic_merit (default) reproduces the original fused "
+        "backtracking merit line search bit-for-bit; merit switches to the modernized "
+        "penalty-based acceptance test selected by merit_penalty_rule. merit requires "
+        "max_soc == 0 and ls_extended_iters == 0.");
+    BIND_SETTINGS_RW(
+        obj, "merit_penalty_rule", merit_penalty_rule_,
+        "Penalty-parameter update rule for the modernized merit strategy; only read when "
+        "acceptance_strategy is merit. wmno (default) updates a single penalty value from "
+        "the directional-derivative condition; flexible tracks a penalty interval and "
+        "accepts a step that improves the merit for at least one value in that interval.");
+    BIND_SETTINGS_RW(
+        obj, "watchdog", watchdog_,
+        "Enables the watchdog recovery heuristic, which tolerates a temporarily worse step "
+        "after repeated rejections instead of immediately shrinking the step further. false "
+        "(default) preserves the original behavior.");
+
     // --- QP solver ---
     BIND_SETTINGS_RW(obj, "force_qp_analysis", force_qp_analysis_, "");
     BIND_SETTINGS_VALIDATED(obj, "qp_ref_steps", qp_ref_steps_, set_qp_ref_steps, "");
@@ -245,6 +292,12 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     nb::enum_<QPPivotModes>(m, "QPPivotModes")
         .value("OneByOne", QPPivotModes::OneByOne)
         .value("TwoByTwo", QPPivotModes::TwoByTwo);
+    nb::enum_<AcceptanceStrategies>(m, "AcceptanceStrategies")
+        .value("classic_merit", AcceptanceStrategies::classic_merit)
+        .value("merit", AcceptanceStrategies::merit);
+    nb::enum_<MeritPenaltyRules>(m, "MeritPenaltyRules")
+        .value("wmno", MeritPenaltyRules::wmno)
+        .value("flexible", MeritPenaltyRules::flexible);
     nb::enum_<PDStepStrategies>(m, "PDStepStrategies")
         .value("PrimSlackEq_Iq", PDStepStrategies::PrimSlackEq_Iq)
         .value("AllMinimum", PDStepStrategies::AllMinimum)

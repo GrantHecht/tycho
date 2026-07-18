@@ -146,6 +146,19 @@ void tycho::solvers::PSIOPT::set_all_max_iters(int m1, int m2) {
     set_max_acc_iters(m2);
 }
 
+void tycho::solvers::PSIOPT::set_max_soc(int max_soc) {
+    if (max_soc < 0)
+        throw std::invalid_argument(fmt::format("max_soc must be non-negative, got {}", max_soc));
+    settings_.max_soc_ = max_soc;
+}
+
+void tycho::solvers::PSIOPT::set_ls_extended_iters(int ls_extended_iters) {
+    if (ls_extended_iters < 0)
+        throw std::invalid_argument(
+            fmt::format("ls_extended_iters must be non-negative, got {}", ls_extended_iters));
+    settings_.ls_extended_iters_ = ls_extended_iters;
+}
+
 void tycho::solvers::PSIOPT::set_kkt_tol(double kkt_tol) {
     if (!std::isfinite(kkt_tol) || kkt_tol <= 0.0)
         throw std::invalid_argument(
@@ -476,6 +489,9 @@ void tycho::solvers::PSIOPT::Settings::validate() const {
     if (max_ls_iters_ < 0)
         throw std::invalid_argument(
             fmt::format("max_ls_iters must be non-negative, got {}", max_ls_iters_));
+    if (max_soc_ < 0)
+        throw std::invalid_argument(
+            fmt::format("max_soc must be non-negative, got {}", max_soc_));
     if (ls_extended_iters_ < 0)
         throw std::invalid_argument(fmt::format(
             "ls_extended_iters must be non-negative, got {}", ls_extended_iters_));
