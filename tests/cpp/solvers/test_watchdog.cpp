@@ -785,4 +785,10 @@ TEST(WatchdogRecoveryDecorator, ResetPropagatesToInner) {
     EXPECT_EQ(inner_ptr->resets_, 1);
 }
 
+// The decorator requires a wrapped chain: constructing it without one is a
+// caller bug and must throw rather than defer a null dereference to solve time.
+TEST(WatchdogRecoveryDecorator, NullInnerThrowsAtConstruction) {
+    EXPECT_THROW(WatchdogRecovery(nullptr), std::invalid_argument);
+}
+
 } // namespace

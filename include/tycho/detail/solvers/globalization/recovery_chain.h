@@ -97,7 +97,11 @@ class RecoveryChain {
     //
     // The remaining parameters are the live per-iteration working set (the same
     // objects compute_step just operated on, threaded verbatim so a recovery
-    // link can build and re-test a corrected step):
+    // link can build and re-test a corrected step). The interface places NO
+    // no-aliasing precondition on the five VectorXd& parameters: the production
+    // caller passes distinct buffers, but test doubles legitimately bind one
+    // shared buffer to several slots, so implementations must order their
+    // writes to be aliasing-robust (see WatchdogRecovery's revert):
     //   acceptance/mechanism        — re-run the full acceptance backtrack, and
     //                                 the fraction-to-boundary scaling, on a
     //                                 corrected direction.

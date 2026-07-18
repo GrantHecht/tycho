@@ -78,9 +78,11 @@
 // (RecoveryChain), which WatchdogRecovery uses to reset
 // consecutive_shortened_ on real progress — without that hook the counter
 // would keep summing non-consecutive rejections straight across an accepted
-// iteration and mis-arm. A future change that gives alg_impl a per-iteration
-// (not just per-rejection) hook could widen the rejection side of this
-// further.
+// iteration and mis-arm. Known observation gap: an iteration with a
+// non-finite step (the divergence path) reaches NEITHER hook — it is
+// invisible to the counter, which neither accumulates nor resets there. A
+// future change that gives alg_impl a per-iteration (not just per-rejection)
+// hook could widen the rejection side of this further and close that gap.
 //
 // WatchdogState is a pure, machinery-free state machine (mirrors soc.h's
 // soc_should_trigger/soc_should_continue/soc_run_loop split of policy from
