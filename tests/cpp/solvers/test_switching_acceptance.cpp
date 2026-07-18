@@ -176,6 +176,10 @@ TEST(SwitchingAcceptance, SwitchingHoldsFTypeArmijoAccepts) {
     a.is_iterate_acceptable(SwitchingMakePm(1.0, 0.0, 0.0), SwitchingMakePm(0.5, 0.0, 0.0),
                             SwitchingMakePm(0.5, 1.0, 0.0), 1.0, 1.0); // priming call, θ₀=1.0
     ASSERT_DOUBLE_EQ(a.theta_min(), 1.0e-4);
+    // the priming call itself routes h-type (θ = 1.0 > θ_min); zero the
+    // hook counters so the assertions below see only the call under test.
+    a.is_infeasibility_acceptable_calls = 0;
+    a.register_accepted_h_type_calls = 0;
 
     const bool ok = a.is_iterate_acceptable(SwitchingMakePm(1.0e-5, 10.0, 0.0),
                                             SwitchingMakePm(1.0e-6, 9.9999, 0.0),
@@ -194,6 +198,10 @@ TEST(SwitchingAcceptance, SwitchingHoldsFTypeArmijoRejects) {
     a.h_verdict = true; // would accept if (wrongly) delegated to H-type
     a.is_iterate_acceptable(SwitchingMakePm(1.0, 0.0, 0.0), SwitchingMakePm(0.5, 0.0, 0.0),
                             SwitchingMakePm(0.5, 1.0, 0.0), 1.0, 1.0); // priming call, θ₀=1.0
+    // the priming call itself routes h-type (θ = 1.0 > θ_min); zero the
+    // hook counters so the assertions below see only the call under test.
+    a.is_infeasibility_acceptable_calls = 0;
+    a.register_accepted_h_type_calls = 0;
 
     const bool ok = a.is_iterate_acceptable(SwitchingMakePm(1.0e-5, 10.0, 0.0),
                                             SwitchingMakePm(1.0e-6, 20.0, 0.0),
@@ -211,6 +219,10 @@ TEST(SwitchingAcceptance, NonDescentForcesHType) {
     a.h_verdict = true;
     a.is_iterate_acceptable(SwitchingMakePm(1.0, 0.0, 0.0), SwitchingMakePm(0.5, 0.0, 0.0),
                             SwitchingMakePm(0.5, 1.0, 0.0), 1.0, 1.0); // priming call, θ₀=1.0
+    // the priming call itself routes h-type (θ = 1.0 > θ_min); zero the
+    // hook counters so the assertions below see only the call under test.
+    a.is_infeasibility_acceptable_calls = 0;
+    a.register_accepted_h_type_calls = 0;
 
     const bool ok = a.is_iterate_acceptable(SwitchingMakePm(1.0e-5, 10.0, 0.0),
                                             SwitchingMakePm(1.0e-6, 9.0, 0.0),
@@ -230,6 +242,10 @@ TEST(SwitchingAcceptance, InequalityFailsForcesHType) {
     a.h_verdict = false;
     a.is_iterate_acceptable(SwitchingMakePm(1.0, 0.0, 0.0), SwitchingMakePm(0.5, 0.0, 0.0),
                             SwitchingMakePm(0.5, 1.0, 0.0), 1.0, 1.0); // priming call, θ₀=1.0
+    // the priming call itself routes h-type (θ = 1.0 > θ_min); zero the
+    // hook counters so the assertions below see only the call under test.
+    a.is_infeasibility_acceptable_calls = 0;
+    a.register_accepted_h_type_calls = 0;
 
     const bool ok = a.is_iterate_acceptable(
         SwitchingMakePm(1.0e-5, 10.0, 0.0), SwitchingMakePm(1.0e-6, 9.0, 0.0),
@@ -249,6 +265,10 @@ TEST(SwitchingAcceptance, ThetaAboveMinAlwaysHType) {
     a.h_verdict = true;
     a.is_iterate_acceptable(SwitchingMakePm(1.0, 0.0, 0.0), SwitchingMakePm(0.5, 0.0, 0.0),
                             SwitchingMakePm(0.5, 1.0, 0.0), 1.0, 1.0); // priming call, θ₀=1.0
+    // the priming call itself routes h-type (θ = 1.0 > θ_min); zero the
+    // hook counters so the assertions below see only the call under test.
+    a.is_infeasibility_acceptable_calls = 0;
+    a.register_accepted_h_type_calls = 0;
 
     const bool ok = a.is_iterate_acceptable(SwitchingMakePm(0.5, 10.0, 0.0),
                                             SwitchingMakePm(0.4, 9.0, 0.0),
