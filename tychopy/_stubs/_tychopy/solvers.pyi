@@ -47,6 +47,24 @@ class PSIOPT:
     def set_max_ls_iters(self, arg: int, /) -> None: ...
 
     @property
+    def max_soc(self) -> int:
+        """
+        Maximum number of second-order correction steps attempted after a rejected trial step. 0 (default) disables second-order correction entirely, so the solver behaves exactly as it did before this feature existed; the recommended enable value is 4 (Wachter & Biegler 2006).
+        """
+
+    @max_soc.setter
+    def max_soc(self, arg: int, /) -> None: ...
+
+    @property
+    def ls_extended_iters(self) -> int:
+        """
+        Extra backtracking trials allowed on the classic line-search ladder once the normal cap and second-order correction (if enabled) are exhausted. 0 (default) disables extended backtracking entirely.
+        """
+
+    @ls_extended_iters.setter
+    def ls_extended_iters(self, arg: int, /) -> None: ...
+
+    @property
     def alpha_red(self) -> float: ...
 
     @alpha_red.setter
@@ -95,6 +113,24 @@ class PSIOPT:
 
     @property
     def last_primals(self) -> numpy.ndarray: ...
+
+    @property
+    def last_soc_steps(self) -> int:
+        """
+        Number of second-order correction back-substitutions performed during the most recent solve. Always 0 unless max_soc is set > 0.
+        """
+
+    @property
+    def last_watchdog_activations(self) -> int:
+        """
+        Number of times the watchdog recovery heuristic armed during the most recent solve. Always 0 unless watchdog is enabled.
+        """
+
+    @property
+    def last_recovery_depth_histogram(self) -> list[int]:
+        """
+        Counts of how each rejected step's recovery was resolved during the most recent solve, as a 4-element list: [second-order correction, extended backtracking, watchdog, unresolved].
+        """
 
     @property
     def obj_scale(self) -> float: ...
@@ -352,6 +388,33 @@ class PSIOPT:
     def set_soe_ls_mode(self, arg: str, /) -> None: ...
 
     @property
+    def acceptance_strategy(self) -> AcceptanceStrategies:
+        """
+        Step-acceptance strategy: classic_merit (default) reproduces the original fused backtracking merit line search bit-for-bit; merit switches to the modernized penalty-based acceptance test selected by merit_penalty_rule. merit requires max_soc == 0 and ls_extended_iters == 0.
+        """
+
+    @acceptance_strategy.setter
+    def acceptance_strategy(self, arg: AcceptanceStrategies, /) -> None: ...
+
+    @property
+    def merit_penalty_rule(self) -> MeritPenaltyRules:
+        """
+        Penalty-parameter update rule for the modernized merit strategy; only read when acceptance_strategy is merit. wmno (default) updates a single penalty value from the directional-derivative condition; flexible tracks a penalty interval and accepts a step that improves the merit for at least one value in that interval.
+        """
+
+    @merit_penalty_rule.setter
+    def merit_penalty_rule(self, arg: MeritPenaltyRules, /) -> None: ...
+
+    @property
+    def watchdog(self) -> bool:
+        """
+        Enables the watchdog recovery heuristic, which tolerates a temporarily worse step after repeated rejections instead of immediately shrinking the step further. false (default) preserves the original behavior.
+        """
+
+    @watchdog.setter
+    def watchdog(self, arg: bool, /) -> None: ...
+
+    @property
     def force_qp_analysis(self) -> bool: ...
 
     @force_qp_analysis.setter
@@ -453,6 +516,16 @@ class QPPivotModes(enum.Enum):
     OneByOne = 0
 
     TwoByTwo = 1
+
+class AcceptanceStrategies(enum.Enum):
+    classic_merit = 0
+
+    merit = 1
+
+class MeritPenaltyRules(enum.Enum):
+    wmno = 0
+
+    flexible = 1
 
 class PDStepStrategies(enum.Enum):
     PrimSlackEq_Iq = 0

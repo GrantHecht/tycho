@@ -2,10 +2,10 @@
 // Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 // =============================================================================
 //
-// Part of the E2 G1 globalization extraction (Task 3). Spec:
-// docs/superpowers/specs/2026-07-16-e2-psiopt-globalization-design.md §3.
-// Ground-truth recon: docs/superpowers/plans/2026-07-16-e2-g1-dossier.md §2
-// ("Fraction-to-boundary & step coupling") and §8 ("Riskiest seam" callout).
+// Part of the globalization component extraction: this is the step-length
+// mechanism (fraction-to-boundary scaling & step coupling), flagged as the
+// riskiest seam in the whole extraction because of the in-place mutation
+// documented below.
 //
 // BacktrackingLineSearch implements GlobalizationMechanism::compute_step by
 // hosting today's PSIOPT::max_primal_dual_step fraction-to-boundary scaling
@@ -17,7 +17,7 @@
 // SolverContext reference passed to the call. Definitions live in
 // src/solvers/psiopt_globalization.cpp.
 //
-// Riskiest-seam design note (dossier §2/§8):
+// Riskiest-seam design note:
 //   max_primal_dual_step SCALES DXSL's primal/slack/multiplier blocks IN PLACE
 //   between the KKT solve+negate and the merit backtrack; the backtrack's trial
 //   points (xsl + alpha*dxsl) and the eventual commit (XSL += alpha*DXSL) both
@@ -34,8 +34,8 @@
 //   PSIOPT state ONLY through SolverContext, and reconstructs a KKTVector view
 //   over the raw XSL/DXSL blocks internally (PSIOPT::KKTVector is private and
 //   not name-accessible from this non-member, non-friend type). The nested
-//   KKTVector below is a VERBATIM copy of PSIOPT::KKTVector; a later G-task that
-//   consolidates the globalization helpers should share one copy.
+//   KKTVector below is a VERBATIM copy of PSIOPT::KKTVector; a future change
+//   that consolidates the globalization helpers should share one copy.
 //
 // Ownership rule: BacktrackingLineSearch holds NO solver state (matches the
 // GlobalizationMechanism ownership rule). Every quantity it needs is either an
@@ -66,7 +66,8 @@ namespace tycho::solvers {
 // backtrack on the scaled search direction.
 //
 // Stateless (holds NO solver state, per GlobalizationMechanism's ownership
-// rule). Constructed once by PSIOPT::set_nlp; every call receives the live
+// rule). Constructed by PSIOPT::rebuild_globalization_components() at the
+// start of every solve invocation; every call receives the live
 // SolverContext view of the solver as an explicit parameter.
 // =============================================================================
 class BacktrackingLineSearch : public GlobalizationMechanism {
@@ -88,8 +89,8 @@ class BacktrackingLineSearch : public GlobalizationMechanism {
 
     // Fraction-to-boundary primal/dual step (verbatim today's
     // PSIOPT::max_primal_dual_step). Public so the PROBE barrier block's
-    // predictor call site can drive it directly on the predictor DXSL (dossier
-    // §3); builds the KKTVector view over the raw XSL/DXSL blocks internally
+    // predictor call site can drive it directly on the predictor DXSL; builds
+    // the KKTVector view over the raw XSL/DXSL blocks internally
     // and MUTATES DXSL in place. bfrac / dims / pd_step_strategy_ are read
     // through `ctx`.
     void max_primal_dual_step(Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, double bfrac,
@@ -156,6 +157,24 @@ class BacktrackingLineSearch : public GlobalizationMechanism {
     // today's PSIOPT::max_step_to_boundary); reads inequal_cons_ through `ctx`.
     double max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> SLI, Eigen::Ref<Eigen::VectorXd> dSLI,
                                 double bfrac, const SolverContext &ctx) const;
+
+    // GENERIC driving path (taken by compute_step when the acceptance strategy
+    // reports drives_classic_path() == false — e.g. ModernMeritAcceptance).
+    // Runs the SAME backtracking ladder as the classic path (up to
+    // max_ls_iters_, dividing alpha by alpha_red_ on reject) but delegates the
+    // accept/reject verdict to AcceptanceStrategy::is_iterate_acceptable on a
+    // ProgressMeasures triple built from the trial point (see
+    // globalization/modern_merit.h for the (θ,f,aux) mapping). Stores the same
+    // accepted_ / first_rejection_iter_ / theta_at_first_rejection_ signals the
+    // classic path stores, so the recovery chain (SOC / watchdog) composes.
+    // Trial-point evaluation goes through the shared modern_eval_trial_point
+    // free helper in the .cpp (a parallel copy of the classic eval — the
+    // classic path's own copies are left untouched).
+    double generic_line_search(PSIOPT::LineSearchModes lsmode, double obj_scale, double mu,
+                               double prim_obj, double barr_obj, Eigen::VectorXd &XSL,
+                               Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
+                               Eigen::VectorXd &RHS2, AcceptanceStrategy &acceptance,
+                               IterateInfo &Citer, SolverContext &ctx);
 };
 
 } // namespace tycho::solvers

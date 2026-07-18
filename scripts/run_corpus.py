@@ -154,7 +154,18 @@ def _run_child(module_name: str, config: dict, result_file: str) -> int:
 
     def configure(optimizer):
         for key, value in config.items():
-            setattr(optimizer, key, value)
+            try:
+                setattr(optimizer, key, value)
+            except TypeError:
+                # Enum-typed properties reject raw ints/strings; coerce through
+                # the property's own enum type (by value for ints, by member
+                # name for strings) and let a genuine mismatch raise.
+                current = getattr(optimizer, key)
+                enum_type = type(current)
+                if isinstance(value, int):
+                    setattr(optimizer, key, enum_type(value))
+                else:
+                    setattr(optimizer, key, getattr(enum_type, str(value)))
 
     result = mod.build_and_solve(configure)
     with open(result_file, "w", encoding="utf-8") as f:

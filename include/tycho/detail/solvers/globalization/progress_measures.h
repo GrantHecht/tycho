@@ -2,15 +2,14 @@
 // Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 // =============================================================================
 //
-// Part of the E2 G1 globalization extraction. Spec:
-// docs/superpowers/specs/2026-07-16-e2-psiopt-globalization-design.md §3
-// ("Component architecture (G1)"). Ground-truth recon for what these types
-// eventually host: docs/superpowers/plans/2026-07-16-e2-g1-dossier.md.
+// Part of the globalization component extraction: PSIOPT's step-acceptance,
+// step-length, and barrier-parameter logic is being pulled out of the
+// monolithic solver into standalone components under this directory.
 //
-// G1 (this file): pure-data value type, no behavior. Filled in by later G1
-// tasks (the classic acceptance/globalization/barrier components read and
-// write ProgressMeasures instances but never own one across calls) and
-// consumed as-is by G2+ (filter/funnel acceptance strategies, §3 of the spec).
+// This file: pure-data value type, no behavior. Read and written by the
+// classic acceptance/globalization/barrier components (none of them owns an
+// instance across calls) and consumed as-is by future filter/funnel
+// acceptance strategies.
 
 #pragma once
 
@@ -27,22 +26,23 @@ namespace tycho::solvers {
 // interface: the current iterate's measures, a trial point's measures, and
 // the *predicted* reduction model (i.e. what a linear/quadratic model of the
 // step predicts (θ, f, aux) will become) — see is_iterate_acceptable() in
-// acceptance_strategy.h. The design spec (§3) describes a conceptually
-// separate "predicted-reduction struct"; Task 1 follows the brief's own code
-// skeleton, which types predicted_reduction as `const ProgressMeasures&`
-// rather than a distinct type — introducing a separate type is deferred until
-// a concrete G2+ strategy actually needs fields ProgressMeasures does not
-// carry.
+// acceptance_strategy.h. A conceptually separate "predicted-reduction struct"
+// would also be a reasonable design; this implementation instead types
+// predicted_reduction as `const ProgressMeasures&` rather than a distinct
+// type — introducing a separate type is deferred until a concrete future
+// acceptance strategy actually needs fields ProgressMeasures does not carry.
 //
 // infeasibility (θ) and objective (f, σ-scaled) are the classic two-term pair
 // consumed by merit/filter/funnel acceptance tests. auxiliary carries
 // barrier/proximal terms (e.g. the current μ-barrier objective contribution)
 // OUTSIDE the (θ, f) pair on purpose: folding a barrier term into the merit
-// objective would contaminate the filter/funnel machinery G3 introduces —
-// see spec §3, "the hook that makes filter/funnel work inside an IPM (§7.1)".
-// G1's classic merit acceptance does not need this separation (it sums
-// prim_obj_ + barr_obj_ directly, see dossier §2 ls_lang/ls_l1/ls_auglang);
-// the slot exists so G1's data shape does not need to change again in G3.
+// objective would contaminate the filter/funnel machinery that a future
+// acceptance strategy introduces — this is the hook that makes filter/funnel
+// work inside an interior-point method. The classic merit acceptance
+// strategy implemented today does not need this separation (it sums
+// prim_obj_ + barr_obj_ directly — see ls_lang/ls_l1/ls_auglang in
+// merit_acceptance.h); the slot exists so this data shape does not need to
+// change again when a filter/funnel strategy is added.
 // =============================================================================
 struct ProgressMeasures {
     double infeasibility = 0.0; ///< θ — constraint violation measure.

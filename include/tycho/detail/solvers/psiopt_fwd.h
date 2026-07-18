@@ -39,4 +39,27 @@ constexpr auto operator<=>(ConvergenceFlags a, ConvergenceFlags b) {
 
 namespace tycho::solvers {
 class PSIOPT;
+
+// Step-acceptance strategy selector (PSIOPT::Settings::acceptance_strategy_).
+// Declared here — rather than nested in PSIOPT like BarrierModes/LineSearchModes
+// — so both PSIOPT::Settings (psiopt.h) and the acceptance components
+// (globalization/modern_merit.h) can name it without a circular include.
+// Style matches the nested mode enums: strongly-typed with explicit values.
+//   classic_merit — the fused classic backtracking merit line search
+//                   (ClassicMeritAcceptance); the bit-identical default.
+//   merit         — the modernized merit family driven through the GENERIC
+//                   AcceptanceStrategy path (ModernMeritAcceptance).
+enum class AcceptanceStrategies { classic_merit = 0, merit = 1 };
+
+// Penalty-parameter rule for the modernized merit family
+// (PSIOPT::Settings::merit_penalty_rule_; read only when
+// acceptance_strategy_ == merit).
+//   wmno     — Waltz, Morales, Nocedal & Orban, Math. Program. 107 (2006),
+//              §3.1: single penalty ν updated from the directional-derivative
+//              condition (Eqs 3.5, 3.6).
+//   flexible — Curtis & Nocedal, IMA J. Numer. Anal. 28(4) (2008): a penalty
+//              INTERVAL [π_l, π_u]; a step is accepted if it reduces the merit
+//              for at least one π in the interval (Eqs 2.1, 3.9, 3.10).
+enum class MeritPenaltyRules { wmno = 0, flexible = 1 };
+
 } // namespace tycho::solvers

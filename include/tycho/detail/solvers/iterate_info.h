@@ -57,6 +57,49 @@ struct IterateInfo {
     double max_e_mult_ = 0;
     double max_i_mult_ = 0;
     double merit_val_ = 0.0;
+
+    // Line-search acceptance outcome. Write-only diagnostic signal recorded by
+    // the merit line search at the point it decides accept vs. reject; not
+    // consumed on the classic solve path except by the recovery-dispatch gate
+    // in alg_impl (which reads accepted_). These fields are NOT printed — the
+    // iteration table formats an explicit field list (see psiopt_print.cpp) —
+    // so adding them leaves console output byte-identical.
+    //   accepted_               — did the merit test accept a step this line
+    //                             search (false if every backtrack was
+    //                             rejected, i.e. the search exhausted).
+    //   first_rejection_iter_   — backtracking index of the first rejected
+    //                             trial (-1 if the step was accepted with no
+    //                             rejection).
+    //   theta_at_first_rejection_ — constraint infeasibility at that first
+    //                             rejected trial. The NORM CONVENTION differs
+    //                             by acceptance path: the classic merit
+    //                             variants (ls_l1/ls_auglang) store the
+    //                             SQUARED L2 norm of the full constraint
+    //                             block (all_cons().squaredNorm()), while the
+    //                             modern merit path (modern_merit.h) stores
+    //                             the L1 norm (all_cons().lpNorm<1>()).
+    //                             Consumers must NOT assume a specific norm
+    //                             across strategies — compare this field only
+    //                             against another reading taken under the
+    //                             SAME acceptance path. The one live consumer
+    //                             today, soc_should_trigger() (globalization/
+    //                             soc.h), only ever compares like-with-like:
+    //                             SocRecovery is reachable only through
+    //                             ClassicMeritAcceptance::classic_line_search
+    //                             (ModernMeritAcceptance's override throws),
+    //                             so its trigger always compares two
+    //                             squared-L2 readings, never a mix. -1.0
+    //                             means UNAVAILABLE: no rejection was
+    //                             recorded, or the LANG variant ran (it
+    //                             materializes no infeasibility scalar). A
+    //                             real infeasibility is always >= 0, so
+    //                             consumers (e.g. a second-order correction
+    //                             trigger) must treat any negative value as
+    //                             "skip theta-based logic" rather than as a
+    //                             feasible reading.
+    bool accepted_ = false;
+    int first_rejection_iter_ = -1;
+    double theta_at_first_rejection_ = -1.0;
 };
 
 } // namespace tycho::solvers

@@ -16,6 +16,7 @@
 
 #pragma once
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <functional>
 #include <initializer_list>
@@ -52,31 +53,31 @@ namespace tycho::solvers {
 using tycho::ConstEigenRef;
 using tycho::EigenRef;
 
-// E2 G1 globalization extraction: PSIOPT owns its step-acceptance strategy
-// through a std::unique_ptr<AcceptanceStrategy>. Only the forward declaration
-// is needed here (the complete type lives in
+// Part of the globalization component extraction: PSIOPT owns its
+// step-acceptance strategy through a std::unique_ptr<AcceptanceStrategy>.
+// Only the forward declaration is needed here (the complete type lives in
 // detail/solvers/globalization/acceptance_strategy.h, which includes THIS
 // header — so psiopt.h must not include it back). Because the member is a
 // unique_ptr to this incomplete type, PSIOPT's constructors and destructor are
 // declared here and defined out-of-line in psiopt.cpp, where the concrete
 // ClassicMeritAcceptance is complete.
 //
-// E2 G1 Task 3: PSIOPT likewise owns its step-length globalization mechanism
+// PSIOPT likewise owns its step-length globalization mechanism
 // through a std::unique_ptr<GlobalizationMechanism> (concrete type
 // BacktrackingLineSearch, complete only in psiopt.cpp). Same forward-declare +
 // out-of-line ctor/dtor discipline as AcceptanceStrategy above.
 //
-// E2 G1 Task 4: PSIOPT owns its barrier-parameter governor through a
+// PSIOPT owns its barrier-parameter governor through a
 // std::unique_ptr<BarrierGovernor> (concrete type ClassicAdaptiveGovernor,
 // complete only in psiopt.cpp). Same forward-declare + out-of-line ctor/dtor
 // discipline.
 //
-// E2 G1 Task 5: PSIOPT owns its post-rejection recovery chain through a
+// PSIOPT owns its post-rejection recovery chain through a
 // std::unique_ptr<RecoveryChain> (concrete type NoopRecovery, complete only in
-// psiopt.cpp). Same forward-declare + out-of-line ctor/dtor discipline. G1's
-// NoopRecovery always returns kAcceptAsIs; the alg_impl call site is
-// provably inert (see noop_recovery.h and the call-site comment in
-// alg_impl) — no real recovery dispatch exists until G2.
+// psiopt.cpp). Same forward-declare + out-of-line ctor/dtor discipline. The
+// NoopRecovery implementation shipped today always returns kAcceptAsIs; the
+// alg_impl call site is provably inert (see noop_recovery.h and the call-site
+// comment in alg_impl) — no live recovery dispatcher exists yet.
 class AcceptanceStrategy;
 class GlobalizationMechanism;
 class BarrierGovernor;
@@ -124,7 +125,33 @@ class PSIOPT {
         int max_ls_iters_ = 2;
         int max_acc_iters_ = 50;
         int max_refac_ = 15;
-        int max_soc_ = 1;       // reserved — second-order correction, not currently implemented
+        // Maximum second-order corrections attempted after a first-trial
+        // rejection (Wächter & Biegler 2006, §2.4). 0 = off (default): the
+        // solver behaves exactly as it did before SOC existed. Set > 0 to opt
+        // in; the recommended enable value is 4 (kSocRecommendedMaxCorrections
+        // in globalization/soc.h).
+        int max_soc_ = 0;
+
+        // Extended backtracking: further trials continuing the SAME classic
+        // ladder (same direction, same alpha_red_ divisor, same merit test)
+        // once the classic capped backtrack rejects and SOC (if enabled) is
+        // exhausted or not triggered. 0 = off (default): the solver behaves
+        // exactly as it did before extended backtracking existed. This cap
+        // extends the classic cap (max_ls_iters_) ONLY when the recovery
+        // dispatch is active on a rejected step — max_ls_iters_ itself is
+        // unaffected. See ExtendedBacktrackRecovery, globalization/watchdog.h.
+        int ls_extended_iters_ = 0;
+
+        // Watchdog (Chamberlain, Powell, Lemaréchal & Pedersen 1982;
+        // constants per Wächter & Biegler 2006's implementation — see
+        // globalization/watchdog.h): arms after kWatchdogShortenedIterTrigger
+        // consecutive fully-rejected iterations, then accepts up to
+        // kWatchdogTrialIterMax trial iterations under relaxed acceptance
+        // before reverting to the pre-watchdog snapshot. false = off
+        // (default): the solver behaves exactly as it did before the
+        // watchdog existed.
+        bool watchdog_ = false;
+
         int max_feas_rest_ = 2; // reserved — feasibility restoration, not currently implemented
 
         // --- Convergence tolerances ---
@@ -158,6 +185,15 @@ class PSIOPT {
         LineSearchModes opt_ls_mode_ = LineSearchModes::AUGLANG;
         LineSearchModes soe_ls_mode_ = LineSearchModes::NOLS;
         PDStepStrategies pd_step_strategy_ = PDStepStrategies::PrimSlackEq_Iq;
+
+        // --- Step-acceptance strategy (opt-in modernized merit) ---
+        // classic_merit (default) reproduces today's fused backtracking merit
+        // line search bit-identically. merit selects the modernized merit
+        // family driven through the GENERIC AcceptanceStrategy path, with the
+        // penalty rule chosen by merit_penalty_rule_ (only read when
+        // acceptance_strategy_ == merit). Both enums live in psiopt_fwd.h.
+        AcceptanceStrategies acceptance_strategy_ = AcceptanceStrategies::classic_merit;
+        MeritPenaltyRules merit_penalty_rule_ = MeritPenaltyRules::wmno;
 
         // --- Barrier parameters ---
         double init_mu_ = 0.001;
@@ -261,6 +297,31 @@ class PSIOPT {
         int factor_mem_ = 0;
         int factor_flops_ = 0;
 
+        // Number of second-order correction back-substitutions performed across
+        // the whole solve (one per correction attempt; each costs a single
+        // constraint evaluation + one back-substitution on the live
+        // factorization). Always 0 when SOC is off (max_soc_ == 0). Reset per
+        // solve alongside the other accumulators.
+        int soc_steps_taken_ = 0;
+
+        // Number of times the watchdog armed across the whole solve
+        // (Chamberlain, Powell, Lemaréchal & Pedersen 1982; constants per
+        // Wächter & Biegler 2006's implementation, globalization/watchdog.h).
+        // Always 0 when the watchdog is off (watchdog_ == false). Reset per
+        // solve alongside the other accumulators.
+        int watchdog_activations_ = 0;
+
+        // Per-rejection recovery-chain outcome depth, indexed by the
+        // kRecoveryDepth* constants in globalization/recovery_chain.h:
+        // recovery_depth_histogram_[0] SOC, [1] extended backtracking,
+        // [2] watchdog, [3] unresolved (today's classic give-up: the
+        // originally-rejected step was simply taken; this is the ONLY bucket
+        // that increments when SOC/extended/watchdog are all off). Counts
+        // rejections, i.e. every should_dispatch_recovery-gated call, not
+        // just ones where a recovery link actually intervened. Reset per
+        // solve alongside the other accumulators.
+        std::array<int, 4> recovery_depth_histogram_{};
+
         // T6 (dead-status fix): the last non-Success status observed from
         // kkt_sol_.info() by factor_impl() within the CURRENT phase (alg_impl
         // resets it on entry, so print_exit_stats reports per-phase status).
@@ -286,6 +347,9 @@ class PSIOPT {
             solver_init_time_ = 0;
             iter_num_ = 0;
             last_kkt_info_ = Eigen::Success;
+            soc_steps_taken_ = 0;
+            watchdog_activations_ = 0;
+            recovery_depth_histogram_.fill(0);
         }
     };
 
@@ -331,6 +395,8 @@ class PSIOPT {
     void set_max_acc_iters(int max_acc_iters);
     void set_max_ls_iters(int max_ls_iters);
     void set_all_max_iters(int m1, int m2);
+    void set_max_soc(int max_soc);
+    void set_ls_extended_iters(int ls_extended_iters);
 
     void set_kkt_tol(double kkt_tol);
     void set_bar_tol(double bar_tol);
@@ -421,38 +487,58 @@ class PSIOPT {
     SolveResult result_;
     std::shared_ptr<NonLinearProgram> nlp_;
 
-    // E2 G1: classic merit line-search acceptance, extracted from the former
+    // Classic merit line-search acceptance, extracted from the former
     // ls_impl/ls_lang/ls_l1/ls_auglang bodies (now ClassicMeritAcceptance). Held
     // through the AcceptanceStrategy interface (forward-declared above); rebuilt
-    // by set_nlp() wired to a SolverContext view of this solver. Never null once
-    // set_nlp has run, which run_phase_sequence guarantees before any solve.
+    // by rebuild_globalization_components() wired to a SolverContext view of
+    // this solver. Never null once run_phase_sequence has run it once, which
+    // every solve entry point guarantees before any iteration.
     std::unique_ptr<AcceptanceStrategy> acceptance_;
 
-    // E2 G1 Task 3: step-length globalization mechanism, extracted from the
+    // Step-length globalization mechanism, extracted from the
     // former max_primal_dual_step/max_step_to_boundary bodies (now
     // BacktrackingLineSearch). Held through the GlobalizationMechanism interface
-    // (forward-declared above); rebuilt by set_nlp() alongside acceptance_.
-    // Never null once set_nlp has run, which run_phase_sequence guarantees
-    // before any solve.
+    // (forward-declared above); rebuilt by rebuild_globalization_components()
+    // alongside acceptance_. Never null once run_phase_sequence has run it
+    // once, which every solve entry point guarantees before any iteration.
     std::unique_ptr<GlobalizationMechanism> mechanism_;
 
-    // E2 G1 Task 4: barrier-parameter governor, extracted from the former
+    // Barrier-parameter governor, extracted from the former
     // PROBE/LOQO barmode switch + loqo_mu/mpc_mu bodies (now
     // ClassicAdaptiveGovernor). Held through the BarrierGovernor interface
-    // (forward-declared above); rebuilt by set_nlp() alongside acceptance_/
-    // mechanism_. Never null once set_nlp has run, which run_phase_sequence
-    // guarantees before any solve.
+    // (forward-declared above); rebuilt by rebuild_globalization_components()
+    // alongside acceptance_/mechanism_. Never null once run_phase_sequence has
+    // run it once, which every solve entry point guarantees before any
+    // iteration.
     std::unique_ptr<BarrierGovernor> governor_;
 
-    // E2 G1 Task 5: post-rejection recovery chain, extracted-as-a-hook (no
-    // prior code existed for this — G1 wires the hook point with a no-op
+    // Post-rejection recovery chain, extracted-as-a-hook (no
+    // prior code existed for this — this hook point is wired with a no-op
     // implementation). Held through the RecoveryChain interface
-    // (forward-declared above); rebuilt by set_nlp() alongside acceptance_/
-    // mechanism_/governor_. Never null once set_nlp has run, which
-    // run_phase_sequence guarantees before any solve. G1's NoopRecovery always
-    // returns kAcceptAsIs and is stateless; G2 replaces the concrete type with
-    // a real SOC/extended-backtrack/watchdog/feasibility-switch dispatcher.
+    // (forward-declared above); rebuilt by rebuild_globalization_components()
+    // alongside acceptance_/mechanism_/governor_. Never null once
+    // run_phase_sequence has run it once, which every solve entry point
+    // guarantees before any iteration. With max_soc_ == 0, ls_extended_iters_
+    // == 0, and watchdog_ == false (all defaults), rebuild_globalization_
+    // components() installs plain NoopRecovery, which always returns
+    // kAcceptAsIs and is stateless — bit-identical to pre-recovery-chain
+    // behavior. Opt in to any subset of SocRecovery/ExtendedBacktrackRecovery
+    // (composed in that order by ChainedRecovery) and WatchdogRecovery (an
+    // outer decorator over whatever chain results) via the corresponding
+    // Settings fields — see globalization/soc.h and globalization/watchdog.h.
+    // The feasibility switch remains a future link.
     std::unique_ptr<RecoveryChain> recovery_;
+
+    // (Re)builds acceptance_/mechanism_/governor_/recovery_ from the current
+    // Settings. Called once at the top of every run_phase_sequence() (i.e.
+    // once per solve invocation — optimize()/solve()/etc. all route through
+    // it), NOT from set_nlp(): construction-time knobs (acceptance_strategy,
+    // max_soc, ls_extended_iters, watchdog, merit_penalty_rule) must take
+    // effect on the very next solve even without a re-transcription in
+    // between, matching every other Settings field's live-at-next-solve
+    // semantics. See psiopt.cpp's definition for the neutrality argument on
+    // the default (all-off) path.
+    void rebuild_globalization_components();
 
     // QP parameter setup — called automatically by set_nlp()
     void set_qp_params();
@@ -592,10 +678,10 @@ class PSIOPT {
     // --- Line search ---
     // The classic merit line search (former ls_impl/ls_lang/ls_l1/ls_auglang and
     // their eval_trial_point_occ/compute_penalties/secondary_accept helpers) was
-    // extracted verbatim into ClassicMeritAcceptance (E2 G1, Task 2); the
+    // extracted verbatim into ClassicMeritAcceptance; the
     // fraction-to-boundary step-length (former max_primal_dual_step/
-    // max_step_to_boundary) was extracted verbatim into BacktrackingLineSearch
-    // (E2 G1, Task 3). alg_impl now drives both through mechanism_->compute_step
+    // max_step_to_boundary) was extracted verbatim into BacktrackingLineSearch.
+    // alg_impl now drives both through mechanism_->compute_step
     // (which fuses the step scaling and acceptance backtrack).
 
     // --- KKT factorization (defined in psiopt.cpp) ---
@@ -615,24 +701,20 @@ class PSIOPT {
 
     // --- Barrier math helpers (defined in psiopt.cpp) ---
     void apply_reset_slacks(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> FXI) const;
-    // max_step_to_boundary was extracted verbatim into BacktrackingLineSearch
-    // (E2 G1 Task 3); it is now a private helper of that mechanism.
+    // max_step_to_boundary was extracted verbatim into BacktrackingLineSearch;
+    // it is now a private helper of that mechanism.
     void complementarity(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI,
                          double &avgcomp, double &mincomp, double &maxcomp) const;
-    double barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu) const;
-    void barrier_gradient(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double mu,
-                          Eigen::Ref<Eigen::VectorXd> AGS) const;
-    void barrier_gradient(Eigen::Ref<Eigen::VectorXd> LI, Eigen::Ref<Eigen::VectorXd> AGS) const;
     void barrier_hessian(Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
                          Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double mu);
     // loqo_mu / mpc_mu were extracted verbatim into ClassicAdaptiveGovernor
-    // (E2 G1 Task 4, src/solvers/psiopt_globalization.cpp); the barrier-
+    // (src/solvers/psiopt_globalization.cpp); the barrier-
     // parameter update now runs through governor_->update_barrier(). The
-    // barrier_objective()/barrier_gradient() helpers above are retained for now
-    // (PSIOPT no longer calls them after Task 4; a later G-task that
-    // consolidates the duplicated globalization helpers should remove the dead
-    // copies). complementarity() STAYS — it is still called from the evaluate
-    // stage (its maxcomp output feeds converge_check's barr_inf_).
+    // barrier_objective()/barrier_gradient() helpers formerly declared here were
+    // dead after that extraction (PSIOPT no longer called them) and have been
+    // removed; ClassicMeritAcceptance and ClassicAdaptiveGovernor each carry
+    // their own copies. complementarity() STAYS — it is still called from the
+    // evaluate stage (its maxcomp output feeds converge_check's barr_inf_).
 
     // --- NLP eval dispatch methods (defined in psiopt.cpp) ---
     void eval_kkt(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
@@ -644,15 +726,13 @@ class PSIOPT {
                   EigenRef<VectorXd> AGXS_FX, Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
     void eval_soe(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
                   EigenRef<VectorXd> AGXS_FX, Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
-    void eval_rhs(double obj_scale, const Eigen::Ref<const Eigen::VectorXd> &XSL, double &val,
-                  Eigen::Ref<Eigen::VectorXd> GX, Eigen::Ref<Eigen::VectorXd> AGXS_FX);
 
     void eval_nlp(AlgorithmModes algmode, double obj_scale, ConstEigenRef<VectorXd> XSL,
                   double &val, EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
                   Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
 
     // --- Convergence and stepping ---
-    // PSIOPT 3.1: the residual formulas shared by the pre-factorization early
+    // The residual formulas shared by the pre-factorization early
     // convergence check and the post-line-search fill_iter_info() call live here
     // ONCE, so neither call site can drift out of sync. fill_residual_info() sets
     // every IterateInfo field derivable from rhs/xsl alone (valid immediately after
@@ -665,8 +745,8 @@ class PSIOPT {
     void fill_iter_info(KKTVector &xsl, KKTVector &rhs, double pobj, double bobj, double mu,
                         IterateInfo &iter) const;
     ConvergenceFlags converge_check(std::vector<IterateInfo> &iters);
-    // max_primal_dual_step was extracted verbatim into BacktrackingLineSearch
-    // (E2 G1 Task 3); alg_impl now drives it through mechanism_ (fused into
+    // max_primal_dual_step was extracted verbatim into BacktrackingLineSearch;
+    // alg_impl now drives it through mechanism_ (fused into
     // compute_step on the main path, and via the public method at the PROBE
     // predictor call site).
 

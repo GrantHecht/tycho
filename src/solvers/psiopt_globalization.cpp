@@ -2,7 +2,7 @@
 // Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 // =============================================================================
 //
-// E2 G1 globalization extraction (Task 2): definitions for
+// Part of the globalization component extraction: definitions for
 // ClassicMeritAcceptance. The classic_line_search dispatcher and the
 // ls_lang / ls_l1 / ls_auglang merit variants plus their
 // eval_trial_point_occ / compute_penalties / secondary_accept helpers are
@@ -15,33 +15,41 @@
 // are verbatim copies of the identically-named PSIOPT methods, reading
 // through ctx_ (see merit_acceptance.h's byte-identity design note).
 //
-// E2 G1 Task 3 also lands here: BacktrackingLineSearch (the step-length
+// This file also hosts BacktrackingLineSearch (the step-length
 // mechanism) — verbatim today's max_step_to_boundary / max_primal_dual_step,
 // reading through the SolverContext passed to each call. See
 // backtracking_line_search.h's riskiest-seam design note.
 //
-// E2 G1 Task 4 also lands here: ClassicAdaptiveGovernor (the barrier-parameter
+// This file also hosts ClassicAdaptiveGovernor (the barrier-parameter
 // update) — verbatim today's PROBE/LOQO barmode switch + common clamp/objective/
 // gradient tail, plus the loqo_mu / mpc_mu oracles and verbatim copies of the
 // barrier_* / complementarity helpers it consumes (the complementarity copy is
 // TOKEN-IDENTICAL including its ULP-load-bearing .sum() warning). See
 // classic_adaptive_governor.h's PROBE-impurity design note.
+//
+// This file also hosts the second batch of live RecoveryChain links:
+// ExtendedBacktrackRecovery, WatchdogRecovery, and the ChainedRecovery
+// composition — see watchdog.h's file docstring for the full design.
 // =============================================================================
 
 #include "tycho/detail/solvers/globalization/backtracking_line_search.h"
 #include "tycho/detail/solvers/globalization/classic_adaptive_governor.h"
 #include "tycho/detail/solvers/globalization/merit_acceptance.h"
+#include "tycho/detail/solvers/globalization/modern_merit.h"
+#include "tycho/detail/solvers/globalization/soc.h"
+#include "tycho/detail/solvers/globalization/watchdog.h"
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 
 namespace tycho::solvers {
 
 // ============================================================================
 // Generic interface — unused on the classic merit path (see header). T6:
-// these throw rather than return a fabricated answer; G2 gives them real
-// bodies when a filter/funnel strategy actually drives them.
+// these throw rather than return a fabricated answer; a future filter/funnel
+// strategy gives them real bodies when it actually drives them.
 // ============================================================================
 bool ClassicMeritAcceptance::is_iterate_acceptable(const ProgressMeasures &current,
                                                    const ProgressMeasures &trial,
@@ -53,7 +61,7 @@ bool ClassicMeritAcceptance::is_iterate_acceptable(const ProgressMeasures &curre
     (void)objective_multiplier;
     throw std::logic_error("ClassicMeritAcceptance::is_iterate_acceptable is unused on the classic "
                            "merit path (acceptance is fused inside classic_line_search); it is "
-                           "driven only by G2+ filter/funnel strategies");
+                           "driven only by a future filter/funnel/WMNO acceptance strategy");
 }
 
 bool ClassicMeritAcceptance::is_infeasibility_sufficiently_reduced(
@@ -62,7 +70,7 @@ bool ClassicMeritAcceptance::is_infeasibility_sufficiently_reduced(
     (void)trial;
     throw std::logic_error(
         "ClassicMeritAcceptance::is_infeasibility_sufficiently_reduced is unused "
-        "on the classic merit path; it is driven only by a G5 restoration "
+        "on the classic merit path; it is driven only by a future feasibility-restoration "
         "strategy");
 }
 
@@ -165,10 +173,18 @@ double ClassicMeritAcceptance::ls_lang(double obj_scale, double mu, double prim_
         double LangTest = ptest + btest + xsl2.lmults().dot(rhs2.all_cons());
         if (LangTest < LangInit) {
             citer.ls_iters_ = j;
+            citer.accepted_ = true;
             break;
         } else {
             citer.ls_iters_ = j + 1;
             alpha = alpha / ctx_.settings_.alpha_red_;
+            // Signal-only: record the first rejection's backtracking index.
+            // The self-referential select keeps the first value (the LANG
+            // variant computes no infeasibility scalar, so theta is left at its
+            // default). Writes touch only the diagnostic signal fields; no
+            // classic line-search state is read or modified here.
+            citer.first_rejection_iter_ =
+                citer.first_rejection_iter_ < 0 ? j : citer.first_rejection_iter_;
         }
     }
     return alpha;
@@ -202,10 +218,19 @@ double ClassicMeritAcceptance::ls_l1(double obj_scale, double mu, double prim_ob
         citer.merit_val_ = LangTest;
         if (LangTest < LangInit || secondary_accept(ptest, prim_obj, test, init)) {
             citer.ls_iters_ = j;
+            citer.accepted_ = true;
             break;
         } else {
             citer.ls_iters_ = j + 1;
             alpha = alpha / ctx_.settings_.alpha_red_;
+            // Signal-only: record the first rejection's index and the trial's
+            // already-computed L2 infeasibility (test.l2_). The self-referential
+            // selects keep the first values. Writes touch only the diagnostic
+            // signal fields; no classic line-search state is read or modified.
+            citer.theta_at_first_rejection_ =
+                citer.first_rejection_iter_ < 0 ? test.l2_ : citer.theta_at_first_rejection_;
+            citer.first_rejection_iter_ =
+                citer.first_rejection_iter_ < 0 ? j : citer.first_rejection_iter_;
         }
     }
     return alpha;
@@ -268,10 +293,19 @@ double ClassicMeritAcceptance::ls_auglang(double obj_scale, double mu, double pr
         citer.merit_val_ = LangTest;
         if (LangTest < LangInit || secondary_accept(ptest, prim_obj, test, init)) {
             citer.ls_iters_ = j;
+            citer.accepted_ = true;
             break;
         } else {
             citer.ls_iters_ = j + 1;
             alpha = alpha / ctx_.settings_.alpha_red_;
+            // Signal-only: record the first rejection's index and the trial's
+            // already-computed L2 penalty (TestL2Pen). The self-referential
+            // selects keep the first values. Writes touch only the diagnostic
+            // signal fields; no classic line-search state is read or modified.
+            citer.theta_at_first_rejection_ =
+                citer.first_rejection_iter_ < 0 ? TestL2Pen : citer.theta_at_first_rejection_;
+            citer.first_rejection_iter_ =
+                citer.first_rejection_iter_ < 0 ? j : citer.first_rejection_iter_;
         }
     }
     return alpha;
@@ -314,6 +348,8 @@ double ClassicMeritAcceptance::classic_line_search(PSIOPT::LineSearchModes lsmod
                           Citer);
     case PSIOPT::LineSearchModes::NOLS:
         Citer.ls_iters_ = 0;
+        // No line search runs: the full step is taken, i.e. accepted.
+        Citer.accepted_ = true;
         return 1.0;
     default:
         throw std::invalid_argument("Unknown LineSearchMode");
@@ -321,7 +357,150 @@ double ClassicMeritAcceptance::classic_line_search(PSIOPT::LineSearchModes lsmod
 }
 
 // ============================================================================
-// BacktrackingLineSearch — step-length mechanism (E2 G1 Task 3). max_step_to_
+// ModernMeritAcceptance — the modernized merit family (WMNO / flexible penalty
+// rules), driven through the GENERIC AcceptanceStrategy path. See
+// globalization/modern_merit.h for the full paper-derived formulation and the
+// ProgressMeasures mapping; the code below is a direct transcription of the
+// (accept-π), (threshold), and penalty-update equations documented there.
+// ============================================================================
+
+void ModernMeritAcceptance::reset() {
+    nu_ = kWmnoInitPenalty;
+    pi_l_ = kFlexInitPiL;
+    pi_u_ = kFlexInitPiU;
+}
+
+bool ModernMeritAcceptance::is_infeasibility_sufficiently_reduced(
+    const ProgressMeasures &reference, const ProgressMeasures &trial) const {
+    (void)reference;
+    (void)trial;
+    throw std::logic_error(
+        "ModernMeritAcceptance::is_infeasibility_sufficiently_reduced is unused until a "
+        "feasibility-restoration strategy drives it");
+}
+
+bool ModernMeritAcceptance::is_iterate_acceptable(const ProgressMeasures &current,
+                                                  const ProgressMeasures &trial,
+                                                  const ProgressMeasures &predicted_reduction,
+                                                  double objective_multiplier) {
+    // objective/auxiliary arrive already σ-scaled (parity with the classic
+    // path), so the merit uses them directly; objective_multiplier is available
+    // for future rules but not needed by the arithmetic here.
+    (void)objective_multiplier;
+    switch (rule_) {
+    case MeritPenaltyRules::wmno:
+        return accept_wmno(current, trial, predicted_reduction);
+    case MeritPenaltyRules::flexible:
+        return accept_flexible(current, trial, predicted_reduction);
+    }
+    throw std::logic_error(
+        "ModernMeritAcceptance::is_iterate_acceptable: unknown MeritPenaltyRule");
+}
+
+// WMNO Math. Program. 107 (2006), §3.1. Merit Eq. (3.1), ν_TRIAL Eq. (3.5, σ=0),
+// update Eq. (3.6), Armijo Eq. (3.9).
+bool ModernMeritAcceptance::accept_wmno(const ProgressMeasures &current,
+                                        const ProgressMeasures &trial,
+                                        const ProgressMeasures &pred) {
+    // Penalty update (Eq. 3.6): steplength-independent — the α factor cancels in
+    // τ (both pred terms scale by α), so calling this every backtrack is
+    // idempotent within an iteration and monotone across iterations. The m_θ==0
+    // (feasible current) special case leaves ν unchanged (WMNO "c(z)=0 ⇒ ν⁺=ν").
+    if (pred.infeasibility > 0.0) {
+        const double tau = -pred.objective / ((1.0 - kWmnoRho) * pred.infeasibility);
+        if (nu_ < tau)
+            nu_ = tau + kWmnoPenaltyBump;
+    }
+    return armijo(current, trial, pred, nu_, kWmnoArmijoEta);
+}
+
+// Curtis–Nocedal IMA JNA 28(4) (2008). Interval merit Eq. (2.1), χ Eq. (3.8,
+// ω=0), π_u update Eq. (3.9), endpoint acceptance (remark after Alg. 3.1), π_l
+// update Eqs. (3.10)-(3.11).
+bool ModernMeritAcceptance::accept_flexible(const ProgressMeasures &current,
+                                            const ProgressMeasures &trial,
+                                            const ProgressMeasures &pred) {
+    // π_u update (Eq. 3.9): raise π_u to χ+ε only when χ exceeds it. Same
+    // α-cancellation / feasible-current guard as WMNO.
+    if (pred.infeasibility > 0.0) {
+        const double chi = -pred.objective / ((1.0 - kFlexSigma) * pred.infeasibility);
+        if (pi_u_ < chi)
+            pi_u_ = chi + kFlexEpsPiU;
+    }
+
+    // Acceptance over the interval: satisfied for some π ∈ [π_l, π_u] iff
+    // satisfied at either endpoint (Curtis–Nocedal, practical remark after
+    // Algorithm 3.1). Test π_l first so the π_l branch of the (3.10) update is
+    // known.
+    const bool accept_at_l = armijo(current, trial, pred, pi_l_, kFlexArmijoEta);
+    const bool accept_at_u = accept_at_l || armijo(current, trial, pred, pi_u_, kFlexArmijoEta);
+    if (!accept_at_u)
+        return false;
+
+    // π_l update (Eq. 3.10) on an accepted step: if π_l already accepted
+    // (regions III/IV) keep it; else (region II — accepted only at π_u) raise
+    // π_l gradually toward ν(step) (Eq. 3.11), clamped to π_u.
+    if (!accept_at_l) {
+        const double denom = current.infeasibility - trial.infeasibility; // ‖c_k‖−‖c_{k+1}‖
+        if (denom > 0.0) {
+            const double num = (trial.objective + trial.auxiliary) -
+                               (current.objective + current.auxiliary); // ϕ_μ(trial)−ϕ_μ(current)
+            const double r = num / denom;                               // ν(step), Eq. (3.11)
+            const double bump = std::max(kFlexPiLDamping * (r - pi_l_), kFlexEpsPiL);
+            pi_l_ = std::min(pi_u_, pi_l_ + bump);
+        }
+    }
+    return true;
+}
+
+// ============================================================================
+// modern_eval_trial_point — shared trial-point evaluation for the GENERIC
+// acceptance loop (BacktrackingLineSearch::generic_line_search). A PARALLEL
+// copy of ClassicMeritAcceptance::eval_trial_point_occ's math (same slack-reset
+// + barrier convention as apply_reset_slacks / barrier_objective) — the classic
+// path's own copies are deliberately NOT reused or touched, so the classic
+// diff stays empty. Reaches PSIOPT state through the SolverContext only.
+// Returns ptest (σ-scaled primal objective at the trial), btest (barrier term
+// −μ·Σ log s), and theta (L1 constraint-norm merit infeasibility ‖c‖₁).
+// ============================================================================
+static void modern_eval_trial_point(SolverContext &ctx, double obj_scale, double mu, double alpha,
+                                    const Eigen::VectorXd &XSL, const Eigen::VectorXd &DXSL,
+                                    Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS2, double &ptest,
+                                    double &btest, double &theta) {
+    const int pv = ctx.primal_vars_;
+    const int sv = ctx.slack_vars_;
+    const int ec = ctx.equal_cons_;
+    const int ic = ctx.inequal_cons_;
+
+    XSL2 = XSL + alpha * DXSL;
+    RHS2.setZero();
+    ptest = 0.0;
+    ctx.nlp_->eval_occ(obj_scale, XSL2.head(pv), ptest, RHS2.segment(pv + sv, ec), RHS2.tail(ic));
+
+    auto S = XSL2.segment(pv, sv);
+    auto FXI = RHS2.tail(ic);
+    for (int i = 0; i < sv; i++) {
+        double fxi = FXI[i];
+        double si = S[i];
+        if (si < ctx.settings_.neg_slack_reset_)
+            si = ctx.settings_.neg_slack_reset_;
+        if (fxi < 0.0) {
+            FXI[i] = 0.0;
+            S[i] = std::max(std::abs(fxi), ctx.settings_.neg_slack_reset_);
+        } else {
+            FXI[i] += si;
+        }
+    }
+
+    btest = 0.0;
+    for (int i = 0; i < ic; i++)
+        btest += -mu * std::log(S[i]);
+
+    theta = RHS2.tail(ec + ic).template lpNorm<1>();
+}
+
+// ============================================================================
+// BacktrackingLineSearch — step-length mechanism. max_step_to_
 // boundary and max_primal_dual_step are moved VERBATIM from src/solvers/
 // psiopt.cpp (statement order and operand order preserved exactly — the merge
 // gate is a bit-identical CBWR iteration-count comparison). The only edits are
@@ -385,7 +564,7 @@ void BacktrackingLineSearch::max_primal_dual_step(Eigen::VectorXd &XSL, Eigen::V
 }
 
 // compute_step fuses the fraction-to-boundary scaling and the acceptance
-// backtrack (dossier §2/§8 riskiest seam): max_primal_dual_step MUTATES DXSL in
+// backtrack (riskiest seam): max_primal_dual_step MUTATES DXSL in
 // place — guarded exactly as the original alg_impl main-path call
 // (`if (inequal_cons_ > 0)`) — and the acceptance strategy then backtracks a
 // scalar alpha on the already-scaled DXSL.
@@ -397,12 +576,88 @@ double BacktrackingLineSearch::compute_step(
     if (ctx.inequal_cons_ > 0)
         this->max_primal_dual_step(XSL, DXSL, ctx.settings_.bound_fraction_, alphap, alphad, ctx);
 
-    return acceptance.classic_line_search(lsmode, obj_scale, mu, prim_obj, barr_obj, XSL, DXSL,
-                                          XSL2, RHS, RHS2, Citer, iters);
+    // Default (classic_merit) path: forward straight to the fused
+    // classic_line_search — byte-identical to pre-modern-merit behavior. The
+    // generic path (ModernMeritAcceptance -> drives_classic_path() == false)
+    // runs the loop here instead.
+    if (acceptance.drives_classic_path())
+        return acceptance.classic_line_search(lsmode, obj_scale, mu, prim_obj, barr_obj, XSL, DXSL,
+                                              XSL2, RHS, RHS2, Citer, iters);
+    return this->generic_line_search(lsmode, obj_scale, mu, prim_obj, barr_obj, XSL, DXSL, XSL2,
+                                     RHS, RHS2, acceptance, Citer, ctx);
+}
+
+// Generic driving path — see backtracking_line_search.h. Loop-in-mechanism,
+// judgment-in-strategy: this reproduces the classic backtracking ladder (up to
+// max_ls_iters_, alpha /= alpha_red_ on reject) and the classic signal stores,
+// but the accept/reject verdict comes from
+// AcceptanceStrategy::is_iterate_acceptable on a ProgressMeasures triple.
+double BacktrackingLineSearch::generic_line_search(
+    PSIOPT::LineSearchModes lsmode, double obj_scale, double mu, double prim_obj, double barr_obj,
+    Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
+    Eigen::VectorXd &RHS2, AcceptanceStrategy &acceptance, IterateInfo &Citer, SolverContext &ctx) {
+    if (lsmode == PSIOPT::LineSearchModes::NOLS) {
+        Citer.ls_iters_ = 0;
+        Citer.accepted_ = true; // full step taken (same NOLS convention as classic).
+        return 1.0;
+    }
+
+    KKTVector v_dxsl = kkt_view(DXSL, ctx);
+    KKTVector v_rhs = kkt_view(RHS, ctx);
+
+    // Current-point measures (j-independent). infeasibility = ‖c(z_k)‖₁ (the
+    // merit ‖c‖); objective/auxiliary = the smooth barrier objective split
+    // f + (−μ·Σ log s). See modern_merit.h's ProgressMeasures mapping.
+    ProgressMeasures current;
+    current.infeasibility = v_rhs.all_cons().template lpNorm<1>();
+    current.objective = prim_obj;
+    current.auxiliary = barr_obj;
+
+    // Directional derivative of the smooth objective ϕ_μ along the (already
+    // fraction-to-boundary-scaled) step: ∇ϕ_μ(z_k)ᵀd = RHS.prim_dual_grad ·
+    // DXSL.primals_slacks — the exact quantity ls_l1/ls_auglang call `vv`.
+    const double dirderiv = v_rhs.prim_dual_grad().dot(v_dxsl.primals_slacks());
+
+    double alpha = 1.0;
+    for (int j = 0; j < ctx.settings_.max_ls_iters_; j++) {
+        double ptest = 0.0;
+        double btest = 0.0;
+        double theta_t = 0.0;
+        modern_eval_trial_point(ctx, obj_scale, mu, alpha, XSL, DXSL, XSL2, RHS2, ptest, btest,
+                                theta_t);
+        ProgressMeasures trial{theta_t, ptest, btest};
+
+        // Predicted reductions (α-scaled; see modern_merit.h): m_f = −α·∇ϕ_μᵀd
+        // (≥0 for descent), m_θ = α·θ_c (linearized-constraint model).
+        ProgressMeasures pred;
+        pred.objective = -alpha * dirderiv;
+        pred.infeasibility = alpha * current.infeasibility;
+
+        // Diagnostic merit (barrier objective sans penalty; the penalty is
+        // strategy-internal state). Not printed — see IterateInfo's field note.
+        Citer.merit_val_ = trial.objective + trial.auxiliary;
+
+        if (acceptance.is_iterate_acceptable(current, trial, pred, obj_scale)) {
+            Citer.ls_iters_ = j;
+            Citer.accepted_ = true;
+            break;
+        } else {
+            Citer.ls_iters_ = j + 1;
+            alpha = alpha / ctx.settings_.alpha_red_;
+            // Signal stores mirror the classic path (self-referential selects
+            // keep the FIRST rejection's values) so SOC/watchdog compose. The
+            // modern path records its own merit infeasibility θ_t (L1 ‖c‖).
+            Citer.theta_at_first_rejection_ =
+                Citer.first_rejection_iter_ < 0 ? theta_t : Citer.theta_at_first_rejection_;
+            Citer.first_rejection_iter_ =
+                Citer.first_rejection_iter_ < 0 ? j : Citer.first_rejection_iter_;
+        }
+    }
+    return alpha;
 }
 
 // ============================================================================
-// ClassicAdaptiveGovernor — barrier-parameter update (E2 G1 Task 4). The
+// ClassicAdaptiveGovernor — barrier-parameter update. The
 // PROBE/LOQO barmode switch + common clamp/objective/gradient tail and the
 // loqo_mu / mpc_mu oracles are moved VERBATIM from src/solvers/psiopt.cpp
 // (statement order and operand order preserved exactly — the merge gate is a
@@ -517,6 +772,311 @@ double ClassicAdaptiveGovernor::update_barrier(PSIOPT::BarrierModes barmode, dou
     barr_obj = this->barrier_objective(v_xsl.slacks(), mu, ctx);
     this->barrier_gradient(v_xsl.slacks(), v_xsl.iq_lmults(), mu, v_rhs.dual_grad());
     return mu;
+}
+
+// ============================================================================
+// SocRecovery — second-order correction (Wächter & Biegler 2006, §2.4). Only
+// reached when SOC is enabled (max_soc_ > 0, so rebuild_globalization_
+// components() built a SocRecovery)
+// AND the line search rejected a usable step (the recovery-dispatch gate). See
+// globalization/soc.h for the algorithm overview and the trigger/termination
+// predicates driven below.
+// ============================================================================
+
+void SocRecovery::eval_trial_constraints(SolverContext &ctx, double obj_scale,
+                                         const Eigen::VectorXd &XSL, const Eigen::VectorXd &dir,
+                                         double alpha, Eigen::VectorXd &xsl2_scratch,
+                                         Eigen::VectorXd &cons_out) {
+    const int pv = ctx.primal_vars_;
+    const int sv = ctx.slack_vars_;
+    const int ec = ctx.equal_cons_;
+    const int ic = ctx.inequal_cons_;
+
+    xsl2_scratch = XSL + alpha * dir;
+
+    double val = 0.0;
+    cons_out.setZero();
+    ctx.nlp_->eval_occ(obj_scale, xsl2_scratch.head(pv), val, cons_out.head(ec), cons_out.tail(ic));
+
+    // Slack reset on the inequality block against the trial slacks — the same
+    // convention ClassicMeritAcceptance::apply_reset_slacks / alg_impl's RHS
+    // assembly use, so cons_out is directly comparable to RHS.all_cons().
+    auto S = xsl2_scratch.segment(pv, sv);
+    auto FXI = cons_out.tail(ic);
+    for (int i = 0; i < sv; i++) {
+        double fxi = FXI[i];
+        double si = S[i];
+        if (si < ctx.settings_.neg_slack_reset_) {
+            si = ctx.settings_.neg_slack_reset_;
+        }
+        if (fxi < 0.0) {
+            FXI[i] = 0.0;
+            S[i] = std::max(std::abs(fxi), ctx.settings_.neg_slack_reset_);
+        } else {
+            FXI[i] += si;
+        }
+    }
+}
+
+RecoveryChain::Action SocRecovery::on_step_rejected(
+    IterateInfo &Citer, const std::vector<IterateInfo> &iters, SolverContext &ctx,
+    AcceptanceStrategy &acceptance, GlobalizationMechanism &mechanism,
+    PSIOPT::LineSearchModes lsmode, double obj_scale, double mu, double prim_obj, double barr_obj,
+    Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
+    Eigen::VectorXd &RHS2, double &alpha, double &alphap, double &alphad, int &soc_steps,
+    int & /*resolved_depth*/, int & /*watchdog_activations*/) {
+    const int max_soc = ctx.settings_.max_soc_;
+    if (max_soc <= 0)
+        return Action::kAcceptAsIs; // defensive: SocRecovery is only built when max_soc_ > 0.
+
+    const int ncons = ctx.equal_cons_ + ctx.inequal_cons_;
+
+    // Current-iterate constraint violation: the same squared-L2 all_cons
+    // quantity theta_at_first_rejection_ records (RHS's inequality block already
+    // carries the merit slack reset — see the RHS assembly in psiopt.cpp).
+    const double current_infeasibility = RHS.tail(ncons).squaredNorm();
+    if (!soc_should_trigger(Citer, current_infeasibility))
+        return Action::kAcceptAsIs;
+
+    // Snapshot the fraction-to-boundary lengths so a rejected correction leaves
+    // no diagnostic residue: only an accepted (kRetry) correction keeps the
+    // corrected step's alphap/alphad.
+    const double alphap_orig = alphap;
+    const double alphad_orig = alphad;
+
+    // Correction-loop scratch (local — SocRecovery holds no state).
+    Eigen::VectorXd rhs_soc(RHS.size());
+    Eigen::VectorXd dxsl_soc(DXSL.size());
+    Eigen::VectorXd trial_cons(ncons);
+
+    // Accumulated corrected constraint block c_soc. Seed from the first rejected
+    // trial (paper: c_soc = alpha_0*c_k + c(x_k + alpha_0*d_k); the classic first
+    // trial used alpha_0 = 1 on the already fraction-to-boundary-scaled DXSL).
+    Eigen::VectorXd c_soc(ncons);
+    eval_trial_constraints(ctx, obj_scale, XSL, DXSL, 1.0, XSL2, trial_cons);
+    c_soc = RHS.tail(ncons) + trial_cons;
+
+    auto do_correction = [&](int /*correction_index*/, double /*prev_violation*/) {
+        // Corrected RHS: reuse the factored RHS (objective block unchanged) and
+        // overwrite only the constraint block with the accumulated c_soc.
+        rhs_soc = RHS;
+        rhs_soc.tail(ncons) = c_soc;
+
+        // Correction on the LIVE factorization — one back-substitution, no
+        // refactor. Same sign convention as the main step (DXSL = -solve(RHS)).
+        dxsl_soc = ctx.kkt_solver_.solve(rhs_soc);
+        dxsl_soc = -dxsl_soc;
+        if (!std::isfinite(dxsl_soc.squaredNorm()))
+            return SocCorrectionOutcome{false, std::numeric_limits<double>::infinity()};
+
+        // Fraction-to-boundary scale the corrected direction, exactly as the
+        // classic path scales DXSL before its backtrack (mechanism's shared
+        // entry point, guarded identically on inequal_cons_ > 0).
+        if (ctx.inequal_cons_ > 0)
+            mechanism.max_primal_dual_step(XSL, dxsl_soc, ctx.settings_.bound_fraction_, alphap,
+                                           alphad, ctx);
+
+        // Re-run the full acceptance backtrack on the corrected direction. A
+        // fresh IterateInfo captures the verdict and, on rejection, the first
+        // corrected trial's L2 infeasibility (theta_at_first_rejection_) without
+        // clobbering Citer's recorded signals.
+        IterateInfo trial_iter;
+        const double alpha_soc =
+            acceptance.classic_line_search(lsmode, obj_scale, mu, prim_obj, barr_obj, XSL, dxsl_soc,
+                                           XSL2, RHS, RHS2, trial_iter, iters);
+
+        if (trial_iter.accepted_) {
+            // Commit the corrected step in place: alg_impl's XSL += alpha*DXSL
+            // applies it. Stamp Citer so the recorded iterate reflects the taken
+            // (corrected) step rather than the rejected one.
+            DXSL = dxsl_soc;
+            alpha = alpha_soc;
+            Citer.accepted_ = true;
+            Citer.ls_iters_ = trial_iter.ls_iters_;
+            Citer.merit_val_ = trial_iter.merit_val_;
+            return SocCorrectionOutcome{true, 0.0};
+        }
+
+        // Rejected. Without an infeasibility reading (theta < 0) SOC cannot
+        // measure progress; stop.
+        const double trial_violation = trial_iter.theta_at_first_rejection_;
+        if (trial_violation < 0.0)
+            return SocCorrectionOutcome{false, std::numeric_limits<double>::infinity()};
+
+        // Accumulate for a possible next round:
+        // c_soc <- alpha_soc*c_soc + c(x_k + alpha_soc*d_soc).
+        eval_trial_constraints(ctx, obj_scale, XSL, dxsl_soc, alpha_soc, XSL2, trial_cons);
+        c_soc = alpha_soc * c_soc + trial_cons;
+        return SocCorrectionOutcome{false, trial_violation};
+    };
+
+    const Action action =
+        soc_run_loop(Citer.theta_at_first_rejection_, max_soc, soc_steps, do_correction);
+
+    if (action != Action::kRetry) {
+        // Reverting to the originally-rejected step: restore the diagnostic
+        // fraction-to-boundary lengths (DXSL/alpha were never touched on a
+        // rejected correction).
+        alphap = alphap_orig;
+        alphad = alphad_orig;
+    }
+    return action;
+}
+
+// ============================================================================
+// ExtendedBacktrackRecovery — see watchdog.h's file docstring, "Extended
+// backtracking" section, for the exact mechanics (why scaling DXSL by the
+// live alpha and re-driving classic_line_search reproduces the SAME ladder
+// with no redundant re-test and no new math).
+// ============================================================================
+RecoveryChain::Action ExtendedBacktrackRecovery::on_step_rejected(
+    IterateInfo &Citer, const std::vector<IterateInfo> &iters, SolverContext &ctx,
+    AcceptanceStrategy &acceptance, GlobalizationMechanism & /*mechanism*/,
+    PSIOPT::LineSearchModes lsmode, double obj_scale, double mu, double prim_obj, double barr_obj,
+    Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
+    Eigen::VectorXd &RHS2, double &alpha, double & /*alphap*/, double & /*alphad*/,
+    int & /*soc_steps*/, int & /*resolved_depth*/, int & /*watchdog_activations*/) {
+    const int max_extended = ctx.settings_.ls_extended_iters_;
+    if (max_extended <= 0)
+        return Action::kAcceptAsIs; // defensive: only built when ls_extended_iters_ > 0.
+
+    // `scale` continues the SAME ladder from the live alpha (compute_step's
+    // return value, passed in as `alpha`) — NOT a restart at 1.0. DXSL itself
+    // is never touched here (only read): the direction that was rejected is
+    // the SAME direction extended backtracking keeps testing at smaller
+    // alpha, exactly like the classic loop's own internal divisions do.
+    Eigen::VectorXd dxsl_ext(DXSL.size());
+    double scale = alpha;
+    for (int i = 0; i < max_extended; ++i) {
+        dxsl_ext = scale * DXSL;
+        IterateInfo trial_iter;
+        const double alpha_result = acceptance.classic_line_search(
+            lsmode, obj_scale, mu, prim_obj, barr_obj, XSL, dxsl_ext, XSL2, RHS, RHS2, trial_iter,
+            iters);
+        if (trial_iter.accepted_) {
+            // Commit the accepted (still-original-direction, further-scaled)
+            // step in place: alg_impl's XSL += alpha*DXSL applies it.
+            DXSL = dxsl_ext;
+            alpha = alpha_result;
+            Citer.accepted_ = true;
+            Citer.ls_iters_ = trial_iter.ls_iters_;
+            Citer.merit_val_ = trial_iter.merit_val_;
+            return Action::kRetry;
+        }
+        // Not accepted: classic_line_search's own internal loop already
+        // divided down to the next untested rung (relative to dxsl_ext);
+        // carry that forward as the next external trial's absolute scale.
+        scale = alpha_result * scale;
+    }
+    return Action::kAcceptAsIs; // extended budget exhausted: take the original rejected step.
+}
+
+// ============================================================================
+// WatchdogRecovery — drives WatchdogState against the real working set. See
+// watchdog.h's file docstring, "Watchdog" section, for the full semantics.
+// ============================================================================
+RecoveryChain::Action WatchdogRecovery::on_step_rejected(
+    IterateInfo &Citer, const std::vector<IterateInfo> &iters, SolverContext &ctx,
+    AcceptanceStrategy &acceptance, GlobalizationMechanism &mechanism,
+    PSIOPT::LineSearchModes lsmode, double obj_scale, double mu, double prim_obj, double barr_obj,
+    Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
+    Eigen::VectorXd &RHS2, double &alpha, double &alphap, double &alphad, int &soc_steps,
+    int &resolved_depth, int &watchdog_activations) {
+    // Always-available proxy for "did the point improve" — see the file
+    // docstring for why prim_obj + barr_obj (rather than a per-variant merit
+    // value) is used here.
+    const double merit = prim_obj + barr_obj;
+    const WatchdogState::Outcome outcome = state_.record_rejected_iteration(mu, merit);
+
+    switch (outcome) {
+    case WatchdogState::Outcome::kAccumulate:
+        // inner_ is enforced non-null at construction (see the class doc) --
+        // no kAcceptAsIs/kRecoveryDepthUnresolved fallback branch is reachable
+        // here.
+        return inner_->on_step_rejected(Citer, iters, ctx, acceptance, mechanism, lsmode,
+                                        obj_scale, mu, prim_obj, barr_obj, XSL, DXSL, XSL2, RHS,
+                                        RHS2, alpha, alphap, alphad, soc_steps, resolved_depth,
+                                        watchdog_activations);
+
+    case WatchdogState::Outcome::kArmed:
+        // Just armed: snapshot the pre-watchdog iterate (XSL as it stands
+        // right now, before this iteration's relaxed-accepted step is
+        // committed) so a later revert can restore it.
+        snapshot_xsl_ = XSL;
+        ++watchdog_activations;
+        [[fallthrough]];
+    case WatchdogState::Outcome::kTrialRelax:
+        Citer.accepted_ = true;
+        resolved_depth = kRecoveryDepthWatchdog;
+        return Action::kAcceptAsIs;
+
+    case WatchdogState::Outcome::kTrialProgress:
+        // Progress observed: the emergency is over, hand this rejection back
+        // to the wrapped chain for its normal treatment. inner_ is enforced
+        // non-null at construction (see the class doc) -- no
+        // kAcceptAsIs/kRecoveryDepthUnresolved fallback branch is reachable
+        // here.
+        return inner_->on_step_rejected(Citer, iters, ctx, acceptance, mechanism, lsmode,
+                                        obj_scale, mu, prim_obj, barr_obj, XSL, DXSL, XSL2, RHS,
+                                        RHS2, alpha, alphap, alphad, soc_steps, resolved_depth,
+                                        watchdog_activations);
+
+    case WatchdogState::Outcome::kTrialRevert:
+        // Window exhausted with no progress: revert XSL to the snapshot and
+        // leave DXSL/alpha at zero so alg_impl's XSL += alpha*DXSL commit is
+        // a no-op on the already-reverted iterate. DXSL is zeroed BEFORE the
+        // XSL assignment (not after): XSL/DXSL are threaded through this
+        // interface as independent Eigen::VectorXd& parameters, but nothing
+        // in the contract (recovery_chain.h) forbids a caller from binding
+        // them to the same underlying storage, and the snapshot write is the
+        // one that must be the LAST write standing on that storage -- a
+        // caller-supplied test double exercising exactly this aliasing is
+        // what caught the ordering bug this comment now documents.
+        DXSL.setZero();
+        XSL = snapshot_xsl_;
+        alpha = 0.0;
+        Citer.accepted_ = true;
+        resolved_depth = kRecoveryDepthWatchdog;
+        return Action::kRetry;
+    }
+    throw std::logic_error(
+        "WatchdogRecovery::on_step_rejected: unreachable WatchdogState::Outcome");
+}
+
+// ============================================================================
+// ChainedRecovery — tries SOC then extended backtracking (see watchdog.h's
+// class doc for the ordering rationale), stamping resolved_depth with
+// whichever link's index actually resolved the rejection.
+// ============================================================================
+RecoveryChain::Action ChainedRecovery::on_step_rejected(
+    IterateInfo &Citer, const std::vector<IterateInfo> &iters, SolverContext &ctx,
+    AcceptanceStrategy &acceptance, GlobalizationMechanism &mechanism,
+    PSIOPT::LineSearchModes lsmode, double obj_scale, double mu, double prim_obj, double barr_obj,
+    Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
+    Eigen::VectorXd &RHS2, double &alpha, double &alphap, double &alphad, int &soc_steps,
+    int &resolved_depth, int &watchdog_activations) {
+    if (soc_) {
+        const Action action =
+            soc_->on_step_rejected(Citer, iters, ctx, acceptance, mechanism, lsmode, obj_scale, mu,
+                                   prim_obj, barr_obj, XSL, DXSL, XSL2, RHS, RHS2, alpha, alphap,
+                                   alphad, soc_steps, resolved_depth, watchdog_activations);
+        if (action != Action::kAcceptAsIs) {
+            resolved_depth = kRecoveryDepthSoc;
+            return action;
+        }
+    }
+    if (extended_) {
+        const Action action = extended_->on_step_rejected(
+            Citer, iters, ctx, acceptance, mechanism, lsmode, obj_scale, mu, prim_obj, barr_obj,
+            XSL, DXSL, XSL2, RHS, RHS2, alpha, alphap, alphad, soc_steps, resolved_depth,
+            watchdog_activations);
+        if (action != Action::kAcceptAsIs) {
+            resolved_depth = kRecoveryDepthExtended;
+            return action;
+        }
+    }
+    resolved_depth = kRecoveryDepthUnresolved;
+    return Action::kAcceptAsIs;
 }
 
 } // namespace tycho::solvers
