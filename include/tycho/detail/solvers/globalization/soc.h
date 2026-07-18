@@ -75,6 +75,13 @@ inline constexpr int kSocRecommendedMaxCorrections = 4;
 // the merit line search's eval-plus-slack-reset convention. alg_impl derives it
 // from RHS.all_cons() at the hook, whose inequality block carries the identical
 // slack reset (see the RHS assembly in psiopt.cpp).
+//
+// Known asymmetry: the augmented-Lagrangian merit variant zeroes constraint
+// entries within tolerance when it records theta_at_first_rejection_, while
+// current_infeasibility is not tolerance-zeroed. The zeroing can only SHRINK
+// the trial-side theta, making the `theta >= current` trigger HARDER to
+// satisfy — i.e. the asymmetry suppresses SOC near feasibility (where it has
+// nothing to gain) and can never spuriously fire it.
 // -----------------------------------------------------------------------------
 inline bool soc_should_trigger(const IterateInfo &citer, double current_infeasibility) {
     if (citer.first_rejection_iter_ != 0)
