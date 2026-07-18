@@ -1,4 +1,4 @@
-"""Coverage for the E2 G2 globalization-knob bindings on PSIOPT.
+"""Coverage for PSIOPT's globalization-knob bindings.
 
 Exercises the Python surface for the five new PSIOPT.Settings fields
 (``acceptance_strategy``, ``merit_penalty_rule``, ``max_soc``,
@@ -143,6 +143,17 @@ class test_BadEnumValues(unittest.TestCase):
     def test_merit_penalty_rule_invalid_raw_value_rejected(self):
         with self.assertRaises(ValueError):
             solvs.MeritPenaltyRules(99)
+
+    def test_enum_property_rejects_raw_int_assignment(self):
+        # Assigning a raw int to the enum-typed PROPERTY goes through
+        # nanobind's convert path, which rejects non-member values with
+        # TypeError (a different path than the ValueError-raising enum
+        # constructor above) -- pin both exception types.
+        opt = solvs.PSIOPT()
+        with self.assertRaises(TypeError):
+            opt.acceptance_strategy = 7
+        with self.assertRaises(TypeError):
+            opt.merit_penalty_rule = 7
 
 
 class test_AcceptanceMeritRecoveryComboGuard(unittest.TestCase):
