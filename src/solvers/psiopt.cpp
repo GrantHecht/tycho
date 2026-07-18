@@ -853,13 +853,70 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
                         "+ equal_cons ({}) + inequal_cons ({})",
                         kkt_dim_, primal_vars_, slack_vars_, equal_cons_, inequal_cons_));
 
+    // acceptance_/mechanism_/governor_/recovery_ are rebuilt from Settings by
+    // rebuild_globalization_components(), NOT here: that construction runs
+    // once per solve invocation (at every run_phase_sequence() entry) rather
+    // than only on (re)transcription, so construction-time knobs
+    // (acceptance_strategy, max_soc, ls_extended_iters, watchdog,
+    // merit_penalty_rule) take effect on the very next solve even without an
+    // intervening set_nlp() call. See rebuild_globalization_components()'s
+    // definition below for the neutrality argument on the default path.
+    this->set_qp_params();
+#ifdef USE_ACCELERATE_SPARSE
+    accelerate_set_num_threads(settings_.qp_threads_);
+#else
+    // Thread-local, not global: only the calling thread's Pardiso thread
+    // count is affected, so concurrent PSIOPT drivers in the same process
+    // (or on other threads) cannot clobber each other's setting. Return
+    // value (previous local count) is intentionally discarded — this is a
+    // fire-and-forget set, matching the prior global-setter semantics.
+    mkl_set_num_threads_local(settings_.qp_threads_);
+#endif
+
+    this->nlp_->analyze_sparsity(this->kkt_sol_.get_matrix());
+#ifdef USE_ACCELERATE_SPARSE
+    // we need to call this to update the internal AccelSparseMatrix since
+    // we changed the sparsity pattern via the reference returned from get_matrix.
+    this->kkt_sol_.reinitialize_internal_matrix_representation();
+#endif
+    this->qp_analyzed_ = false;
+}
+
+// (Re)builds the four globalization components from the CURRENT Settings.
+// Called once at the top of every run_phase_sequence() — i.e. once per solve
+// invocation (optimize()/solve()/solve_optimize()/etc. all route through
+// run_phase_sequence()) — rather than only from set_nlp() (which runs only on
+// (re)transcription). This makes construction-time knobs (acceptance_strategy,
+// max_soc, ls_extended_iters, watchdog, merit_penalty_rule) live at the next
+// solve even when no set_nlp() call intervenes, matching every other Settings
+// field (which alg_impl/governor_/etc. already read live off settings_ each
+// iteration). Before this fix, these four knobs were snapshotted at whichever
+// (re)transcription last ran set_nlp() and silently ignored by a later
+// solve() call that changed them without retranscribing — see
+// tychopy/test/test_Solvers/test_psiopt_globalization_settings.py's
+// test_ComponentRebuildTakesEffectWithoutRetranscription for the reachable-
+// from-Python repro (the two acceptance strategies produce different
+// iteration counts from the same cold start, so a stale acceptance_ is
+// directly observable).
+//
+// Neutrality on the default (all-off) path: this call constructs the exact
+// same four concrete types (ClassicMeritAcceptance, BacktrackingLineSearch,
+// ClassicAdaptiveGovernor, NoopRecovery) that set_nlp() used to construct —
+// only the MOMENT of construction moves (every solve entry vs. every
+// (re)transcription). No consumer can observe the difference: nothing reads
+// acceptance_/mechanism_/governor_/recovery_ between set_nlp() returning and
+// run_phase_sequence() reaching this call (verified by grep — the only
+// consumers are alg_impl's dispatch and the per-phase reset() calls, both
+// inside run_phase_sequence()'s own call graph), and ClassicMeritAcceptance's
+// SolverContext captures (this->nlp_.get(), and primal_vars_/slack_vars_/
+// equal_cons_/inequal_cons_/kkt_dim_ by const reference) are already their
+// final values at run_phase_sequence() entry: set_nlp() always runs first
+// (run_phase_sequence() throws if nlp_ is unset) and is the only place those
+// members are written, so re-snapshotting them here at solve time reproduces
+// bit-identical captures to the old per-transcription construction.
+void tycho::solvers::PSIOPT::rebuild_globalization_components() {
     // (Re)build the step-acceptance strategy. Default (classic_merit) builds
-    // ClassicMeritAcceptance wired to a SolverContext view of this solver;
-    // rebuilt here (rather than once in the constructor) so the SolverContext's
-    // captured nlp_ raw pointer tracks the NLP just installed (dims/settings/
-    // scratch are captured by reference and stay live). PSIOPT owns acceptance_,
-    // so the SolverContext's references cannot outlive their referents.
-    //
+    // ClassicMeritAcceptance wired to a SolverContext view of this solver.
     // Opting in (acceptance_strategy_ == merit) builds ModernMeritAcceptance
     // instead — driven through the GENERIC compute_step path with the penalty
     // rule chosen by merit_penalty_rule_. The modern strategy carries only its
@@ -919,26 +976,6 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
     if (this->settings_.watchdog_) {
         this->recovery_ = std::make_unique<WatchdogRecovery>(std::move(this->recovery_));
     }
-
-    this->set_qp_params();
-#ifdef USE_ACCELERATE_SPARSE
-    accelerate_set_num_threads(settings_.qp_threads_);
-#else
-    // Thread-local, not global: only the calling thread's Pardiso thread
-    // count is affected, so concurrent PSIOPT drivers in the same process
-    // (or on other threads) cannot clobber each other's setting. Return
-    // value (previous local count) is intentionally discarded — this is a
-    // fire-and-forget set, matching the prior global-setter semantics.
-    mkl_set_num_threads_local(settings_.qp_threads_);
-#endif
-
-    this->nlp_->analyze_sparsity(this->kkt_sol_.get_matrix());
-#ifdef USE_ACCELERATE_SPARSE
-    // we need to call this to update the internal AccelSparseMatrix since
-    // we changed the sparsity pattern via the reference returned from get_matrix.
-    this->kkt_sol_.reinitialize_internal_matrix_representation();
-#endif
-    this->qp_analyzed_ = false;
 }
 
 // max_primal_dual_step was extracted verbatim into BacktrackingLineSearch
@@ -1441,12 +1478,12 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
 
         // Recovery-chain hook. This is where a rejected step's
         // recovery gets a say -- SOC -> extended-backtrack -> watchdog-revert
-        // dispatch from this point (see set_nlp's wiring comment); the
-        // feasibility switch remains a future link. The inertia/perturbation
-        // ladder above (factor_impl's Zfac cycling + escalation) is a
-        // SEPARATE mechanism and stays out of this chain until the
-        // proximal-regularization inertia mode is implemented -- it is NOT
-        // invoked or bypassed here.
+        // dispatch from this point (see rebuild_globalization_components's
+        // wiring comment); the feasibility switch remains a future link. The
+        // inertia/perturbation ladder above (factor_impl's Zfac cycling +
+        // escalation) is a SEPARATE mechanism and stays out of this chain
+        // until the proximal-regularization inertia mode is implemented --
+        // it is NOT invoked or bypassed here.
         //
         // The call is GATED on an actual rejection: should_dispatch_recovery
         // fires the hook only when the line search reported the trial step
@@ -1456,7 +1493,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // runs no line search) is excluded too. On the default solve path every
         // step is accepted, so the hook is never invoked at all.
         //
-        // By default recovery_ is a NoopRecovery (set_nlp installs it whenever
+        // By default recovery_ is a NoopRecovery
+        // (rebuild_globalization_components() installs it whenever
         // max_soc_ == 0, ls_extended_iters_ == 0, and watchdog_ == false),
         // whose on_step_rejected() unconditionally returns kAcceptAsIs and
         // touches no state, so the kAcceptAsIs branch below is exactly
@@ -1712,6 +1750,16 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
 
     this->result_.reset_accumulators();
     settings_.validate();
+
+    // Rebuild acceptance_/mechanism_/governor_/recovery_ from the
+    // just-validated Settings on every solve entry, not just on
+    // (re)transcription (set_nlp() no longer builds them) — see
+    // rebuild_globalization_components()'s doc comment for why this must run
+    // per solve rather than per transcription, and for the neutrality
+    // argument on the default (all-off) path. nlp_ is guaranteed non-null
+    // here (checked above), and set_nlp() has always already run (same
+    // guarantee), so the SolverContext captures this call takes are final.
+    this->rebuild_globalization_components();
 
     // Re-apply the QP threading setting on every solve entry, not just in
     // set_nlp() (which only runs on transcribe): a single-thread pin left on

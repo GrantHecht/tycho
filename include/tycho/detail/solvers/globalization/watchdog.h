@@ -6,9 +6,10 @@
 // watchdog, and the ChainedRecovery composition that ties them to SOC
 // (soc.h). All three are opt-in and default OFF; with both
 // Settings::ls_extended_iters_ == 0 and Settings::watchdog_ == false (and
-// Settings::max_soc_ == 0), PSIOPT::set_nlp installs a plain NoopRecovery and
-// the solver is bit-identical to its pre-recovery-chain behavior — see the
-// wiring comment in psiopt.cpp's set_nlp.
+// Settings::max_soc_ == 0), PSIOPT::rebuild_globalization_components()
+// installs a plain NoopRecovery and the solver is bit-identical to its
+// pre-recovery-chain behavior — see the wiring comment in psiopt.cpp's
+// rebuild_globalization_components().
 //
 // -----------------------------------------------------------------------------
 // Extended backtracking (ExtendedBacktrackRecovery)
@@ -281,8 +282,9 @@ class WatchdogState {
 // window (kArmed/kTrialRelax), it is instead overridden with a relaxed
 // accept; on kTrialRevert, XSL is restored to the pre-watchdog snapshot.
 //
-// `inner` must be non-null -- every construction site (PSIOPT::set_nlp) always
-// supplies a real chain (NoopRecovery at minimum), so the constructor enforces
+// `inner` must be non-null -- every construction site
+// (PSIOPT::rebuild_globalization_components()) always supplies a real chain
+// (NoopRecovery at minimum), so the constructor enforces
 // this invariant once, up front, letting on_step_rejected/notify_step_accepted/
 // reset dereference inner_ unconditionally rather than guarding a state that
 // can never actually occur.

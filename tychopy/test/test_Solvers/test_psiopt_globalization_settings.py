@@ -8,6 +8,14 @@ diagnostics (``last_soc_steps``, ``last_watchdog_activations``,
 validation, invalid enum construction, and the
 ``acceptance_strategy=merit`` + classic-path-recovery combo guard in
 ``Settings::validate()`` (src/solvers/psiopt.cpp).
+
+Also regression-tests the "component construction staleness" review
+finding: ``acceptance_``/``mechanism_``/``governor_``/``recovery_`` used to
+be (re)built only inside ``PSIOPT::set_nlp()`` (i.e. only on
+(re)transcription), so construction-time knobs like
+``acceptance_strategy`` changed AFTER a first solve were silently ignored
+by a later re-solve that did not retranscribe. See
+``test_ComponentRebuildTakesEffectWithoutRetranscription`` below.
 """
 
 import unittest
@@ -212,6 +220,86 @@ class test_SolveDiagnostics(unittest.TestCase):
         self.assertEqual(len(hist), 4)
         for count in hist:
             self.assertIsInstance(count, int)
+
+
+class test_ComponentRebuildTakesEffectWithoutRetranscription(unittest.TestCase):
+    """Regression test for the "component construction staleness" review
+    finding on PSIOPT::set_nlp() / PSIOPT::rebuild_globalization_components()
+    (src/solvers/psiopt.cpp): the four globalization components used to be
+    constructed only in set_nlp() (which runs only on (re)transcription),
+    so a construction-time knob like ``acceptance_strategy`` changed AFTER
+    a first solve was silently ignored by a re-solve that did not
+    retranscribe.
+
+    Reachability from Python: OptimizationProblem::optimize()
+    (include/tycho/detail/solvers/optimization_problem.h) gates
+    ``transcribe()`` (and therefore ``set_nlp()``) on ``do_transcription_``
+    alone, which is cleared once transcribe() runs and set back to True
+    only by problem-EDITING calls (add_objective/add_*_con/
+    reset_transcription) -- never by writing an optimizer setting, and
+    NOT by ``set_vars()`` (a plain assignment to active_variables_). So:
+    optimize(), set_vars(<original guess>), flip acceptance_strategy,
+    optimize() again reaches run_phase_sequence() a second time WITHOUT an
+    intervening set_nlp() call, from the SAME cold start as the first
+    solve -- the exact repro path for the staleness bug, with the
+    warm-start confound removed.
+
+    The observable: on this Rosenbrock+disk fixture from [-1, -1] the two
+    acceptance strategies take genuinely different iterate paths (measured
+    on the dev toolchain: classic_merit 22 iterations, merit/wmno 20).
+    Rather than pin those exact counts, the test computes BOTH cold-start
+    reference counts from fresh problems, requires the fixture to
+    discriminate (skip if a toolchain ever makes them coincide -- then
+    this observable is void, not failing), and asserts the
+    re-solve-without-retranscription run reproduces the MERIT reference
+    count, not the classic one. Under the pre-fix code the re-solve still
+    ran the stale ClassicMeritAcceptance and reproduced the classic count.
+    """
+
+    def test_acceptance_strategy_switch_is_live_on_resolve(self):
+        # Cold-start reference counts, each from a fresh problem (each
+        # first optimize() transcribes, so both references are built the
+        # ordinary way).
+        ref_classic = _make_problem()
+        self.assertEqual(ref_classic.optimize(), solvs.ConvergenceFlags.CONVERGED)
+        iters_classic = ref_classic.optimizer.last_iter_num
+
+        ref_merit = _make_problem()
+        ref_merit.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.merit
+        self.assertEqual(ref_merit.optimize(), solvs.ConvergenceFlags.CONVERGED)
+        iters_merit = ref_merit.optimizer.last_iter_num
+
+        if iters_classic == iters_merit:
+            self.skipTest(
+                "classic_merit and merit converge in the same iteration "
+                "count on this fixture/toolchain; the iteration-count "
+                "observable cannot discriminate the strategies here"
+            )
+
+        # The regression scenario: solve with defaults (transcribes once),
+        # restore the ORIGINAL cold start via set_vars (which does NOT set
+        # do_transcription_), flip the construction-time knob, re-optimize.
+        # No transcribe()/set_nlp() runs before the second optimize().
+        prob = _make_problem()
+        self.assertEqual(prob.optimize(), solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(prob.optimizer.last_iter_num, iters_classic)
+
+        prob.set_vars([-1, -1])
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.merit
+        self.assertEqual(prob.optimize(), solvs.ConvergenceFlags.CONVERGED)
+        iters_resolve = prob.optimizer.last_iter_num
+
+        # Identical solver configuration + identical cold start as the
+        # merit reference => identical iterate sequence; under the pre-fix
+        # code this came out equal to iters_classic instead (stale
+        # ClassicMeritAcceptance still installed).
+        self.assertEqual(
+            iters_resolve,
+            iters_merit,
+            "acceptance_strategy=merit did not take effect on a re-solve "
+            "without retranscription -- construction-staleness regression "
+            "(globalization components not rebuilt per solve invocation)",
+        )
 
 
 if __name__ == "__main__":

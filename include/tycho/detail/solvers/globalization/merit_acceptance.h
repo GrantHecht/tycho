@@ -58,9 +58,11 @@ namespace tycho::solvers {
 // Holds a SolverContext BY VALUE (references-only aggregate; cheap to copy,
 // cannot dangle because PSIOPT owns the acceptance_ unique_ptr and therefore
 // outlives it, and every SolverContext member refers to a stable PSIOPT
-// member). Rebuilt by PSIOPT::set_nlp each time the NLP/dims change so the
-// captured nlp_ raw pointer never goes stale (dims are captured by reference
-// and track the live members regardless).
+// member). Rebuilt by PSIOPT::rebuild_globalization_components() at the start
+// of every solve invocation, so the captured nlp_ raw pointer never goes
+// stale (dims are captured by reference and track the live members
+// regardless; nlp_ and the dims are themselves only ever written by
+// set_nlp(), which always precedes any solve).
 // =============================================================================
 class ClassicMeritAcceptance : public AcceptanceStrategy {
   public:

@@ -776,7 +776,8 @@ double ClassicAdaptiveGovernor::update_barrier(PSIOPT::BarrierModes barmode, dou
 
 // ============================================================================
 // SocRecovery — second-order correction (Wächter & Biegler 2006, §2.4). Only
-// reached when SOC is enabled (max_soc_ > 0, so set_nlp built a SocRecovery)
+// reached when SOC is enabled (max_soc_ > 0, so rebuild_globalization_
+// components() built a SocRecovery)
 // AND the line search rejected a usable step (the recovery-dispatch gate). See
 // globalization/soc.h for the algorithm overview and the trigger/termination
 // predicates driven below.

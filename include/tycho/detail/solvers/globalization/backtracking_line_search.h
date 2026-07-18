@@ -66,7 +66,8 @@ namespace tycho::solvers {
 // backtrack on the scaled search direction.
 //
 // Stateless (holds NO solver state, per GlobalizationMechanism's ownership
-// rule). Constructed once by PSIOPT::set_nlp; every call receives the live
+// rule). Constructed by PSIOPT::rebuild_globalization_components() at the
+// start of every solve invocation; every call receives the live
 // SolverContext view of the solver as an explicit parameter.
 // =============================================================================
 class BacktrackingLineSearch : public GlobalizationMechanism {

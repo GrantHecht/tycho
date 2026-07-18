@@ -89,9 +89,10 @@ namespace tycho::solvers {
 // ClassicAdaptiveGovernor — the classic PROBE/LOQO barrier-parameter update.
 //
 // Stateless (holds NO solver state, per BarrierGovernor's ownership rule).
-// Constructed once by PSIOPT::set_nlp; every call receives the live
-// SolverContext view of the solver and the GlobalizationMechanism as explicit
-// parameters. Always reports in_monotone_mode() == false (free-mode only).
+// Constructed by PSIOPT::rebuild_globalization_components() at the start of
+// every solve invocation; every call receives the live SolverContext view of
+// the solver and the GlobalizationMechanism as explicit parameters. Always
+// reports in_monotone_mode() == false (free-mode only).
 // =============================================================================
 class ClassicAdaptiveGovernor : public BarrierGovernor {
   public:

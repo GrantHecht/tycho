@@ -490,41 +490,55 @@ class PSIOPT {
     // Classic merit line-search acceptance, extracted from the former
     // ls_impl/ls_lang/ls_l1/ls_auglang bodies (now ClassicMeritAcceptance). Held
     // through the AcceptanceStrategy interface (forward-declared above); rebuilt
-    // by set_nlp() wired to a SolverContext view of this solver. Never null once
-    // set_nlp has run, which run_phase_sequence guarantees before any solve.
+    // by rebuild_globalization_components() wired to a SolverContext view of
+    // this solver. Never null once run_phase_sequence has run it once, which
+    // every solve entry point guarantees before any iteration.
     std::unique_ptr<AcceptanceStrategy> acceptance_;
 
     // Step-length globalization mechanism, extracted from the
     // former max_primal_dual_step/max_step_to_boundary bodies (now
     // BacktrackingLineSearch). Held through the GlobalizationMechanism interface
-    // (forward-declared above); rebuilt by set_nlp() alongside acceptance_.
-    // Never null once set_nlp has run, which run_phase_sequence guarantees
-    // before any solve.
+    // (forward-declared above); rebuilt by rebuild_globalization_components()
+    // alongside acceptance_. Never null once run_phase_sequence has run it
+    // once, which every solve entry point guarantees before any iteration.
     std::unique_ptr<GlobalizationMechanism> mechanism_;
 
     // Barrier-parameter governor, extracted from the former
     // PROBE/LOQO barmode switch + loqo_mu/mpc_mu bodies (now
     // ClassicAdaptiveGovernor). Held through the BarrierGovernor interface
-    // (forward-declared above); rebuilt by set_nlp() alongside acceptance_/
-    // mechanism_. Never null once set_nlp has run, which run_phase_sequence
-    // guarantees before any solve.
+    // (forward-declared above); rebuilt by rebuild_globalization_components()
+    // alongside acceptance_/mechanism_. Never null once run_phase_sequence has
+    // run it once, which every solve entry point guarantees before any
+    // iteration.
     std::unique_ptr<BarrierGovernor> governor_;
 
     // Post-rejection recovery chain, extracted-as-a-hook (no
     // prior code existed for this — this hook point is wired with a no-op
     // implementation). Held through the RecoveryChain interface
-    // (forward-declared above); rebuilt by set_nlp() alongside acceptance_/
-    // mechanism_/governor_. Never null once set_nlp has run, which
-    // run_phase_sequence guarantees before any solve. With max_soc_ == 0,
-    // ls_extended_iters_ == 0, and watchdog_ == false (all defaults), set_nlp
-    // installs plain NoopRecovery, which always returns kAcceptAsIs and is
-    // stateless — bit-identical to pre-recovery-chain behavior. Opt in to any
-    // subset of SocRecovery/ExtendedBacktrackRecovery (composed in that order
-    // by ChainedRecovery) and WatchdogRecovery (an outer decorator over
-    // whatever chain results) via the corresponding Settings fields — see
-    // globalization/soc.h and globalization/watchdog.h. The feasibility
-    // switch remains a future link.
+    // (forward-declared above); rebuilt by rebuild_globalization_components()
+    // alongside acceptance_/mechanism_/governor_. Never null once
+    // run_phase_sequence has run it once, which every solve entry point
+    // guarantees before any iteration. With max_soc_ == 0, ls_extended_iters_
+    // == 0, and watchdog_ == false (all defaults), rebuild_globalization_
+    // components() installs plain NoopRecovery, which always returns
+    // kAcceptAsIs and is stateless — bit-identical to pre-recovery-chain
+    // behavior. Opt in to any subset of SocRecovery/ExtendedBacktrackRecovery
+    // (composed in that order by ChainedRecovery) and WatchdogRecovery (an
+    // outer decorator over whatever chain results) via the corresponding
+    // Settings fields — see globalization/soc.h and globalization/watchdog.h.
+    // The feasibility switch remains a future link.
     std::unique_ptr<RecoveryChain> recovery_;
+
+    // (Re)builds acceptance_/mechanism_/governor_/recovery_ from the current
+    // Settings. Called once at the top of every run_phase_sequence() (i.e.
+    // once per solve invocation — optimize()/solve()/etc. all route through
+    // it), NOT from set_nlp(): construction-time knobs (acceptance_strategy,
+    // max_soc, ls_extended_iters, watchdog, merit_penalty_rule) must take
+    // effect on the very next solve even without a re-transcription in
+    // between, matching every other Settings field's live-at-next-solve
+    // semantics. See psiopt.cpp's definition for the neutrality argument on
+    // the default (all-off) path.
+    void rebuild_globalization_components();
 
     // QP parameter setup — called automatically by set_nlp()
     void set_qp_params();

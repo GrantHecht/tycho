@@ -27,8 +27,9 @@
 //     (RecoveryChain::Action::kAcceptAsIs — bit-identical to the no-SOC path).
 //
 // Default is off (max_soc_ == 0): SocRecovery is not even constructed then
-// (set_nlp installs a NoopRecovery), so the solver is bit-identical to its
-// pre-SOC behavior. The correctness-critical numeric path is exercised
+// (rebuild_globalization_components() installs a NoopRecovery), so the
+// solver is bit-identical to its pre-SOC behavior. The correctness-critical
+// numeric path is exercised
 // end-to-end by the solver corpus; the unit tests here truth-table the trigger,
 // the termination policy, and the correction counter with scripted outcomes.
 //
