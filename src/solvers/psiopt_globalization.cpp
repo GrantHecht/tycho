@@ -769,13 +769,13 @@ RecoveryChain::Action WatchdogRecovery::on_step_rejected(
 
     switch (outcome) {
     case WatchdogState::Outcome::kAccumulate:
-        if (inner_)
-            return inner_->on_step_rejected(Citer, iters, ctx, acceptance, mechanism, lsmode,
-                                            obj_scale, mu, prim_obj, barr_obj, XSL, DXSL, XSL2,
-                                            RHS, RHS2, alpha, alphap, alphad, soc_steps,
-                                            resolved_depth, watchdog_activations);
-        resolved_depth = kRecoveryDepthUnresolved;
-        return Action::kAcceptAsIs;
+        // inner_ is enforced non-null at construction (see the class doc) --
+        // no kAcceptAsIs/kRecoveryDepthUnresolved fallback branch is reachable
+        // here.
+        return inner_->on_step_rejected(Citer, iters, ctx, acceptance, mechanism, lsmode,
+                                        obj_scale, mu, prim_obj, barr_obj, XSL, DXSL, XSL2, RHS,
+                                        RHS2, alpha, alphap, alphad, soc_steps, resolved_depth,
+                                        watchdog_activations);
 
     case WatchdogState::Outcome::kArmed:
         // Just armed: snapshot the pre-watchdog iterate (XSL as it stands
@@ -791,21 +791,28 @@ RecoveryChain::Action WatchdogRecovery::on_step_rejected(
 
     case WatchdogState::Outcome::kTrialProgress:
         // Progress observed: the emergency is over, hand this rejection back
-        // to the wrapped chain for its normal treatment.
-        if (inner_)
-            return inner_->on_step_rejected(Citer, iters, ctx, acceptance, mechanism, lsmode,
-                                            obj_scale, mu, prim_obj, barr_obj, XSL, DXSL, XSL2,
-                                            RHS, RHS2, alpha, alphap, alphad, soc_steps,
-                                            resolved_depth, watchdog_activations);
-        resolved_depth = kRecoveryDepthUnresolved;
-        return Action::kAcceptAsIs;
+        // to the wrapped chain for its normal treatment. inner_ is enforced
+        // non-null at construction (see the class doc) -- no
+        // kAcceptAsIs/kRecoveryDepthUnresolved fallback branch is reachable
+        // here.
+        return inner_->on_step_rejected(Citer, iters, ctx, acceptance, mechanism, lsmode,
+                                        obj_scale, mu, prim_obj, barr_obj, XSL, DXSL, XSL2, RHS,
+                                        RHS2, alpha, alphap, alphad, soc_steps, resolved_depth,
+                                        watchdog_activations);
 
     case WatchdogState::Outcome::kTrialRevert:
         // Window exhausted with no progress: revert XSL to the snapshot and
         // leave DXSL/alpha at zero so alg_impl's XSL += alpha*DXSL commit is
-        // a no-op on the already-reverted iterate.
-        XSL = snapshot_xsl_;
+        // a no-op on the already-reverted iterate. DXSL is zeroed BEFORE the
+        // XSL assignment (not after): XSL/DXSL are threaded through this
+        // interface as independent Eigen::VectorXd& parameters, but nothing
+        // in the contract (recovery_chain.h) forbids a caller from binding
+        // them to the same underlying storage, and the snapshot write is the
+        // one that must be the LAST write standing on that storage -- a
+        // caller-supplied test double exercising exactly this aliasing is
+        // what caught the ordering bug this comment now documents.
         DXSL.setZero();
+        XSL = snapshot_xsl_;
         alpha = 0.0;
         Citer.accepted_ = true;
         resolved_depth = kRecoveryDepthWatchdog;

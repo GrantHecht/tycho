@@ -89,6 +89,39 @@ TEST(WatchdogStateArm, MuChangeResetsBeforeArming) {
     EXPECT_FALSE(s.armed());
 }
 
+// A genuinely accepted iteration in between rejections (record_accepted_
+// iteration -- see notify_step_accepted() on RecoveryChain) resets the
+// consecutive-shortened count exactly like a mu change does: [9 rejections,
+// accepted, 1 rejection] must NOT arm (this is the sequence the watchdog.h
+// docstring's now-corrected "cannot mis-arm" note pins). The control case --
+// 10 STRAIGHT rejections, no accepted iteration in between -- DOES arm.
+TEST(WatchdogStateArm, AcceptedIterationResetsConsecutiveCount) {
+    static_assert(kWatchdogShortenedIterTrigger == 10,
+                 "test assumes the paper's 10-rejection trigger");
+
+    WatchdogState not_armed;
+    for (int i = 0; i < kWatchdogShortenedIterTrigger - 1; ++i)
+        not_armed.record_rejected_iteration(/*mu=*/1.0, /*merit=*/10.0);
+    ASSERT_EQ(not_armed.consecutive_shortened(), kWatchdogShortenedIterTrigger - 1);
+
+    not_armed.record_accepted_iteration();
+    EXPECT_EQ(not_armed.consecutive_shortened(), 0);
+    EXPECT_FALSE(not_armed.armed());
+
+    EXPECT_EQ(not_armed.record_rejected_iteration(/*mu=*/1.0, /*merit=*/10.0),
+              Outcome::kAccumulate); // 1st of a fresh count, not the 10th overall
+    EXPECT_EQ(not_armed.consecutive_shortened(), 1);
+    EXPECT_FALSE(not_armed.armed());
+
+    // Control: the same kWatchdogShortenedIterTrigger rejections with no
+    // accepted iteration in between DOES arm.
+    WatchdogState armed;
+    for (int i = 0; i < kWatchdogShortenedIterTrigger - 1; ++i)
+        armed.record_rejected_iteration(/*mu=*/1.0, /*merit=*/10.0);
+    EXPECT_EQ(armed.record_rejected_iteration(/*mu=*/1.0, /*merit=*/10.0), Outcome::kArmed);
+    EXPECT_TRUE(armed.armed());
+}
+
 // Once armed, a trial iterate that beats the snapshot's merit reference
 // disarms (kTrialProgress) and clears the count entirely.
 TEST(WatchdogStateTrial, ProgressDisarms) {
@@ -390,10 +423,12 @@ class WatchdogSpyRecovery : public RecoveryChain {
         ++calls_;
         return action_;
     }
+    void notify_step_accepted() override { ++notify_accepted_calls_; }
     void reset() override { ++resets_; }
 
     int calls_ = 0;
     int resets_ = 0;
+    int notify_accepted_calls_ = 0;
 
   private:
     Action action_;
@@ -493,6 +528,22 @@ TEST(ChainedRecoveryOrdering, BothDeclineIsUnresolved) {
 
     EXPECT_EQ(action, Action::kAcceptAsIs);
     EXPECT_EQ(d.resolved_depth, kRecoveryDepthUnresolved);
+}
+
+// notify_step_accepted() propagates to BOTH links unconditionally (unlike
+// on_step_rejected's short-circuit dispatch order) -- every link with
+// per-solve state gets a chance to reset on real progress.
+TEST(ChainedRecoveryOrdering, NotifyStepAcceptedPropagatesToBothLinks) {
+    auto soc_spy = std::make_unique<WatchdogSpyRecovery>(Action::kRetry);
+    auto ext_spy = std::make_unique<WatchdogSpyRecovery>(Action::kRetry);
+    WatchdogSpyRecovery *soc_ptr = soc_spy.get();
+    WatchdogSpyRecovery *ext_ptr = ext_spy.get();
+    ChainedRecovery chain(std::move(soc_spy), std::move(ext_spy));
+
+    chain.notify_step_accepted();
+
+    EXPECT_EQ(soc_ptr->notify_accepted_calls_, 1);
+    EXPECT_EQ(ext_ptr->notify_accepted_calls_, 1);
 }
 
 // Drives WatchdogRecovery once with a fixed mu (kept constant across the
@@ -668,6 +719,60 @@ TEST(WatchdogRecoveryDecorator, ProgressDisarmsAndDelegatesBack) {
     EXPECT_EQ(action, Action::kRetry); // inner's configured return value
     EXPECT_EQ(inner_ptr->calls_, kWatchdogShortenedIterTrigger); // consulted this time
     EXPECT_EQ(watchdog_activations, 1);                          // no re-arm from this call
+}
+
+// notify_step_accepted() resets the arming counter AND threads through to
+// inner_: [9 rejections, notify accepted, 1 rejection] must NOT arm (mirrors
+// the WatchdogStateArm-level pin, driven this time through the decorator so
+// the inner-delegation wiring is covered too).
+TEST(WatchdogRecoveryDecorator, NotifyStepAcceptedResetsArmingCounter) {
+    PSIOPT::Settings settings;
+    KktSolverType solver;
+    int zero = 0;
+    Eigen::VectorXd scratch;
+    SolverContext ctx = watchdog_dummy_context(solver, settings, zero, scratch);
+    WatchdogUnusedAcceptance acceptance;
+    WatchdogUnusedMechanism mechanism;
+
+    auto inner = std::make_unique<WatchdogSpyRecovery>(Action::kAcceptAsIs);
+    WatchdogSpyRecovery *inner_ptr = inner.get();
+    WatchdogRecovery watchdog(std::move(inner));
+
+    constexpr double kMu = 1.0;
+    int watchdog_activations = 0;
+
+    static_assert(kWatchdogShortenedIterTrigger == 10,
+                 "test assumes the paper's 10-rejection trigger");
+    for (int i = 0; i < kWatchdogShortenedIterTrigger - 1; ++i) {
+        Eigen::VectorXd v(1);
+        v << 1.0;
+        IterateInfo citer;
+        double alpha = 1.0;
+        int resolved_depth = kRecoveryDepthUnresolved;
+        drive_watchdog(watchdog, ctx, acceptance, mechanism, v, citer, kMu, /*prim_obj=*/10.0,
+                      alpha, resolved_depth, watchdog_activations);
+    }
+    ASSERT_EQ(inner_ptr->calls_, kWatchdogShortenedIterTrigger - 1);
+    ASSERT_EQ(watchdog_activations, 0); // not yet armed
+
+    watchdog.notify_step_accepted();
+    EXPECT_EQ(inner_ptr->notify_accepted_calls_, 1); // threaded through to inner_
+
+    // One more rejection: with the counter reset by the notify above, this is
+    // the 1st of a fresh count (kAccumulate, delegates to inner), NOT the
+    // 10th overall (kArmed, which would bypass inner and revert on the
+    // NEXT two calls instead).
+    Eigen::VectorXd v(1);
+    v << 1.0;
+    IterateInfo citer;
+    double alpha = 1.0;
+    int resolved_depth = kRecoveryDepthUnresolved;
+    const Action action = drive_watchdog(watchdog, ctx, acceptance, mechanism, v, citer, kMu,
+                                         /*prim_obj=*/10.0, alpha, resolved_depth,
+                                         watchdog_activations);
+    EXPECT_EQ(action, Action::kAcceptAsIs); // inner's configured return value
+    EXPECT_EQ(inner_ptr->calls_, kWatchdogShortenedIterTrigger); // consulted, not bypassed
+    EXPECT_EQ(watchdog_activations, 0);                          // still not armed
 }
 
 // reset() propagates to the wrapped chain (behavior-neutral for a stateless

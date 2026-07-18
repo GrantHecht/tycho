@@ -133,6 +133,18 @@ class RecoveryChain {
                                      double &alphap, double &alphad, int &soc_steps,
                                      int &resolved_depth, int &watchdog_activations) = 0;
 
+    // Called once per genuinely ACCEPTED iteration -- i.e. the rejection hook
+    // above was skipped this iteration because should_dispatch_recovery was
+    // false (GoodStep && Citer.accepted_; see alg_impl's call site in
+    // psiopt.cpp, in the branch mirroring should_dispatch_recovery's gate).
+    // Implementations MAY use this to reset counters tied to real progress
+    // (e.g. WatchdogRecovery's consecutive-shortened-iteration count -- see
+    // watchdog.h); an implementation must NOT touch solver state (XSL/DXSL/
+    // etc -- none of which are even passed here) or mutate Citer/iters/ctx.
+    // Default: empty body -- NoopRecovery and every other currently-stateless
+    // link inherit it unchanged (behavior-neutral).
+    virtual void notify_step_accepted() {}
+
     // μ-event / phase-change reset hook — see the ownership-rule note above.
     virtual void reset() = 0;
 };

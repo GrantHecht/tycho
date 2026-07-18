@@ -62,20 +62,25 @@
 // before reverting.
 //
 // Architectural scope note (read before touching arming semantics): the ONLY
-// hook this recovery-chain layer has into the solve loop is on_step_rejected,
-// invoked exactly when the classic backtrack FULLY rejects a step (every one
-// of max_ls_iters_ trials failed the merit test) — see
-// should_dispatch_recovery in recovery_chain.h. An iteration that backtracks
-// to some alpha < 1 but still finds an acceptable trial (Citer.accepted_ ==
-// true at some j > 0) never reaches this hook at all. Consequently "shortened
-// iteration" for WatchdogState's purposes means "a full rejection was
-// dispatched here", not the broader "any alpha < 1 iteration" a fully
-// integrated watchdog (observing every solve iteration) would use. This is a
-// CONSERVATIVE narrowing: it can only arm later (or not at all) relative to
-// full paper semantics, counting only the most severe form of shortening;
-// it can never mis-arm on an iteration it never observes. A future change
-// that gives alg_impl a per-iteration (not just per-rejection) hook could
-// widen this.
+// REJECTION-observing hook this recovery-chain layer has into the solve loop
+// is on_step_rejected, invoked exactly when the classic backtrack FULLY
+// rejects a step (every one of max_ls_iters_ trials failed the merit test) —
+// see should_dispatch_recovery in recovery_chain.h. An iteration that
+// backtracks to some alpha < 1 but still finds an acceptable trial
+// (Citer.accepted_ == true at some j > 0) never reaches this hook at all.
+// Consequently "shortened iteration" for WatchdogState's purposes means "a
+// full rejection was dispatched here", not the broader "any alpha < 1
+// iteration" a fully integrated watchdog (observing every solve iteration)
+// would use. This is a CONSERVATIVE narrowing: it can only arm later (or not
+// at all) relative to full paper semantics, counting only the most severe
+// form of shortening. A genuinely ACCEPTED iteration in between two
+// rejections is observed through the separate notify_step_accepted() hook
+// (RecoveryChain), which WatchdogRecovery uses to reset
+// consecutive_shortened_ on real progress — without that hook the counter
+// would keep summing non-consecutive rejections straight across an accepted
+// iteration and mis-arm. A future change that gives alg_impl a per-iteration
+// (not just per-rejection) hook could widen the rejection side of this
+// further.
 //
 // WatchdogState is a pure, machinery-free state machine (mirrors soc.h's
 // soc_should_trigger/soc_should_continue/soc_run_loop split of policy from
@@ -95,7 +100,9 @@
 //   - Not armed: each rejected iteration increments a consecutive-shortened
 //     counter (reset to 0 if the barrier parameter mu changed since the
 //     previous call — a mu change invalidates the count, since it belongs to
-//     a different barrier subproblem). On reaching
+//     a different barrier subproblem — and ALSO reset to 0 by
+//     notify_step_accepted() on any genuinely accepted iteration observed in
+//     between, since that iteration broke the "consecutive" run). On reaching
 //     kWatchdogShortenedIterTrigger, WatchdogState arms: it records the
 //     CURRENT mu and merit as the snapshot reference (WatchdogRecovery also
 //     copies XSL), and this SAME call becomes trial #1 of the window — it is
@@ -121,6 +128,7 @@
 #pragma once
 
 #include <memory>
+#include <stdexcept>
 #include <vector>
 
 #include <Eigen/Core>
@@ -226,6 +234,16 @@ class WatchdogState {
         return accumulate(mu, merit);
     }
 
+    // Reset the consecutive-shortened counter on a genuinely accepted
+    // iteration (see notify_step_accepted() on RecoveryChain, which
+    // WatchdogRecovery threads into this call): a real accept breaks the
+    // "consecutive" run that arming depends on, so counting toward the NEXT
+    // arm attempt must start over from this point. Does not touch
+    // armed_/trial_count_/the snapshot -- if a trial window is already open,
+    // that window's own rejected-iteration bookkeeping
+    // (record_rejected_iteration) is unaffected by this call.
+    void record_accepted_iteration() { consecutive_shortened_ = 0; }
+
   private:
     Outcome accumulate(double mu, double merit) {
         if (have_last_mu_ && mu != last_mu_)
@@ -261,12 +279,21 @@ class WatchdogState {
 // window (kArmed/kTrialRelax), it is instead overridden with a relaxed
 // accept; on kTrialRevert, XSL is restored to the pre-watchdog snapshot.
 //
+// `inner` must be non-null -- every construction site (PSIOPT::set_nlp) always
+// supplies a real chain (NoopRecovery at minimum), so the constructor enforces
+// this invariant once, up front, letting on_step_rejected/notify_step_accepted/
+// reset dereference inner_ unconditionally rather than guarding a state that
+// can never actually occur.
+//
 // Ownership: holds real per-solve state (see the file docstring's Ownership
 // note) behind reset().
 // =============================================================================
 class WatchdogRecovery : public RecoveryChain {
   public:
-    explicit WatchdogRecovery(std::unique_ptr<RecoveryChain> inner) : inner_(std::move(inner)) {}
+    explicit WatchdogRecovery(std::unique_ptr<RecoveryChain> inner) : inner_(std::move(inner)) {
+        if (!inner_)
+            throw std::invalid_argument("WatchdogRecovery: inner recovery chain must not be null");
+    }
 
     Action on_step_rejected(IterateInfo &Citer, const std::vector<IterateInfo> &iters,
                             SolverContext &ctx, AcceptanceStrategy &acceptance,
@@ -277,11 +304,19 @@ class WatchdogRecovery : public RecoveryChain {
                             double &alphap, double &alphad, int &soc_steps, int &resolved_depth,
                             int &watchdog_activations) override;
 
+    // Resets consecutive_shortened_ on real progress (see the file
+    // docstring's Architectural scope note), then threads the notification
+    // through to inner_ so a nested link with its own counter (none exist
+    // yet) would see it too -- the same threading on_step_rejected uses.
+    void notify_step_accepted() override {
+        state_.record_accepted_iteration();
+        inner_->notify_step_accepted();
+    }
+
     void reset() override {
         state_.reset();
         snapshot_xsl_.resize(0);
-        if (inner_)
-            inner_->reset();
+        inner_->reset();
     }
 
   private:
@@ -317,6 +352,16 @@ class ChainedRecovery : public RecoveryChain {
                             Eigen::VectorXd &RHS, Eigen::VectorXd &RHS2, double &alpha,
                             double &alphap, double &alphad, int &soc_steps, int &resolved_depth,
                             int &watchdog_activations) override;
+
+    // Propagates to whichever link(s) are present -- same null-guard pattern
+    // as reset() below, since soc_/extended_ (unlike WatchdogRecovery::inner_)
+    // are legitimately null when that link is disabled by Settings.
+    void notify_step_accepted() override {
+        if (soc_)
+            soc_->notify_step_accepted();
+        if (extended_)
+            extended_->notify_step_accepted();
+    }
 
     void reset() override {
         if (soc_)

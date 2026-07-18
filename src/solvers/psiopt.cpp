@@ -1455,6 +1455,14 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                     "(no recovery link can produce this Action)");
             }
             this->result_.recovery_depth_histogram_[resolved_depth]++;
+        } else if (GoodStep && Citer.accepted_) {
+            // Mirrors should_dispatch_recovery's gate (GoodStep && !accepted_)
+            // for its complement: a genuinely accepted iteration, where the
+            // rejection hook above was skipped. See notify_step_accepted() on
+            // RecoveryChain (recovery_chain.h) for what a link may do with
+            // this -- WatchdogRecovery resets its consecutive-shortened-
+            // iteration count here (watchdog.h).
+            this->recovery_->notify_step_accepted();
         }
 
         Citer.alpha_p_ = alphap;
