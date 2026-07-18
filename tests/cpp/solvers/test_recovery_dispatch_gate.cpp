@@ -47,6 +47,7 @@ using tycho::solvers::SolverContext;
 // unused here.
 class StubAcceptance : public AcceptanceStrategy {
   public:
+    bool drives_classic_path() const override { return true; }
     explicit StubAcceptance(bool accept) : accept_(accept) {}
 
     bool is_iterate_acceptable(const ProgressMeasures &, const ProgressMeasures &,

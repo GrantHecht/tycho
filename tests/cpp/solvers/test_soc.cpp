@@ -168,6 +168,7 @@ TEST(SocLoop, CapStops) {
 // paths return before ever calling these, so their bodies must never run.
 class UnusedAcceptance : public AcceptanceStrategy {
   public:
+    bool drives_classic_path() const override { return true; }
     bool is_iterate_acceptable(const ProgressMeasures &, const ProgressMeasures &,
                                const ProgressMeasures &, double) override {
         ADD_FAILURE() << "acceptance must not be reached on an early-exit path";

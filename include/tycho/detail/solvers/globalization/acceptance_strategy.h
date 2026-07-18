@@ -76,17 +76,20 @@ class AcceptanceStrategy {
     virtual void reset() = 0;
 
     // Selects which driving path GlobalizationMechanism::compute_step uses.
-    //   true  (default) — the FUSED classic path: compute_step forwards
-    //                     straight to classic_line_search (below), whose own
-    //                     backtracking loop hosts the merit test. This is the
-    //                     bit-identical default; ClassicMeritAcceptance inherits
-    //                     it unchanged (no override needed).
+    //   true  — the FUSED classic path: compute_step forwards straight to
+    //           classic_line_search (below), whose own backtracking loop hosts
+    //           the merit test. This is the bit-identical classic behavior;
+    //           only ClassicMeritAcceptance returns it.
     //   false — the GENERIC path: compute_step runs the loop itself (trial
     //           eval -> ProgressMeasures -> is_iterate_acceptable -> backtrack)
     //           and never calls classic_line_search. ModernMeritAcceptance
     //           overrides this to false — it is the loop-in-mechanism /
     //           judgment-in-strategy split the generic surface was designed for.
-    virtual bool drives_classic_path() const { return true; }
+    // Pure virtual on purpose: every strategy must declare its driving path at
+    // compile time. A defaulted answer here would let a new strategy silently
+    // inherit the classic path and hit classic_line_search's throwing default
+    // at solve time instead of failing to compile.
+    virtual bool drives_classic_path() const = 0;
 
     // Mode-switch notifications (restoration handoff); default no-op so the
     // classic path and any strategy that doesn't care about the switch need

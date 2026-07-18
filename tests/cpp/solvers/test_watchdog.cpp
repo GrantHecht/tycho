@@ -183,6 +183,7 @@ TEST(WatchdogStateTrial, MuChangeWhileArmedResetsEntirely) {
 // 0) early-exit path, which must never reach either.
 class ExtBtUnusedAcceptance : public AcceptanceStrategy {
   public:
+    bool drives_classic_path() const override { return true; }
     bool is_iterate_acceptable(const ProgressMeasures &, const ProgressMeasures &,
                                const ProgressMeasures &, double) override {
         ADD_FAILURE() << "acceptance must not be reached when ls_extended_iters_ == 0";
@@ -217,6 +218,7 @@ class ExtBtUnusedMechanism : public GlobalizationMechanism {
 // (the scaled direction ExtendedBacktrackRecovery built for that trial).
 class ExtBtScriptedAcceptance : public AcceptanceStrategy {
   public:
+    bool drives_classic_path() const override { return true; }
     explicit ExtBtScriptedAcceptance(std::vector<std::pair<bool, double>> outcomes)
         : outcomes_(std::move(outcomes)) {}
 
@@ -379,6 +381,7 @@ TEST(ExtendedBacktrackLadder, AcceptsAndStopsEarly) {
 // touch them, so any call is a wiring bug.
 class WatchdogUnusedAcceptance : public AcceptanceStrategy {
   public:
+    bool drives_classic_path() const override { return true; }
     bool is_iterate_acceptable(const ProgressMeasures &, const ProgressMeasures &,
                                const ProgressMeasures &, double) override {
         ADD_FAILURE() << "acceptance must not be reached by a spy recovery link";

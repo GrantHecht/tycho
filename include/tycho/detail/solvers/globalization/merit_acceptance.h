@@ -66,6 +66,9 @@ class ClassicMeritAcceptance : public AcceptanceStrategy {
   public:
     explicit ClassicMeritAcceptance(const SolverContext &ctx) : ctx_(ctx) {}
 
+    // The classic strategy is the one (and only) fused-path driver.
+    bool drives_classic_path() const override { return true; }
+
     // --- Generic interface (unused on the classic merit path) ---
     // The classic acceptance test is fused inside classic_line_search's
     // backtracking loop; these generic (θ, f) hooks are driven only by future

@@ -480,6 +480,20 @@ void tycho::solvers::PSIOPT::Settings::validate() const {
         throw std::invalid_argument(fmt::format(
             "ls_extended_iters must be non-negative, got {}", ls_extended_iters_));
 
+    // --- Strategy-combination guards ---
+    // The SOC and extended-backtracking recovery links re-drive the fused
+    // classic line search, which the modern merit strategy does not implement
+    // (its acceptance runs on the generic path). Reject the combination here
+    // so the user gets an upfront error instead of a mid-solve throw. The
+    // watchdog alone is compatible with either strategy.
+    if (acceptance_strategy_ == AcceptanceStrategies::merit &&
+        (max_soc_ > 0 || ls_extended_iters_ > 0))
+        throw std::invalid_argument(fmt::format(
+            "acceptance_strategy=merit does not support the classic-path recovery links: "
+            "max_soc ({}) and ls_extended_iters ({}) must both be 0 with the modern merit "
+            "strategy (use acceptance_strategy=classic_merit to combine them)",
+            max_soc_, ls_extended_iters_));
+
     // --- Convergence tolerances ---
     pos_finite(kkt_tol_, "kkt_tol");
     pos_finite(econ_tol_, "econ_tol");
