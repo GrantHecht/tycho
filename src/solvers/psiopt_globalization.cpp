@@ -37,6 +37,7 @@
 #include "tycho/detail/solvers/globalization/merit_acceptance.h"
 #include "tycho/detail/solvers/globalization/modern_merit.h"
 #include "tycho/detail/solvers/globalization/soc.h"
+#include "tycho/detail/solvers/globalization/switching_acceptance.h"
 #include "tycho/detail/solvers/globalization/watchdog.h"
 
 #include <algorithm>
@@ -1080,6 +1081,76 @@ RecoveryChain::Action ChainedRecovery::on_step_rejected(
     }
     resolved_depth = kRecoveryDepthUnresolved;
     return Action::kAcceptAsIs;
+}
+
+// ============================================================================
+// SwitchingAcceptance — the shared Wächter–Biegler switching-condition
+// skeleton (filter/funnel shared base). See globalization/switching_acceptance.h
+// for the full formulation; the code below is a direct transcription of the
+// θ_min/θ_max derivation, the switching condition (Eq. 19), and the F-type
+// Armijo test (Eq. 20) documented there.
+// ============================================================================
+
+void SwitchingAcceptance::reset() {
+    bounds_initialized_ = false;
+    reset_bounds();
+}
+
+bool SwitchingAcceptance::is_infeasibility_sufficiently_reduced(
+    const ProgressMeasures &reference, const ProgressMeasures &trial) const {
+    (void)reference;
+    (void)trial;
+    throw std::logic_error(
+        "SwitchingAcceptance::is_infeasibility_sufficiently_reduced is unused until a "
+        "feasibility-restoration strategy drives it");
+}
+
+bool SwitchingAcceptance::is_iterate_acceptable(const ProgressMeasures &current,
+                                                const ProgressMeasures &trial,
+                                                const ProgressMeasures &predicted_reduction,
+                                                double objective_multiplier, double step_length) {
+    // objective_multiplier is available for future rules but not needed by
+    // the arithmetic here — see modern_merit.h's identical posture.
+    (void)objective_multiplier;
+
+    // Lazy per-phase initialization (see the file-top formulation): θ₀ is the
+    // FIRST current.infeasibility seen since the last reset().
+    if (!bounds_initialized_) {
+        const double theta_0 = current.infeasibility;
+        theta_min_ = kThetaMinFact * std::max(1.0, theta_0);
+        theta_max_ = kThetaMaxFact * std::max(1.0, theta_0);
+        initialize_bounds(theta_0);
+        bounds_initialized_ = true;
+    }
+
+    // Hard ceiling (Eq. 21): rejected before either the switching test or the
+    // H-type delegate ever runs.
+    if (trial.infeasibility > theta_max_)
+        return false;
+
+    // Switching condition (Eq. 19): tested only when θ_k ≤ θ_min AND the step
+    // is a descent direction for φ (m_f = predicted_reduction.objective > 0).
+    bool switching_holds = false;
+    if (current.infeasibility <= theta_min_ && predicted_reduction.objective > 0.0) {
+        const double lhs =
+            step_length * std::pow(predicted_reduction.objective / step_length, kSwitchingSPhi);
+        const double rhs = kSwitchingDelta * std::pow(current.infeasibility, kSwitchingSTheta);
+        switching_holds = lhs > rhs;
+    }
+
+    if (switching_holds) {
+        // F-type: Armijo condition on φ (Eq. 20). φ(pt) = pt.objective + pt.auxiliary.
+        const double phi_current = current.objective + current.auxiliary;
+        const double phi_trial = trial.objective + trial.auxiliary;
+        return phi_trial <= phi_current - kArmijoEtaPhi * predicted_reduction.objective;
+    }
+
+    // H-type: delegate the verdict to the subclass (filter membership test /
+    // funnel width test); bookkeeping runs only on an accepted verdict.
+    const bool accepted = is_infeasibility_acceptable(current, trial);
+    if (accepted)
+        register_accepted_h_type(current, trial);
+    return accepted;
 }
 
 } // namespace tycho::solvers
