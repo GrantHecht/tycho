@@ -179,7 +179,7 @@ class UnusedAcceptance : public AcceptanceStrategy {
     void reset() override {}
 };
 
-class UnusedMechanism : public GlobalizationMechanism {
+class SocUnusedMechanism : public GlobalizationMechanism {
   public:
     double compute_step(PSIOPT::LineSearchModes, double, double, double, double, Eigen::VectorXd &,
                         Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &,
@@ -202,7 +202,7 @@ class UnusedMechanism : public GlobalizationMechanism {
 Action drive_soc(PSIOPT::Settings &settings, IterateInfo &citer, int &soc_steps) {
     KktSolverType solver;
     UnusedAcceptance acceptance;
-    UnusedMechanism mechanism;
+    SocUnusedMechanism mechanism;
     int zero = 0;
     Eigen::VectorXd scratch; // empty: dims are all zero
     SolverContext ctx{nullptr, solver,  settings, zero,    zero,    zero,
