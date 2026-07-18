@@ -51,7 +51,7 @@ class StubAcceptance : public AcceptanceStrategy {
     explicit StubAcceptance(bool accept) : accept_(accept) {}
 
     bool is_iterate_acceptable(const ProgressMeasures &, const ProgressMeasures &,
-                               const ProgressMeasures &, double) override {
+                               const ProgressMeasures &, double, double) override {
         return false;
     }
     bool is_infeasibility_sufficiently_reduced(const ProgressMeasures &,

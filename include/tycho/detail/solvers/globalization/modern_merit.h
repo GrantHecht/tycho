@@ -158,9 +158,12 @@ class ModernMeritAcceptance : public AcceptanceStrategy {
     // The real generic acceptance test (see the file-top formulation). Pure in
     // its ProgressMeasures arguments plus the penalty state; may mutate the
     // penalty state (WMNO ν / flexible π_l, π_u) per the paper update rules.
+    // step_length is accepted and ignored: the penalty math above is
+    // step-length-independent (the alpha factor cancels in every threshold
+    // and Armijo ratio — see the file-top formulation's cancellation note).
     bool is_iterate_acceptable(const ProgressMeasures &current, const ProgressMeasures &trial,
                                const ProgressMeasures &predicted_reduction,
-                               double objective_multiplier) override;
+                               double objective_multiplier, double step_length) override;
 
     // Restoration-exit test — unused until a feasibility-restoration strategy
     // drives it; throws (T6) rather than fabricate an answer.

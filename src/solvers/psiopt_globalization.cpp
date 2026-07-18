@@ -54,11 +54,12 @@ namespace tycho::solvers {
 bool ClassicMeritAcceptance::is_iterate_acceptable(const ProgressMeasures &current,
                                                    const ProgressMeasures &trial,
                                                    const ProgressMeasures &predicted_reduction,
-                                                   double objective_multiplier) {
+                                                   double objective_multiplier, double step_length) {
     (void)current;
     (void)trial;
     (void)predicted_reduction;
     (void)objective_multiplier;
+    (void)step_length;
     throw std::logic_error("ClassicMeritAcceptance::is_iterate_acceptable is unused on the classic "
                            "merit path (acceptance is fused inside classic_line_search); it is "
                            "driven only by a future filter/funnel/WMNO acceptance strategy");
@@ -382,11 +383,13 @@ bool ModernMeritAcceptance::is_infeasibility_sufficiently_reduced(
 bool ModernMeritAcceptance::is_iterate_acceptable(const ProgressMeasures &current,
                                                   const ProgressMeasures &trial,
                                                   const ProgressMeasures &predicted_reduction,
-                                                  double objective_multiplier) {
+                                                  double objective_multiplier, double step_length) {
     // objective/auxiliary arrive already σ-scaled (parity with the classic
     // path), so the merit uses them directly; objective_multiplier is available
-    // for future rules but not needed by the arithmetic here.
+    // for future rules but not needed by the arithmetic here. step_length is
+    // likewise accepted and ignored — see modern_merit.h's declaration comment.
     (void)objective_multiplier;
+    (void)step_length;
     switch (rule_) {
     case MeritPenaltyRules::wmno:
         return accept_wmno(current, trial, predicted_reduction);
@@ -637,7 +640,7 @@ double BacktrackingLineSearch::generic_line_search(
         // strategy-internal state). Not printed — see IterateInfo's field note.
         Citer.merit_val_ = trial.objective + trial.auxiliary;
 
-        if (acceptance.is_iterate_acceptable(current, trial, pred, obj_scale)) {
+        if (acceptance.is_iterate_acceptable(current, trial, pred, obj_scale, alpha)) {
             Citer.ls_iters_ = j;
             Citer.accepted_ = true;
             break;

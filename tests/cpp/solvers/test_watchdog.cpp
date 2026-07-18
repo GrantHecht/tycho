@@ -185,7 +185,7 @@ class ExtBtUnusedAcceptance : public AcceptanceStrategy {
   public:
     bool drives_classic_path() const override { return true; }
     bool is_iterate_acceptable(const ProgressMeasures &, const ProgressMeasures &,
-                               const ProgressMeasures &, double) override {
+                               const ProgressMeasures &, double, double) override {
         ADD_FAILURE() << "acceptance must not be reached when ls_extended_iters_ == 0";
         return false;
     }
@@ -223,7 +223,7 @@ class ExtBtScriptedAcceptance : public AcceptanceStrategy {
         : outcomes_(std::move(outcomes)) {}
 
     bool is_iterate_acceptable(const ProgressMeasures &, const ProgressMeasures &,
-                               const ProgressMeasures &, double) override {
+                               const ProgressMeasures &, double, double) override {
         return false;
     }
     bool is_infeasibility_sufficiently_reduced(const ProgressMeasures &,
@@ -383,7 +383,7 @@ class WatchdogUnusedAcceptance : public AcceptanceStrategy {
   public:
     bool drives_classic_path() const override { return true; }
     bool is_iterate_acceptable(const ProgressMeasures &, const ProgressMeasures &,
-                               const ProgressMeasures &, double) override {
+                               const ProgressMeasures &, double, double) override {
         ADD_FAILURE() << "acceptance must not be reached by a spy recovery link";
         return false;
     }
