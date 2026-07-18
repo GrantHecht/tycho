@@ -34,6 +34,7 @@
 
 #include "tycho/detail/solvers/globalization/backtracking_line_search.h"
 #include "tycho/detail/solvers/globalization/classic_adaptive_governor.h"
+#include "tycho/detail/solvers/globalization/funnel_acceptance.h"
 #include "tycho/detail/solvers/globalization/merit_acceptance.h"
 #include "tycho/detail/solvers/globalization/modern_merit.h"
 #include "tycho/detail/solvers/globalization/soc.h"
@@ -1151,6 +1152,48 @@ bool SwitchingAcceptance::is_iterate_acceptable(const ProgressMeasures &current,
     if (accepted)
         register_accepted_h_type(current, trial);
     return accepted;
+}
+
+// ============================================================================
+// FunnelAcceptance — scalar-funnel H-type strategy on the switching skeleton.
+// See globalization/funnel_acceptance.h for the full formulation; the code
+// below transcribes the width initialization (init), the H-type verdict (2),
+// and the width update (3) documented there, following Uno's shipped default
+// funnel_update_strategy = 1.
+// ============================================================================
+
+void FunnelAcceptance::initialize_bounds(double theta_0) {
+    // (init): τ = max(τ̄, κ̄·θ₀).
+    width_ = std::max(kFunnelInitialUpperBound, kFunnelInfeasibilityFactor * theta_0);
+}
+
+void FunnelAcceptance::reset_bounds() {
+    // Restore the uninitialized sentinel so the next θ₀ re-derives the width.
+    width_ = std::numeric_limits<double>::infinity();
+}
+
+bool FunnelAcceptance::is_infeasibility_acceptable(const ProgressMeasures &current,
+                                                   const ProgressMeasures &trial) {
+    // (2): within the funnel (θ_trial ≤ τ) AND sufficient reduction
+    // (θ_trial ≤ β·τ). current participates only in the update, not the
+    // verdict — matching Uno's single-argument Funnel::acceptable /
+    // Funnel::sufficient_decrease_condition.
+    (void)current;
+    const double theta_trial = trial.infeasibility;
+    return theta_trial <= width_ && theta_trial <= kFunnelBeta * width_;
+}
+
+void FunnelAcceptance::register_accepted_h_type(const ProgressMeasures &current,
+                                                const ProgressMeasures &trial) {
+    // (3): Uno update strategy 1.
+    const double theta_current = current.infeasibility;
+    const double theta_trial = trial.infeasibility;
+    if (theta_trial <= theta_current) {
+        width_ = std::max(kFunnelBeta * width_,
+                          convex_combination(theta_current, theta_trial, kFunnelKappa));
+    } else {
+        width_ = kFunnelBeta * width_;
+    }
 }
 
 } // namespace tycho::solvers
