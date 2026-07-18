@@ -174,6 +174,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     solvers/test_recovery_dispatch_gate.cpp
     solvers/test_soc.cpp
     solvers/test_watchdog.cpp
+    solvers/test_merit_rules.cpp
 )
 
 #-------------------------------------------------------------------------------

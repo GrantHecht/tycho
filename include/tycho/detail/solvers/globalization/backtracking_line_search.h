@@ -156,6 +156,24 @@ class BacktrackingLineSearch : public GlobalizationMechanism {
     // today's PSIOPT::max_step_to_boundary); reads inequal_cons_ through `ctx`.
     double max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> SLI, Eigen::Ref<Eigen::VectorXd> dSLI,
                                 double bfrac, const SolverContext &ctx) const;
+
+    // GENERIC driving path (taken by compute_step when the acceptance strategy
+    // reports drives_classic_path() == false — e.g. ModernMeritAcceptance).
+    // Runs the SAME backtracking ladder as the classic path (up to
+    // max_ls_iters_, dividing alpha by alpha_red_ on reject) but delegates the
+    // accept/reject verdict to AcceptanceStrategy::is_iterate_acceptable on a
+    // ProgressMeasures triple built from the trial point (see
+    // globalization/modern_merit.h for the (θ,f,aux) mapping). Stores the same
+    // accepted_ / first_rejection_iter_ / theta_at_first_rejection_ signals the
+    // classic path stores, so the recovery chain (SOC / watchdog) composes.
+    // Trial-point evaluation goes through the shared modern_eval_trial_point
+    // free helper in the .cpp (a parallel copy of the classic eval — the
+    // classic path's own copies are left untouched).
+    double generic_line_search(PSIOPT::LineSearchModes lsmode, double obj_scale, double mu,
+                               double prim_obj, double barr_obj, Eigen::VectorXd &XSL,
+                               Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
+                               Eigen::VectorXd &RHS2, AcceptanceStrategy &acceptance,
+                               IterateInfo &Citer, SolverContext &ctx);
 };
 
 } // namespace tycho::solvers

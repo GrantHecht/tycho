@@ -186,6 +186,15 @@ class PSIOPT {
         LineSearchModes soe_ls_mode_ = LineSearchModes::NOLS;
         PDStepStrategies pd_step_strategy_ = PDStepStrategies::PrimSlackEq_Iq;
 
+        // --- Step-acceptance strategy (opt-in modernized merit) ---
+        // classic_merit (default) reproduces today's fused backtracking merit
+        // line search bit-identically. merit selects the modernized merit
+        // family driven through the GENERIC AcceptanceStrategy path, with the
+        // penalty rule chosen by merit_penalty_rule_ (only read when
+        // acceptance_strategy_ == merit). Both enums live in psiopt_fwd.h.
+        AcceptanceStrategies acceptance_strategy_ = AcceptanceStrategies::classic_merit;
+        MeritPenaltyRules merit_penalty_rule_ = MeritPenaltyRules::wmno;
+
         // --- Barrier parameters ---
         double init_mu_ = 0.001;
         double max_mu_ = 100.0;

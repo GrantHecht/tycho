@@ -40,6 +40,7 @@
 #include "tycho/detail/solvers/globalization/barrier_governor.h"
 #include "tycho/detail/solvers/globalization/classic_adaptive_governor.h"
 #include "tycho/detail/solvers/globalization/merit_acceptance.h"
+#include "tycho/detail/solvers/globalization/modern_merit.h"
 #include "tycho/detail/solvers/globalization/recovery_chain.h"
 #include "tycho/detail/solvers/globalization/noop_recovery.h"
 #include "tycho/detail/solvers/globalization/soc.h"
@@ -822,17 +823,27 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
                         "+ equal_cons ({}) + inequal_cons ({})",
                         kkt_dim_, primal_vars_, slack_vars_, equal_cons_, inequal_cons_));
 
-    // (Re)build the classic merit acceptance strategy wired to a
-    // SolverContext view of this solver. Rebuilt here (rather than once in the
-    // constructor) so the SolverContext's captured nlp_ raw pointer tracks the
-    // NLP just installed; dims/settings/scratch are captured by reference and
-    // stay live. PSIOPT owns acceptance_, so the SolverContext's references
-    // cannot outlive their referents.
-    this->acceptance_ = std::make_unique<ClassicMeritAcceptance>(
-        SolverContext{this->nlp_.get(), this->kkt_sol_, this->settings_, this->primal_vars_,
-                      this->slack_vars_, this->equal_cons_, this->inequal_cons_, this->kkt_dim_,
-                      this->stli_scratch_, this->hp_scratch_, this->best_xsl_scratch_,
-                      this->best_rhs_scratch_});
+    // (Re)build the step-acceptance strategy. Default (classic_merit) builds
+    // ClassicMeritAcceptance wired to a SolverContext view of this solver;
+    // rebuilt here (rather than once in the constructor) so the SolverContext's
+    // captured nlp_ raw pointer tracks the NLP just installed (dims/settings/
+    // scratch are captured by reference and stay live). PSIOPT owns acceptance_,
+    // so the SolverContext's references cannot outlive their referents.
+    //
+    // Opting in (acceptance_strategy_ == merit) builds ModernMeritAcceptance
+    // instead — driven through the GENERIC compute_step path with the penalty
+    // rule chosen by merit_penalty_rule_. The modern strategy carries only its
+    // penalty state (no SolverContext); the mechanism owns trial-point eval.
+    if (this->settings_.acceptance_strategy_ == AcceptanceStrategies::merit) {
+        this->acceptance_ =
+            std::make_unique<ModernMeritAcceptance>(this->settings_.merit_penalty_rule_);
+    } else {
+        this->acceptance_ = std::make_unique<ClassicMeritAcceptance>(
+            SolverContext{this->nlp_.get(), this->kkt_sol_, this->settings_, this->primal_vars_,
+                          this->slack_vars_, this->equal_cons_, this->inequal_cons_, this->kkt_dim_,
+                          this->stli_scratch_, this->hp_scratch_, this->best_xsl_scratch_,
+                          this->best_rhs_scratch_});
+    }
 
     // The step-length globalization mechanism. Stateless (holds
     // NO solver state per GlobalizationMechanism's ownership rule) — every call

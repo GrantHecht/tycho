@@ -75,6 +75,19 @@ class AcceptanceStrategy {
     // μ-event / phase-change reset hook — see the ownership-rule note above.
     virtual void reset() = 0;
 
+    // Selects which driving path GlobalizationMechanism::compute_step uses.
+    //   true  (default) — the FUSED classic path: compute_step forwards
+    //                     straight to classic_line_search (below), whose own
+    //                     backtracking loop hosts the merit test. This is the
+    //                     bit-identical default; ClassicMeritAcceptance inherits
+    //                     it unchanged (no override needed).
+    //   false — the GENERIC path: compute_step runs the loop itself (trial
+    //           eval -> ProgressMeasures -> is_iterate_acceptable -> backtrack)
+    //           and never calls classic_line_search. ModernMeritAcceptance
+    //           overrides this to false — it is the loop-in-mechanism /
+    //           judgment-in-strategy split the generic surface was designed for.
+    virtual bool drives_classic_path() const { return true; }
+
     // Mode-switch notifications (restoration handoff); default no-op so the
     // classic path and any strategy that doesn't care about the switch need
     // not override them.
