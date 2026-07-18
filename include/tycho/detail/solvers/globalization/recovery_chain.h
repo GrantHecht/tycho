@@ -20,14 +20,20 @@
 // post-rejection recovery by default; there is no give-up branch at this
 // point). SocRecovery (soc.h) is the first live implementor: an opt-in
 // (Settings::max_soc_ > 0) second-order correction that re-solves on the live
-// factorization and returns kRetry with a corrected step. Extended-backtrack,
-// watchdog revert, and the feasibility switch remain future links.
+// factorization and returns kRetry with a corrected step. ChainedRecovery,
+// ExtendedBacktrackRecovery, and WatchdogRecovery (globalization/watchdog.h)
+// are the second batch of live links: ChainedRecovery composes SOC and
+// extended backtracking in order (SOC first — see its class doc for why),
+// WatchdogRecovery wraps whatever chain is configured as an outer decorator.
+// The feasibility switch remains a future link (kSwitchToFeasibility below is
+// still unproduced by any link).
 //
 // Ownership rule: a RecoveryChain holds NO solver state (no persistent
 // watchdog counters, etc. until a live recovery dispatcher actually needs
 // them, and even then they live behind reset(), not as ambient global
 // state). reset() is the μ-event/phase-change hook (mirrors the other three
-// interfaces); a future watchdog is explicitly reset on μ change.
+// interfaces); WatchdogRecovery is explicitly reset on μ change (see
+// watchdog.h) in addition to the ordinary phase-boundary reset() call.
 
 #pragma once
 
@@ -45,6 +51,18 @@
 // psiopt.h. See solver_context.h's one-directional include-discipline note.
 
 namespace tycho::solvers {
+
+// Recovery-dispatch depth: which link (if any) actually resolved a given
+// rejection. Written by ChainedRecovery/WatchdogRecovery (globalization/
+// watchdog.h) into the `resolved_depth` out-parameter of on_step_rejected
+// below; individual links (SocRecovery, ExtendedBacktrackRecovery) do not
+// write it themselves — only the composing wrapper knows which position in
+// the dispatch order actually won. Backs PSIOPT::SolveResult::
+// recovery_depth_histogram_[d] (psiopt.h).
+inline constexpr int kRecoveryDepthSoc = 0;
+inline constexpr int kRecoveryDepthExtended = 1;
+inline constexpr int kRecoveryDepthWatchdog = 2;
+inline constexpr int kRecoveryDepthUnresolved = 3; // classic give-up: no link resolved it.
 
 // =============================================================================
 // RecoveryChain — ordered dispatch invoked after an AcceptanceStrategy
@@ -96,6 +114,15 @@ class RecoveryChain {
     //                                 fraction-to-boundary primal/dual lengths.
     //   soc_steps                   — accumulator a link increments once per
     //                                 correction back-substitution (diagnostic).
+    //   resolved_depth               — out-parameter, caller-seeded to
+    //                                 kRecoveryDepthUnresolved before the call.
+    //                                 Only ChainedRecovery/WatchdogRecovery
+    //                                 write it (see the constants above);
+    //                                 SocRecovery/ExtendedBacktrackRecovery
+    //                                 accept the parameter but leave it alone.
+    //   watchdog_activations         — accumulator WatchdogRecovery increments
+    //                                 once per arm event (diagnostic; every
+    //                                 other link ignores it).
     virtual Action on_step_rejected(IterateInfo &Citer, const std::vector<IterateInfo> &iters,
                                      SolverContext &ctx, AcceptanceStrategy &acceptance,
                                      GlobalizationMechanism &mechanism,
@@ -103,7 +130,8 @@ class RecoveryChain {
                                      double prim_obj, double barr_obj, Eigen::VectorXd &XSL,
                                      Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2,
                                      Eigen::VectorXd &RHS, Eigen::VectorXd &RHS2, double &alpha,
-                                     double &alphap, double &alphad, int &soc_steps) = 0;
+                                     double &alphap, double &alphad, int &soc_steps,
+                                     int &resolved_depth, int &watchdog_activations) = 0;
 
     // μ-event / phase-change reset hook — see the ownership-rule note above.
     virtual void reset() = 0;

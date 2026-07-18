@@ -43,6 +43,7 @@
 #include "tycho/detail/solvers/globalization/recovery_chain.h"
 #include "tycho/detail/solvers/globalization/noop_recovery.h"
 #include "tycho/detail/solvers/globalization/soc.h"
+#include "tycho/detail/solvers/globalization/watchdog.h"
 #include "tycho/detail/solvers/globalization/restoration.h"
 
 #ifndef USE_ACCELERATE_SPARSE
@@ -474,6 +475,9 @@ void tycho::solvers::PSIOPT::Settings::validate() const {
     if (max_ls_iters_ < 0)
         throw std::invalid_argument(
             fmt::format("max_ls_iters must be non-negative, got {}", max_ls_iters_));
+    if (ls_extended_iters_ < 0)
+        throw std::invalid_argument(fmt::format(
+            "ls_extended_iters must be non-negative, got {}", ls_extended_iters_));
 
     // --- Convergence tolerances ---
     pos_finite(kkt_tol_, "kkt_tol");
@@ -844,17 +848,35 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
     // the SolverContext view and passes *mechanism_ to update_barrier.
     this->governor_ = std::make_unique<ClassicAdaptiveGovernor>();
 
-    // The post-rejection recovery chain. Both implementations are stateless
-    // (hold no solver state, per RecoveryChain's ownership rule) and need no
-    // context at construction; alg_impl builds the SolverContext view and passes
-    // the live working set to on_step_rejected. Default (max_soc_ == 0, off) is
-    // NoopRecovery, which always returns kAcceptAsIs so the solve path is
-    // bit-identical to its pre-SOC behavior. Opt in (max_soc_ > 0) to install
-    // SocRecovery's second-order correction.
-    if (this->settings_.max_soc_ > 0) {
-        this->recovery_ = std::make_unique<SocRecovery>();
+    // The post-rejection recovery chain. Every concrete implementation
+    // (NoopRecovery, SocRecovery, ExtendedBacktrackRecovery, ChainedRecovery)
+    // except WatchdogRecovery is stateless (holds no solver state, per
+    // RecoveryChain's ownership rule) and needs no context at construction;
+    // alg_impl builds the SolverContext view and passes the live working set
+    // to on_step_rejected. Default (max_soc_ == 0, ls_extended_iters_ == 0,
+    // watchdog_ == false — all off) installs plain NoopRecovery, which always
+    // returns kAcceptAsIs so the solve path is bit-identical to its
+    // pre-recovery-chain behavior.
+    //
+    // Opting in to SOC and/or extended backtracking composes them (in that
+    // fixed order — see ChainedRecovery's class doc, globalization/
+    // watchdog.h) into a ChainedRecovery; either link may be individually
+    // enabled. The watchdog, if enabled, then wraps whatever chain resulted
+    // (even plain NoopRecovery) as an outer decorator, per WatchdogRecovery's
+    // class doc.
+    if (this->settings_.max_soc_ > 0 || this->settings_.ls_extended_iters_ > 0) {
+        std::unique_ptr<RecoveryChain> soc_link =
+            this->settings_.max_soc_ > 0 ? std::make_unique<SocRecovery>() : nullptr;
+        std::unique_ptr<RecoveryChain> extended_link =
+            this->settings_.ls_extended_iters_ > 0 ? std::make_unique<ExtendedBacktrackRecovery>()
+                                                    : nullptr;
+        this->recovery_ =
+            std::make_unique<ChainedRecovery>(std::move(soc_link), std::move(extended_link));
     } else {
         this->recovery_ = std::make_unique<NoopRecovery>();
+    }
+    if (this->settings_.watchdog_) {
+        this->recovery_ = std::make_unique<WatchdogRecovery>(std::move(this->recovery_));
     }
 
     this->set_qp_params();
@@ -1377,12 +1399,13 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         Funtimer.stop();
 
         // Recovery-chain hook. This is where a rejected step's
-        // recovery gets a say -- a live recovery dispatcher would implement the
-        // SOC -> extended-backtrack -> watchdog-revert -> feasibility-switch
-        // dispatch from this point; the inertia/perturbation ladder above
-        // (factor_impl's Zfac cycling + escalation) is a SEPARATE mechanism and
-        // stays out of this chain until the proximal-regularization inertia
-        // mode is implemented -- it is NOT invoked or bypassed here.
+        // recovery gets a say -- SOC -> extended-backtrack -> watchdog-revert
+        // dispatch from this point (see set_nlp's wiring comment); the
+        // feasibility switch remains a future link. The inertia/perturbation
+        // ladder above (factor_impl's Zfac cycling + escalation) is a
+        // SEPARATE mechanism and stays out of this chain until the
+        // proximal-regularization inertia mode is implemented -- it is NOT
+        // invoked or bypassed here.
         //
         // The call is GATED on an actual rejection: should_dispatch_recovery
         // fires the hook only when the line search reported the trial step
@@ -1393,24 +1416,34 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // step is accepted, so the hook is never invoked at all.
         //
         // By default recovery_ is a NoopRecovery (set_nlp installs it whenever
-        // max_soc_ == 0), whose on_step_rejected() unconditionally returns
-        // kAcceptAsIs and touches no state, so the kAcceptAsIs branch below is
-        // exactly today's control flow (take whatever alpha/DXSL compute_step
-        // produced). When SOC is enabled (max_soc_ > 0) recovery_ is a
-        // SocRecovery, which may instead return kRetry after replacing DXSL/alpha
-        // (and alphap/alphad) in place with an accepted corrected step — applied
+        // max_soc_ == 0, ls_extended_iters_ == 0, and watchdog_ == false),
+        // whose on_step_rejected() unconditionally returns kAcceptAsIs and
+        // touches no state, so the kAcceptAsIs branch below is exactly
+        // today's control flow (take whatever alpha/DXSL compute_step
+        // produced). When any of SOC/extended-backtrack/watchdog are enabled,
+        // recovery_ may instead return kRetry after replacing DXSL/alpha (and
+        // alphap/alphad) in place with an accepted or reverted step — applied
         // by the XSL += alpha*DXSL commit below.
+        //
+        // resolved_depth is seeded to the unresolved sentinel and only
+        // written by a link that actually resolves the rejection (see
+        // recovery_chain.h's kRecoveryDepth* constants); it always ends up
+        // valid by the time the histogram below reads it, since every link
+        // on every path either writes it or leaves the seeded default.
         if (should_dispatch_recovery(GoodStep, Citer)) {
+            int resolved_depth = kRecoveryDepthUnresolved;
             const RecoveryChain::Action recovery_action = this->recovery_->on_step_rejected(
                 Citer, iters, ctx, *acceptance_, *mechanism_, lsmode, obj_scale * lsobjscale, mu,
                 prim_obj, barr_obj, XSL, DXSL, Temp, RHS, RHS2, alpha, alphap, alphad,
-                this->result_.soc_steps_taken_);
+                this->result_.soc_steps_taken_, resolved_depth,
+                this->result_.watchdog_activations_);
             switch (recovery_action) {
             case RecoveryChain::Action::kAcceptAsIs:
                 // Take the step compute_step produced (DXSL/alpha unchanged).
                 break;
             case RecoveryChain::Action::kRetry:
-                // SocRecovery committed the corrected step into DXSL/alpha.
+                // The recovery chain committed a corrected/reverted step into
+                // DXSL/alpha.
                 break;
             case RecoveryChain::Action::kSwitchToFeasibility:
                 throw std::logic_error(
@@ -1421,6 +1454,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                     "PSIOPT: recovery gave up on the step, but no give-up handling exists yet "
                     "(no recovery link can produce this Action)");
             }
+            this->result_.recovery_depth_histogram_[resolved_depth]++;
         }
 
         Citer.alpha_p_ = alphap;
@@ -1689,6 +1723,24 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
 
         if (settings_.print_level_ < 2)
             print_beginning(step.label_);
+
+        // Phase-boundary reset: each globalization component's μ-event/
+        // phase-change hook (see e.g. recovery_chain.h's ownership-rule
+        // note). reset() was never actually invoked anywhere before this —
+        // every implementation that could be live through recovery_ (or
+        // acceptance_/mechanism_/governor_) has an empty reset() body EXCEPT
+        // WatchdogRecovery (ClassicMeritAcceptance, BacktrackingLineSearch,
+        // ClassicAdaptiveGovernor, NoopRecovery, SocRecovery,
+        // ExtendedBacktrackRecovery, and ChainedRecovery are all no-ops), so
+        // adding these calls is behavior-neutral for every configuration
+        // except one: WatchdogRecovery, the one component with real
+        // per-solve state, needs its counters/arm-state/snapshot cleared at
+        // each new phase (OPT, then a conditional SOE, etc.) rather than
+        // carried over from the previous phase.
+        this->acceptance_->reset();
+        this->mechanism_->reset();
+        this->governor_->reset();
+        this->recovery_->reset();
 
         XSL = this->alg_impl(step.alg_mode_, step.bar_mode_, step.ls_mode_, settings_.obj_scale_,
                              settings_.init_mu_, XSL);

@@ -35,6 +35,7 @@ namespace {
 using tycho::solvers::AcceptanceStrategy;
 using tycho::solvers::GlobalizationMechanism;
 using tycho::solvers::IterateInfo;
+using tycho::solvers::kRecoveryDepthUnresolved;
 using tycho::solvers::KktSolverType;
 using tycho::solvers::kSocRecommendedMaxCorrections;
 using tycho::solvers::kSocViolationDecrease;
@@ -210,9 +211,12 @@ Action drive_soc(PSIOPT::Settings &settings, IterateInfo &citer, int &soc_steps)
     const std::vector<IterateInfo> iters;
     Eigen::VectorXd XSL, DXSL, XSL2, RHS, RHS2; // empty (ncons == 0)
     double alpha = 1.0, alphap = 1.0, alphad = 1.0;
+    int resolved_depth = kRecoveryDepthUnresolved;
+    int watchdog_activations = 0;
     return SocRecovery{}.on_step_rejected(
         citer, iters, ctx, acceptance, mechanism, PSIOPT::LineSearchModes::AUGLANG, 1.0, 1e-3, 0.0,
-        0.0, XSL, DXSL, XSL2, RHS, RHS2, alpha, alphap, alphad, soc_steps);
+        0.0, XSL, DXSL, XSL2, RHS, RHS2, alpha, alphap, alphad, soc_steps, resolved_depth,
+        watchdog_activations);
 }
 
 // max_soc_ == 0 (off): decline immediately, no corrections.

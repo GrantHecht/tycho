@@ -54,7 +54,8 @@ class NoopRecovery : public RecoveryChain {
                             Eigen::VectorXd & /*DXSL*/, Eigen::VectorXd & /*XSL2*/,
                             Eigen::VectorXd & /*RHS*/, Eigen::VectorXd & /*RHS2*/,
                             double & /*alpha*/, double & /*alphap*/, double & /*alphad*/,
-                            int & /*soc_steps*/) override {
+                            int & /*soc_steps*/, int & /*resolved_depth*/,
+                            int & /*watchdog_activations*/) override {
         return Action::kAcceptAsIs;
     }
 

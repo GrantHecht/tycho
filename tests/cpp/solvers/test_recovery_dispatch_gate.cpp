@@ -33,6 +33,7 @@ namespace {
 using tycho::solvers::AcceptanceStrategy;
 using tycho::solvers::GlobalizationMechanism;
 using tycho::solvers::IterateInfo;
+using tycho::solvers::kRecoveryDepthUnresolved;
 using tycho::solvers::KktSolverType;
 using tycho::solvers::ProgressMeasures;
 using tycho::solvers::PSIOPT;
@@ -81,7 +82,7 @@ class RecordingRecovery : public RecoveryChain {
                             PSIOPT::LineSearchModes, double, double, double, double,
                             Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &,
                             Eigen::VectorXd &, Eigen::VectorXd &, double &, double &, double &,
-                            int &) override {
+                            int &, int &, int &) override {
         ++calls_;
         return Action::kAcceptAsIs;
     }
@@ -116,9 +117,12 @@ void drive_gate(bool good_step, IterateInfo &citer, RecoveryChain &recovery,
         Eigen::VectorXd v;
         double alpha = 1.0, alphap = 1.0, alphad = 1.0;
         int soc_steps = 0;
+        int resolved_depth = kRecoveryDepthUnresolved;
+        int watchdog_activations = 0;
         recovery.on_step_rejected(citer, iters, ctx, acceptance, mechanism,
                                   PSIOPT::LineSearchModes::AUGLANG, 1.0, 1e-3, 0.0, 0.0, v, v, v, v,
-                                  v, alpha, alphap, alphad, soc_steps);
+                                  v, alpha, alphap, alphad, soc_steps, resolved_depth,
+                                  watchdog_activations);
     }
 }
 

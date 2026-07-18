@@ -16,6 +16,7 @@
 
 #pragma once
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <functional>
 #include <initializer_list>
@@ -130,6 +131,26 @@ class PSIOPT {
         // in; the recommended enable value is 4 (kSocRecommendedMaxCorrections
         // in globalization/soc.h).
         int max_soc_ = 0;
+
+        // Extended backtracking: further trials continuing the SAME classic
+        // ladder (same direction, same alpha_red_ divisor, same merit test)
+        // once the classic capped backtrack rejects and SOC (if enabled) is
+        // exhausted or not triggered. 0 = off (default): the solver behaves
+        // exactly as it did before extended backtracking existed. This cap
+        // extends the classic cap (max_ls_iters_) ONLY when the recovery
+        // dispatch is active on a rejected step — max_ls_iters_ itself is
+        // unaffected. See ExtendedBacktrackRecovery, globalization/watchdog.h.
+        int ls_extended_iters_ = 0;
+
+        // Watchdog (Chamberlain, Powell, Lemaréchal & Pedersen 1982;
+        // constants per Wächter & Biegler 2006's implementation — see
+        // globalization/watchdog.h): arms after kWatchdogShortenedIterTrigger
+        // consecutive fully-rejected iterations, then accepts up to
+        // kWatchdogTrialIterMax trial iterations under relaxed acceptance
+        // before reverting to the pre-watchdog snapshot. false = off
+        // (default): the solver behaves exactly as it did before the
+        // watchdog existed.
+        bool watchdog_ = false;
 
         int max_feas_rest_ = 2; // reserved — feasibility restoration, not currently implemented
 
@@ -274,6 +295,24 @@ class PSIOPT {
         // solve alongside the other accumulators.
         int soc_steps_taken_ = 0;
 
+        // Number of times the watchdog armed across the whole solve
+        // (Chamberlain, Powell, Lemaréchal & Pedersen 1982; constants per
+        // Wächter & Biegler 2006's implementation, globalization/watchdog.h).
+        // Always 0 when the watchdog is off (watchdog_ == false). Reset per
+        // solve alongside the other accumulators.
+        int watchdog_activations_ = 0;
+
+        // Per-rejection recovery-chain outcome depth, indexed by the
+        // kRecoveryDepth* constants in globalization/recovery_chain.h:
+        // recovery_depth_histogram_[0] SOC, [1] extended backtracking,
+        // [2] watchdog, [3] unresolved (today's classic give-up: the
+        // originally-rejected step was simply taken; this is the ONLY bucket
+        // that increments when SOC/extended/watchdog are all off). Counts
+        // rejections, i.e. every should_dispatch_recovery-gated call, not
+        // just ones where a recovery link actually intervened. Reset per
+        // solve alongside the other accumulators.
+        std::array<int, 4> recovery_depth_histogram_{};
+
         // T6 (dead-status fix): the last non-Success status observed from
         // kkt_sol_.info() by factor_impl() within the CURRENT phase (alg_impl
         // resets it on entry, so print_exit_stats reports per-phase status).
@@ -300,6 +339,8 @@ class PSIOPT {
             iter_num_ = 0;
             last_kkt_info_ = Eigen::Success;
             soc_steps_taken_ = 0;
+            watchdog_activations_ = 0;
+            recovery_depth_histogram_.fill(0);
         }
     };
 
@@ -463,10 +504,15 @@ class PSIOPT {
     // implementation). Held through the RecoveryChain interface
     // (forward-declared above); rebuilt by set_nlp() alongside acceptance_/
     // mechanism_/governor_. Never null once set_nlp has run, which
-    // run_phase_sequence guarantees before any solve. The NoopRecovery
-    // implementation shipped today always returns kAcceptAsIs and is
-    // stateless; a future change replaces the concrete type with a real
-    // SOC/extended-backtrack/watchdog/feasibility-switch dispatcher.
+    // run_phase_sequence guarantees before any solve. With max_soc_ == 0,
+    // ls_extended_iters_ == 0, and watchdog_ == false (all defaults), set_nlp
+    // installs plain NoopRecovery, which always returns kAcceptAsIs and is
+    // stateless — bit-identical to pre-recovery-chain behavior. Opt in to any
+    // subset of SocRecovery/ExtendedBacktrackRecovery (composed in that order
+    // by ChainedRecovery) and WatchdogRecovery (an outer decorator over
+    // whatever chain results) via the corresponding Settings fields — see
+    // globalization/soc.h and globalization/watchdog.h. The feasibility
+    // switch remains a future link.
     std::unique_ptr<RecoveryChain> recovery_;
 
     // QP parameter setup — called automatically by set_nlp()

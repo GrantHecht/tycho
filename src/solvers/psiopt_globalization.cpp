@@ -26,12 +26,17 @@
 // barrier_* / complementarity helpers it consumes (the complementarity copy is
 // TOKEN-IDENTICAL including its ULP-load-bearing .sum() warning). See
 // classic_adaptive_governor.h's PROBE-impurity design note.
+//
+// This file also hosts the second batch of live RecoveryChain links:
+// ExtendedBacktrackRecovery, WatchdogRecovery, and the ChainedRecovery
+// composition — see watchdog.h's file docstring for the full design.
 // =============================================================================
 
 #include "tycho/detail/solvers/globalization/backtracking_line_search.h"
 #include "tycho/detail/solvers/globalization/classic_adaptive_governor.h"
 #include "tycho/detail/solvers/globalization/merit_acceptance.h"
 #include "tycho/detail/solvers/globalization/soc.h"
+#include "tycho/detail/solvers/globalization/watchdog.h"
 
 #include <algorithm>
 #include <cmath>
@@ -597,7 +602,8 @@ RecoveryChain::Action SocRecovery::on_step_rejected(
     AcceptanceStrategy &acceptance, GlobalizationMechanism &mechanism,
     PSIOPT::LineSearchModes lsmode, double obj_scale, double mu, double prim_obj, double barr_obj,
     Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
-    Eigen::VectorXd &RHS2, double &alpha, double &alphap, double &alphad, int &soc_steps) {
+    Eigen::VectorXd &RHS2, double &alpha, double &alphap, double &alphad, int &soc_steps,
+    int & /*resolved_depth*/, int & /*watchdog_activations*/) {
     const int max_soc = ctx.settings_.max_soc_;
     if (max_soc <= 0)
         return Action::kAcceptAsIs; // defensive: SocRecovery is only built when max_soc_ > 0.
@@ -694,6 +700,155 @@ RecoveryChain::Action SocRecovery::on_step_rejected(
         alphad = alphad_orig;
     }
     return action;
+}
+
+// ============================================================================
+// ExtendedBacktrackRecovery — see watchdog.h's file docstring, "Extended
+// backtracking" section, for the exact mechanics (why scaling DXSL by the
+// live alpha and re-driving classic_line_search reproduces the SAME ladder
+// with no redundant re-test and no new math).
+// ============================================================================
+RecoveryChain::Action ExtendedBacktrackRecovery::on_step_rejected(
+    IterateInfo &Citer, const std::vector<IterateInfo> &iters, SolverContext &ctx,
+    AcceptanceStrategy &acceptance, GlobalizationMechanism & /*mechanism*/,
+    PSIOPT::LineSearchModes lsmode, double obj_scale, double mu, double prim_obj, double barr_obj,
+    Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
+    Eigen::VectorXd &RHS2, double &alpha, double & /*alphap*/, double & /*alphad*/,
+    int & /*soc_steps*/, int & /*resolved_depth*/, int & /*watchdog_activations*/) {
+    const int max_extended = ctx.settings_.ls_extended_iters_;
+    if (max_extended <= 0)
+        return Action::kAcceptAsIs; // defensive: only built when ls_extended_iters_ > 0.
+
+    // `scale` continues the SAME ladder from the live alpha (compute_step's
+    // return value, passed in as `alpha`) — NOT a restart at 1.0. DXSL itself
+    // is never touched here (only read): the direction that was rejected is
+    // the SAME direction extended backtracking keeps testing at smaller
+    // alpha, exactly like the classic loop's own internal divisions do.
+    Eigen::VectorXd dxsl_ext(DXSL.size());
+    double scale = alpha;
+    for (int i = 0; i < max_extended; ++i) {
+        dxsl_ext = scale * DXSL;
+        IterateInfo trial_iter;
+        const double alpha_result = acceptance.classic_line_search(
+            lsmode, obj_scale, mu, prim_obj, barr_obj, XSL, dxsl_ext, XSL2, RHS, RHS2, trial_iter,
+            iters);
+        if (trial_iter.accepted_) {
+            // Commit the accepted (still-original-direction, further-scaled)
+            // step in place: alg_impl's XSL += alpha*DXSL applies it.
+            DXSL = dxsl_ext;
+            alpha = alpha_result;
+            Citer.accepted_ = true;
+            Citer.ls_iters_ = trial_iter.ls_iters_;
+            Citer.merit_val_ = trial_iter.merit_val_;
+            return Action::kRetry;
+        }
+        // Not accepted: classic_line_search's own internal loop already
+        // divided down to the next untested rung (relative to dxsl_ext);
+        // carry that forward as the next external trial's absolute scale.
+        scale = alpha_result * scale;
+    }
+    return Action::kAcceptAsIs; // extended budget exhausted: take the original rejected step.
+}
+
+// ============================================================================
+// WatchdogRecovery — drives WatchdogState against the real working set. See
+// watchdog.h's file docstring, "Watchdog" section, for the full semantics.
+// ============================================================================
+RecoveryChain::Action WatchdogRecovery::on_step_rejected(
+    IterateInfo &Citer, const std::vector<IterateInfo> &iters, SolverContext &ctx,
+    AcceptanceStrategy &acceptance, GlobalizationMechanism &mechanism,
+    PSIOPT::LineSearchModes lsmode, double obj_scale, double mu, double prim_obj, double barr_obj,
+    Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
+    Eigen::VectorXd &RHS2, double &alpha, double &alphap, double &alphad, int &soc_steps,
+    int &resolved_depth, int &watchdog_activations) {
+    // Always-available proxy for "did the point improve" — see the file
+    // docstring for why prim_obj + barr_obj (rather than a per-variant merit
+    // value) is used here.
+    const double merit = prim_obj + barr_obj;
+    const WatchdogState::Outcome outcome = state_.record_rejected_iteration(mu, merit);
+
+    switch (outcome) {
+    case WatchdogState::Outcome::kAccumulate:
+        if (inner_)
+            return inner_->on_step_rejected(Citer, iters, ctx, acceptance, mechanism, lsmode,
+                                            obj_scale, mu, prim_obj, barr_obj, XSL, DXSL, XSL2,
+                                            RHS, RHS2, alpha, alphap, alphad, soc_steps,
+                                            resolved_depth, watchdog_activations);
+        resolved_depth = kRecoveryDepthUnresolved;
+        return Action::kAcceptAsIs;
+
+    case WatchdogState::Outcome::kArmed:
+        // Just armed: snapshot the pre-watchdog iterate (XSL as it stands
+        // right now, before this iteration's relaxed-accepted step is
+        // committed) so a later revert can restore it.
+        snapshot_xsl_ = XSL;
+        ++watchdog_activations;
+        [[fallthrough]];
+    case WatchdogState::Outcome::kTrialRelax:
+        Citer.accepted_ = true;
+        resolved_depth = kRecoveryDepthWatchdog;
+        return Action::kAcceptAsIs;
+
+    case WatchdogState::Outcome::kTrialProgress:
+        // Progress observed: the emergency is over, hand this rejection back
+        // to the wrapped chain for its normal treatment.
+        if (inner_)
+            return inner_->on_step_rejected(Citer, iters, ctx, acceptance, mechanism, lsmode,
+                                            obj_scale, mu, prim_obj, barr_obj, XSL, DXSL, XSL2,
+                                            RHS, RHS2, alpha, alphap, alphad, soc_steps,
+                                            resolved_depth, watchdog_activations);
+        resolved_depth = kRecoveryDepthUnresolved;
+        return Action::kAcceptAsIs;
+
+    case WatchdogState::Outcome::kTrialRevert:
+        // Window exhausted with no progress: revert XSL to the snapshot and
+        // leave DXSL/alpha at zero so alg_impl's XSL += alpha*DXSL commit is
+        // a no-op on the already-reverted iterate.
+        XSL = snapshot_xsl_;
+        DXSL.setZero();
+        alpha = 0.0;
+        Citer.accepted_ = true;
+        resolved_depth = kRecoveryDepthWatchdog;
+        return Action::kRetry;
+    }
+    throw std::logic_error(
+        "WatchdogRecovery::on_step_rejected: unreachable WatchdogState::Outcome");
+}
+
+// ============================================================================
+// ChainedRecovery — tries SOC then extended backtracking (see watchdog.h's
+// class doc for the ordering rationale), stamping resolved_depth with
+// whichever link's index actually resolved the rejection.
+// ============================================================================
+RecoveryChain::Action ChainedRecovery::on_step_rejected(
+    IterateInfo &Citer, const std::vector<IterateInfo> &iters, SolverContext &ctx,
+    AcceptanceStrategy &acceptance, GlobalizationMechanism &mechanism,
+    PSIOPT::LineSearchModes lsmode, double obj_scale, double mu, double prim_obj, double barr_obj,
+    Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
+    Eigen::VectorXd &RHS2, double &alpha, double &alphap, double &alphad, int &soc_steps,
+    int &resolved_depth, int &watchdog_activations) {
+    if (soc_) {
+        const Action action =
+            soc_->on_step_rejected(Citer, iters, ctx, acceptance, mechanism, lsmode, obj_scale, mu,
+                                   prim_obj, barr_obj, XSL, DXSL, XSL2, RHS, RHS2, alpha, alphap,
+                                   alphad, soc_steps, resolved_depth, watchdog_activations);
+        if (action != Action::kAcceptAsIs) {
+            resolved_depth = kRecoveryDepthSoc;
+            return action;
+        }
+    }
+    if (extended_) {
+        const Action action = extended_->on_step_rejected(
+            Citer, iters, ctx, acceptance, mechanism, lsmode, obj_scale, mu, prim_obj, barr_obj,
+            XSL, DXSL, XSL2, RHS, RHS2, alpha, alphap, alphad, soc_steps, resolved_depth,
+            watchdog_activations);
+        if (action != Action::kAcceptAsIs) {
+            resolved_depth = kRecoveryDepthExtended;
+            return action;
+        }
+    }
+    resolved_depth = kRecoveryDepthUnresolved;
+    return Action::kAcceptAsIs;
 }
 
 } // namespace tycho::solvers
