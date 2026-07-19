@@ -207,9 +207,8 @@ TEST(FunnelAcceptance, WidthUpdateTrialAboveCurrentUsesFloor) {
 //
 // If a future change clamps the update (τ⁺ = min(τ, ...)) to restore
 // monotonicity even across the recovery-fallback edge, this test must be updated
-// deliberately, and the corpus scorecards
-// (docs/dev/analysis/2026-07-e2-g3-scorecards.md) must be re-validated against
-// the new behavior before the clamp ships.
+// deliberately, and the corpus scorecards analysis doc must be re-validated
+// against the new behavior before the clamp ships.
 TEST(FunnelAcceptance, WidthUpdateReWidensWhenCurrentIterateOutsideFunnel) {
     FunnelAcceptance a;
     FunnelPrimeRejecting(a, /*theta0=*/1.0, /*trial_outside=*/5.0); // τ = 1.5

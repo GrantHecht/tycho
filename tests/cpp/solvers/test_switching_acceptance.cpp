@@ -12,7 +12,10 @@
 //
 // Acceptance order (see switching_acceptance.h): θ_max ceiling → membership
 // (every trial) → switching selects F-type (Armijo) vs H-type (progress
-// verdict) → register on accept; every rejection notifies its cause.
+// verdict) → register on accept; every rejection notifies its cause. A
+// membership rejection additionally notifies whether the trial would have
+// passed the type-appropriate progress test, evaluated speculatively
+// (Ipopt's T1) — see the membership section below.
 //
 // Every scenario's arithmetic is computed BY HAND (or via a one-line python
 // check, reproduced in the comment) from the equations documented in
@@ -64,6 +67,7 @@ class SwitchingFakeAcceptance : public SwitchingAcceptance {
     bool last_register_h_type = false;
     int rejected_calls = 0;
     RejectionCause last_cause = RejectionCause::kCeiling;
+    bool last_trial_passed_progress_test = false;
     double last_theta0 = 0.0;
 
     void clear_hook_counters() {
@@ -100,9 +104,10 @@ class SwitchingFakeAcceptance : public SwitchingAcceptance {
         ++register_calls;
         last_register_h_type = h_type;
     }
-    void notify_trial_rejected(RejectionCause cause) override {
+    void notify_trial_rejected(RejectionCause cause, bool trial_passed_progress_test) override {
         ++rejected_calls;
         last_cause = cause;
+        last_trial_passed_progress_test = trial_passed_progress_test;
     }
 };
 
@@ -189,18 +194,31 @@ TEST(SwitchingAcceptance, ThetaMaxCeilingRejectsRegardless) {
     EXPECT_EQ(a.register_calls, 0);
     EXPECT_EQ(a.rejected_calls, 1);
     EXPECT_EQ(a.last_cause, RejectionCause::kCeiling);
+    // trial_passed_progress_test is a don't-care for kCeiling (Ipopt leaves
+    // its attribution flag untouched here); the base passes false.
+    EXPECT_FALSE(a.last_trial_passed_progress_test);
 }
 
 // ===========================================================================
 // Membership — checked for EVERY trial, before switching/Armijo (the behavior
 // that changed). A trial that WOULD pass switching + Armijo (F-type) is
 // rejected at membership when the strategy blocks it.
+//
+// On a membership rejection the base additionally evaluates, SPECULATIVELY,
+// the type-appropriate T1 (Armijo for what would have been an f-type trial,
+// the H-type progress delegate otherwise) and hands the verdict to
+// notify_trial_rejected() as trial_passed_progress_test — see the file-top
+// ordering note (5) and switching_acceptance.h.
 // ===========================================================================
 
 // Same trial as SwitchingHoldsFTypeArmijoAccepts below (θ_k = 1e-5 ≤ θ_min =
 // 1e-4, m_f = 0.01 ⇒ switching holds, Armijo would pass), but membership is
 // scripted false. It is checked FIRST, so the trial is rejected at membership
-// before the switching/Armijo tests run at all ⇒ cause kMembership.
+// before the switching/Armijo tests run at all ⇒ cause kMembership. Because
+// switching WOULD have held, T1 is the Armijo test, evaluated speculatively
+// (not delegated to is_h_type_progress_acceptable) ⇒ h_progress_calls stays 0
+// and, since Armijo would have passed (9.9999 ≤ 9.9999999999),
+// trial_passed_progress_test = true.
 //   θ₀ = current.infeasibility = 1e-5 ⇒ θ_min = 1e-4·max(1, 1e-5) = 1e-4.
 TEST(SwitchingAcceptance, MembershipRejectsFTypeTrial) {
     SwitchingFakeAcceptance a;
@@ -215,6 +233,64 @@ TEST(SwitchingAcceptance, MembershipRejectsFTypeTrial) {
     EXPECT_EQ(a.register_calls, 0);
     EXPECT_EQ(a.rejected_calls, 1);
     EXPECT_EQ(a.last_cause, RejectionCause::kMembership);
+    EXPECT_TRUE(a.last_trial_passed_progress_test); // speculative Armijo passed
+}
+
+// Same setup as above but φ_trial = 20 fails the speculative Armijo test
+// (Armijo RHS = 9.9999999999, matching SwitchingHoldsFTypeArmijoRejects
+// below) ⇒ trial_passed_progress_test = false even though the cause is still
+// kMembership (membership is checked first and fails regardless of Armijo).
+TEST(SwitchingAcceptance, MembershipRejectsFTypeTrialArmijoWouldFail) {
+    SwitchingFakeAcceptance a;
+    a.membership_verdict = false;
+    a.h_progress_verdict = true; // would accept if (wrongly) reached
+    const bool ok = a.is_iterate_acceptable(SwitchingMakePm(1.0e-5, 10.0, 0.0),
+                                            SwitchingMakePm(1.0e-6, 20.0, 0.0),
+                                            SwitchingMakePm(0.01, 0.01, 0.0), 1.0, 1.0);
+    EXPECT_FALSE(ok);
+    EXPECT_EQ(a.membership_calls, 1);
+    EXPECT_EQ(a.h_progress_calls, 0); // speculative T1 is Armijo, not H-type
+    EXPECT_EQ(a.rejected_calls, 1);
+    EXPECT_EQ(a.last_cause, RejectionCause::kMembership);
+    EXPECT_FALSE(a.last_trial_passed_progress_test); // speculative Armijo failed
+}
+
+// θ_current = 0.5 > θ_min = 1e-4 ⇒ switching is never evaluated (H-type
+// regardless of m_f, as in ThetaAboveMinAlwaysHType below), so the speculative
+// T1 for a membership rejection is is_h_type_progress_acceptable() itself —
+// called once (h_progress_calls = 1) with its scripted verdict forwarded
+// verbatim as trial_passed_progress_test.
+TEST(SwitchingAcceptance, MembershipRejectsHTypeTrialProgressWouldPass) {
+    SwitchingFakeAcceptance a;
+    a.membership_verdict = false;
+    a.h_progress_verdict = true;
+    const bool ok = a.is_iterate_acceptable(SwitchingMakePm(0.5, 10.0, 0.0),
+                                            SwitchingMakePm(0.4, 9.0, 0.0),
+                                            SwitchingMakePm(0.1, 1.0e6, 0.0), 1.0, 1.0);
+    EXPECT_FALSE(ok);
+    EXPECT_EQ(a.membership_calls, 1);
+    EXPECT_EQ(a.h_progress_calls, 1); // speculative T1 delegates to H-type here
+    EXPECT_EQ(a.register_calls, 0);
+    EXPECT_EQ(a.rejected_calls, 1);
+    EXPECT_EQ(a.last_cause, RejectionCause::kMembership);
+    EXPECT_TRUE(a.last_trial_passed_progress_test);
+}
+
+// Same routing as above but the scripted H-type verdict is false ⇒
+// trial_passed_progress_test = false.
+TEST(SwitchingAcceptance, MembershipRejectsHTypeTrialProgressWouldFail) {
+    SwitchingFakeAcceptance a;
+    a.membership_verdict = false;
+    a.h_progress_verdict = false;
+    const bool ok = a.is_iterate_acceptable(SwitchingMakePm(0.5, 10.0, 0.0),
+                                            SwitchingMakePm(0.4, 9.0, 0.0),
+                                            SwitchingMakePm(0.1, 1.0e6, 0.0), 1.0, 1.0);
+    EXPECT_FALSE(ok);
+    EXPECT_EQ(a.membership_calls, 1);
+    EXPECT_EQ(a.h_progress_calls, 1);
+    EXPECT_EQ(a.rejected_calls, 1);
+    EXPECT_EQ(a.last_cause, RejectionCause::kMembership);
+    EXPECT_FALSE(a.last_trial_passed_progress_test);
 }
 
 // ===========================================================================
@@ -274,6 +350,7 @@ TEST(SwitchingAcceptance, SwitchingHoldsFTypeArmijoRejects) {
     EXPECT_EQ(a.register_calls, 0);
     EXPECT_EQ(a.rejected_calls, 1);
     EXPECT_EQ(a.last_cause, RejectionCause::kArmijo);
+    EXPECT_FALSE(a.last_trial_passed_progress_test); // T1 failed by definition here
 }
 
 // θ_k ≤ θ_min but predicted_reduction.objective ≤ 0 (not a descent direction
@@ -320,6 +397,7 @@ TEST(SwitchingAcceptance, InequalityFailsForcesHType) {
     EXPECT_EQ(a.register_calls, 0);
     EXPECT_EQ(a.rejected_calls, 1);
     EXPECT_EQ(a.last_cause, RejectionCause::kHTypeProgress);
+    EXPECT_FALSE(a.last_trial_passed_progress_test); // T1 failed by definition here
 }
 
 // θ_k > θ_min ⇒ the switching condition is never even evaluated (skipped
@@ -373,6 +451,7 @@ TEST(SwitchingAcceptance, HTypeRejectedSkipsBookkeeping) {
     EXPECT_EQ(a.register_calls, 0);
     EXPECT_EQ(a.rejected_calls, 1);
     EXPECT_EQ(a.last_cause, RejectionCause::kHTypeProgress);
+    EXPECT_FALSE(a.last_trial_passed_progress_test); // T1 failed by definition here
 }
 
 // ===========================================================================

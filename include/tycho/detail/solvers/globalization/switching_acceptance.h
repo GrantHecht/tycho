@@ -74,6 +74,13 @@
 //      funnel's within-the-width test. Failure ⇒ reject (cause kMembership).
 //      Wächter–Biegler step A-5.4, Ipopt's CheckAcceptabilityOfTrialPoint, and
 //      Uno's FunnelMethod all gate every trial on membership, not only H-type.
+//      Ipopt attributes a rejection to the filter only when its own first test
+//      (T1 — the Armijo condition for an f-type trial, the acceptable-to-
+//      current-iterate test otherwise) PASSED and the filter test failed. To
+//      reproduce that exactly despite checking membership first, a membership
+//      rejection here SPECULATIVELY evaluates the type-appropriate T1 (side-
+//      effect-free) and hands the result to notify_trial_rejected() as its
+//      second argument — see (5).
 //   3. Switching condition (Eq. 19) selects F-type vs H-type:
 //        • F-TYPE (switching holds): accept iff the Armijo condition on φ holds
 //          (Eq. 20); else reject (cause kArmijo).
@@ -83,8 +90,14 @@
 //      subclass bookkeeping (a filter augments only on an H-type accept and
 //      folds in its per-iteration reset heuristic; a funnel tightens its width
 //      only on an H-type accept). h_type is false for an F-type accept.
-//   5. On any rejection: notify_trial_rejected(cause) lets a stateful subclass
-//      (the filter) run per-iteration bookkeeping keyed on the last rejection.
+//   5. On any rejection: notify_trial_rejected(cause, trial_passed_progress_test)
+//      lets a stateful subclass (the filter) run per-iteration bookkeeping
+//      keyed on the last rejection. trial_passed_progress_test is meaningful
+//      only for cause == kMembership (the speculative T1 result from (2));
+//      for kArmijo/kHTypeProgress it is trivially false (T1 failed by
+//      definition to reach that branch), and for kCeiling it is false and
+//      MUST be ignored (Ipopt leaves its attribution flag untouched on a
+//      θ_max rejection).
 //
 // Subclass hooks (this class is never instantiated directly):
 //   initialize_bounds(theta_0)    — called once, lazily, the first time
@@ -102,8 +115,12 @@
 //                                    verdict, run only on the H-type path.
 //   register_accepted_step(current, trial, h_type)  — bookkeeping run on any
 //                                    accept; h_type distinguishes F- from H-type.
-//   notify_trial_rejected(cause)  — bookkeeping run on any rejection (default
-//                                    no-op; the filter overrides it).
+//   notify_trial_rejected(cause, trial_passed_progress_test) — bookkeeping run
+//                                    on any rejection (default no-op; the
+//                                    filter overrides it). The second
+//                                    argument is the speculative T1 result,
+//                                    meaningful only for cause == kMembership
+//                                    (see (5) above).
 //
 // Design note — the minimal-step / feasibility-restoration trigger (WB
 // Eq. (23), α_min as a fraction of a computed minimal step size, e.g.
@@ -204,10 +221,27 @@ class SwitchingAcceptance : public AcceptanceStrategy {
     // Bookkeeping on any accept; h_type is false for an F-type accept.
     virtual void register_accepted_step(const ProgressMeasures &current,
                                         const ProgressMeasures &trial, bool h_type) = 0;
-    // Bookkeeping on any rejection; default no-op (only the filter overrides it).
-    virtual void notify_trial_rejected(RejectionCause cause) { (void)cause; }
+    // Bookkeeping on any rejection; default no-op (only the filter overrides
+    // it). trial_passed_progress_test is Ipopt's speculative T1 result and is
+    // meaningful only when cause == kMembership (see the file-top ordering
+    // note (5)); it is a trivially-implied constant for every other cause.
+    virtual void notify_trial_rejected(RejectionCause cause, bool trial_passed_progress_test) {
+        (void)cause;
+        (void)trial_passed_progress_test;
+    }
 
   private:
+    // Eq. (19), factored out so the membership-reject branch can evaluate it
+    // speculatively (to select which T1 to run) without duplicating the
+    // arithmetic the template method also runs at step 3.
+    bool compute_switching_holds(const ProgressMeasures &current,
+                                 const ProgressMeasures &predicted_reduction,
+                                 double step_length) const;
+    // Eq. (20), factored out for the same reason (used at step 3 AND,
+    // speculatively, in the membership-reject branch's T1 evaluation).
+    bool armijo_holds(const ProgressMeasures &current, const ProgressMeasures &trial,
+                      const ProgressMeasures &predicted_reduction) const;
+
     bool bounds_initialized_ = false; // Lazy-init flag; re-armed by reset().
     double theta_min_ = 0.0;
     double theta_max_ = 0.0;

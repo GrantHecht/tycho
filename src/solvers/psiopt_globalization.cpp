@@ -1108,6 +1108,29 @@ bool SwitchingAcceptance::is_infeasibility_sufficiently_reduced(
         "feasibility-restoration strategy drives it");
 }
 
+bool SwitchingAcceptance::compute_switching_holds(const ProgressMeasures &current,
+                                                  const ProgressMeasures &predicted_reduction,
+                                                  double step_length) const {
+    // Eq. (19): tested only when θ_k ≤ θ_min AND the step is a descent
+    // direction for φ (m_f = predicted_reduction.objective > 0).
+    if (current.infeasibility <= theta_min_ && predicted_reduction.objective > 0.0) {
+        const double lhs =
+            step_length * std::pow(predicted_reduction.objective / step_length, kSwitchingSPhi);
+        const double rhs = kSwitchingDelta * std::pow(current.infeasibility, kSwitchingSTheta);
+        return lhs > rhs;
+    }
+    return false;
+}
+
+bool SwitchingAcceptance::armijo_holds(const ProgressMeasures &current,
+                                       const ProgressMeasures &trial,
+                                       const ProgressMeasures &predicted_reduction) const {
+    // Eq. (20). φ(pt) = pt.objective + pt.auxiliary.
+    const double phi_current = current.objective + current.auxiliary;
+    const double phi_trial = trial.objective + trial.auxiliary;
+    return phi_trial <= phi_current - kArmijoEtaPhi * predicted_reduction.objective;
+}
+
 bool SwitchingAcceptance::is_iterate_acceptable(const ProgressMeasures &current,
                                                 const ProgressMeasures &trial,
                                                 const ProgressMeasures &predicted_reduction,
@@ -1126,45 +1149,52 @@ bool SwitchingAcceptance::is_iterate_acceptable(const ProgressMeasures &current,
         bounds_initialized_ = true;
     }
 
-    // Hard ceiling (Eq. 21): rejected before any other test.
+    // Hard ceiling (Eq. 21): rejected before any other test. Ipopt leaves its
+    // filter-attribution flag untouched on a "Tmax" rejection, so the second
+    // argument here is a don't-care false (see notify_trial_rejected()'s doc).
     if (trial.infeasibility > theta_max_) {
-        notify_trial_rejected(RejectionCause::kCeiling);
+        notify_trial_rejected(RejectionCause::kCeiling, false);
         return false;
     }
 
     // Strategy membership (step 2): checked for EVERY trial, F-type included —
     // the filter's non-dominance test / the funnel's within-the-width test.
     if (!is_trial_acceptable_to_strategy(current, trial)) {
-        notify_trial_rejected(RejectionCause::kMembership);
+        // Ipopt attributes a filter rejection only when its own first test
+        // (T1) PASSED. Reproduce that by SPECULATIVELY evaluating the
+        // type-appropriate T1 here — the Armijo condition if the switching
+        // condition would have selected an f-type trial, the H-type
+        // sufficient-progress delegate otherwise (side-effect-free per its
+        // contract) — and handing the verdict to notify_trial_rejected().
+        const bool switching_holds_spec =
+            compute_switching_holds(current, predicted_reduction, step_length);
+        const bool trial_passed_progress_test =
+            switching_holds_spec ? armijo_holds(current, trial, predicted_reduction)
+                                 : is_h_type_progress_acceptable(current, trial);
+        notify_trial_rejected(RejectionCause::kMembership, trial_passed_progress_test);
         return false;
     }
 
-    // Switching condition (Eq. 19): tested only when θ_k ≤ θ_min AND the step
-    // is a descent direction for φ (m_f = predicted_reduction.objective > 0).
-    bool switching_holds = false;
-    if (current.infeasibility <= theta_min_ && predicted_reduction.objective > 0.0) {
-        const double lhs =
-            step_length * std::pow(predicted_reduction.objective / step_length, kSwitchingSPhi);
-        const double rhs = kSwitchingDelta * std::pow(current.infeasibility, kSwitchingSTheta);
-        switching_holds = lhs > rhs;
-    }
+    // Switching condition (Eq. 19) selects F-type vs H-type.
+    const bool switching_holds =
+        compute_switching_holds(current, predicted_reduction, step_length);
 
     if (switching_holds) {
-        // F-type: Armijo condition on φ (Eq. 20). φ(pt) = pt.objective + pt.auxiliary.
-        const double phi_current = current.objective + current.auxiliary;
-        const double phi_trial = trial.objective + trial.auxiliary;
-        if (phi_trial <= phi_current - kArmijoEtaPhi * predicted_reduction.objective) {
+        // F-type: accept iff the Armijo condition on φ holds (Eq. 20).
+        if (armijo_holds(current, trial, predicted_reduction)) {
             register_accepted_step(current, trial, /*h_type=*/false);
             return true;
         }
-        notify_trial_rejected(RejectionCause::kArmijo);
+        // T1 (Armijo) failed by definition to reach this branch.
+        notify_trial_rejected(RejectionCause::kArmijo, false);
         return false;
     }
 
     // H-type: the subclass sufficient-progress verdict (filter acceptable-to-
     // current-iterate / funnel β·width). Bookkeeping runs only on an accept.
     if (!is_h_type_progress_acceptable(current, trial)) {
-        notify_trial_rejected(RejectionCause::kHTypeProgress);
+        // T1 (the current-iterate test) failed by definition to reach here.
+        notify_trial_rejected(RejectionCause::kHTypeProgress, false);
         return false;
     }
     register_accepted_step(current, trial, /*h_type=*/true);
@@ -1289,14 +1319,18 @@ bool FilterAcceptance::is_h_type_progress_acceptable(const ProgressMeasures &cur
     return is_acceptable_to_current(phi_trial, theta_trial, phi_current, theta_current);
 }
 
-void FilterAcceptance::notify_trial_rejected(RejectionCause cause) {
-    // Ipopt last_rejection_due_to_filter_: TRUE only for a filter-membership
-    // rejection; a current-iterate/Armijo rejection sets it FALSE; a θ_max
-    // ceiling rejection leaves it UNCHANGED (Ipopt returns on "Tmax" before
-    // touching the flag). See (4) and the ordering divergence note.
+void FilterAcceptance::notify_trial_rejected(RejectionCause cause,
+                                             bool trial_passed_progress_test) {
+    // Ipopt last_rejection_due_to_filter_: TRUE only when T1 (the Armijo/
+    // current-iterate test) PASSED and the filter membership test failed —
+    // i.e. a kMembership rejection whose speculatively-evaluated
+    // trial_passed_progress_test is true. A current-iterate/Armijo rejection
+    // (T1 itself failed) sets it FALSE; a θ_max ceiling rejection leaves it
+    // UNCHANGED (Ipopt returns on "Tmax" before touching the flag; the second
+    // argument is a don't-care here). See (4).
     switch (cause) {
     case RejectionCause::kMembership:
-        last_rejection_was_filter_ = true;
+        last_rejection_was_filter_ = trial_passed_progress_test;
         break;
     case RejectionCause::kArmijo:
     case RejectionCause::kHTypeProgress:

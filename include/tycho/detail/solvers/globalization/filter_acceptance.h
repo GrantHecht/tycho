@@ -130,21 +130,25 @@
 //     is cleared by reset_bounds() (the per-phase hook), so the cap is per-phase.
 //
 // Divergences from the sources, disclosed (consequence stated):
-//   • Membership-check ORDER (the one residual filter divergence). Ipopt tests
-//     the filter membership (1b) AFTER the current-iterate/Armijo test, so a
-//     rejection is "filter-caused" only when (1a)/Armijo PASSED but (1b) failed.
-//     The shared skeleton is membership-first (the base checks (1b) at step 2,
-//     before the switching/Armijo/(1a) tests at step 3) — the unified order Uno's
-//     funnel also uses. Acceptance outcomes are identical (a trial must pass ALL
-//     tests, and AND does not depend on order); only the REJECTION-CAUSE
-//     attribution differs. Consequence: a trial that fails BOTH membership and
-//     the (1a)/Armijo test is attributed to membership here (kMembership ⇒
-//     filter-caused) but to (1a)/Armijo in Ipopt (not filter-caused). So this
-//     implementation's filter-reset counter advances in a strict SUPERSET of
-//     Ipopt's cases, and the reset heuristic can fire somewhat more eagerly. The
-//     θ_max-ceiling and current-iterate/Armijo mappings match Ipopt exactly (a
-//     ceiling rejection leaves the flag unchanged; an (1a)/Armijo rejection
-//     zeroes it on the next accept).
+//   • Membership-check ORDER (no longer a rejection-attribution divergence).
+//     The shared skeleton still checks the filter membership (1b) at step 2,
+//     before the switching/Armijo/(1a) tests at step 3 — the unified order
+//     Uno's funnel also uses, the reverse of Ipopt's own (1a)-then-(1b) order.
+//     Acceptance outcomes are unaffected by this (a trial must pass ALL
+//     tests, and AND does not depend on order). Rejection-cause ATTRIBUTION
+//     now reproduces Ipopt's T1-then-filter semantics exactly despite the
+//     reversed check order: a kMembership rejection speculatively evaluates
+//     the type-appropriate T1 (Armijo for an f-type trial, the current-
+//     iterate test otherwise — side-effect-free) and is attributed to the
+//     filter (last_rejection_was_filter_ = true) only when that speculative
+//     T1 passes; if T1 would also have failed, the rejection is attributed to
+//     that failure instead (last_rejection_was_filter_ = false), exactly as
+//     Ipopt's last_rejection_due_to_filter_ would read. See
+//     SwitchingAcceptance::is_iterate_acceptable's membership-reject branch
+//     and notify_trial_rejected() below. The θ_max-ceiling and current-
+//     iterate/Armijo mappings match Ipopt exactly (a ceiling rejection leaves
+//     the flag unchanged; an (1a)/Armijo rejection zeroes it on the next
+//     accept).
 //   • n_filter_resets_ increment. In current Ipopt master n_filter_resets_ is
 //     initialized to 0 but never incremented (the "maximal number of resets
 //     already exceeded" branch is unreachable), so the max_filter_resets cap is
@@ -285,8 +289,10 @@ class FilterAcceptance final : public SwitchingAcceptance {
     // reset heuristic (which reads the last rejection's cause) on any accept.
     void register_accepted_step(const ProgressMeasures &current, const ProgressMeasures &trial,
                                 bool h_type) override;
-    // (4): record the last rejection's cause for the per-iteration reset heuristic.
-    void notify_trial_rejected(RejectionCause cause) override;
+    // (4): record the last rejection's cause for the per-iteration reset
+    // heuristic. trial_passed_progress_test is the base's speculative T1
+    // result, meaningful only when cause == kMembership.
+    void notify_trial_rejected(RejectionCause cause, bool trial_passed_progress_test) override;
 
   private:
     // (1a): acceptable to the current iterate — the barrier-objective ceiling

@@ -27,7 +27,11 @@
 //   (4)  reset heuristic (per-iteration): the counter advances once per ACCEPT
 //        whose line search's last rejection was filter-caused; 5 such successive
 //        iterations clear the filter, ≤ 5 times; an accept whose last rejection
-//        was non-filter zeroes the run
+//        was non-filter zeroes the run. A kMembership rejection is filter-caused
+//        only when the speculatively-evaluated, type-appropriate T1 (Armijo for
+//        an f-type trial, (1a) for an h-type one) PASSES — Ipopt-exact
+//        attribution; the four AttributionFails* tests below walk this truth
+//        table.
 //
 // UNITY RULE: anonymous namespace does not protect names against the unity
 // build — every helper here is prefixed Filter* to stay globally unique across
@@ -402,6 +406,111 @@ TEST(FilterAcceptance, ArmijoLastRejectionZeroesStreakOnAccept) {
     FilterFTypeAccept(a);
     EXPECT_EQ(a.successive_filter_rejections(), 0);
     EXPECT_EQ(a.filter_size(), 1u); // untouched (F-type accepts do not augment)
+}
+
+// ===========================================================================
+// (4) reset heuristic — REJECTION-CAUSE ATTRIBUTION on a membership rejection.
+// The base speculatively evaluates the type-appropriate progress test (T1:
+// Armijo for an f-type trial, the current-iterate test (1a) for an h-type
+// one) on every kMembership rejection and hands the verdict to
+// notify_trial_rejected() as trial_passed_progress_test; FilterAcceptance
+// sets last_rejection_was_filter_ = trial_passed_progress_test for that
+// cause (Ipopt-exact: a rejection is filter-caused only when T1 PASSED).
+// The four cases below walk the full truth table — H-type and F-type
+// trials, each either failing membership ONLY (T1 passes ⇒ filter-caused)
+// or failing BOTH membership AND T1 (T1 fails ⇒ not filter-caused).
+// ===========================================================================
+
+// H-type, fails BOTH membership and (1a). Seed E = augment(θ_c=4, φ_c=20) =
+// (φ_E ≈ 20 − 4e-8, θ_E = 3.99996), as in the tests above.
+//   membership: trial (θ_t=50, φ_t=30); 50 > 3.99996 AND 30 > ≈20 ⇒ dominated.
+//   (1a) with current (θ_c=10, φ_c=10), trial (θ_t=50, φ_t=30):
+//     φ_t(30) > φ_c(10) ⇒ ceiling check: basval=1 (|φ_c|=10, not > 10),
+//       log10(30−10)=log10(20)≈1.301 ≤ 5+1=6 ⇒ ceiling passes (no trip);
+//     margin: θ_t=50 ≤ (1−1e-5)·10=9.9999? NO. φ_t−φ_c=20 ≤ −1e-8·10=−1e-7? NO.
+//     Both margins fail ⇒ (1a) FAILS ⇒ trial_passed_progress_test = false.
+// A streak of 1 is built first (via the fails-membership-only H-type case
+// below) so the zeroing is visible: the following accept reads flag=false
+// and resets the streak to 0, not 2 — the pre-fix code (kMembership ⇒
+// unconditionally filter-caused) would have incremented here instead.
+TEST(FilterAcceptance, AttributionFailsBothHTypeZeroesStreak) {
+    FilterAcceptance a;
+    FilterPrimeCeilingReject(a, 4.0);
+    ASSERT_TRUE(FilterHType(a, 4.0, 20.0, 1.0, 20.0)); // seed E
+    ASSERT_EQ(a.filter_size(), 1u);
+
+    FilterMembershipReject(a); // fails-membership-only ⇒ flag true ⇒ streak 1
+    FilterFTypeAccept(a);
+    ASSERT_EQ(a.successive_filter_rejections(), 1);
+
+    EXPECT_FALSE(FilterHType(a, /*θ_c=*/10.0, /*φ_c=*/10.0, /*θ_t=*/50.0, /*φ_t=*/30.0));
+    FilterFTypeAccept(a);
+    EXPECT_EQ(a.successive_filter_rejections(), 0); // zeroed, not incremented to 2
+    EXPECT_EQ(a.filter_size(), 1u);                 // F-type accepts never augment; E intact
+}
+
+// H-type, fails membership ONLY. Same trial as FilterMembershipReject
+// (θ_c=100, φ_c=100, θ_t=50, φ_t=30): membership fails (dominated by E, as
+// above) but (1a) PASSES via the θ margin (θ_t=50 ≤ (1−1e-5)·100=99.999) ⇒
+// trial_passed_progress_test = true ⇒ filter-caused ⇒ the following accept
+// INCREMENTS the streak.
+TEST(FilterAcceptance, AttributionFailsMembershipOnlyHTypeIncrementsStreak) {
+    FilterAcceptance a;
+    FilterPrimeCeilingReject(a, 4.0);
+    ASSERT_TRUE(FilterHType(a, 4.0, 20.0, 1.0, 20.0)); // seed E
+    ASSERT_EQ(a.successive_filter_rejections(), 0);
+
+    FilterMembershipReject(a);
+    FilterFTypeAccept(a);
+    EXPECT_EQ(a.successive_filter_rejections(), 1); // incremented
+    EXPECT_EQ(a.filter_size(), 1u);                 // F-type accept did not augment; E intact
+}
+
+// F-type, fails BOTH membership and Armijo (T1). Switching holds (current
+// θ_c=1e-5 ≤ θ_min=4e-4, m_f=0.01 > 0: lhs=0.01^2.3≈2.511886e-05 >
+// rhs=(1e-5)^1.1≈3.162278e-06), so the speculative T1 is Armijo, not (1a).
+// Trial (θ_t=50, φ_t=30): membership fails (dominated by seed E, same trial
+// as the H-type case above) AND Armijo fails (φ_t=30 > φ_c(10) −
+// 1e-8·0.01 ≈ 9.9999999999) ⇒ trial_passed_progress_test = false. As in the
+// H-type case, a pre-built streak of 1 zeroes on the following accept.
+TEST(FilterAcceptance, AttributionFailsBothFTypeZeroesStreak) {
+    FilterAcceptance a;
+    FilterPrimeCeilingReject(a, 4.0);
+    ASSERT_TRUE(FilterHType(a, 4.0, 20.0, 1.0, 20.0)); // seed E
+
+    FilterMembershipReject(a);
+    FilterFTypeAccept(a);
+    ASSERT_EQ(a.successive_filter_rejections(), 1);
+
+    EXPECT_FALSE(a.is_iterate_acceptable(FilterMakePm(1.0e-5, 10.0, 0.0),
+                                         FilterMakePm(50.0, 30.0, 0.0),
+                                         FilterMakePm(0.01, 0.01, 0.0), 1.0, 1.0));
+    FilterFTypeAccept(a);
+    EXPECT_EQ(a.successive_filter_rejections(), 0); // zeroed
+    EXPECT_EQ(a.filter_size(), 1u);
+}
+
+// F-type, fails membership ONLY. Switching holds as above (same current/
+// predicted_reduction), so T1 is Armijo. Uses a SEPARATE, smaller seed
+// E' = augment(θ_c=1, φ_c=1) = (φ_E' ≈ 0.99999999, θ_E' = 0.99999) (a fresh
+// prime, θ₀=1.0) so a trial can be dominated by E' (large φ relative to
+// φ_E') while still passing Armijo (small φ relative to φ_current=10):
+// trial (θ_t=2.0, φ_t=5.0).
+//   membership: θ_t=2.0 > 0.99999 AND φ_t=5.0 > 0.99999999 ⇒ dominated by E'.
+//   Armijo (T1): φ_t=5.0 ≤ φ_c(10) − 1e-8·0.01 ≈ 9.9999999999 ⇒ PASSES.
+// ⇒ trial_passed_progress_test = true ⇒ filter-caused ⇒ the following accept
+// INCREMENTS the (fresh) streak.
+TEST(FilterAcceptance, AttributionFailsMembershipOnlyFTypeIncrementsStreak) {
+    FilterAcceptance a;
+    FilterPrimeCeilingReject(a, 1.0);
+    ASSERT_TRUE(FilterHType(a, /*θ_c=*/1.0, /*φ_c=*/1.0, /*θ_t=*/0.5, /*φ_t=*/1.0)); // seed E'
+    ASSERT_EQ(a.successive_filter_rejections(), 0);
+
+    EXPECT_FALSE(a.is_iterate_acceptable(FilterMakePm(1.0e-5, 10.0, 0.0),
+                                         FilterMakePm(2.0, 5.0, 0.0),
+                                         FilterMakePm(0.01, 0.01, 0.0), 1.0, 1.0));
+    FilterFTypeAccept(a);
+    EXPECT_EQ(a.successive_filter_rejections(), 1); // incremented
 }
 
 // Five consecutive filter-caused ITERATIONS (each: a filter-caused last
