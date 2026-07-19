@@ -15,7 +15,7 @@ modernized penalty-based acceptance test (rather than the classic fused backtrac
 line search) is what rescues the `lit_wb2000` counterexample; this document scores the two
 strategies purpose-built to replace a monolithic penalty/merit value with an explicit
 progress-measures history — a set of dominating pairs (filter) or a single shrinking width
-(funnel) — which the G2 document's nulls section flagged as the plausible next lever for the
+(funnel) — which the merit-series scorecards (2026-07-e2-g2-scorecards.md), whose nulls section flagged as the plausible next lever for the
 hard/degenerate problems that no acceptance or recovery-chain change had moved.
 
 ## 1. Method
@@ -32,7 +32,7 @@ two repeats to separate genuine behavior change from run-to-run float noise):
 | **filter-wd** | `python scripts/run_corpus.py --cbwr --repeat 2 --config acceptance_strategy=filter watchdog=1` | Filter acceptance plus the watchdog, same purpose as `funnel-wd`. |
 
 Both `funnel` and `filter` are generic-path acceptance strategies in the same sense as `merit`
-in the G2 document: the classic-path recovery links (`max_soc`, `ls_extended_iters`) require
+in the merit-series scorecards (2026-07-e2-g2-scorecards.md): the classic-path recovery links (`max_soc`, `ls_extended_iters`) require
 `acceptance_strategy=classic_merit` and are rejected upfront by an `std::invalid_argument`
 check in `psiopt.cpp` otherwise, so neither strategy composes with SOC or extended
 backtracking in this scorecard. The watchdog is architecturally independent of that guard —
@@ -78,7 +78,7 @@ wiring — the `FunnelAcceptance`/`FilterAcceptance` construction branches added
 
 **Funnel: fastest rescue of the counterexample so far, plus three more iteration wins, zero
 regressions.** `lit_wb2000` moves from `failed / 500` to `converged / 29`. Set against the
-merit-based rescues in the G2 scorecard doc — `wmno` (`acceptance_strategy=merit`) took 114
+merit-based rescues in 2026-07-e2-g2-scorecards.md — `wmno` (`acceptance_strategy=merit`) took 114
 iterations, `flex` (`acceptance_strategy=merit merit_penalty_rule=flexible`) took 48 — the
 funnel's 29 is the cheapest fix for this instance across the whole series. Three more problems
 get cheaper without changing status: `lit_powell_badscaled` 22 -> 12, `hard_brach_coldstart`
@@ -91,7 +91,7 @@ efficiency mix.** `lit_wb2000` also converges (`133` iterations — slower than 
 consistent with maintaining a growing set of dominating pairs costing more bookkeeping per
 trial than updating one scalar width). `hard_mountaincar_badguess` moves from `failed / 1000`
 to `acceptable / 739` — the first status movement on that problem by any configuration in
-this program (it held its exact `defaults` status across every option in the G2 scorecard
+this program (it held its exact `defaults` status across every option in 2026-07-e2-g2-scorecards.md
 too). `hard_zermelo_wrongbasin` moves from `diverged / 822` to `failed / 1000`: per the
 `ConvergenceFlags` severity ordering documented at
 `include/tycho/detail/solvers/psiopt_fwd.h` (`CONVERGED < ACCEPTABLE < NOTCONVERGED <
@@ -109,7 +109,7 @@ corpus never puts either acceptance strategy through the run of consecutive full
 the watchdog arms on, so the composition is architecturally sound (confirmed by the earlier
 error-check reading — the strategy-combination guard in `psiopt.cpp` explicitly allows
 watchdog with any acceptance strategy) but has nothing to demonstrate on this corpus. This
-mirrors the G2 scorecard's finding that the classic-path recovery chain's watchdog leg rarely
+mirrors the finding in 2026-07-e2-g2-scorecards.md that the classic-path recovery chain's watchdog leg rarely
 fires here; a corpus problem engineered to stall a trial sequence for 10+ consecutive
 rejections would be needed to observe the composition doing anything.
 
@@ -145,7 +145,7 @@ status and iteration count:
 - **All 17 problems, all 5 configs:** status and iteration count are byte-identical between
   repeat 1 and repeat 2 — no config introduces a new source of status/iteration flakiness.
 - **`hard_cartpole_tightbounds`:** the same LSB-level objective float noise already documented
-  in the G0 baseline and reconfirmed in the G2 scorecard persists under every configuration in
+  in the corpus baseline (2026-07-e2-g0-baseline.md) and reconfirmed in 2026-07-e2-g2-scorecards.md persists under every configuration in
   this document — e.g. `defaults` `78.54562203020066` vs. `78.54562203020087`, differing only
   at the ~13th significant digit; `funnel`, `filter`, `funnel-wd`, and `filter-wd` all show the
   same pattern. Status (`converged`) and iteration count (`95`) are unaffected.
@@ -155,7 +155,7 @@ status and iteration count:
   pre-existing baseline before trusting the four strategy diffs above.
 - Two corpus problems carry known order-sensitivity notes independent of this document's
   configurations (`hard_zermelo_wrongbasin`, `hard_mountaincar_badguess` — see their module
-  docstrings and the G0 baseline doc): their flag and iteration-cap behavior is stable across
+  docstrings and the corpus baseline doc (2026-07-e2-g0-baseline.md)): their flag and iteration-cap behavior is stable across
   repeats even though objective/iteration-path details near the failure are not guaranteed
   byte-identical run to run in general. On the specific repeat pairs captured for this
   document, status and iteration count landed identically for both problems under every
@@ -168,7 +168,7 @@ For the filter, the standard Wächter & Biegler global-convergence argument is s
 full algorithm, including a monotone barrier-parameter update scheme; this implementation
 still drives the barrier parameter through the pre-existing monolithic governor, not a
 provably-compatible one, so the filter's guarantee story is incomplete pending the barrier
-governor work already flagged as future work in the G2 scorecard's nulls section. For the
+governor work already flagged as future work in 2026-07-e2-g2-scorecards.md's nulls section. For the
 funnel, the situation is more open: the trust-region funnel method has a published convergence
 proof, but a *line-search* funnel's convergence proof is, per Kiessling, Leyffer & Vanaret's
 own framing, an open question in the literature, and funnel acceptance embedded inside an
@@ -203,7 +203,7 @@ the corpus is deliberately small and adversarially selected, see `tests/corpus/R
 
 - **`funnel`** (`acceptance_strategy=funnel`) is the configuration to reach for when
   efficiency matters most: it clears the corpus's literature counterexample in the fewest
-  iterations of any configuration measured across this and the G2 scorecard, wins on every
+  iterations of any configuration measured across this document and 2026-07-e2-g2-scorecards.md, wins on every
   other problem it touches, and regresses nothing.
 - **`filter`** (`acceptance_strategy=filter`) is the configuration to reach for when
   robustness matters most: it is the only configuration in this program to move
