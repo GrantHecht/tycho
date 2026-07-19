@@ -34,6 +34,7 @@
 
 #include "tycho/detail/solvers/globalization/backtracking_line_search.h"
 #include "tycho/detail/solvers/globalization/classic_adaptive_governor.h"
+#include "tycho/detail/solvers/globalization/filter_acceptance.h"
 #include "tycho/detail/solvers/globalization/funnel_acceptance.h"
 #include "tycho/detail/solvers/globalization/merit_acceptance.h"
 #include "tycho/detail/solvers/globalization/modern_merit.h"
@@ -1194,6 +1195,94 @@ void FunnelAcceptance::register_accepted_h_type(const ProgressMeasures &current,
     } else {
         width_ = kFunnelBeta * width_;
     }
+}
+
+// ============================================================================
+// FilterAcceptance — (θ, φ)-pair filter H-type strategy on the switching
+// skeleton. See globalization/filter_acceptance.h for the full formulation and
+// the rule-by-rule Ipopt citations; the code below transcribes the
+// acceptable-to-current test (1a), the acceptable-to-filter test (1b), the
+// augmentation (2), and the filter-reset heuristic (4) documented there.
+// ============================================================================
+
+void FilterAcceptance::initialize_bounds(double theta_0) {
+    // Start the phase with an empty filter (Ipopt Reset; the θ_max ceiling is
+    // the base's scalar bound, not a seeded filter entry — see the divergence
+    // notes). θ_0 is not needed here: the filter derives no bound from it.
+    (void)theta_0;
+    filter_.clear();
+    successive_filter_rejections_ = 0;
+    n_filter_resets_ = 0;
+}
+
+void FilterAcceptance::reset_bounds() {
+    // Empty the filter and zero both reset-heuristic counters so the next θ₀
+    // capture re-arms a clean per-phase filter.
+    filter_.clear();
+    successive_filter_rejections_ = 0;
+    n_filter_resets_ = 0;
+}
+
+bool FilterAcceptance::is_acceptable_to_current(double phi_trial, double theta_trial,
+                                                double phi_current, double theta_current) {
+    // (1a) barrier-objective ceiling (Ipopt IsAcceptableToCurrentIterate's
+    // obj_max_inc test) — only when the barrier objective increases.
+    if (phi_trial > phi_current) {
+        double basval = 1.0;
+        if (std::abs(phi_current) > 10.0)
+            basval = std::log10(std::abs(phi_current));
+        if (std::log10(phi_trial - phi_current) > kFilterObjMaxInc + basval)
+            return false;
+    }
+
+    // (1a) two-condition margin test (WB Eqs. (18a)/(18b)); both margins scale
+    // by θ_current, matching Ipopt. Plain ≤ (see the Compare_le divergence note).
+    return theta_trial <= (1.0 - kFilterGammaTheta) * theta_current ||
+           phi_trial - phi_current <= -kFilterGammaPhi * theta_current;
+}
+
+bool FilterAcceptance::is_infeasibility_acceptable(const ProgressMeasures &current,
+                                                   const ProgressMeasures &trial) {
+    const double theta_trial = trial.infeasibility;
+    const double phi_trial = trial.objective + trial.auxiliary;
+    const double theta_current = current.infeasibility;
+    const double phi_current = current.objective + current.auxiliary;
+
+    // (1a): a rejection here is NOT filter-caused — Ipopt zeroes the successive-
+    // rejection counter (last_rejection_due_to_filter_ = false → count = 0).
+    if (!is_acceptable_to_current(phi_trial, theta_trial, phi_current, theta_current)) {
+        successive_filter_rejections_ = 0;
+        return false;
+    }
+
+    // (1b): a rejection here IS filter-caused — Ipopt increments the successive-
+    // rejection counter and clears the filter once the trigger is reached,
+    // honouring the per-phase reset cap (4).
+    if (!filter_.acceptable(phi_trial, theta_trial)) {
+        ++successive_filter_rejections_;
+        if (n_filter_resets_ < kFilterMaxResets &&
+            successive_filter_rejections_ >= kFilterResetTrigger) {
+            filter_.clear();
+            ++n_filter_resets_;
+            successive_filter_rejections_ = 0;
+        }
+        return false;
+    }
+
+    // Accepted: Ipopt sets last_rejection_due_to_filter_ = false, which zeroes
+    // the counter on the next pass — mirrored here directly.
+    successive_filter_rejections_ = 0;
+    return true;
+}
+
+void FilterAcceptance::register_accepted_h_type(const ProgressMeasures &current,
+                                                const ProgressMeasures &trial) {
+    // (2): Ipopt AugmentFilter stores the CURRENT (reference) iterate's margined
+    // pair; the trial participates only in the verdict (1), not the entry.
+    (void)trial;
+    const double theta_current = current.infeasibility;
+    const double phi_current = current.objective + current.auxiliary;
+    filter_.augment(phi_current, theta_current);
 }
 
 } // namespace tycho::solvers
