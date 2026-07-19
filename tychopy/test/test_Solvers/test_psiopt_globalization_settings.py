@@ -5,9 +5,13 @@ Exercises the Python surface for the five new PSIOPT.Settings fields
 ``ls_extended_iters``, ``watchdog``) and the three new SolveResult
 diagnostics (``last_soc_steps``, ``last_watchdog_activations``,
 ``last_recovery_depth_histogram``): property round-trips, per-field
-validation, invalid enum construction, and the
-``acceptance_strategy=merit`` + classic-path-recovery combo guard in
-``Settings::validate()`` (src/solvers/psiopt.cpp).
+validation, invalid enum construction, and the classic-path-recovery
+combo guard in ``Settings::validate()`` (src/solvers/psiopt.cpp), which
+rejects ``max_soc``/``ls_extended_iters`` in combination with any of the
+three generic-path acceptance strategies (``merit``, ``funnel``,
+``filter``). Also covers enum-from-int coercion for ``funnel``/``filter``
+(``AcceptanceStrategies(2)``/``AcceptanceStrategies(3)``), which the
+corpus harness relies on.
 
 Also regression-tests the "component construction staleness" review
 finding: ``acceptance_``/``mechanism_``/``governor_``/``recovery_`` used to
@@ -68,6 +72,44 @@ class test_AcceptanceStrategyRoundTrip(unittest.TestCase):
         prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.classic_merit
         self.assertEqual(
             prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.classic_merit
+        )
+
+    def test_round_trip_funnel(self):
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.funnel
+        self.assertEqual(
+            prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.funnel
+        )
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.classic_merit
+        self.assertEqual(
+            prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.classic_merit
+        )
+
+    def test_round_trip_filter(self):
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.filter
+        self.assertEqual(
+            prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.filter
+        )
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.classic_merit
+        self.assertEqual(
+            prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.classic_merit
+        )
+
+    def test_round_trip_funnel_via_int_coercion(self):
+        # The corpus harness selects strategies by raw int; enum-from-int
+        # coercion must resolve to the same member as the named attribute.
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies(2)
+        self.assertEqual(
+            prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.funnel
+        )
+
+    def test_round_trip_filter_via_int_coercion(self):
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies(3)
+        self.assertEqual(
+            prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.filter
         )
 
 
@@ -165,13 +207,15 @@ class test_BadEnumValues(unittest.TestCase):
 
 
 class test_AcceptanceMeritRecoveryComboGuard(unittest.TestCase):
-    """Settings::validate() rejects acceptance_strategy=merit combined with
-    max_soc > 0 or ls_extended_iters > 0: the modern merit acceptance path
-    does not implement the classic-path recovery links (SOC / extended
+    """Settings::validate() rejects any non-classic acceptance strategy
+    (merit, funnel, filter) combined with max_soc > 0 or
+    ls_extended_iters > 0: none of the three generic-path acceptance
+    strategies implement the classic-path recovery links (SOC / extended
     backtracking re-drive the fused classic line search). validate() runs
     at PSIOPT::run_phase_sequence() entry -- i.e. on the very first call to
     optimize()/solve(), before any iteration -- so triggering it only
-    requires a single solve() call on an otherwise-trivial problem.
+    requires a single solve() call on an otherwise-trivial problem. The
+    watchdog link is compatible with all four acceptance strategies.
     """
 
     def test_max_soc_combo_raises_before_any_iteration(self):
@@ -203,6 +247,64 @@ class test_AcceptanceMeritRecoveryComboGuard(unittest.TestCase):
         # acceptance_strategy=merit.
         prob = _make_problem()
         prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.merit
+        prob.optimizer.watchdog = True
+        flag = prob.optimize()
+        self.assertEqual(flag, ast.solvers.ConvergenceFlags.CONVERGED)
+
+    def test_funnel_max_soc_combo_raises_before_any_iteration(self):
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.funnel
+        prob.optimizer.max_soc = 4
+        with self.assertRaises(ValueError) as ctx:
+            prob.optimize()
+        msg = str(ctx.exception)
+        self.assertIn("max_soc", msg)
+        self.assertIn("ls_extended_iters", msg)
+        self.assertEqual(prob.optimizer.last_iter_num, 0)
+
+    def test_funnel_ls_extended_iters_combo_raises_before_any_iteration(self):
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.funnel
+        prob.optimizer.ls_extended_iters = 2
+        with self.assertRaises(ValueError) as ctx:
+            prob.optimize()
+        msg = str(ctx.exception)
+        self.assertIn("max_soc", msg)
+        self.assertIn("ls_extended_iters", msg)
+        self.assertEqual(prob.optimizer.last_iter_num, 0)
+
+    def test_filter_max_soc_combo_raises_before_any_iteration(self):
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.filter
+        prob.optimizer.max_soc = 4
+        with self.assertRaises(ValueError) as ctx:
+            prob.optimize()
+        msg = str(ctx.exception)
+        self.assertIn("max_soc", msg)
+        self.assertIn("ls_extended_iters", msg)
+        self.assertEqual(prob.optimizer.last_iter_num, 0)
+
+    def test_filter_ls_extended_iters_combo_raises_before_any_iteration(self):
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.filter
+        prob.optimizer.ls_extended_iters = 2
+        with self.assertRaises(ValueError) as ctx:
+            prob.optimize()
+        msg = str(ctx.exception)
+        self.assertIn("max_soc", msg)
+        self.assertIn("ls_extended_iters", msg)
+        self.assertEqual(prob.optimizer.last_iter_num, 0)
+
+    def test_watchdog_alone_is_compatible_with_funnel(self):
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.funnel
+        prob.optimizer.watchdog = True
+        flag = prob.optimize()
+        self.assertEqual(flag, ast.solvers.ConvergenceFlags.CONVERGED)
+
+    def test_watchdog_alone_is_compatible_with_filter(self):
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.filter
         prob.optimizer.watchdog = True
         flag = prob.optimize()
         self.assertEqual(flag, ast.solvers.ConvergenceFlags.CONVERGED)
