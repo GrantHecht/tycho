@@ -37,11 +37,15 @@
 //   φ(pt) = pt.objective + pt.auxiliary = the barrier objective
 //     (Ipopt reference_barr_ / trial_barr)
 //
-// (1) H-type acceptance verdict — a trial is accepted iff it is acceptable to
-//     the CURRENT iterate AND acceptable to every stored filter entry:
+// (1) Acceptance verdicts, split across the base's two hooks to match Ipopt's
+//     CheckAcceptabilityOfTrialPoint, which checks filter membership for EVERY
+//     trial (F-type included), not only H-type ones. The base runs (1b) as the
+//     membership test on every trial (step 2 of its order) and (1a) as the
+//     H-type sufficient-progress test:
 //
 //   (1a) Acceptable to the current iterate (Ipopt
-//        FilterLSAcceptor::IsAcceptableToCurrentIterate). Two parts:
+//        FilterLSAcceptor::IsAcceptableToCurrentIterate) — the H-type progress
+//        verdict. Two parts:
 //
 //        • Barrier-objective ceiling (the "obj_max_inc" test). Ipopt rejects a
 //          trial whose barrier objective grows by more than ~5 orders of
@@ -65,7 +69,8 @@
 //          matching Ipopt exactly.
 //
 //   (1b) Acceptable to the filter (Ipopt FilterLSAcceptor::IsAcceptableToCurrentFilter
-//        → Filter::Acceptable → FilterEntry::Acceptable). The trial is acceptable
+//        → Filter::Acceptable → FilterEntry::Acceptable) — the MEMBERSHIP test,
+//        run for every trial. The trial is acceptable
 //        w.r.t. a stored entry (φ_j, θ_j) iff φ_trial ≤ φ_j OR θ_trial ≤ θ_j
 //        (Ipopt FilterEntry::Acceptable: `for i: if (vals[i] <= vals_[i]) return
 //        true;` — a per-coordinate ≤, so an entry BLOCKS the trial only when
@@ -76,8 +81,9 @@
 //
 // (2) Augmentation on an ACCEPTED H-type step (Ipopt FilterLSAcceptor::
 //     AugmentFilter, run from the H-type acceptance branch only; WB Eq. (17)).
-//     The base runs register_accepted_h_type() exactly there. The stored pair
-//     is the CURRENT (reference) iterate's, pushed IN from both margins:
+//     The base runs register_accepted_step() on every accept; the filter
+//     augments only when its h_type flag is set. The stored pair is the CURRENT
+//     (reference) iterate's, pushed IN from both margins:
 //         φ_add = φ_current − γ_φ·θ_current  (Ipopt reference_barr_ − gamma_phi_·reference_theta_)
 //         θ_add = (1 − γ_θ)·θ_current        (Ipopt (1.−gamma_theta_)·reference_theta_)
 //     Adding a pair prunes every stored entry it DOMINATES (Ipopt
@@ -94,12 +100,17 @@
 // (4) Filter-reset heuristic (Ipopt FilterLSAcceptor::CheckAcceptabilityOfTrialPoint,
 //     the "Filter reset heuristic" block; options "max_filter_resets" = 5 and
 //     "filter_reset_trigger" = 5). Ipopt distinguishes WHY the last trial was
-//     rejected: last_rejection_due_to_filter_ is set TRUE only when (1a) passed
-//     but (1b) failed, and FALSE when (1a) failed (the barrier-ceiling or
-//     two-condition test) or the trial was accepted. When a run of
-//     kFilterResetTrigger successive filter-caused rejections accumulates, the
-//     filter is cleared; a non-filter rejection (or an accept) zeroes the
-//     successive-rejection counter. Ipopt code, verbatim:
+//     rejected: last_rejection_due_to_filter_ is set TRUE only for a filter-
+//     membership rejection, FALSE for a current-iterate/Armijo rejection, and is
+//     left UNCHANGED by a θ_max-ceiling rejection (Ipopt returns on "Tmax"
+//     before touching the flag). The heuristic runs ONCE PER ACCEPT (the block
+//     sits at the tail of CheckAcceptabilityOfTrialPoint, past both early
+//     returns): a filter-caused LAST rejection advances the successive-iteration
+//     counter (clearing the filter at the trigger), any other last rejection
+//     zeroes it. This implementation mirrors that exactly via the base's two
+//     bookkeeping hooks — notify_trial_rejected() records the last cause into
+//     last_rejection_was_filter_, and register_accepted_step() runs the block
+//     below on each accept. Ipopt code, verbatim:
 //         if (max_filter_resets_ > 0) {
 //            if (n_filter_resets_ < max_filter_resets_) {
 //               if (last_rejection_due_to_filter_) {
@@ -112,44 +123,35 @@
 //               }
 //            }
 //         }
-//     n_filter_resets_ caps the number of clears. Both counters are cleared by
-//     reset_bounds() (the per-phase hook), so on this path the cap is per-phase.
+//     Because the counter advances only on ACCEPT (not per rejected trial), a
+//     single line search backtracking through N filter-blocked trials before its
+//     accept counts ONE increment, not N — exactly Ipopt's per-iteration
+//     granularity. n_filter_resets_ caps the number of clears; all reset state
+//     is cleared by reset_bounds() (the per-phase hook), so the cap is per-phase.
 //
 // Divergences from the sources, disclosed (consequence stated):
-//   • Reset-heuristic granularity. Ipopt drives the reset heuristic once per
-//     SOLVER ITERATION, reading last_rejection_due_to_filter_ left by the
-//     previous iteration's line search. The shared skeleton hands the subclass
-//     only a per-TRIAL H-type verdict (is_infeasibility_acceptable), so this
-//     implementation counts filter-caused rejections per H-type trial.
-//     Consequence: the trigger (5 consecutive filter-blocked trials) is
-//     strictly easier to satisfy than Ipopt's (5 iterations whose last
-//     rejection was filter-caused), so reset fires materially more eagerly.
-//     A single line search backtracking through 5 filter-blocked trials can
-//     clear the filter mid-line-search. Combined with the per-phase cap of 5
-//     resets, an eager burst can exhaust all clears early in a phase, after
-//     which the filter is never reset for the remainder of that phase.
-//   • F-type rejections are invisible to the counter. In Ipopt every rejection
-//     (F-type Armijo, current-iterate, or filter) funnels through one function,
-//     so an F-type Armijo rejection sets last_rejection_due_to_filter_ = false
-//     and thereby zeroes the counter. In the shared skeleton the F-type Armijo
-//     test lives in the base and never consults the subclass on rejection, so
-//     an F-type rejection leaves the counter untouched; the base's θ_max
-//     ceiling test (switching_acceptance.h Eq. (21)) rejects a trial outright,
-//     before either the switching test or the H-type delegate runs, so a
-//     θ_max-ceiling rejection leaves the counter untouched too. A non-filter
-//     H-type rejection (the (1a) branch) still zeroes it, matching Ipopt's
-//     intent for the H-type case. Consequence: in a backtracking sequence that
-//     interleaves f-type, θ_max-ceiling, and h-type trials, any base-level
-//     rejection — f-type Armijo or θ_max ceiling — leaves the counter
-//     untouched, whereas Ipopt's last-rejection-wins bookkeeping would zero
-//     it.
+//   • Membership-check ORDER (the one residual filter divergence). Ipopt tests
+//     the filter membership (1b) AFTER the current-iterate/Armijo test, so a
+//     rejection is "filter-caused" only when (1a)/Armijo PASSED but (1b) failed.
+//     The shared skeleton is membership-first (the base checks (1b) at step 2,
+//     before the switching/Armijo/(1a) tests at step 3) — the unified order Uno's
+//     funnel also uses. Acceptance outcomes are identical (a trial must pass ALL
+//     tests, and AND does not depend on order); only the REJECTION-CAUSE
+//     attribution differs. Consequence: a trial that fails BOTH membership and
+//     the (1a)/Armijo test is attributed to membership here (kMembership ⇒
+//     filter-caused) but to (1a)/Armijo in Ipopt (not filter-caused). So this
+//     implementation's filter-reset counter advances in a strict SUPERSET of
+//     Ipopt's cases, and the reset heuristic can fire somewhat more eagerly. The
+//     θ_max-ceiling and current-iterate/Armijo mappings match Ipopt exactly (a
+//     ceiling rejection leaves the flag unchanged; an (1a)/Armijo rejection
+//     zeroes it on the next accept).
 //   • n_filter_resets_ increment. In current Ipopt master n_filter_resets_ is
 //     initialized to 0 but never incremented (the "maximal number of resets
 //     already exceeded" branch is unreachable), so the max_filter_resets cap is
 //     not actually enforced upstream. This implementation increments the reset
 //     counter at each clear and honours the kFilterMaxResets cap — the behavior
-//     the option name and the "F-" branch document, and the behavior the brief
-//     requires ("6th reset never happens").
+//     the option name and the "F-" branch document, so a sixth reset never
+//     happens.
 //   • No θ_max filter seed. Ipopt's per-phase reset (InitializeImpl → Reset)
 //     Clear()s the filter to EMPTY; θ_max is a separate scalar ceiling (owned by
 //     the base here), not a seeded filter entry. This implementation likewise
@@ -271,15 +273,20 @@ class FilterAcceptance final : public SwitchingAcceptance {
     // --- SwitchingAcceptance hooks (see the file-top formulation) ---
     // Start the phase with an empty filter (Ipopt Reset; no θ_max seed).
     void initialize_bounds(double theta_0) override;
-    // Empty the filter and zero both reset-heuristic counters.
+    // Empty the filter and zero the reset-heuristic state.
     void reset_bounds() override;
-    // (1): acceptable to the current iterate AND to the filter, with the
-    // filter-reset heuristic bookkeeping (4) folded in on rejection.
-    bool is_infeasibility_acceptable(const ProgressMeasures &current,
-                                     const ProgressMeasures &trial) override;
-    // (2): augment the filter with the current iterate's margined pair.
-    void register_accepted_h_type(const ProgressMeasures &current,
-                                  const ProgressMeasures &trial) override;
+    // (1b) membership: acceptable to the current filter (every trial).
+    bool is_trial_acceptable_to_strategy(const ProgressMeasures &current,
+                                         const ProgressMeasures &trial) override;
+    // (1a) H-type sufficient progress: acceptable to the current iterate.
+    bool is_h_type_progress_acceptable(const ProgressMeasures &current,
+                                       const ProgressMeasures &trial) override;
+    // (2)/(4): augment the filter on an H-type accept, and run the per-iteration
+    // reset heuristic (which reads the last rejection's cause) on any accept.
+    void register_accepted_step(const ProgressMeasures &current, const ProgressMeasures &trial,
+                                bool h_type) override;
+    // (4): record the last rejection's cause for the per-iteration reset heuristic.
+    void notify_trial_rejected(RejectionCause cause) override;
 
   private:
     // (1a): acceptable to the current iterate — the barrier-objective ceiling
@@ -288,9 +295,10 @@ class FilterAcceptance final : public SwitchingAcceptance {
                                          double theta_current);
 
     Filter filter_;
-    // (4) reset-heuristic counters; both zeroed by reset_bounds().
-    int successive_filter_rejections_ = 0; // Ipopt count_successive_filter_rejections_.
-    int n_filter_resets_ = 0;              // Ipopt n_filter_resets_ (capped by kFilterMaxResets).
+    // (4) reset-heuristic state; all zeroed by reset_bounds().
+    int successive_filter_rejections_ = 0;   // Ipopt count_successive_filter_rejections_.
+    int n_filter_resets_ = 0;                // Ipopt n_filter_resets_ (capped by kFilterMaxResets).
+    bool last_rejection_was_filter_ = false; // Ipopt last_rejection_due_to_filter_.
 };
 
 } // namespace tycho::solvers

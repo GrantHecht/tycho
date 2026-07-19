@@ -1126,10 +1126,18 @@ bool SwitchingAcceptance::is_iterate_acceptable(const ProgressMeasures &current,
         bounds_initialized_ = true;
     }
 
-    // Hard ceiling (Eq. 21): rejected before either the switching test or the
-    // H-type delegate ever runs.
-    if (trial.infeasibility > theta_max_)
+    // Hard ceiling (Eq. 21): rejected before any other test.
+    if (trial.infeasibility > theta_max_) {
+        notify_trial_rejected(RejectionCause::kCeiling);
         return false;
+    }
+
+    // Strategy membership (step 2): checked for EVERY trial, F-type included —
+    // the filter's non-dominance test / the funnel's within-the-width test.
+    if (!is_trial_acceptable_to_strategy(current, trial)) {
+        notify_trial_rejected(RejectionCause::kMembership);
+        return false;
+    }
 
     // Switching condition (Eq. 19): tested only when θ_k ≤ θ_min AND the step
     // is a descent direction for φ (m_f = predicted_reduction.objective > 0).
@@ -1145,15 +1153,22 @@ bool SwitchingAcceptance::is_iterate_acceptable(const ProgressMeasures &current,
         // F-type: Armijo condition on φ (Eq. 20). φ(pt) = pt.objective + pt.auxiliary.
         const double phi_current = current.objective + current.auxiliary;
         const double phi_trial = trial.objective + trial.auxiliary;
-        return phi_trial <= phi_current - kArmijoEtaPhi * predicted_reduction.objective;
+        if (phi_trial <= phi_current - kArmijoEtaPhi * predicted_reduction.objective) {
+            register_accepted_step(current, trial, /*h_type=*/false);
+            return true;
+        }
+        notify_trial_rejected(RejectionCause::kArmijo);
+        return false;
     }
 
-    // H-type: delegate the verdict to the subclass (filter membership test /
-    // funnel width test); bookkeeping runs only on an accepted verdict.
-    const bool accepted = is_infeasibility_acceptable(current, trial);
-    if (accepted)
-        register_accepted_h_type(current, trial);
-    return accepted;
+    // H-type: the subclass sufficient-progress verdict (filter acceptable-to-
+    // current-iterate / funnel β·width). Bookkeeping runs only on an accept.
+    if (!is_h_type_progress_acceptable(current, trial)) {
+        notify_trial_rejected(RejectionCause::kHTypeProgress);
+        return false;
+    }
+    register_accepted_step(current, trial, /*h_type=*/true);
+    return true;
 }
 
 // ============================================================================
@@ -1174,20 +1189,29 @@ void FunnelAcceptance::reset_bounds() {
     width_ = std::numeric_limits<double>::infinity();
 }
 
-bool FunnelAcceptance::is_infeasibility_acceptable(const ProgressMeasures &current,
-                                                   const ProgressMeasures &trial) {
-    // (2): within the funnel (θ_trial ≤ τ) AND sufficient reduction
-    // (θ_trial ≤ β·τ). current participates only in the update, not the
-    // verdict — matching Uno's single-argument Funnel::acceptable /
-    // Funnel::sufficient_decrease_condition.
+bool FunnelAcceptance::is_trial_acceptable_to_strategy(const ProgressMeasures &current,
+                                                       const ProgressMeasures &trial) {
+    // (2a) membership: within the funnel (θ_trial ≤ τ) — Uno Funnel::acceptable.
+    // current participates only in the update, not the verdict.
     (void)current;
-    const double theta_trial = trial.infeasibility;
-    return theta_trial <= width_ && theta_trial <= kFunnelBeta * width_;
+    return trial.infeasibility <= width_;
 }
 
-void FunnelAcceptance::register_accepted_h_type(const ProgressMeasures &current,
-                                                const ProgressMeasures &trial) {
-    // (3): Uno update strategy 1.
+bool FunnelAcceptance::is_h_type_progress_acceptable(const ProgressMeasures &current,
+                                                     const ProgressMeasures &trial) {
+    // (2b) H-type sufficient reduction (θ_trial ≤ β·τ) — Uno
+    // Funnel::sufficient_decrease_condition.
+    (void)current;
+    return trial.infeasibility <= kFunnelBeta * width_;
+}
+
+void FunnelAcceptance::register_accepted_step(const ProgressMeasures &current,
+                                              const ProgressMeasures &trial, bool h_type) {
+    // (3): the width tightens ONLY on an accepted H-type step (Uno calls
+    // funnel.update() from the H-type branch alone); an F-type accept leaves τ
+    // untouched. Uno update strategy 1.
+    if (!h_type)
+        return;
     const double theta_current = current.infeasibility;
     const double theta_trial = trial.infeasibility;
     if (theta_trial <= theta_current) {
@@ -1214,14 +1238,16 @@ void FilterAcceptance::initialize_bounds(double theta_0) {
     filter_.clear();
     successive_filter_rejections_ = 0;
     n_filter_resets_ = 0;
+    last_rejection_was_filter_ = false;
 }
 
 void FilterAcceptance::reset_bounds() {
-    // Empty the filter and zero both reset-heuristic counters so the next θ₀
-    // capture re-arms a clean per-phase filter.
+    // Empty the filter and zero the reset-heuristic state so the next θ₀ capture
+    // re-arms a clean per-phase filter.
     filter_.clear();
     successive_filter_rejections_ = 0;
     n_filter_resets_ = 0;
+    last_rejection_was_filter_ = false;
 }
 
 bool FilterAcceptance::is_acceptable_to_current(double phi_trial, double theta_trial,
@@ -1242,48 +1268,75 @@ bool FilterAcceptance::is_acceptable_to_current(double phi_trial, double theta_t
            phi_trial - phi_current <= -kFilterGammaPhi * theta_current;
 }
 
-bool FilterAcceptance::is_infeasibility_acceptable(const ProgressMeasures &current,
-                                                   const ProgressMeasures &trial) {
+bool FilterAcceptance::is_trial_acceptable_to_strategy(const ProgressMeasures &current,
+                                                       const ProgressMeasures &trial) {
+    // (1b) membership: acceptable to the current filter (Ipopt
+    // IsAcceptableToCurrentFilter). Run for every trial; the reset heuristic is
+    // driven from notify_trial_rejected()/register_accepted_step(), not here.
+    (void)current;
+    const double theta_trial = trial.infeasibility;
+    const double phi_trial = trial.objective + trial.auxiliary;
+    return filter_.acceptable(phi_trial, theta_trial);
+}
+
+bool FilterAcceptance::is_h_type_progress_acceptable(const ProgressMeasures &current,
+                                                     const ProgressMeasures &trial) {
+    // (1a) acceptable to the current iterate (Ipopt IsAcceptableToCurrentIterate).
     const double theta_trial = trial.infeasibility;
     const double phi_trial = trial.objective + trial.auxiliary;
     const double theta_current = current.infeasibility;
     const double phi_current = current.objective + current.auxiliary;
-
-    // (1a): a rejection here is NOT filter-caused — Ipopt zeroes the successive-
-    // rejection counter (last_rejection_due_to_filter_ = false → count = 0).
-    if (!is_acceptable_to_current(phi_trial, theta_trial, phi_current, theta_current)) {
-        successive_filter_rejections_ = 0;
-        return false;
-    }
-
-    // (1b): a rejection here IS filter-caused — Ipopt increments the successive-
-    // rejection counter and clears the filter once the trigger is reached,
-    // honouring the per-phase reset cap (4).
-    if (!filter_.acceptable(phi_trial, theta_trial)) {
-        ++successive_filter_rejections_;
-        if (n_filter_resets_ < kFilterMaxResets &&
-            successive_filter_rejections_ >= kFilterResetTrigger) {
-            filter_.clear();
-            ++n_filter_resets_;
-            successive_filter_rejections_ = 0;
-        }
-        return false;
-    }
-
-    // Accepted: Ipopt sets last_rejection_due_to_filter_ = false, which zeroes
-    // the counter on the next pass — mirrored here directly.
-    successive_filter_rejections_ = 0;
-    return true;
+    return is_acceptable_to_current(phi_trial, theta_trial, phi_current, theta_current);
 }
 
-void FilterAcceptance::register_accepted_h_type(const ProgressMeasures &current,
-                                                const ProgressMeasures &trial) {
-    // (2): Ipopt AugmentFilter stores the CURRENT (reference) iterate's margined
-    // pair; the trial participates only in the verdict (1), not the entry.
+void FilterAcceptance::notify_trial_rejected(RejectionCause cause) {
+    // Ipopt last_rejection_due_to_filter_: TRUE only for a filter-membership
+    // rejection; a current-iterate/Armijo rejection sets it FALSE; a θ_max
+    // ceiling rejection leaves it UNCHANGED (Ipopt returns on "Tmax" before
+    // touching the flag). See (4) and the ordering divergence note.
+    switch (cause) {
+    case RejectionCause::kMembership:
+        last_rejection_was_filter_ = true;
+        break;
+    case RejectionCause::kArmijo:
+    case RejectionCause::kHTypeProgress:
+        last_rejection_was_filter_ = false;
+        break;
+    case RejectionCause::kCeiling:
+        break;
+    }
+}
+
+void FilterAcceptance::register_accepted_step(const ProgressMeasures &current,
+                                              const ProgressMeasures &trial, bool h_type) {
     (void)trial;
-    const double theta_current = current.infeasibility;
-    const double phi_current = current.objective + current.auxiliary;
-    filter_.augment(phi_current, theta_current);
+    // (4) Filter-reset heuristic (Ipopt CheckAcceptabilityOfTrialPoint tail):
+    // runs once per ACCEPT, reading the last rejection's cause. A filter-caused
+    // last rejection advances the successive-iteration counter (and clears the
+    // filter at the trigger, honouring the per-phase cap); any other last
+    // rejection zeroes it. Below the cap only, matching Ipopt's outer guard.
+    if (n_filter_resets_ < kFilterMaxResets) {
+        if (last_rejection_was_filter_) {
+            ++successive_filter_rejections_;
+            if (successive_filter_rejections_ >= kFilterResetTrigger) {
+                filter_.clear();
+                ++n_filter_resets_;
+                successive_filter_rejections_ = 0;
+            }
+        } else {
+            successive_filter_rejections_ = 0;
+        }
+    }
+    last_rejection_was_filter_ = false;
+
+    // (2) Augment ONLY on an H-type accept (Ipopt AugmentFilter, called from the
+    // H-type acceptance branch): store the CURRENT (reference) iterate's margined
+    // pair. An F-type accept never augments.
+    if (h_type) {
+        const double theta_current = current.infeasibility;
+        const double phi_current = current.objective + current.auxiliary;
+        filter_.augment(phi_current, theta_current);
+    }
 }
 
 } // namespace tycho::solvers

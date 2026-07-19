@@ -55,10 +55,12 @@ ProgressMeasures FunnelMakePm(double infeasibility, double objective, double aux
 
 // Priming: run the FIRST is_iterate_acceptable() so the width is derived from
 // θ₀ = current.infeasibility, WITHOUT the priming call mutating the width. The
-// trial sits OUTSIDE the funnel (θ_trial > τ) so the H-type verdict rejects and
-// register_accepted_h_type() never runs — the width is left exactly at its
-// initialized value. Returns nothing; the caller asserts funnel_width().
-//   pred.objective = 0 ⇒ H-type; trial_outside must be > τ but ≤ θ_max.
+// trial sits OUTSIDE the funnel (θ_trial > τ) so the base's MEMBERSHIP test
+// (checked for every trial) rejects it and register_accepted_step() never runs
+// — the width is left exactly at its initialized value. Returns nothing; the
+// caller asserts funnel_width().
+//   pred.objective = 0 ⇒ H-type were membership to pass; trial_outside must be
+//   > τ but ≤ θ_max.
 void FunnelPrimeRejecting(FunnelAcceptance &a, double theta0, double trial_outside) {
     const bool ok = a.is_iterate_acceptable(FunnelMakePm(theta0, 0.0, 0.0),
                                             FunnelMakePm(trial_outside, 0.0, 0.0),
@@ -181,19 +183,22 @@ TEST(FunnelAcceptance, WidthUpdateTrialAboveCurrentUsesFloor) {
     EXPECT_DOUBLE_EQ(a.funnel_width(), kFunnelBeta * 6.0); // 5.9994
 }
 
-// ===========================================================================
-// Pinning test: an accepted H-type step whose CURRENT iterate lies outside the
-// funnel (θ_current ≫ τ) can transiently RE-WIDEN the funnel instead of
-// tightening it. This is not a bug fix target — it is the documented
-// consequence (funnel_acceptance.h note (3) and the f-type divergence bullet)
-// of the base only funnel-gating H-type accepts: an f-type accept (or a
-// recovery-chain accept-as-is outcome) can leave the current iterate outside
-// the funnel, and the H-type verdict itself only checks θ_trial, not
-// θ_current, so the update still runs and reads that oversized θ_current.
+// Pinning test — the ONE residual re-widening edge (funnel_acceptance.h
+// note (3)). At the strategy level the base gates EVERY accept on membership
+// (θ_trial ≤ τ), so no strategy-accepted iterate can land outside the funnel and
+// the width is unconditionally monotone. The residual edge is OUTSIDE the
+// strategy: when the backtracking ladder exhausts, the solver's recovery
+// fallback can accept a strategy-rejected trial (accept-as-is), leaving the
+// CURRENT iterate outside the funnel (θ_current ≫ τ). A subsequent accepted
+// H-type step then reads that oversized θ_current in the convex-combination
+// update and can transiently RE-WIDEN the funnel. This test drives the hook
+// directly with an out-of-funnel θ_current to hold that recovery-fallback edge
+// fixed (the H-type verdict itself checks θ_trial, not θ_current, so the update
+// still runs).
 //
 // τ = 1.5 (θ₀ = 1.0 ⇒ τ = max(1.0, 1.5·1.0) = 1.5; same init as
-// FTypeAcceptLeavesWidthUnchanged above). β·τ = 0.9999·1.5 = 1.4998... (5).
-// H-type verdict reads θ_trial only: θ_trial = 0.5 ≤ τ (1.5) AND
+// FTypeAcceptLeavesWidthUnchanged above). β·τ = 0.9999·1.5 = 1.49985.
+// Membership + H-type verdict read θ_trial only: θ_trial = 0.5 ≤ τ (1.5) AND
 // θ_trial ≤ β·τ (1.49985) ⇒ ACCEPT, regardless of θ_current.
 // Update (θ_trial ≤ θ_current ⇒ convex-combination branch):
 //   convex = κ·θ_current + (1−κ)·θ_trial = 0.5·100 + 0.5·0.5 = 50 + 0.25 = 50.25
@@ -201,9 +206,10 @@ TEST(FunnelAcceptance, WidthUpdateTrialAboveCurrentUsesFloor) {
 // 50.25 ≫ 1.5: the width RE-WIDENS by more than 33x on this single step.
 //
 // If a future change clamps the update (τ⁺ = min(τ, ...)) to restore
-// unconditional monotonicity, this test must be updated deliberately, and the
-// corpus scorecards (docs/dev/analysis/2026-07-e2-g3-scorecards.md) must be
-// re-validated against the new behavior before the clamp ships.
+// monotonicity even across the recovery-fallback edge, this test must be updated
+// deliberately, and the corpus scorecards
+// (docs/dev/analysis/2026-07-e2-g3-scorecards.md) must be re-validated against
+// the new behavior before the clamp ships.
 TEST(FunnelAcceptance, WidthUpdateReWidensWhenCurrentIterateOutsideFunnel) {
     FunnelAcceptance a;
     FunnelPrimeRejecting(a, /*theta0=*/1.0, /*trial_outside=*/5.0); // τ = 1.5
@@ -222,8 +228,8 @@ TEST(FunnelAcceptance, WidthUpdateReWidensWhenCurrentIterateOutsideFunnel) {
 //   lhs = 1·(0.01/1)^2.3 = 0.01^2.3 ≈ 2.511886e-05
 //   rhs = 1·(1e-5)^1.1        ≈ 3.162278e-06 ⇒ lhs > rhs ⇒ switching HOLDS.
 // Armijo on φ = obj + aux: φ_trial = 9.9999 ≤ φ_current(10) − 1e-8·0.01
-//   = 9.9999999999 ⇒ ACCEPT as F-type ⇒ register_accepted_h_type NOT called
-//   ⇒ width stays 1.5.
+//   = 9.9999999999 ⇒ ACCEPT as F-type ⇒ register_accepted_step is called with
+//   h_type = false ⇒ width stays 1.5.
 TEST(FunnelAcceptance, FTypeAcceptLeavesWidthUnchanged) {
     FunnelAcceptance a;
     FunnelPrimeRejecting(a, /*theta0=*/1.0, /*trial_outside=*/5.0); // τ = 1.5
@@ -232,6 +238,30 @@ TEST(FunnelAcceptance, FTypeAcceptLeavesWidthUnchanged) {
                                 FunnelMakePm(0.01, 0.01, 0.0), 1.0, 1.0);
     EXPECT_TRUE(ok);                         // F-type accept
     EXPECT_DOUBLE_EQ(a.funnel_width(), 1.5); // untouched by the F-type step
+}
+
+// ===========================================================================
+// Membership gates EVERY trial, F-type included (the behavior that changed).
+// ===========================================================================
+
+// An f-type trial (switching holds, Armijo would pass) whose infeasibility sits
+// OUTSIDE the funnel (θ_trial > τ) is now REJECTED at membership — Uno wraps its
+// entire is_iterate_acceptable body in "if (funnel.acceptable(trial))". Same
+// init and f-type arithmetic as FTypeAcceptLeavesWidthUnchanged, but θ_trial is
+// raised above τ.
+//   θ₀ = 1.0 ⇒ τ = 1.5, θ_min = 1e-4, θ_max = 1e4.
+//   θ_trial = 2.0 > τ = 1.5 (but ≤ θ_max) ⇒ membership fails ⇒ REJECT before
+//   the switching/Armijo tests. Armijo would otherwise pass (φ_trial = 9.9999 ≤
+//   φ_current(10) − 1e-8·0.01), so the rejection is due to membership alone.
+//   A rejected trial performs no width update ⇒ τ stays 1.5.
+TEST(FunnelAcceptance, MembershipRejectsFTypeTrialOutsideFunnel) {
+    FunnelAcceptance a;
+    FunnelPrimeRejecting(a, /*theta0=*/1.0, /*trial_outside=*/5.0); // τ = 1.5
+    const bool ok =
+        a.is_iterate_acceptable(FunnelMakePm(1.0e-5, 10.0, 0.0), FunnelMakePm(2.0, 9.9999, 0.0),
+                                FunnelMakePm(0.01, 0.01, 0.0), 1.0, 1.0);
+    EXPECT_FALSE(ok);                        // rejected at membership (θ_trial > τ)
+    EXPECT_DOUBLE_EQ(a.funnel_width(), 1.5); // untouched by the rejected trial
 }
 
 // ===========================================================================
@@ -253,13 +283,16 @@ TEST(FunnelAcceptance, ResetReDerivesWidthFromNewThetaZero) {
 }
 
 // ===========================================================================
-// Monotone non-increasing width across a synthetic accepted-H-type sequence.
+// Width is UNCONDITIONALLY monotone non-increasing across a strategy-accepted
+// sequence: the base gates every accept on membership (θ_trial ≤ τ), so every
+// accepted iterate is inside the funnel and each update strictly tightens τ.
 // ===========================================================================
 
-// τ₀ = 150.0. Each step: current θ = 10.0, trial θ = 5.0 (5 ≤ current, and
-// 5 ≤ β·τ throughout since τ stays ≈ 150) ⇒ accepted; convex = 0.5·10+0.5·5 =
-// 7.5 ≪ β·τ ⇒ the floor dominates ⇒ τ⁺ = β·τ = 0.9999·τ. Hence τ shrinks by a
-// constant factor 0.9999 each step: strictly decreasing, always > 0.
+// τ₀ = 150.0. Each step: current θ = 10.0, trial θ = 5.0 (membership 5 ≤ τ and
+// H-type progress 5 ≤ β·τ hold throughout since τ stays ≈ 150) ⇒ accepted;
+// convex = 0.5·10+0.5·5 = 7.5 ≪ β·τ ⇒ the floor dominates ⇒ τ⁺ = β·τ =
+// 0.9999·τ. Hence τ shrinks by a constant factor 0.9999 each step: strictly
+// decreasing, always > 0.
 TEST(FunnelAcceptance, WidthMonotoneNonIncreasingAcrossSequence) {
     FunnelAcceptance a;
     FunnelPrimeRejecting(a, /*theta0=*/100.0, /*trial_outside=*/200.0); // τ = 150.0

@@ -24,8 +24,10 @@
 //        θ_t > θ_j (per-coordinate ≤ dominance)
 //   (2)  augment (accepted H-type): store (φ_c − γ_φ·θ_c, (1−γ_θ)·θ_c), pruning
 //        entries dominated by the new pair
-//   (4)  reset heuristic: 5 successive filter-caused rejections clear the
-//        filter, ≤ 5 times; a non-filter rejection or an accept zeroes the run
+//   (4)  reset heuristic (per-iteration): the counter advances once per ACCEPT
+//        whose line search's last rejection was filter-caused; 5 such successive
+//        iterations clear the filter, ≤ 5 times; an accept whose last rejection
+//        was non-filter zeroes the run
 //
 // UNITY RULE: anonymous namespace does not protect names against the unity
 // build — every helper here is prefixed Filter* to stay globally unique across
@@ -81,6 +83,37 @@ bool FilterHType(FilterAcceptance &a, double theta_current, double phi_current, 
     return a.is_iterate_acceptable(FilterMakePm(theta_current, phi_current, 0.0),
                                    FilterMakePm(theta_trial, phi_trial, 0.0),
                                    FilterMakePm(0.0, 0.0, 0.0), 1.0, 1.0);
+}
+
+// --- Reset-heuristic helpers (all assume the seed entry E = augment(θ_c=4.0,
+// φ_c=20.0) ⇒ E = (φ_E ≈ 20, θ_E = (1−1e-5)·4 = 3.99996) is present, and that
+// θ₀ was primed to 4.0 ⇒ θ_min = 1e-4·4 = 4e-4, θ_max = 4e4). The reset
+// heuristic runs ONCE PER ACCEPT (reading the last rejection's cause), so these
+// helpers separate the two events the truth table depends on.
+
+// A MEMBERSHIP rejection: trial (θ_t = 50, φ_t = 30) is dominated by E
+// (50 > 3.99996 AND 30 > ≈20) ⇒ rejected at membership (kMembership) ⇒ the last
+// rejection is filter-caused. The counter is NOT touched (only accepts touch it).
+void FilterMembershipReject(FilterAcceptance &a) {
+    EXPECT_FALSE(FilterHType(a, 100.0, 100.0, 50.0, 30.0));
+}
+
+// An F-type ACCEPT (θ_c = 1e-5 ≤ θ_min, m_f = 0.01 ⇒ switching holds; Armijo
+// passes; membership passes since (φ_t = 9.9999, θ_t = 1e-6) is not dominated by
+// E). Runs the reset heuristic (advancing/zeroing the counter per the last
+// rejection) but does NOT augment — the filter is left unchanged.
+void FilterFTypeAccept(FilterAcceptance &a) {
+    EXPECT_TRUE(a.is_iterate_acceptable(FilterMakePm(1.0e-5, 10.0, 0.0),
+                                        FilterMakePm(1.0e-6, 9.9999, 0.0),
+                                        FilterMakePm(0.01, 0.01, 0.0), 1.0, 1.0));
+}
+
+// An F-type ARMIJO rejection (switching holds; membership passes; φ_t = 20 fails
+// Armijo) ⇒ non-filter rejection (kArmijo) ⇒ last rejection is NOT filter-caused.
+void FilterFTypeArmijoReject(FilterAcceptance &a) {
+    EXPECT_FALSE(a.is_iterate_acceptable(FilterMakePm(1.0e-5, 10.0, 0.0),
+                                         FilterMakePm(1.0e-6, 20.0, 0.0),
+                                         FilterMakePm(0.01, 0.01, 0.0), 1.0, 1.0));
 }
 
 // ===========================================================================
@@ -285,8 +318,8 @@ TEST(FilterAcceptance, AugmentKeepsNonDominatedEntries) {
 //     lhs = 1·(0.01/1)^2.3 = 0.01^2.3 ≈ 2.511886e-05
 //     rhs = 1·(1e-5)^1.1        ≈ 3.162278e-06 ⇒ lhs > rhs ⇒ switching HOLDS.
 //   Armijo on φ = obj + aux: φ_trial = 9.9999 ≤ φ_current(10) − 1e-8·0.01
-//     = 9.9999999999 ⇒ ACCEPT as F-type ⇒ register_accepted_h_type NOT called
-//     ⇒ filter_size stays 1.
+//     = 9.9999999999 ⇒ ACCEPT as F-type ⇒ register_accepted_step is called with
+//     h_type = false (no augment) ⇒ filter_size stays 1.
 TEST(FilterAcceptance, FTypeAcceptDoesNotAugment) {
     FilterAcceptance a;
     FilterPrimeCeilingReject(a, 1.0);
@@ -324,109 +357,105 @@ TEST(FilterAcceptance, ThetaMaxCeilingRejectsBeforeFilter) {
 }
 
 // ===========================================================================
-// (4) reset heuristic — counter sequences.
+// (4) reset heuristic — PER-ITERATION counter sequences (Ipopt-faithful). The
+// heuristic runs once per ACCEPT, reading the cause of the last rejection in the
+// line search that produced the accept: a filter-caused last rejection advances
+// the successive-iteration counter, any other zeroes it.
 // ===========================================================================
 
-// Build a filter with one entry E = (φ_E ≈ 20, θ_E = 3.99996), then drive
-// repeated FILTER-caused rejections. Each rejecting trial must pass (1a) but be
-// dominated by E: current (θ_c = 100, φ_c = 100), trial (θ_t = 50 > θ_E,
-// φ_t = 30 > φ_E). (1a) passes via θ_t = 50 ≤ (1−1e-5)·100 = 99.999.
-//
-// The counter increments on each filter-caused rejection; on the
-// kFilterResetTrigger-th (5th) it clears the filter and increments the reset
-// count, and zeroes the run.
-TEST(FilterAcceptance, FiveFilterRejectionsClearFilter) {
+// Multiple filter-caused rejections within ONE line search (before the accept
+// that ends it) count as ONE increment, not N — the counter is untouched by
+// rejections and advances only on the accept.
+TEST(FilterAcceptance, MultipleFilterRejectionsBeforeAcceptCountOnce) {
     FilterAcceptance a;
     FilterPrimeCeilingReject(a, 4.0);
     ASSERT_TRUE(FilterHType(a, 4.0, 20.0, 1.0, 20.0)); // seed E
     ASSERT_EQ(a.filter_size(), 1u);
 
-    for (int i = 1; i <= kFilterResetTrigger; ++i) {
-        EXPECT_FALSE(FilterHType(a, /*θ_c=*/100.0, /*φ_c=*/100.0, /*θ_t=*/50.0, /*φ_t=*/30.0));
-        if (i < kFilterResetTrigger) {
-            EXPECT_EQ(a.successive_filter_rejections(), i); // still counting
-            EXPECT_EQ(a.filter_size(), 1u);                 // not cleared yet
+    // Three membership rejections within one search (no accept between them).
+    for (int i = 0; i < 3; ++i)
+        FilterMembershipReject(a);
+    EXPECT_EQ(a.successive_filter_rejections(), 0); // untouched until the accept
+
+    // The single accept that ends the search advances the counter by ONE.
+    FilterFTypeAccept(a);
+    EXPECT_EQ(a.successive_filter_rejections(), 1);
+    EXPECT_EQ(a.filter_size(), 1u); // F-type accept did not augment; E intact
+}
+
+// An iteration whose LAST rejection is a non-filter (F-type Armijo) rejection
+// zeroes the streak on the next accept.
+TEST(FilterAcceptance, ArmijoLastRejectionZeroesStreakOnAccept) {
+    FilterAcceptance a;
+    FilterPrimeCeilingReject(a, 4.0);
+    ASSERT_TRUE(FilterHType(a, 4.0, 20.0, 1.0, 20.0)); // seed E
+
+    // Three filter-caused iterations build the streak to 3.
+    for (int i = 1; i <= 3; ++i) {
+        FilterMembershipReject(a);
+        FilterFTypeAccept(a);
+        EXPECT_EQ(a.successive_filter_rejections(), i);
+    }
+    // An F-type Armijo rejection (non-filter) followed by an accept: the accept
+    // reads last_rejection = false ⇒ streak zeroed.
+    FilterFTypeArmijoReject(a);
+    FilterFTypeAccept(a);
+    EXPECT_EQ(a.successive_filter_rejections(), 0);
+    EXPECT_EQ(a.filter_size(), 1u); // untouched (F-type accepts do not augment)
+}
+
+// Five consecutive filter-caused ITERATIONS (each: a filter-caused last
+// rejection then an accept) clear the filter on the fifth accept and count one
+// reset.
+TEST(FilterAcceptance, FiveFilterCausedIterationsClearFilter) {
+    FilterAcceptance a;
+    FilterPrimeCeilingReject(a, 4.0);
+    ASSERT_TRUE(FilterHType(a, 4.0, 20.0, 1.0, 20.0)); // seed E
+    ASSERT_EQ(a.filter_size(), 1u);
+
+    for (int iter = 1; iter <= kFilterResetTrigger; ++iter) {
+        FilterMembershipReject(a); // filter-caused last rejection
+        FilterFTypeAccept(a);      // accept advances / triggers the heuristic
+        if (iter < kFilterResetTrigger) {
+            EXPECT_EQ(a.successive_filter_rejections(), iter); // one per iteration
+            EXPECT_EQ(a.filter_size(), 1u);                    // not cleared yet
             EXPECT_EQ(a.filter_resets(), 0);
         } else {
-            EXPECT_EQ(a.filter_size(), 0u);                 // cleared on the 5th
-            EXPECT_EQ(a.filter_resets(), 1);
+            EXPECT_EQ(a.filter_resets(), 1);                // cleared on the 5th accept
             EXPECT_EQ(a.successive_filter_rejections(), 0); // run zeroed
+            EXPECT_EQ(a.filter_size(), 0u); // cleared (F-type accept did not re-augment)
         }
     }
 }
 
-// A non-filter rejection (an (1a) failure) mid-run zeroes the trigger counter,
-// so the filter is NOT cleared prematurely. Accumulate 4 filter-caused
-// rejections, then one (1a)-failing trial, then confirm the counter restarted.
-//   (1a)-failing trial: current (θ_c = 1, φ_c = 10), trial (θ_t = 2 > 0.99999,
-//   φ_t = 10 ⇒ φ margin fails, φ_t = φ_c ⇒ no ceiling) ⇒ both margins fail.
-TEST(FilterAcceptance, NonFilterRejectionResetsTriggerCounter) {
-    FilterAcceptance a;
-    FilterPrimeCeilingReject(a, 4.0);
-    ASSERT_TRUE(FilterHType(a, 4.0, 20.0, 1.0, 20.0)); // seed E
-    ASSERT_EQ(a.filter_size(), 1u);
-
-    for (int i = 1; i <= 4; ++i) {
-        ASSERT_FALSE(FilterHType(a, 100.0, 100.0, 50.0, 30.0)); // filter-caused
-        ASSERT_EQ(a.successive_filter_rejections(), i);
-    }
-    // Non-filter rejection: (1a) fails ⇒ counter zeroed, filter intact.
-    ASSERT_FALSE(FilterHType(a, /*θ_c=*/1.0, /*φ_c=*/10.0, /*θ_t=*/2.0, /*φ_t=*/10.0));
-    EXPECT_EQ(a.successive_filter_rejections(), 0);
-    EXPECT_EQ(a.filter_size(), 1u); // NOT cleared
-    EXPECT_EQ(a.filter_resets(), 0);
-
-    // Now 4 more filter-caused rejections do NOT clear (run restarted at 0).
-    for (int i = 1; i <= 4; ++i) {
-        ASSERT_FALSE(FilterHType(a, 100.0, 100.0, 50.0, 30.0));
-        EXPECT_EQ(a.filter_size(), 1u);
-        EXPECT_EQ(a.filter_resets(), 0);
-    }
-    EXPECT_EQ(a.successive_filter_rejections(), 4);
-}
-
-// An accepted H-type step also zeroes the trigger counter (Ipopt sets
-// last_rejection_due_to_filter_ = false on accept). Accumulate 4 filter-caused
-// rejections, then an accepted step, and confirm the run restarted.
-//   accepted trial: current (θ_c = 100, φ_c = 100), trial (θ_t = 1, φ_t = 30):
-//     (1a) θ_t = 1 ≤ 99.999 ⇒ ok; (1b) θ_t = 1 ≤ θ_E = 3.99996 ⇒ ok ⇒ ACCEPT.
-TEST(FilterAcceptance, AcceptedStepResetsTriggerCounter) {
-    FilterAcceptance a;
-    FilterPrimeCeilingReject(a, 4.0);
-    ASSERT_TRUE(FilterHType(a, 4.0, 20.0, 1.0, 20.0)); // seed E
-    for (int i = 1; i <= 4; ++i)
-        ASSERT_FALSE(FilterHType(a, 100.0, 100.0, 50.0, 30.0));
-    ASSERT_EQ(a.successive_filter_rejections(), 4);
-
-    ASSERT_TRUE(FilterHType(a, /*θ_c=*/100.0, /*φ_c=*/100.0, /*θ_t=*/1.0, /*φ_t=*/30.0));
-    EXPECT_EQ(a.successive_filter_rejections(), 0); // accept zeroed the run
-}
-
 // The cap holds: after kFilterMaxResets clears no further clear happens (a 6th
-// reset never occurs). Each clear leaves an empty filter, so the very next
-// filter-caused rejection needs a NON-empty filter to be filter-caused — so we
-// re-seed one entry before each fresh run of 5 rejections. After kFilterMaxResets
-// clears, a further run of 5 filter-caused rejections must NOT increment the
-// reset count beyond the cap (and must leave the re-seeded entry in place).
+// reset never occurs). Each clear leaves an empty filter and the F-type accepts
+// do not re-augment, so E is re-seeded before each fresh run of 5 iterations.
+// After the cap, a further run of filter-caused iterations neither increments
+// the reset count nor clears the re-seeded entry.
 TEST(FilterAcceptance, ResetCapNeverExceeded) {
     FilterAcceptance a;
     FilterPrimeCeilingReject(a, 4.0);
 
     for (int r = 0; r < kFilterMaxResets; ++r) {
-        ASSERT_TRUE(FilterHType(a, 4.0, 20.0, 1.0, 20.0)); // seed E (accept zeroes run)
+        ASSERT_TRUE(FilterHType(a, 4.0, 20.0, 1.0, 20.0)); // (re-)seed E
         ASSERT_EQ(a.filter_size(), 1u);
-        for (int i = 1; i <= kFilterResetTrigger; ++i)
-            ASSERT_FALSE(FilterHType(a, 100.0, 100.0, 50.0, 30.0));
-        EXPECT_EQ(a.filter_size(), 0u);       // cleared
+        for (int i = 1; i <= kFilterResetTrigger; ++i) {
+            FilterMembershipReject(a);
+            FilterFTypeAccept(a);
+        }
+        EXPECT_EQ(a.filter_size(), 0u); // cleared on the 5th accept
         EXPECT_EQ(a.filter_resets(), r + 1);
     }
     ASSERT_EQ(a.filter_resets(), kFilterMaxResets);
 
-    // One more run of filter-caused rejections: the cap blocks any further clear.
+    // One more run of filter-caused iterations: the cap blocks any further clear.
     ASSERT_TRUE(FilterHType(a, 4.0, 20.0, 1.0, 20.0)); // re-seed E
     ASSERT_EQ(a.filter_size(), 1u);
-    for (int i = 1; i <= kFilterResetTrigger + 3; ++i)
-        ASSERT_FALSE(FilterHType(a, 100.0, 100.0, 50.0, 30.0));
+    for (int i = 1; i <= kFilterResetTrigger + 3; ++i) {
+        FilterMembershipReject(a);
+        FilterFTypeAccept(a);
+    }
     EXPECT_EQ(a.filter_resets(), kFilterMaxResets); // 6th reset never happened
     EXPECT_EQ(a.filter_size(), 1u);                 // entry survives (no clear)
 }
@@ -440,9 +469,11 @@ TEST(FilterAcceptance, ResetClearsEverythingAndReArms) {
     FilterPrimeCeilingReject(a, 4.0);
     ASSERT_TRUE(FilterHType(a, 4.0, 20.0, 1.0, 20.0)); // seed E
     ASSERT_EQ(a.filter_size(), 1u);
-    // Accumulate a couple filter-caused rejections so a counter is non-zero.
-    ASSERT_FALSE(FilterHType(a, 100.0, 100.0, 50.0, 30.0));
-    ASSERT_FALSE(FilterHType(a, 100.0, 100.0, 50.0, 30.0));
+    // Two filter-caused iterations so the successive-iteration counter is > 0.
+    for (int i = 1; i <= 2; ++i) {
+        FilterMembershipReject(a);
+        FilterFTypeAccept(a);
+    }
     ASSERT_EQ(a.successive_filter_rejections(), 2);
 
     a.reset();

@@ -62,13 +62,31 @@
 //
 // When the switching condition does NOT hold — either θ_k > θ_min, or the
 // step is not a descent direction for φ, or Eq. (19)'s inequality itself
-// fails — the trial is H-TYPE: the verdict is delegated to the subclass
-// (filter membership test / funnel width test) via the pure virtual
-// is_infeasibility_acceptable(); on a true verdict the subclass bookkeeping
-// hook register_accepted_h_type() runs before true is returned (a filter
-// augments its list there; a funnel shrinks its width there).
+// fails — the trial is H-TYPE: its sufficient-progress verdict is delegated to
+// the subclass (the filter's acceptable-to-current-iterate test / the funnel's
+// β·width test) via is_h_type_progress_acceptable().
 //
-// Subclass hooks (pure virtual — this class is never instantiated directly):
+// ACCEPTANCE ORDER (template method; EVERY trial passes through it in order):
+//   1. θ_max ceiling (Eq. 21): θ(trial) > θ_max ⇒ reject (cause kCeiling),
+//      before any other test.
+//   2. STRATEGY MEMBERSHIP, every trial (F-type included): the subclass verdict
+//      is_trial_acceptable_to_strategy() — the filter's non-dominance test / the
+//      funnel's within-the-width test. Failure ⇒ reject (cause kMembership).
+//      Wächter–Biegler step A-5.4, Ipopt's CheckAcceptabilityOfTrialPoint, and
+//      Uno's FunnelMethod all gate every trial on membership, not only H-type.
+//   3. Switching condition (Eq. 19) selects F-type vs H-type:
+//        • F-TYPE (switching holds): accept iff the Armijo condition on φ holds
+//          (Eq. 20); else reject (cause kArmijo).
+//        • H-TYPE (switching fails): accept iff is_h_type_progress_acceptable()
+//          holds; else reject (cause kHTypeProgress).
+//   4. On any accept: register_accepted_step(current, trial, h_type) runs the
+//      subclass bookkeeping (a filter augments only on an H-type accept and
+//      folds in its per-iteration reset heuristic; a funnel tightens its width
+//      only on an H-type accept). h_type is false for an F-type accept.
+//   5. On any rejection: notify_trial_rejected(cause) lets a stateful subclass
+//      (the filter) run per-iteration bookkeeping keyed on the last rejection.
+//
+// Subclass hooks (this class is never instantiated directly):
 //   initialize_bounds(theta_0)    — called once, lazily, the first time
 //                                    is_iterate_acceptable() runs after a
 //                                    reset() (i.e. at the start of each
@@ -78,9 +96,14 @@
 //                                    initialize_bounds() set up so the next
 //                                    is_iterate_acceptable() call re-arms the
 //                                    lazy init.
-//   is_infeasibility_acceptable(current, trial) — the H-TYPE verdict.
-//   register_accepted_h_type(current, trial)    — bookkeeping run only when
-//                                    an H-TYPE trial is accepted.
+//   is_trial_acceptable_to_strategy(current, trial) — MEMBERSHIP verdict, run
+//                                    for every trial (step 2).
+//   is_h_type_progress_acceptable(current, trial)   — H-TYPE sufficient-progress
+//                                    verdict, run only on the H-type path.
+//   register_accepted_step(current, trial, h_type)  — bookkeeping run on any
+//                                    accept; h_type distinguishes F- from H-type.
+//   notify_trial_rejected(cause)  — bookkeeping run on any rejection (default
+//                                    no-op; the filter overrides it).
 //
 // Design note — the minimal-step / feasibility-restoration trigger (WB
 // Eq. (23), α_min as a fraction of a computed minimal step size, e.g.
@@ -128,6 +151,17 @@ inline constexpr double kThetaMinFact = 1.0e-4;
 inline constexpr double kThetaMaxFact = 1.0e4;
 
 // =============================================================================
+// RejectionCause — why the template method rejected a trial, handed to the
+// subclass's notify_trial_rejected() hook (see the acceptance order above).
+// =============================================================================
+enum class RejectionCause {
+    kCeiling,      // θ(trial) > θ_max (Eq. 21).
+    kMembership,   // failed the strategy membership test (step 2).
+    kArmijo,       // F-type: failed the Armijo condition on φ (Eq. 20).
+    kHTypeProgress // H-type: failed the sufficient-progress verdict.
+};
+
+// =============================================================================
 // SwitchingAcceptance — shared filter/funnel skeleton (template method).
 // =============================================================================
 class SwitchingAcceptance : public AcceptanceStrategy {
@@ -161,10 +195,17 @@ class SwitchingAcceptance : public AcceptanceStrategy {
     // --- Subclass hooks (see the file-top formulation) ---
     virtual void initialize_bounds(double theta_0) = 0;
     virtual void reset_bounds() = 0;
-    virtual bool is_infeasibility_acceptable(const ProgressMeasures &current,
-                                             const ProgressMeasures &trial) = 0;
-    virtual void register_accepted_h_type(const ProgressMeasures &current,
-                                          const ProgressMeasures &trial) = 0;
+    // Membership verdict, run for EVERY trial (step 2 of the acceptance order).
+    virtual bool is_trial_acceptable_to_strategy(const ProgressMeasures &current,
+                                                 const ProgressMeasures &trial) = 0;
+    // H-type sufficient-progress verdict, run only on the H-type path.
+    virtual bool is_h_type_progress_acceptable(const ProgressMeasures &current,
+                                               const ProgressMeasures &trial) = 0;
+    // Bookkeeping on any accept; h_type is false for an F-type accept.
+    virtual void register_accepted_step(const ProgressMeasures &current,
+                                        const ProgressMeasures &trial, bool h_type) = 0;
+    // Bookkeeping on any rejection; default no-op (only the filter overrides it).
+    virtual void notify_trial_rejected(RejectionCause cause) { (void)cause; }
 
   private:
     bool bounds_initialized_ = false; // Lazy-init flag; re-armed by reset().
