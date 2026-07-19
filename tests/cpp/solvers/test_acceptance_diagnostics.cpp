@@ -31,7 +31,6 @@ using tycho::solvers::AcceptanceStrategy;
 using tycho::solvers::FilterAcceptance;
 using tycho::solvers::FunnelAcceptance;
 using tycho::solvers::kFunnelInfeasibilityFactor;
-using tycho::solvers::kFunnelInitialUpperBound;
 using tycho::solvers::ProgressMeasures;
 using tycho::solvers::PSIOPT;
 
