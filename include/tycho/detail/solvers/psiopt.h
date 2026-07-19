@@ -45,6 +45,12 @@
 #include "tycho/detail/solvers/linear/pardiso_interface.h"
 #endif
 
+// Forward declarations of gtest-generated test-fixture classes (global
+// namespace, per gtest's TEST() expansion) that are befriended below. See the
+// "Test access" comment in the PSIOPT class body for why this exists.
+class RecoveryDispatchGate_FunnelSelectionConstructsFunnelAcceptance_Test;
+class RecoveryDispatchGate_FilterSelectionConstructsFilterAcceptance_Test;
+
 namespace tycho::solvers {
 
 // Pull root-namespace Eigen type aliases into tycho::solvers so that PSIOPT
@@ -379,17 +385,6 @@ class PSIOPT {
     const Settings &settings() const { return settings_; }
     const SolveResult &result() const { return result_; }
 
-    // Testing hook: rebuilds acceptance_/mechanism_/governor_/recovery_ from
-    // the CURRENT Settings (see rebuild_globalization_components()) and
-    // returns the raw acceptance-strategy pointer, so unit tests can check
-    // Settings::acceptance_strategy_ wiring (concrete type via dynamic_cast,
-    // drives_classic_path()) without running a full solve. Safe with no NLP
-    // set: none of the non-classic_merit branches read nlp_ at construction.
-    AcceptanceStrategy *rebuild_acceptance_for_testing() {
-        rebuild_globalization_components();
-        return acceptance_.get();
-    }
-
     // --- NLP management ---
     void set_nlp(std::shared_ptr<NonLinearProgram> np);
     void release();
@@ -494,6 +489,12 @@ class PSIOPT {
     static void print_header() { fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65); }
 
   private:
+    // Test access: these unit tests verify which concrete acceptance strategy
+    // the settings dispatch constructs; befriended narrowly instead of
+    // exposing a public rebuild hook.
+    friend class ::RecoveryDispatchGate_FunnelSelectionConstructsFunnelAcceptance_Test;
+    friend class ::RecoveryDispatchGate_FilterSelectionConstructsFilterAcceptance_Test;
+
     Settings settings_;
     SolveResult result_;
     std::shared_ptr<NonLinearProgram> nlp_;

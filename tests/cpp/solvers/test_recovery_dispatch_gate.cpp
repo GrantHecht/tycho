@@ -202,27 +202,6 @@ TEST(RecoveryDispatchGate, StubAcceptanceDrivesHook) {
     }
 }
 
-// Settings::acceptance_strategy_ = funnel/filter must construct the matching
-// concrete strategy (via PSIOPT::rebuild_acceptance_for_testing(), the
-// testing hook around rebuild_globalization_components()) and drive the
-// generic AcceptanceStrategy path, exactly like the modern merit family
-// (see test_merit_rules.cpp's DrivesGenericPath).
-TEST(RecoveryDispatchGate, FunnelSelectionConstructsFunnelAcceptance) {
-    PSIOPT solver;
-    solver.settings().acceptance_strategy_ = AcceptanceStrategies::funnel;
-    AcceptanceStrategy *acceptance = solver.rebuild_acceptance_for_testing();
-    ASSERT_NE(dynamic_cast<FunnelAcceptance *>(acceptance), nullptr);
-    EXPECT_FALSE(acceptance->drives_classic_path());
-}
-
-TEST(RecoveryDispatchGate, FilterSelectionConstructsFilterAcceptance) {
-    PSIOPT solver;
-    solver.settings().acceptance_strategy_ = AcceptanceStrategies::filter;
-    AcceptanceStrategy *acceptance = solver.rebuild_acceptance_for_testing();
-    ASSERT_NE(dynamic_cast<FilterAcceptance *>(acceptance), nullptr);
-    EXPECT_FALSE(acceptance->drives_classic_path());
-}
-
 // Settings::validate()'s strategy-combination guard: originally scoped to
 // acceptance_strategy_ == merit, now generalized to every non-classic_merit
 // strategy (see the guard's comment in psiopt.cpp). Exercise both new
@@ -273,4 +252,52 @@ TEST(RecoveryDispatchGate, ValidateStillRejectsMeritWithMaxSoc) {
     EXPECT_THROW(settings.validate(), std::invalid_argument);
 }
 
+// The recovery-link guard covers only max_soc_/ls_extended_iters_; watchdog_
+// combines freely with every acceptance strategy, including the two newly
+// wired non-classic strategies.
+TEST(RecoveryDispatchGate, ValidateAcceptsFunnelWithWatchdog) {
+    PSIOPT::Settings settings;
+    settings.acceptance_strategy_ = AcceptanceStrategies::funnel;
+    settings.watchdog_ = true;
+    EXPECT_NO_THROW(settings.validate());
+}
+
+TEST(RecoveryDispatchGate, ValidateAcceptsFilterWithWatchdog) {
+    PSIOPT::Settings settings;
+    settings.acceptance_strategy_ = AcceptanceStrategies::filter;
+    settings.watchdog_ = true;
+    EXPECT_NO_THROW(settings.validate());
+}
+
 } // namespace
+
+// Settings::acceptance_strategy_ = funnel/filter must construct the matching
+// concrete strategy and drive the generic AcceptanceStrategy path, exactly
+// like the modern merit family (see test_merit_rules.cpp's DrivesGenericPath).
+//
+// Test access: these two cases call the private
+// PSIOPT::rebuild_globalization_components() and read the private
+// acceptance_ member directly, so they are declared as friends in psiopt.h
+// (narrowly, by their gtest-generated class names) rather than PSIOPT
+// exposing a public rebuild hook for this alone. gtest TEST() macros expand
+// to a class at the enclosing scope, and a friend declaration cannot name a
+// class inside an anonymous namespace from a production header, so these two
+// cases live at global scope instead of inside the anonymous namespace above.
+
+TEST(RecoveryDispatchGate, FunnelSelectionConstructsFunnelAcceptance) {
+    tycho::solvers::PSIOPT solver;
+    solver.settings().acceptance_strategy_ = tycho::solvers::AcceptanceStrategies::funnel;
+    solver.rebuild_globalization_components();
+    tycho::solvers::AcceptanceStrategy *acceptance = solver.acceptance_.get();
+    ASSERT_NE(dynamic_cast<tycho::solvers::FunnelAcceptance *>(acceptance), nullptr);
+    EXPECT_FALSE(acceptance->drives_classic_path());
+}
+
+TEST(RecoveryDispatchGate, FilterSelectionConstructsFilterAcceptance) {
+    tycho::solvers::PSIOPT solver;
+    solver.settings().acceptance_strategy_ = tycho::solvers::AcceptanceStrategies::filter;
+    solver.rebuild_globalization_components();
+    tycho::solvers::AcceptanceStrategy *acceptance = solver.acceptance_.get();
+    ASSERT_NE(dynamic_cast<tycho::solvers::FilterAcceptance *>(acceptance), nullptr);
+    EXPECT_FALSE(acceptance->drives_classic_path());
+}

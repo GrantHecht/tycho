@@ -11,9 +11,8 @@
 // the base's subclass hooks; the θ_min/θ_max ceiling, the switching condition,
 // and the F-type Armijo test all live in SwitchingAcceptance.
 //
-// Nothing constructs FilterAcceptance in production yet — it is opt-in and not
-// wired into Settings; these definitions exist so the strategy is testable in
-// isolation through ProgressMeasures + its own filter state.
+// Opt-in via Settings::acceptance_strategy_ == filter; the default
+// classic_merit path stays bit-identical.
 //
 // =============================================================================
 // FORMULATION — derived from the two primary sources (fetched + read, not from

@@ -12,9 +12,8 @@
 // this class supplies ONLY the funnel-specific H-type verdict and the width
 // bookkeeping through the base's subclass hooks.
 //
-// Nothing constructs FunnelAcceptance in production yet — it is opt-in and not
-// wired into Settings; these definitions exist so the strategy is testable in
-// isolation through ProgressMeasures + its own width state.
+// Opt-in via Settings::acceptance_strategy_ == funnel; the default
+// classic_merit path stays bit-identical.
 //
 // =============================================================================
 // FORMULATION — derived from the two primary sources (fetched + read, not from
