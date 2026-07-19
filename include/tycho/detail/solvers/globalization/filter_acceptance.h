@@ -118,23 +118,28 @@
 //
 // Divergences from the sources, disclosed (consequence stated):
 //   • Reset-heuristic granularity. Ipopt drives the reset heuristic once per
-//     SOLVER ITERATION (the "in N iterations last rejection was due to filter"
-//     message), reading last_rejection_due_to_filter_ left by the previous
-//     iteration's line search. The shared skeleton hands the subclass only a
-//     per-TRIAL H-type verdict (is_infeasibility_acceptable), so this
-//     implementation counts filter-caused rejections per H-type trial. The
-//     consequence: a single line search that backtracks through kFilterResetTrigger
-//     consecutive filter-blocked trials can trigger a clear mid-line-search,
-//     which Ipopt would only do across iterations. Both count "successive
-//     filter-caused rejections"; only the unit of "successive" differs.
+//     SOLVER ITERATION, reading last_rejection_due_to_filter_ left by the
+//     previous iteration's line search. The shared skeleton hands the subclass
+//     only a per-TRIAL H-type verdict (is_infeasibility_acceptable), so this
+//     implementation counts filter-caused rejections per H-type trial.
+//     Consequence: the trigger (5 consecutive filter-blocked trials) is
+//     strictly easier to satisfy than Ipopt's (5 iterations whose last
+//     rejection was filter-caused), so reset fires materially more eagerly.
+//     A single line search backtracking through 5 filter-blocked trials can
+//     clear the filter mid-line-search. Combined with the per-phase cap of 5
+//     resets, an eager burst can exhaust all clears early in a phase, after
+//     which the filter is never reset for the remainder of that phase.
 //   • F-type rejections are invisible to the counter. In Ipopt every rejection
 //     (F-type Armijo, current-iterate, or filter) funnels through one function,
 //     so an F-type Armijo rejection sets last_rejection_due_to_filter_ = false
 //     and thereby zeroes the counter. In the shared skeleton the F-type Armijo
-//     test lives in the base and never consults the subclass on rejection, so an
-//     F-type rejection leaves the counter untouched. A non-filter H-type
+//     test lives in the base and never consults the subclass on rejection, so
+//     an F-type rejection leaves the counter untouched. A non-filter H-type
 //     rejection (the (1a) branch) still zeroes it, matching Ipopt's intent for
-//     the H-type case.
+//     the H-type case. Consequence: in a backtracking sequence that interleaves
+//     f-type and h-type trials, an f-type rejection does not break a run of
+//     h-type filter-caused rejections here, whereas Ipopt's last-rejection-wins
+//     bookkeeping would.
 //   • n_filter_resets_ increment. In current Ipopt master n_filter_resets_ is
 //     initialized to 0 but never incremented (the "maximal number of resets
 //     already exceeded" branch is unreachable), so the max_filter_resets cap is
