@@ -133,6 +133,24 @@ class PSIOPT:
         """
 
     @property
+    def last_funnel_width(self) -> float:
+        """
+        Final funnel width (tau) at the end of the most recent solve's last phase. -1.0 unless acceptance_strategy is funnel, or if no acceptance test ran.
+        """
+
+    @property
+    def last_filter_size(self) -> int:
+        """
+        Final number of stored filter (theta, phi) pairs at the end of the most recent solve's last phase. -1 unless acceptance_strategy is filter.
+        """
+
+    @property
+    def last_filter_resets(self) -> int:
+        """
+        Number of filter-reset-heuristic clears during the most recent solve's last phase. -1 unless acceptance_strategy is filter.
+        """
+
+    @property
     def obj_scale(self) -> float: ...
 
     @obj_scale.setter
