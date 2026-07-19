@@ -182,6 +182,37 @@ TEST(FunnelAcceptance, WidthUpdateTrialAboveCurrentUsesFloor) {
 }
 
 // ===========================================================================
+// Pinning test: an accepted H-type step whose CURRENT iterate lies outside the
+// funnel (θ_current ≫ τ) can transiently RE-WIDEN the funnel instead of
+// tightening it. This is not a bug fix target — it is the documented
+// consequence (funnel_acceptance.h note (3) and the f-type divergence bullet)
+// of the base only funnel-gating H-type accepts: an f-type accept (or a
+// recovery-chain accept-as-is outcome) can leave the current iterate outside
+// the funnel, and the H-type verdict itself only checks θ_trial, not
+// θ_current, so the update still runs and reads that oversized θ_current.
+//
+// τ = 1.5 (θ₀ = 1.0 ⇒ τ = max(1.0, 1.5·1.0) = 1.5; same init as
+// FTypeAcceptLeavesWidthUnchanged above). β·τ = 0.9999·1.5 = 1.4998... (5).
+// H-type verdict reads θ_trial only: θ_trial = 0.5 ≤ τ (1.5) AND
+// θ_trial ≤ β·τ (1.49985) ⇒ ACCEPT, regardless of θ_current.
+// Update (θ_trial ≤ θ_current ⇒ convex-combination branch):
+//   convex = κ·θ_current + (1−κ)·θ_trial = 0.5·100 + 0.5·0.5 = 50 + 0.25 = 50.25
+//   τ⁺ = max(β·τ, convex) = max(1.49985, 50.25) = 50.25
+// 50.25 ≫ 1.5: the width RE-WIDENS by more than 33x on this single step.
+//
+// If a future change clamps the update (τ⁺ = min(τ, ...)) to restore
+// unconditional monotonicity, this test must be updated deliberately, and the
+// corpus scorecards (docs/dev/analysis/2026-07-e2-g3-scorecards.md) must be
+// re-validated against the new behavior before the clamp ships.
+TEST(FunnelAcceptance, WidthUpdateReWidensWhenCurrentIterateOutsideFunnel) {
+    FunnelAcceptance a;
+    FunnelPrimeRejecting(a, /*theta0=*/1.0, /*trial_outside=*/5.0); // τ = 1.5
+    ASSERT_TRUE(FunnelHType(a, /*theta_current=*/100.0, /*theta_trial=*/0.5));
+    EXPECT_DOUBLE_EQ(a.funnel_width(), 50.25); // re-widened, not tightened
+    EXPECT_GT(a.funnel_width(), 1.5);          // strictly ABOVE the old width
+}
+
+// ===========================================================================
 // F-type accept leaves the width unchanged (only accepted H-type updates it).
 // ===========================================================================
 

@@ -15,8 +15,9 @@ modernized penalty-based acceptance test (rather than the classic fused backtrac
 line search) is what rescues the `lit_wb2000` counterexample; this document scores the two
 strategies purpose-built to replace a monolithic penalty/merit value with an explicit
 progress-measures history — a set of dominating pairs (filter) or a single shrinking width
-(funnel) — which the merit-series scorecards (2026-07-e2-g2-scorecards.md), whose nulls section flagged as the plausible next lever for the
-hard/degenerate problems that no acceptance or recovery-chain change had moved.
+(funnel) — an approach the earlier merit-series scorecards' nulls section
+(2026-07-e2-g2-scorecards.md) flagged as the plausible next lever for the hard/degenerate
+problems that no acceptance or recovery-chain change had moved.
 
 ## 1. Method
 
@@ -26,7 +27,7 @@ two repeats to separate genuine behavior change from run-to-run float noise):
 | Config | Harness invocation | What it turns on |
 | --- | --- | --- |
 | **defaults** | `python scripts/run_corpus.py --cbwr --repeat 2` | Nothing — `acceptance_strategy` at its default `classic_merit` value. Exists to reconfirm the corpus reproduces the committed baseline before trusting the other four diffs against it. |
-| **funnel** | `python scripts/run_corpus.py --cbwr --repeat 2 --config acceptance_strategy=funnel` | Step acceptance switches to `FunnelAcceptance` — a single monotonically non-increasing scalar bound (the funnel width) on constraint violation, following Kiessling, Leyffer & Vanaret, "A Unified Funnel Restoration SQP Algorithm," arXiv:2409.09208, with constants taken from Vanaret's Uno solver's shipped option defaults. |
+| **funnel** | `python scripts/run_corpus.py --cbwr --repeat 2 --config acceptance_strategy=funnel` | Step acceptance switches to `FunnelAcceptance` — a single scalar bound (the funnel width) on constraint violation, monotonically tightened while accepted iterates remain within the bound, following Kiessling, Leyffer & Vanaret, "A Unified Funnel Restoration SQP Algorithm," arXiv:2409.09208, with constants taken from Vanaret's Uno solver's shipped option defaults. |
 | **filter** | `python scripts/run_corpus.py --cbwr --repeat 2 --config acceptance_strategy=filter` | Step acceptance switches to `FilterAcceptance` — the classic Wächter & Biegler (θ, φ)-pair filter, per Wächter & Biegler, "On the implementation of an interior-point filter line-search algorithm for large-scale nonlinear programming," *Math. Program.* 106(1):25-57 (2006), with the practical bookkeeping (barrier-ceiling test, filter-reset heuristic, dominance comparison) transcribed rule-by-rule from the COIN-OR Ipopt reference implementation. |
 | **funnel-wd** | `python scripts/run_corpus.py --cbwr --repeat 2 --config acceptance_strategy=funnel watchdog=1` | Funnel acceptance plus the watchdog technique (Chamberlain, Powell, Lemaréchal & Pedersen, 1982) layered on top, to check whether the two opt-in mechanisms interact on this corpus. |
 | **filter-wd** | `python scripts/run_corpus.py --cbwr --repeat 2 --config acceptance_strategy=filter watchdog=1` | Filter acceptance plus the watchdog, same purpose as `funnel-wd`. |
@@ -185,7 +186,11 @@ formulation comment:
   width; this implementation's shared switching skeleton consults the funnel only on the
   H-type path, so an F-type step is bounded by the base's θ_max ceiling but not by the funnel
   width itself. The strict funnel invariant (every accepted iterate inside the funnel) holds
-  for H-type accepts only.
+  for H-type accepts only. Because the next H-type width update reads whatever iterate was
+  last accepted, an out-of-funnel F-type accept can make that update transiently re-widen the
+  bound instead of tightening it — the width is monotonically tightened only while accepted
+  iterates stay inside the funnel, not unconditionally; see the header's note (3) for the
+  exact arithmetic.
 - **Filter** (`include/tycho/detail/solvers/globalization/filter_acceptance.h`): Ipopt drives
   its filter-reset heuristic once per solver iteration, from the *last* rejection's cause;
   this implementation's shared skeleton only exposes a per-trial H-type verdict, so the reset
@@ -220,10 +225,10 @@ the corpus is deliberately small and adversarially selected, see `tests/corpus/R
 All results in this document are reproducible via:
 
 ```
-conda run -n tycho python scripts/run_corpus.py --cbwr --config acceptance_strategy=funnel
-conda run -n tycho python scripts/run_corpus.py --cbwr --config acceptance_strategy=filter
-conda run -n tycho python scripts/run_corpus.py --cbwr --config acceptance_strategy=funnel watchdog=1
-conda run -n tycho python scripts/run_corpus.py --cbwr --config acceptance_strategy=filter watchdog=1
+conda run -n tycho python scripts/run_corpus.py --cbwr --repeat 2 --config acceptance_strategy=funnel
+conda run -n tycho python scripts/run_corpus.py --cbwr --repeat 2 --config acceptance_strategy=filter
+conda run -n tycho python scripts/run_corpus.py --cbwr --repeat 2 --config acceptance_strategy=funnel watchdog=1
+conda run -n tycho python scripts/run_corpus.py --cbwr --repeat 2 --config acceptance_strategy=filter watchdog=1
 ```
 
 ## References

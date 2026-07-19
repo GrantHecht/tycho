@@ -3,10 +3,12 @@
 // =============================================================================
 //
 // FunnelAcceptance — a concrete SwitchingAcceptance strategy that replaces the
-// filter's SET of (θ, f) pairs with ONE scalar: a monotonically non-increasing
-// upper bound on the constraint violation, the "funnel width" τ. A trial's
-// infeasibility must stay under (a fixed margin below) τ; each accepted
-// feasibility-improving step tightens τ. This is the funnel counterpart to the
+// filter's SET of (θ, f) pairs with ONE scalar: an upper bound on the
+// constraint violation, the "funnel width" τ, monotonically tightened while
+// accepted iterates remain inside the funnel (see note (3) for the
+// out-of-funnel-accept exception). A trial's infeasibility must stay under
+// (a fixed margin below) τ; each accepted feasibility-improving step tightens
+// τ. This is the funnel counterpart to the
 // filter strategy, sharing the Wächter–Biegler switching skeleton in
 // SwitchingAcceptance (θ_min/θ_max ceiling, switching condition, F-type Armijo);
 // this class supplies ONLY the funnel-specific H-type verdict and the width
@@ -70,10 +72,21 @@
 //     with the convex-combination coefficient κ = kFunnelKappa (Uno option
 //     "funnel_kappa" = 0.5). The convex combination is Uno's
 //     convex_combination(current, trial, κ) = κ·current + (1−κ)·trial, floored
-//     at β·τ so a single step never over-tightens. Because an accepted H-type
-//     step guarantees θ_trial ≤ β·τ < τ and the current iterate satisfies
-//     θ_current ≤ τ, both branches give τ⁺ < τ: the width is strictly
-//     decreasing, hence monotonically non-increasing across a run.
+//     at β·τ so a single step never over-tightens IN THE COMMON CASE.
+//
+//     The strict-decrease argument needs θ_current ≤ τ (the current iterate is
+//     INSIDE the funnel): an accepted H-type step guarantees θ_trial ≤ β·τ < τ,
+//     so if θ_current ≤ τ too, both branches give τ⁺ < τ. That invariant is
+//     NOT guaranteed here — the base's F-type path is not funnel-gated, and a
+//     recovery-chain accept-as-is outcome can also land an iterate outside the
+//     funnel (see the divergence notes below) — so a later accepted H-type
+//     step can read θ_current ≫ τ. When it does, the convex-combination branch
+//     can EXCEED the old width: e.g. τ = 1.0, θ_current = 100, θ_trial = 0.5
+//     → convex = 0.5·100 + 0.5·0.5 = 50.25, and β·τ ≈ 1.0, so
+//     τ⁺ = max(1.0, 50.25) = 50.25 — a transient RE-WIDENING, not a
+//     tightening. Monotone non-increase therefore holds only over runs where
+//     every accepted iterate stays inside the funnel (θ_current ≤ τ at each
+//     accepted step); it is not an unconditional property of this update rule.
 //
 // (4) When the width updates: ONLY on an accepted H-type step. The base runs
 //     register_accepted_h_type() exactly there; an F-type accept (switching +
@@ -87,7 +100,8 @@
 //     combination of the OLD WIDTH and the trial). That formula is Uno's
 //     update_strategy = 2, NOT its default. This implementation follows Uno's
 //     shipped default (strategy 1, above), whose constants are the ones adopted
-//     here; both rules are monotone non-increasing.
+//     here; both rules share the same width-decrease guarantee, and the same
+//     θ_current ≤ τ caveat from note (3) above.
 //   • Uno gates BOTH step types on funnel.acceptable (the whole
 //     is_iterate_acceptable body sits inside "if (funnel.acceptable(...))").
 //     In this shared skeleton the base consults the subclass only on the H-type
@@ -97,7 +111,15 @@
 //     within-the-funnel gate. As a result, an f-type step is bounded only by
 //     theta_max, so the violation may transiently exceed the funnel width on
 //     f-type accepts; the strict funnel invariant (every accepted iterate inside
-//     the funnel) is enforced on h-type steps only.
+//     the funnel) is enforced on h-type steps only. That out-of-funnel accept
+//     then feeds the NEXT h-type width update (note (3) above): reading an
+//     out-of-funnel iterate as θ_current can push the convex-combination
+//     branch above the old width, re-widening the funnel instead of
+//     tightening it. Clamping the update (τ⁺ = min(τ, ...)) would restore
+//     unconditional monotonicity, but that is a behavior change that would
+//     invalidate the shipped corpus scorecards
+//     (docs/dev/analysis/2026-07-e2-g3-scorecards.md), so it is left as-is and
+//     disclosed here.
 //   • Uno's optional "acceptable with respect to the current iterate" refinement
 //     (options funnel_gamma, funnel_require_acceptance_wrt_current_iterate) is
 //     OFF by default (funnel_require_acceptance_wrt_current_iterate = false) and

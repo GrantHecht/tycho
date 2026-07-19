@@ -133,12 +133,16 @@
 //     so an F-type Armijo rejection sets last_rejection_due_to_filter_ = false
 //     and thereby zeroes the counter. In the shared skeleton the F-type Armijo
 //     test lives in the base and never consults the subclass on rejection, so
-//     an F-type rejection leaves the counter untouched. A non-filter H-type
-//     rejection (the (1a) branch) still zeroes it, matching Ipopt's intent for
-//     the H-type case. Consequence: in a backtracking sequence that interleaves
-//     f-type and h-type trials, an f-type rejection does not break a run of
-//     h-type filter-caused rejections here, whereas Ipopt's last-rejection-wins
-//     bookkeeping would.
+//     an F-type rejection leaves the counter untouched; the base's θ_max
+//     ceiling test (switching_acceptance.h Eq. (21)) rejects a trial outright,
+//     before either the switching test or the H-type delegate runs, so a
+//     θ_max-ceiling rejection leaves the counter untouched too. A non-filter
+//     H-type rejection (the (1a) branch) still zeroes it, matching Ipopt's
+//     intent for the H-type case. Consequence: in a backtracking sequence that
+//     interleaves f-type, θ_max-ceiling, and h-type trials, any base-level
+//     rejection — f-type Armijo or θ_max ceiling — leaves the counter
+//     untouched, whereas Ipopt's last-rejection-wins bookkeeping would zero
+//     it.
 //   • n_filter_resets_ increment. In current Ipopt master n_filter_resets_ is
 //     initialized to 0 but never incremented (the "maximal number of resets
 //     already exceeded" branch is unreachable), so the max_filter_resets cap is
