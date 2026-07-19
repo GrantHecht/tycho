@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-run_corpus.py — PSIOPT robustness corpus scoring harness (E2 G0)
+run_corpus.py — PSIOPT robustness corpus scoring harness
 
 Runs the problem modules registered in ``tests/corpus/registry.py`` and
 scores each against PSIOPT's convergence flag, subprocess-isolated (one

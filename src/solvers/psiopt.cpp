@@ -41,6 +41,8 @@
 #include "tycho/detail/solvers/globalization/classic_adaptive_governor.h"
 #include "tycho/detail/solvers/globalization/merit_acceptance.h"
 #include "tycho/detail/solvers/globalization/modern_merit.h"
+#include "tycho/detail/solvers/globalization/funnel_acceptance.h"
+#include "tycho/detail/solvers/globalization/filter_acceptance.h"
 #include "tycho/detail/solvers/globalization/recovery_chain.h"
 #include "tycho/detail/solvers/globalization/noop_recovery.h"
 #include "tycho/detail/solvers/globalization/soc.h"
@@ -50,6 +52,28 @@
 #ifndef USE_ACCELERATE_SPARSE
 #include <mkl.h>
 #endif
+
+namespace {
+
+// Name of a non-classic acceptance strategy, for the validate() error message
+// below. classic_merit never reaches this helper (the guard that calls it is
+// gated on acceptance_strategy_ != classic_merit).
+const char *acceptance_strategy_name(tycho::solvers::AcceptanceStrategies strategy) {
+    using tycho::solvers::AcceptanceStrategies;
+    switch (strategy) {
+    case AcceptanceStrategies::merit:
+        return "merit";
+    case AcceptanceStrategies::funnel:
+        return "funnel";
+    case AcceptanceStrategies::filter:
+        return "filter";
+    case AcceptanceStrategies::classic_merit:
+        return "classic_merit";
+    }
+    return "unknown";
+}
+
+} // namespace
 
 // =============================================================================
 // Static string-to-enum converters
@@ -498,17 +522,18 @@ void tycho::solvers::PSIOPT::Settings::validate() const {
 
     // --- Strategy-combination guards ---
     // The SOC and extended-backtracking recovery links re-drive the fused
-    // classic line search, which the modern merit strategy does not implement
-    // (its acceptance runs on the generic path). Reject the combination here
-    // so the user gets an upfront error instead of a mid-solve throw. The
-    // watchdog alone is compatible with either strategy.
-    if (acceptance_strategy_ == AcceptanceStrategies::merit &&
+    // classic line search, which none of the generic-path strategies
+    // (merit, funnel, filter) implement (their acceptance runs on the
+    // generic path). Reject the combination here so the user gets an
+    // upfront error instead of a mid-solve throw. The watchdog alone is
+    // compatible with every strategy.
+    if (acceptance_strategy_ != AcceptanceStrategies::classic_merit &&
         (max_soc_ > 0 || ls_extended_iters_ > 0))
         throw std::invalid_argument(fmt::format(
-            "acceptance_strategy=merit does not support the classic-path recovery links: "
-            "max_soc ({}) and ls_extended_iters ({}) must both be 0 with the modern merit "
-            "strategy (use acceptance_strategy=classic_merit to combine them)",
-            max_soc_, ls_extended_iters_));
+            "acceptance_strategy={} does not support the classic-path recovery links: "
+            "max_soc ({}) and ls_extended_iters ({}) must both be 0 with a generic-path "
+            "acceptance strategy (use acceptance_strategy=classic_merit to combine them)",
+            acceptance_strategy_name(acceptance_strategy_), max_soc_, ls_extended_iters_));
 
     // --- Convergence tolerances ---
     pos_finite(kkt_tol_, "kkt_tol");
@@ -917,13 +942,19 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
 void tycho::solvers::PSIOPT::rebuild_globalization_components() {
     // (Re)build the step-acceptance strategy. Default (classic_merit) builds
     // ClassicMeritAcceptance wired to a SolverContext view of this solver.
-    // Opting in (acceptance_strategy_ == merit) builds ModernMeritAcceptance
-    // instead — driven through the GENERIC compute_step path with the penalty
-    // rule chosen by merit_penalty_rule_. The modern strategy carries only its
-    // penalty state (no SolverContext); the mechanism owns trial-point eval.
+    // Opting in (acceptance_strategy_ == merit/funnel/filter) builds the
+    // corresponding strategy instead — all three drive through the GENERIC
+    // compute_step path and carry no SolverContext (the mechanism owns
+    // trial-point eval); merit's penalty state is seeded from
+    // merit_penalty_rule_, while funnel/filter are default-constructed and
+    // derive their bounds lazily from the first iterate they see each phase.
     if (this->settings_.acceptance_strategy_ == AcceptanceStrategies::merit) {
         this->acceptance_ =
             std::make_unique<ModernMeritAcceptance>(this->settings_.merit_penalty_rule_);
+    } else if (this->settings_.acceptance_strategy_ == AcceptanceStrategies::funnel) {
+        this->acceptance_ = std::make_unique<FunnelAcceptance>();
+    } else if (this->settings_.acceptance_strategy_ == AcceptanceStrategies::filter) {
+        this->acceptance_ = std::make_unique<FilterAcceptance>();
     } else {
         this->acceptance_ = std::make_unique<ClassicMeritAcceptance>(
             SolverContext{this->nlp_.get(), this->kkt_sol_, this->settings_, this->primal_vars_,

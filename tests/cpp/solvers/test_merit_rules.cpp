@@ -64,7 +64,7 @@ TEST(WmnoRule, DescentAcceptsPenaltyUnchanged) {
     ModernMeritAcceptance a(MeritPenaltyRules::wmno);
     const bool ok =
         a.is_iterate_acceptable(ModernMeritMakePm(2.0, 10.0, 0.0), ModernMeritMakePm(1.0, 5.0, 0.0),
-                                ModernMeritMakePm(2.0, 3.0, 0.0), 1.0);
+                                ModernMeritMakePm(2.0, 3.0, 0.0), 1.0, 1.0);
     EXPECT_TRUE(ok);
     EXPECT_DOUBLE_EQ(a.wmno_penalty(), 1.0);
 }
@@ -77,7 +77,7 @@ TEST(WmnoRule, PenaltyBumpThenAccept) {
     ModernMeritAcceptance a(MeritPenaltyRules::wmno);
     const bool ok = a.is_iterate_acceptable(ModernMeritMakePm(1.0, 10.0, 0.0),
                                             ModernMeritMakePm(0.5, 12.0, 0.0),
-                                            ModernMeritMakePm(1.0, -9.0, 0.0), 1.0);
+                                            ModernMeritMakePm(1.0, -9.0, 0.0), 1.0, 1.0);
     EXPECT_TRUE(ok);
     EXPECT_DOUBLE_EQ(a.wmno_penalty(), 11.0);
 }
@@ -91,7 +91,7 @@ TEST(WmnoRule, MeritIncreaseRejects) {
     const bool ok =
         a.is_iterate_acceptable(ModernMeritMakePm(1.0, 10.0, 0.0),
                                 ModernMeritMakePm(1.0, 12.0, 0.0),
-                                ModernMeritMakePm(2.0, 3.0, 0.0), 1.0);
+                                ModernMeritMakePm(2.0, 3.0, 0.0), 1.0, 1.0);
     EXPECT_FALSE(ok);
     EXPECT_DOUBLE_EQ(a.wmno_penalty(), 1.0);
 }
@@ -102,7 +102,7 @@ TEST(WmnoRule, FeasibleCurrentNoPenaltyUpdate) {
     ModernMeritAcceptance a(MeritPenaltyRules::wmno);
     const bool ok =
         a.is_iterate_acceptable(ModernMeritMakePm(0.0, 10.0, 0.0), ModernMeritMakePm(0.0, 8.0, 0.0),
-                                ModernMeritMakePm(0.0, -9.0, 0.0), 1.0);
+                                ModernMeritMakePm(0.0, -9.0, 0.0), 1.0, 1.0);
     EXPECT_TRUE(ok);
     EXPECT_DOUBLE_EQ(a.wmno_penalty(), 1.0);
 }
@@ -114,11 +114,11 @@ TEST(WmnoRule, PenaltyTrajectoryMonotone) {
     const ProgressMeasures cur = ModernMeritMakePm(1.0, 1.0, 0.0);
     const ProgressMeasures tri = ModernMeritMakePm(1.0, 1.0, 0.0);
 
-    a.is_iterate_acceptable(cur, tri, ModernMeritMakePm(1.0, -9.0, 0.0), 1.0); // τ=10
+    a.is_iterate_acceptable(cur, tri, ModernMeritMakePm(1.0, -9.0, 0.0), 1.0, 1.0); // τ=10
     EXPECT_DOUBLE_EQ(a.wmno_penalty(), 11.0);
-    a.is_iterate_acceptable(cur, tri, ModernMeritMakePm(1.0, -4.5, 0.0), 1.0); // τ=5
+    a.is_iterate_acceptable(cur, tri, ModernMeritMakePm(1.0, -4.5, 0.0), 1.0, 1.0); // τ=5
     EXPECT_DOUBLE_EQ(a.wmno_penalty(), 11.0);
-    a.is_iterate_acceptable(cur, tri, ModernMeritMakePm(1.0, -18.0, 0.0), 1.0); // τ=20
+    a.is_iterate_acceptable(cur, tri, ModernMeritMakePm(1.0, -18.0, 0.0), 1.0, 1.0); // τ=20
     EXPECT_DOUBLE_EQ(a.wmno_penalty(), 21.0);
 }
 
@@ -141,7 +141,7 @@ TEST(FlexRule, RegionIIAcceptsAndRaisesPiL) {
     ModernMeritAcceptance a(MeritPenaltyRules::flexible);
     const bool ok = a.is_iterate_acceptable(ModernMeritMakePm(2.0, 10.0, 0.0),
                                             ModernMeritMakePm(1.0, 12.0, 0.0),
-                                            ModernMeritMakePm(2.0, 3.0, 0.0), 1.0);
+                                            ModernMeritMakePm(2.0, 3.0, 0.0), 1.0, 1.0);
     EXPECT_TRUE(ok);
     EXPECT_NEAR(a.flex_pi_l(), 0.2, 1e-6);
     EXPECT_DOUBLE_EQ(a.flex_pi_u(), kFlexInitPiU);
@@ -153,7 +153,7 @@ TEST(FlexRule, ObjectiveDecreaseAcceptsKeepsPiL) {
     ModernMeritAcceptance a(MeritPenaltyRules::flexible);
     const bool ok = a.is_iterate_acceptable(ModernMeritMakePm(1.0, 10.0, 0.0),
                                             ModernMeritMakePm(2.0, 5.0, 0.0),
-                                            ModernMeritMakePm(1.0, 3.0, 0.0), 1.0);
+                                            ModernMeritMakePm(1.0, 3.0, 0.0), 1.0, 1.0);
     EXPECT_TRUE(ok);
     EXPECT_DOUBLE_EQ(a.flex_pi_l(), kFlexInitPiL);
     EXPECT_DOUBLE_EQ(a.flex_pi_u(), kFlexInitPiU);
@@ -165,7 +165,7 @@ TEST(FlexRule, BothWorseRejects) {
     ModernMeritAcceptance a(MeritPenaltyRules::flexible);
     const bool ok = a.is_iterate_acceptable(ModernMeritMakePm(1.0, 10.0, 0.0),
                                             ModernMeritMakePm(2.0, 12.0, 0.0),
-                                            ModernMeritMakePm(1.0, 3.0, 0.0), 1.0);
+                                            ModernMeritMakePm(1.0, 3.0, 0.0), 1.0, 1.0);
     EXPECT_FALSE(ok);
     EXPECT_DOUBLE_EQ(a.flex_pi_l(), kFlexInitPiL);
     EXPECT_DOUBLE_EQ(a.flex_pi_u(), kFlexInitPiU);
@@ -176,7 +176,7 @@ TEST(FlexRule, BothWorseRejects) {
 TEST(FlexRule, PiUpperRaisedWhenChiExceeds) {
     ModernMeritAcceptance a(MeritPenaltyRules::flexible);
     a.is_iterate_acceptable(ModernMeritMakePm(1.0, 10.0, 0.0), ModernMeritMakePm(0.5, 10.0, 0.0),
-                            ModernMeritMakePm(1.0, -1.8e8, 0.0), 1.0);
+                            ModernMeritMakePm(1.0, -1.8e8, 0.0), 1.0, 1.0);
     EXPECT_NEAR(a.flex_pi_u(), 2.0e8, 10.0);
 }
 
@@ -187,7 +187,7 @@ TEST(ModernMerit, ResetClearsPenaltyState) {
     // WMNO: bump ν to 11, then reset back to ν₀.
     ModernMeritAcceptance w(MeritPenaltyRules::wmno);
     w.is_iterate_acceptable(ModernMeritMakePm(1.0, 10.0, 0.0), ModernMeritMakePm(0.5, 12.0, 0.0),
-                            ModernMeritMakePm(1.0, -9.0, 0.0), 1.0);
+                            ModernMeritMakePm(1.0, -9.0, 0.0), 1.0, 1.0);
     ASSERT_DOUBLE_EQ(w.wmno_penalty(), 11.0);
     w.reset();
     EXPECT_DOUBLE_EQ(w.wmno_penalty(), kWmnoInitPenalty);
@@ -195,7 +195,7 @@ TEST(ModernMerit, ResetClearsPenaltyState) {
     // Flexible: raise π_l to ≈0.2, then reset the whole interval.
     ModernMeritAcceptance f(MeritPenaltyRules::flexible);
     f.is_iterate_acceptable(ModernMeritMakePm(2.0, 10.0, 0.0), ModernMeritMakePm(1.0, 12.0, 0.0),
-                            ModernMeritMakePm(2.0, 3.0, 0.0), 1.0);
+                            ModernMeritMakePm(2.0, 3.0, 0.0), 1.0, 1.0);
     ASSERT_NEAR(f.flex_pi_l(), 0.2, 1e-6);
     f.reset();
     EXPECT_DOUBLE_EQ(f.flex_pi_l(), kFlexInitPiL);

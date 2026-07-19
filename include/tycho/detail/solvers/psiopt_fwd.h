@@ -49,7 +49,11 @@ class PSIOPT;
 //                   (ClassicMeritAcceptance); the bit-identical default.
 //   merit         — the modernized merit family driven through the GENERIC
 //                   AcceptanceStrategy path (ModernMeritAcceptance).
-enum class AcceptanceStrategies { classic_merit = 0, merit = 1 };
+//   funnel        — the scalar-funnel-width strategy on the shared
+//                   Wächter–Biegler switching skeleton (FunnelAcceptance).
+//   filter        — the (θ, φ)-pair filter strategy on the shared
+//                   Wächter–Biegler switching skeleton (FilterAcceptance).
+enum class AcceptanceStrategies { classic_merit = 0, merit = 1, funnel = 2, filter = 3 };
 
 // Penalty-parameter rule for the modernized merit family
 // (PSIOPT::Settings::merit_penalty_rule_; read only when

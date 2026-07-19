@@ -45,6 +45,12 @@
 #include "tycho/detail/solvers/linear/pardiso_interface.h"
 #endif
 
+// Forward declarations of gtest-generated test-fixture classes (global
+// namespace, per gtest's TEST() expansion) that are befriended below. See the
+// "Test access" comment in the PSIOPT class body for why this exists.
+class RecoveryDispatchGate_FunnelSelectionConstructsFunnelAcceptance_Test;
+class RecoveryDispatchGate_FilterSelectionConstructsFilterAcceptance_Test;
+
 namespace tycho::solvers {
 
 // Pull root-namespace Eigen type aliases into tycho::solvers so that PSIOPT
@@ -483,6 +489,12 @@ class PSIOPT {
     static void print_header() { fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65); }
 
   private:
+    // Test access: these unit tests verify which concrete acceptance strategy
+    // the settings dispatch constructs; befriended narrowly instead of
+    // exposing a public rebuild hook.
+    friend class ::RecoveryDispatchGate_FunnelSelectionConstructsFunnelAcceptance_Test;
+    friend class ::RecoveryDispatchGate_FilterSelectionConstructsFilterAcceptance_Test;
+
     Settings settings_;
     SolveResult result_;
     std::shared_ptr<NonLinearProgram> nlp_;

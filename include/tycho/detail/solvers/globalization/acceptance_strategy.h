@@ -58,12 +58,21 @@ class AcceptanceStrategy {
     // pair acceptable relative to the current iterate, given what the step
     // model predicted? ClassicMeritAcceptance stubs this with a documented
     // "unused on classic path" body (today's classic acceptance is entirely
-    // inside classic_line_search's fused loop+test); it is not driven from
-    // anywhere until a filter/funnel/WMNO strategy is selected.
+    // inside classic_line_search's fused loop+test); ModernMeritAcceptance,
+    // FunnelAcceptance, and FilterAcceptance all implement it for real and are
+    // selectable via Settings::acceptance_strategy_. The generic surface is
+    // driven whenever any non-classic_merit strategy is selected.
+    //
+    // step_length is the trial's alpha, in (0, 1] — the live ladder value
+    // from the generic backtracking loop that produced `trial`.
+    // predicted_reduction stays alpha-scaled (as documented on
+    // ProgressMeasures/modern_merit.h); a strategy that needs the raw,
+    // unscaled directional derivative recovers it as
+    // predicted_reduction.objective / step_length.
     virtual bool is_iterate_acceptable(const ProgressMeasures &current,
                                         const ProgressMeasures &trial,
                                         const ProgressMeasures &predicted_reduction,
-                                        double objective_multiplier) = 0;
+                                        double objective_multiplier, double step_length) = 0;
 
     // Restoration-exit test: has infeasibility been reduced enough (relative
     // to `reference`, the point restoration was entered from) to leave

@@ -80,7 +80,7 @@ class ClassicMeritAcceptance : public AcceptanceStrategy {
     // them real bodies.
     bool is_iterate_acceptable(const ProgressMeasures &current, const ProgressMeasures &trial,
                                const ProgressMeasures &predicted_reduction,
-                               double objective_multiplier) override;
+                               double objective_multiplier, double step_length) override;
     bool is_infeasibility_sufficiently_reduced(const ProgressMeasures &reference,
                                                const ProgressMeasures &trial) const override;
 

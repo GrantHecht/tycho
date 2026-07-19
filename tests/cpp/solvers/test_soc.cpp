@@ -170,7 +170,7 @@ class UnusedAcceptance : public AcceptanceStrategy {
   public:
     bool drives_classic_path() const override { return true; }
     bool is_iterate_acceptable(const ProgressMeasures &, const ProgressMeasures &,
-                               const ProgressMeasures &, double) override {
+                               const ProgressMeasures &, double, double) override {
         ADD_FAILURE() << "acceptance must not be reached on an early-exit path";
         return false;
     }
