@@ -390,7 +390,7 @@ class PSIOPT:
     @property
     def acceptance_strategy(self) -> AcceptanceStrategies:
         """
-        Step-acceptance strategy: classic_merit (default) reproduces the original fused backtracking merit line search bit-for-bit; merit switches to the modernized penalty-based acceptance test selected by merit_penalty_rule. merit requires max_soc == 0 and ls_extended_iters == 0.
+        Step-acceptance strategy: classic_merit (default) reproduces the original fused backtracking merit line search bit-for-bit; merit switches to the modernized penalty-based acceptance test selected by merit_penalty_rule; funnel switches to a single-scalar, monotonically-tightened bound on constraint violation; filter switches to a (violation, objective) Wachter-Biegler-style filter. merit, funnel, and filter each require max_soc == 0 and ls_extended_iters == 0 (ValueError raised otherwise); watchdog is compatible with all four strategies. These are heuristically-motivated acceptance alternatives, not one another's strict improvement -- compare against classic_merit on your own problem before adopting one.
         """
 
     @acceptance_strategy.setter
@@ -521,6 +521,16 @@ class AcceptanceStrategies(enum.Enum):
     classic_merit = 0
 
     merit = 1
+
+    funnel = 2
+    """
+    Single-scalar upper bound on constraint violation (the funnel width), tightened monotonically as accepted steps improve feasibility (Kiessling, Leyffer & Vanaret funnel formulation, implemented after Uno's funnel). Rejects combination with max_soc > 0 or ls_extended_iters > 0 (ValueError at validate() time); composes with watchdog. Heuristically motivated -- no convergence guarantee is implied; compare against classic_merit and filter on your own problem.
+    """
+
+    filter = 3
+    """
+    (Constraint violation, objective) pair filter with margined dominance (Wachter-Biegler filter line search, Ipopt lineage). Rejects combination with max_soc > 0 or ls_extended_iters > 0 (ValueError at validate() time); composes with watchdog. Heuristically motivated -- no convergence guarantee is implied; compare against classic_merit and funnel on your own problem.
+    """
 
 class MeritPenaltyRules(enum.Enum):
     wmno = 0
