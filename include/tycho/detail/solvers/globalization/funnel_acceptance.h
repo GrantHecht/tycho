@@ -161,6 +161,13 @@ class FunnelAcceptance final : public SwitchingAcceptance {
     // sentinel (+∞); it is derived from θ₀ on the first call.
     double funnel_width() const { return width_; }
 
+    // Solver-level observability hook (see AcceptanceStrategy::
+    // append_diagnostics): reports the current width_ into
+    // SolveResult::last_funnel_width_ verbatim (including the +∞
+    // uninitialized sentinel, on the pathological case of a phase that never
+    // calls is_iterate_acceptable).
+    void append_diagnostics(PSIOPT::SolveResult &result) const override;
+
   protected:
     // --- SwitchingAcceptance hooks (see the file-top formulation) ---
     // (init): τ = max(τ̄, κ̄·θ₀).

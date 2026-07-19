@@ -1873,6 +1873,17 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
         XSL = this->alg_impl(step.alg_mode_, step.bar_mode_, step.ls_mode_, settings_.obj_scale_,
                              settings_.init_mu_, XSL);
 
+        // Solver-level observability: collect this phase's acceptance-
+        // strategy diagnostics (funnel width / filter size+resets — see
+        // AcceptanceStrategy::append_diagnostics()) right after alg_impl()
+        // returns and BEFORE the next loop iteration's acceptance_->reset()
+        // above clears any per-phase state (e.g. FilterAcceptance's reset
+        // counters). A multi-phase call therefore ends with the LAST phase's
+        // values, like every other SolveResult field alg_impl overwrites.
+        // The default no-op body means this is write-only-neutral on the
+        // classic/merit paths.
+        this->acceptance_->append_diagnostics(this->result_);
+
         if (settings_.print_level_ < 2)
             print_finished(step.label_);
 

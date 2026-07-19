@@ -328,6 +328,41 @@ class PSIOPT {
         // solve alongside the other accumulators.
         std::array<int, 4> recovery_depth_histogram_{};
 
+        // Final funnel width (τ) reported by FunnelAcceptance::
+        // append_diagnostics() (globalization/funnel_acceptance.h) at the end
+        // of the most recent solve's LAST PHASE. Sentinel -1.0 when the
+        // selected acceptance strategy does not report this field (every
+        // strategy except funnel — the default AcceptanceStrategy::
+        // append_diagnostics() no-op leaves this untouched). A multi-phase
+        // call (e.g. solve_optimize()) reports only the LAST phase's value,
+        // not a running total across phases — see the collection point in
+        // run_phase_sequence(). Reset per solve alongside the other
+        // accumulators; NOT touched by AcceptanceStrategy::reset() (the
+        // per-phase hook), only by reset_accumulators() (the per-solve hook).
+        double last_funnel_width_ = -1.0;
+
+        // Final filter size (number of stored (θ, φ) pairs, Filter::size())
+        // reported by FilterAcceptance::append_diagnostics()
+        // (globalization/filter_acceptance.h) at the end of the most recent
+        // solve's LAST PHASE. Sentinel -1 when the selected acceptance
+        // strategy is not filter. Same last-phase-only semantics as
+        // last_funnel_width_ above.
+        int last_filter_size_ = -1;
+
+        // Total number of filter-reset-heuristic clears
+        // (FilterAcceptance::filter_resets(), Ipopt n_filter_resets_ — see
+        // filter_acceptance.h rule (4)) reported at the end of the most
+        // recent solve's LAST PHASE. Sentinel -1 when the selected acceptance
+        // strategy is not filter. PER-PHASE semantics: the counter is
+        // cleared by FilterAcceptance::reset_bounds() at every phase
+        // boundary (via AcceptanceStrategy::reset(), called at the top of
+        // each run_phase_sequence() loop iteration), and append_diagnostics()
+        // is collected once per phase right before that reset runs for the
+        // NEXT phase — so a multi-phase call (e.g. solve_optimize()) reports
+        // only the LAST phase's total resets, not a running total across
+        // phases within the same solve() call.
+        int last_filter_resets_ = -1;
+
         // T6 (dead-status fix): the last non-Success status observed from
         // kkt_sol_.info() by factor_impl() within the CURRENT phase (alg_impl
         // resets it on entry, so print_exit_stats reports per-phase status).
@@ -356,6 +391,9 @@ class PSIOPT {
             soc_steps_taken_ = 0;
             watchdog_activations_ = 0;
             recovery_depth_histogram_.fill(0);
+            last_funnel_width_ = -1.0;
+            last_filter_size_ = -1;
+            last_filter_resets_ = -1;
         }
     };
 

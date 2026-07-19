@@ -121,6 +121,16 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
         "solve, as a 4-element list: [second-order correction, extended backtracking, "
         "watchdog, unresolved].");
 
+    BIND_RESULT_RO(obj, "last_funnel_width", last_funnel_width_,
+                   "Final funnel width (tau) at the end of the most recent solve's last phase. "
+                   "-1.0 unless acceptance_strategy is funnel.");
+    BIND_RESULT_RO(obj, "last_filter_size", last_filter_size_,
+                   "Final number of stored filter (theta, phi) pairs at the end of the most "
+                   "recent solve's last phase. -1 unless acceptance_strategy is filter.");
+    BIND_RESULT_RO(obj, "last_filter_resets", last_filter_resets_,
+                   "Number of filter-reset-heuristic clears during the most recent solve's last "
+                   "phase. -1 unless acceptance_strategy is filter.");
+
     BIND_SETTINGS_VALIDATED(obj, "obj_scale", obj_scale_, set_obj_scale, "");
     BIND_SETTINGS_VALIDATED(obj, "print_level", print_level_, set_print_level, "");
     obj.def("set_print_level", &PSIOPT::set_print_level);

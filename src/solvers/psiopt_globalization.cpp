@@ -1252,6 +1252,10 @@ void FunnelAcceptance::register_accepted_step(const ProgressMeasures &current,
     }
 }
 
+void FunnelAcceptance::append_diagnostics(PSIOPT::SolveResult &result) const {
+    result.last_funnel_width_ = width_;
+}
+
 // ============================================================================
 // FilterAcceptance — (θ, φ)-pair filter H-type strategy on the switching
 // skeleton. See globalization/filter_acceptance.h for the full formulation and
@@ -1371,6 +1375,11 @@ void FilterAcceptance::register_accepted_step(const ProgressMeasures &current,
         const double phi_current = current.objective + current.auxiliary;
         filter_.augment(phi_current, theta_current);
     }
+}
+
+void FilterAcceptance::append_diagnostics(PSIOPT::SolveResult &result) const {
+    result.last_filter_size_ = static_cast<int>(filter_.size());
+    result.last_filter_resets_ = n_filter_resets_;
 }
 
 } // namespace tycho::solvers

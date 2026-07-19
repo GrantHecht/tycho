@@ -324,6 +324,56 @@ class test_SolveDiagnostics(unittest.TestCase):
             self.assertIsInstance(count, int)
 
 
+class test_AcceptanceDiagnostics(unittest.TestCase):
+    """SolveResult.last_funnel_width / last_filter_size / last_filter_resets
+    (src/solvers/psiopt_globalization.cpp's FunnelAcceptance::
+    append_diagnostics / FilterAcceptance::append_diagnostics, collected once
+    per phase in PSIOPT::run_phase_sequence -- see psiopt.h for the sentinel
+    semantics). Each is -1.0/-1/-1 ("not applicable") unless the matching
+    acceptance strategy is selected; a solve with that strategy selected
+    populates its own field(s) and leaves the other strategy's field(s) at
+    their sentinel.
+    """
+
+    def test_funnel_solve_reports_width_filter_sentinel(self):
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.funnel
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertGreater(prob.optimizer.last_funnel_width, 0.0)
+        self.assertEqual(prob.optimizer.last_filter_size, -1)
+        self.assertEqual(prob.optimizer.last_filter_resets, -1)
+
+    def test_filter_solve_reports_size_funnel_sentinel(self):
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.filter
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertGreaterEqual(prob.optimizer.last_filter_size, 0)
+        self.assertGreaterEqual(prob.optimizer.last_filter_resets, 0)
+        self.assertEqual(prob.optimizer.last_funnel_width, -1.0)
+
+    def test_default_solve_reports_all_sentinels(self):
+        prob = _make_problem()
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(prob.optimizer.last_funnel_width, -1.0)
+        self.assertEqual(prob.optimizer.last_filter_size, -1)
+        self.assertEqual(prob.optimizer.last_filter_resets, -1)
+
+    def test_merit_solve_reports_all_sentinels(self):
+        # classic_merit's generic-path sibling (merit) also has no
+        # funnel/filter state to report -- the default AcceptanceStrategy::
+        # append_diagnostics() no-op applies to it too.
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.merit
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(prob.optimizer.last_funnel_width, -1.0)
+        self.assertEqual(prob.optimizer.last_filter_size, -1)
+        self.assertEqual(prob.optimizer.last_filter_resets, -1)
+
+
 class test_ComponentRebuildTakesEffectWithoutRetranscription(unittest.TestCase):
     """Regression test for the "component construction staleness" review
     finding on PSIOPT::set_nlp() / PSIOPT::rebuild_globalization_components()
