@@ -57,7 +57,8 @@ namespace tycho::solvers {
 bool ClassicMeritAcceptance::is_iterate_acceptable(const ProgressMeasures &current,
                                                    const ProgressMeasures &trial,
                                                    const ProgressMeasures &predicted_reduction,
-                                                   double objective_multiplier, double step_length) {
+                                                   double objective_multiplier,
+                                                   double step_length) {
     (void)current;
     (void)trial;
     (void)predicted_reduction;
