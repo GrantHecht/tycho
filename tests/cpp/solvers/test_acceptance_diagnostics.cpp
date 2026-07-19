@@ -150,6 +150,25 @@ TEST(AcceptanceDiagnostics, FunnelReportsWidth) {
     EXPECT_EQ(result.last_filter_resets_, -1);
 }
 
+// FunnelAcceptance::append_diagnostics() reports the -1.0 sentinel when the
+// acceptance test never ran (e.g. phase converged at initial iterate). The
+// width_ stays at its +∞ uninitialized sentinel if is_iterate_acceptable was
+// never called; append_diagnostics converts +∞ to -1.0.
+TEST(AcceptanceDiagnostics, DiagFunnelUninitializedWidthSentinel) {
+    FunnelAcceptance funnel;
+    // Do NOT call is_iterate_acceptable — width_ remains at +∞.
+    ASSERT_FALSE(std::isfinite(funnel.funnel_width()));
+
+    PSIOPT::SolveResult result;
+    result.reset_accumulators();
+    static_cast<AcceptanceStrategy &>(funnel).append_diagnostics(result);
+
+    EXPECT_DOUBLE_EQ(result.last_funnel_width_, -1.0);
+    // Untouched by FunnelAcceptance's override.
+    EXPECT_EQ(result.last_filter_size_, -1);
+    EXPECT_EQ(result.last_filter_resets_, -1);
+}
+
 // FilterAcceptance::append_diagnostics() reports filter_size() and
 // filter_resets(). One accepted H-type step (m_f = 0 routes every call to the
 // H-type delegate) augments the filter to size 1 and leaves the reset counter

@@ -339,6 +339,8 @@ class PSIOPT {
         // run_phase_sequence(). Reset per solve alongside the other
         // accumulators; NOT touched by AcceptanceStrategy::reset() (the
         // per-phase hook), only by reset_accumulators() (the per-solve hook).
+        // Sentinel -1.0 reports when no acceptance test ran in the selected
+        // phase (e.g. the phase converged at its initial iterate).
         double last_funnel_width_ = -1.0;
 
         // Final filter size (number of stored (θ, φ) pairs, Filter::size())

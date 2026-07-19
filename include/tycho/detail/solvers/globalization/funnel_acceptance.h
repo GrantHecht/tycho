@@ -163,9 +163,9 @@ class FunnelAcceptance final : public SwitchingAcceptance {
 
     // Solver-level observability hook (see AcceptanceStrategy::
     // append_diagnostics): reports the current width_ into
-    // SolveResult::last_funnel_width_ verbatim (including the +∞
-    // uninitialized sentinel, on the pathological case of a phase that never
-    // calls is_iterate_acceptable).
+    // SolveResult::last_funnel_width_, or the -1.0 sentinel if width_ is
+    // uninitialized (the pathological case of a phase that never calls
+    // is_iterate_acceptable, e.g. converges at the initial iterate).
     void append_diagnostics(PSIOPT::SolveResult &result) const override;
 
   protected:

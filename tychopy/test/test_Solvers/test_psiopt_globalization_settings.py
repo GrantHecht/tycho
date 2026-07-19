@@ -22,6 +22,7 @@ by a later re-solve that did not retranscribe. See
 ``test_ComponentRebuildTakesEffectWithoutRetranscription`` below.
 """
 
+import math
 import unittest
 
 import _tychopy as ast
@@ -341,6 +342,7 @@ class test_AcceptanceDiagnostics(unittest.TestCase):
         flag = prob.optimize()
         self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
         self.assertGreater(prob.optimizer.last_funnel_width, 0.0)
+        self.assertTrue(math.isfinite(prob.optimizer.last_funnel_width))
         self.assertEqual(prob.optimizer.last_filter_size, -1)
         self.assertEqual(prob.optimizer.last_filter_resets, -1)
 

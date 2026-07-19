@@ -1253,7 +1253,7 @@ void FunnelAcceptance::register_accepted_step(const ProgressMeasures &current,
 }
 
 void FunnelAcceptance::append_diagnostics(PSIOPT::SolveResult &result) const {
-    result.last_funnel_width_ = width_;
+    result.last_funnel_width_ = std::isfinite(width_) ? width_ : -1.0;
 }
 
 // ============================================================================

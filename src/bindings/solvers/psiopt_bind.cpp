@@ -123,7 +123,7 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
 
     BIND_RESULT_RO(obj, "last_funnel_width", last_funnel_width_,
                    "Final funnel width (tau) at the end of the most recent solve's last phase. "
-                   "-1.0 unless acceptance_strategy is funnel.");
+                   "-1.0 unless acceptance_strategy is funnel, or if no acceptance test ran.");
     BIND_RESULT_RO(obj, "last_filter_size", last_filter_size_,
                    "Final number of stored filter (theta, phi) pairs at the end of the most "
                    "recent solve's last phase. -1 unless acceptance_strategy is filter.");
