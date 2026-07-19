@@ -17,20 +17,27 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "tycho/detail/solvers/globalization/acceptance_strategy.h"
+#include "tycho/detail/solvers/globalization/filter_acceptance.h"
+#include "tycho/detail/solvers/globalization/funnel_acceptance.h"
 #include "tycho/detail/solvers/globalization/globalization_mechanism.h"
 #include "tycho/detail/solvers/globalization/recovery_chain.h"
 #include "tycho/detail/solvers/globalization/solver_context.h"
 #include "tycho/detail/solvers/iterate_info.h"
+#include "tycho/detail/solvers/psiopt_fwd.h"
 
 #include <gtest/gtest.h>
 
+#include <stdexcept>
 #include <vector>
 
 #include <Eigen/Core>
 
 namespace {
 
+using tycho::solvers::AcceptanceStrategies;
 using tycho::solvers::AcceptanceStrategy;
+using tycho::solvers::FilterAcceptance;
+using tycho::solvers::FunnelAcceptance;
 using tycho::solvers::GlobalizationMechanism;
 using tycho::solvers::IterateInfo;
 using tycho::solvers::kRecoveryDepthUnresolved;
@@ -193,6 +200,77 @@ TEST(RecoveryDispatchGate, StubAcceptanceDrivesHook) {
         drive_gate(/*good_step=*/false, citer, recovery, acceptance, iters, ctx);
         EXPECT_EQ(recovery.calls_, 0);
     }
+}
+
+// Settings::acceptance_strategy_ = funnel/filter must construct the matching
+// concrete strategy (via PSIOPT::rebuild_acceptance_for_testing(), the
+// testing hook around rebuild_globalization_components()) and drive the
+// generic AcceptanceStrategy path, exactly like the modern merit family
+// (see test_merit_rules.cpp's DrivesGenericPath).
+TEST(RecoveryDispatchGate, FunnelSelectionConstructsFunnelAcceptance) {
+    PSIOPT solver;
+    solver.settings().acceptance_strategy_ = AcceptanceStrategies::funnel;
+    AcceptanceStrategy *acceptance = solver.rebuild_acceptance_for_testing();
+    ASSERT_NE(dynamic_cast<FunnelAcceptance *>(acceptance), nullptr);
+    EXPECT_FALSE(acceptance->drives_classic_path());
+}
+
+TEST(RecoveryDispatchGate, FilterSelectionConstructsFilterAcceptance) {
+    PSIOPT solver;
+    solver.settings().acceptance_strategy_ = AcceptanceStrategies::filter;
+    AcceptanceStrategy *acceptance = solver.rebuild_acceptance_for_testing();
+    ASSERT_NE(dynamic_cast<FilterAcceptance *>(acceptance), nullptr);
+    EXPECT_FALSE(acceptance->drives_classic_path());
+}
+
+// Settings::validate()'s strategy-combination guard: originally scoped to
+// acceptance_strategy_ == merit, now generalized to every non-classic_merit
+// strategy (see the guard's comment in psiopt.cpp). Exercise both new
+// strategies against both offending knobs.
+TEST(RecoveryDispatchGate, ValidateRejectsFunnelWithMaxSoc) {
+    PSIOPT::Settings settings;
+    settings.acceptance_strategy_ = AcceptanceStrategies::funnel;
+    settings.max_soc_ = 1;
+    EXPECT_THROW(settings.validate(), std::invalid_argument);
+}
+
+TEST(RecoveryDispatchGate, ValidateRejectsFunnelWithLsExtendedIters) {
+    PSIOPT::Settings settings;
+    settings.acceptance_strategy_ = AcceptanceStrategies::funnel;
+    settings.ls_extended_iters_ = 1;
+    EXPECT_THROW(settings.validate(), std::invalid_argument);
+}
+
+TEST(RecoveryDispatchGate, ValidateRejectsFilterWithMaxSoc) {
+    PSIOPT::Settings settings;
+    settings.acceptance_strategy_ = AcceptanceStrategies::filter;
+    settings.max_soc_ = 1;
+    EXPECT_THROW(settings.validate(), std::invalid_argument);
+}
+
+TEST(RecoveryDispatchGate, ValidateRejectsFilterWithLsExtendedIters) {
+    PSIOPT::Settings settings;
+    settings.acceptance_strategy_ = AcceptanceStrategies::filter;
+    settings.ls_extended_iters_ = 1;
+    EXPECT_THROW(settings.validate(), std::invalid_argument);
+}
+
+// classic_merit is unaffected by the widened guard: max_soc_/ls_extended_iters_
+// combine with it exactly as before.
+TEST(RecoveryDispatchGate, ValidateAcceptsClassicMeritWithMaxSoc) {
+    PSIOPT::Settings settings;
+    settings.acceptance_strategy_ = AcceptanceStrategies::classic_merit;
+    settings.max_soc_ = 1;
+    settings.ls_extended_iters_ = 1;
+    EXPECT_NO_THROW(settings.validate());
+}
+
+// merit's pre-existing rejection still fires under the generalized guard.
+TEST(RecoveryDispatchGate, ValidateStillRejectsMeritWithMaxSoc) {
+    PSIOPT::Settings settings;
+    settings.acceptance_strategy_ = AcceptanceStrategies::merit;
+    settings.max_soc_ = 1;
+    EXPECT_THROW(settings.validate(), std::invalid_argument);
 }
 
 } // namespace

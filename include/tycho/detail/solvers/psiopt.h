@@ -379,6 +379,17 @@ class PSIOPT {
     const Settings &settings() const { return settings_; }
     const SolveResult &result() const { return result_; }
 
+    // Testing hook: rebuilds acceptance_/mechanism_/governor_/recovery_ from
+    // the CURRENT Settings (see rebuild_globalization_components()) and
+    // returns the raw acceptance-strategy pointer, so unit tests can check
+    // Settings::acceptance_strategy_ wiring (concrete type via dynamic_cast,
+    // drives_classic_path()) without running a full solve. Safe with no NLP
+    // set: none of the non-classic_merit branches read nlp_ at construction.
+    AcceptanceStrategy *rebuild_acceptance_for_testing() {
+        rebuild_globalization_components();
+        return acceptance_.get();
+    }
+
     // --- NLP management ---
     void set_nlp(std::shared_ptr<NonLinearProgram> np);
     void release();
