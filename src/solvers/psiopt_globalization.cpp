@@ -735,13 +735,16 @@ double ClassicAdaptiveGovernor::mpc_mu(Eigen::Ref<Eigen::VectorXd> S,
 // Verbatim today's psiopt.cpp barmode switch (the former `if (inequal_cons_ > 0)`
 // body): the guard stays at the alg_impl call site, so update_barrier assumes
 // inequal_cons_ > 0. The predictor's alphap/alphad are locals here (discarded —
-// see the divergence-path note in the header).
+// see the divergence-path note in the header). `iters` is ignored and `mu_event`
+// is never written (free mode only; see the header).
 double ClassicAdaptiveGovernor::update_barrier(PSIOPT::BarrierModes barmode, double mu_in,
                                                double avgcomp, double mincomp, Eigen::VectorXd &XSL,
                                                Eigen::VectorXd &RHS, Eigen::VectorXd &DXSL,
                                                Eigen::VectorXd &Temp,
                                                GlobalizationMechanism &mechanism,
-                                               SolverContext &ctx, double &barr_obj) {
+                                               SolverContext &ctx, double &barr_obj,
+                                               const std::vector<IterateInfo> & /*iters*/,
+                                               bool & /*mu_event*/) {
     KKTVector v_xsl = kkt_view(XSL, ctx);
     KKTVector v_rhs = kkt_view(RHS, ctx);
     KKTVector v_temp = kkt_view(Temp, ctx);

@@ -24,9 +24,12 @@
 
 #pragma once
 
+#include <vector>
+
 #include <Eigen/Core>
 
 #include "tycho/detail/solvers/globalization/solver_context.h"
+#include "tycho/detail/solvers/iterate_info.h"
 // PSIOPT::BarrierModes requires the complete PSIOPT class; see
 // acceptance_strategy.h's include note for why this is a plain,
 // non-circular include (psiopt.h does not include this directory back).
@@ -89,11 +92,25 @@ class BarrierGovernor {
     // Returns the new (already-clamped) mu; barr_obj is an out-parameter
     // (today's barr_obj local, set by the common tail's barrier_objective()
     // call).
+    //
+    // `iters` is the completed iteration history (iters.back() is the current
+    // iterate, whose residuals were just filled). A monitored free<->monotone
+    // governor reads recent KKT errors from it to decide the free<->monotone
+    // switch; the classic free-mode oracles ignore it entirely.
+    //
+    // `mu_event` is an out-signal (the caller passes it initialized to false):
+    // an implementation sets it true when its monotone mode begins a new barrier
+    // subproblem with a fresh barrier parameter, which is the acceptance
+    // strategy's per-barrier-subproblem reset trigger (the caller clears the
+    // acceptance filter/funnel before the iteration's line search runs). The
+    // classic free-mode oracles never set it, so on the default path the
+    // caller's reset branch is dead and the solve stays bit-identical.
     virtual double update_barrier(PSIOPT::BarrierModes barmode, double mu_in, double avgcomp,
                                   double mincomp, Eigen::VectorXd &XSL, Eigen::VectorXd &RHS,
                                   Eigen::VectorXd &DXSL, Eigen::VectorXd &Temp,
                                   GlobalizationMechanism &mechanism, SolverContext &ctx,
-                                  double &barr_obj) = 0;
+                                  double &barr_obj, const std::vector<IterateInfo> &iters,
+                                  bool &mu_event) = 0;
 
     // Free vs. monotone mode query. No implementation shipped today has a
     // monotone mode, so every implementation reports "free" unconditionally;

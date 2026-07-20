@@ -1467,10 +1467,27 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // are inequality constraints (barrier terms). The PROBE predictor's KKT
         // solve moves INTO the governor; the REAL step solve below (a distinct
         // second solve) stays here. avgcomp/mincomp feed the mu oracles;
-        // *mechanism_ lets the PROBE predictor reuse the step-scaling.
+        // *mechanism_ lets the PROBE predictor reuse the step-scaling. The
+        // completed iteration history `iters` (iters.back() is this iterate,
+        // filled above) lets a monitored free<->monotone governor read recent
+        // KKT errors; `mu_event` is its out-signal, initialized false each
+        // iteration so the classic governor (which never writes it) leaves the
+        // reset below dead — bit-identical on the default path.
+        bool mu_event = false;
         if (this->inequal_cons_ > 0) {
             mu = governor_->update_barrier(barmode, mu, avgcomp, mincomp, XSL, RHS, DXSL, Temp,
-                                           *mechanism_, ctx, barr_obj);
+                                           *mechanism_, ctx, barr_obj, iters, mu_event);
+        }
+
+        // Per-barrier-subproblem acceptance reset: when the governor's monotone
+        // mode begins a new barrier subproblem (fresh mu), the acceptance
+        // strategy's filter/funnel must clear. Placed here — after update_barrier
+        // (complementarity -> factor -> update_barrier) and BEFORE the real step
+        // solve and line search below — so the reset lands before this
+        // iteration's line search consumes the acceptance strategy. Dead on the
+        // classic path (mu_event stays false there).
+        if (mu_event) {
+            this->acceptance_->reset();
         }
 
         // The REAL step solve (distinct from the PROBE predictor solve, which
