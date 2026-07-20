@@ -3,17 +3,15 @@
 // =============================================================================
 //
 // Part of the globalization component extraction: BarrierGovernor is the
-// free<->monotone barrier-update state machine. This header ships an
-// interface plus a stub implementation that always reports "free" (the
-// LOQO/PROBE oracles are untouched); a future free<->monotone barrier
-// governor implements the real state machine.
+// free<->monotone barrier-update state machine interface. Two
+// implementations ship: ClassicAdaptiveGovernor (verbatim today's
+// PROBE/LOQO free-mode oracles; always reports in_monotone_mode() ==
+// false) and MonitoredBarrierGovernor (monitored_governor.h — the
+// free<->monotone state machine: KKT-error monitor, monotone
+// Fiacco-McCormick fallback, re-entry), selected via
+// Settings::barrier_governor_.
 //
-// This file: pure interface declaration, no implementation. The
-// implementation that ships alongside it (ClassicAdaptiveGovernor, not part
-// of this file) is verbatim today's PROBE/LOQO block (psiopt.cpp:1310-1340)
-// and always reports in_monotone_mode() == false (the default below). A
-// future free<->monotone barrier governor is what actually implements the
-// free<->monotone switch this interface exists to support.
+// This file: pure interface declaration, no implementation.
 //
 // Ownership rule: a BarrierGovernor holds NO solver state (no persistent mu_
 // member, etc.) — mu is always passed in (mu_in) and returned, never cached.
@@ -114,10 +112,9 @@ class BarrierGovernor {
                                   double &barr_obj, const IterateInfo &current,
                                   bool &mu_event) = 0;
 
-    // Free vs. monotone mode query. No implementation shipped today has a
-    // monotone mode, so every implementation reports "free" unconditionally;
-    // a future free<->monotone barrier governor overrides this once the
-    // free<->monotone state machine exists.
+    // Free vs. monotone mode query. ClassicAdaptiveGovernor keeps this
+    // default (always free); MonitoredBarrierGovernor overrides it to report
+    // its live state-machine mode.
     virtual bool in_monotone_mode() const { return false; }
 
     // μ-event / phase-change reset hook — see the ownership-rule note above.

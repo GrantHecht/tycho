@@ -39,7 +39,6 @@ namespace {
 using tycho::solvers::AcceptanceStrategies;
 using tycho::solvers::AcceptanceStrategy;
 using tycho::solvers::BarrierGovernors;
-using tycho::solvers::ClassicAdaptiveGovernor;
 using tycho::solvers::FilterAcceptance;
 using tycho::solvers::FunnelAcceptance;
 using tycho::solvers::GlobalizationMechanism;
@@ -263,6 +262,7 @@ TEST(RecoveryDispatchGate, ValidateStillRejectsMeritWithMaxSoc) {
 TEST(RecoveryDispatchGate, ValidateAcceptsFunnelWithWatchdog) {
     PSIOPT::Settings settings;
     settings.acceptance_strategy_ = AcceptanceStrategies::funnel;
+    settings.barrier_governor_ = BarrierGovernors::monitored;
     settings.watchdog_ = true;
     EXPECT_NO_THROW(settings.validate());
 }
@@ -270,6 +270,7 @@ TEST(RecoveryDispatchGate, ValidateAcceptsFunnelWithWatchdog) {
 TEST(RecoveryDispatchGate, ValidateAcceptsFilterWithWatchdog) {
     PSIOPT::Settings settings;
     settings.acceptance_strategy_ = AcceptanceStrategies::filter;
+    settings.never_monotone_ = true;
     settings.watchdog_ = true;
     EXPECT_NO_THROW(settings.validate());
 }
