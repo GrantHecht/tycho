@@ -113,6 +113,12 @@ verdict and the H-type sufficient-progress verdict:
 | membership (2a/1b)   | θ_trial ≤ τ (funnel width)                | trial not dominated by any stored (θ,φ) entry                          |
 | H-type progress      | θ_trial ≤ β·τ, β = 0.9999                  | θ_trial ≤ (1−γθ)·θ_current **OR** φ_trial ≤ φ_current − γφ·θ_current    |
 
+The filter's H-type verdict as implemented in `filter_acceptance.h` also
+applies a barrier-objective max-increase ceiling beyond the two margin
+disjuncts shown above; it is omitted from the table because it can only
+*add* rejections on top of the disjuncts and does not change the
+iteration-10 verdict analyzed below.
+
 For this problem the shared skeleton's ceilings never bind. θ₀ = |c1| + |c2|
 = 0 + 4 = 4.0 at the start, so:
 
@@ -130,8 +136,15 @@ of what the objective does.
 
 ### Where the two runs diverge
 
-The two strategies compute the *same* Newton directions (same KKT system, same
-adaptive barrier oracle) and take **byte-identical steps through iteration 9**.
+The two strategies take **byte-identical steps through iteration 4**, sharing
+the same adaptive barrier oracle and computing approximately equal Newton
+directions from approximately equal states — not, past that point, an
+identical KKT system, since each strategy's accept/reject decisions start
+feeding back into subsequent iterates. The first line-search divergence
+appears at iteration 5 (funnel LS0 full step vs filter LS2 backtrack), though
+the iteration-5 landing states are still approximately identical. From there
+the two runs **closely track each other through iteration 9** without being
+identical — e.g. μ at iteration 8 is 1.6e−07 (funnel) vs 1.9e−05 (filter).
 The divergence window (θ ≈ ECons Inf + ICons Inf; α = taken primal step; LS =
 line-search backtracks):
 
@@ -159,12 +172,21 @@ Filter:
 
 Both reach the *same* state at iteration 10 (x₁ ≈ −0.965, θ ≈ 2.03, having
 just accepted a violation-**increasing** step: ICons climbed 1.04 → 1.60 →
-1.965 across iters 8–10 in both runs). From there the full Newton step raises
-x₁ further toward 0 while θ stays ≈ 2.
+1.965 (funnel) / 1.02 → 1.59 → 1.965 (filter) across iters 8–10). From there
+the full Newton step raises x₁ further toward 0 while θ stays ≈ 2.
 
-- **Funnel accepts the full step (α = 1, LS = 0).** The step increases φ (x₁
-  climbing = objective worsening under minimize-x₁), so it is not a descent
-  direction for φ — switching fails — and the trial is **H-type**. Its H-type
+The trial classifies as **H-type** directly from the printed data: θ_current
+≈ 2.03 is roughly four orders of magnitude above θ_min = 4×10⁻⁴, and per
+`switching_acceptance.h` the switching condition — the gate that could route
+a trial to the F-type Armijo test instead — is only evaluated when
+θ_k ≤ θ_min. With θ_current that far above the threshold, the trial is
+H-type by construction, independent of φ. (Corroborating inference: the step
+also increases φ — x₁ climbing worsens the objective under minimize-x₁ — so
+it would fail a descent test for φ even if the switching condition had been
+reached; this is consistent with, but not required to establish, the H-type
+classification.)
+
+- **Funnel accepts the full step (α = 1, LS = 0).** Its H-type
   test is θ_trial (≈ 2.1) ≤ 0.9999·6.0, which passes trivially. Because
   θ_trial > θ_current on these steps, the width update takes the τ⁺ = β·τ
   branch — a 0.9999 nudge, hence the near-flat final width. The funnel simply
@@ -184,8 +206,8 @@ objective-coupled — it demands monotone θ-decrease or φ-decrease against the
 current iterate, and the accumulated (θ,φ) history dominates the region the
 iterate must pass through. This confirms the working hypothesis: **the
 funnel's generous absolute width is the load-bearing difference, not the
-switching / Armijo machinery** (which is shared and produces identical steps
-through iteration 9).
+switching / Armijo machinery** (which is shared and produces byte-identical
+steps through iteration 4 and closely tracking steps through iteration 9).
 
 Note also that the funnel takes **LS = 0 on all 29 iterations** — no line-
 search backtracking anywhere, so the recovery-chain "accept-as-is" fallback
@@ -201,15 +223,22 @@ schedule) across four orders of magnitude:
 
 | init_mu | funnel                    | filter                     |
 |---------|---------------------------|----------------------------|
-| 1e−3    | CONVERGED, 29, +1.000     | NOTCONVERGED, 500, −0.975  |
-| 1e−2    | CONVERGED, 29, +1.000     | CONVERGED, 37, +1.000      |
-| 0.1     | CONVERGED, 33, +1.000     | NOTCONVERGED, 500, −0.974  |
-| 1.0     | CONVERGED, 30, +1.000     | NOTCONVERGED, 500, −0.969  |
-| 10.0    | CONVERGED, 28, +1.000     | NOTCONVERGED, 500, −0.988  |
+| 1e−3    | CONVERGED, 29, +1.000     | NOTCONVERGED, 500, n/r     |
+| 1e−2    | CONVERGED, 29, +1.000     | CONVERGED, 37, n/r         |
+| 0.1     | CONVERGED, 33, +1.000     | NOTCONVERGED, 500, n/r     |
+| 1.0     | CONVERGED, 30, +1.000     | NOTCONVERGED, 500, n/r     |
+| 10.0    | CONVERGED, 28, +1.000     | NOTCONVERGED, 500, n/r     |
+
+n/r = objective not recorded for that run in the raw evidence trail. The
+funnel objectives above are traceable (the trail notes "all obj +1.000" for
+this sweep); the filter objectives were not captured — only status and
+iteration count were recorded — so they are omitted here rather than
+reconstructed.
 
 The funnel converges to the true optimum for **every** value (28–33 iters,
-final width always ≈ 5.98); the filter escapes only for one lucky value. The
-funnel win is not a knife-edge in the barrier schedule.
+final width always ≈ 5.98); the filter escapes for only one value (status
+and iteration count only — its objective at that value was not recorded).
+The funnel win is not a knife-edge in the barrier schedule.
 
 Second, perturb the start point (which *changes* θ₀ and hence the funnel
 width):
@@ -217,11 +246,19 @@ width):
 | start           | funnel                    | filter                     |
 |-----------------|---------------------------|----------------------------|
 | (−2.0,3.0,1.0)  | CONVERGED, 29, +1.000     | NOTCONVERGED, 500, −0.975  |
-| (−1.5,2.0,0.5)  | NOTCONVERGED, 500, −0.794 | NOTCONVERGED, 500, −0.974  |
-| (−1.8,2.5,0.8)  | NOTCONVERGED, 500, −0.940 | NOTCONVERGED, 500, −0.974  |
-| (−2.2,3.5,1.2)  | CONVERGED, 28, +1.000     | CONVERGED, 44, +1.000      |
-| (−2.5,4.0,1.5)  | CONVERGED, 32, +1.000     | CONVERGED, 47, +1.000      |
-| (−3.0,5.0,2.0)  | CONVERGED, 31, +1.000     | CONVERGED, 57, +1.000      |
+| (−1.5,2.0,0.5)  | NOTCONVERGED, 500, −0.794 | NOTCONVERGED, 500, n/r     |
+| (−1.8,2.5,0.8)  | NOTCONVERGED, 500, −0.940 | NOTCONVERGED, 500, n/r     |
+| (−2.2,3.5,1.2)  | CONVERGED, 28, n/r        | CONVERGED, 44, n/r         |
+| (−2.5,4.0,1.5)  | CONVERGED, 32, n/r        | CONVERGED, 47, n/r         |
+| (−3.0,5.0,2.0)  | CONVERGED, 31, n/r        | CONVERGED, 57, n/r         |
+
+n/r = objective not recorded for that run in the raw evidence trail. The
+first row is the registered corpus start, already reported in the three-
+outcomes table above, so both its objectives are traceable; the funnel
+−0.794/−0.940 entries are traceable to the trail's funnel-jam rows for those
+starts. The remaining objectives (all convergent runs beyond the corpus
+start) were not captured for this sweep — only status and iteration count
+were recorded — so they are omitted here rather than reconstructed.
 
 Honest reading: the funnel converges from 4 of 6 starts, the filter from 2 of
 6, and on the two starts closest to the jamming basin (smaller |x₁(0)|) even
@@ -234,12 +271,18 @@ corpus records.
 ## Confidence
 
 - **Established (direct evidence):** the three outcomes and their per-iteration
-  trajectories; the byte-identical steps through iteration 9 and the precise
-  iteration-10 divergence (funnel α = 1 / LS = 0 accept vs filter α = 0.25 /
-  LS = 2 backtrack from the same state); the funnel final width 5.9862 (0.23%
-  shrink); LS = 0 on all 29 funnel iterations (no accept-as-is involvement);
-  `last_filter_resets = 0` (reset heuristic not implicated); the init_mu and
-  start-perturbation robustness tables.
+  trajectories; byte-identical steps through iteration 4; the first
+  line-search divergence at iteration 5 (funnel LS0 full vs filter LS2
+  backtrack, landing states approximately identical); the two runs closely
+  tracking each other through iteration 9 without being byte-identical (e.g.
+  μ at iteration 8 is 1.6e−07 funnel vs 1.9e−05 filter) — identity through
+  iteration 9 is not claimed; the precise iteration-10 divergence (funnel
+  α = 1 / LS = 0 accept vs filter α = 0.25 / LS = 2 backtrack from the same
+  x₁/θ state); the funnel final width 5.9862 (0.23% shrink); LS = 0 on all 29
+  funnel iterations (no accept-as-is involvement); `last_filter_resets = 0`
+  (reset heuristic not implicated); the init_mu and start-perturbation
+  robustness tables' status/iteration entries, plus the objective values
+  among them that trace to the trail (marked n/r elsewhere).
 - **Inferred (from the acceptance rules applied to the observed θ/φ, not from
   instrumented trial-level values):** the specific reason each strategy
   accepts/rejects the iteration-10 full step — i.e. that the funnel classifies
@@ -261,8 +304,9 @@ regime on exactly this problem class. The mechanism above says the filter jams
 because its H-type acceptance is current-relative and objective-coupled, and
 the μ schedule drives *where* the current iterate sits when the escape step is
 offered — the divergence at iteration 10 sits immediately after a barrier
-event (μ jumps at iters 6 and 9 in both runs). A monotone μ safeguard changes
-that schedule. The upcoming monitored-governor experiment on wb2000 should
+event (μ jumps at iteration 9 in both runs: funnel 1.6e−07 → 2.6e−05, filter
+1.9e−05 → 2.5e−02, iter 8 → 9). A monotone μ safeguard changes that schedule.
+The upcoming monitored-governor experiment on wb2000 should
 therefore look for:
 
 - Whether a monotone (non-increasing) μ safeguard shifts the filter's
