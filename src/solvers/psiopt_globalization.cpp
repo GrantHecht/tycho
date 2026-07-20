@@ -38,6 +38,7 @@
 #include "tycho/detail/solvers/globalization/funnel_acceptance.h"
 #include "tycho/detail/solvers/globalization/merit_acceptance.h"
 #include "tycho/detail/solvers/globalization/modern_merit.h"
+#include "tycho/detail/solvers/globalization/monitored_governor.h"
 #include "tycho/detail/solvers/globalization/soc.h"
 #include "tycho/detail/solvers/globalization/switching_acceptance.h"
 #include "tycho/detail/solvers/globalization/watchdog.h"
@@ -1383,6 +1384,186 @@ void FilterAcceptance::register_accepted_step(const ProgressMeasures &current,
 void FilterAcceptance::append_diagnostics(PSIOPT::SolveResult &result) const {
     result.last_filter_size_ = static_cast<int>(filter_.size());
     result.last_filter_resets_ = n_filter_resets_;
+}
+
+// ============================================================================
+// MonitoredBarrierGovernor — free<->monotone monitored barrier governor. See
+// monitored_governor.h for the full formulation, the Ipopt source citations,
+// and the μ-event / re-entry / error-norm resolutions.
+// ============================================================================
+
+MonitoredBarrierGovernor::MonitoredBarrierGovernor()
+    : free_delegate_(std::make_unique<ClassicAdaptiveGovernor>()) {}
+
+MonitoredBarrierGovernor::MonitoredBarrierGovernor(std::unique_ptr<BarrierGovernor> free_delegate)
+    : free_delegate_(std::move(free_delegate)) {}
+
+MonitoredBarrierGovernor::~MonitoredBarrierGovernor() = default;
+
+double MonitoredBarrierGovernor::monitor_error(const IterateInfo &it) {
+    // (1): sum of squared ∞-norm residual parts — the Tycho mapping of Ipopt's
+    // 2-norm-squared quality function (IpAdaptiveMuUpdate.cpp:657-675).
+    return it.kkt_inf_ * it.kkt_inf_ + it.econ_inf_ * it.econ_inf_ +
+           it.icon_inf_ * it.icon_inf_ + it.barr_inf_ * it.barr_inf_;
+}
+
+double MonitoredBarrierGovernor::barrier_subproblem_error(const IterateInfo &it) {
+    // (6): ∞-norm barrier optimality error (Ipopt curr_barrier_error analog).
+    return std::max({it.kkt_inf_, it.econ_inf_, it.icon_inf_, it.barr_inf_});
+}
+
+double MonitoredBarrierGovernor::fiacco_mccormick_mu(double mu, double bar_tol, double kkt_tol,
+                                                     double min_mu, double max_mu) {
+    // (6): IpAdaptiveMuUpdate.cpp:327-329 / IpMonotoneMuUpdate.cpp:214-215.
+    double new_mu = std::min(kBarrierKappaMu * mu, std::pow(mu, kBarrierThetaMu));
+    const double floor = std::min(bar_tol, kkt_tol) / (kBarrierTolFactor + 1.0);
+    new_mu = std::max(new_mu, floor);
+    // Consistency clamp against the configured mu bounds (ClassicAdaptiveGovernor
+    // common-tail clamp; Ipopt clamps to [mu_min, mu_max], AMU:623-624).
+    new_mu = std::max(new_mu, min_mu);
+    new_mu = std::min(new_mu, max_mu);
+    return new_mu;
+}
+
+double MonitoredBarrierGovernor::handoff_mu(double avgcomp, double min_mu, double max_mu) {
+    // (4): IpAdaptiveMuUpdate.cpp:618 (NewFixedMu default oracle) + 623-624 clamp.
+    double new_mu = kAdaptiveMuMonotoneInitFactor * avgcomp;
+    new_mu = std::max(new_mu, min_mu);
+    new_mu = std::min(new_mu, max_mu);
+    return new_mu;
+}
+
+bool MonitoredBarrierGovernor::check_sufficient_progress(double curr_error) const {
+    // (2): IpAdaptiveMuUpdate.cpp:452-469 (CheckSufficientProgress, KKT_ERROR).
+    // Fewer than the full window of references -> trivially sufficient.
+    if (static_cast<int>(refs_vals_.size()) < kAdaptiveMuKktErrorRedIters) {
+        return true;
+    }
+    for (double ref : refs_vals_) {
+        if (curr_error <= kAdaptiveMuKktErrorRedFact * ref) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void MonitoredBarrierGovernor::remember_accepted(double curr_error) {
+    // (3): IpAdaptiveMuUpdate.cpp:496-505 (RememberCurrentPointAsAccepted).
+    if (static_cast<int>(refs_vals_.size()) >= kAdaptiveMuKktErrorRedIters) {
+        refs_vals_.pop_front();
+    }
+    refs_vals_.push_back(curr_error);
+}
+
+MonitoredBarrierGovernor::BarrierDecision
+MonitoredBarrierGovernor::decide(const std::vector<IterateInfo> &iters, double mu_in,
+                                 double avgcomp, double bar_tol, double kkt_tol, double min_mu,
+                                 double max_mu) {
+    const double curr_error = monitor_error(iters.back());
+    BarrierDecision d;
+    d.mu = mu_in;
+
+    if (monotone_mode_) {
+        // Fixed-mu branch (IpAdaptiveMuUpdate.cpp:299-341).
+        if (check_sufficient_progress(curr_error)) {
+            // Re-entry to free mode (AMU:303-311); no mu_event.
+            monotone_mode_ = false;
+            remember_accepted(curr_error);
+            // Falls through to free delegation (d.monotone == false).
+        } else {
+            // Remain monotone (AMU:313-340).
+            ++last_monotone_iters_;
+            const double sub_err = barrier_subproblem_error(iters.back());
+            if (sub_err <= kBarrierTolFactor * monotone_mu_) {
+                const double new_mu =
+                    fiacco_mccormick_mu(monotone_mu_, bar_tol, kkt_tol, min_mu, max_mu);
+                if (new_mu < monotone_mu_) {
+                    monotone_mu_ = new_mu; // advance (AMU:335)
+                    d.mu_event = true;     // new subproblem -> filter reset (AMU:339)
+                }
+            }
+            d.mu = monotone_mu_;
+            d.monotone = true;
+            return d;
+        }
+    } else {
+        // Free-mu branch (IpAdaptiveMuUpdate.cpp:343-389).
+        if (check_sufficient_progress(curr_error)) {
+            remember_accepted(curr_error); // stay free (AMU:352-357)
+        } else {
+            // Handoff to monotone (AMU:358-388).
+            monotone_mode_ = true;
+            ++last_monotone_switches_;
+            monotone_mu_ = handoff_mu(avgcomp, min_mu, max_mu); // NewFixedMu (AMU:374)
+            d.mu = monotone_mu_;
+            d.mu_event = true; // new subproblem -> filter reset (AMU:386)
+            d.monotone = true;
+            return d;
+        }
+    }
+
+    // Free mode (stayed free, or just re-entered): the free oracle produces mu.
+    d.monotone = false;
+    return d;
+}
+
+double MonitoredBarrierGovernor::barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu,
+                                                   const SolverContext &ctx) const {
+    double psi = 0;
+    for (int i = 0; i < ctx.inequal_cons_; i++) {
+        psi += -mu * std::log(S[i]);
+    }
+    return psi;
+}
+
+void MonitoredBarrierGovernor::barrier_gradient(Eigen::Ref<Eigen::VectorXd> S,
+                                                Eigen::Ref<Eigen::VectorXd> LI, double mu,
+                                                Eigen::Ref<Eigen::VectorXd> AGS) const {
+    AGS = LI - mu * (S.cwiseInverse());
+}
+
+double MonitoredBarrierGovernor::update_barrier(
+    PSIOPT::BarrierModes barmode, double mu_in, double avgcomp, double mincomp,
+    Eigen::VectorXd &XSL, Eigen::VectorXd &RHS, Eigen::VectorXd &DXSL, Eigen::VectorXd &Temp,
+    GlobalizationMechanism &mechanism, SolverContext &ctx, double &barr_obj,
+    const std::vector<IterateInfo> &iters, bool &mu_event) {
+    const BarrierDecision d = decide(iters, mu_in, avgcomp, ctx.settings_.bar_tol_,
+                                     ctx.settings_.kkt_tol_, ctx.settings_.min_mu_,
+                                     ctx.settings_.max_mu_);
+    mu_event = d.mu_event;
+
+    if (d.monotone) {
+        // Monotone mode: hold μ fixed and write the barrier tail directly (the
+        // same objective/dual-gradient the free-mode common tail produces). The
+        // slack / inequality-multiplier / dual-gradient blocks are the same
+        // contiguous segments PSIOPT::KKTVector names (slacks/iq_lmults on XSL,
+        // dual_grad on RHS): segment(primal_vars_, slack_vars_) and tail(...).
+        const double mu = d.mu;
+        auto slacks = XSL.segment(ctx.primal_vars_, ctx.slack_vars_);
+        auto iq_lmults = XSL.tail(ctx.inequal_cons_);
+        auto dual_grad = RHS.segment(ctx.primal_vars_, ctx.slack_vars_);
+        barr_obj = barrier_objective(slacks, mu, ctx);
+        barrier_gradient(slacks, iq_lmults, mu, dual_grad);
+        return mu;
+    }
+
+    // Free mode: delegate the whole barrier update (oracle + clamp + barrier
+    // tail) to the composed governor. Its own mu_event (never set by the classic
+    // delegate) is captured locally so it cannot leak past the free-mode path.
+    bool inner_event = false;
+    return free_delegate_->update_barrier(barmode, mu_in, avgcomp, mincomp, XSL, RHS, DXSL, Temp,
+                                          mechanism, ctx, barr_obj, iters, inner_event);
+}
+
+void MonitoredBarrierGovernor::reset() {
+    refs_vals_.clear();
+    monotone_mode_ = false;
+    monotone_mu_ = 0.0;
+    last_monotone_switches_ = 0;
+    last_monotone_iters_ = 0;
+    if (free_delegate_) {
+        free_delegate_->reset();
+    }
 }
 
 } // namespace tycho::solvers
