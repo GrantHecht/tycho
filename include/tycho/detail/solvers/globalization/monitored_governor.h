@@ -67,14 +67,17 @@
 //     consistent with Tycho's own convergence test):
 //       - each part is an ∞-norm scalar (kkt_inf_ = ‖prim_grad‖∞, econ_inf_ =
 //         ‖eq_cons‖∞, icon_inf_ = ‖iq_cons‖∞), not the ‖·‖₂ Ipopt squares;
-//       - no per-dimension division (n_dual/n_pri/n_comp): the reference-list
-//         test is purely ratio-based (curr ≤ 0.9999·ref) and the problem
-//         dimensions are constant within a solve, so any constant dimensional
-//         scaling cancels and cannot change a monitor decision;
+//       - no per-dimension division (n_dual/n_pri/n_comp): these are THREE
+//         separate per-term weights, not one global scalar, so omitting them
+//         re-weights the dual/primal/complementarity blocks against each
+//         other and CAN shift exactly when the free->monotone switch
+//         triggers relative to [AMU]'s formula. This cannot affect
+//         correctness: monitor_error() and every value it is compared
+//         against (the reference window) are computed with the identical
+//         formula here, and the monotone-mode fallback this monitor gates is
+//         safe regardless of exactly when it engages;
 //       - the complementarity part uses barr_inf_ = max(sᵢ·λᵢ) (the same
 //         quantity the barrier convergence test reads) in place of ‖compl‖₂².
-//     None of these changes the monitor's decisions relative to a
-//     monotone-in-the-KKT-error surrogate; they only pick the norm.
 //
 // (2) Sufficient-progress test (nonmonotone), [AMU] CheckSufficientProgress()
 //     KKT_ERROR case (AMU:452-469): with fewer than kAdaptiveMuKktErrorRedIters
@@ -163,7 +166,6 @@
 #include <cstddef>
 #include <deque>
 #include <memory>
-#include <vector>
 
 #include <Eigen/Core>
 
@@ -203,7 +205,7 @@ class MonitoredBarrierGovernor : public BarrierGovernor {
                           double mincomp, Eigen::VectorXd &XSL, Eigen::VectorXd &RHS,
                           Eigen::VectorXd &DXSL, Eigen::VectorXd &Temp,
                           GlobalizationMechanism &mechanism, SolverContext &ctx, double &barr_obj,
-                          const std::vector<IterateInfo> &iters, bool &mu_event) override;
+                          const IterateInfo &current, bool &mu_event) override;
 
     bool in_monotone_mode() const override { return monotone_mode_; }
 
@@ -213,20 +215,20 @@ class MonitoredBarrierGovernor : public BarrierGovernor {
     void reset() override;
 
     // ------------------------------------------------------------------------
-    // Testable state machine. `decide` advances the monitor/mode state from the
-    // completed iteration history and returns the barrier decision WITHOUT
-    // touching any KKT vectors (the tolerances/bounds it needs are passed as
-    // scalars). update_barrier calls it, then applies the barrier tail in
-    // monotone mode or delegates in free mode. Exposed so the monitor, handoff,
-    // Fiacco–McCormick, re-entry, and mu-event logic are drivable in unit tests
-    // without a real KKT solve.
+    // Testable state machine. `decide` advances the monitor/mode state from
+    // `current` (the in-progress iterate's residuals) and returns the barrier
+    // decision WITHOUT touching any KKT vectors (the tolerances/bounds it
+    // needs are passed as scalars). update_barrier calls it, then applies the
+    // barrier tail in monotone mode or delegates in free mode. Exposed so the
+    // monitor, handoff, Fiacco–McCormick, re-entry, and mu-event logic are
+    // drivable in unit tests without a real KKT solve.
     // ------------------------------------------------------------------------
     struct BarrierDecision {
         double mu = 0.0;      // barrier parameter to use (meaningful iff monotone).
         bool mu_event = false; // a new monotone barrier subproblem began.
         bool monotone = false; // resulting mode after this decision.
     };
-    BarrierDecision decide(const std::vector<IterateInfo> &iters, double mu_in, double avgcomp,
+    BarrierDecision decide(const IterateInfo &current, double mu_in, double avgcomp,
                            double bar_tol, double kkt_tol, double min_mu, double max_mu);
 
     // Pure quantities (see (1), (6), (4)).

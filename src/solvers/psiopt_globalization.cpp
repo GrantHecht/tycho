@@ -736,15 +736,15 @@ double ClassicAdaptiveGovernor::mpc_mu(Eigen::Ref<Eigen::VectorXd> S,
 // Verbatim today's psiopt.cpp barmode switch (the former `if (inequal_cons_ > 0)`
 // body): the guard stays at the alg_impl call site, so update_barrier assumes
 // inequal_cons_ > 0. The predictor's alphap/alphad are locals here (discarded —
-// see the divergence-path note in the header). `iters` is ignored and `mu_event`
-// is never written (free mode only; see the header).
+// see the divergence-path note in the header). `current` is ignored and
+// `mu_event` is never written (free mode only; see the header).
 double ClassicAdaptiveGovernor::update_barrier(PSIOPT::BarrierModes barmode, double mu_in,
                                                double avgcomp, double mincomp, Eigen::VectorXd &XSL,
                                                Eigen::VectorXd &RHS, Eigen::VectorXd &DXSL,
                                                Eigen::VectorXd &Temp,
                                                GlobalizationMechanism &mechanism,
                                                SolverContext &ctx, double &barr_obj,
-                                               const std::vector<IterateInfo> & /*iters*/,
+                                               const IterateInfo & /*current*/,
                                                bool & /*mu_event*/) {
     KKTVector v_xsl = kkt_view(XSL, ctx);
     KKTVector v_rhs = kkt_view(RHS, ctx);
@@ -1456,10 +1456,9 @@ void MonitoredBarrierGovernor::remember_accepted(double curr_error) {
 }
 
 MonitoredBarrierGovernor::BarrierDecision
-MonitoredBarrierGovernor::decide(const std::vector<IterateInfo> &iters, double mu_in,
-                                 double avgcomp, double bar_tol, double kkt_tol, double min_mu,
-                                 double max_mu) {
-    const double curr_error = monitor_error(iters.back());
+MonitoredBarrierGovernor::decide(const IterateInfo &current, double mu_in, double avgcomp,
+                                 double bar_tol, double kkt_tol, double min_mu, double max_mu) {
+    const double curr_error = monitor_error(current);
     BarrierDecision d;
     d.mu = mu_in;
 
@@ -1473,7 +1472,7 @@ MonitoredBarrierGovernor::decide(const std::vector<IterateInfo> &iters, double m
         } else {
             // Remain monotone (AMU:313-340).
             ++last_monotone_iters_;
-            const double sub_err = barrier_subproblem_error(iters.back());
+            const double sub_err = barrier_subproblem_error(current);
             if (sub_err <= kBarrierTolFactor * monotone_mu_) {
                 const double new_mu =
                     fiacco_mccormick_mu(monotone_mu_, bar_tol, kkt_tol, min_mu, max_mu);
@@ -1526,8 +1525,8 @@ double MonitoredBarrierGovernor::update_barrier(
     PSIOPT::BarrierModes barmode, double mu_in, double avgcomp, double mincomp,
     Eigen::VectorXd &XSL, Eigen::VectorXd &RHS, Eigen::VectorXd &DXSL, Eigen::VectorXd &Temp,
     GlobalizationMechanism &mechanism, SolverContext &ctx, double &barr_obj,
-    const std::vector<IterateInfo> &iters, bool &mu_event) {
-    const BarrierDecision d = decide(iters, mu_in, avgcomp, ctx.settings_.bar_tol_,
+    const IterateInfo &current, bool &mu_event) {
+    const BarrierDecision d = decide(current, mu_in, avgcomp, ctx.settings_.bar_tol_,
                                      ctx.settings_.kkt_tol_, ctx.settings_.min_mu_,
                                      ctx.settings_.max_mu_);
     mu_event = d.mu_event;
@@ -1552,7 +1551,7 @@ double MonitoredBarrierGovernor::update_barrier(
     // delegate) is captured locally so it cannot leak past the free-mode path.
     bool inner_event = false;
     return free_delegate_->update_barrier(barmode, mu_in, avgcomp, mincomp, XSL, RHS, DXSL, Temp,
-                                          mechanism, ctx, barr_obj, iters, inner_event);
+                                          mechanism, ctx, barr_obj, current, inner_event);
 }
 
 void MonitoredBarrierGovernor::reset() {

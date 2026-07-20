@@ -1467,16 +1467,20 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // are inequality constraints (barrier terms). The PROBE predictor's KKT
         // solve moves INTO the governor; the REAL step solve below (a distinct
         // second solve) stays here. avgcomp/mincomp feed the mu oracles;
-        // *mechanism_ lets the PROBE predictor reuse the step-scaling. The
-        // completed iteration history `iters` (iters.back() is this iterate,
-        // filled above) lets a monitored free<->monotone governor read recent
-        // KKT errors; `mu_event` is its out-signal, initialized false each
-        // iteration so the classic governor (which never writes it) leaves the
-        // reset below dead — bit-identical on the default path.
+        // *mechanism_ lets the PROBE predictor reuse the step-scaling. Citer
+        // (this iterate's residuals, filled by the convergence check above) was
+        // popped back off `iters` at the continuing-path pop above -- it is not
+        // re-appended until after the line search below -- so it is passed
+        // explicitly rather than through `iters` (whose back(), here, would be
+        // the PREVIOUS iterate, and is empty outright on iteration 0); a
+        // monitored free<->monotone governor reads Citer's residuals to decide
+        // the free<->monotone switch. `mu_event` is its out-signal, initialized
+        // false each iteration so the classic governor (which never writes it)
+        // leaves the reset below dead — bit-identical on the default path.
         bool mu_event = false;
         if (this->inequal_cons_ > 0) {
             mu = governor_->update_barrier(barmode, mu, avgcomp, mincomp, XSL, RHS, DXSL, Temp,
-                                           *mechanism_, ctx, barr_obj, iters, mu_event);
+                                           *mechanism_, ctx, barr_obj, Citer, mu_event);
         }
 
         // Per-barrier-subproblem acceptance reset: when the governor's monotone

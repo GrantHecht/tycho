@@ -24,8 +24,6 @@
 
 #pragma once
 
-#include <vector>
-
 #include <Eigen/Core>
 
 #include "tycho/detail/solvers/globalization/solver_context.h"
@@ -93,10 +91,14 @@ class BarrierGovernor {
     // (today's barr_obj local, set by the common tail's barrier_objective()
     // call).
     //
-    // `iters` is the completed iteration history (iters.back() is the current
-    // iterate, whose residuals were just filled). A monitored free<->monotone
-    // governor reads recent KKT errors from it to decide the free<->monotone
-    // switch; the classic free-mode oracles ignore it entirely.
+    // `current` is the in-progress iteration's IterateInfo whose residual
+    // fields (kkt_inf_/econ_inf_/icon_inf_/barr_inf_) were filled by this
+    // iteration's convergence check — it is NOT yet in the solver's iteration
+    // history at this point in the loop (it is re-appended after the line
+    // search), which is exactly why it is passed explicitly. A monitored
+    // free<->monotone governor reads these residuals to decide the
+    // free<->monotone switch; the classic free-mode oracles ignore it
+    // entirely.
     //
     // `mu_event` is an out-signal (the caller passes it initialized to false):
     // an implementation sets it true when its monotone mode begins a new barrier
@@ -109,7 +111,7 @@ class BarrierGovernor {
                                   double mincomp, Eigen::VectorXd &XSL, Eigen::VectorXd &RHS,
                                   Eigen::VectorXd &DXSL, Eigen::VectorXd &Temp,
                                   GlobalizationMechanism &mechanism, SolverContext &ctx,
-                                  double &barr_obj, const std::vector<IterateInfo> &iters,
+                                  double &barr_obj, const IterateInfo &current,
                                   bool &mu_event) = 0;
 
     // Free vs. monotone mode query. No implementation shipped today has a

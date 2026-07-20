@@ -55,14 +55,10 @@ IterateInfo MonGovIterate(double kkt_inf, double econ_inf, double icon_inf, doub
     return it;
 }
 
-// A one-element history whose monitor_error is exactly `err` and whose
-// barrier_subproblem_error is exactly `sub` (so tests control both quantities
-// independently): put all the monitor mass in kkt_inf_ and the subproblem mass
-// in barr_inf_ when they must differ. Here every residual equals `v`, so
-// monitor_error = 4 v² and barrier_subproblem_error = v.
-std::vector<IterateInfo> MonGovHistoryUniform(double v) {
-    return {MonGovIterate(v, v, v, v)};
-}
+// An IterateInfo (the `current` argument decide()/update_barrier() now take
+// directly) with every residual equal to `v`, so monitor_error = 4 v² and
+// barrier_subproblem_error = v.
+IterateInfo MonGovUniform(double v) { return MonGovIterate(v, v, v, v); }
 
 // Recording fake free-mode delegate: never consulted unless the governor is in
 // free mode. Records the call and echoes a sentinel mu + barr_obj so the test
@@ -79,8 +75,7 @@ class MonGovFakeDelegate : public BarrierGovernor {
     double update_barrier(PSIOPT::BarrierModes, double mu_in, double avgcomp, double mincomp,
                           Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &,
                           Eigen::VectorXd &, GlobalizationMechanism &, SolverContext &,
-                          double &barr_obj, const std::vector<IterateInfo> &,
-                          bool &mu_event) override {
+                          double &barr_obj, const IterateInfo &, bool &mu_event) override {
         ++calls;
         seen_mu_in = mu_in;
         seen_avgcomp = avgcomp;
@@ -197,8 +192,8 @@ TEST(MonGovHandoff, DecideSwitchesToMonotoneOnMonitorFailure) {
         g.remember_accepted(1.0);
     }
     // current monitor_error = 4 * 100^2 = 40000 >> 0.9999 -> monitor fails.
-    const auto iters = MonGovHistoryUniform(100.0);
-    const auto d = g.decide(iters, /*mu_in=*/0.01, /*avgcomp=*/1e-3, /*bar_tol=*/1e-6,
+    const auto current = MonGovUniform(100.0);
+    const auto d = g.decide(current, /*mu_in=*/0.01, /*avgcomp=*/1e-3, /*bar_tol=*/1e-6,
                             /*kkt_tol=*/1e-6, /*min_mu=*/1e-12, /*max_mu=*/100.0);
     EXPECT_TRUE(d.monotone);
     EXPECT_TRUE(d.mu_event); // handoff begins a new barrier subproblem.
@@ -240,7 +235,7 @@ TEST(MonGovFiaccoMcCormick, GateBlocksAdvanceUntilSubproblemConverged) {
     for (int n = 0; n < 4; ++n) {
         g.remember_accepted(1e-30); // tight refs -> any real error fails the monitor
     }
-    const auto trigger = MonGovHistoryUniform(1.0); // monitor_error = 4 >> refs
+    const auto trigger = MonGovUniform(1.0); // monitor_error = 4 >> refs
     g.decide(trigger, 0.01, /*avgcomp=*/0.0125, 1e-6, 1e-6, 1e-12, 100.0);
     ASSERT_TRUE(g.in_monotone_mode());
     ASSERT_DOUBLE_EQ(g.monotone_mu(), 0.01);
@@ -250,7 +245,7 @@ TEST(MonGovFiaccoMcCormick, GateBlocksAdvanceUntilSubproblemConverged) {
     // (a) sub_problem_error = 0.2 (barr_inf_) > 0.1 -> NO advance, NO mu_event.
     //     Keep the monitor "failing" (monitor_error large) so we stay monotone:
     //     residuals {0.05,0.05,0.05,0.2}: monitor_error = 3*0.0025 + 0.04 large vs 1e-30.
-    std::vector<IterateInfo> not_converged = {MonGovIterate(0.05, 0.05, 0.05, 0.2)};
+    const IterateInfo not_converged = MonGovIterate(0.05, 0.05, 0.05, 0.2);
     auto d_hold = g.decide(not_converged, mu_before, 0.0125, 1e-6, 1e-6, 1e-12, 100.0);
     EXPECT_TRUE(d_hold.monotone);
     EXPECT_FALSE(d_hold.mu_event);
@@ -258,7 +253,7 @@ TEST(MonGovFiaccoMcCormick, GateBlocksAdvanceUntilSubproblemConverged) {
 
     // (b) sub_problem_error = 0.05 (all parts) <= 0.1 -> advance, mu_event.
     //     monitor_error = 4*0.05^2 = 0.01 still >> 1e-30 refs -> stays monotone.
-    std::vector<IterateInfo> converged = {MonGovIterate(0.05, 0.05, 0.05, 0.05)};
+    const IterateInfo converged = MonGovIterate(0.05, 0.05, 0.05, 0.05);
     auto d_adv = g.decide(converged, g.monotone_mu(), 0.0125, 1e-6, 1e-6, 1e-12, 100.0);
     EXPECT_TRUE(d_adv.monotone);
     EXPECT_TRUE(d_adv.mu_event);
@@ -279,13 +274,13 @@ TEST(MonGovReentry, ReturnsToFreeWhenErrorReentersBand) {
     for (int n = 0; n < 4; ++n) {
         g.remember_accepted(4.0);
     }
-    const auto fail = MonGovHistoryUniform(100.0); // monitor_error 40000 -> fails
+    const auto fail = MonGovUniform(100.0); // monitor_error 40000 -> fails
     g.decide(fail, 0.01, 1e-3, 1e-6, 1e-6, 1e-12, 100.0);
     ASSERT_TRUE(g.in_monotone_mode());
 
     // Now the error re-enters the band: residuals all 0.5 -> monitor_error = 1.0.
     // 1.0 <= 0.9999 * 4.0 = 3.9996 -> sufficient -> re-enter free.
-    const auto recover = MonGovHistoryUniform(0.5);
+    const auto recover = MonGovUniform(0.5);
     const auto d = g.decide(recover, 0.01, 1e-3, 1e-6, 1e-6, 1e-12, 100.0);
     EXPECT_FALSE(d.monotone);
     EXPECT_FALSE(d.mu_event); // re-entry does not fire a mu_event.
@@ -301,8 +296,8 @@ TEST(MonGovReentry, ReturnsToFreeWhenErrorReentersBand) {
 TEST(MonGovMuEvent, StayingFreeDoesNotFire) {
     MonitoredBarrierGovernor g;
     // Empty window (<4 refs) -> monitor sufficient -> stay free.
-    const auto iters = MonGovHistoryUniform(1.0);
-    const auto d = g.decide(iters, 0.01, 1e-3, 1e-6, 1e-6, 1e-12, 100.0);
+    const auto current = MonGovUniform(1.0);
+    const auto d = g.decide(current, 0.01, 1e-3, 1e-6, 1e-6, 1e-12, 100.0);
     EXPECT_FALSE(d.monotone);
     EXPECT_FALSE(d.mu_event);
     EXPECT_EQ(g.last_monotone_switches(), 0);
@@ -313,10 +308,10 @@ TEST(MonGovMuEvent, HoldingMonotoneDoesNotFire) {
     for (int n = 0; n < 4; ++n) {
         g.remember_accepted(1e-30);
     }
-    g.decide(MonGovHistoryUniform(1.0), 0.01, 0.0125, 1e-6, 1e-6, 1e-12, 100.0); // handoff
+    g.decide(MonGovUniform(1.0), 0.01, 0.0125, 1e-6, 1e-6, 1e-12, 100.0); // handoff
     ASSERT_TRUE(g.in_monotone_mode());
     // sub_problem_error = 100 (barr_inf_) > 10*0.01 = 0.1 -> gate blocks -> hold.
-    std::vector<IterateInfo> big = {MonGovIterate(1.0, 1.0, 1.0, 100.0)};
+    const IterateInfo big = MonGovIterate(1.0, 1.0, 1.0, 100.0);
     const auto d = g.decide(big, g.monotone_mu(), 0.0125, 1e-6, 1e-6, 1e-12, 100.0);
     EXPECT_TRUE(d.monotone);
     EXPECT_FALSE(d.mu_event);
@@ -331,7 +326,7 @@ TEST(MonGovReset, ClearsAllState) {
     for (int n = 0; n < 4; ++n) {
         g.remember_accepted(1e-30);
     }
-    g.decide(MonGovHistoryUniform(1.0), 0.01, 0.0125, 1e-6, 1e-6, 1e-12, 100.0); // -> monotone
+    g.decide(MonGovUniform(1.0), 0.01, 0.0125, 1e-6, 1e-6, 1e-12, 100.0); // -> monotone
     ASSERT_TRUE(g.in_monotone_mode());
     ASSERT_GT(g.reference_values().size(), 0u);
     ASSERT_EQ(g.last_monotone_switches(), 1);
@@ -364,12 +359,12 @@ TEST(MonGovDelegation, FreeModeForwardsToDelegateVerbatim) {
     Eigen::VectorXd XSL, RHS, DXSL, Temp; // empty (dims all zero).
 
     // Fresh governor, empty window -> monitor sufficient -> stays free -> delegates.
-    const auto iters = MonGovHistoryUniform(1.0);
+    const auto current = MonGovUniform(1.0);
     double barr_obj = -1.0;
     bool mu_event = false;
     const double mu = g.update_barrier(PSIOPT::BarrierModes::LOQO, /*mu_in=*/0.007,
                                        /*avgcomp=*/0.55, /*mincomp=*/0.11, XSL, RHS, DXSL, Temp,
-                                       mechanism, ctx, barr_obj, iters, mu_event);
+                                       mechanism, ctx, barr_obj, current, mu_event);
     EXPECT_EQ(fake->calls, 1);
     EXPECT_DOUBLE_EQ(fake->seen_mu_in, 0.007);   // mu_in forwarded verbatim.
     EXPECT_DOUBLE_EQ(fake->seen_avgcomp, 0.55);  // avgcomp forwarded verbatim.
@@ -378,6 +373,131 @@ TEST(MonGovDelegation, FreeModeForwardsToDelegateVerbatim) {
     EXPECT_DOUBLE_EQ(barr_obj, fake->set_barr_obj); // delegate's barr_obj propagated.
     EXPECT_FALSE(mu_event); // delegate's inner event must NOT leak past the free path.
     EXPECT_FALSE(g.in_monotone_mode());
+}
+
+// -----------------------------------------------------------------------------
+// Multi-call sequences driven THROUGH update_barrier (not decide() directly),
+// each call passing a DIFFERENT `current`. This exercises the fix for the
+// governor reading the wrong iterate: with the old `iters` (history) parameter,
+// a caller that popped the current iterate before calling update_barrier (as
+// alg_impl does) would make every one of these calls see the PREVIOUS current
+// instead of the one just passed. `current` is now the argument itself, so
+// each call below must react to exactly the value passed to it.
+// -----------------------------------------------------------------------------
+
+TEST(MonGovSequence, SufficientProgressVerdictFlipsWithPassedCurrent) {
+    auto fake_owned = std::make_unique<MonGovFakeDelegate>();
+    MonGovFakeDelegate *fake = fake_owned.get();
+    MonitoredBarrierGovernor g(std::move(fake_owned));
+
+    // Minimal all-zero-dimension context (as MonGovDelegation above): the fake
+    // delegate ignores it, and with inequal_cons_ == 0 the monotone-mode
+    // barrier tail (unused here in the free-mode call, but exercised by the
+    // next test) is also a no-op over empty XSL/RHS.
+    PSIOPT::Settings settings;
+    tycho::solvers::KktSolverType solver;
+    int zero = 0;
+    Eigen::VectorXd scratch;
+    SolverContext ctx{nullptr, solver,  settings, zero,    zero,    zero,
+                      zero,    zero,    scratch,  scratch, scratch, scratch};
+    MonGovUnusedMechanism mechanism;
+    Eigen::VectorXd XSL, RHS, DXSL, Temp;
+
+    // Prime a full reference window of four 1.0's.
+    for (int n = 0; n < 4; ++n) {
+        g.remember_accepted(1.0);
+    }
+
+    // Call 1: current has icon_inf_ = 0.9, everything else 0 -> monitor_error =
+    // 0.9^2 = 0.81. 0.81 <= 0.9999 * 1.0 -> sufficient -> stays free -> delegates.
+    const IterateInfo current1 = MonGovIterate(0.0, 0.0, 0.9, 0.0);
+    double barr_obj1 = 0.0;
+    bool event1 = false;
+    g.update_barrier(PSIOPT::BarrierModes::LOQO, 0.01, 0.0125, 0.0, XSL, RHS, DXSL, Temp, mechanism,
+                     ctx, barr_obj1, current1, event1);
+    EXPECT_FALSE(event1);
+    EXPECT_FALSE(g.in_monotone_mode());
+    EXPECT_EQ(fake->calls, 1);
+    // remember_accepted(0.81) pops the oldest 1.0 -> window = {1,1,1,0.81}.
+    ASSERT_EQ(g.reference_values().size(), 4u);
+    EXPECT_DOUBLE_EQ(g.reference_values().back(), 0.81);
+
+    // Call 2: current has icon_inf_ = 1.0, everything else 0 -> monitor_error =
+    // 1.0^2 = 1.0. Checked against window {1,1,1,0.81}: 1.0 <= 0.9999*1.0 =
+    // 0.9999? no. 1.0 <= 0.9999*0.81 = 0.809919? no. Fails every reference ->
+    // handoff to monotone. This is the SAME kind of residual shape as call 1
+    // (only icon_inf_ differs, 0.9 -> 1.0): the verdict flip is driven purely
+    // by the `current` passed to THIS call, not by any stale value.
+    const IterateInfo current2 = MonGovIterate(0.0, 0.0, 1.0, 0.0);
+    double barr_obj2 = 0.0;
+    bool event2 = false;
+    g.update_barrier(PSIOPT::BarrierModes::LOQO, 0.01, 0.0125, 0.0, XSL, RHS, DXSL, Temp, mechanism,
+                     ctx, barr_obj2, current2, event2);
+    EXPECT_TRUE(event2);
+    EXPECT_TRUE(g.in_monotone_mode());
+    EXPECT_DOUBLE_EQ(g.monotone_mu(), 0.01); // handoff_mu(0.0125, ...) = 0.8*0.0125.
+    // The free delegate is never consulted again once monotone mode is entered.
+    EXPECT_EQ(fake->calls, 1);
+}
+
+TEST(MonGovSequence, FiaccoMcCormickGateAdvancesOnSatisfyingCall) {
+    // Default governor (real ClassicAdaptiveGovernor free delegate) -- never
+    // reached, since every call below forces/keeps monotone mode.
+    MonitoredBarrierGovernor g;
+
+    PSIOPT::Settings settings;
+    tycho::solvers::KktSolverType solver;
+    int zero = 0;
+    Eigen::VectorXd scratch;
+    SolverContext ctx{nullptr, solver,  settings, zero,    zero,    zero,
+                      zero,    zero,    scratch,  scratch, scratch, scratch};
+    MonGovUnusedMechanism mechanism;
+    Eigen::VectorXd XSL, RHS, DXSL, Temp;
+
+    // Prime a tight reference window so the monitor fails for the rest of this
+    // test regardless of the (small) currents passed below -- isolates the FM
+    // gate behavior from the monitor's free<->monotone re-entry decision.
+    for (int n = 0; n < 4; ++n) {
+        g.remember_accepted(1e-30);
+    }
+
+    // Call 1 (handoff): current = uniform 1.0 -> monitor_error = 4 >> refs.
+    // monotone_mu_ = handoff_mu(0.0125, ...) = 0.8*0.0125 = 0.01.
+    double barr_obj = 0.0;
+    bool event = false;
+    g.update_barrier(PSIOPT::BarrierModes::LOQO, 0.01, /*avgcomp=*/0.0125, 0.0, XSL, RHS, DXSL,
+                     Temp, mechanism, ctx, barr_obj, MonGovUniform(1.0), event);
+    ASSERT_TRUE(g.in_monotone_mode());
+    ASSERT_DOUBLE_EQ(g.monotone_mu(), 0.01);
+    ASSERT_TRUE(event);
+
+    // Call 2 (hold): current = {0.05,0.05,0.05,0.2}. Gate threshold =
+    // kBarrierTolFactor*mu = 10*0.01 = 0.1; sub_problem_error = max(...) = 0.2
+    // > 0.1 -> gate blocks -> NO advance, NO mu_event.
+    event = false;
+    const double mu_after_hold = g.update_barrier(
+        PSIOPT::BarrierModes::LOQO, g.monotone_mu(), 0.0125, 0.0, XSL, RHS, DXSL, Temp, mechanism,
+        ctx, barr_obj, MonGovIterate(0.05, 0.05, 0.05, 0.2), event);
+    EXPECT_FALSE(event);
+    EXPECT_DOUBLE_EQ(g.monotone_mu(), 0.01);
+    EXPECT_DOUBLE_EQ(mu_after_hold, 0.01);
+
+    // Call 3 (advance): current = {0.05,0.05,0.05,0.05} -> sub_problem_error =
+    // 0.05 <= 0.1 -> gate passes -> advance. PSIOPT::Settings defaults
+    // bar_tol_ = kkt_tol_ = 1e-6, so floor = min(1e-6,1e-6)/(10+1) ≈ 9.09e-8,
+    // well below the candidate, so
+    // fiacco_mccormick_mu(0.01, 1e-6, 1e-6, min_mu_, max_mu_) =
+    // max(9.09e-8, min(0.2*0.01=0.002, 0.01^1.5=0.001)) = 0.001 (superlinear
+    // wins, matching MonGovFiaccoMcCormick.SequenceHandComputed's mu1->mu2 step),
+    // then clamped to [1e-12, 100] (inert).
+    event = false;
+    const double mu_after_advance = g.update_barrier(
+        PSIOPT::BarrierModes::LOQO, g.monotone_mu(), 0.0125, 0.0, XSL, RHS, DXSL, Temp, mechanism,
+        ctx, barr_obj, MonGovIterate(0.05, 0.05, 0.05, 0.05), event);
+    EXPECT_TRUE(event); // advance on exactly this call, not the previous hold.
+    EXPECT_DOUBLE_EQ(g.monotone_mu(), 0.001);
+    EXPECT_DOUBLE_EQ(mu_after_advance, 0.001);
+    EXPECT_EQ(g.last_monotone_iters(), 2); // two "remain monotone" calls (hold + advance).
 }
 
 } // namespace

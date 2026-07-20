@@ -103,15 +103,15 @@ class ClassicAdaptiveGovernor : public BarrierGovernor {
     // alg_impl's `if (inequal_cons_ > 0)` guard (the guard stays at the call
     // site, exactly as the block was guarded before extraction).
     //
-    // Free-mode only: `iters` is ignored (the PROBE/LOQO oracles read no
-    // iteration history) and `mu_event` is never written (this governor has no
+    // Free-mode only: `current` is ignored (the PROBE/LOQO oracles read no
+    // iteration state) and `mu_event` is never written (this governor has no
     // monotone mode), so the caller's mu-event reset branch stays dead on the
     // classic path.
     double update_barrier(PSIOPT::BarrierModes barmode, double mu_in, double avgcomp,
                           double mincomp, Eigen::VectorXd &XSL, Eigen::VectorXd &RHS,
                           Eigen::VectorXd &DXSL, Eigen::VectorXd &Temp,
                           GlobalizationMechanism &mechanism, SolverContext &ctx, double &barr_obj,
-                          const std::vector<IterateInfo> &iters, bool &mu_event) override;
+                          const IterateInfo &current, bool &mu_event) override;
 
     // μ-event / phase-change hook — no-op: the classic PROBE/LOQO oracles carry
     // no persistent state across iterations (free mode; see barrier_governor.h).
