@@ -122,6 +122,22 @@ class BarrierGovernor {
 
     // μ-event / phase-change reset hook — see the ownership-rule note above.
     virtual void reset() = 0;
+
+    // Solver-level observability hook: writes this governor's diagnostic
+    // state (if any) into `result`. Mirrors AcceptanceStrategy::
+    // append_diagnostics() (acceptance_strategy.h) — same call site
+    // (run_phase_sequence(), once per phase, right after that phase's
+    // alg_impl() returns and before the NEXT phase's reset()), same
+    // write-only contract, same last-phase-wins semantics for a multi-phase
+    // solve. The default body is a no-op, which is exactly right for
+    // ClassicAdaptiveGovernor (it has no monotone-mode bookkeeping to
+    // report): the classic path stays bit-identical because this hook never
+    // touches `result` unless an implementation overrides it.
+    // MonitoredBarrierGovernor overrides this to report its
+    // last_monotone_switches_/last_monotone_iters_ counters — see
+    // monitored_governor.h and the corresponding SolveResult fields in
+    // psiopt.h.
+    virtual void append_diagnostics(PSIOPT::SolveResult &result) const { (void)result; }
 };
 
 } // namespace tycho::solvers

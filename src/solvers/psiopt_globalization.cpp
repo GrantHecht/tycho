@@ -1565,4 +1565,9 @@ void MonitoredBarrierGovernor::reset() {
     }
 }
 
+void MonitoredBarrierGovernor::append_diagnostics(PSIOPT::SolveResult &result) const {
+    result.last_monotone_switches_ = last_monotone_switches_;
+    result.last_monotone_iters_ = last_monotone_iters_;
+}
+
 } // namespace tycho::solvers

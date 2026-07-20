@@ -214,6 +214,11 @@ class MonitoredBarrierGovernor : public BarrierGovernor {
     // boundaries start in free mode.
     void reset() override;
 
+    // Reports last_monotone_switches_/last_monotone_iters_ into the
+    // corresponding SolveResult fields (psiopt.h) — see BarrierGovernor::
+    // append_diagnostics() for the call-site contract this overrides.
+    void append_diagnostics(PSIOPT::SolveResult &result) const override;
+
     // ------------------------------------------------------------------------
     // Testable state machine. `decide` advances the monitor/mode state from
     // `current` (the in-progress iterate's residuals) and returns the barrier
@@ -264,7 +269,9 @@ class MonitoredBarrierGovernor : public BarrierGovernor {
     bool monotone_mode_ = false;
     double monotone_mu_ = 0.0; // current monotone barrier parameter (meaningful iff monotone_mode_)
 
-    // Write-only SolveResult diagnostics (bound to the result in a later task).
+    // Write-only SolveResult diagnostics, bound to the result via
+    // append_diagnostics() (see PSIOPT::SolveResult::last_monotone_switches_/
+    // last_monotone_iters_ in psiopt.h).
     int last_monotone_switches_ = 0; // free -> monotone handoffs this phase.
     int last_monotone_iters_ = 0;    // iterations spent in monotone mode this phase.
 };

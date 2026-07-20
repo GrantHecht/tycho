@@ -50,6 +50,7 @@
 // "Test access" comment in the PSIOPT class body for why this exists.
 class RecoveryDispatchGate_FunnelSelectionConstructsFunnelAcceptance_Test;
 class RecoveryDispatchGate_FilterSelectionConstructsFilterAcceptance_Test;
+class RecoveryDispatchGate_MonitoredSelectionConstructsMonitoredGovernor_Test;
 
 namespace tycho::solvers {
 
@@ -200,6 +201,25 @@ class PSIOPT {
         // acceptance_strategy_ == merit). Both enums live in psiopt_fwd.h.
         AcceptanceStrategies acceptance_strategy_ = AcceptanceStrategies::classic_merit;
         MeritPenaltyRules merit_penalty_rule_ = MeritPenaltyRules::wmno;
+
+        // --- Barrier-parameter governor (opt-in monitored free<->monotone) ---
+        // classic_adaptive (default) reproduces today's PROBE/LOQO free-mode
+        // barrier update bit-identically. monitored selects the free<->monotone
+        // MonitoredBarrierGovernor, which composes a ClassicAdaptiveGovernor as
+        // its free-mode delegate — so it may pair with any acceptance_strategy_.
+        // The funnel/filter acceptance strategies are designed to operate above
+        // a monotone barrier safeguard; validate() rejects them combined with
+        // classic_adaptive unless never_monotone_ is explicitly set (see
+        // validate()'s guard below). Enum lives in psiopt_fwd.h.
+        BarrierGovernors barrier_governor_ = BarrierGovernors::classic_adaptive;
+
+        // Expert escape hatch mirroring Ipopt's never-monotone-mode: explicitly
+        // accepts running funnel/filter above the classic_adaptive (free-only)
+        // barrier governor without its monotone safeguard. false (default).
+        // Contradictory when combined with barrier_governor_ == monitored (the
+        // monitored governor already provides the monotone fallback) — validate()
+        // rejects that combination.
+        bool never_monotone_ = false;
 
         // --- Barrier parameters ---
         double init_mu_ = 0.001;
@@ -365,6 +385,25 @@ class PSIOPT {
         // phases within the same solve() call.
         int last_filter_resets_ = -1;
 
+        // Number of free -> monotone handoffs during the most recent solve's
+        // LAST PHASE, reported by MonitoredBarrierGovernor::append_diagnostics()
+        // (globalization/monitored_governor.h). Sentinel -1 when the selected
+        // barrier_governor_ is not monitored. PER-PHASE semantics matching
+        // last_filter_resets_ above: MonitoredBarrierGovernor::reset() clears
+        // its own last_monotone_switches_/last_monotone_iters_ counters at
+        // every phase boundary (via BarrierGovernor::reset(), called at the top
+        // of each run_phase_sequence() loop iteration), and
+        // append_diagnostics() is collected once per phase right before that
+        // reset runs for the NEXT phase — so a multi-phase call reports only
+        // the LAST phase's totals, not a running total across phases.
+        int last_monotone_switches_ = -1;
+
+        // Number of iterations spent in monotone mode during the most recent
+        // solve's LAST PHASE, reported by MonitoredBarrierGovernor::
+        // append_diagnostics(). Sentinel -1 when the selected barrier_governor_
+        // is not monitored. Same per-phase semantics as last_monotone_switches_.
+        int last_monotone_iters_ = -1;
+
         // T6 (dead-status fix): the last non-Success status observed from
         // kkt_sol_.info() by factor_impl() within the CURRENT phase (alg_impl
         // resets it on entry, so print_exit_stats reports per-phase status).
@@ -396,6 +435,8 @@ class PSIOPT {
             last_funnel_width_ = -1.0;
             last_filter_size_ = -1;
             last_filter_resets_ = -1;
+            last_monotone_switches_ = -1;
+            last_monotone_iters_ = -1;
         }
     };
 
@@ -534,6 +575,7 @@ class PSIOPT {
     // exposing a public rebuild hook.
     friend class ::RecoveryDispatchGate_FunnelSelectionConstructsFunnelAcceptance_Test;
     friend class ::RecoveryDispatchGate_FilterSelectionConstructsFilterAcceptance_Test;
+    friend class ::RecoveryDispatchGate_MonitoredSelectionConstructsMonitoredGovernor_Test;
 
     Settings settings_;
     SolveResult result_;
