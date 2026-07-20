@@ -151,6 +151,18 @@ class PSIOPT:
         """
 
     @property
+    def last_monotone_switches(self) -> int:
+        """
+        Number of free -> monotone handoffs during the most recent solve's last phase. -1 unless barrier_governor is monitored.
+        """
+
+    @property
+    def last_monotone_iters(self) -> int:
+        """
+        Number of iterations spent in monotone mode during the most recent solve's last phase. -1 unless barrier_governor is monitored.
+        """
+
+    @property
     def obj_scale(self) -> float: ...
 
     @obj_scale.setter
@@ -433,6 +445,24 @@ class PSIOPT:
     def watchdog(self, arg: bool, /) -> None: ...
 
     @property
+    def barrier_governor(self) -> BarrierGovernors:
+        """
+        Barrier-parameter governor: classic_adaptive (default) reproduces the original PROBE/LOQO free-mode barrier update bit-for-bit; monitored composes a classic_adaptive delegate with a KKT-error monitor that watches a sliding reference window of recent iterations and, when free-mode progress is no longer a sufficient decrease relative to that window, hands off to a monotone (Fiacco-McCormick) mode with the barrier parameter initialized to 0.8 times the average complementarity and held fixed until the barrier subproblem converges, then decreased; the monitor re-enters free mode once progress against the (frozen) reference window resumes. Each free->monotone handoff and each monotone barrier-parameter decrease resets the acceptance strategy's per-barrier-subproblem state (the filter/funnel's stored bounds), exactly as a new barrier subproblem does in Ipopt. The funnel/filter acceptance strategies are designed to operate above a monotone barrier safeguard, which classic_adaptive does not provide; validate() raises ValueError if they are combined with classic_adaptive unless never_monotone is set. Any acceptance_strategy may pair with monitored.
+        """
+
+    @barrier_governor.setter
+    def barrier_governor(self, arg: BarrierGovernors, /) -> None: ...
+
+    @property
+    def never_monotone(self) -> bool:
+        """
+        Expert escape hatch, mirroring Ipopt's never-monotone-mode: explicitly accepts running funnel/filter above barrier_governor=classic_adaptive without its monotone safeguard, forfeiting that guard rather than switching to barrier_governor=monitored. false (default). Contradictory with barrier_governor=monitored (which already supplies the monotone fallback this knob opts out of) -- validate() raises ValueError on that combination.
+        """
+
+    @never_monotone.setter
+    def never_monotone(self, arg: bool, /) -> None: ...
+
+    @property
     def force_qp_analysis(self) -> bool: ...
 
     @force_qp_analysis.setter
@@ -554,6 +584,17 @@ class MeritPenaltyRules(enum.Enum):
     wmno = 0
 
     flexible = 1
+
+class BarrierGovernors(enum.Enum):
+    classic_adaptive = 0
+    """
+    The classic PROBE/LOQO free-mode barrier update, unchanged -- the bit-identical default.
+    """
+
+    monitored = 1
+    """
+    Free<->monotone monitored barrier governor: a KKT-error monitor hands off to a Fiacco-McCormick monotone mode when free-mode progress stalls, then re-enters free mode once progress resumes -- see the barrier_governor property docstring for the full mechanism.
+    """
 
 class PDStepStrategies(enum.Enum):
     PrimSlackEq_Iq = 0
