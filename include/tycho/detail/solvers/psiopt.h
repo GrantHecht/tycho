@@ -382,7 +382,11 @@ class PSIOPT {
         // is collected once per phase right before that reset runs for the
         // NEXT phase — so a multi-phase call (e.g. solve_optimize()) reports
         // only the LAST phase's total resets, not a running total across
-        // phases within the same solve() call.
+        // phases within the same solve() call. Under barrier_governor_ ==
+        // monitored, each mu-event ALSO clears the counter (the acceptance
+        // strategy is reset per barrier subproblem), so this reports resets
+        // since the last mu-event of the last phase — the Ipopt-faithful
+        // per-subproblem scope, not a whole-phase total.
         int last_filter_resets_ = -1;
 
         // Number of free -> monotone handoffs during the most recent solve's
