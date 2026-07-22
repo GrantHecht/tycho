@@ -408,6 +408,25 @@ class PSIOPT {
         // is not monitored. Same per-phase semantics as last_monotone_switches_.
         int last_monotone_iters_ = -1;
 
+        // Number of times feasibility restoration was entered during the most
+        // recent solve's LAST PHASE, reported by RestorationStrategy::
+        // append_diagnostics() (globalization/restoration.h;
+        // ProximalSwitchRestoration is the concrete reporter today —
+        // globalization/proximal_restoration.h). WRITE-ONLY diagnostics field:
+        // no algorithm code reads it back. Sentinel -1 when no restoration
+        // strategy is constructed on the active solve path (today's only
+        // path — feasibility restoration is not yet wired into the solver).
+        // Same last-phase-wins semantics as last_monotone_switches_ once a
+        // restoration strategy is wired and this is collected per phase.
+        int last_feas_rest_entries_ = -1;
+
+        // Number of iterations spent in restoration mode during the most
+        // recent solve's LAST PHASE, reported by RestorationStrategy::
+        // append_diagnostics(). WRITE-ONLY diagnostics field. Sentinel -1
+        // when no restoration strategy is constructed on the active solve
+        // path. Same per-phase semantics as last_feas_rest_entries_.
+        int last_feas_rest_iters_ = -1;
+
         // T6 (dead-status fix): the last non-Success status observed from
         // kkt_sol_.info() by factor_impl() within the CURRENT phase (alg_impl
         // resets it on entry, so print_exit_stats reports per-phase status).
@@ -441,6 +460,8 @@ class PSIOPT {
             last_filter_resets_ = -1;
             last_monotone_switches_ = -1;
             last_monotone_iters_ = -1;
+            last_feas_rest_entries_ = -1;
+            last_feas_rest_iters_ = -1;
         }
     };
 

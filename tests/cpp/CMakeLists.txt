@@ -180,6 +180,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     solvers/test_filter_acceptance.cpp
     solvers/test_acceptance_diagnostics.cpp
     solvers/test_monitored_governor.cpp
+    solvers/test_proximal_restoration.cpp
 )
 
 #-------------------------------------------------------------------------------

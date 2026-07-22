@@ -30,6 +30,11 @@
 // This file also hosts the second batch of live RecoveryChain links:
 // ExtendedBacktrackRecovery, WatchdogRecovery, and the ChainedRecovery
 // composition — see watchdog.h's file docstring for the full design.
+//
+// This file also hosts ProximalSwitchRestoration (the proximal feasibility
+// mode-switch, first of the feasibility-restoration trio) — see
+// proximal_restoration.h's file docstring for the full formulation and
+// citations. No solver wiring exists yet; this is the standalone component.
 // =============================================================================
 
 #include "tycho/detail/solvers/globalization/backtracking_line_search.h"
@@ -39,6 +44,7 @@
 #include "tycho/detail/solvers/globalization/merit_acceptance.h"
 #include "tycho/detail/solvers/globalization/modern_merit.h"
 #include "tycho/detail/solvers/globalization/monitored_governor.h"
+#include "tycho/detail/solvers/globalization/proximal_restoration.h"
 #include "tycho/detail/solvers/globalization/soc.h"
 #include "tycho/detail/solvers/globalization/switching_acceptance.h"
 #include "tycho/detail/solvers/globalization/watchdog.h"
@@ -1568,6 +1574,76 @@ void MonitoredBarrierGovernor::reset() {
 void MonitoredBarrierGovernor::append_diagnostics(PSIOPT::SolveResult &result) const {
     result.last_monotone_switches_ = last_monotone_switches_;
     result.last_monotone_iters_ = last_monotone_iters_;
+}
+
+// ============================================================================
+// ProximalSwitchRestoration — proximal feasibility mode-switch. See
+// proximal_restoration.h for the full formulation and the Uno/Ipopt source
+// citations; the code below transcribes the frozen-ζ snapshot (1), the
+// per-coordinate scaling and proximal term/gradient (2), and the near-
+// feasible + budget entry guard (3)/(4) documented there.
+// ============================================================================
+
+void ProximalSwitchRestoration::enter_restoration(const ProgressMeasures &reference,
+                                                  const Eigen::Ref<const Eigen::VectorXd> &primals,
+                                                  double mu) {
+    reference_ = reference;
+    x_r_ = primals;
+    // (1): ζ = resto_proximity_weight * sqrt(mu), set ONCE here from the mu
+    // live at this call — never re-derived from a later, live mu.
+    zeta_ = kRestoProximityWeight * std::sqrt(mu);
+    // (2): d_i = min(1, 1/|x_R_i|); diagonal_ = zeta * d_i^2.
+    d_.resize(x_r_.size());
+    for (Eigen::Index i = 0; i < x_r_.size(); ++i) {
+        d_[i] = std::min(1.0, 1.0 / std::abs(x_r_[i]));
+    }
+    diagonal_ = zeta_ * d_.array().square();
+    active_ = true;
+    ++entries_;
+}
+
+void ProximalSwitchRestoration::reset() {
+    active_ = false;
+    x_r_.resize(0);
+    d_.resize(0);
+    diagonal_.resize(0);
+    zeta_ = 0.0;
+    reference_ = ProgressMeasures{};
+    entries_ = 0;
+    iterations_in_mode_ = 0;
+}
+
+double ProximalSwitchRestoration::proximal_objective(
+    const Eigen::Ref<const Eigen::VectorXd> &primals) const {
+    // (2): P(x) = (ζ/2) * sum_i d_i^2 * (x_i - x_R_i)^2 = 0.5 * sum_i
+    // diagonal_[i] * (x_i - x_R_i)^2, using the cached diagonal_ = ζ*d_i^2.
+    const Eigen::VectorXd delta = primals - x_r_;
+    return 0.5 * diagonal_.dot(delta.cwiseProduct(delta));
+}
+
+void ProximalSwitchRestoration::add_proximal_gradient(
+    const Eigen::Ref<const Eigen::VectorXd> &primals, Eigen::Ref<Eigen::VectorXd> grad_out) const {
+    // (2): dP/dx_i = ζ * d_i^2 * (x_i - x_R_i) = diagonal_[i] * (x_i - x_R_i).
+    grad_out += diagonal_.cwiseProduct(primals - x_r_);
+}
+
+bool ProximalSwitchRestoration::entry_permitted(double constraint_violation,
+                                                const SolverContext &ctx) const {
+    // (3): near-feasible guard (Ipopt-adapted, single measure).
+    if (constraint_violation <= kNearFeasibleGuardFactor * ctx.settings_.econ_tol_) {
+        return false;
+    }
+    // (4): per-phase entry budget. entries_ >= max_feas_rest_ refuses (so
+    // max_feas_rest_ == 0 refuses unconditionally, before any entry).
+    if (entries_ >= ctx.settings_.max_feas_rest_) {
+        return false;
+    }
+    return true;
+}
+
+void ProximalSwitchRestoration::append_diagnostics(PSIOPT::SolveResult &result) const {
+    result.last_feas_rest_entries_ = entries_;
+    result.last_feas_rest_iters_ = iterations_in_mode_;
 }
 
 } // namespace tycho::solvers
