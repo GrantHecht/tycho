@@ -1,17 +1,24 @@
 """Coverage for PSIOPT's globalization-knob bindings.
 
-Exercises the Python surface for the five new PSIOPT.Settings fields
+Exercises the Python surface for the seven PSIOPT.Settings fields
 (``acceptance_strategy``, ``merit_penalty_rule``, ``max_soc``,
-``ls_extended_iters``, ``watchdog``) and the three new SolveResult
-diagnostics (``last_soc_steps``, ``last_watchdog_activations``,
-``last_recovery_depth_histogram``): property round-trips, per-field
-validation, invalid enum construction, and the classic-path-recovery
-combo guard in ``Settings::validate()`` (src/solvers/psiopt.cpp), which
-rejects ``max_soc``/``ls_extended_iters`` in combination with any of the
-three generic-path acceptance strategies (``merit``, ``funnel``,
-``filter``). Also covers enum-from-int coercion for ``funnel``/``filter``
-(``AcceptanceStrategies(2)``/``AcceptanceStrategies(3)``), which the
-corpus harness relies on.
+``ls_extended_iters``, ``watchdog``, ``barrier_governor``,
+``never_monotone``) and the five SolveResult diagnostics
+(``last_soc_steps``, ``last_watchdog_activations``,
+``last_recovery_depth_histogram``, ``last_monotone_switches``,
+``last_monotone_iters``): property round-trips, per-field validation,
+invalid enum construction, the classic-path-recovery combo guard in
+``Settings::validate()`` (src/solvers/psiopt.cpp), which rejects
+``max_soc``/``ls_extended_iters`` in combination with any of the three
+generic-path acceptance strategies (``merit``, ``funnel``, ``filter``),
+and the barrier-governor combo guard, which rejects ``funnel``/``filter``
+paired with ``barrier_governor=classic_adaptive`` (the default) unless
+``never_monotone`` is set, and rejects ``never_monotone=True`` paired with
+``barrier_governor=monitored`` as a direct contradiction. Also covers
+enum-from-int coercion for ``funnel``/``filter``
+(``AcceptanceStrategies(2)``/``AcceptanceStrategies(3)``) and for
+``monitored`` (``BarrierGovernors(1)``), which the corpus harness relies
+on.
 
 Also regression-tests the "component construction staleness" review
 finding: ``acceptance_``/``mechanism_``/``governor_``/``recovery_`` used to
@@ -22,6 +29,7 @@ by a later re-solve that did not retranscribe. See
 ``test_ComponentRebuildTakesEffectWithoutRetranscription`` below.
 """
 
+import math
 import unittest
 
 import _tychopy as ast
@@ -180,6 +188,151 @@ class test_WatchdogRoundTrip(unittest.TestCase):
         self.assertEqual(prob.optimizer.watchdog, False)
 
 
+class test_BarrierGovernorRoundTrip(unittest.TestCase):
+    def test_default_is_classic_adaptive(self):
+        prob = _make_problem()
+        self.assertEqual(
+            prob.optimizer.barrier_governor, solvs.BarrierGovernors.classic_adaptive
+        )
+
+    def test_round_trip(self):
+        prob = _make_problem()
+        prob.optimizer.barrier_governor = solvs.BarrierGovernors.monitored
+        self.assertEqual(
+            prob.optimizer.barrier_governor, solvs.BarrierGovernors.monitored
+        )
+        prob.optimizer.barrier_governor = solvs.BarrierGovernors.classic_adaptive
+        self.assertEqual(
+            prob.optimizer.barrier_governor, solvs.BarrierGovernors.classic_adaptive
+        )
+
+    def test_round_trip_via_int_coercion(self):
+        # The corpus harness selects the governor by raw int; enum-from-int
+        # coercion must resolve to the same member as the named attribute.
+        prob = _make_problem()
+        prob.optimizer.barrier_governor = solvs.BarrierGovernors(1)
+        self.assertEqual(
+            prob.optimizer.barrier_governor, solvs.BarrierGovernors.monitored
+        )
+
+
+class test_NeverMonotoneRoundTrip(unittest.TestCase):
+    def test_default_is_false(self):
+        prob = _make_problem()
+        self.assertEqual(prob.optimizer.never_monotone, False)
+
+    def test_round_trip(self):
+        prob = _make_problem()
+        prob.optimizer.never_monotone = True
+        self.assertEqual(prob.optimizer.never_monotone, True)
+        prob.optimizer.never_monotone = False
+        self.assertEqual(prob.optimizer.never_monotone, False)
+
+
+class test_BarrierGovernorComboGuard(unittest.TestCase):
+    """Settings::validate() rejects funnel/filter combined with
+    barrier_governor=classic_adaptive (the default) and never_monotone=False
+    -- those acceptance strategies are designed to operate above a monotone
+    barrier safeguard, which classic_adaptive does not provide.
+    never_monotone=True combined with barrier_governor=monitored is a direct
+    contradiction (monitored already provides the safeguard never_monotone
+    forfeits) and is rejected regardless of acceptance_strategy. Both
+    opt-ins (barrier_governor=monitored, never_monotone=True) individually
+    validate and solve with funnel/filter; classic_merit/merit are
+    unaffected by this guard in every combination.
+    """
+
+    def test_funnel_classic_adaptive_raises_before_any_iteration(self):
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.funnel
+        with self.assertRaises(ValueError) as ctx:
+            prob.optimize()
+        msg = str(ctx.exception)
+        self.assertIn("barrier_governor", msg)
+        self.assertIn("never_monotone", msg)
+        self.assertEqual(prob.optimizer.last_iter_num, 0)
+
+    def test_filter_classic_adaptive_raises_before_any_iteration(self):
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.filter
+        with self.assertRaises(ValueError) as ctx:
+            prob.optimize()
+        msg = str(ctx.exception)
+        self.assertIn("barrier_governor", msg)
+        self.assertIn("never_monotone", msg)
+        self.assertEqual(prob.optimizer.last_iter_num, 0)
+
+    def test_never_monotone_with_monitored_raises_before_any_iteration(self):
+        prob = _make_problem()
+        prob.optimizer.barrier_governor = solvs.BarrierGovernors.monitored
+        prob.optimizer.never_monotone = True
+        with self.assertRaises(ValueError) as ctx:
+            prob.optimize()
+        msg = str(ctx.exception)
+        self.assertIn("barrier_governor", msg)
+        self.assertIn("never_monotone", msg)
+        self.assertEqual(prob.optimizer.last_iter_num, 0)
+
+    def test_funnel_with_monitored_governor_validates_and_solves(self):
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.funnel
+        prob.optimizer.barrier_governor = solvs.BarrierGovernors.monitored
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+    def test_filter_with_never_monotone_validates_and_solves(self):
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.filter
+        prob.optimizer.never_monotone = True
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+    def test_classic_merit_unaffected_by_classic_adaptive_governor(self):
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.classic_merit
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+    def test_merit_unaffected_by_classic_adaptive_governor(self):
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.merit
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+    def test_classic_merit_with_monitored_governor_is_allowed_opt_in(self):
+        # classic_merit + monitored is allowed opt-in -- bit-identity is
+        # about the DEFAULT governor selection, not about excluding
+        # classic_merit from pairing with the monitored governor.
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.classic_merit
+        prob.optimizer.barrier_governor = solvs.BarrierGovernors.monitored
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+
+class test_MonotoneDiagnostics(unittest.TestCase):
+    """SolveResult.last_monotone_switches / last_monotone_iters
+    (MonitoredBarrierGovernor::append_diagnostics, collected once per phase
+    in PSIOPT::run_phase_sequence -- see psiopt.h for the sentinel
+    semantics). Sentinel -1/-1 unless barrier_governor is monitored.
+    """
+
+    def test_default_solve_reports_sentinels(self):
+        prob = _make_problem()
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(prob.optimizer.last_monotone_switches, -1)
+        self.assertEqual(prob.optimizer.last_monotone_iters, -1)
+
+    def test_monitored_solve_populates_diagnostics(self):
+        prob = _make_problem()
+        prob.optimizer.barrier_governor = solvs.BarrierGovernors.monitored
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertGreaterEqual(prob.optimizer.last_monotone_switches, 0)
+        self.assertGreaterEqual(prob.optimizer.last_monotone_iters, 0)
+
+
 class test_BadEnumValues(unittest.TestCase):
     """nanobind's enum constructor validates a raw int against the
     registered members and raises ValueError on mismatch (mirroring
@@ -194,6 +347,10 @@ class test_BadEnumValues(unittest.TestCase):
         with self.assertRaises(ValueError):
             solvs.MeritPenaltyRules(99)
 
+    def test_barrier_governor_invalid_raw_value_rejected(self):
+        with self.assertRaises(ValueError):
+            solvs.BarrierGovernors(99)
+
     def test_enum_property_rejects_raw_int_assignment(self):
         # Assigning a raw int to the enum-typed PROPERTY goes through
         # nanobind's convert path, which rejects non-member values with
@@ -204,6 +361,8 @@ class test_BadEnumValues(unittest.TestCase):
             opt.acceptance_strategy = 7
         with self.assertRaises(TypeError):
             opt.merit_penalty_rule = 7
+        with self.assertRaises(TypeError):
+            opt.barrier_governor = 7
 
 
 class test_AcceptanceMeritRecoveryComboGuard(unittest.TestCase):
@@ -296,9 +455,17 @@ class test_AcceptanceMeritRecoveryComboGuard(unittest.TestCase):
         self.assertEqual(prob.optimizer.last_iter_num, 0)
 
     def test_watchdog_alone_is_compatible_with_funnel(self):
+        # The watchdog link is compatible with either acceptance strategy --
+        # only SOC / extended backtracking are rejected in combination with
+        # acceptance_strategy=merit. funnel/filter also require an explicit
+        # barrier_governor/never_monotone opt-in (see
+        # test_BarrierGovernorRoundTrip / test_BarrierGovernorComboGuard
+        # below) -- never_monotone is used here, barrier_governor=monitored
+        # is used in the filter sibling below, to exercise both opt-ins.
         prob = _make_problem()
         prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.funnel
         prob.optimizer.watchdog = True
+        prob.optimizer.never_monotone = True
         flag = prob.optimize()
         self.assertEqual(flag, ast.solvers.ConvergenceFlags.CONVERGED)
 
@@ -306,6 +473,7 @@ class test_AcceptanceMeritRecoveryComboGuard(unittest.TestCase):
         prob = _make_problem()
         prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.filter
         prob.optimizer.watchdog = True
+        prob.optimizer.barrier_governor = solvs.BarrierGovernors.monitored
         flag = prob.optimize()
         self.assertEqual(flag, ast.solvers.ConvergenceFlags.CONVERGED)
 
@@ -322,6 +490,63 @@ class test_SolveDiagnostics(unittest.TestCase):
         self.assertEqual(len(hist), 4)
         for count in hist:
             self.assertIsInstance(count, int)
+
+
+class test_AcceptanceDiagnostics(unittest.TestCase):
+    """SolveResult.last_funnel_width / last_filter_size / last_filter_resets
+    (src/solvers/psiopt_globalization.cpp's FunnelAcceptance::
+    append_diagnostics / FilterAcceptance::append_diagnostics, collected once
+    per phase in PSIOPT::run_phase_sequence -- see psiopt.h for the sentinel
+    semantics). Each is -1.0/-1/-1 ("not applicable") unless the matching
+    acceptance strategy is selected; a solve with that strategy selected
+    populates its own field(s) and leaves the other strategy's field(s) at
+    their sentinel.
+    """
+
+    def test_funnel_solve_reports_width_filter_sentinel(self):
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.funnel
+        # funnel requires an explicit barrier_governor/never_monotone opt-in
+        # (Settings::validate()) -- exercise the barrier_governor=monitored
+        # flavor here (the filter sibling below uses never_monotone).
+        prob.optimizer.barrier_governor = solvs.BarrierGovernors.monitored
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertGreater(prob.optimizer.last_funnel_width, 0.0)
+        self.assertTrue(math.isfinite(prob.optimizer.last_funnel_width))
+        self.assertEqual(prob.optimizer.last_filter_size, -1)
+        self.assertEqual(prob.optimizer.last_filter_resets, -1)
+
+    def test_filter_solve_reports_size_funnel_sentinel(self):
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.filter
+        # never_monotone opt-in flavor (see the funnel sibling above).
+        prob.optimizer.never_monotone = True
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertGreaterEqual(prob.optimizer.last_filter_size, 0)
+        self.assertGreaterEqual(prob.optimizer.last_filter_resets, 0)
+        self.assertEqual(prob.optimizer.last_funnel_width, -1.0)
+
+    def test_default_solve_reports_all_sentinels(self):
+        prob = _make_problem()
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(prob.optimizer.last_funnel_width, -1.0)
+        self.assertEqual(prob.optimizer.last_filter_size, -1)
+        self.assertEqual(prob.optimizer.last_filter_resets, -1)
+
+    def test_merit_solve_reports_all_sentinels(self):
+        # classic_merit's generic-path sibling (merit) also has no
+        # funnel/filter state to report -- the default AcceptanceStrategy::
+        # append_diagnostics() no-op applies to it too.
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.merit
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(prob.optimizer.last_funnel_width, -1.0)
+        self.assertEqual(prob.optimizer.last_filter_size, -1)
+        self.assertEqual(prob.optimizer.last_filter_resets, -1)
 
 
 class test_ComponentRebuildTakesEffectWithoutRetranscription(unittest.TestCase):

@@ -121,6 +121,23 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
         "solve, as a 4-element list: [second-order correction, extended backtracking, "
         "watchdog, unresolved].");
 
+    BIND_RESULT_RO(obj, "last_funnel_width", last_funnel_width_,
+                   "Final funnel width (tau) at the end of the most recent solve's last phase. "
+                   "-1.0 unless acceptance_strategy is funnel, or if no acceptance test ran.");
+    BIND_RESULT_RO(obj, "last_filter_size", last_filter_size_,
+                   "Final number of stored filter (theta, phi) pairs at the end of the most "
+                   "recent solve's last phase. -1 unless acceptance_strategy is filter.");
+    BIND_RESULT_RO(obj, "last_filter_resets", last_filter_resets_,
+                   "Number of filter-reset-heuristic clears during the most recent solve's last "
+                   "phase. -1 unless acceptance_strategy is filter.");
+
+    BIND_RESULT_RO(obj, "last_monotone_switches", last_monotone_switches_,
+                   "Number of free -> monotone handoffs during the most recent solve's last "
+                   "phase. -1 unless barrier_governor is monitored.");
+    BIND_RESULT_RO(obj, "last_monotone_iters", last_monotone_iters_,
+                   "Number of iterations spent in monotone mode during the most recent solve's "
+                   "last phase. -1 unless barrier_governor is monitored.");
+
     BIND_SETTINGS_VALIDATED(obj, "obj_scale", obj_scale_, set_obj_scale, "");
     BIND_SETTINGS_VALIDATED(obj, "print_level", print_level_, set_print_level, "");
     obj.def("set_print_level", &PSIOPT::set_print_level);
@@ -239,6 +256,33 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
         "Enables the watchdog recovery heuristic, which tolerates a temporarily worse step "
         "after repeated rejections instead of immediately shrinking the step further. false "
         "(default) preserves the original behavior.");
+    BIND_SETTINGS_RW(
+        obj, "barrier_governor", barrier_governor_,
+        "Barrier-parameter governor: classic_adaptive (default) reproduces the original "
+        "PROBE/LOQO free-mode barrier update bit-for-bit; monitored composes a "
+        "classic_adaptive delegate with a KKT-error monitor that watches a sliding reference "
+        "window of recent iterations and, when free-mode progress is no longer a sufficient "
+        "decrease relative to that window, hands off to a monotone (Fiacco-McCormick) mode "
+        "with the barrier parameter initialized to 0.8 times the average complementarity and "
+        "held fixed until the barrier subproblem converges, then decreased; the monitor "
+        "re-enters free mode once progress against the (frozen) reference window resumes. "
+        "Each free->monotone handoff and each monotone barrier-parameter decrease resets the "
+        "acceptance strategy's per-barrier-subproblem state — the filter set is cleared and "
+        "the violation thresholds (and funnel width) are RE-DERIVED from the current "
+        "iterate's violation on the next acceptance test, exactly as a new barrier "
+        "subproblem re-bases them in Ipopt. The funnel/filter "
+        "acceptance strategies are designed to operate above a monotone barrier safeguard, "
+        "which classic_adaptive does not provide; validate() raises ValueError if they are "
+        "combined with classic_adaptive unless never_monotone is set. Any acceptance_strategy "
+        "may pair with monitored.");
+    BIND_SETTINGS_RW(
+        obj, "never_monotone", never_monotone_,
+        "Expert escape hatch, mirroring Ipopt's never-monotone-mode: explicitly accepts "
+        "running funnel/filter above barrier_governor=classic_adaptive without its monotone "
+        "safeguard, forfeiting that guard rather than switching to barrier_governor=monitored. "
+        "false (default). Contradictory with barrier_governor=monitored (which already "
+        "supplies the monotone fallback this knob opts out of) -- validate() raises ValueError "
+        "on that combination.");
 
     // --- QP solver ---
     BIND_SETTINGS_RW(obj, "force_qp_analysis", force_qp_analysis_, "");
@@ -318,6 +362,15 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     nb::enum_<MeritPenaltyRules>(m, "MeritPenaltyRules")
         .value("wmno", MeritPenaltyRules::wmno)
         .value("flexible", MeritPenaltyRules::flexible);
+    nb::enum_<BarrierGovernors>(m, "BarrierGovernors")
+        .value("classic_adaptive", BarrierGovernors::classic_adaptive,
+               "The classic PROBE/LOQO free-mode barrier update, unchanged -- the "
+               "bit-identical default.")
+        .value("monitored", BarrierGovernors::monitored,
+               "Free<->monotone monitored barrier governor: a KKT-error monitor hands off "
+               "to a Fiacco-McCormick monotone mode when free-mode progress stalls, then "
+               "re-enters free mode once progress resumes -- see the barrier_governor "
+               "property docstring for the full mechanism.");
     nb::enum_<PDStepStrategies>(m, "PDStepStrategies")
         .value("PrimSlackEq_Iq", PDStepStrategies::PrimSlackEq_Iq)
         .value("AllMinimum", PDStepStrategies::AllMinimum)

@@ -178,6 +178,8 @@ set(TYCHO_TEST_HEAVY_SOURCES
     solvers/test_switching_acceptance.cpp
     solvers/test_funnel_acceptance.cpp
     solvers/test_filter_acceptance.cpp
+    solvers/test_acceptance_diagnostics.cpp
+    solvers/test_monitored_governor.cpp
 )
 
 #-------------------------------------------------------------------------------

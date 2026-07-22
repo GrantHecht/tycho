@@ -17,9 +17,11 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "tycho/detail/solvers/globalization/acceptance_strategy.h"
+#include "tycho/detail/solvers/globalization/classic_adaptive_governor.h"
 #include "tycho/detail/solvers/globalization/filter_acceptance.h"
 #include "tycho/detail/solvers/globalization/funnel_acceptance.h"
 #include "tycho/detail/solvers/globalization/globalization_mechanism.h"
+#include "tycho/detail/solvers/globalization/monitored_governor.h"
 #include "tycho/detail/solvers/globalization/recovery_chain.h"
 #include "tycho/detail/solvers/globalization/solver_context.h"
 #include "tycho/detail/solvers/iterate_info.h"
@@ -36,12 +38,14 @@ namespace {
 
 using tycho::solvers::AcceptanceStrategies;
 using tycho::solvers::AcceptanceStrategy;
+using tycho::solvers::BarrierGovernors;
 using tycho::solvers::FilterAcceptance;
 using tycho::solvers::FunnelAcceptance;
 using tycho::solvers::GlobalizationMechanism;
 using tycho::solvers::IterateInfo;
 using tycho::solvers::kRecoveryDepthUnresolved;
 using tycho::solvers::KktSolverType;
+using tycho::solvers::MonitoredBarrierGovernor;
 using tycho::solvers::ProgressMeasures;
 using tycho::solvers::PSIOPT;
 using tycho::solvers::RecoveryChain;
@@ -258,6 +262,7 @@ TEST(RecoveryDispatchGate, ValidateStillRejectsMeritWithMaxSoc) {
 TEST(RecoveryDispatchGate, ValidateAcceptsFunnelWithWatchdog) {
     PSIOPT::Settings settings;
     settings.acceptance_strategy_ = AcceptanceStrategies::funnel;
+    settings.barrier_governor_ = BarrierGovernors::monitored;
     settings.watchdog_ = true;
     EXPECT_NO_THROW(settings.validate());
 }
@@ -265,7 +270,97 @@ TEST(RecoveryDispatchGate, ValidateAcceptsFunnelWithWatchdog) {
 TEST(RecoveryDispatchGate, ValidateAcceptsFilterWithWatchdog) {
     PSIOPT::Settings settings;
     settings.acceptance_strategy_ = AcceptanceStrategies::filter;
+    settings.never_monotone_ = true;
     settings.watchdog_ = true;
+    EXPECT_NO_THROW(settings.validate());
+}
+
+// Settings::validate()'s barrier_governor/never_monotone truth table (see the
+// guard's comment in psiopt.cpp): funnel/filter with barrier_governor=
+// classic_adaptive (the default) and never_monotone=false rejects; either
+// opt-in (barrier_governor=monitored, or never_monotone=true) accepts; the two
+// opt-ins together are a direct contradiction and reject; classic_merit/merit
+// are unaffected in every combination.
+
+TEST(RecoveryDispatchGate, ValidateRejectsFunnelWithClassicAdaptiveGovernor) {
+    PSIOPT::Settings settings;
+    settings.acceptance_strategy_ = AcceptanceStrategies::funnel;
+    settings.barrier_governor_ = BarrierGovernors::classic_adaptive;
+    settings.never_monotone_ = false;
+    EXPECT_THROW(settings.validate(), std::invalid_argument);
+}
+
+TEST(RecoveryDispatchGate, ValidateRejectsFilterWithClassicAdaptiveGovernor) {
+    PSIOPT::Settings settings;
+    settings.acceptance_strategy_ = AcceptanceStrategies::filter;
+    settings.barrier_governor_ = BarrierGovernors::classic_adaptive;
+    settings.never_monotone_ = false;
+    EXPECT_THROW(settings.validate(), std::invalid_argument);
+}
+
+TEST(RecoveryDispatchGate, ValidateAcceptsFunnelWithMonitoredGovernor) {
+    PSIOPT::Settings settings;
+    settings.acceptance_strategy_ = AcceptanceStrategies::funnel;
+    settings.barrier_governor_ = BarrierGovernors::monitored;
+    EXPECT_NO_THROW(settings.validate());
+}
+
+TEST(RecoveryDispatchGate, ValidateAcceptsFilterWithMonitoredGovernor) {
+    PSIOPT::Settings settings;
+    settings.acceptance_strategy_ = AcceptanceStrategies::filter;
+    settings.barrier_governor_ = BarrierGovernors::monitored;
+    EXPECT_NO_THROW(settings.validate());
+}
+
+TEST(RecoveryDispatchGate, ValidateAcceptsFunnelWithNeverMonotone) {
+    PSIOPT::Settings settings;
+    settings.acceptance_strategy_ = AcceptanceStrategies::funnel;
+    settings.barrier_governor_ = BarrierGovernors::classic_adaptive;
+    settings.never_monotone_ = true;
+    EXPECT_NO_THROW(settings.validate());
+}
+
+TEST(RecoveryDispatchGate, ValidateAcceptsFilterWithNeverMonotone) {
+    PSIOPT::Settings settings;
+    settings.acceptance_strategy_ = AcceptanceStrategies::filter;
+    settings.barrier_governor_ = BarrierGovernors::classic_adaptive;
+    settings.never_monotone_ = true;
+    EXPECT_NO_THROW(settings.validate());
+}
+
+TEST(RecoveryDispatchGate, ValidateRejectsNeverMonotoneWithMonitoredGovernor) {
+    PSIOPT::Settings settings;
+    settings.acceptance_strategy_ = AcceptanceStrategies::classic_merit;
+    settings.barrier_governor_ = BarrierGovernors::monitored;
+    settings.never_monotone_ = true;
+    EXPECT_THROW(settings.validate(), std::invalid_argument);
+}
+
+TEST(RecoveryDispatchGate, ValidateAcceptsClassicMeritWithClassicAdaptiveGovernor) {
+    PSIOPT::Settings settings;
+    settings.acceptance_strategy_ = AcceptanceStrategies::classic_merit;
+    settings.barrier_governor_ = BarrierGovernors::classic_adaptive;
+    settings.never_monotone_ = false;
+    EXPECT_NO_THROW(settings.validate());
+}
+
+// merit is a generic-path strategy like funnel/filter but is explicitly
+// unaffected by the monotone-safeguard guard -- only funnel/filter are gated.
+TEST(RecoveryDispatchGate, ValidateAcceptsMeritWithClassicAdaptiveGovernor) {
+    PSIOPT::Settings settings;
+    settings.acceptance_strategy_ = AcceptanceStrategies::merit;
+    settings.barrier_governor_ = BarrierGovernors::classic_adaptive;
+    settings.never_monotone_ = false;
+    EXPECT_NO_THROW(settings.validate());
+}
+
+// classic_merit + monitored is allowed opt-in (bit-identity is about the
+// DEFAULT governor selection, not about excluding classic_merit from pairing
+// with the monitored governor).
+TEST(RecoveryDispatchGate, ValidateAcceptsClassicMeritWithMonitoredGovernor) {
+    PSIOPT::Settings settings;
+    settings.acceptance_strategy_ = AcceptanceStrategies::classic_merit;
+    settings.barrier_governor_ = BarrierGovernors::monitored;
     EXPECT_NO_THROW(settings.validate());
 }
 
@@ -300,4 +395,22 @@ TEST(RecoveryDispatchGate, FilterSelectionConstructsFilterAcceptance) {
     tycho::solvers::AcceptanceStrategy *acceptance = solver.acceptance_.get();
     ASSERT_NE(dynamic_cast<tycho::solvers::FilterAcceptance *>(acceptance), nullptr);
     EXPECT_FALSE(acceptance->drives_classic_path());
+}
+
+// Settings::barrier_governor_ = monitored must construct MonitoredBarrierGovernor
+// (the default, classic_adaptive, constructs ClassicAdaptiveGovernor -- covered
+// implicitly by every other test in this file, which never touches
+// barrier_governor_ and still solves/validates against the classic governor).
+//
+// Test access: same pattern as the funnel/filter construction tests above --
+// calls the private rebuild_globalization_components() and reads the private
+// governor_ member, so it is declared as a friend in psiopt.h and lives at
+// global scope (see the comment above for why).
+TEST(RecoveryDispatchGate, MonitoredSelectionConstructsMonitoredGovernor) {
+    tycho::solvers::PSIOPT solver;
+    solver.settings().barrier_governor_ = tycho::solvers::BarrierGovernors::monitored;
+    solver.rebuild_globalization_components();
+    tycho::solvers::BarrierGovernor *governor = solver.governor_.get();
+    ASSERT_NE(dynamic_cast<tycho::solvers::MonitoredBarrierGovernor *>(governor), nullptr);
+    EXPECT_FALSE(governor->in_monotone_mode());
 }

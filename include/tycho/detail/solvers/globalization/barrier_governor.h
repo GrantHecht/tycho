@@ -3,17 +3,15 @@
 // =============================================================================
 //
 // Part of the globalization component extraction: BarrierGovernor is the
-// free<->monotone barrier-update state machine. This header ships an
-// interface plus a stub implementation that always reports "free" (the
-// LOQO/PROBE oracles are untouched); a future free<->monotone barrier
-// governor implements the real state machine.
+// free<->monotone barrier-update state machine interface. Two
+// implementations ship: ClassicAdaptiveGovernor (verbatim today's
+// PROBE/LOQO free-mode oracles; always reports in_monotone_mode() ==
+// false) and MonitoredBarrierGovernor (monitored_governor.h — the
+// free<->monotone state machine: KKT-error monitor, monotone
+// Fiacco-McCormick fallback, re-entry), selected via
+// Settings::barrier_governor_.
 //
-// This file: pure interface declaration, no implementation. The
-// implementation that ships alongside it (ClassicAdaptiveGovernor, not part
-// of this file) is verbatim today's PROBE/LOQO block (psiopt.cpp:1310-1340)
-// and always reports in_monotone_mode() == false (the default below). A
-// future free<->monotone barrier governor is what actually implements the
-// free<->monotone switch this interface exists to support.
+// This file: pure interface declaration, no implementation.
 //
 // Ownership rule: a BarrierGovernor holds NO solver state (no persistent mu_
 // member, etc.) — mu is always passed in (mu_in) and returned, never cached.
@@ -27,6 +25,7 @@
 #include <Eigen/Core>
 
 #include "tycho/detail/solvers/globalization/solver_context.h"
+#include "tycho/detail/solvers/iterate_info.h"
 // PSIOPT::BarrierModes requires the complete PSIOPT class; see
 // acceptance_strategy.h's include note for why this is a plain,
 // non-circular include (psiopt.h does not include this directory back).
@@ -89,20 +88,53 @@ class BarrierGovernor {
     // Returns the new (already-clamped) mu; barr_obj is an out-parameter
     // (today's barr_obj local, set by the common tail's barrier_objective()
     // call).
+    //
+    // `current` is the in-progress iteration's IterateInfo whose residual
+    // fields (kkt_inf_/econ_inf_/icon_inf_/barr_inf_) were filled by this
+    // iteration's convergence check — it is NOT yet in the solver's iteration
+    // history at this point in the loop (it is re-appended after the line
+    // search), which is exactly why it is passed explicitly. A monitored
+    // free<->monotone governor reads these residuals to decide the
+    // free<->monotone switch; the classic free-mode oracles ignore it
+    // entirely.
+    //
+    // `mu_event` is an out-signal (the caller passes it initialized to false):
+    // an implementation sets it true when its monotone mode begins a new barrier
+    // subproblem with a fresh barrier parameter, which is the acceptance
+    // strategy's per-barrier-subproblem reset trigger (the caller clears the
+    // acceptance filter/funnel before the iteration's line search runs). The
+    // classic free-mode oracles never set it, so on the default path the
+    // caller's reset branch is dead and the solve stays bit-identical.
     virtual double update_barrier(PSIOPT::BarrierModes barmode, double mu_in, double avgcomp,
                                   double mincomp, Eigen::VectorXd &XSL, Eigen::VectorXd &RHS,
                                   Eigen::VectorXd &DXSL, Eigen::VectorXd &Temp,
                                   GlobalizationMechanism &mechanism, SolverContext &ctx,
-                                  double &barr_obj) = 0;
+                                  double &barr_obj, const IterateInfo &current,
+                                  bool &mu_event) = 0;
 
-    // Free vs. monotone mode query. No implementation shipped today has a
-    // monotone mode, so every implementation reports "free" unconditionally;
-    // a future free<->monotone barrier governor overrides this once the
-    // free<->monotone state machine exists.
+    // Free vs. monotone mode query. ClassicAdaptiveGovernor keeps this
+    // default (always free); MonitoredBarrierGovernor overrides it to report
+    // its live state-machine mode.
     virtual bool in_monotone_mode() const { return false; }
 
     // μ-event / phase-change reset hook — see the ownership-rule note above.
     virtual void reset() = 0;
+
+    // Solver-level observability hook: writes this governor's diagnostic
+    // state (if any) into `result`. Mirrors AcceptanceStrategy::
+    // append_diagnostics() (acceptance_strategy.h) — same call site
+    // (run_phase_sequence(), once per phase, right after that phase's
+    // alg_impl() returns and before the NEXT phase's reset()), same
+    // write-only contract, same last-phase-wins semantics for a multi-phase
+    // solve. The default body is a no-op, which is exactly right for
+    // ClassicAdaptiveGovernor (it has no monotone-mode bookkeeping to
+    // report): the classic path stays bit-identical because this hook never
+    // touches `result` unless an implementation overrides it.
+    // MonitoredBarrierGovernor overrides this to report its
+    // last_monotone_switches_/last_monotone_iters_ counters — see
+    // monitored_governor.h and the corresponding SolveResult fields in
+    // psiopt.h.
+    virtual void append_diagnostics(PSIOPT::SolveResult &result) const { (void)result; }
 };
 
 } // namespace tycho::solvers

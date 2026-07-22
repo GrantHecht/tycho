@@ -66,4 +66,20 @@ enum class AcceptanceStrategies { classic_merit = 0, merit = 1, funnel = 2, filt
 //              for at least one π in the interval (Eqs 2.1, 3.9, 3.10).
 enum class MeritPenaltyRules { wmno = 0, flexible = 1 };
 
+// Barrier-parameter governor selector (PSIOPT::Settings::barrier_governor_).
+// Declared here alongside AcceptanceStrategies/MeritPenaltyRules — for the
+// same reason: both PSIOPT::Settings (psiopt.h) and the governor components
+// (globalization/classic_adaptive_governor.h, globalization/
+// monitored_governor.h) need it without a circular include.
+//   classic_adaptive — the classic PROBE/LOQO free-mode barrier update
+//                      (ClassicAdaptiveGovernor); the bit-identical default.
+//   monitored        — the free<->monotone monitored governor
+//                      (MonitoredBarrierGovernor): a KKT-error monitor hands
+//                      off to a Fiacco-McCormick monotone mode when free-mode
+//                      progress stalls, then re-enters free mode once
+//                      progress resumes. Composes a ClassicAdaptiveGovernor
+//                      as its free-mode delegate, so any acceptance strategy
+//                      may pair with it.
+enum class BarrierGovernors { classic_adaptive = 0, monitored = 1 };
+
 } // namespace tycho::solvers

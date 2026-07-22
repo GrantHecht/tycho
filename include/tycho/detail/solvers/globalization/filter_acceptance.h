@@ -273,6 +273,13 @@ class FilterAcceptance final : public SwitchingAcceptance {
     int successive_filter_rejections() const { return successive_filter_rejections_; }
     int filter_resets() const { return n_filter_resets_; }
 
+    // Solver-level observability hook (see AcceptanceStrategy::
+    // append_diagnostics): reports filter_size() into
+    // SolveResult::last_filter_size_ and filter_resets() (n_filter_resets_,
+    // the per-phase reset-heuristic total — see (4) and reset_bounds()) into
+    // SolveResult::last_filter_resets_.
+    void append_diagnostics(PSIOPT::SolveResult &result) const override;
+
   protected:
     // --- SwitchingAcceptance hooks (see the file-top formulation) ---
     // Start the phase with an empty filter (Ipopt Reset; no θ_max seed).

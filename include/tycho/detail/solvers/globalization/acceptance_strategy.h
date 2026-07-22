@@ -106,6 +106,25 @@ class AcceptanceStrategy {
     virtual void notify_switch_to_feasibility(const ProgressMeasures &) {}
     virtual void notify_switch_to_optimality(const ProgressMeasures &) {}
 
+    // Solver-level observability hook: writes this strategy's diagnostic
+    // state (if any) into `result`. Called by run_phase_sequence() once per
+    // phase, right after that phase's alg_impl() returns and before the NEXT
+    // phase's reset() (see the call site's comment in psiopt.cpp) — so a
+    // multi-phase solve (e.g. solve_optimize()) ends up with the LAST
+    // phase's values, overwritten in phase order like every other SolveResult
+    // field. WRITE-ONLY on purpose: this hook never reads `result` or any
+    // other solver state, so it cannot influence control flow — a strategy
+    // that changed behavior based on prior diagnostics would need a real
+    // feedback path, not this one. The default body is a no-op, which is
+    // exactly right for ClassicMeritAcceptance and ModernMeritAcceptance
+    // (neither has funnel/filter-style state to report): the classic path
+    // stays bit-identical because this hook never touches `result` unless a
+    // strategy overrides it. FunnelAcceptance and FilterAcceptance override
+    // this to report their width/size (+ reset count for the filter) — see
+    // funnel_acceptance.h / filter_acceptance.h and the corresponding
+    // SolveResult fields in psiopt.h.
+    virtual void append_diagnostics(PSIOPT::SolveResult &result) const { (void)result; }
+
     // --- Classic fused entry point ---
     // Signature mirrors today's private PSIOPT::ls_impl dispatcher exactly
     // (psiopt.h:530-533) — NOT the private per-variant

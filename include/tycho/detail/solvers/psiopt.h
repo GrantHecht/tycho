@@ -50,6 +50,7 @@
 // "Test access" comment in the PSIOPT class body for why this exists.
 class RecoveryDispatchGate_FunnelSelectionConstructsFunnelAcceptance_Test;
 class RecoveryDispatchGate_FilterSelectionConstructsFilterAcceptance_Test;
+class RecoveryDispatchGate_MonitoredSelectionConstructsMonitoredGovernor_Test;
 
 namespace tycho::solvers {
 
@@ -201,6 +202,25 @@ class PSIOPT {
         AcceptanceStrategies acceptance_strategy_ = AcceptanceStrategies::classic_merit;
         MeritPenaltyRules merit_penalty_rule_ = MeritPenaltyRules::wmno;
 
+        // --- Barrier-parameter governor (opt-in monitored free<->monotone) ---
+        // classic_adaptive (default) reproduces today's PROBE/LOQO free-mode
+        // barrier update bit-identically. monitored selects the free<->monotone
+        // MonitoredBarrierGovernor, which composes a ClassicAdaptiveGovernor as
+        // its free-mode delegate — so it may pair with any acceptance_strategy_.
+        // The funnel/filter acceptance strategies are designed to operate above
+        // a monotone barrier safeguard; validate() rejects them combined with
+        // classic_adaptive unless never_monotone_ is explicitly set (see
+        // validate()'s guard below). Enum lives in psiopt_fwd.h.
+        BarrierGovernors barrier_governor_ = BarrierGovernors::classic_adaptive;
+
+        // Expert escape hatch mirroring Ipopt's never-monotone-mode: explicitly
+        // accepts running funnel/filter above the classic_adaptive (free-only)
+        // barrier governor without its monotone safeguard. false (default).
+        // Contradictory when combined with barrier_governor_ == monitored (the
+        // monitored governor already provides the monotone fallback) — validate()
+        // rejects that combination.
+        bool never_monotone_ = false;
+
         // --- Barrier parameters ---
         double init_mu_ = 0.001;
         double max_mu_ = 100.0;
@@ -328,6 +348,66 @@ class PSIOPT {
         // solve alongside the other accumulators.
         std::array<int, 4> recovery_depth_histogram_{};
 
+        // Final funnel width (τ) reported by FunnelAcceptance::
+        // append_diagnostics() (globalization/funnel_acceptance.h) at the end
+        // of the most recent solve's LAST PHASE. Sentinel -1.0 when the
+        // selected acceptance strategy does not report this field (every
+        // strategy except funnel — the default AcceptanceStrategy::
+        // append_diagnostics() no-op leaves this untouched). A multi-phase
+        // call (e.g. solve_optimize()) reports only the LAST phase's value,
+        // not a running total across phases — see the collection point in
+        // run_phase_sequence(). Reset per solve alongside the other
+        // accumulators; NOT touched by AcceptanceStrategy::reset() (the
+        // per-phase hook), only by reset_accumulators() (the per-solve hook).
+        // Sentinel -1.0 reports when no acceptance test ran in the selected
+        // phase (e.g. the phase converged at its initial iterate).
+        double last_funnel_width_ = -1.0;
+
+        // Final filter size (number of stored (θ, φ) pairs, Filter::size())
+        // reported by FilterAcceptance::append_diagnostics()
+        // (globalization/filter_acceptance.h) at the end of the most recent
+        // solve's LAST PHASE. Sentinel -1 when the selected acceptance
+        // strategy is not filter. Same last-phase-only semantics as
+        // last_funnel_width_ above.
+        int last_filter_size_ = -1;
+
+        // Total number of filter-reset-heuristic clears
+        // (FilterAcceptance::filter_resets(), Ipopt n_filter_resets_ — see
+        // filter_acceptance.h rule (4)) reported at the end of the most
+        // recent solve's LAST PHASE. Sentinel -1 when the selected acceptance
+        // strategy is not filter. PER-PHASE semantics: the counter is
+        // cleared by FilterAcceptance::reset_bounds() at every phase
+        // boundary (via AcceptanceStrategy::reset(), called at the top of
+        // each run_phase_sequence() loop iteration), and append_diagnostics()
+        // is collected once per phase right before that reset runs for the
+        // NEXT phase — so a multi-phase call (e.g. solve_optimize()) reports
+        // only the LAST phase's total resets, not a running total across
+        // phases within the same solve() call. Under barrier_governor_ ==
+        // monitored, each mu-event ALSO clears the counter (the acceptance
+        // strategy is reset per barrier subproblem), so this reports resets
+        // since the last mu-event of the last phase — the Ipopt-faithful
+        // per-subproblem scope, not a whole-phase total.
+        int last_filter_resets_ = -1;
+
+        // Number of free -> monotone handoffs during the most recent solve's
+        // LAST PHASE, reported by MonitoredBarrierGovernor::append_diagnostics()
+        // (globalization/monitored_governor.h). Sentinel -1 when the selected
+        // barrier_governor_ is not monitored. PER-PHASE semantics matching
+        // last_filter_resets_ above: MonitoredBarrierGovernor::reset() clears
+        // its own last_monotone_switches_/last_monotone_iters_ counters at
+        // every phase boundary (via BarrierGovernor::reset(), called at the top
+        // of each run_phase_sequence() loop iteration), and
+        // append_diagnostics() is collected once per phase right before that
+        // reset runs for the NEXT phase — so a multi-phase call reports only
+        // the LAST phase's totals, not a running total across phases.
+        int last_monotone_switches_ = -1;
+
+        // Number of iterations spent in monotone mode during the most recent
+        // solve's LAST PHASE, reported by MonitoredBarrierGovernor::
+        // append_diagnostics(). Sentinel -1 when the selected barrier_governor_
+        // is not monitored. Same per-phase semantics as last_monotone_switches_.
+        int last_monotone_iters_ = -1;
+
         // T6 (dead-status fix): the last non-Success status observed from
         // kkt_sol_.info() by factor_impl() within the CURRENT phase (alg_impl
         // resets it on entry, so print_exit_stats reports per-phase status).
@@ -356,6 +436,11 @@ class PSIOPT {
             soc_steps_taken_ = 0;
             watchdog_activations_ = 0;
             recovery_depth_histogram_.fill(0);
+            last_funnel_width_ = -1.0;
+            last_filter_size_ = -1;
+            last_filter_resets_ = -1;
+            last_monotone_switches_ = -1;
+            last_monotone_iters_ = -1;
         }
     };
 
@@ -494,6 +579,7 @@ class PSIOPT {
     // exposing a public rebuild hook.
     friend class ::RecoveryDispatchGate_FunnelSelectionConstructsFunnelAcceptance_Test;
     friend class ::RecoveryDispatchGate_FilterSelectionConstructsFilterAcceptance_Test;
+    friend class ::RecoveryDispatchGate_MonitoredSelectionConstructsMonitoredGovernor_Test;
 
     Settings settings_;
     SolveResult result_;

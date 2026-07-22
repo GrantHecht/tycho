@@ -39,6 +39,7 @@
 #include "tycho/detail/solvers/globalization/backtracking_line_search.h"
 #include "tycho/detail/solvers/globalization/barrier_governor.h"
 #include "tycho/detail/solvers/globalization/classic_adaptive_governor.h"
+#include "tycho/detail/solvers/globalization/monitored_governor.h"
 #include "tycho/detail/solvers/globalization/merit_acceptance.h"
 #include "tycho/detail/solvers/globalization/modern_merit.h"
 #include "tycho/detail/solvers/globalization/funnel_acceptance.h"
@@ -535,6 +536,34 @@ void tycho::solvers::PSIOPT::Settings::validate() const {
             "acceptance strategy (use acceptance_strategy=classic_merit to combine them)",
             acceptance_strategy_name(acceptance_strategy_), max_soc_, ls_extended_iters_));
 
+    // funnel/filter are designed to operate above a monotone barrier safeguard
+    // (this is a factual dependency statement, not a convergence-guarantee
+    // claim — neither strategy is proven to converge with or without it).
+    // classic_adaptive (the default governor) is free-mode only, so pairing it
+    // with funnel/filter silently drops that safeguard unless the user
+    // explicitly opts in via never_monotone. classic_merit/merit are
+    // unaffected by this guard in every combination (bit-identity for the
+    // default path; merit + monitored is allowed opt-in, same as merit +
+    // classic_adaptive).
+    if ((acceptance_strategy_ == AcceptanceStrategies::funnel ||
+         acceptance_strategy_ == AcceptanceStrategies::filter) &&
+        barrier_governor_ == BarrierGovernors::classic_adaptive && !never_monotone_)
+        throw std::invalid_argument(fmt::format(
+            "acceptance_strategy={} is designed to operate above the monotone barrier "
+            "safeguard, which barrier_governor=classic_adaptive (the default) does not "
+            "provide: set barrier_governor=monitored, or set never_monotone=True to "
+            "explicitly accept adaptive-only operation",
+            acceptance_strategy_name(acceptance_strategy_)));
+
+    // never_monotone is an expert escape that explicitly accepts running
+    // WITHOUT a monotone safeguard; barrier_governor=monitored already
+    // provides one, so the combination is a direct contradiction.
+    if (never_monotone_ && barrier_governor_ == BarrierGovernors::monitored)
+        throw std::invalid_argument(
+            "never_monotone=True is contradictory with barrier_governor=monitored: the "
+            "monitored governor already provides the monotone safeguard never_monotone "
+            "opts out of; set barrier_governor=classic_adaptive or never_monotone=False");
+
     // --- Convergence tolerances ---
     pos_finite(kkt_tol_, "kkt_tol");
     pos_finite(econ_tol_, "econ_tol");
@@ -970,12 +999,23 @@ void tycho::solvers::PSIOPT::rebuild_globalization_components() {
     // it passes to compute_step / max_primal_dual_step.
     this->mechanism_ = std::make_unique<BacktrackingLineSearch>();
 
-    // The barrier-parameter governor. Stateless (holds NO solver
-    // state per BarrierGovernor's ownership rule) — every update_barrier() call
-    // receives the live SolverContext and the GlobalizationMechanism as explicit
+    // The barrier-parameter governor. Default (classic_adaptive) builds
+    // ClassicAdaptiveGovernor, which is stateless (holds NO solver state per
+    // BarrierGovernor's ownership rule) — every update_barrier() call receives
+    // the live SolverContext and the GlobalizationMechanism as explicit
     // parameters — so it is constructed with no context here; alg_impl builds
-    // the SolverContext view and passes *mechanism_ to update_barrier.
-    this->governor_ = std::make_unique<ClassicAdaptiveGovernor>();
+    // the SolverContext view and passes *mechanism_ to update_barrier. Opting
+    // in (barrier_governor_ == monitored) builds MonitoredBarrierGovernor
+    // instead, default-constructed (it composes its own ClassicAdaptiveGovernor
+    // free-mode delegate internally — see monitored_governor.h); it carries its
+    // own monotone-mode bookkeeping (the KKT-error reference window, current
+    // mode, current monotone mu) as private state, cleared by reset() at each
+    // phase boundary like every other governor's phase-change hook.
+    if (this->settings_.barrier_governor_ == BarrierGovernors::monitored) {
+        this->governor_ = std::make_unique<MonitoredBarrierGovernor>();
+    } else {
+        this->governor_ = std::make_unique<ClassicAdaptiveGovernor>();
+    }
 
     // The post-rejection recovery chain. Every concrete implementation
     // (NoopRecovery, SocRecovery, ExtendedBacktrackRecovery, ChainedRecovery)
@@ -1467,10 +1507,31 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // are inequality constraints (barrier terms). The PROBE predictor's KKT
         // solve moves INTO the governor; the REAL step solve below (a distinct
         // second solve) stays here. avgcomp/mincomp feed the mu oracles;
-        // *mechanism_ lets the PROBE predictor reuse the step-scaling.
+        // *mechanism_ lets the PROBE predictor reuse the step-scaling. Citer
+        // (this iterate's residuals, filled by the convergence check above) was
+        // popped back off `iters` at the continuing-path pop above -- it is not
+        // re-appended until after the line search below -- so it is passed
+        // explicitly rather than through `iters` (whose back(), here, would be
+        // the PREVIOUS iterate, and is empty outright on iteration 0); a
+        // monitored free<->monotone governor reads Citer's residuals to decide
+        // the free<->monotone switch. `mu_event` is its out-signal, initialized
+        // false each iteration so the classic governor (which never writes it)
+        // leaves the reset below dead — bit-identical on the default path.
+        bool mu_event = false;
         if (this->inequal_cons_ > 0) {
             mu = governor_->update_barrier(barmode, mu, avgcomp, mincomp, XSL, RHS, DXSL, Temp,
-                                           *mechanism_, ctx, barr_obj);
+                                           *mechanism_, ctx, barr_obj, Citer, mu_event);
+        }
+
+        // Per-barrier-subproblem acceptance reset: when the governor's monotone
+        // mode begins a new barrier subproblem (fresh mu), the acceptance
+        // strategy's filter/funnel must clear. Placed here — after update_barrier
+        // (complementarity -> factor -> update_barrier) and BEFORE the real step
+        // solve and line search below — so the reset lands before this
+        // iteration's line search consumes the acceptance strategy. Dead on the
+        // classic path (mu_event stays false there).
+        if (mu_event) {
+            this->acceptance_->reset();
         }
 
         // The REAL step solve (distinct from the PROBE predictor solve, which
@@ -1872,6 +1933,24 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
 
         XSL = this->alg_impl(step.alg_mode_, step.bar_mode_, step.ls_mode_, settings_.obj_scale_,
                              settings_.init_mu_, XSL);
+
+        // Solver-level observability: collect this phase's acceptance-
+        // strategy diagnostics (funnel width / filter size+resets — see
+        // AcceptanceStrategy::append_diagnostics()) right after alg_impl()
+        // returns and BEFORE the next loop iteration's acceptance_->reset()
+        // above clears any per-phase state (e.g. FilterAcceptance's reset
+        // counters). A multi-phase call therefore ends with the LAST phase's
+        // values, like every other SolveResult field alg_impl overwrites.
+        // The default no-op body means this is write-only-neutral on the
+        // classic/merit paths.
+        this->acceptance_->append_diagnostics(this->result_);
+
+        // Same collection point, same last-phase-wins semantics, for the
+        // barrier governor's own diagnostics (monotone-mode switch/iteration
+        // counts — see BarrierGovernor::append_diagnostics()). The default
+        // no-op body means this is write-only-neutral unless
+        // barrier_governor=monitored is selected.
+        this->governor_->append_diagnostics(this->result_);
 
         if (settings_.print_level_ < 2)
             print_finished(step.label_);
