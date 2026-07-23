@@ -42,6 +42,7 @@
 #include "tycho/detail/solvers/globalization/feasibility_switch_recovery.h"
 #include "tycho/detail/solvers/globalization/filter_acceptance.h"
 #include "tycho/detail/solvers/globalization/funnel_acceptance.h"
+#include "tycho/detail/solvers/globalization/l1_restoration.h"
 #include "tycho/detail/solvers/globalization/merit_acceptance.h"
 #include "tycho/detail/solvers/globalization/modern_merit.h"
 #include "tycho/detail/solvers/globalization/monitored_governor.h"
@@ -2029,6 +2030,310 @@ bool ProximalSwitchRestoration::entry_permitted(double constraint_violation,
 void ProximalSwitchRestoration::append_diagnostics(PSIOPT::SolveResult &result) const {
     result.last_feas_rest_entries_ = entries_;
     result.last_feas_rest_iters_ = iterations_in_mode_;
+}
+
+// ============================================================================
+// NestedL1Restoration — condensed l1 elastic feasibility restoration. See
+// l1_restoration.h for the full formulation, the pinned Ipopt citations per
+// formula, and the disclosed design decisions. The code below transcribes the
+// closed-form slack init (4), the per-iteration condensation (pivot + r̃) and
+// step recovery (5), the live-μ proximal objective/gradient/diagonal (2)/(3),
+// and the fraction-to-boundary caps documented there.
+// ============================================================================
+
+void NestedL1Restoration::enter_restoration(const ProgressMeasures &reference,
+                                            const Eigen::Ref<const Eigen::VectorXd> &primals,
+                                            double mu) {
+    // Guard-only entry: the nested solver path enters through enter_nested();
+    // this records just the reference/center and the entry counters so the
+    // budget guard and reference() accessor work if this base entry is used.
+    (void)mu;
+    reference_ = reference;
+    x_r_ = primals;
+    active_ = true;
+    ++entries_;
+}
+
+void NestedL1Restoration::reset() {
+    active_ = false;
+    reference_ = ProgressMeasures{};
+    x_r_.resize(0);
+    dr2_.resize(0);
+    resto_mu_ = 0.0;
+    n_e_.resize(0);
+    p_e_.resize(0);
+    z_ne_.resize(0);
+    z_pe_.resize(0);
+    n_i_.resize(0);
+    p_i_.resize(0);
+    z_ni_.resize(0);
+    z_pi_.resize(0);
+    dn_e_.resize(0);
+    dp_e_.resize(0);
+    dzn_e_.resize(0);
+    dzp_e_.resize(0);
+    dn_i_.resize(0);
+    dp_i_.resize(0);
+    dzn_i_.resize(0);
+    dzp_i_.resize(0);
+    e_pivots_.resize(0);
+    i_pivots_.resize(0);
+    entries_ = 0;
+    iterations_in_mode_ = 0;
+}
+
+double
+NestedL1Restoration::proximal_objective(const Eigen::Ref<const Eigen::VectorXd> &primals) const {
+    (void)primals;
+    throw std::logic_error("NestedL1Restoration does not use the frozen-proximal-coefficient "
+                           "objective surface; the live-mu nested_objective is used instead");
+}
+
+void NestedL1Restoration::add_proximal_gradient(const Eigen::Ref<const Eigen::VectorXd> &primals,
+                                                Eigen::Ref<Eigen::VectorXd> grad_out) const {
+    (void)primals;
+    (void)grad_out;
+    throw std::logic_error("NestedL1Restoration does not use the frozen-proximal-coefficient "
+                           "gradient surface; the live-mu add_nested_gradient is used instead");
+}
+
+const Eigen::VectorXd &NestedL1Restoration::proximal_diagonal() const {
+    throw std::logic_error("NestedL1Restoration does not use the frozen-proximal-coefficient "
+                           "Hessian surface; the live-mu nested_primal_diagonal is used instead");
+}
+
+bool NestedL1Restoration::entry_permitted(double constraint_violation,
+                                          const SolverContext &ctx) const {
+    // Same near-feasible guard + per-phase entry budget as the proximal switch
+    // (shared constants; single-measure adaptation disclosure (d)).
+    if (constraint_violation <= kNearFeasibleGuardFactor * ctx.settings_.econ_tol_) {
+        return false;
+    }
+    if (entries_ >= ctx.settings_.max_feas_rest_) {
+        return false;
+    }
+    return true;
+}
+
+void NestedL1Restoration::append_diagnostics(PSIOPT::SolveResult &result) const {
+    result.last_feas_rest_entries_ = entries_;
+    result.last_feas_rest_iters_ = iterations_in_mode_;
+}
+
+void NestedL1Restoration::init_channel(const Eigen::Ref<const Eigen::VectorXd> &residuals,
+                                       Eigen::VectorXd &n, Eigen::VectorXd &p, Eigen::VectorXd &zn,
+                                       Eigen::VectorXd &zp) const {
+    const Eigen::Index m = residuals.size();
+    n.resize(m);
+    p.resize(m);
+    zn.resize(m);
+    zp.resize(m);
+    for (Eigen::Index i = 0; i < m; ++i) {
+        // (4): closed-form positive-root init at the entry barrier parameter.
+        const ElasticSlackInit s = l1_elastic_slack_init(residuals[i], resto_mu_,
+                                                         kRestoPenaltyParameter);
+        n[i] = s.n;
+        p[i] = s.p;
+        zn[i] = s.zn;
+        zp[i] = s.zp;
+    }
+}
+
+void NestedL1Restoration::update_pivots(const Eigen::VectorXd &n, const Eigen::VectorXd &p,
+                                        const Eigen::VectorXd &zn, const Eigen::VectorXd &zp,
+                                        Eigen::VectorXd &pivots) {
+    // (5): pivot = n/z_n + p/z_p (POSITIVE; the seam negates it into (y,y)).
+    pivots = n.cwiseQuotient(zn) + p.cwiseQuotient(zp);
+}
+
+void NestedL1Restoration::enter_nested(const ProgressMeasures &reference,
+                                       const Eigen::Ref<const Eigen::VectorXd> &primals,
+                                       const Eigen::Ref<const Eigen::VectorXd> &eq_residuals,
+                                       const Eigen::Ref<const Eigen::VectorXd> &iq_residuals,
+                                       double outer_mu) {
+    reference_ = reference;
+    x_r_ = primals;
+
+    // (3): D_R^2 = diag(1/max(1,|x_R_i|))^2, cached.
+    dr2_.resize(x_r_.size());
+    for (Eigen::Index i = 0; i < x_r_.size(); ++i) {
+        const double di = 1.0 / std::max(1.0, std::abs(x_r_[i]));
+        dr2_[i] = di * di;
+    }
+
+    // (4): resto_mu = max(outer_mu, ||h||_inf, ||g+s||_inf).
+    double m = outer_mu;
+    if (eq_residuals.size() > 0) {
+        m = std::max(m, eq_residuals.cwiseAbs().maxCoeff());
+    }
+    if (iq_residuals.size() > 0) {
+        m = std::max(m, iq_residuals.cwiseAbs().maxCoeff());
+    }
+    resto_mu_ = m;
+
+    // (4): closed-form elastic init per channel.
+    init_channel(eq_residuals, n_e_, p_e_, z_ne_, z_pe_);
+    init_channel(iq_residuals, n_i_, p_i_, z_ni_, z_pi_);
+
+    // (5): pivots from the fresh elastic state.
+    update_pivots(n_e_, p_e_, z_ne_, z_pe_, e_pivots_);
+    update_pivots(n_i_, p_i_, z_ni_, z_pi_, i_pivots_);
+
+    // Recovered steps start at zero (no step recovered until the first solve).
+    dn_e_ = Eigen::VectorXd::Zero(n_e_.size());
+    dp_e_ = Eigen::VectorXd::Zero(p_e_.size());
+    dzn_e_ = Eigen::VectorXd::Zero(z_ne_.size());
+    dzp_e_ = Eigen::VectorXd::Zero(z_pe_.size());
+    dn_i_ = Eigen::VectorXd::Zero(n_i_.size());
+    dp_i_ = Eigen::VectorXd::Zero(p_i_.size());
+    dzn_i_ = Eigen::VectorXd::Zero(z_ni_.size());
+    dzp_i_ = Eigen::VectorXd::Zero(z_pi_.size());
+
+    active_ = true;
+    ++entries_;
+}
+
+void NestedL1Restoration::condensed_residuals(
+    double mu, const Eigen::Ref<const Eigen::VectorXd> &eq_residuals,
+    const Eigen::Ref<const Eigen::VectorXd> &iq_residuals,
+    const Eigen::Ref<const Eigen::VectorXd> &eq_lmults,
+    const Eigen::Ref<const Eigen::VectorXd> &iq_lmults, Eigen::Ref<Eigen::VectorXd> eq_rtilde_out,
+    Eigen::Ref<Eigen::VectorXd> iq_rtilde_out) const {
+    const double rho = kRestoPenaltyParameter;
+    // (5): r̃ = (c+n−p) + μ/z_n − (n/z_n)(ρ+y) − μ/z_p + (p/z_p)(ρ−y).
+    auto condense = [&](const Eigen::Ref<const Eigen::VectorXd> &c, const Eigen::VectorXd &n,
+                        const Eigen::VectorXd &p, const Eigen::VectorXd &zn,
+                        const Eigen::VectorXd &zp, const Eigen::Ref<const Eigen::VectorXd> &y,
+                        Eigen::Ref<Eigen::VectorXd> out) {
+        for (Eigen::Index i = 0; i < c.size(); ++i) {
+            out[i] = (c[i] + n[i] - p[i]) + mu / zn[i] - (n[i] / zn[i]) * (rho + y[i]) -
+                     mu / zp[i] + (p[i] / zp[i]) * (rho - y[i]);
+        }
+    };
+    condense(eq_residuals, n_e_, p_e_, z_ne_, z_pe_, eq_lmults, eq_rtilde_out);
+    condense(iq_residuals, n_i_, p_i_, z_ni_, z_pi_, iq_lmults, iq_rtilde_out);
+}
+
+double NestedL1Restoration::nested_objective(double mu,
+                                             const Eigen::Ref<const Eigen::VectorXd> &primals)
+    const {
+    // (2)/(3): ρ·Σ(n+p) + (η(μ)/2)‖D_R(x−x_R)‖², η(μ) recomputed from μ.
+    const double eta = kRestoProximityWeight * std::sqrt(mu);
+    const double slack_sum = n_e_.sum() + p_e_.sum() + n_i_.sum() + p_i_.sum();
+    const Eigen::VectorXd dx = primals - x_r_;
+    const double prox = 0.5 * eta * dr2_.dot(dx.cwiseProduct(dx));
+    return kRestoPenaltyParameter * slack_sum + prox;
+}
+
+void NestedL1Restoration::add_nested_gradient(double mu,
+                                              const Eigen::Ref<const Eigen::VectorXd> &primals,
+                                              Eigen::Ref<Eigen::VectorXd> grad_out) const {
+    // (2)/(3): ∇_x = η(μ)·D_R²·(x−x_R); accumulated (+=) into grad_out.
+    const double eta = kRestoProximityWeight * std::sqrt(mu);
+    grad_out += eta * dr2_.cwiseProduct(primals - x_r_);
+}
+
+void NestedL1Restoration::nested_primal_diagonal(double mu,
+                                                 Eigen::Ref<Eigen::VectorXd> diag_out) const {
+    // (2)/(3): proximal Hessian diagonal on the x rows, η(μ)·D_R² (written).
+    const double eta = kRestoProximityWeight * std::sqrt(mu);
+    diag_out = eta * dr2_;
+}
+
+void NestedL1Restoration::recover_elastic_steps(
+    double mu, const Eigen::Ref<const Eigen::VectorXd> &eq_lmults,
+    const Eigen::Ref<const Eigen::VectorXd> &iq_lmults,
+    const Eigen::Ref<const Eigen::VectorXd> &eq_dy,
+    const Eigen::Ref<const Eigen::VectorXd> &iq_dy) {
+    const double rho = kRestoPenaltyParameter;
+    // (5): Δn = μ/z_n − (n/z_n)(ρ+y) − (n/z_n)Δy;
+    //      Δp = μ/z_p − (p/z_p)(ρ−y) + (p/z_p)Δy;
+    //      Δz_n = Δy + ρ + y − z_n;  Δz_p = −Δy + ρ − y − z_p.
+    auto recover = [&](const Eigen::VectorXd &n, const Eigen::VectorXd &p,
+                       const Eigen::VectorXd &zn, const Eigen::VectorXd &zp,
+                       const Eigen::Ref<const Eigen::VectorXd> &y,
+                       const Eigen::Ref<const Eigen::VectorXd> &dy, Eigen::VectorXd &dn,
+                       Eigen::VectorXd &dp, Eigen::VectorXd &dzn, Eigen::VectorXd &dzp) {
+        const Eigen::Index m = n.size();
+        dn.resize(m);
+        dp.resize(m);
+        dzn.resize(m);
+        dzp.resize(m);
+        for (Eigen::Index i = 0; i < m; ++i) {
+            dn[i] = mu / zn[i] - (n[i] / zn[i]) * (rho + y[i]) - (n[i] / zn[i]) * dy[i];
+            dp[i] = mu / zp[i] - (p[i] / zp[i]) * (rho - y[i]) + (p[i] / zp[i]) * dy[i];
+            dzn[i] = dy[i] + rho + y[i] - zn[i];
+            dzp[i] = -dy[i] + rho - y[i] - zp[i];
+        }
+    };
+    recover(n_e_, p_e_, z_ne_, z_pe_, eq_lmults, eq_dy, dn_e_, dp_e_, dzn_e_, dzp_e_);
+    recover(n_i_, p_i_, z_ni_, z_pi_, iq_lmults, iq_dy, dn_i_, dp_i_, dzn_i_, dzp_i_);
+}
+
+namespace {
+// Fraction-to-boundary tau cap over one positive-variable / step pair: the
+// largest alpha in (0,1] keeping v + alpha*dv >= (1-tau)*v for every entry.
+double l1resto_tau_cap(double alpha, const Eigen::VectorXd &v, const Eigen::VectorXd &dv,
+                       double tau) {
+    for (Eigen::Index i = 0; i < v.size(); ++i) {
+        if (dv[i] < 0.0) {
+            alpha = std::min(alpha, -tau * v[i] / dv[i]);
+        }
+    }
+    return alpha;
+}
+} // namespace
+
+double NestedL1Restoration::primal_boundary_alpha(double tau) const {
+    double alpha = 1.0;
+    alpha = l1resto_tau_cap(alpha, n_e_, dn_e_, tau);
+    alpha = l1resto_tau_cap(alpha, p_e_, dp_e_, tau);
+    alpha = l1resto_tau_cap(alpha, n_i_, dn_i_, tau);
+    alpha = l1resto_tau_cap(alpha, p_i_, dp_i_, tau);
+    return alpha;
+}
+
+double NestedL1Restoration::dual_boundary_alpha(double tau) const {
+    double alpha = 1.0;
+    alpha = l1resto_tau_cap(alpha, z_ne_, dzn_e_, tau);
+    alpha = l1resto_tau_cap(alpha, z_pe_, dzp_e_, tau);
+    alpha = l1resto_tau_cap(alpha, z_ni_, dzn_i_, tau);
+    alpha = l1resto_tau_cap(alpha, z_pi_, dzp_i_, tau);
+    return alpha;
+}
+
+void NestedL1Restoration::apply_elastic_step(double alpha_primal, double alpha_dual) {
+    n_e_ += alpha_primal * dn_e_;
+    p_e_ += alpha_primal * dp_e_;
+    z_ne_ += alpha_dual * dzn_e_;
+    z_pe_ += alpha_dual * dzp_e_;
+    n_i_ += alpha_primal * dn_i_;
+    p_i_ += alpha_primal * dp_i_;
+    z_ni_ += alpha_dual * dzn_i_;
+    z_pi_ += alpha_dual * dzp_i_;
+    // Pivots track the moved elastic state.
+    update_pivots(n_e_, p_e_, z_ne_, z_pe_, e_pivots_);
+    update_pivots(n_i_, p_i_, z_ni_, z_pi_, i_pivots_);
+}
+
+double NestedL1Restoration::trial_objective(double mu, double alpha,
+                                            const Eigen::Ref<const Eigen::VectorXd> &trial_primals)
+    const {
+    const double eta = kRestoProximityWeight * std::sqrt(mu);
+    // Slacks along the step at fraction alpha: n+αΔn, p+αΔp (both channels).
+    const double slack_sum = (n_e_ + alpha * dn_e_).sum() + (p_e_ + alpha * dp_e_).sum() +
+                             (n_i_ + alpha * dn_i_).sum() + (p_i_ + alpha * dp_i_).sum();
+    const Eigen::VectorXd dx = trial_primals - x_r_;
+    const double prox = 0.5 * eta * dr2_.dot(dx.cwiseProduct(dx));
+    return kRestoPenaltyParameter * slack_sum + prox;
+}
+
+void NestedL1Restoration::trial_residual_shift(double alpha,
+                                               Eigen::Ref<Eigen::VectorXd> eq_shift_out,
+                                               Eigen::Ref<Eigen::VectorXd> iq_shift_out) const {
+    // shift = (n + αΔn) − (p + αΔp), added to the raw constraint residuals.
+    eq_shift_out = (n_e_ + alpha * dn_e_) - (p_e_ + alpha * dp_e_);
+    iq_shift_out = (n_i_ + alpha * dn_i_) - (p_i_ + alpha * dp_i_);
 }
 
 } // namespace tycho::solvers

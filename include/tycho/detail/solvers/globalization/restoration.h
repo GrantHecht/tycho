@@ -31,6 +31,8 @@
 
 #include <Eigen/Core>
 
+#include <stdexcept>
+
 #include "tycho/detail/solvers/globalization/progress_measures.h"
 #include "tycho/detail/solvers/globalization/solver_context.h"
 // PSIOPT::SolveResult requires the complete PSIOPT class; see
@@ -114,6 +116,179 @@ class RestorationStrategy {
     // their -1 sentinel (see PSIOPT::SolveResult::last_feas_rest_entries_ /
     // last_feas_rest_iters_ in psiopt.h).
     virtual void append_diagnostics(PSIOPT::SolveResult &result) const { (void)result; }
+
+    // -------------------------------------------------------------------------
+    // Nested restoration surface.
+    //
+    // A second family of restoration strategies solves an l1 elastic
+    // reformulation of the feasibility problem (min ρ·Σ(n+p) + proximal) with
+    // the elastic slack pairs (n,p) and their bound multipliers condensed out of
+    // the KKT system analytically. That machinery has no counterpart in the
+    // proximal mode-switch above, so it lives behind is_nested(): the solver seam
+    // consults these methods ONLY when is_nested() reports true.
+    //
+    // The default bodies below therefore throw — reaching one on a strategy that
+    // is not nested marks a wiring bug, not a recoverable condition. Concrete
+    // proximal-switch strategies inherit these throwing defaults untouched (they
+    // are never reached through the is_nested() gate); the nested l1 strategy
+    // overrides every one.
+    // -------------------------------------------------------------------------
+
+    // Whether this strategy uses the nested elastic-condensation surface below.
+    virtual bool is_nested() const { return false; }
+
+    // Enter the nested phase from the given entry point. `reference` is the
+    // (θ,f) pair; `primals` is snapshotted as the proximal center x_R;
+    // `eq_residuals`/`iq_residuals` are the constraint residual values at entry
+    // (equality h(x); inequality g(x)+s). `outer_mu` is the live outer barrier
+    // parameter, one input to the entry barrier parameter (see entry_mu()).
+    virtual void enter_nested(const ProgressMeasures &reference,
+                              const Eigen::Ref<const Eigen::VectorXd> &primals,
+                              const Eigen::Ref<const Eigen::VectorXd> &eq_residuals,
+                              const Eigen::Ref<const Eigen::VectorXd> &iq_residuals,
+                              double outer_mu) {
+        (void)reference;
+        (void)primals;
+        (void)eq_residuals;
+        (void)iq_residuals;
+        (void)outer_mu;
+        throw std::logic_error(
+            "RestorationStrategy::enter_nested called on a strategy that does not "
+            "implement the nested restoration surface");
+    }
+
+    // The restoration barrier parameter computed at entry (also the phase's
+    // starting barrier parameter).
+    virtual double entry_mu() const {
+        throw std::logic_error(
+            "RestorationStrategy::entry_mu called on a strategy that does not "
+            "implement the nested restoration surface");
+    }
+
+    // Per-row diagonal pivots landing in the KKT constraint-row slots — POSITIVE
+    // vectors (the solver seam negates them into the (y,y) diagonal entries).
+    virtual const Eigen::VectorXd &e_pivots() const {
+        throw std::logic_error(
+            "RestorationStrategy::e_pivots called on a strategy that does not "
+            "implement the nested restoration surface");
+    }
+    virtual const Eigen::VectorXd &i_pivots() const {
+        throw std::logic_error(
+            "RestorationStrategy::i_pivots called on a strategy that does not "
+            "implement the nested restoration surface");
+    }
+
+    // Condensed constraint-row right-hand sides (r̃), given the live barrier
+    // parameter and the CURRENT residual values and multipliers.
+    virtual void condensed_residuals(double mu,
+                                     const Eigen::Ref<const Eigen::VectorXd> &eq_residuals,
+                                     const Eigen::Ref<const Eigen::VectorXd> &iq_residuals,
+                                     const Eigen::Ref<const Eigen::VectorXd> &eq_lmults,
+                                     const Eigen::Ref<const Eigen::VectorXd> &iq_lmults,
+                                     Eigen::Ref<Eigen::VectorXd> eq_rtilde_out,
+                                     Eigen::Ref<Eigen::VectorXd> iq_rtilde_out) const {
+        (void)mu;
+        (void)eq_residuals;
+        (void)iq_residuals;
+        (void)eq_lmults;
+        (void)iq_lmults;
+        (void)eq_rtilde_out;
+        (void)iq_rtilde_out;
+        throw std::logic_error(
+            "RestorationStrategy::condensed_residuals called on a strategy that does "
+            "not implement the nested restoration surface");
+    }
+
+    // The proximal objective/gradient/Hessian-diagonal pieces of the nested
+    // reformulation, evaluated with the LIVE barrier parameter (η recomputed
+    // from `mu` on every call, unlike the frozen-ζ proximal-switch trio above).
+    virtual double nested_objective(double mu,
+                                    const Eigen::Ref<const Eigen::VectorXd> &primals) const {
+        (void)mu;
+        (void)primals;
+        throw std::logic_error(
+            "RestorationStrategy::nested_objective called on a strategy that does not "
+            "implement the nested restoration surface");
+    }
+    virtual void add_nested_gradient(double mu,
+                                     const Eigen::Ref<const Eigen::VectorXd> &primals,
+                                     Eigen::Ref<Eigen::VectorXd> grad_out) const {
+        (void)mu;
+        (void)primals;
+        (void)grad_out;
+        throw std::logic_error(
+            "RestorationStrategy::add_nested_gradient called on a strategy that does "
+            "not implement the nested restoration surface");
+    }
+    virtual void nested_primal_diagonal(double mu, Eigen::Ref<Eigen::VectorXd> diag_out) const {
+        (void)mu;
+        (void)diag_out;
+        throw std::logic_error(
+            "RestorationStrategy::nested_primal_diagonal called on a strategy that does "
+            "not implement the nested restoration surface");
+    }
+
+    // Recover the elastic slack / bound-multiplier steps from the constraint
+    // multiplier steps (Δy) produced by the condensed KKT solve.
+    virtual void recover_elastic_steps(double mu,
+                                       const Eigen::Ref<const Eigen::VectorXd> &eq_lmults,
+                                       const Eigen::Ref<const Eigen::VectorXd> &iq_lmults,
+                                       const Eigen::Ref<const Eigen::VectorXd> &eq_dy,
+                                       const Eigen::Ref<const Eigen::VectorXd> &iq_dy) {
+        (void)mu;
+        (void)eq_lmults;
+        (void)iq_lmults;
+        (void)eq_dy;
+        (void)iq_dy;
+        throw std::logic_error(
+            "RestorationStrategy::recover_elastic_steps called on a strategy that does "
+            "not implement the nested restoration surface");
+    }
+
+    // Fraction-to-boundary caps for the recovered elastic steps: primal cap from
+    // the slacks (n,p), dual cap from their bound multipliers (z_n,z_p).
+    virtual double primal_boundary_alpha(double tau) const {
+        (void)tau;
+        throw std::logic_error(
+            "RestorationStrategy::primal_boundary_alpha called on a strategy that does "
+            "not implement the nested restoration surface");
+    }
+    virtual double dual_boundary_alpha(double tau) const {
+        (void)tau;
+        throw std::logic_error(
+            "RestorationStrategy::dual_boundary_alpha called on a strategy that does "
+            "not implement the nested restoration surface");
+    }
+
+    // Commit the recovered elastic steps at the accepted step fractions.
+    virtual void apply_elastic_step(double alpha_primal, double alpha_dual) {
+        (void)alpha_primal;
+        (void)alpha_dual;
+        throw std::logic_error(
+            "RestorationStrategy::apply_elastic_step called on a strategy that does not "
+            "implement the nested restoration surface");
+    }
+
+    // Trial-path measures at step fraction alpha, for acceptance during the phase.
+    virtual double trial_objective(double mu, double alpha,
+                                   const Eigen::Ref<const Eigen::VectorXd> &trial_primals) const {
+        (void)mu;
+        (void)alpha;
+        (void)trial_primals;
+        throw std::logic_error(
+            "RestorationStrategy::trial_objective called on a strategy that does not "
+            "implement the nested restoration surface");
+    }
+    // shift = (n + αΔn) − (p + αΔp), added to the raw constraint residuals.
+    virtual void trial_residual_shift(double alpha, Eigen::Ref<Eigen::VectorXd> eq_shift_out,
+                                      Eigen::Ref<Eigen::VectorXd> iq_shift_out) const {
+        (void)alpha;
+        (void)eq_shift_out;
+        (void)iq_shift_out;
+        throw std::logic_error(
+            "RestorationStrategy::trial_residual_shift called on a strategy that does not "
+            "implement the nested restoration surface");
+    }
 };
 
 } // namespace tycho::solvers
