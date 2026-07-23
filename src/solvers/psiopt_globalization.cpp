@@ -402,26 +402,105 @@ double ClassicMeritAcceptance::classic_line_search(PSIOPT::LineSearchModes lsmod
 // ============================================================================
 
 void ModernMeritAcceptance::reset() {
+    // Working penalty state + working smallest-known tracker back to their
+    // fresh-construction values (Uno MeritFunction: smallest_known_infeasibility
+    // is +∞-initialized).
     nu_ = kWmnoInitPenalty;
     pi_l_ = kFlexInitPiL;
     pi_u_ = kFlexInitPiU;
-    // Uno MeritFunction: smallest_known_infeasibility is +∞-initialized. reset()
-    // (the μ-event / phase-change hook) re-bases it — see modern_merit.h.
     smallest_known_infeasibility_ = std::numeric_limits<double>::infinity();
+    // Phase-aware, mirroring the filter/funnel: inside the feasibility phase
+    // this is a μ-event reset — the stashed optimality-phase state (which the
+    // exit test reduces against) and the in-feasibility flag SURVIVE, so a
+    // μ-event mid-restoration cannot destroy the frozen tracker. Outside the
+    // phase this is the full per-phase clear, which also drops any leftover
+    // stash defensively. See the state-isolation section in modern_merit.h.
+    if (!in_feasibility_phase_) {
+        stashed_nu_ = kWmnoInitPenalty;
+        stashed_pi_l_ = kFlexInitPiL;
+        stashed_pi_u_ = kFlexInitPiU;
+        stashed_smallest_known_infeasibility_ = std::numeric_limits<double>::infinity();
+    }
 }
 
 bool ModernMeritAcceptance::is_infeasibility_sufficiently_reduced(
     const ProgressMeasures &reference, const ProgressMeasures &trial) const {
     // Uno MeritFunction::is_infeasibility_sufficiently_reduced (cvanaret/Uno
-    // 7481abe, MeritFunction.cpp) verbatim:
+    // 7481abe, MeritFunction.cpp):
     //   return trial_progress.infeasibility <=
     //          sufficient_infeasibility_decrease_ratio * smallest_known_infeasibility;
     // Uno's signature also takes the reference progress but its body never reads
     // it — the smallest-known tracker is the reference this rule reduces
     // against, not the entry point. Mirror that: `reference` is ignored.
+    //
+    // While in the feasibility phase, reduce against the STASHED (frozen
+    // optimality-phase) tracker — Uno freezes it structurally by running a
+    // separate optimality instance; here the stash is that frozen copy. Reading
+    // the live tracker would be self-defeating: the accept branch of
+    // is_iterate_acceptable has just lowered it to include the tested point's
+    // own θ, making θ ≤ ratio·live unsatisfiable for θ > 0. Outside the phase
+    // the live tracker is read (well-defined; the seam only tests for exit
+    // during the phase). The +∞ edge — restoration entered before any
+    // optimality-phase accept leaves the stash at +∞, so ratio·(+∞) passes at
+    // the first check — is the reference solver's own behavior, retained.
     (void)reference;
-    return trial.infeasibility <=
-           kSufficientInfeasibilityDecreaseRatio * smallest_known_infeasibility_;
+    const double tracker =
+        in_feasibility_phase_ ? stashed_smallest_known_infeasibility_ : smallest_known_infeasibility_;
+    return trial.infeasibility <= kSufficientInfeasibilityDecreaseRatio * tracker;
+}
+
+void ModernMeritAcceptance::notify_switch_to_feasibility(
+    const ProgressMeasures &current_progress) {
+    // T6: a second entry without an intervening exit would stash the FEASIBILITY
+    // working penalties/tracker over the preserved optimality stash, silently
+    // clobbering the frozen state the exit test consults — a phase-transition
+    // mis-wiring, not a recoverable runtime condition.
+    if (in_feasibility_phase_)
+        throw std::logic_error(
+            "ModernMeritAcceptance::notify_switch_to_feasibility: already in the feasibility "
+            "phase (in_feasibility_phase_ is true) — a solver wiring bug called entry without "
+            "an intervening notify_switch_to_optimality exit");
+
+    // The merit rule augments nothing at the switch point (unlike the filter);
+    // the merit's whole persistent state is the penalties + tracker, so the
+    // switch measures are not consumed here.
+    (void)current_progress;
+
+    // Stash the optimality-phase persistent state, then enter feasibility mode
+    // and reinitialize fresh working state via the reset() machinery (the flag
+    // is set FIRST so the phase-aware reset() preserves the stash just written).
+    stashed_nu_ = nu_;
+    stashed_pi_l_ = pi_l_;
+    stashed_pi_u_ = pi_u_;
+    stashed_smallest_known_infeasibility_ = smallest_known_infeasibility_;
+    in_feasibility_phase_ = true;
+    this->reset();
+}
+
+void ModernMeritAcceptance::notify_switch_to_optimality(
+    const ProgressMeasures &current_progress) {
+    // T6: an exit without a preceding entry has no stash to restore — running
+    // this body would overwrite the live optimality penalties/tracker with the
+    // fresh-construction stash (or a stale one from a prior phase), a
+    // phase-transition mis-wiring symmetric to the entry-side hazard above.
+    if (!in_feasibility_phase_)
+        throw std::logic_error(
+            "ModernMeritAcceptance::notify_switch_to_optimality: not in the feasibility phase "
+            "(in_feasibility_phase_ is false) — a solver wiring bug called exit without a "
+            "preceding notify_switch_to_feasibility entry");
+
+    // The merit rule augments nothing at the exit point either.
+    (void)current_progress;
+
+    // Restore the preserved optimality-phase persistent state and leave the
+    // phase. The stash is intentionally NOT cleared here: it is now a harmless
+    // leftover (the exit test only reads it while the flag is set, and the next
+    // entry overwrites it), dropped by the next reset() OUTSIDE the phase.
+    nu_ = stashed_nu_;
+    pi_l_ = stashed_pi_l_;
+    pi_u_ = stashed_pi_u_;
+    smallest_known_infeasibility_ = stashed_smallest_known_infeasibility_;
+    in_feasibility_phase_ = false;
 }
 
 bool ModernMeritAcceptance::is_iterate_acceptable(const ProgressMeasures &current,
@@ -1327,8 +1406,17 @@ void FunnelAcceptance::initialize_bounds(double theta_0) {
 }
 
 void FunnelAcceptance::reset_bounds() {
-    // Restore the uninitialized sentinel so the next θ₀ re-derives the width.
+    // Always restore the uninitialized sentinel on the WORKING width so the next
+    // θ₀ re-derives it.
     width_ = std::numeric_limits<double>::infinity();
+    // Phase-aware (mirroring the filter): inside the feasibility phase this is a
+    // μ-event reset — clear the working width only, preserving the stashed
+    // optimality width and the in-feasibility flag so the exit test and the exit
+    // re-base still have the frozen width to consult/restore. Outside the phase
+    // this is the full per-phase clear, which also drops any leftover stash
+    // defensively. See (5)/(6) in funnel_acceptance.h.
+    if (!in_feasibility_phase_)
+        stashed_width_ = std::numeric_limits<double>::infinity();
 }
 
 bool FunnelAcceptance::is_trial_acceptable_to_strategy(const ProgressMeasures &current,
@@ -1371,28 +1459,68 @@ void FunnelAcceptance::append_diagnostics(PSIOPT::SolveResult &result) const {
 bool FunnelAcceptance::is_infeasibility_sufficiently_reduced(const ProgressMeasures &reference,
                                                              const ProgressMeasures &trial) const {
     // Uno FunnelMethod::is_infeasibility_sufficiently_reduced (cvanaret/Uno
-    // 7481abe) verbatim:
+    // 7481abe):
     //   return funnel.acceptable(trial.infeasibility) &&
     //          trial.infeasibility <= parameters.beta * reference.infeasibility;
     // funnel.acceptable(θ) is the membership test θ ≤ width; parameters.beta is
     // the funnel's own sufficient-decrease β, reused here (kFunnelBeta) exactly
-    // as Uno reuses it. See (5a) in funnel_acceptance.h.
-    return trial.infeasibility <= width_ &&
+    // as Uno reuses it. While in the feasibility phase the membership half tests
+    // against the STASHED (frozen optimality) width — the reference solver's
+    // exit test reads its frozen optimality funnel; outside the phase it reads
+    // the live width (well-defined; the seam only tests for exit during the
+    // phase). See (5a) in funnel_acceptance.h.
+    const double effective_width = in_feasibility_phase_ ? stashed_width_ : width_;
+    return trial.infeasibility <= effective_width &&
            trial.infeasibility <= kFunnelBeta * reference.infeasibility;
 }
 
-void FunnelAcceptance::notify_switch_to_feasibility(const ProgressMeasures & /*current_progress*/) {
-    // Uno FunnelMethod::notify_switch_to_feasibility is empty: the funnel's
-    // state is the scalar θ-width alone, which the proximal objective swap does
-    // not invalidate. No-op — see (5b) in funnel_acceptance.h.
+void FunnelAcceptance::notify_switch_to_feasibility(const ProgressMeasures &current_progress) {
+    // T6: a second entry without an intervening exit would stash the FEASIBILITY
+    // working width over the preserved optimality width, silently clobbering the
+    // frozen width the exit test and exit re-base consult — a phase-transition
+    // mis-wiring, not a recoverable runtime condition.
+    if (in_feasibility_phase_)
+        throw std::logic_error(
+            "FunnelAcceptance::notify_switch_to_feasibility: already in the feasibility "
+            "phase (in_feasibility_phase_ is true) — a solver wiring bug called entry "
+            "without an intervening notify_switch_to_optimality exit");
+
+    // The funnel augments nothing at the switch point; its whole persistent
+    // state is the scalar width.
+    (void)current_progress;
+
+    // Stash the optimality width, then enter feasibility mode and reinitialize a
+    // fresh working width via the reset() machinery (re-arms the base's lazy θ₀
+    // init so the feasibility phase derives its own θ_min/θ_max and width). The
+    // flag is set FIRST so the phase-aware reset_bounds() preserves the stash
+    // just written. See (5b) in funnel_acceptance.h.
+    stashed_width_ = width_;
+    in_feasibility_phase_ = true;
+    this->reset();
 }
 
 void FunnelAcceptance::notify_switch_to_optimality(const ProgressMeasures &current_progress) {
-    // Uno Funnel::update_restoration:
+    // T6: an exit without a preceding entry has no stashed width to restore —
+    // running this body would re-base whatever stashed_width_ last held (the
+    // uninitialized sentinel, or a stale stash), a phase-transition mis-wiring
+    // symmetric to the entry-side hazard above.
+    if (!in_feasibility_phase_)
+        throw std::logic_error(
+            "FunnelAcceptance::notify_switch_to_optimality: not in the feasibility phase "
+            "(in_feasibility_phase_ is false) — a solver wiring bug called exit without a "
+            "preceding notify_switch_to_feasibility entry");
+
+    // Restore the preserved optimality width DIRECTLY (not via reset(), which
+    // would re-arm the base's lazy θ₀ init and make the next optimality call
+    // re-derive and wipe the just-restored width), THEN apply Uno's
+    // update_restoration re-base to the restored width:
     //   width = convex_combination(width, current_infeasibility, kappa)
     //         = kappa*width + (1-kappa)*current_infeasibility.
-    // Re-base the width toward the exit infeasibility (see (5c)).
+    // See (5c) in funnel_acceptance.h. The stash is left as a harmless leftover,
+    // dropped by the next reset() OUTSIDE the phase.
+    width_ = stashed_width_;
     width_ = convex_combination(width_, current_progress.infeasibility, kFunnelKappa);
+    in_feasibility_phase_ = false;
 }
 
 // ============================================================================

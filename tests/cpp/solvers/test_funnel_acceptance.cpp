@@ -35,6 +35,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 
 namespace {
 
@@ -356,38 +357,119 @@ TEST(FunnelAcceptance, ExitTestRelativeBoundaryInclusive) {
 }
 
 // ===========================================================================
-// Restoration switch notifications (asymmetric, Uno-verbatim): entry is a
-// no-op; exit re-bases the width to κ·τ + (1−κ)·θ_exit, κ = kFunnelKappa = 0.5.
+// Restoration switch notifications with state isolation. The reference solver
+// runs a SEPARATE optimality funnel instance across the feasibility phase, so
+// its width is structurally frozen; the single-instance design STASHES the
+// optimality width at entry (reinitializing a fresh feasibility-phase width) and
+// RESTORES it at exit before applying the re-base κ·τ + (1−κ)·θ_exit,
+// κ = kFunnelKappa = 0.5. Entry/exit are throw-guarded against mis-ordering.
 // ===========================================================================
 
-// notify_switch_to_feasibility leaves the width untouched (the funnel's θ-only
-// state is unaffected by the objective swap).
-TEST(FunnelAcceptance, NotifySwitchToFeasibilityIsNoOp) {
+// Entry stashes the optimality width and reinitializes the working width to the
+// uninitialized sentinel (the fresh feasibility-phase width is lazily re-derived
+// from the feasibility-phase θ₀ on the next is_iterate_acceptable call).
+TEST(FunnelAcceptance, NotifySwitchToFeasibilityStashesWidth) {
     FunnelAcceptance a;
     FunnelPrimeRejecting(a, 4.0, 10.0); // τ = 6.0
     a.notify_switch_to_feasibility(FunnelMakePm(3.0, 1.0, 0.0));
-    EXPECT_DOUBLE_EQ(a.funnel_width(), 6.0); // unchanged
+    EXPECT_TRUE(a.in_feasibility_phase());
+    EXPECT_TRUE(std::isinf(a.funnel_width()));       // working reset to sentinel
+    EXPECT_DOUBLE_EQ(a.stashed_funnel_width(), 6.0); // optimality width frozen
 }
 
-// notify_switch_to_optimality re-bases: τ = 6.0, θ_exit = 2.0 ⇒
-// τ⁺ = 0.5·6 + 0.5·2 = 3 + 1 = 4.0 (the width tightens toward the reduced exit
-// infeasibility).
-TEST(FunnelAcceptance, NotifySwitchToOptimalityReBasesWidth) {
+// Exit restores the stashed optimality width and re-bases THAT restored width:
+// τ_stashed = 6.0, θ_exit = 2.0 ⇒ τ⁺ = 0.5·6 + 0.5·2 = 4.0. The re-base applies
+// to the restored 6.0, not the working +∞ sentinel left by entry (which would
+// give +∞) — this pins re-base-on-restored.
+TEST(FunnelAcceptance, NotifySwitchToOptimalityReBasesRestoredWidth) {
     FunnelAcceptance a;
-    FunnelPrimeRejecting(a, 4.0, 10.0); // τ = 6.0
+    FunnelPrimeRejecting(a, 4.0, 10.0);                         // τ = 6.0
+    a.notify_switch_to_feasibility(FunnelMakePm(5.0, 0.0, 0.0)); // stash 6.0, working → +∞
     a.notify_switch_to_optimality(FunnelMakePm(2.0, 0.0, 0.0));
+    EXPECT_FALSE(a.in_feasibility_phase());
     EXPECT_DOUBLE_EQ(a.funnel_width(), kFunnelKappa * 6.0 + (1.0 - kFunnelKappa) * 2.0); // 4.0
 }
 
 // Verbatim convex combination with no guard: an exit infeasibility ABOVE the
-// width re-widens it (κ·6 + (1−κ)·10 = 3 + 5 = 8.0). Uno's update_restoration
-// adds no floor; this pins that behavior.
+// restored width re-widens it (κ·6 + (1−κ)·10 = 8.0). Uno's update_restoration
+// adds no floor; this pins that behavior on the restored width.
 TEST(FunnelAcceptance, NotifySwitchToOptimalityAllowsReWidening) {
     FunnelAcceptance a;
     FunnelPrimeRejecting(a, 4.0, 10.0); // τ = 6.0
+    a.notify_switch_to_feasibility(FunnelMakePm(5.0, 0.0, 0.0));
     a.notify_switch_to_optimality(FunnelMakePm(10.0, 0.0, 0.0));
     EXPECT_DOUBLE_EQ(a.funnel_width(), kFunnelKappa * 6.0 + (1.0 - kFunnelKappa) * 10.0); // 8.0
     EXPECT_GT(a.funnel_width(), 6.0);
+}
+
+// While in the feasibility phase, the exit test's membership half tests against
+// the STASHED width, not the live feasibility-phase width. Stash 6.0, drive the
+// working width down to 1.0, then a trial θ=5.0 passes membership against 6.0
+// but would fail against 1.0.
+TEST(FunnelAcceptance, ExitTestReadsStashedWidthInPhase) {
+    FunnelAcceptance a;
+    FunnelPrimeRejecting(a, 4.0, 10.0);                         // τ = 6.0
+    a.notify_switch_to_feasibility(FunnelMakePm(4.0, 0.0, 0.0)); // stash 6.0, working → +∞
+    ASSERT_TRUE(a.in_feasibility_phase());
+    FunnelPrimeRejecting(a, /*theta0=*/0.1, /*trial_outside=*/2.0); // working width → 1.0
+    ASSERT_DOUBLE_EQ(a.funnel_width(), 1.0);
+    ASSERT_DOUBLE_EQ(a.stashed_funnel_width(), 6.0);
+
+    // trial θ=5.0: membership against the stashed 6.0 passes (5 ≤ 6); against the
+    // live working width 1.0 it would fail. Relative half: 5 ≤ 0.9999·100.
+    EXPECT_TRUE(a.is_infeasibility_sufficiently_reduced(FunnelMakePm(100.0, 0.0, 0.0),
+                                                        FunnelMakePm(5.0, 0.0, 0.0)));
+}
+
+// reset() mid-phase (μ-event) clears the WORKING width only; the stash + flag
+// survive so the exit test still consults the frozen optimality width.
+TEST(FunnelAcceptance, ResetMidPhasePreservesStashedWidth) {
+    FunnelAcceptance a;
+    FunnelPrimeRejecting(a, 4.0, 10.0);                         // τ = 6.0
+    a.notify_switch_to_feasibility(FunnelMakePm(4.0, 0.0, 0.0)); // stash 6.0
+    FunnelPrimeRejecting(a, 0.1, 2.0);                          // working width → 1.0
+    a.reset();                                                 // μ-event mid-restoration
+    EXPECT_TRUE(a.in_feasibility_phase());            // flag survives
+    EXPECT_TRUE(std::isinf(a.funnel_width()));         // working cleared to sentinel
+    EXPECT_DOUBLE_EQ(a.stashed_funnel_width(), 6.0);  // stash survives
+}
+
+// reset() OUTSIDE the phase drops the stash defensively.
+TEST(FunnelAcceptance, ResetOutsidePhaseDropsStashedWidth) {
+    FunnelAcceptance a;
+    FunnelPrimeRejecting(a, 4.0, 10.0);
+    a.notify_switch_to_feasibility(FunnelMakePm(4.0, 0.0, 0.0));
+    a.notify_switch_to_optimality(FunnelMakePm(2.0, 0.0, 0.0)); // flag now false
+    ASSERT_FALSE(a.in_feasibility_phase());
+    a.reset();
+    EXPECT_TRUE(std::isinf(a.stashed_funnel_width())); // dropped
+}
+
+// +∞ edge (FP-inert, reference behavior): restoration entered before the first
+// is_iterate_acceptable call stashes the +∞ sentinel; the exit re-base is
+// κ·∞ + (1−κ)·θ_exit = ∞, so the funnel simply stays wide (no NaN).
+TEST(FunnelAcceptance, EntryBeforeFirstCallStashesInfinityExitStaysWide) {
+    FunnelAcceptance a;
+    ASSERT_TRUE(std::isinf(a.funnel_width())); // sentinel, no call yet
+    a.notify_switch_to_feasibility(FunnelMakePm(4.0, 0.0, 0.0));
+    EXPECT_TRUE(std::isinf(a.stashed_funnel_width()));
+    a.notify_switch_to_optimality(FunnelMakePm(2.0, 0.0, 0.0));
+    EXPECT_TRUE(std::isinf(a.funnel_width()));
+}
+
+// Throw guards on mis-ordered transitions (T6): a second entry without an
+// intervening exit, and an exit without a preceding entry, both throw.
+TEST(FunnelAcceptance, DoubleEntryThrows) {
+    FunnelAcceptance a;
+    FunnelPrimeRejecting(a, 4.0, 10.0);
+    a.notify_switch_to_feasibility(FunnelMakePm(4.0, 0.0, 0.0));
+    EXPECT_THROW(a.notify_switch_to_feasibility(FunnelMakePm(4.0, 0.0, 0.0)), std::logic_error);
+}
+
+TEST(FunnelAcceptance, ExitWithoutEntryThrows) {
+    FunnelAcceptance a;
+    FunnelPrimeRejecting(a, 4.0, 10.0);
+    EXPECT_THROW(a.notify_switch_to_optimality(FunnelMakePm(2.0, 0.0, 0.0)), std::logic_error);
 }
 
 } // namespace
