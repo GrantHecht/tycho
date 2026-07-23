@@ -735,8 +735,8 @@ class test_SolveDiagnostics(unittest.TestCase):
         self.assertEqual(prob.optimizer.last_watchdog_activations, 0)
         hist = prob.optimizer.last_recovery_depth_histogram
         # 5 buckets: SOC, extended backtracking, watchdog, unresolved,
-        # restoration -- the restoration bucket only increments when
-        # restoration_mode is proximal_switch.
+        # restoration -- the restoration bucket only increments when a
+        # restoration mode (proximal_switch or l1_nested) is enabled.
         self.assertEqual(len(hist), 5)
         for count in hist:
             self.assertIsInstance(count, int)

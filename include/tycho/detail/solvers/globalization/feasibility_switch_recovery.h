@@ -4,10 +4,12 @@
 //
 // FeasibilitySwitchRecovery — the outermost RecoveryChain link that converts a
 // ladder-exhausted step rejection into a feasibility-restoration mode-switch.
-// It is built (by rebuild_globalization_components) only when
-// restoration_mode_ == proximal_switch, wrapping whatever inner chain the other
+// It is built (by rebuild_globalization_components) whenever a restoration
+// mode is enabled (restoration_mode_ != off — both the proximal mode-switch
+// and the nested l1 restoration), wrapping whatever inner chain the other
 // settings produced (NoopRecovery, ChainedRecovery, or a WatchdogRecovery-
-// decorated chain).
+// decorated chain). For a nested strategy it additionally runs the soft
+// pre-stage documented below before escalating to the full switch.
 //
 // Behavior: delegate the whole rejection to the inner chain first. If the inner
 // chain RESOLVES the rejection (returns kRetry / kSwitchToFeasibility / kGiveUp)

@@ -129,7 +129,7 @@ class PSIOPT:
     @property
     def last_recovery_depth_histogram(self) -> list[int]:
         """
-        Counts of how each rejected step's recovery was resolved during the most recent solve, as a 5-element list: [second-order correction, extended backtracking, watchdog, unresolved, restoration]. The final bucket only increments when restoration_mode is proximal_switch.
+        Counts of how each rejected step's recovery was resolved during the most recent solve, as a 5-element list: [second-order correction, extended backtracking, watchdog, unresolved, restoration]. The final bucket only increments when restoration_mode is proximal_switch or l1_nested.
         """
 
     @property
@@ -165,13 +165,13 @@ class PSIOPT:
     @property
     def last_feas_rest_entries(self) -> int:
         """
-        Number of times feasibility restoration was entered during the most recent solve's last phase. -1 unless restoration_mode is proximal_switch (no restoration strategy is constructed when restoration_mode is off).
+        Number of times feasibility restoration was entered during the most recent solve's last phase. -1 unless restoration_mode is proximal_switch or l1_nested (no restoration strategy is constructed when restoration_mode is off). Counts identically under both modes -- l1_nested has no separate inner/outer iteration split, so this and last_feas_rest_iters mean the same thing regardless of which mode is selected.
         """
 
     @property
     def last_feas_rest_iters(self) -> int:
         """
-        Number of iterations spent in the feasibility-restoration phase during the most recent solve's last phase. -1 unless restoration_mode is proximal_switch.
+        Number of iterations spent in the feasibility-restoration phase during the most recent solve's last phase. -1 unless restoration_mode is proximal_switch or l1_nested.
         """
 
     @property
@@ -477,7 +477,7 @@ class PSIOPT:
     @property
     def restoration_mode(self) -> RestorationModes:
         """
-        Feasibility-restoration mode selector: off (default) reproduces today's behavior bit-identically -- no restoration strategy is constructed, so every restoration branch in the solver is provably dead. proximal_switch enables the proximal feasibility mode-switch: when the recovery chain exhausts on a rejected step, the solver switches to a pure feasibility phase -- the objective is replaced by a proximal term centered on the switch point (coefficient sqrt(mu) at entry) while all constraints and barrier machinery keep running -- and returns to the true objective once the acceptance strategy's infeasibility-reduction test passes (per-strategy: classic_merit uses a relative infeasibility-reduction test against the entry point, Ipopt restoration-convergence style; merit reduces against the smallest-known infeasibility held from the optimality phase -- frozen at restoration entry and unchanged by feasibility-phase iterates; funnel/filter use their own reference-solver tests). Entry is refused at a near-feasible point or once the per-phase budget max_feas_rest is exhausted. Composes with every acceptance_strategy and barrier_governor (no matrix restrictions). Mode-switch lineage: Knitro's bar_switchobj=scalarprox, with entry/exit semantics derived from Ipopt's restoration phase and Uno's phase switching.
+        Feasibility-restoration mode selector: off (default) reproduces today's behavior bit-identically -- no restoration strategy is constructed, so every restoration branch in the solver is provably dead. proximal_switch enables the proximal feasibility mode-switch: when the recovery chain exhausts on a rejected step, the solver switches to a pure feasibility phase -- the objective is replaced by a proximal term centered on the switch point (coefficient sqrt(mu) at entry) while all constraints and barrier machinery keep running -- and returns to the true objective once the acceptance strategy's infeasibility-reduction test passes (per-strategy: classic_merit uses a relative infeasibility-reduction test against the entry point, Ipopt restoration-convergence style; merit reduces against the smallest-known infeasibility held from the optimality phase -- frozen at restoration entry and unchanged by feasibility-phase iterates; funnel/filter use their own reference-solver tests). l1_nested enables the nested l1 elastic feasibility restoration instead: the same trigger and the same acceptance-strategy exit test, but the elastic reformulation runs as a condensed in-place phase reusing the outer barrier algorithm's own KKT system, rather than swapping the outer objective for a proximal term -- see RestorationModes for the mechanism and Ipopt-lineage citations. Unlike proximal_switch, l1_nested first tries a soft feasibility pre-stage (full fraction-to-boundary steps tested under a primal-dual-error reduction rule) and only escalates to the full elastic switch after several soft steps in a row fail to recover; proximal_switch has no pre-stage and switches directly. Both modes refuse entry at a near-feasible point or once the per-phase budget max_feas_rest is exhausted. Composes with every acceptance_strategy and barrier_governor (no matrix restrictions -- every shipped acceptance strategy implements the exit test either mode relies on). Mode-switch lineage: Knitro's bar_switchobj=scalarprox for proximal_switch, with entry/exit semantics derived from Ipopt's restoration phase and Uno's phase switching for both modes.
         """
 
     @restoration_mode.setter
@@ -635,6 +635,11 @@ class RestorationModes(enum.Enum):
     proximal_switch = 1
     """
     Proximal feasibility mode-switch: on a ladder-exhausted step rejection, keep the same barrier algorithm running but swap the true objective for a proximal term pulling the primals back toward the switch point, until the acceptance strategy's infeasibility-reduction test passes -- see the restoration_mode property docstring for the full mechanism. Composes with every acceptance_strategy and barrier_governor.
+    """
+
+    l1_nested = 2
+    """
+    Nested l1 elastic feasibility restoration: on a ladder-exhausted step rejection, solve the l1 elastic reformulation of the current KKT system as a condensed in-place phase -- each row gets a pair of nonnegative elastic slacks (n, p) absorbing the residual, penalized at rho=1e3 plus a proximity term pulling the primals back toward the switch point with weight sqrt(mu) -- rather than switching the outer objective the way proximal_switch does; the phase reuses the outer barrier algorithm's own KKT system instead of spinning up a separate nested solver. Constants (the penalty rho, the proximity weight factor, the entry/re-entry rules) are pinned at Ipopt's restoration-phase literature defaults (coin-or/Ipopt's IpRestoIpoptNLP / IpRestoIterateInitializer / IpRestoMinC_1Nrm). Before commiting to the full elastic switch, a soft feasibility pre-stage first tries ordinary fraction-to-boundary steps under a primal-dual-error reduction rule for a bounded number of consecutive iterations (adapted from Ipopt's soft restoration phase) and only escalates once that budget is exhausted; proximal_switch has no such pre-stage. Prefer l1_nested over proximal_switch when a stall is a genuinely constraint-infeasible point the elastic reformulation can relax productively (the pre-stage also gives it a cheaper recovery attempt before the full switch); prefer proximal_switch for a simpler, cheaper mode-switch with no elastic-slack bookkeeping. Returns to the true objective on the same acceptance-strategy infeasibility-reduction test proximal_switch uses -- see the restoration_mode property docstring. Composes with every acceptance_strategy and barrier_governor; the diagnostics last_feas_rest_entries/last_feas_rest_iters count identically for both modes.
     """
 
 class PDStepStrategies(enum.Enum):
