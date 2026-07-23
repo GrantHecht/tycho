@@ -160,10 +160,12 @@ SolverContext feas_switch_context(KktSolverType &solver, PSIOPT::Settings &setti
 // Drive FeasibilitySwitchRecovery::on_step_rejected once and return its Action;
 // captures resolved_depth via the out-parameter.
 RecoveryChain::Action drive_feas_switch(FeasibilitySwitchRecovery &fsr, SolverContext &ctx,
-                                        int &resolved_depth_out) {
+                                        int &resolved_depth_out,
+                                        IterateInfo *citer_out = nullptr) {
     FeasSwitchUnusedMechanism mechanism;
     FeasSwitchUnusedAcceptance acceptance;
-    IterateInfo citer;
+    IterateInfo local_citer;
+    IterateInfo &citer = citer_out ? *citer_out : local_citer;
     const std::vector<IterateInfo> iters;
     Eigen::VectorXd v;
     double alpha = 1.0, alphap = 1.0, alphad = 1.0;
@@ -290,8 +292,10 @@ TEST(FeasibilitySwitchTruthTable, WatchdogResolvedAcceptPassesThrough) {
     FeasibilitySwitchRecovery fsr(std::make_unique<FeasSwitchStubInner>(
         RecoveryChain::Action::kAcceptAsIs, kRecoveryDepthWatchdog, /*stamp_accepted=*/true));
     int depth = 0;
-    EXPECT_EQ(drive_feas_switch(fsr, ctx, depth), RecoveryChain::Action::kAcceptAsIs);
+    IterateInfo citer;
+    EXPECT_EQ(drive_feas_switch(fsr, ctx, depth, &citer), RecoveryChain::Action::kAcceptAsIs);
     EXPECT_EQ(depth, kRecoveryDepthWatchdog); // depth preserved, not overwritten
+    EXPECT_TRUE(citer.accepted_); // the resolved acceptance itself survives the pass-through
 }
 
 TEST(FeasibilitySwitchTruthTable, NullInnerChainRejected) {
