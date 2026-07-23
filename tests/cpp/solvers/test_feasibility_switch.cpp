@@ -41,6 +41,7 @@ using tycho::solvers::GlobalizationMechanism;
 using tycho::solvers::IterateInfo;
 using tycho::solvers::kRecoveryDepthRestoration;
 using tycho::solvers::kRecoveryDepthUnresolved;
+using tycho::solvers::kRecoveryDepthWatchdog;
 using tycho::solvers::KktSolverType;
 using tycho::solvers::OptimizationProblem;
 using tycho::solvers::ProgressMeasures;
@@ -86,24 +87,33 @@ class FeasSwitchStubRestoration : public RestorationStrategy {
 };
 
 // Inner recovery double returning a configured Action, so FeasibilitySwitchRecovery's
-// delegation and pass-through can be observed. Stamps a marker resolved_depth so
-// the pass-through case can confirm it is preserved.
+// delegation and pass-through can be observed. Stamps a configurable
+// resolved_depth (default kRecoveryDepthUnresolved, the caller-seeded sentinel a
+// ladder-exhausted chain leaves in place) so the pass-through cases can confirm
+// it is preserved, and optionally stamps Citer.accepted_ to mimic a
+// watchdog-resolved kAcceptAsIs.
 class FeasSwitchStubInner : public RecoveryChain {
   public:
-    explicit FeasSwitchStubInner(Action action) : action_(action) {}
-    Action on_step_rejected(IterateInfo &, const std::vector<IterateInfo> &, SolverContext &,
+    explicit FeasSwitchStubInner(Action action, int stamp_depth = kRecoveryDepthUnresolved,
+                                 bool stamp_accepted = false)
+        : action_(action), stamp_depth_(stamp_depth), stamp_accepted_(stamp_accepted) {}
+    Action on_step_rejected(IterateInfo &citer, const std::vector<IterateInfo> &, SolverContext &,
                             AcceptanceStrategy &, GlobalizationMechanism &,
                             PSIOPT::LineSearchModes, double, double, double, double,
                             Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &,
                             Eigen::VectorXd &, Eigen::VectorXd &, double &, double &, double &,
                             int &, int &resolved_depth, int &) override {
         ++calls_;
-        resolved_depth = kRecoveryDepthUnresolved;
+        resolved_depth = stamp_depth_;
+        if (stamp_accepted_)
+            citer.accepted_ = true;
         return action_;
     }
     void reset() override {}
 
     Action action_;
+    int stamp_depth_;
+    bool stamp_accepted_;
     int calls_ = 0;
 };
 
@@ -258,6 +268,30 @@ TEST(FeasibilitySwitchTruthTable, EntryPermittedSwitchesAndStampsDepth) {
     int depth = 0;
     EXPECT_EQ(drive_feas_switch(fsr, ctx, depth), RecoveryChain::Action::kSwitchToFeasibility);
     EXPECT_EQ(depth, kRecoveryDepthRestoration);
+}
+
+// A watchdog-resolved kAcceptAsIs must NOT be hijacked into a feasibility
+// switch. The watchdog's trial-acceptance path returns kAcceptAsIs but has
+// RESOLVED the rejection — it stamps Citer.accepted_ = true and writes
+// resolved_depth = kRecoveryDepthWatchdog (any link that resolved sets its own
+// depth). kAcceptAsIs alone is overloaded, so the interception is gated on the
+// depth out-parameter staying at the caller-seeded kRecoveryDepthUnresolved;
+// here it is kRecoveryDepthWatchdog, so the wrapper passes the step through
+// unchanged and preserves the depth. Restoration is present, inactive, and would
+// otherwise permit entry — proving the depth check alone blocks the switch.
+TEST(FeasibilitySwitchTruthTable, WatchdogResolvedAcceptPassesThrough) {
+    KktSolverType solver;
+    PSIOPT::Settings settings;
+    int zero = 0;
+    Eigen::VectorXd scratch;
+    FeasSwitchStubRestoration restoration; // active_=false, permit_=true
+    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+
+    FeasibilitySwitchRecovery fsr(std::make_unique<FeasSwitchStubInner>(
+        RecoveryChain::Action::kAcceptAsIs, kRecoveryDepthWatchdog, /*stamp_accepted=*/true));
+    int depth = 0;
+    EXPECT_EQ(drive_feas_switch(fsr, ctx, depth), RecoveryChain::Action::kAcceptAsIs);
+    EXPECT_EQ(depth, kRecoveryDepthWatchdog); // depth preserved, not overwritten
 }
 
 TEST(FeasibilitySwitchTruthTable, NullInnerChainRejected) {

@@ -1246,11 +1246,19 @@ RecoveryChain::Action FeasibilitySwitchRecovery::on_step_rejected(
         DXSL, XSL2, RHS, RHS2, alpha, alphap, alphad, soc_steps, resolved_depth,
         watchdog_activations);
 
-    // Only a ladder-exhausted rejection (inner kAcceptAsIs — today's take-as-is
-    // fallback) is a candidate for a feasibility switch; anything the inner
-    // chain actually resolved (kRetry/kSwitchToFeasibility/kGiveUp) passes
-    // through untouched, with the resolved_depth it already set.
-    if (inner != Action::kAcceptAsIs)
+    // Only a ladder-exhausted rejection is a candidate for a feasibility
+    // switch. kAcceptAsIs alone is NOT a sufficient discriminator: it is
+    // overloaded. The watchdog's trial-acceptance path also returns kAcceptAsIs
+    // — but it has RESOLVED the rejection (it stamped Citer.accepted_ = true and
+    // wrote resolved_depth = kRecoveryDepthWatchdog), taking the relaxed step on
+    // purpose. Only the ladder-exhaustion fallback returns kAcceptAsIs while
+    // leaving resolved_depth at the caller-seeded kRecoveryDepthUnresolved (any
+    // link that resolved sets its own depth). So the designed discriminator is
+    // the depth out-parameter, not the Action: intercept only an UNRESOLVED
+    // kAcceptAsIs. Anything else — a resolved kAcceptAsIs (watchdog), or a
+    // kRetry/kSwitchToFeasibility/kGiveUp — passes through untouched, with the
+    // resolved_depth it already set.
+    if (inner != Action::kAcceptAsIs || resolved_depth != kRecoveryDepthUnresolved)
         return inner;
 
     // No restoration strategy configured, or already in restoration mode:

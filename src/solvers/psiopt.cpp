@@ -1517,10 +1517,19 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                     // are all true-objective-scale -- cur.objective (= φ_prox) is
                     // never valid there, so the true objective is re-evaluated at
                     // the live primals via the shared exit-measures helper.
+                    // Count this exit iteration in the in-mode total (it was a
+                    // feasibility-mode iterate; the stay-in-mode note_iteration
+                    // below only counts iterations that keep going).
+                    this->restoration_->note_iteration();
                     this->restoration_->exit_restoration();
                     this->acceptance_->notify_switch_to_optimality(
                         this->build_restoration_exit_measures(obj_scale, cur.infeasibility,
                                                               v_xsl.primals(), barr_obj));
+                    // Reset the recovery chain across the mode switch (see the
+                    // entry-side rationale at the kSwitchToFeasibility case): the
+                    // watchdog's objective-scale-bound snapshot/counters must not
+                    // survive back into the optimality phase. Once per transition.
+                    this->recovery_->reset();
                     iters.pop_back();
                     QPtimer.stop();
                     continue;
@@ -1538,8 +1547,14 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                     ProgressMeasures exit_measures = this->build_restoration_exit_measures(
                         obj_scale, cur.infeasibility, v_xsl.primals(), barr_obj);
                     restoration_was_active = true;
+                    // Count this exit iteration in the in-mode total (see the
+                    // near-feasible exit above).
+                    this->restoration_->note_iteration();
                     this->restoration_->exit_restoration();
                     this->acceptance_->notify_switch_to_optimality(exit_measures);
+                    // Reset the recovery chain across the mode switch (see the
+                    // kSwitchToFeasibility entry rationale). Once per transition.
+                    this->recovery_->reset();
                 }
                 iters.back().mu_ = mu;
                 QPtimer.stop();
@@ -1576,10 +1591,16 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 // point cur == reference so this cannot fire (θ_trial == θ_ref).
                 if (this->acceptance_->is_infeasibility_sufficiently_reduced(
                         this->restoration_->reference(), cur)) {
+                    // Count this exit iteration in the in-mode total (the
+                    // stay-in-mode note_iteration below is skipped on exit).
+                    this->restoration_->note_iteration();
                     this->restoration_->exit_restoration();
                     this->acceptance_->notify_switch_to_optimality(
                         this->build_restoration_exit_measures(obj_scale, cur.infeasibility,
                                                               v_xsl.primals(), barr_obj));
+                    // Reset the recovery chain across the mode switch (see the
+                    // kSwitchToFeasibility entry rationale). Once per transition.
+                    this->recovery_->reset();
                     iters.pop_back();
                     QPtimer.stop();
                     continue;
@@ -1615,7 +1636,14 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             QPtimer.stop();
             ExitCode = PreExitCode;
 
-            if (settings_.return_best_) {
+            // Suspend best-iterate tracking while restoration is active (dead on
+            // the default path: restoration_ null). A feasibility-mode iterate's
+            // prim_obj/kkt_inf are proximal-scale and must not compete with
+            // true-objective iterates for "best" — otherwise return_best_ could
+            // report a mixed-scale winner. Only DIVERGING-while-active reaches
+            // this early-exit block (CONVERGED/ACCEPTABLE are intercepted by the
+            // restoration handling above).
+            if (settings_.return_best_ && !(this->restoration_ && this->restoration_->is_active())) {
                 double critval;
                 switch (settings_.best_criteria_) {
                 case BestCriteriaModes::ECONS:
@@ -1851,6 +1879,15 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 entry.auxiliary = barr_obj;
                 this->restoration_->enter_restoration(entry, v_xsl.primals(), mu);
                 this->acceptance_->notify_switch_to_feasibility(entry);
+                // Reset the recovery chain across the mode switch. WatchdogRecovery
+                // holds armed-state/counters and a full-iterate revert snapshot
+                // (snapshot_xsl_) whose merit references are bound to the optimality
+                // objective scale; carrying them into feasibility mode would let a
+                // feasibility-mode revert restore a pre-switch iterate under an
+                // incomparable merit scale. Same precedent as the per-phase reset
+                // in run_phase_sequence() and the μ-event-triggered watchdog reset.
+                // Once per transition; dead on the default path (restoration_ null).
+                this->recovery_->reset();
                 alpha = 0.0;
                 break;
             }
@@ -1877,7 +1914,12 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         this->fill_iter_info(v_xsl, v_rhs, prim_obj, barr_obj, mu, Citer);
         iters.push_back(Citer);
 
-        if (settings_.return_best_) {
+        // Suspend best-iterate tracking while restoration is active (dead on the
+        // default path: restoration_ null). A feasibility-mode iterate's
+        // prim_obj/kkt_inf are proximal-scale and must not compete with
+        // true-objective iterates for "best" — otherwise return_best_ could
+        // report a mixed-scale winner.
+        if (settings_.return_best_ && !(this->restoration_ && this->restoration_->is_active())) {
             double critval;
             switch (settings_.best_criteria_) {
             case BestCriteriaModes::ECONS:
@@ -1962,8 +2004,16 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             obj_scale, v_rhs.all_cons().template lpNorm<1>(), v_xsl.primals(), 0.0);
         restoration_was_active = true;
         restoration_true_obj = measures.objective;
+        // No note_iteration() here: this teardown catches the max_iters /
+        // divergence exits, whose final feasibility-mode iterate was already
+        // counted by the in-loop stay-in-mode note_iteration() before the loop
+        // broke (the decision-driven in-loop exits, which return before that
+        // point, are the ones that count their exit iteration explicitly).
         this->restoration_->exit_restoration();
         this->acceptance_->notify_switch_to_optimality(measures);
+        // Reset the recovery chain across the mode switch (see the
+        // kSwitchToFeasibility entry rationale). Once per transition.
+        this->recovery_->reset();
     }
 
     if (algmode == AlgorithmModes::OPT) {
