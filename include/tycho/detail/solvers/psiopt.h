@@ -51,6 +51,9 @@
 class RecoveryDispatchGate_FunnelSelectionConstructsFunnelAcceptance_Test;
 class RecoveryDispatchGate_FilterSelectionConstructsFilterAcceptance_Test;
 class RecoveryDispatchGate_MonitoredSelectionConstructsMonitoredGovernor_Test;
+class FeasibilitySwitch_ProximalSwitchConstructsRestorationAndWrapsRecovery_Test;
+class FeasibilitySwitch_OffModeConstructsNoRestoration_Test;
+class FeasibilitySwitch_FilterSeedsRestorationConstraintTol_Test;
 
 namespace tycho::solvers {
 
@@ -630,6 +633,9 @@ class PSIOPT {
     friend class ::RecoveryDispatchGate_FunnelSelectionConstructsFunnelAcceptance_Test;
     friend class ::RecoveryDispatchGate_FilterSelectionConstructsFilterAcceptance_Test;
     friend class ::RecoveryDispatchGate_MonitoredSelectionConstructsMonitoredGovernor_Test;
+    friend class ::FeasibilitySwitch_ProximalSwitchConstructsRestorationAndWrapsRecovery_Test;
+    friend class ::FeasibilitySwitch_OffModeConstructsNoRestoration_Test;
+    friend class ::FeasibilitySwitch_FilterSeedsRestorationConstraintTol_Test;
 
     Settings settings_;
     SolveResult result_;

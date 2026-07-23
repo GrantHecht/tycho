@@ -39,6 +39,7 @@
 
 #include "tycho/detail/solvers/globalization/backtracking_line_search.h"
 #include "tycho/detail/solvers/globalization/classic_adaptive_governor.h"
+#include "tycho/detail/solvers/globalization/feasibility_switch_recovery.h"
 #include "tycho/detail/solvers/globalization/filter_acceptance.h"
 #include "tycho/detail/solvers/globalization/funnel_acceptance.h"
 #include "tycho/detail/solvers/globalization/merit_acceptance.h"
@@ -1145,6 +1146,56 @@ RecoveryChain::Action ChainedRecovery::on_step_rejected(
     }
     resolved_depth = kRecoveryDepthUnresolved;
     return Action::kAcceptAsIs;
+}
+
+// ============================================================================
+// FeasibilitySwitchRecovery — outermost link; converts a ladder-exhausted
+// rejection into a feasibility-restoration mode-switch. See
+// feasibility_switch_recovery.h for the design.
+// ============================================================================
+
+RecoveryChain::Action FeasibilitySwitchRecovery::on_step_rejected(
+    IterateInfo &Citer, const std::vector<IterateInfo> &iters, SolverContext &ctx,
+    AcceptanceStrategy &acceptance, GlobalizationMechanism &mechanism,
+    PSIOPT::LineSearchModes lsmode, double obj_scale, double mu, double prim_obj, double barr_obj,
+    Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
+    Eigen::VectorXd &RHS2, double &alpha, double &alphap, double &alphad, int &soc_steps,
+    int &resolved_depth, int &watchdog_activations) {
+    // Delegate the whole rejection to the inner chain first.
+    const Action inner = inner_->on_step_rejected(
+        Citer, iters, ctx, acceptance, mechanism, lsmode, obj_scale, mu, prim_obj, barr_obj, XSL,
+        DXSL, XSL2, RHS, RHS2, alpha, alphap, alphad, soc_steps, resolved_depth,
+        watchdog_activations);
+
+    // Only a ladder-exhausted rejection (inner kAcceptAsIs — today's take-as-is
+    // fallback) is a candidate for a feasibility switch; anything the inner
+    // chain actually resolved (kRetry/kSwitchToFeasibility/kGiveUp) passes
+    // through untouched, with the resolved_depth it already set.
+    if (inner != Action::kAcceptAsIs)
+        return inner;
+
+    // No restoration strategy configured, or already in restoration mode:
+    // there is nothing to switch into. (Both are impossible while active,
+    // since alg_impl re-enters iterations in feasibility mode — but guarding
+    // keeps the link correct in isolation and under the unit tests.)
+    if (ctx.restoration_ == nullptr || ctx.restoration_->is_active())
+        return inner;
+
+    // Current-iterate constraint violation: L1 norm of the KKT constraint block
+    // (the [eq | iq] tail of RHS), the same measure alg_impl builds the
+    // restoration reference from.
+    const int ncons = ctx.equal_cons_ + ctx.inequal_cons_;
+    const double constraint_violation = RHS.tail(ncons).template lpNorm<1>();
+
+    // Near-feasible guard + per-phase entry budget (RestorationStrategy::
+    // entry_permitted). Either refusing keeps the inner take-as-is behavior.
+    if (!ctx.restoration_->entry_permitted(constraint_violation, ctx))
+        return inner;
+
+    // Signal the switch. This link mutates nothing; alg_impl's
+    // kSwitchToFeasibility case performs the actual mode entry.
+    resolved_depth = kRecoveryDepthRestoration;
+    return Action::kSwitchToFeasibility;
 }
 
 // ============================================================================
