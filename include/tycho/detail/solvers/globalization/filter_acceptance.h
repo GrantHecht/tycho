@@ -218,7 +218,12 @@
 //     next phase-boundary reset, rather than returning to the exact pre-
 //     restoration optimality values; this affects only the heuristic switching/
 //     ceiling scalars, never the filter membership or dominance semantics that
-//     govern acceptance.
+//     govern acceptance. Direction and self-heal: because the feasibility-
+//     phase θ₀ is the (high) entry infeasibility, the retained ceiling is
+//     LOOSER/MORE PERMISSIVE than a byte-restored optimality ceiling would
+//     be — and the divergence self-heals at the next μ-event or phase reset,
+//     either of which re-derives θ_min/θ_max from the then-current
+//     optimality-phase measures.
 //   • Membership-check ORDER (no longer a rejection-attribution divergence).
 //     The shared skeleton still checks the filter membership (1b) at step 2,
 //     before the switching/Armijo/(1a) tests at step 3 — the unified order
@@ -441,10 +446,18 @@ class FilterAcceptance final : public SwitchingAcceptance {
     // Set at entry, cleared at exit. Makes reset() phase-aware (see (6)): a
     // μ-event reset mid-feasibility-phase must preserve the stash + this flag.
     bool in_feasibility_phase_ = false;
-    // Injected constraint-violation tolerance for the exit floor; defaults to
-    // PSIOPT::Settings::econ_tol_'s default (1e-6). Configuration, not working
-    // state — left untouched by reset(). See set_restoration_constraint_tol().
-    double restoration_constraint_tol_ = 1.0e-6;
+    // Injected constraint-violation tolerance for the exit floor; derived from
+    // PSIOPT::Settings's own default (not a duplicated literal) so this member
+    // and Settings::econ_tol_ can never silently drift apart. Configuration,
+    // not working state — left untouched by reset(). See
+    // set_restoration_constraint_tol(). HARD CONTRACT: this default is only a
+    // placeholder until the solver seam exists — the future solver wiring
+    // MUST call set_restoration_constraint_tol() with the live
+    // Settings::econ_tol_ value when it activates restoration; failing to do
+    // so leaves the exit floor pinned to the default even if the user has
+    // configured a different econ_tol_, silently decoupling the restoration
+    // exit test from the user's actual constraint tolerance.
+    double restoration_constraint_tol_ = PSIOPT::Settings{}.econ_tol_;
 };
 
 } // namespace tycho::solvers

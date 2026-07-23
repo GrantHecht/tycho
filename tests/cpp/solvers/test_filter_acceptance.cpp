@@ -45,6 +45,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <stdexcept>
 
 namespace {
 
@@ -620,14 +621,14 @@ TEST(FilterRestoration, ExitAllClausesPassRelativeFloorDominates) {
                                                         FilterMakePm(0.5, 9.0, 0.0)));
 }
 
-// Relative floor rejects independently. Same setup; trial θ = 0.95 > 0.9 = floor
-// ⇒ FALSE, even though the stash does not block it and the θ margin (0.95 ≤
-// 0.99999) would pass acceptable-to-reference.
+// Relative floor rejects independently. Same setup; trial θ = kKappaResto +
+// 0.05 = 0.95 > 0.9 = floor ⇒ FALSE, even though the stash does not block it
+// and the θ margin (0.95 ≤ 0.99999) would pass acceptable-to-reference.
 TEST(FilterRestoration, ExitRelativeFloorRejects) {
     FilterAcceptance a;
     a.notify_switch_to_feasibility(FilterMakePm(1.0, 10.0, 0.0));
-    EXPECT_FALSE(a.is_infeasibility_sufficiently_reduced(FilterMakePm(1.0, 10.0, 0.0),
-                                                         FilterMakePm(0.95, 9.0, 0.0)));
+    EXPECT_FALSE(a.is_infeasibility_sufficiently_reduced(
+        FilterMakePm(1.0, 10.0, 0.0), FilterMakePm(kKappaResto + 0.05, 9.0, 0.0)));
 }
 
 // Tolerance floor waives the relative test when θ_ref is tiny. entry/reference =
@@ -708,6 +709,26 @@ TEST(FilterRestoration, StashRestoreRoundTrip) {
         EXPECT_DOUBLE_EQ(phi1, 20.0 - kFilterGammaPhi * 0.5);
         EXPECT_DOUBLE_EQ(theta1, (1.0 - kFilterGammaTheta) * 0.5);
     }
+}
+
+// ===========================================================================
+// Phase-transition mis-wiring guards (T6): a second entry without an
+// intervening exit would run `stashed_filter_ = filter_` while filter_ holds
+// the FEASIBILITY working filter, silently clobbering the preserved
+// optimality stash; an exit without a preceding entry has no stash to
+// restore. Both are solver wiring bugs, not recoverable runtime conditions,
+// so both throw std::logic_error.
+// ===========================================================================
+
+TEST(FilterRestoration, EntryWithoutInterveningExitThrows) {
+    FilterAcceptance a;
+    a.notify_switch_to_feasibility(FilterMakePm(2.0, 8.0, 0.0));
+    EXPECT_THROW(a.notify_switch_to_feasibility(FilterMakePm(1.5, 7.0, 0.0)), std::logic_error);
+}
+
+TEST(FilterRestoration, ExitWithoutPrecedingEntryThrows) {
+    FilterAcceptance a;
+    EXPECT_THROW(a.notify_switch_to_optimality(FilterMakePm(0.5, 20.0, 0.0)), std::logic_error);
 }
 
 // ===========================================================================

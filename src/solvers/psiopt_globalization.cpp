@@ -1496,6 +1496,17 @@ bool FilterAcceptance::is_infeasibility_sufficiently_reduced(const ProgressMeasu
 }
 
 void FilterAcceptance::notify_switch_to_feasibility(const ProgressMeasures &current_progress) {
+    // T6: a second entry without an intervening exit would run
+    // `stashed_filter_ = filter_` while filter_ already holds the
+    // FEASIBILITY working filter, silently clobbering the preserved
+    // optimality stash — a phase-transition mis-wiring, not a recoverable
+    // runtime condition.
+    if (in_feasibility_phase_)
+        throw std::logic_error(
+            "FilterAcceptance::notify_switch_to_feasibility: already in the feasibility "
+            "phase (in_feasibility_phase_ is true) — a solver wiring bug called entry "
+            "without an intervening notify_switch_to_optimality exit");
+
     // (5a). Uno FilterMethod::notify_switch_to_feasibility (Ipopt
     // PrepareRestoPhaseStart analog): augment the optimality filter with the
     // entry pair BEFORE it is preserved. φ = objective + auxiliary (the
@@ -1520,6 +1531,16 @@ void FilterAcceptance::notify_switch_to_feasibility(const ProgressMeasures &curr
 }
 
 void FilterAcceptance::notify_switch_to_optimality(const ProgressMeasures &current_progress) {
+    // T6: an exit without a preceding entry has no stash to restore — running
+    // this body would overwrite the live optimality filter with whatever
+    // stashed_filter_ last held (empty, or a stale stash from a prior phase),
+    // a phase-transition mis-wiring symmetric to the entry-side hazard above.
+    if (!in_feasibility_phase_)
+        throw std::logic_error(
+            "FilterAcceptance::notify_switch_to_optimality: not in the feasibility phase "
+            "(in_feasibility_phase_ is false) — a solver wiring bug called exit without a "
+            "preceding notify_switch_to_feasibility entry");
+
     // (5c). Restore the preserved optimality-phase working state and augment the
     // restored filter with the EXIT pair (Uno FilterMethod::
     // notify_switch_to_optimality — Uno adds the switch-point pair at BOTH
