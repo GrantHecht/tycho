@@ -1204,9 +1204,15 @@ void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
                                                     GX.head(primal_vars_));
             // Replace the raw constraint residuals with the condensed r̃. Copy the
             // raw residual c out first: condensed_residuals reads c and writes r̃,
-            // and the target segments alias the raw-c source in the RHS vector.
+            // and the target segments alias the raw-c source in the RHS vector. The
+            // inequality residual for the elastic row is the slack-completed g(x)+s
+            // (the same residual the ordinary path forms via apply_reset_slacks,
+            // which is suppressed for the nested phase so it cannot clobber r̃);
+            // eval_kkt_no leaves only the raw g(x) in the RHS, so add the slacks
+            // here. This is also the true original-problem inequality infeasibility
+            // the exit ratchet/classification reads back from resto_ic_scratch_.
             this->resto_ec_scratch_ = AGXS_FX.segment(primal_vars_ + slack_vars_, ec);
-            this->resto_ic_scratch_ = AGXS_FX.tail(ic);
+            this->resto_ic_scratch_ = AGXS_FX.tail(ic) + XSL.segment(primal_vars_, slack_vars_);
             this->restoration_->condensed_residuals(
                 mu, this->resto_ec_scratch_, this->resto_ic_scratch_,
                 XSL.segment(primal_vars_ + slack_vars_, ec), XSL.tail(ic),
@@ -1627,7 +1633,20 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                        mu);
 
         if (this->inequal_cons_ > 0) {
-            this->apply_reset_slacks(v_xsl.slacks(), v_rhs.iq_cons());
+            // apply_reset_slacks completes the raw inequality residual g(x) into the
+            // slack form g(x)+s (and resets negative slacks). The nested restoration
+            // eval seam has ALREADY formed the condensed residual r̃ from the
+            // slack-completed residual and written it into the iq RHS; running the
+            // completion again here would add the slack a second time or (when r̃ is
+            // negative) zero the row outright, destroying the elastic Newton
+            // direction. Skip it while a nested restoration phase is active — the
+            // slacks stay strictly positive through the elastic fraction-to-boundary
+            // caps, so barrier_hessian/complementarity still consume valid slacks.
+            const bool nested_resto_active = this->restoration_ &&
+                                             this->restoration_->is_active() &&
+                                             this->restoration_->is_nested();
+            if (!nested_resto_active)
+                this->apply_reset_slacks(v_xsl.slacks(), v_rhs.iq_cons());
             this->barrier_hessian(this->kkt_sol_.get_matrix(), v_xsl.slacks(), v_xsl.iq_lmults(),
                                   mu);
             this->complementarity(v_xsl.slacks(), v_xsl.iq_lmults(), avgcomp, mincomp, maxcomp);

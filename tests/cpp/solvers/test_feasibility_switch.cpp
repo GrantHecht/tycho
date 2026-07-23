@@ -823,6 +823,139 @@ TEST(NestedRestorationSeam, ProximalPathNeverConsultsNestedSurface) {
 }
 
 // -----------------------------------------------------------------------------
+// 4b. Inequality-row seam through the assembled KKT. The equality-only harness
+// above left the inequality condensation unverified at the seam level; that gap
+// let a defect slip where the seam condensed the RAW residual g(x) instead of the
+// slack-completed g(x)+s and the main loop's slack-completion then clobbered the
+// condensed inequality RHS. These tests pin the inequality-row sign convention:
+// the (z,z) diagonal is the negated inequality pivot, and the RHS carries the
+// condensed r̃ built from g(x)+s (NOT the raw g(x)). Befriended by PSIOPT.
+// -----------------------------------------------------------------------------
+class NestedSeamIneqHarness {
+  public:
+    NestedSeamIneqHarness() {
+        using tycho::vf::Arguments;
+        using tycho::vf::GenericFunction;
+        prob_.set_vars((Eigen::VectorXd(2) << 0.0, 0.0).finished());
+        {
+            auto args = Arguments<2>();
+            auto x0 = args.coeff<0>();
+            auto x1 = args.coeff<1>();
+            prob_.add_objective(GenericFunction<-1, 1>(x0 * x0 + x1 * x1),
+                                (Eigen::VectorXi(2) << 0, 1).finished());
+        }
+        {
+            auto args = Arguments<1>();
+            auto x = args.coeff<0>();
+            // Inequality x0 - 5 <= 0; raw constraint value g(x) = x0 - 5. The elastic
+            // row residual is the slack-completed g(x) + s.
+            prob_.add_inequal_con(GenericFunction<-1, -1>(x - 5.0),
+                                  (Eigen::VectorXi(1) << 0).finished());
+        }
+        prob_.optimizer_->set_print_level(3);
+        prob_.transcribe();
+        solver_ = prob_.optimizer_.get();
+    }
+
+    PSIOPT &solver() { return *solver_; }
+    int pv() const { return solver_->primal_vars_; }
+    int sv() const { return solver_->slack_vars_; }
+    int ec() const { return solver_->equal_cons_; }
+    int ic() const { return solver_->inequal_cons_; }
+    int dim() const { return solver_->kkt_dim_; }
+
+    // Enter nested restoration with the inequality residual g(x)+s implied by the
+    // given primals and slack (no equality channel).
+    NestedL1Restoration *enter_nested(const Eigen::VectorXd &primals, double slack,
+                                      double outer_mu) {
+        auto strat = std::make_unique<NestedL1Restoration>();
+        NestedL1Restoration *raw = strat.get();
+        solver_->restoration_ = std::move(strat);
+        Eigen::VectorXd eq_res(0);
+        Eigen::VectorXd iq_res(1);
+        iq_res[0] = (primals[0] - 5.0) + slack; // g(x) + s
+        tycho::solvers::ProgressMeasures ref;
+        ref.infeasibility = 0.0;
+        ref.objective = 0.0;
+        ref.auxiliary = 0.0;
+        raw->enter_nested(ref, primals, eq_res, iq_res, outer_mu);
+        return raw;
+    }
+
+    // Run the nested eval seam once at (primals, slack, z) with barrier mu; record
+    // the assembled KKT inequality-row diagonal and the RHS inequality segment.
+    void run_eval_seam(const Eigen::VectorXd &primals, double slack, double z, double mu) {
+        Eigen::VectorXd XSL = Eigen::VectorXd::Zero(dim());
+        XSL.head(pv()) = primals;
+        XSL[pv()] = slack;      // single slack (sv == ic == 1)
+        XSL[dim() - 1] = z;     // single inequality multiplier
+        Eigen::VectorXd GX = Eigen::VectorXd::Zero(pv());
+        Eigen::VectorXd AGXS = Eigen::VectorXd::Zero(dim());
+        double val = 0.0;
+        solver_->eval_nlp(PSIOPT::AlgorithmModes::OPTNO, 0.0, XSL, val, GX, AGXS,
+                          solver_->kkt_sol_.get_matrix(), mu);
+        const int zrow = pv() + sv() + ec();
+        kkt_zz_ = solver_->kkt_sol_.get_matrix().coeff(zrow, zrow);
+        rhs_iq_ = AGXS.tail(ic())[0];
+    }
+
+    double kkt_zz_ = 0.0;
+    double rhs_iq_ = 0.0;
+
+  private:
+    OptimizationProblem prob_;
+    PSIOPT *solver_ = nullptr;
+};
+
+// (i-iq) The assembled KKT inequality-row diagonal equals the NEGATED component
+// inequality pivot (same sign convention as the equality row).
+TEST(NestedRestorationSeam, IqPivotDiagonalNegatesComponentPivot) {
+    NestedSeamIneqHarness h;
+    Eigen::VectorXd primals = (Eigen::VectorXd(2) << 0.0, 0.0).finished();
+    const double slack = 3.0;
+    NestedL1Restoration *comp = h.enter_nested(primals, slack, /*outer_mu=*/0.1);
+    h.run_eval_seam(primals, slack, /*z=*/0.5, /*mu=*/comp->entry_mu());
+
+    ASSERT_EQ(comp->i_pivots().size(), 1);
+    EXPECT_GT(comp->i_pivots()[0], 0.0); // component pivot is positive
+    EXPECT_NEAR(h.kkt_zz_, -comp->i_pivots()[0], 1e-10);
+}
+
+// (ii-iq) The RHS inequality segment equals the condensed residual r̃ recomputed
+// from the SLACK-COMPLETED residual g(x)+s (not the raw g(x)), the component's
+// live elastic state, the multiplier z, and μ. Guarding this at the seam is the
+// coverage that was missing: the raw-residual defect produced a materially
+// different r̃ whenever the slack is nonzero.
+TEST(NestedRestorationSeam, IqRhsSegmentCarriesSlackCompletedCondensedResidual) {
+    NestedSeamIneqHarness h;
+    Eigen::VectorXd primals = (Eigen::VectorXd(2) << 0.0, 0.0).finished();
+    const double slack = 3.0;
+    NestedL1Restoration *comp = h.enter_nested(primals, slack, /*outer_mu=*/0.1);
+    const double z = 0.5;
+    const double mu = comp->entry_mu();
+    h.run_eval_seam(primals, slack, z, mu);
+
+    const double rho = tycho::solvers::kRestoPenaltyParameter;
+    const double n = comp->ic_n()[0];
+    const double p = comp->ic_p()[0];
+    const double zn = comp->ic_zn()[0];
+    const double zp = comp->ic_zp()[0];
+
+    // Slack-completed residual: c = g(x) + s.
+    const double c = (primals[0] - 5.0) + slack;
+    const double rtilde =
+        (c + n - p) + mu / zn - (n / zn) * (rho + z) - mu / zp + (p / zp) * (rho - z);
+    EXPECT_NEAR(h.rhs_iq_, rtilde, 1e-8 * (1.0 + std::abs(rtilde)));
+
+    // Regression guard: the raw-residual condensation (the defect) would land a
+    // materially different r̃ because the slack is nonzero.
+    const double c_raw = primals[0] - 5.0;
+    const double rtilde_raw =
+        (c_raw + n - p) + mu / zn - (n / zn) * (rho + z) - mu / zp + (p / zp) * (rho - z);
+    EXPECT_GT(std::abs(rtilde - rtilde_raw), 1e-6);
+}
+
+// -----------------------------------------------------------------------------
 // 5. Nested-restoration LIFECYCLE (entry orchestration, exit ratchet, multiplier
 // re-entry) through the private surface. NestedLifecycleHarness is befriended by
 // PSIOPT so it can drive the private enter_/exit_feasibility_restoration helpers

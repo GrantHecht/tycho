@@ -57,6 +57,10 @@ class FeasibilitySwitch_FilterSeedsRestorationConstraintTol_Test;
 // Test harness for the nested feasibility-restoration eval/step seam: reaches
 // private eval_nlp / alg_impl / restoration_ / dims to drive the seam directly.
 class NestedSeamHarness;
+// Inequality-row variant of the seam harness: drives the eval seam on a problem
+// with an inequality constraint so the slack-completed inequality condensation is
+// verified through the assembled KKT.
+class NestedSeamIneqHarness;
 // Test harness for the nested feasibility-restoration LIFECYCLE (entry
 // orchestration, exit ratchet, multiplier re-entry): reaches the private
 // enter_/exit_feasibility_restoration helpers, the stashed-μ / ratchet state,
@@ -647,6 +651,7 @@ class PSIOPT {
     friend class ::FeasibilitySwitch_OffModeConstructsNoRestoration_Test;
     friend class ::FeasibilitySwitch_FilterSeedsRestorationConstraintTol_Test;
     friend class ::NestedSeamHarness;
+    friend class ::NestedSeamIneqHarness;
     friend class ::NestedLifecycleHarness;
 
     Settings settings_;
