@@ -230,6 +230,8 @@ double ClassicMeritAcceptance::ls_lang(double obj_scale, double mu, double prim_
         btest = this->barrier_objective(xsl2.slacks(), mu);
         this->barrier_gradient(xsl2.slacks(), xsl2.iq_lmults(), mu, rhs2.dual_grad());
         if (ctx_.restoration_ && ctx_.restoration_->is_active() && ctx_.restoration_->is_nested()) {
+            resto_eq_shift_scratch_.resize(ctx_.equal_cons_);
+            resto_iq_shift_scratch_.resize(ctx_.inequal_cons_);
             ctx_.restoration_->trial_residual_shift(alpha, resto_eq_shift_scratch_,
                                                     resto_iq_shift_scratch_);
             rhs2.eq_cons() += resto_eq_shift_scratch_;
