@@ -29,6 +29,11 @@
 //           supplies the weight default; src/Algorithm/IpBacktrackingLineSearch.cpp
 //           supplies the near-feasible entry guard this class's entry_permitted()
 //           adapts.
+//   [Knitro] The mode-switch CONCEPT (same barrier algorithm, objective swapped
+//           for a scalar-weighted proximal term rather than a nested solve)
+//           follows Knitro's bar_switchrule/bar_switchobj=scalarprox feature
+//           (documented behavior only — Knitro is closed-source, so entry/exit
+//           mechanics here are the Uno/Ipopt-derived ones above).
 //
 // (1) Proximal coefficient ζ, [Uno] InteriorPointMethod::proximal_coefficient():
 //
