@@ -100,6 +100,7 @@ class GlobalizationMechanism;
 class BarrierGovernor;
 class RecoveryChain;
 class RestorationStrategy;
+struct ProgressMeasures;
 
 class PSIOPT {
   public:
@@ -897,6 +898,21 @@ class PSIOPT {
     void eval_nlp(AlgorithmModes algmode, double obj_scale, ConstEigenRef<VectorXd> XSL,
                   double &val, EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
                   Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
+
+    // --- Feasibility-restoration exit measures (defined in psiopt.cpp) ---
+    // Shared by every restoration exit/teardown site (the two continuing-exit
+    // arms, the in-loop locally-infeasible break, and the post-loop teardown).
+    // While restoration is active, the loop's own prim_obj_ is φ_prox (the
+    // proximal objective substituted by the eval seam) — never valid outside
+    // restoration, since the OPTIMALITY filter/funnel's accumulated pairs are
+    // all true-objective-scale (see the incomparability note in
+    // globalization/progress_measures.h). This helper re-evaluates the TRUE
+    // objective once at the live primals so every exit site hands
+    // notify_switch_to_optimality (and, ultimately, obj_val_) a measures
+    // triple in the same scale as the filter/funnel it is augmenting into.
+    ProgressMeasures build_restoration_exit_measures(double obj_scale, double infeasibility,
+                                                     ConstEigenRef<VectorXd> primals,
+                                                     double barr_obj);
 
     // --- Convergence and stepping ---
     // The residual formulas shared by the pre-factorization early

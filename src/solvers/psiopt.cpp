@@ -1197,6 +1197,25 @@ void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
     }
 }
 
+// Feasibility-restoration exit measures. Dead on the default path (only
+// called from restoration-active branches, all guarded on
+// `restoration_ && restoration_->is_active()`). The current iterate's
+// prim_obj_/cur.objective is φ_prox (the proximal objective substituted by the
+// eval seam in eval_nlp above) while restoration is active — it must never be
+// handed to notify_switch_to_optimality or reported as obj_val_, since both
+// consumers expect true-objective scale. This re-evaluates the true objective
+// once at the live primals, matching the non-OPT obj_val_ eval pattern below
+// (zero the accumulator, then let eval_obj accumulate into it).
+tycho::solvers::ProgressMeasures tycho::solvers::PSIOPT::build_restoration_exit_measures(
+    double obj_scale, double infeasibility, ConstEigenRef<VectorXd> primals, double barr_obj) {
+    ProgressMeasures measures;
+    measures.infeasibility = infeasibility;
+    measures.objective = 0.0;
+    this->nlp_->eval_obj(obj_scale, primals, measures.objective);
+    measures.auxiliary = barr_obj;
+    return measures;
+}
+
 tycho::ConvergenceFlags tycho::solvers::PSIOPT::converge_check(std::vector<IterateInfo> &iters) {
     assert(!iters.empty() && "converge_check called with empty iteration history");
     ConvergenceFlags Flag = ConvergenceFlags::CONVERGED;
@@ -1385,6 +1404,18 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     ConvergenceFlags ExitCode = ConvergenceFlags::NOTCONVERGED;
     bool FirstPert = true;
 
+    // Feasibility-restoration obj_val_ override. Dead on the default path
+    // (never set true unless restoration_ is non-null). Two terminal restoration
+    // exits leave the loop with the last-filled iters.back().prim_obj_ still at
+    // φ_prox (the proximal objective substituted while restoration was active):
+    // the in-loop "converged to a locally infeasible point" break, and the
+    // post-loop max-iters/DIVERGING-while-active catch-all. Both record the true
+    // objective (re-evaluated via build_restoration_exit_measures) here so the
+    // unconditional algmode==OPT obj_val_ assignment below the main loop can be
+    // corrected afterward, once, in a single place.
+    bool restoration_was_active = false;
+    double restoration_true_obj = 0.0;
+
     Runtimer.start();
     for (int i = 0; i < settings_.max_iters_; i++) {
         IterateInfo Citer;
@@ -1467,8 +1498,15 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                     // near-feasible: leave restoration and resume the true
                     // objective. The same iterate is re-evaluated in optimality
                     // mode next iteration (the per-phase budget prevents cycling).
+                    // notify_switch_to_optimality augments this pair into the
+                    // restored OPTIMALITY filter/funnel, whose accumulated pairs
+                    // are all true-objective-scale -- cur.objective (= φ_prox) is
+                    // never valid there, so the true objective is re-evaluated at
+                    // the live primals via the shared exit-measures helper.
                     this->restoration_->exit_restoration();
-                    this->acceptance_->notify_switch_to_optimality(cur);
+                    this->acceptance_->notify_switch_to_optimality(
+                        this->build_restoration_exit_measures(obj_scale, cur.infeasibility,
+                                                              v_xsl.primals(), barr_obj));
                     iters.pop_back();
                     QPtimer.stop();
                     continue;
@@ -1478,8 +1516,14 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 // restoration-convergence failure classification). Tear down
                 // restoration BEFORE returning so the phase-boundary reset() sees
                 // optimality mode, then stop with the NOT-converged verdict.
-                this->restoration_->exit_restoration();
-                this->acceptance_->notify_switch_to_optimality(cur);
+                {
+                    ProgressMeasures exit_measures = this->build_restoration_exit_measures(
+                        obj_scale, cur.infeasibility, v_xsl.primals(), barr_obj);
+                    restoration_was_active = true;
+                    restoration_true_obj = exit_measures.objective;
+                    this->restoration_->exit_restoration();
+                    this->acceptance_->notify_switch_to_optimality(exit_measures);
+                }
                 iters.back().mu_ = mu;
                 QPtimer.stop();
                 ExitCode = ConvergenceFlags::NOTCONVERGED;
@@ -1510,7 +1554,9 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 if (this->acceptance_->is_infeasibility_sufficiently_reduced(
                         this->restoration_->reference(), cur)) {
                     this->restoration_->exit_restoration();
-                    this->acceptance_->notify_switch_to_optimality(cur);
+                    this->acceptance_->notify_switch_to_optimality(
+                        this->build_restoration_exit_measures(obj_scale, cur.infeasibility,
+                                                              v_xsl.primals(), barr_obj));
                     iters.pop_back();
                     QPtimer.stop();
                     continue;
@@ -1872,19 +1918,29 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     // to optimality BEFORE alg_impl returns, so the phase-boundary reset() in
     // run_phase_sequence() always sees optimality mode (the acceptance reset
     // invariant). The in-loop exit paths above already tore down; this is the
-    // catch-all for the loop's break/fall-through exits.
+    // catch-all for the loop's break/fall-through exits (max_iters exhausted, or
+    // DIVERGING, while restoration was still active).
+    //
+    // restoration_was_active/restoration_true_obj (declared near the top of
+    // this function) are set here too, for the obj_val_ override further down:
+    // by the time obj_val_ is set, exit_restoration() has already flipped
+    // is_active() false, so `restoration_ && restoration_->is_active()` can no
+    // longer be re-tested there.
     if (this->restoration_ && this->restoration_->is_active()) {
-        // Self-contained measures (prim_obj/barr_obj are loop-scoped): the
-        // proximal objective at the current primals stands in for objective; the
-        // barrier auxiliary is not recomputed here (the phase is ending and the
-        // next reset() clears everything). Only notify_switch_to_optimality
-        // consumes these — a no-op for the default/merit strategies.
-        ProgressMeasures cur;
-        cur.infeasibility = v_rhs.all_cons().template lpNorm<1>();
-        cur.objective = this->restoration_->proximal_objective(v_xsl.primals());
-        cur.auxiliary = 0.0;
+        // The barrier auxiliary is not recomputed here (the phase is ending
+        // and the next reset() clears everything). The objective, however,
+        // must be the TRUE objective, not φ_prox (this->restoration_->
+        // proximal_objective(...)): notify_switch_to_optimality augments this
+        // pair into the restored OPTIMALITY filter/funnel, whose accumulated
+        // pairs are all true-objective-scale, and obj_val_ below must report
+        // a meaningful number rather than a solver-internal one. Re-evaluated
+        // once via the same helper the in-loop exit arms use.
+        ProgressMeasures measures = this->build_restoration_exit_measures(
+            obj_scale, v_rhs.all_cons().template lpNorm<1>(), v_xsl.primals(), 0.0);
+        restoration_was_active = true;
+        restoration_true_obj = measures.objective;
         this->restoration_->exit_restoration();
-        this->acceptance_->notify_switch_to_optimality(cur);
+        this->acceptance_->notify_switch_to_optimality(measures);
     }
 
     if (algmode == AlgorithmModes::OPT) {
@@ -1894,6 +1950,14 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         this->result_.obj_val_ = 0;
         this->nlp_->eval_obj(obj_scale, v_xsl.primals(), this->result_.obj_val_);
         Funtimer.stop();
+    }
+
+    if (restoration_was_active) {
+        // Override the algmode==OPT branch's iters.back().prim_obj_ above,
+        // which is φ_prox for the last iterate evaluated while restoration was
+        // active -- obj_val_ must report the true objective at the returned
+        // primals.
+        this->result_.obj_val_ = restoration_true_obj;
     }
 
     this->result_.primals_ = v_xsl.primals();
