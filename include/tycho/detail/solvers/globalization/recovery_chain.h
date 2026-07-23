@@ -63,6 +63,12 @@ inline constexpr int kRecoveryDepthSoc = 0;
 inline constexpr int kRecoveryDepthExtended = 1;
 inline constexpr int kRecoveryDepthWatchdog = 2;
 inline constexpr int kRecoveryDepthUnresolved = 3; // classic give-up: no link resolved it.
+// Feasibility-restoration mode-switch: written by FeasibilitySwitchRecovery
+// (globalization/feasibility_switch_recovery.h) when it converts an inner
+// kAcceptAsIs into a kSwitchToFeasibility. Only reachable when restoration_mode_
+// == proximal_switch; PSIOPT::SolveResult::recovery_depth_histogram_ (psiopt.h)
+// is sized to 5 to hold this bucket.
+inline constexpr int kRecoveryDepthRestoration = 4;
 
 // =============================================================================
 // RecoveryChain — ordered dispatch invoked after an AcceptanceStrategy

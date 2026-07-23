@@ -105,9 +105,46 @@
 // SolverContext, no eval): the mechanism owns trial-point evaluation, so this
 // strategy is unit-testable in isolation.
 //
+// =============================================================================
+// FEASIBILITY-RESTORATION STATE ISOLATION — reproducing the reference
+// solver's two-instance structure inside one object.
+// =============================================================================
+// The reference (Uno) constructs a SEPARATE globalization-strategy instance for
+// the feasibility phase, so every piece of optimality-phase merit state — the
+// smallest-known-infeasibility tracker, the WMNO penalty ν, and the flexible
+// interval (π_l, π_u) — is structurally FROZEN while restoration runs, and the
+// restoration-exit test (is_infeasibility_sufficiently_reduced) reduces against
+// that frozen tracker. Tycho drives one object across both phases, so it must
+// stash the optimality-phase state at restoration entry and restore it at exit
+// to get the same behavior:
+//
+//   • notify_switch_to_feasibility (entry): stash ALL persistent state (the
+//     tracker + ν + π_l + π_u), set the in-feasibility flag, and reinitialize
+//     the working state to its fresh-construction values so the feasibility
+//     phase runs its own penalties/tracker without contaminating the frozen
+//     optimality-phase copy.
+//   • is_infeasibility_sufficiently_reduced: while in the feasibility phase it
+//     reduces the trial against the STASHED (frozen) tracker, never the live
+//     working one — the live one is updated by the tested point's own θ on
+//     every feasibility-phase accept, which would make θ ≤ ratio·live
+//     unsatisfiable for θ > 0. Outside the phase it reads the live tracker
+//     (well-defined; the exit test is only ever called during the phase).
+//   • notify_switch_to_optimality (exit): restore the stash and clear the flag.
+//   • reset(): phase-aware. During the phase a μ-event clears only the working
+//     state, preserving the stash the exit test consults; outside the phase it
+//     is the full clear and additionally drops the stash defensively.
+//
+// Retained edge (the reference's own behavior): if restoration is entered
+// before any optimality-phase accept, the stashed tracker is still +∞, so the
+// exit test's ratio·(+∞) = +∞ passes at the first check. This matches the
+// reference and is kept.
+//
 // Definitions live in src/solvers/psiopt_globalization.cpp.
 
 #pragma once
+
+#include <limits>
+#include <stdexcept>
 
 #include "tycho/detail/solvers/globalization/acceptance_strategy.h"
 #include "tycho/detail/solvers/globalization/progress_measures.h"
@@ -147,6 +184,14 @@ inline constexpr double kFlexPiLDamping = 0.1;
 inline constexpr double kFlexInitPiL = 1.0e-8;
 inline constexpr double kFlexInitPiU = 1.0e8;
 
+// Restoration-exit sufficient-infeasibility-decrease ratio: the trial's
+// infeasibility must fall to this fraction of the smallest infeasibility seen so
+// far to leave feasibility restoration. Uno option
+// "sufficient_infeasibility_decrease_ratio", shipped default 0.9
+// (cvanaret/Uno 7481abe, DefaultOptions.cpp; consumed verbatim in
+// MeritFunction::is_infeasibility_sufficiently_reduced).
+inline constexpr double kSufficientInfeasibilityDecreaseRatio = 0.9;
+
 // =============================================================================
 // ModernMeritAcceptance — modernized merit family (WMNO / flexible), driven
 // through the generic AcceptanceStrategy path.
@@ -165,23 +210,52 @@ class ModernMeritAcceptance : public AcceptanceStrategy {
                                const ProgressMeasures &predicted_reduction,
                                double objective_multiplier, double step_length) override;
 
-    // Restoration-exit test — unused until a feasibility-restoration strategy
-    // drives it; throws (T6) rather than fabricate an answer.
+    // Restoration-exit test — Uno MeritFunction::is_infeasibility_sufficiently_
+    // reduced: θ_trial ≤ kSufficientInfeasibilityDecreaseRatio ·
+    // smallest_known_infeasibility. The `reference` argument is accepted and
+    // ignored — Uno's signature takes the reference progress but its body reads
+    // only the trial and the internal smallest-known tracker (the tracker, not
+    // the entry point, is the reference this rule reduces against). While in the
+    // feasibility phase the tracker read is the STASHED (frozen optimality-phase)
+    // one — see the state-isolation section above; outside the phase it is the
+    // live tracker. See the definition in psiopt_globalization.cpp.
     bool is_infeasibility_sufficiently_reduced(const ProgressMeasures &reference,
                                                const ProgressMeasures &trial) const override;
 
-    // μ-event / phase-change hook: restore the penalty state to its initial
-    // value(s). Unlike the classic strategy this is NOT a no-op — the penalty
-    // parameter is per-solve state.
+    // μ-event / phase-change hook: clear the WORKING penalty state AND the
+    // working smallest-known-infeasibility tracker to their fresh-construction
+    // values. Unlike the classic strategy this is NOT a no-op — the penalty
+    // parameter and the tracker are per-solve state. Phase-aware (see the
+    // state-isolation section above): during the feasibility phase a μ-event
+    // clears only the working state, preserving the stashed optimality-phase
+    // state the exit test consults; outside the phase it is the full clear and
+    // additionally drops the stash defensively. The default (restoration-off)
+    // path never enters the phase, so reset() is the full clear there.
     void reset() override;
 
     // Selects the GENERIC driving path in compute_step (see acceptance_strategy.h).
     bool drives_classic_path() const override { return false; }
 
+    // --- Restoration mode-switch hooks (see the state-isolation section) ---
+    // Entry: stash the optimality-phase state, set the flag, reinitialize fresh.
+    void notify_switch_to_feasibility(const ProgressMeasures &current_progress) override;
+    // Exit: restore the stashed optimality-phase state and clear the flag.
+    void notify_switch_to_optimality(const ProgressMeasures &current_progress) override;
+
     // --- Penalty-state accessors (diagnostics + unit tests) ---
     double wmno_penalty() const { return nu_; }
     double flex_pi_l() const { return pi_l_; }
     double flex_pi_u() const { return pi_u_; }
+    double smallest_known_infeasibility() const { return smallest_known_infeasibility_; }
+
+    // --- Restoration-state accessors (diagnostics + unit tests) ---
+    bool in_feasibility_phase() const { return in_feasibility_phase_; }
+    double stashed_wmno_penalty() const { return stashed_nu_; }
+    double stashed_flex_pi_l() const { return stashed_pi_l_; }
+    double stashed_flex_pi_u() const { return stashed_pi_u_; }
+    double stashed_smallest_known_infeasibility() const {
+        return stashed_smallest_known_infeasibility_;
+    }
 
   private:
     // Shared merit primitives (pure arithmetic on ProgressMeasures).
@@ -207,6 +281,27 @@ class ModernMeritAcceptance : public AcceptanceStrategy {
     double nu_ = kWmnoInitPenalty;    // WMNO single penalty ν.
     double pi_l_ = kFlexInitPiL;      // flexible lower penalty π_l.
     double pi_u_ = kFlexInitPiU;      // flexible upper penalty π_u.
+
+    // Restoration-exit tracker (Uno MeritFunction::smallest_known_infeasibility).
+    // +∞-initialized; updated by std::min() ONLY in the accept branch of
+    // is_iterate_acceptable; cleared back to +∞ by reset(). FP-inert on the
+    // default path: it writes a member on every accept but is never read unless
+    // is_infeasibility_sufficiently_reduced (the restoration-exit test) runs.
+    double smallest_known_infeasibility_ = std::numeric_limits<double>::infinity();
+
+    // --- Feasibility-restoration state isolation (see the state-isolation
+    // section in the file-top doc) ---
+    // The PRESERVED optimality-phase persistent state, stashed at
+    // notify_switch_to_feasibility and restored at notify_switch_to_optimality.
+    // The exit test reduces against stashed_smallest_known_infeasibility_ while
+    // in the feasibility phase.
+    double stashed_nu_ = kWmnoInitPenalty;
+    double stashed_pi_l_ = kFlexInitPiL;
+    double stashed_pi_u_ = kFlexInitPiU;
+    double stashed_smallest_known_infeasibility_ = std::numeric_limits<double>::infinity();
+    // Set at entry, cleared at exit. Makes reset() phase-aware: a μ-event reset
+    // mid-feasibility-phase must preserve the stash + this flag.
+    bool in_feasibility_phase_ = false;
 };
 
 } // namespace tycho::solvers

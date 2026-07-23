@@ -30,15 +30,22 @@
 // This file also hosts the second batch of live RecoveryChain links:
 // ExtendedBacktrackRecovery, WatchdogRecovery, and the ChainedRecovery
 // composition — see watchdog.h's file docstring for the full design.
+//
+// This file also hosts ProximalSwitchRestoration (the proximal feasibility
+// mode-switch, first of the feasibility-restoration trio) — see
+// proximal_restoration.h's file docstring for the full formulation and
+// citations. No solver wiring exists yet; this is the standalone component.
 // =============================================================================
 
 #include "tycho/detail/solvers/globalization/backtracking_line_search.h"
 #include "tycho/detail/solvers/globalization/classic_adaptive_governor.h"
+#include "tycho/detail/solvers/globalization/feasibility_switch_recovery.h"
 #include "tycho/detail/solvers/globalization/filter_acceptance.h"
 #include "tycho/detail/solvers/globalization/funnel_acceptance.h"
 #include "tycho/detail/solvers/globalization/merit_acceptance.h"
 #include "tycho/detail/solvers/globalization/modern_merit.h"
 #include "tycho/detail/solvers/globalization/monitored_governor.h"
+#include "tycho/detail/solvers/globalization/proximal_restoration.h"
 #include "tycho/detail/solvers/globalization/soc.h"
 #include "tycho/detail/solvers/globalization/switching_acceptance.h"
 #include "tycho/detail/solvers/globalization/watchdog.h"
@@ -72,12 +79,22 @@ bool ClassicMeritAcceptance::is_iterate_acceptable(const ProgressMeasures &curre
 
 bool ClassicMeritAcceptance::is_infeasibility_sufficiently_reduced(
     const ProgressMeasures &reference, const ProgressMeasures &trial) const {
-    (void)reference;
-    (void)trial;
-    throw std::logic_error(
-        "ClassicMeritAcceptance::is_infeasibility_sufficiently_reduced is unused "
-        "on the classic merit path; it is driven only by a future feasibility-restoration "
-        "strategy");
+    // Ipopt IpRestoConvCheck::CheckConvergence (coin-or/Ipopt 72a29c9):
+    //   orig_inf_pr_max = Max(kappa_resto_ * orig_curr_inf_pr,
+    //                         Min(orig_ip_data->tol(), orig_constr_viol_tol_));
+    //   ... exit when orig_trial_inf_pr <= orig_inf_pr_max.
+    // orig_curr_inf_pr is the infeasibility at the frozen entry point =
+    // reference.infeasibility; orig_trial_inf_pr = trial.infeasibility.
+    //
+    // Ipopt floors the relative target with Min(tol, constr_viol_tol) — its
+    // separate optimality and constraint-violation tolerances. Tycho carries a
+    // single constraint-violation tolerance (settings_.econ_tol_, the same field
+    // ProximalSwitchRestoration::entry_permitted reads), so the floor here is
+    // that one tolerance — a disclosed single-tolerance adaptation of Ipopt's
+    // two-tolerance minimum. Classic merit has no Uno counterpart; the Ipopt
+    // relative-reduction shape is the reference.
+    const double floor = std::max(kKappaResto * reference.infeasibility, ctx_.settings_.econ_tol_);
+    return trial.infeasibility <= floor;
 }
 
 // ============================================================================
@@ -139,6 +156,13 @@ void ClassicMeritAcceptance::eval_trial_point_occ(double obj_scale, double mu, d
     xsl2.data() = xsl.data() + alpha * dxsl.data();
     rhs2.data().setZero();
     ctx_.nlp_->eval_occ(obj_scale, xsl2.primals(), ptest, rhs2.eq_cons(), rhs2.iq_cons());
+    // Feasibility-restoration trial seam (dead on the default path:
+    // ctx_.restoration_ is null). Shared by the L1 and AUGLANG variants. While
+    // active, obj_scale is 0 (user objective contributes exactly 0.0) and the
+    // proximal objective φ_prox(trial primals) is added — matching the uniform
+    // objective substitution the eval seam applies to prim_obj.
+    if (ctx_.restoration_ && ctx_.restoration_->is_active())
+        ptest += ctx_.restoration_->proximal_objective(xsl2.primals());
     this->apply_reset_slacks(xsl2.slacks(), rhs2.iq_cons());
     btest = this->barrier_objective(xsl2.slacks(), mu);
 }
@@ -173,6 +197,13 @@ double ClassicMeritAcceptance::ls_lang(double obj_scale, double mu, double prim_
         xsl2.data() = xsl.data() + alpha * dxsl.data();
         rhs2.data().setZero();
         this->eval_rhs(obj_scale, xsl2.data(), ptest, rhs2.data(), rhs2.data());
+        // Feasibility-restoration trial seam (dead on the default path:
+        // ctx_.restoration_ is null). While active, obj_scale is 0 (the user
+        // objective contributes exactly 0.0 to ptest via lsobjscale) and the
+        // proximal objective φ_prox(trial primals) is added instead — matching
+        // the uniform objective substitution the eval seam applies to prim_obj.
+        if (ctx_.restoration_ && ctx_.restoration_->is_active())
+            ptest += ctx_.restoration_->proximal_objective(xsl2.primals());
         this->apply_reset_slacks(xsl2.slacks(), rhs2.iq_cons());
         btest = this->barrier_objective(xsl2.slacks(), mu);
         this->barrier_gradient(xsl2.slacks(), xsl2.iq_lmults(), mu, rhs2.dual_grad());
@@ -371,18 +402,105 @@ double ClassicMeritAcceptance::classic_line_search(PSIOPT::LineSearchModes lsmod
 // ============================================================================
 
 void ModernMeritAcceptance::reset() {
+    // Working penalty state + working smallest-known tracker back to their
+    // fresh-construction values (Uno MeritFunction: smallest_known_infeasibility
+    // is +∞-initialized).
     nu_ = kWmnoInitPenalty;
     pi_l_ = kFlexInitPiL;
     pi_u_ = kFlexInitPiU;
+    smallest_known_infeasibility_ = std::numeric_limits<double>::infinity();
+    // Phase-aware, mirroring the filter/funnel: inside the feasibility phase
+    // this is a μ-event reset — the stashed optimality-phase state (which the
+    // exit test reduces against) and the in-feasibility flag SURVIVE, so a
+    // μ-event mid-restoration cannot destroy the frozen tracker. Outside the
+    // phase this is the full per-phase clear, which also drops any leftover
+    // stash defensively. See the state-isolation section in modern_merit.h.
+    if (!in_feasibility_phase_) {
+        stashed_nu_ = kWmnoInitPenalty;
+        stashed_pi_l_ = kFlexInitPiL;
+        stashed_pi_u_ = kFlexInitPiU;
+        stashed_smallest_known_infeasibility_ = std::numeric_limits<double>::infinity();
+    }
 }
 
 bool ModernMeritAcceptance::is_infeasibility_sufficiently_reduced(
     const ProgressMeasures &reference, const ProgressMeasures &trial) const {
+    // Uno MeritFunction::is_infeasibility_sufficiently_reduced (cvanaret/Uno
+    // 7481abe, MeritFunction.cpp):
+    //   return trial_progress.infeasibility <=
+    //          sufficient_infeasibility_decrease_ratio * smallest_known_infeasibility;
+    // Uno's signature also takes the reference progress but its body never reads
+    // it — the smallest-known tracker is the reference this rule reduces
+    // against, not the entry point. Mirror that: `reference` is ignored.
+    //
+    // While in the feasibility phase, reduce against the STASHED (frozen
+    // optimality-phase) tracker — Uno freezes it structurally by running a
+    // separate optimality instance; here the stash is that frozen copy. Reading
+    // the live tracker would be self-defeating: the accept branch of
+    // is_iterate_acceptable has just lowered it to include the tested point's
+    // own θ, making θ ≤ ratio·live unsatisfiable for θ > 0. Outside the phase
+    // the live tracker is read (well-defined; the seam only tests for exit
+    // during the phase). The +∞ edge — restoration entered before any
+    // optimality-phase accept leaves the stash at +∞, so ratio·(+∞) passes at
+    // the first check — is the reference solver's own behavior, retained.
     (void)reference;
-    (void)trial;
-    throw std::logic_error(
-        "ModernMeritAcceptance::is_infeasibility_sufficiently_reduced is unused until a "
-        "feasibility-restoration strategy drives it");
+    const double tracker =
+        in_feasibility_phase_ ? stashed_smallest_known_infeasibility_ : smallest_known_infeasibility_;
+    return trial.infeasibility <= kSufficientInfeasibilityDecreaseRatio * tracker;
+}
+
+void ModernMeritAcceptance::notify_switch_to_feasibility(
+    const ProgressMeasures &current_progress) {
+    // T6: a second entry without an intervening exit would stash the FEASIBILITY
+    // working penalties/tracker over the preserved optimality stash, silently
+    // clobbering the frozen state the exit test consults — a phase-transition
+    // mis-wiring, not a recoverable runtime condition.
+    if (in_feasibility_phase_)
+        throw std::logic_error(
+            "ModernMeritAcceptance::notify_switch_to_feasibility: already in the feasibility "
+            "phase (in_feasibility_phase_ is true) — a solver wiring bug called entry without "
+            "an intervening notify_switch_to_optimality exit");
+
+    // The merit rule augments nothing at the switch point (unlike the filter);
+    // the merit's whole persistent state is the penalties + tracker, so the
+    // switch measures are not consumed here.
+    (void)current_progress;
+
+    // Stash the optimality-phase persistent state, then enter feasibility mode
+    // and reinitialize fresh working state via the reset() machinery (the flag
+    // is set FIRST so the phase-aware reset() preserves the stash just written).
+    stashed_nu_ = nu_;
+    stashed_pi_l_ = pi_l_;
+    stashed_pi_u_ = pi_u_;
+    stashed_smallest_known_infeasibility_ = smallest_known_infeasibility_;
+    in_feasibility_phase_ = true;
+    this->reset();
+}
+
+void ModernMeritAcceptance::notify_switch_to_optimality(
+    const ProgressMeasures &current_progress) {
+    // T6: an exit without a preceding entry has no stash to restore — running
+    // this body would overwrite the live optimality penalties/tracker with the
+    // fresh-construction stash (or a stale one from a prior phase), a
+    // phase-transition mis-wiring symmetric to the entry-side hazard above.
+    if (!in_feasibility_phase_)
+        throw std::logic_error(
+            "ModernMeritAcceptance::notify_switch_to_optimality: not in the feasibility phase "
+            "(in_feasibility_phase_ is false) — a solver wiring bug called exit without a "
+            "preceding notify_switch_to_feasibility entry");
+
+    // The merit rule augments nothing at the exit point either.
+    (void)current_progress;
+
+    // Restore the preserved optimality-phase persistent state and leave the
+    // phase. The stash is intentionally NOT cleared here: it is now a harmless
+    // leftover (the exit test only reads it while the flag is set, and the next
+    // entry overwrites it), dropped by the next reset() OUTSIDE the phase.
+    nu_ = stashed_nu_;
+    pi_l_ = stashed_pi_l_;
+    pi_u_ = stashed_pi_u_;
+    smallest_known_infeasibility_ = stashed_smallest_known_infeasibility_;
+    in_feasibility_phase_ = false;
 }
 
 bool ModernMeritAcceptance::is_iterate_acceptable(const ProgressMeasures &current,
@@ -395,14 +513,26 @@ bool ModernMeritAcceptance::is_iterate_acceptable(const ProgressMeasures &curren
     // likewise accepted and ignored — see modern_merit.h's declaration comment.
     (void)objective_multiplier;
     (void)step_length;
+    bool accept;
     switch (rule_) {
     case MeritPenaltyRules::wmno:
-        return accept_wmno(current, trial, predicted_reduction);
+        accept = accept_wmno(current, trial, predicted_reduction);
+        break;
     case MeritPenaltyRules::flexible:
-        return accept_flexible(current, trial, predicted_reduction);
+        accept = accept_flexible(current, trial, predicted_reduction);
+        break;
+    default:
+        throw std::logic_error(
+            "ModernMeritAcceptance::is_iterate_acceptable: unknown MeritPenaltyRule");
     }
-    throw std::logic_error(
-        "ModernMeritAcceptance::is_iterate_acceptable: unknown MeritPenaltyRule");
+    // Uno MeritFunction.cpp: the smallest-known-infeasibility tracker is updated
+    // by std::min() ONLY inside the accept branch of is_iterate_acceptable (the
+    // restoration-exit test reduces against it). FP-inert on the default path —
+    // it writes a member that nothing reads unless the exit test runs.
+    if (accept)
+        smallest_known_infeasibility_ =
+            std::min(smallest_known_infeasibility_, trial.infeasibility);
+    return accept;
 }
 
 // WMNO Math. Program. 107 (2006), §3.1. Merit Eq. (3.1), ν_TRIAL Eq. (3.5, σ=0),
@@ -484,6 +614,13 @@ static void modern_eval_trial_point(SolverContext &ctx, double obj_scale, double
     RHS2.setZero();
     ptest = 0.0;
     ctx.nlp_->eval_occ(obj_scale, XSL2.head(pv), ptest, RHS2.segment(pv + sv, ec), RHS2.tail(ic));
+    // Feasibility-restoration trial seam (dead on the default path:
+    // ctx.restoration_ is null). While active, obj_scale is 0 (user objective
+    // contributes exactly 0.0) and the proximal objective φ_prox(trial primals)
+    // is added, so the generic acceptance loop's trial.objective mirrors the
+    // uniform substitution applied to current.objective (= prim_obj = φ_prox).
+    if (ctx.restoration_ && ctx.restoration_->is_active())
+        ptest += ctx.restoration_->proximal_objective(XSL2.head(pv));
 
     auto S = XSL2.segment(pv, sv);
     auto FXI = RHS2.tail(ic);
@@ -1091,6 +1228,64 @@ RecoveryChain::Action ChainedRecovery::on_step_rejected(
 }
 
 // ============================================================================
+// FeasibilitySwitchRecovery — outermost link; converts a ladder-exhausted
+// rejection into a feasibility-restoration mode-switch. See
+// feasibility_switch_recovery.h for the design.
+// ============================================================================
+
+RecoveryChain::Action FeasibilitySwitchRecovery::on_step_rejected(
+    IterateInfo &Citer, const std::vector<IterateInfo> &iters, SolverContext &ctx,
+    AcceptanceStrategy &acceptance, GlobalizationMechanism &mechanism,
+    PSIOPT::LineSearchModes lsmode, double obj_scale, double mu, double prim_obj, double barr_obj,
+    Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
+    Eigen::VectorXd &RHS2, double &alpha, double &alphap, double &alphad, int &soc_steps,
+    int &resolved_depth, int &watchdog_activations) {
+    // Delegate the whole rejection to the inner chain first.
+    const Action inner = inner_->on_step_rejected(
+        Citer, iters, ctx, acceptance, mechanism, lsmode, obj_scale, mu, prim_obj, barr_obj, XSL,
+        DXSL, XSL2, RHS, RHS2, alpha, alphap, alphad, soc_steps, resolved_depth,
+        watchdog_activations);
+
+    // Only a ladder-exhausted rejection is a candidate for a feasibility
+    // switch. kAcceptAsIs alone is NOT a sufficient discriminator: it is
+    // overloaded. The watchdog's trial-acceptance path also returns kAcceptAsIs
+    // — but it has RESOLVED the rejection (it stamped Citer.accepted_ = true and
+    // wrote resolved_depth = kRecoveryDepthWatchdog), taking the relaxed step on
+    // purpose. Only the ladder-exhaustion fallback returns kAcceptAsIs while
+    // leaving resolved_depth at the caller-seeded kRecoveryDepthUnresolved (any
+    // link that resolved sets its own depth). So the designed discriminator is
+    // the depth out-parameter, not the Action: intercept only an UNRESOLVED
+    // kAcceptAsIs. Anything else — a resolved kAcceptAsIs (watchdog), or a
+    // kRetry/kSwitchToFeasibility/kGiveUp — passes through untouched, with the
+    // resolved_depth it already set.
+    if (inner != Action::kAcceptAsIs || resolved_depth != kRecoveryDepthUnresolved)
+        return inner;
+
+    // No restoration strategy configured, or already in restoration mode:
+    // there is nothing to switch into. (Both are impossible while active,
+    // since alg_impl re-enters iterations in feasibility mode — but guarding
+    // keeps the link correct in isolation and under the unit tests.)
+    if (ctx.restoration_ == nullptr || ctx.restoration_->is_active())
+        return inner;
+
+    // Current-iterate constraint violation: L1 norm of the KKT constraint block
+    // (the [eq | iq] tail of RHS), the same measure alg_impl builds the
+    // restoration reference from.
+    const int ncons = ctx.equal_cons_ + ctx.inequal_cons_;
+    const double constraint_violation = RHS.tail(ncons).template lpNorm<1>();
+
+    // Near-feasible guard + per-phase entry budget (RestorationStrategy::
+    // entry_permitted). Either refusing keeps the inner take-as-is behavior.
+    if (!ctx.restoration_->entry_permitted(constraint_violation, ctx))
+        return inner;
+
+    // Signal the switch. This link mutates nothing; alg_impl's
+    // kSwitchToFeasibility case performs the actual mode entry.
+    resolved_depth = kRecoveryDepthRestoration;
+    return Action::kSwitchToFeasibility;
+}
+
+// ============================================================================
 // SwitchingAcceptance — the shared Wächter–Biegler switching-condition
 // skeleton (filter/funnel shared base). See globalization/switching_acceptance.h
 // for the full formulation; the code below is a direct transcription of the
@@ -1219,8 +1414,17 @@ void FunnelAcceptance::initialize_bounds(double theta_0) {
 }
 
 void FunnelAcceptance::reset_bounds() {
-    // Restore the uninitialized sentinel so the next θ₀ re-derives the width.
+    // Always restore the uninitialized sentinel on the WORKING width so the next
+    // θ₀ re-derives it.
     width_ = std::numeric_limits<double>::infinity();
+    // Phase-aware (mirroring the filter): inside the feasibility phase this is a
+    // μ-event reset — clear the working width only, preserving the stashed
+    // optimality width and the in-feasibility flag so the exit test and the exit
+    // re-base still have the frozen width to consult/restore. Outside the phase
+    // this is the full per-phase clear, which also drops any leftover stash
+    // defensively. See (5)/(6) in funnel_acceptance.h.
+    if (!in_feasibility_phase_)
+        stashed_width_ = std::numeric_limits<double>::infinity();
 }
 
 bool FunnelAcceptance::is_trial_acceptable_to_strategy(const ProgressMeasures &current,
@@ -1260,6 +1464,73 @@ void FunnelAcceptance::append_diagnostics(PSIOPT::SolveResult &result) const {
     result.last_funnel_width_ = std::isfinite(width_) ? width_ : -1.0;
 }
 
+bool FunnelAcceptance::is_infeasibility_sufficiently_reduced(const ProgressMeasures &reference,
+                                                             const ProgressMeasures &trial) const {
+    // Uno FunnelMethod::is_infeasibility_sufficiently_reduced (cvanaret/Uno
+    // 7481abe):
+    //   return funnel.acceptable(trial.infeasibility) &&
+    //          trial.infeasibility <= parameters.beta * reference.infeasibility;
+    // funnel.acceptable(θ) is the membership test θ ≤ width; parameters.beta is
+    // the funnel's own sufficient-decrease β, reused here (kFunnelBeta) exactly
+    // as Uno reuses it. While in the feasibility phase the membership half tests
+    // against the STASHED (frozen optimality) width — the reference solver's
+    // exit test reads its frozen optimality funnel; outside the phase it reads
+    // the live width (well-defined; the seam only tests for exit during the
+    // phase). See (5a) in funnel_acceptance.h.
+    const double effective_width = in_feasibility_phase_ ? stashed_width_ : width_;
+    return trial.infeasibility <= effective_width &&
+           trial.infeasibility <= kFunnelBeta * reference.infeasibility;
+}
+
+void FunnelAcceptance::notify_switch_to_feasibility(const ProgressMeasures &current_progress) {
+    // T6: a second entry without an intervening exit would stash the FEASIBILITY
+    // working width over the preserved optimality width, silently clobbering the
+    // frozen width the exit test and exit re-base consult — a phase-transition
+    // mis-wiring, not a recoverable runtime condition.
+    if (in_feasibility_phase_)
+        throw std::logic_error(
+            "FunnelAcceptance::notify_switch_to_feasibility: already in the feasibility "
+            "phase (in_feasibility_phase_ is true) — a solver wiring bug called entry "
+            "without an intervening notify_switch_to_optimality exit");
+
+    // The funnel augments nothing at the switch point; its whole persistent
+    // state is the scalar width.
+    (void)current_progress;
+
+    // Stash the optimality width, then enter feasibility mode and reinitialize a
+    // fresh working width via the reset() machinery (re-arms the base's lazy θ₀
+    // init so the feasibility phase derives its own θ_min/θ_max and width). The
+    // flag is set FIRST so the phase-aware reset_bounds() preserves the stash
+    // just written. See (5b) in funnel_acceptance.h.
+    stashed_width_ = width_;
+    in_feasibility_phase_ = true;
+    this->reset();
+}
+
+void FunnelAcceptance::notify_switch_to_optimality(const ProgressMeasures &current_progress) {
+    // T6: an exit without a preceding entry has no stashed width to restore —
+    // running this body would re-base whatever stashed_width_ last held (the
+    // uninitialized sentinel, or a stale stash), a phase-transition mis-wiring
+    // symmetric to the entry-side hazard above.
+    if (!in_feasibility_phase_)
+        throw std::logic_error(
+            "FunnelAcceptance::notify_switch_to_optimality: not in the feasibility phase "
+            "(in_feasibility_phase_ is false) — a solver wiring bug called exit without a "
+            "preceding notify_switch_to_feasibility entry");
+
+    // Restore the preserved optimality width DIRECTLY (not via reset(), which
+    // would re-arm the base's lazy θ₀ init and make the next optimality call
+    // re-derive and wipe the just-restored width), THEN apply Uno's
+    // update_restoration re-base to the restored width:
+    //   width = convex_combination(width, current_infeasibility, kappa)
+    //         = kappa*width + (1-kappa)*current_infeasibility.
+    // See (5c) in funnel_acceptance.h. The stash is left as a harmless leftover,
+    // dropped by the next reset() OUTSIDE the phase.
+    width_ = stashed_width_;
+    width_ = convex_combination(width_, current_progress.infeasibility, kFunnelKappa);
+    in_feasibility_phase_ = false;
+}
+
 // ============================================================================
 // FilterAcceptance — (θ, φ)-pair filter H-type strategy on the switching
 // skeleton. See globalization/filter_acceptance.h for the full formulation and
@@ -1280,12 +1551,25 @@ void FilterAcceptance::initialize_bounds(double theta_0) {
 }
 
 void FilterAcceptance::reset_bounds() {
-    // Empty the filter and zero the reset-heuristic state so the next θ₀ capture
-    // re-arms a clean per-phase filter.
+    // Always empty the live working state (filter + reset-heuristic counters) so
+    // the next θ₀ capture re-arms a clean per-phase filter.
     filter_.clear();
     successive_filter_rejections_ = 0;
     n_filter_resets_ = 0;
     last_rejection_was_filter_ = false;
+    // Reset invariant (see (6) in filter_acceptance.h): inside the feasibility
+    // phase this is a μ-event reset — clear WORKING state only, preserving the
+    // stashed optimality filter and the in-feasibility flag so the exit test
+    // still has the preserved filter to consult. Outside the phase this is the
+    // full per-phase clear, which also drops any leftover stash/flag
+    // defensively. The injected constraint tolerance is configuration, not
+    // working state, and is intentionally left untouched.
+    if (!in_feasibility_phase_) {
+        stashed_filter_.clear();
+        stashed_successive_filter_rejections_ = 0;
+        stashed_n_filter_resets_ = 0;
+        stashed_last_rejection_was_filter_ = false;
+    }
 }
 
 bool FilterAcceptance::is_acceptable_to_current(double phi_trial, double theta_trial,
@@ -1384,6 +1668,113 @@ void FilterAcceptance::register_accepted_step(const ProgressMeasures &current,
 void FilterAcceptance::append_diagnostics(PSIOPT::SolveResult &result) const {
     result.last_filter_size_ = static_cast<int>(filter_.size());
     result.last_filter_resets_ = n_filter_resets_;
+}
+
+bool FilterAcceptance::is_infeasibility_sufficiently_reduced(const ProgressMeasures &reference,
+                                                             const ProgressMeasures &trial) const {
+    // Ipopt IpRestoConvCheck::CheckConvergence + IpRestoFilterConvCheck::
+    // TestOrigProgress (coin-or/Ipopt 72a29c9). The original problem's current
+    // iterate is FROZEN at the restoration entry point, so its (θ, φ) is
+    // `reference`; the trial's is `trial`. See (5b) in filter_acceptance.h.
+    const double theta_ref = reference.infeasibility;
+    const double theta_trial = trial.infeasibility;
+    const double phi_ref = reference.objective + reference.auxiliary;
+    const double phi_trial = trial.objective + trial.auxiliary;
+
+    // (Tmax) relative θ-reduction with the constraint-tolerance floor:
+    //   orig_inf_pr_max = Max(kappa_resto_ * orig_curr_inf_pr,
+    //                         Min(orig tol, orig constr_viol_tol_));
+    // Tycho's single constraint tolerance stands in for Ipopt's two-tolerance
+    // minimum (injected via set_restoration_constraint_tol; see the divergence
+    // note in the header).
+    const double floor = std::max(kKappaResto * theta_ref, restoration_constraint_tol_);
+    if (theta_trial > floor)
+        return false;
+
+    // Acceptable to the PRESERVED optimality filter (Ipopt
+    // IsAcceptableToCurrentFilter). During feasibility the preserved filter is
+    // the stash (the optimality filter + the entry pair added at (5a)).
+    if (!stashed_filter_.acceptable(phi_trial, theta_trial))
+        return false;
+
+    // Acceptable w.r.t. the preserved (frozen entry) iterate — Ipopt
+    // IsAcceptableToCurrentIterate against `reference`, margined identically to
+    // the live (1a) acceptable-to-current test.
+    return is_acceptable_to_current(phi_trial, theta_trial, phi_ref, theta_ref);
+}
+
+void FilterAcceptance::notify_switch_to_feasibility(const ProgressMeasures &current_progress) {
+    // T6: a second entry without an intervening exit would run
+    // `stashed_filter_ = filter_` while filter_ already holds the
+    // FEASIBILITY working filter, silently clobbering the preserved
+    // optimality stash — a phase-transition mis-wiring, not a recoverable
+    // runtime condition.
+    if (in_feasibility_phase_)
+        throw std::logic_error(
+            "FilterAcceptance::notify_switch_to_feasibility: already in the feasibility "
+            "phase (in_feasibility_phase_ is true) — a solver wiring bug called entry "
+            "without an intervening notify_switch_to_optimality exit");
+
+    // (5a). Uno FilterMethod::notify_switch_to_feasibility (Ipopt
+    // PrepareRestoPhaseStart analog): augment the optimality filter with the
+    // entry pair BEFORE it is preserved. φ = objective + auxiliary (the
+    // unconstrained merit measure), θ = infeasibility.
+    const double theta_entry = current_progress.infeasibility;
+    const double phi_entry = current_progress.objective + current_progress.auxiliary;
+    filter_.augment(phi_entry, theta_entry);
+
+    // Preserve the optimality-phase working state (the augmented filter + the
+    // reset-heuristic counters) — the exit test consults stashed_filter_.
+    stashed_filter_ = filter_;
+    stashed_successive_filter_rejections_ = successive_filter_rejections_;
+    stashed_n_filter_resets_ = n_filter_resets_;
+    stashed_last_rejection_was_filter_ = last_rejection_was_filter_;
+
+    // Enter feasibility mode, then reinitialize fresh working state via the
+    // reset() machinery (re-arms the lazy θ₀ init so the feasibility phase
+    // derives its own θ_min/θ_max). The flag is set first so the phase-aware
+    // reset_bounds() preserves the stash just written above.
+    in_feasibility_phase_ = true;
+    this->reset();
+}
+
+void FilterAcceptance::notify_switch_to_optimality(const ProgressMeasures &current_progress) {
+    // T6: an exit without a preceding entry has no stash to restore — running
+    // this body would overwrite the live optimality filter with whatever
+    // stashed_filter_ last held (empty, or a stale stash from a prior phase),
+    // a phase-transition mis-wiring symmetric to the entry-side hazard above.
+    if (!in_feasibility_phase_)
+        throw std::logic_error(
+            "FilterAcceptance::notify_switch_to_optimality: not in the feasibility phase "
+            "(in_feasibility_phase_ is false) — a solver wiring bug called exit without a "
+            "preceding notify_switch_to_feasibility entry");
+
+    // (5c). Restore the preserved optimality-phase working state and augment the
+    // restored filter with the EXIT pair (Uno FilterMethod::
+    // notify_switch_to_optimality — Uno adds the switch-point pair at BOTH
+    // transitions).
+    const double theta_exit = current_progress.infeasibility;
+    const double phi_exit = current_progress.objective + current_progress.auxiliary;
+
+    // Restore directly (NOT via reset()): the base's lazy θ₀ init is left ARMED
+    // (bounds_initialized_ stays true from the feasibility phase), because
+    // re-arming it would make the next optimality is_iterate_acceptable call
+    // initialize_bounds(), which clears the filter — wiping the very state just
+    // restored. The θ_min/θ_max thresholds therefore retain their feasibility-
+    // phase values until the next phase-boundary reset (see the base-bounds
+    // divergence note); this affects only the heuristic switching/ceiling
+    // scalars, not the restored filter membership/dominance semantics.
+    filter_ = stashed_filter_;
+    successive_filter_rejections_ = stashed_successive_filter_rejections_;
+    n_filter_resets_ = stashed_n_filter_resets_;
+    last_rejection_was_filter_ = stashed_last_rejection_was_filter_;
+    filter_.augment(phi_exit, theta_exit);
+
+    // Leave feasibility mode. The stash is intentionally NOT cleared here: it is
+    // now a harmless leftover (the exit test only reads it while the flag is set,
+    // and the next entry overwrites it). The next reset() OUTSIDE the phase drops
+    // it defensively — the reset invariant, (6) in filter_acceptance.h.
+    in_feasibility_phase_ = false;
 }
 
 // ============================================================================
@@ -1568,6 +1959,76 @@ void MonitoredBarrierGovernor::reset() {
 void MonitoredBarrierGovernor::append_diagnostics(PSIOPT::SolveResult &result) const {
     result.last_monotone_switches_ = last_monotone_switches_;
     result.last_monotone_iters_ = last_monotone_iters_;
+}
+
+// ============================================================================
+// ProximalSwitchRestoration — proximal feasibility mode-switch. See
+// proximal_restoration.h for the full formulation and the Uno/Ipopt source
+// citations; the code below transcribes the frozen-ζ snapshot (1), the
+// per-coordinate scaling and proximal term/gradient (2), and the near-
+// feasible + budget entry guard (3)/(4) documented there.
+// ============================================================================
+
+void ProximalSwitchRestoration::enter_restoration(const ProgressMeasures &reference,
+                                                  const Eigen::Ref<const Eigen::VectorXd> &primals,
+                                                  double mu) {
+    reference_ = reference;
+    x_r_ = primals;
+    // (1): ζ = resto_proximity_weight * sqrt(mu), set ONCE here from the mu
+    // live at this call — never re-derived from a later, live mu.
+    zeta_ = kRestoProximityWeight * std::sqrt(mu);
+    // (2): d_i = min(1, 1/|x_R_i|); diagonal_ = zeta * d_i^2.
+    d_.resize(x_r_.size());
+    for (Eigen::Index i = 0; i < x_r_.size(); ++i) {
+        d_[i] = std::min(1.0, 1.0 / std::abs(x_r_[i]));
+    }
+    diagonal_ = zeta_ * d_.array().square();
+    active_ = true;
+    ++entries_;
+}
+
+void ProximalSwitchRestoration::reset() {
+    active_ = false;
+    x_r_.resize(0);
+    d_.resize(0);
+    diagonal_.resize(0);
+    zeta_ = 0.0;
+    reference_ = ProgressMeasures{};
+    entries_ = 0;
+    iterations_in_mode_ = 0;
+}
+
+double ProximalSwitchRestoration::proximal_objective(
+    const Eigen::Ref<const Eigen::VectorXd> &primals) const {
+    // (2): P(x) = (ζ/2) * sum_i d_i^2 * (x_i - x_R_i)^2 = 0.5 * sum_i
+    // diagonal_[i] * (x_i - x_R_i)^2, using the cached diagonal_ = ζ*d_i^2.
+    const Eigen::VectorXd delta = primals - x_r_;
+    return 0.5 * diagonal_.dot(delta.cwiseProduct(delta));
+}
+
+void ProximalSwitchRestoration::add_proximal_gradient(
+    const Eigen::Ref<const Eigen::VectorXd> &primals, Eigen::Ref<Eigen::VectorXd> grad_out) const {
+    // (2): dP/dx_i = ζ * d_i^2 * (x_i - x_R_i) = diagonal_[i] * (x_i - x_R_i).
+    grad_out += diagonal_.cwiseProduct(primals - x_r_);
+}
+
+bool ProximalSwitchRestoration::entry_permitted(double constraint_violation,
+                                                const SolverContext &ctx) const {
+    // (3): near-feasible guard (Ipopt-adapted, single measure).
+    if (constraint_violation <= kNearFeasibleGuardFactor * ctx.settings_.econ_tol_) {
+        return false;
+    }
+    // (4): per-phase entry budget. entries_ >= max_feas_rest_ refuses (so
+    // max_feas_rest_ == 0 refuses unconditionally, before any entry).
+    if (entries_ >= ctx.settings_.max_feas_rest_) {
+        return false;
+    }
+    return true;
+}
+
+void ProximalSwitchRestoration::append_diagnostics(PSIOPT::SolveResult &result) const {
+    result.last_feas_rest_entries_ = entries_;
+    result.last_feas_rest_iters_ = iterations_in_mode_;
 }
 
 } // namespace tycho::solvers

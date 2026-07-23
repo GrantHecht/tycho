@@ -51,6 +51,9 @@
 class RecoveryDispatchGate_FunnelSelectionConstructsFunnelAcceptance_Test;
 class RecoveryDispatchGate_FilterSelectionConstructsFilterAcceptance_Test;
 class RecoveryDispatchGate_MonitoredSelectionConstructsMonitoredGovernor_Test;
+class FeasibilitySwitch_ProximalSwitchConstructsRestorationAndWrapsRecovery_Test;
+class FeasibilitySwitch_OffModeConstructsNoRestoration_Test;
+class FeasibilitySwitch_FilterSeedsRestorationConstraintTol_Test;
 
 namespace tycho::solvers {
 
@@ -85,10 +88,19 @@ using tycho::EigenRef;
 // NoopRecovery implementation shipped today always returns kAcceptAsIs; the
 // alg_impl call site is provably inert (see noop_recovery.h and the call-site
 // comment in alg_impl) — no live recovery dispatcher exists yet.
+// PSIOPT also owns an optional feasibility-restoration mode-switch through a
+// std::unique_ptr<RestorationStrategy> (concrete type ProximalSwitchRestoration,
+// complete only in psiopt.cpp). Unlike the four components above it is NOT
+// always constructed: rebuild_globalization_components() leaves it null unless
+// restoration_mode_ == proximal_switch, so on the default path every
+// restoration branch guards on `restoration_ != nullptr` and is provably dead.
+// Same forward-declare + out-of-line ctor/dtor discipline as the others.
 class AcceptanceStrategy;
 class GlobalizationMechanism;
 class BarrierGovernor;
 class RecoveryChain;
+class RestorationStrategy;
+struct ProgressMeasures;
 
 class PSIOPT {
   public:
@@ -159,7 +171,13 @@ class PSIOPT {
         // watchdog existed.
         bool watchdog_ = false;
 
-        int max_feas_rest_ = 2; // reserved — feasibility restoration, not currently implemented
+        // Per-phase feasibility-restoration entry budget: the maximum number of
+        // times restoration mode may be entered within a single phase. Read by
+        // ProximalSwitchRestoration::entry_permitted() (globalization/
+        // proximal_restoration.h) — 0 refuses restoration entirely (budget
+        // exhausted before the first entry). Ignored when restoration_mode_ ==
+        // off. validate() requires it >= 0.
+        int max_feas_rest_ = 2;
 
         // --- Convergence tolerances ---
         double kkt_tol_ = 1.0e-6;
@@ -220,6 +238,19 @@ class PSIOPT {
         // monitored governor already provides the monotone fallback) — validate()
         // rejects that combination.
         bool never_monotone_ = false;
+
+        // --- Feasibility restoration (opt-in proximal mode-switch) ---
+        // off (default) reproduces today's behavior bit-identically: no
+        // RestorationStrategy is constructed and every restoration branch in
+        // the solver is provably dead. proximal_switch selects the proximal
+        // feasibility mode-switch (ProximalSwitchRestoration), which — on a
+        // ladder-exhausted step rejection at a not-near-feasible point — swaps
+        // the true objective for a proximal term until infeasibility is
+        // sufficiently reduced, then resumes optimality mode. Composes with
+        // every acceptance_strategy_ and barrier_governor_ (no matrix
+        // restrictions). Enum lives in psiopt_fwd.h; the per-phase entry budget
+        // is max_feas_rest_ above.
+        RestorationModes restoration_mode_ = RestorationModes::off;
 
         // --- Barrier parameters ---
         double init_mu_ = 0.001;
@@ -342,11 +373,13 @@ class PSIOPT {
         // recovery_depth_histogram_[0] SOC, [1] extended backtracking,
         // [2] watchdog, [3] unresolved (today's classic give-up: the
         // originally-rejected step was simply taken; this is the ONLY bucket
-        // that increments when SOC/extended/watchdog are all off). Counts
+        // that increments when SOC/extended/watchdog are all off),
+        // [4] restoration (a feasibility-restoration mode-switch was taken —
+        // only increments when restoration_mode_ == proximal_switch). Counts
         // rejections, i.e. every should_dispatch_recovery-gated call, not
         // just ones where a recovery link actually intervened. Reset per
         // solve alongside the other accumulators.
-        std::array<int, 4> recovery_depth_histogram_{};
+        std::array<int, 5> recovery_depth_histogram_{};
 
         // Final funnel width (τ) reported by FunnelAcceptance::
         // append_diagnostics() (globalization/funnel_acceptance.h) at the end
@@ -408,6 +441,25 @@ class PSIOPT {
         // is not monitored. Same per-phase semantics as last_monotone_switches_.
         int last_monotone_iters_ = -1;
 
+        // Number of times feasibility restoration was entered during the most
+        // recent solve's LAST PHASE, reported by RestorationStrategy::
+        // append_diagnostics() (globalization/restoration.h;
+        // ProximalSwitchRestoration is the concrete reporter today —
+        // globalization/proximal_restoration.h). WRITE-ONLY diagnostics field:
+        // no algorithm code reads it back. Sentinel -1 when no restoration
+        // strategy is constructed on the active solve path (today's only
+        // path — feasibility restoration is not yet wired into the solver).
+        // Same last-phase-wins semantics as last_monotone_switches_ once a
+        // restoration strategy is wired and this is collected per phase.
+        int last_feas_rest_entries_ = -1;
+
+        // Number of iterations spent in restoration mode during the most
+        // recent solve's LAST PHASE, reported by RestorationStrategy::
+        // append_diagnostics(). WRITE-ONLY diagnostics field. Sentinel -1
+        // when no restoration strategy is constructed on the active solve
+        // path. Same per-phase semantics as last_feas_rest_entries_.
+        int last_feas_rest_iters_ = -1;
+
         // T6 (dead-status fix): the last non-Success status observed from
         // kkt_sol_.info() by factor_impl() within the CURRENT phase (alg_impl
         // resets it on entry, so print_exit_stats reports per-phase status).
@@ -441,6 +493,8 @@ class PSIOPT {
             last_filter_resets_ = -1;
             last_monotone_switches_ = -1;
             last_monotone_iters_ = -1;
+            last_feas_rest_entries_ = -1;
+            last_feas_rest_iters_ = -1;
         }
     };
 
@@ -488,6 +542,7 @@ class PSIOPT {
     void set_all_max_iters(int m1, int m2);
     void set_max_soc(int max_soc);
     void set_ls_extended_iters(int ls_extended_iters);
+    void set_max_feas_rest(int max_feas_rest);
 
     void set_kkt_tol(double kkt_tol);
     void set_bar_tol(double bar_tol);
@@ -580,6 +635,9 @@ class PSIOPT {
     friend class ::RecoveryDispatchGate_FunnelSelectionConstructsFunnelAcceptance_Test;
     friend class ::RecoveryDispatchGate_FilterSelectionConstructsFilterAcceptance_Test;
     friend class ::RecoveryDispatchGate_MonitoredSelectionConstructsMonitoredGovernor_Test;
+    friend class ::FeasibilitySwitch_ProximalSwitchConstructsRestorationAndWrapsRecovery_Test;
+    friend class ::FeasibilitySwitch_OffModeConstructsNoRestoration_Test;
+    friend class ::FeasibilitySwitch_FilterSeedsRestorationConstraintTol_Test;
 
     Settings settings_;
     SolveResult result_;
@@ -624,8 +682,21 @@ class PSIOPT {
     // (composed in that order by ChainedRecovery) and WatchdogRecovery (an
     // outer decorator over whatever chain results) via the corresponding
     // Settings fields — see globalization/soc.h and globalization/watchdog.h.
-    // The feasibility switch remains a future link.
     std::unique_ptr<RecoveryChain> recovery_;
+
+    // Optional feasibility-restoration mode-switch. Held through the
+    // RestorationStrategy interface (forward-declared above). Unlike
+    // acceptance_/mechanism_/governor_/recovery_ this is NOT always constructed:
+    // rebuild_globalization_components() leaves it null unless restoration_mode_
+    // == proximal_switch, in which case it holds a ProximalSwitchRestoration and
+    // FeasibilitySwitchRecovery is wrapped as the outermost recovery link. On
+    // the default path (off) it stays null and every restoration branch in
+    // eval_nlp / the classic+generic trial-eval seams / alg_impl guards on
+    // `restoration_ != nullptr` (or `ctx.restoration_ != nullptr`) and is
+    // provably dead. run_phase_sequence() resets it (when present) at each phase
+    // boundary alongside the other components, and collects its diagnostics into
+    // SolveResult::last_feas_rest_entries_/last_feas_rest_iters_.
+    std::unique_ptr<RestorationStrategy> restoration_;
 
     // (Re)builds acceptance_/mechanism_/governor_/recovery_ from the current
     // Settings. Called once at the top of every run_phase_sequence() (i.e.
@@ -828,6 +899,21 @@ class PSIOPT {
     void eval_nlp(AlgorithmModes algmode, double obj_scale, ConstEigenRef<VectorXd> XSL,
                   double &val, EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
                   Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
+
+    // --- Feasibility-restoration exit measures (defined in psiopt.cpp) ---
+    // Shared by every restoration exit/teardown site (the two continuing-exit
+    // arms, the in-loop locally-infeasible break, and the post-loop teardown).
+    // While restoration is active, the loop's own prim_obj_ is φ_prox (the
+    // proximal objective substituted by the eval seam) — never valid outside
+    // restoration, since the OPTIMALITY filter/funnel's accumulated pairs are
+    // all true-objective-scale (see the cross-phase pair-incomparability
+    // disclosure in globalization/filter_acceptance.h). This helper re-evaluates the TRUE
+    // objective once at the live primals so every exit site hands
+    // notify_switch_to_optimality (and, ultimately, obj_val_) a measures
+    // triple in the same scale as the filter/funnel it is augmenting into.
+    ProgressMeasures build_restoration_exit_measures(double obj_scale, double infeasibility,
+                                                     ConstEigenRef<VectorXd> primals,
+                                                     double barr_obj);
 
     // --- Convergence and stepping ---
     // The residual formulas shared by the pre-factorization early

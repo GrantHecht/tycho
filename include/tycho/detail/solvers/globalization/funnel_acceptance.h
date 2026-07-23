@@ -109,6 +109,60 @@
 //     no update. This matches Uno, where funnel.update() is called from the
 //     single H-type acceptance branch of FunnelMethod::is_iterate_acceptable.
 //
+// (5) Feasibility-restoration hooks (Uno FunnelMethod, cvanaret/Uno 7481abe).
+//     The reference solver constructs a SEPARATE globalization-strategy instance
+//     for the feasibility phase, so the optimality funnel's width is
+//     structurally FROZEN during restoration and both the exit test and the
+//     exit re-base operate on that frozen width. Tycho drives one object across
+//     both phases, so the entry hook STASHES the optimality width (and re-arms
+//     the base's lazy θ₀ init) to reproduce that freeze; the exit hook restores
+//     it before re-basing.
+//
+//     (5a) Restoration-exit test, is_infeasibility_sufficiently_reduced —
+//          FunnelMethod::is_infeasibility_sufficiently_reduced:
+//
+//            funnel.acceptable(θ_trial)  AND  θ_trial ≤ β·θ_ref
+//          = θ_trial ≤ τ_frozen         AND  θ_trial ≤ kFunnelBeta·θ_ref,
+//
+//          reusing the existing sufficient-decrease margin β (Uno reuses the
+//          same parameters.beta). θ_ref is the infeasibility at the restoration
+//          entry point (reference.infeasibility). While in the feasibility phase
+//          the membership half tests against the STASHED (frozen optimality)
+//          width, not the live feasibility-phase width — the reference solver's
+//          exit test reads the frozen optimality funnel. Outside the phase it
+//          reads the live width (well-defined; the seam only tests for exit
+//          during the phase).
+//
+//     (5b) notify_switch_to_feasibility (entry) — STASH the optimality width and
+//          the base's switching state (via a reset() that re-arms the lazy θ₀
+//          init), set the in-feasibility flag, and reinitialize a fresh
+//          feasibility-phase width (lazily re-derived from the feasibility-phase
+//          θ₀ on the first is_iterate_acceptable call, exactly as the filter
+//          does at entry). The reference solver's FunnelMethod::
+//          notify_switch_to_feasibility body IS an empty no-op — but that no-op
+//          is correct ONLY because its optimality funnel instance is untouched
+//          by the feasibility phase (a separate instance runs there). Tycho's
+//          single-instance design would otherwise let feasibility-phase h-type
+//          accepts keep tightening the very width the exit test and exit re-base
+//          consult, so it must stash to reproduce the reference's structural
+//          freeze — the stash IS the single-instance equivalent of that no-op.
+//
+//     (5c) notify_switch_to_optimality (exit) — Uno Funnel::update_restoration,
+//          applied to the RESTORED optimality width:
+//
+//            τ ← τ_stashed
+//            τ⁺ = κ·τ + (1−κ)·θ_exit
+//               = convex_combination(τ, θ_exit, κ),   κ = kFunnelKappa,
+//
+//          re-basing the (restored) optimality width toward the (reduced) exit
+//          infeasibility as restoration hands control back to the optimality
+//          phase. Restoring directly (NOT via reset()) leaves the base's lazy
+//          θ₀ init armed-as-initialized so the next optimality call does not
+//          re-derive and wipe the just-restored width. No extra guard beyond
+//          Uno's: the +∞-width edge (restoration entered before the first
+//          is_iterate_acceptable call ⇒ stashed width +∞) is FP-inert
+//          (κ·∞ + finite = ∞ — no NaN, the funnel simply stays wide).
+//
 // Divergences from the sources, disclosed:
 //   • KLV Eq. (13) states the update as τ⁺ = (1−κ)·θ_trial + κ·τ (a convex
 //     combination of the OLD WIDTH and the trial). That formula is Uno's
@@ -130,6 +184,7 @@
 #pragma once
 
 #include <limits>
+#include <stdexcept>
 
 #include "tycho/detail/solvers/globalization/progress_measures.h"
 #include "tycho/detail/solvers/globalization/switching_acceptance.h"
@@ -168,11 +223,28 @@ class FunnelAcceptance final : public SwitchingAcceptance {
     // is_iterate_acceptable, e.g. converges at the initial iterate).
     void append_diagnostics(PSIOPT::SolveResult &result) const override;
 
+    // --- Feasibility-restoration hooks (see (5) in the file-top formulation) ---
+    // (5a) Restoration-exit test: funnel-membership (against the stashed width
+    // while in the feasibility phase) AND θ_trial ≤ β·θ_ref.
+    bool is_infeasibility_sufficiently_reduced(const ProgressMeasures &reference,
+                                               const ProgressMeasures &trial) const override;
+    // (5b) Entry: stash the optimality width, set the flag, reinitialize fresh.
+    void notify_switch_to_feasibility(const ProgressMeasures &current_progress) override;
+    // (5c) Exit: restore the stashed width, then re-base τ ← κ·τ + (1−κ)·θ_exit.
+    void notify_switch_to_optimality(const ProgressMeasures &current_progress) override;
+
+    // --- Restoration diagnostics (unit tests) ---
+    bool in_feasibility_phase() const { return in_feasibility_phase_; }
+    double stashed_funnel_width() const { return stashed_width_; }
+
   protected:
     // --- SwitchingAcceptance hooks (see the file-top formulation) ---
     // (init): τ = max(τ̄, κ̄·θ₀).
     void initialize_bounds(double theta_0) override;
     // Restore the uninitialized sentinel so the next θ₀ re-derives the width.
+    // Phase-aware (mirroring the filter): inside the feasibility phase a μ-event
+    // clears only the working width, preserving the stashed optimality width and
+    // the in-feasibility flag; outside the phase it also drops the stash.
     void reset_bounds() override;
     // (2a) membership: within the funnel (θ_trial ≤ τ) — every trial.
     bool is_trial_acceptable_to_strategy(const ProgressMeasures &current,
@@ -194,6 +266,15 @@ class FunnelAcceptance final : public SwitchingAcceptance {
     // Scalar funnel width τ; +∞ until the first θ₀ capture (uninitialized
     // sentinel, matching Uno's Funnel::width default).
     double width_ = std::numeric_limits<double>::infinity();
+
+    // --- Feasibility-restoration state (see (5) in the file-top doc) ---
+    // The PRESERVED optimality-phase width, stashed at
+    // notify_switch_to_feasibility and restored at notify_switch_to_optimality.
+    // The exit test's membership half consults it while in the feasibility phase.
+    double stashed_width_ = std::numeric_limits<double>::infinity();
+    // Set at entry, cleared at exit. Makes reset_bounds() phase-aware: a μ-event
+    // reset mid-feasibility-phase must preserve the stash + this flag.
+    bool in_feasibility_phase_ = false;
 };
 
 } // namespace tycho::solvers

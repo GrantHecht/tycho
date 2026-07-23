@@ -54,6 +54,13 @@
 
 namespace tycho::solvers {
 
+// Forward declaration only: SolverContext carries a non-owning pointer to the
+// active RestorationStrategy (complete type in globalization/restoration.h,
+// which includes THIS header — so a plain include here would be circular). The
+// pointer is null whenever feasibility restoration is off (the default), which
+// is exactly when every restoration branch that consults it is provably dead.
+class RestorationStrategy;
+
 // The concrete sparse KKT factorization type, mirroring PSIOPT::kkt_sol_'s
 // declaration (psiopt.h) exactly — same macro guard, same template
 // arguments. Components never choose or construct this type; they only ever
@@ -123,6 +130,18 @@ struct SolverContext {
     // best-iterate blocks are extracted (not yet done).
     Eigen::VectorXd &best_xsl_scratch_;
     Eigen::VectorXd &best_rhs_scratch_;
+
+    // --- Feasibility restoration (optional; null when off) ---
+    // Non-owning pointer to the active RestorationStrategy, or nullptr when
+    // restoration is off (the default). Consulted by the classic and generic
+    // trial-point evaluators (ClassicMeritAcceptance::ls_* / modern_eval_trial_
+    // point) to add the proximal objective φ_prox to a trial's objective value
+    // while restoration is active, and by FeasibilitySwitchRecovery to test
+    // entry permission. A default member initializer of nullptr keeps this an
+    // aggregate whose existing braced-init call sites (which omit this trailing
+    // member) still compile and default it to nullptr — so those sites, and the
+    // whole default solve path, remain restoration-free and bit-identical.
+    const RestorationStrategy *restoration_ = nullptr;
 };
 
 } // namespace tycho::solvers

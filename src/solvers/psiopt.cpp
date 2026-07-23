@@ -49,6 +49,8 @@
 #include "tycho/detail/solvers/globalization/soc.h"
 #include "tycho/detail/solvers/globalization/watchdog.h"
 #include "tycho/detail/solvers/globalization/restoration.h"
+#include "tycho/detail/solvers/globalization/proximal_restoration.h"
+#include "tycho/detail/solvers/globalization/feasibility_switch_recovery.h"
 
 #ifndef USE_ACCELERATE_SPARSE
 #include <mkl.h>
@@ -182,6 +184,13 @@ void tycho::solvers::PSIOPT::set_ls_extended_iters(int ls_extended_iters) {
         throw std::invalid_argument(
             fmt::format("ls_extended_iters must be non-negative, got {}", ls_extended_iters));
     settings_.ls_extended_iters_ = ls_extended_iters;
+}
+
+void tycho::solvers::PSIOPT::set_max_feas_rest(int max_feas_rest) {
+    if (max_feas_rest < 0)
+        throw std::invalid_argument(
+            fmt::format("max_feas_rest must be non-negative, got {}", max_feas_rest));
+    settings_.max_feas_rest_ = max_feas_rest;
 }
 
 void tycho::solvers::PSIOPT::set_kkt_tol(double kkt_tol) {
@@ -520,6 +529,12 @@ void tycho::solvers::PSIOPT::Settings::validate() const {
     if (ls_extended_iters_ < 0)
         throw std::invalid_argument(fmt::format(
             "ls_extended_iters must be non-negative, got {}", ls_extended_iters_));
+    // Per-phase feasibility-restoration entry budget. 0 is valid (disables
+    // restoration entry even when restoration_mode_ == proximal_switch);
+    // negative is not.
+    if (max_feas_rest_ < 0)
+        throw std::invalid_argument(
+            fmt::format("max_feas_rest must be non-negative, got {}", max_feas_rest_));
 
     // --- Strategy-combination guards ---
     // The SOC and extended-backtracking recovery links re-drive the fused
@@ -969,6 +984,18 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
 // members are written, so re-snapshotting them here at solve time reproduces
 // bit-identical captures to the old per-transcription construction.
 void tycho::solvers::PSIOPT::rebuild_globalization_components() {
+    // (Re)build the optional feasibility-restoration mode-switch FIRST, so the
+    // ClassicMeritAcceptance SolverContext below captures a valid (or null)
+    // restoration_ pointer. Default (off) leaves it null — no RestorationStrategy
+    // is constructed and every restoration branch in the solver stays dead.
+    // proximal_switch builds a ProximalSwitchRestoration; the matching outermost
+    // FeasibilitySwitchRecovery link is wrapped around the recovery chain below.
+    if (this->settings_.restoration_mode_ == RestorationModes::proximal_switch) {
+        this->restoration_ = std::make_unique<ProximalSwitchRestoration>();
+    } else {
+        this->restoration_.reset();
+    }
+
     // (Re)build the step-acceptance strategy. Default (classic_merit) builds
     // ClassicMeritAcceptance wired to a SolverContext view of this solver.
     // Opting in (acceptance_strategy_ == merit/funnel/filter) builds the
@@ -983,13 +1010,23 @@ void tycho::solvers::PSIOPT::rebuild_globalization_components() {
     } else if (this->settings_.acceptance_strategy_ == AcceptanceStrategies::funnel) {
         this->acceptance_ = std::make_unique<FunnelAcceptance>();
     } else if (this->settings_.acceptance_strategy_ == AcceptanceStrategies::filter) {
-        this->acceptance_ = std::make_unique<FilterAcceptance>();
+        // HARD CONTRACT: seed the restoration-exit constraint-tolerance floor
+        // from the live settings tolerance. FilterAcceptance's exit test
+        // (is_infeasibility_sufficiently_reduced) floors the relative
+        // θ-reduction with restoration_constraint_tol_; leaving it at the
+        // header default would silently decouple the filter exit floor from the
+        // user-configured econ_tol_. Set unconditionally when a FilterAcceptance
+        // is built (independent of restoration_mode_) — it is inert unless a
+        // restoration episode actually drives the exit test.
+        auto filter = std::make_unique<FilterAcceptance>();
+        filter->set_restoration_constraint_tol(this->settings_.econ_tol_);
+        this->acceptance_ = std::move(filter);
     } else {
         this->acceptance_ = std::make_unique<ClassicMeritAcceptance>(
             SolverContext{this->nlp_.get(), this->kkt_sol_, this->settings_, this->primal_vars_,
                           this->slack_vars_, this->equal_cons_, this->inequal_cons_, this->kkt_dim_,
                           this->stli_scratch_, this->hp_scratch_, this->best_xsl_scratch_,
-                          this->best_rhs_scratch_});
+                          this->best_rhs_scratch_, this->restoration_.get()});
     }
 
     // The step-length globalization mechanism. Stateless (holds
@@ -1046,6 +1083,16 @@ void tycho::solvers::PSIOPT::rebuild_globalization_components() {
     }
     if (this->settings_.watchdog_) {
         this->recovery_ = std::make_unique<WatchdogRecovery>(std::move(this->recovery_));
+    }
+
+    // Feasibility restoration wraps the OUTERMOST recovery link (built only when
+    // restoration_mode_ == proximal_switch, i.e. exactly when restoration_ above
+    // is non-null). It delegates to the whole inner chain (Noop/Chained/
+    // Watchdog) and intercepts only its ladder-exhausted kAcceptAsIs to hand off
+    // to restoration — see feasibility_switch_recovery.h. Off by default, so the
+    // recovery chain is unchanged on the default path.
+    if (this->settings_.restoration_mode_ == RestorationModes::proximal_switch) {
+        this->recovery_ = std::make_unique<FeasibilitySwitchRecovery>(std::move(this->recovery_));
     }
 }
 
@@ -1113,6 +1160,27 @@ void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
                                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
     std::fill_n(KKTmat.valuePtr(), KKTmat.nonZeros(), 0.0);
 
+    // Feasibility-restoration evaluation seam. Dead on the default path
+    // (restoration_ is null unless restoration_mode_ == proximal_switch). While
+    // restoration is active the true objective is uniformly replaced by the
+    // proximal term φ_prox: route through the objective-free KKT (constraints +
+    // their Hessians, exactly the OPTNO/SOE shape), then inject the proximal
+    // objective value, its gradient into the (now-zero) objective-gradient
+    // block, and its diagonal Hessian via the solver primal-diagonal slot the
+    // SOE/INIT modes already use. The auxiliary/barrier terms and the
+    // infeasibility residuals are untouched, and obj_scale never multiplies
+    // φ_prox (it is a solver-internal objective). The convergence check needs no
+    // mode code: it reads whatever lands in prim_grad() downstream (the
+    // objective-free-mode precedent), which now carries the proximal gradient.
+    if (this->restoration_ && this->restoration_->is_active()) {
+        this->nlp_->set_primal_diags(this->restoration_->proximal_diagonal());
+        eval_kkt_no(0.0, XSL, val, GX, AGXS_FX, KKTmat);
+        this->nlp_->set_primal_diags(0.0);
+        val = this->restoration_->proximal_objective(XSL.head(primal_vars_));
+        this->restoration_->add_proximal_gradient(XSL.head(primal_vars_), GX.head(primal_vars_));
+        return;
+    }
+
     switch (algmode) {
     case AlgorithmModes::OPT:
         eval_kkt(obj_scale, XSL, val, GX, AGXS_FX, KKTmat);
@@ -1134,6 +1202,25 @@ void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
     default:
         throw std::invalid_argument("Unknown AlgorithmMode");
     }
+}
+
+// Feasibility-restoration exit measures. Dead on the default path (only
+// called from restoration-active branches, all guarded on
+// `restoration_ && restoration_->is_active()`). The current iterate's
+// prim_obj_/cur.objective is φ_prox (the proximal objective substituted by the
+// eval seam in eval_nlp above) while restoration is active — it must never be
+// handed to notify_switch_to_optimality or reported as obj_val_, since both
+// consumers expect true-objective scale. This re-evaluates the true objective
+// once at the live primals, matching the non-OPT obj_val_ eval pattern below
+// (zero the accumulator, then let eval_obj accumulate into it).
+tycho::solvers::ProgressMeasures tycho::solvers::PSIOPT::build_restoration_exit_measures(
+    double obj_scale, double infeasibility, ConstEigenRef<VectorXd> primals, double barr_obj) {
+    ProgressMeasures measures;
+    measures.infeasibility = infeasibility;
+    measures.objective = 0.0;
+    this->nlp_->eval_obj(obj_scale, primals, measures.objective);
+    measures.auxiliary = barr_obj;
+    return measures;
 }
 
 tycho::ConvergenceFlags tycho::solvers::PSIOPT::converge_check(std::vector<IterateInfo> &iters) {
@@ -1305,10 +1392,11 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     // step-length mechanism (mechanism_) at its call sites below. Built once
     // here (dims/settings/scratch are stable for the solve); it must not
     // outlive this alg_impl frame or the PSIOPT members it references.
-    SolverContext ctx{this->nlp_.get(),    this->kkt_sol_,          this->settings_,
-                      this->primal_vars_,  this->slack_vars_,       this->equal_cons_,
-                      this->inequal_cons_, this->kkt_dim_,          this->stli_scratch_,
-                      this->hp_scratch_,   this->best_xsl_scratch_, this->best_rhs_scratch_};
+    SolverContext ctx{this->nlp_.get(),     this->kkt_sol_,           this->settings_,
+                      this->primal_vars_,   this->slack_vars_,        this->equal_cons_,
+                      this->inequal_cons_,  this->kkt_dim_,           this->stli_scratch_,
+                      this->hp_scratch_,    this->best_xsl_scratch_,  this->best_rhs_scratch_,
+                      this->restoration_.get()};
 
     tycho::utils::Timer Runtimer;
     tycho::utils::Timer Funtimer;
@@ -1322,6 +1410,18 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     iters.reserve(settings_.max_iters_);
     ConvergenceFlags ExitCode = ConvergenceFlags::NOTCONVERGED;
     bool FirstPert = true;
+
+    // Feasibility-restoration obj_val_ override. Dead on the default path
+    // (never set true unless restoration_ is non-null). Two terminal restoration
+    // exits leave the loop with the last-filled iters.back().prim_obj_ still at
+    // φ_prox (the proximal objective substituted while restoration was active):
+    // the in-loop "converged to a locally infeasible point" break, and the
+    // post-loop max-iters/DIVERGING-while-active catch-all. Both record the true
+    // objective (re-evaluated via build_restoration_exit_measures) here so the
+    // unconditional algmode==OPT obj_val_ assignment below the main loop can be
+    // corrected afterward, once, in a single place.
+    bool restoration_was_active = false;
+    double restoration_true_obj = 0.0;
 
     Runtimer.start();
     for (int i = 0; i < settings_.max_iters_; i++) {
@@ -1383,6 +1483,135 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         this->fill_residual_info(v_xsl, v_rhs, prim_obj, Citer);
         iters.push_back(Citer);
         ConvergenceFlags PreExitCode = this->converge_check(iters);
+
+        // Feasibility-restoration mode handling. Dead on the default path
+        // (restoration_ is null). While active, the KKT gradient/objective this
+        // iterate was evaluated under is the PROXIMAL one (the eval seam swapped
+        // it), so a converge_check "converged/acceptable" verdict here means the
+        // PROXIMAL subproblem converged, NOT that the true NLP is solved — it
+        // must never be reported as a solve. Intercept before the early-exit
+        // block below.
+        if (this->restoration_ && this->restoration_->is_active()) {
+            ProgressMeasures cur;
+            cur.infeasibility = v_rhs.all_cons().template lpNorm<1>();
+            cur.objective = prim_obj; // = φ_prox while active (set by the eval seam).
+            cur.auxiliary = barr_obj;
+            // Stall classification uses the FAILURE threshold (1e2 · tol), not
+            // the far-stricter entry guard: a proximal-subproblem stall at
+            // violation <= 1e2 · tol is the recoverable "reached a
+            // (near-)feasible point" outcome, and only beyond it is local
+            // infeasibility declared (see kRestoFailureFeasibilityFactor's
+            // citation block in proximal_restoration.h).
+            const double resto_failure_threshold =
+                kRestoFailureFeasibilityFactor * settings_.econ_tol_;
+
+            if (PreExitCode == ConvergenceFlags::CONVERGED ||
+                PreExitCode == ConvergenceFlags::ACCEPTABLE) {
+                if (cur.infeasibility <= resto_failure_threshold) {
+                    // Proximal subproblem converged AND the true constraints are
+                    // near-feasible: leave restoration and resume the true
+                    // objective. The same iterate is re-evaluated in optimality
+                    // mode next iteration (the per-phase budget prevents cycling).
+                    // notify_switch_to_optimality augments this pair into the
+                    // restored OPTIMALITY filter/funnel, whose accumulated pairs
+                    // are all true-objective-scale -- cur.objective (= φ_prox) is
+                    // never valid there, so the true objective is re-evaluated at
+                    // the live primals via the shared exit-measures helper.
+                    // Count this exit iteration in the in-mode total (it was a
+                    // feasibility-mode iterate; the stay-in-mode note_iteration
+                    // below only counts iterations that keep going).
+                    this->restoration_->note_iteration();
+                    this->restoration_->exit_restoration();
+                    this->acceptance_->notify_switch_to_optimality(
+                        this->build_restoration_exit_measures(obj_scale, cur.infeasibility,
+                                                              v_xsl.primals(), barr_obj));
+                    // Reset the recovery chain across the mode switch (see the
+                    // entry-side rationale at the kSwitchToFeasibility case): the
+                    // watchdog's objective-scale-bound snapshot/counters must not
+                    // survive back into the optimality phase. Once per transition.
+                    this->recovery_->reset();
+                    iters.pop_back();
+                    QPtimer.stop();
+                    continue;
+                }
+                // Proximal subproblem converged/stalled at a still-infeasible
+                // point: the problem is locally infeasible (Ipopt's
+                // restoration-convergence failure classification). Tear down
+                // restoration BEFORE returning so the phase-boundary reset() sees
+                // optimality mode, then stop with the NOT-converged verdict.
+                {
+                    // The notify measures record the point restoration exited
+                    // (the live iterate) — the filter augment describes the
+                    // exit point itself, independent of the return_best_
+                    // reporting substitution below.
+                    ProgressMeasures exit_measures = this->build_restoration_exit_measures(
+                        obj_scale, cur.infeasibility, v_xsl.primals(), barr_obj);
+                    restoration_was_active = true;
+                    // Count this exit iteration in the in-mode total (see the
+                    // near-feasible exit above).
+                    this->restoration_->note_iteration();
+                    this->restoration_->exit_restoration();
+                    this->acceptance_->notify_switch_to_optimality(exit_measures);
+                    // Reset the recovery chain across the mode switch (see the
+                    // kSwitchToFeasibility entry rationale). Once per transition.
+                    this->recovery_->reset();
+                }
+                iters.back().mu_ = mu;
+                QPtimer.stop();
+                ExitCode = ConvergenceFlags::NOTCONVERGED;
+                if (settings_.return_best_) {
+                    XSL = BestXSL;
+                    RHS = BestRHS;
+                }
+                // obj_val_ must describe the RETURNED primals: evaluate after
+                // the return_best_ substitution above (which may have replaced
+                // XSL), unlike the notify measures, which record the exit
+                // point. With return_best_ off the two evaluations coincide.
+                restoration_true_obj = 0.0;
+                this->nlp_->eval_obj(obj_scale, v_xsl.primals(), restoration_true_obj);
+                this->result_.converge_flag_ = ExitCode;
+                if (settings_.print_level_ == 0) {
+                    Printtimer.start();
+                    this->print_last_iterate(iters);
+                    Printtimer.stop();
+                }
+                if (settings_.print_level_ < 3)
+                    fmt::print(fmt::fg(fmt::color::yellow),
+                               "Feasibility restoration converged to a locally infeasible "
+                               "point (infeasibility {:.3e} > {:.3e}); stopping "
+                               "(not converged).\n",
+                               cur.infeasibility, resto_failure_threshold);
+                break;
+            }
+
+            if (PreExitCode == ConvergenceFlags::NOTCONVERGED) {
+                // Subproblem not converged: has infeasibility fallen enough,
+                // relative to the restoration entry point, to leave restoration?
+                // Runs from an accepted feasibility-mode iterate; at the entry
+                // point cur == reference so this cannot fire (θ_trial == θ_ref).
+                if (this->acceptance_->is_infeasibility_sufficiently_reduced(
+                        this->restoration_->reference(), cur)) {
+                    // Count this exit iteration in the in-mode total (the
+                    // stay-in-mode note_iteration below is skipped on exit).
+                    this->restoration_->note_iteration();
+                    this->restoration_->exit_restoration();
+                    this->acceptance_->notify_switch_to_optimality(
+                        this->build_restoration_exit_measures(obj_scale, cur.infeasibility,
+                                                              v_xsl.primals(), barr_obj));
+                    // Reset the recovery chain across the mode switch (see the
+                    // kSwitchToFeasibility entry rationale). Once per transition.
+                    this->recovery_->reset();
+                    iters.pop_back();
+                    QPtimer.stop();
+                    continue;
+                }
+                // Staying in restoration mode this iteration.
+                this->restoration_->note_iteration();
+            }
+            // DIVERGING while active falls through to the early-exit block below;
+            // the post-loop teardown clears restoration before alg_impl returns.
+        }
+
         if (PreExitCode == ConvergenceFlags::CONVERGED ||
             PreExitCode == ConvergenceFlags::ACCEPTABLE ||
             PreExitCode == ConvergenceFlags::DIVERGING) {
@@ -1407,7 +1636,14 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             QPtimer.stop();
             ExitCode = PreExitCode;
 
-            if (settings_.return_best_) {
+            // Suspend best-iterate tracking while restoration is active (dead on
+            // the default path: restoration_ null). A feasibility-mode iterate's
+            // prim_obj/kkt_inf are proximal-scale and must not compete with
+            // true-objective iterates for "best" — otherwise return_best_ could
+            // report a mixed-scale winner. Only DIVERGING-while-active reaches
+            // this early-exit block (CONVERGED/ACCEPTABLE are intercepted by the
+            // restoration handling above).
+            if (settings_.return_best_ && !(this->restoration_ && this->restoration_->is_active())) {
                 double critval;
                 switch (settings_.best_criteria_) {
                 case BestCriteriaModes::ECONS:
@@ -1548,8 +1784,17 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // scale (obj_scale * lsobjscale) to its acceptance re-test; its value is
         // a pure select on algmode (0.0 for SOE/OPTNO, else 1.0), so hoisting the
         // declaration does not change the value passed to compute_step.
-        double lsobjscale =
-            algmode == AlgorithmModes::SOE || algmode == AlgorithmModes::OPTNO ? 0.0 : 1.0;
+        //
+        // While feasibility restoration is active the user objective must
+        // contribute exactly 0.0 to the trial merit (the proximal objective is
+        // added instead by the trial seams), so lsobjscale is 0.0 there too. The
+        // added disjunct is provably false on the default path (restoration_ is
+        // null → short-circuit), so the selected value — and every FP operation
+        // downstream — is byte-identical when restoration is off.
+        double lsobjscale = (algmode == AlgorithmModes::SOE || algmode == AlgorithmModes::OPTNO ||
+                             (this->restoration_ && this->restoration_->is_active()))
+                                ? 0.0
+                                : 1.0;
         Funtimer.start();
         if (GoodStep) {
             // compute_step fuses the fraction-to-boundary scaling (former
@@ -1616,10 +1861,36 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 // The recovery chain committed a corrected/reverted step into
                 // DXSL/alpha.
                 break;
-            case RecoveryChain::Action::kSwitchToFeasibility:
-                throw std::logic_error(
-                    "PSIOPT: recovery requested a feasibility-restoration switch, but no "
-                    "restoration strategy exists yet (no recovery link can produce this Action)");
+            case RecoveryChain::Action::kSwitchToFeasibility: {
+                // Enter feasibility-restoration mode. The recovery link only
+                // SIGNALS (it mutates nothing); the actual mode entry happens
+                // here. Discard the rejected step (alpha = 0 no-ops the
+                // XSL += alpha*DXSL commit below), snapshot the current iterate
+                // as the restoration center/reference, freeze ζ from the live μ,
+                // and notify the acceptance strategy of the switch. The current
+                // measures are the TRUE-objective (θ, f) at this point — this
+                // iterate was evaluated in optimality mode; restoration begins on
+                // the NEXT iteration. FeasibilitySwitchRecovery is the only link
+                // that produces this Action, and only when restoration_ is
+                // non-null and inactive (so the calls below are safe).
+                ProgressMeasures entry;
+                entry.infeasibility = v_rhs.all_cons().template lpNorm<1>();
+                entry.objective = prim_obj;
+                entry.auxiliary = barr_obj;
+                this->restoration_->enter_restoration(entry, v_xsl.primals(), mu);
+                this->acceptance_->notify_switch_to_feasibility(entry);
+                // Reset the recovery chain across the mode switch. WatchdogRecovery
+                // holds armed-state/counters and a full-iterate revert snapshot
+                // (snapshot_xsl_) whose merit references are bound to the optimality
+                // objective scale; carrying them into feasibility mode would let a
+                // feasibility-mode revert restore a pre-switch iterate under an
+                // incomparable merit scale. Same precedent as the per-phase reset
+                // in run_phase_sequence() and the μ-event-triggered watchdog reset.
+                // Once per transition; dead on the default path (restoration_ null).
+                this->recovery_->reset();
+                alpha = 0.0;
+                break;
+            }
             case RecoveryChain::Action::kGiveUp:
                 throw std::logic_error(
                     "PSIOPT: recovery gave up on the step, but no give-up handling exists yet "
@@ -1643,7 +1914,12 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         this->fill_iter_info(v_xsl, v_rhs, prim_obj, barr_obj, mu, Citer);
         iters.push_back(Citer);
 
-        if (settings_.return_best_) {
+        // Suspend best-iterate tracking while restoration is active (dead on the
+        // default path: restoration_ null). A feasibility-mode iterate's
+        // prim_obj/kkt_inf are proximal-scale and must not compete with
+        // true-objective iterates for "best" — otherwise return_best_ could
+        // report a mixed-scale winner.
+        if (settings_.return_best_ && !(this->restoration_ && this->restoration_->is_active())) {
             double critval;
             switch (settings_.best_criteria_) {
             case BestCriteriaModes::ECONS:
@@ -1701,6 +1977,45 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         XSL += alpha * DXSL;
     }
 
+    // Teardown invariant (dead on the default path: restoration_ is null). Any
+    // return path that is still in feasibility mode (max_iters, divergence)
+    // exits restoration and notifies the acceptance strategy of the switch back
+    // to optimality BEFORE alg_impl returns, so the phase-boundary reset() in
+    // run_phase_sequence() always sees optimality mode (the acceptance reset
+    // invariant). The in-loop exit paths above already tore down; this is the
+    // catch-all for the loop's break/fall-through exits (max_iters exhausted, or
+    // DIVERGING, while restoration was still active).
+    //
+    // restoration_was_active/restoration_true_obj (declared near the top of
+    // this function) are set here too, for the obj_val_ override further down:
+    // by the time obj_val_ is set, exit_restoration() has already flipped
+    // is_active() false, so `restoration_ && restoration_->is_active()` can no
+    // longer be re-tested there.
+    if (this->restoration_ && this->restoration_->is_active()) {
+        // The barrier auxiliary is not recomputed here (the phase is ending
+        // and the next reset() clears everything). The objective, however,
+        // must be the TRUE objective, not φ_prox (this->restoration_->
+        // proximal_objective(...)): notify_switch_to_optimality augments this
+        // pair into the restored OPTIMALITY filter/funnel, whose accumulated
+        // pairs are all true-objective-scale, and obj_val_ below must report
+        // a meaningful number rather than a solver-internal one. Re-evaluated
+        // once via the same helper the in-loop exit arms use.
+        ProgressMeasures measures = this->build_restoration_exit_measures(
+            obj_scale, v_rhs.all_cons().template lpNorm<1>(), v_xsl.primals(), 0.0);
+        restoration_was_active = true;
+        restoration_true_obj = measures.objective;
+        // No note_iteration() here: this teardown catches the max_iters /
+        // divergence exits, whose final feasibility-mode iterate was already
+        // counted by the in-loop stay-in-mode note_iteration() before the loop
+        // broke (the decision-driven in-loop exits, which return before that
+        // point, are the ones that count their exit iteration explicitly).
+        this->restoration_->exit_restoration();
+        this->acceptance_->notify_switch_to_optimality(measures);
+        // Reset the recovery chain across the mode switch (see the
+        // kSwitchToFeasibility entry rationale). Once per transition.
+        this->recovery_->reset();
+    }
+
     if (algmode == AlgorithmModes::OPT) {
         this->result_.obj_val_ = iters.back().prim_obj_;
     } else {
@@ -1708,6 +2023,14 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         this->result_.obj_val_ = 0;
         this->nlp_->eval_obj(obj_scale, v_xsl.primals(), this->result_.obj_val_);
         Funtimer.stop();
+    }
+
+    if (restoration_was_active) {
+        // Override the algmode==OPT branch's iters.back().prim_obj_ above,
+        // which is φ_prox for the last iterate evaluated while restoration was
+        // active -- obj_val_ must report the true objective at the returned
+        // primals.
+        this->result_.obj_val_ = restoration_true_obj;
     }
 
     this->result_.primals_ = v_xsl.primals();
@@ -1930,6 +2253,12 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
         this->mechanism_->reset();
         this->governor_->reset();
         this->recovery_->reset();
+        // Restoration reset is null-guarded (restoration_ exists only under
+        // restoration_mode_ == proximal_switch). alg_impl's teardown guarantees
+        // restoration is inactive by the time this runs, so reset() here only
+        // clears the per-phase entry snapshot and diagnostic counters.
+        if (this->restoration_)
+            this->restoration_->reset();
 
         XSL = this->alg_impl(step.alg_mode_, step.bar_mode_, step.ls_mode_, settings_.obj_scale_,
                              settings_.init_mu_, XSL);
@@ -1951,6 +2280,14 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
         // no-op body means this is write-only-neutral unless
         // barrier_governor=monitored is selected.
         this->governor_->append_diagnostics(this->result_);
+
+        // Same collection point and last-phase-wins semantics for the
+        // feasibility-restoration diagnostics (entry count / iterations-in-mode
+        // — see RestorationStrategy::append_diagnostics()). Null-guarded: the
+        // SolveResult::last_feas_rest_* fields keep their -1 sentinels when
+        // restoration_mode_ == off (no strategy constructed).
+        if (this->restoration_)
+            this->restoration_->append_diagnostics(this->result_);
 
         if (settings_.print_level_ < 2)
             print_finished(step.label_);

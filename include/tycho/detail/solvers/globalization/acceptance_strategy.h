@@ -47,6 +47,24 @@
 namespace tycho::solvers {
 
 // =============================================================================
+// Restoration-exit constant shared by the two acceptance strategies whose exit
+// test uses the Ipopt-style relative θ-reduction floor: ClassicMeritAcceptance
+// (merit_acceptance.h) and FilterAcceptance (filter_acceptance.h). It lives on
+// the shared base header because both strategies compile into the same
+// translation unit and a single definition is required; ModernMeritAcceptance
+// and FunnelAcceptance use their own source-specific exit criteria and never
+// read it.
+// =============================================================================
+
+// Required infeasibility reduction to leave feasibility restoration: a trial's
+// constraint violation must fall to kKappaResto·θ_ref before the point is
+// eligible to exit (subject to the constraint-tolerance floor the two consumers
+// apply on top). Ipopt option "required_infeasibility_reduction", shipped
+// default 0.9 (coin-or/Ipopt 72a29c9, src/Algorithm/IpRestoConvCheck.cpp,
+// kappa_resto_).
+inline constexpr double kKappaResto = 0.9;
+
+// =============================================================================
 // AcceptanceStrategy — decides whether a trial step is accepted.
 // =============================================================================
 class AcceptanceStrategy {
@@ -100,9 +118,15 @@ class AcceptanceStrategy {
     // at solve time instead of failing to compile.
     virtual bool drives_classic_path() const = 0;
 
-    // Mode-switch notifications (restoration handoff); default no-op so the
-    // classic path and any strategy that doesn't care about the switch need
-    // not override them.
+    // Mode-switch notifications (restoration handoff), called by the solver
+    // seam when it enters / leaves feasibility restoration. `current` is the
+    // ProgressMeasures at the switch point (the entry point on the way in, the
+    // exit point on the way out). Default no-op: the classic and modern merit
+    // strategies keep it (their acceptance state is not invalidated by the
+    // objective swap — matching Uno's MeritFunction, which defines no switch
+    // hooks). FunnelAcceptance overrides only the optimality (exit) hook to
+    // re-base its width; FilterAcceptance overrides both to augment/stash/restore
+    // its filter (see funnel_acceptance.h / filter_acceptance.h).
     virtual void notify_switch_to_feasibility(const ProgressMeasures &) {}
     virtual void notify_switch_to_optimality(const ProgressMeasures &) {}
 

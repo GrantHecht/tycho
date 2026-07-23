@@ -118,8 +118,9 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
             return std::vector<int>(h.begin(), h.end());
         },
         "Counts of how each rejected step's recovery was resolved during the most recent "
-        "solve, as a 4-element list: [second-order correction, extended backtracking, "
-        "watchdog, unresolved].");
+        "solve, as a 5-element list: [second-order correction, extended backtracking, "
+        "watchdog, unresolved, restoration]. The final bucket only increments when "
+        "restoration_mode is proximal_switch.");
 
     BIND_RESULT_RO(obj, "last_funnel_width", last_funnel_width_,
                    "Final funnel width (tau) at the end of the most recent solve's last phase. "
@@ -137,6 +138,15 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     BIND_RESULT_RO(obj, "last_monotone_iters", last_monotone_iters_,
                    "Number of iterations spent in monotone mode during the most recent solve's "
                    "last phase. -1 unless barrier_governor is monitored.");
+
+    BIND_RESULT_RO(obj, "last_feas_rest_entries", last_feas_rest_entries_,
+                   "Number of times feasibility restoration was entered during the most recent "
+                   "solve's last phase. -1 unless restoration_mode is proximal_switch (no "
+                   "restoration strategy is constructed when restoration_mode is off).");
+    BIND_RESULT_RO(obj, "last_feas_rest_iters", last_feas_rest_iters_,
+                   "Number of iterations spent in the feasibility-restoration phase during the "
+                   "most recent solve's last phase. -1 unless restoration_mode is "
+                   "proximal_switch.");
 
     BIND_SETTINGS_VALIDATED(obj, "obj_scale", obj_scale_, set_obj_scale, "");
     BIND_SETTINGS_VALIDATED(obj, "print_level", print_level_, set_print_level, "");
@@ -283,6 +293,30 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
         "false (default). Contradictory with barrier_governor=monitored (which already "
         "supplies the monotone fallback this knob opts out of) -- validate() raises ValueError "
         "on that combination.");
+    BIND_SETTINGS_RW(
+        obj, "restoration_mode", restoration_mode_,
+        "Feasibility-restoration mode selector: off (default) reproduces today's behavior "
+        "bit-identically -- no restoration strategy is constructed, so every restoration branch "
+        "in the solver is provably dead. proximal_switch enables the proximal feasibility "
+        "mode-switch: when the recovery chain exhausts on a rejected step, the solver switches "
+        "to a pure feasibility phase -- the objective is replaced by a proximal term centered on "
+        "the switch point (coefficient sqrt(mu) at entry) while all constraints and barrier "
+        "machinery keep running -- and returns to the true objective once the acceptance "
+        "strategy's infeasibility-reduction test passes (per-strategy: classic_merit uses a "
+        "relative infeasibility-reduction test against the entry point, Ipopt "
+        "restoration-convergence style; merit reduces against the smallest-known infeasibility "
+        "held from the optimality phase -- frozen at restoration entry and unchanged by "
+        "feasibility-phase iterates; funnel/filter use their own reference-solver tests). "
+        "Entry is refused at a near-feasible point or once the per-phase budget max_feas_rest is "
+        "exhausted. Composes with every acceptance_strategy and barrier_governor (no matrix "
+        "restrictions). Mode-switch lineage: Knitro's bar_switchobj=scalarprox, with entry/exit "
+        "semantics derived from Ipopt's restoration phase and Uno's phase switching.");
+    BIND_SETTINGS_VALIDATED(
+        obj, "max_feas_rest", max_feas_rest_, set_max_feas_rest,
+        "Per-phase cap on the number of times feasibility restoration may be entered. 0 "
+        "disables restoration entry entirely (the budget is exhausted before the first entry); "
+        "2 (default). Ignored when restoration_mode is off. Negative values raise ValueError "
+        "immediately on assignment; validate() re-checks non-negativity as a backstop.");
 
     // --- QP solver ---
     BIND_SETTINGS_RW(obj, "force_qp_analysis", force_qp_analysis_, "");
@@ -371,6 +405,18 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
                "to a Fiacco-McCormick monotone mode when free-mode progress stalls, then "
                "re-enters free mode once progress resumes -- see the barrier_governor "
                "property docstring for the full mechanism.");
+    nb::enum_<RestorationModes>(m, "RestorationModes")
+        .value("off", RestorationModes::off,
+               "No feasibility restoration -- the bit-identical default. No restoration "
+               "strategy is constructed, so every restoration branch in the solver is provably "
+               "dead.")
+        .value("proximal_switch", RestorationModes::proximal_switch,
+               "Proximal feasibility mode-switch: on a ladder-exhausted step rejection, keep "
+               "the same barrier algorithm running but swap the true objective for a proximal "
+               "term pulling the primals back toward the switch point, until the acceptance "
+               "strategy's infeasibility-reduction test passes -- see the restoration_mode "
+               "property docstring for the full mechanism. Composes with every "
+               "acceptance_strategy and barrier_governor.");
     nb::enum_<PDStepStrategies>(m, "PDStepStrategies")
         .value("PrimSlackEq_Iq", PDStepStrategies::PrimSlackEq_Iq)
         .value("AllMinimum", PDStepStrategies::AllMinimum)

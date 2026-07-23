@@ -238,6 +238,37 @@ TEST(RecoveryDispatchGate, ValidateRejectsFilterWithLsExtendedIters) {
     EXPECT_THROW(settings.validate(), std::invalid_argument);
 }
 
+// Settings::validate()'s feasibility-restoration budget guard: max_feas_rest_
+// must be non-negative (0 disables restoration entry; negative is invalid). The
+// restoration mode itself composes with every acceptance strategy and governor
+// — validate() adds no new combination restrictions for it.
+TEST(RecoveryDispatchGate, ValidateRejectsNegativeMaxFeasRest) {
+    PSIOPT::Settings settings;
+    settings.max_feas_rest_ = -1;
+    EXPECT_THROW(settings.validate(), std::invalid_argument);
+}
+
+TEST(RecoveryDispatchGate, ValidateAcceptsZeroMaxFeasRest) {
+    PSIOPT::Settings settings;
+    settings.max_feas_rest_ = 0;
+    EXPECT_NO_THROW(settings.validate());
+}
+
+TEST(RecoveryDispatchGate, ValidateAcceptsRestorationWithClassicMerit) {
+    PSIOPT::Settings settings;
+    settings.restoration_mode_ = tycho::solvers::RestorationModes::proximal_switch;
+    settings.acceptance_strategy_ = AcceptanceStrategies::classic_merit;
+    EXPECT_NO_THROW(settings.validate());
+}
+
+TEST(RecoveryDispatchGate, ValidateAcceptsRestorationWithFilterMonitored) {
+    PSIOPT::Settings settings;
+    settings.restoration_mode_ = tycho::solvers::RestorationModes::proximal_switch;
+    settings.acceptance_strategy_ = AcceptanceStrategies::filter;
+    settings.barrier_governor_ = BarrierGovernors::monitored;
+    EXPECT_NO_THROW(settings.validate());
+}
+
 // classic_merit is unaffected by the widened guard: max_soc_/ls_extended_iters_
 // combine with it exactly as before.
 TEST(RecoveryDispatchGate, ValidateAcceptsClassicMeritWithMaxSoc) {

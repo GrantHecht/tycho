@@ -82,4 +82,22 @@ enum class MeritPenaltyRules { wmno = 0, flexible = 1 };
 //                      may pair with it.
 enum class BarrierGovernors { classic_adaptive = 0, monitored = 1 };
 
+// Feasibility-restoration mode selector (PSIOPT::Settings::restoration_mode_).
+// Declared here alongside the other strategy selectors — for the same reason:
+// both PSIOPT::Settings (psiopt.h) and the restoration component
+// (globalization/proximal_restoration.h) need it without a circular include.
+//   off             — no feasibility restoration (default). The globalization
+//                     failure path behaves exactly as it did before restoration
+//                     existed: a ladder-exhausted rejection is taken as-is. No
+//                     RestorationStrategy is constructed, so every restoration
+//                     branch in the solver is provably dead.
+//   proximal_switch — the proximal feasibility mode-switch
+//                     (ProximalSwitchRestoration): on a ladder-exhausted
+//                     rejection, keep the same barrier algorithm running but
+//                     swap the true objective for a proximal term pulling the
+//                     primals back toward the entry point, until infeasibility
+//                     is sufficiently reduced. Composes with every acceptance
+//                     strategy and barrier governor.
+enum class RestorationModes { off = 0, proximal_switch = 1 };
+
 } // namespace tycho::solvers

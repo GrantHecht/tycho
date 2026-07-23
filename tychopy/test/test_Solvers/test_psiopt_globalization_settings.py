@@ -1,24 +1,30 @@
 """Coverage for PSIOPT's globalization-knob bindings.
 
-Exercises the Python surface for the seven PSIOPT.Settings fields
+Exercises the Python surface for the nine PSIOPT.Settings fields
 (``acceptance_strategy``, ``merit_penalty_rule``, ``max_soc``,
 ``ls_extended_iters``, ``watchdog``, ``barrier_governor``,
-``never_monotone``) and the five SolveResult diagnostics
-(``last_soc_steps``, ``last_watchdog_activations``,
-``last_recovery_depth_histogram``, ``last_monotone_switches``,
-``last_monotone_iters``): property round-trips, per-field validation,
-invalid enum construction, the classic-path-recovery combo guard in
-``Settings::validate()`` (src/solvers/psiopt.cpp), which rejects
-``max_soc``/``ls_extended_iters`` in combination with any of the three
-generic-path acceptance strategies (``merit``, ``funnel``, ``filter``),
-and the barrier-governor combo guard, which rejects ``funnel``/``filter``
-paired with ``barrier_governor=classic_adaptive`` (the default) unless
+``never_monotone``, ``restoration_mode``, ``max_feas_rest``) and the
+seven SolveResult diagnostics (``last_soc_steps``,
+``last_watchdog_activations``, ``last_recovery_depth_histogram``,
+``last_monotone_switches``, ``last_monotone_iters``,
+``last_feas_rest_entries``, ``last_feas_rest_iters``): property
+round-trips, per-field validation, invalid enum construction, the
+classic-path-recovery combo guard in ``Settings::validate()``
+(src/solvers/psiopt.cpp), which rejects ``max_soc``/``ls_extended_iters``
+in combination with any of the three generic-path acceptance strategies
+(``merit``, ``funnel``, ``filter``), and the barrier-governor combo
+guard, which rejects ``funnel``/``filter`` paired with
+``barrier_governor=classic_adaptive`` (the default) unless
 ``never_monotone`` is set, and rejects ``never_monotone=True`` paired with
 ``barrier_governor=monitored`` as a direct contradiction. Also covers
 enum-from-int coercion for ``funnel``/``filter``
-(``AcceptanceStrategies(2)``/``AcceptanceStrategies(3)``) and for
-``monitored`` (``BarrierGovernors(1)``), which the corpus harness relies
-on.
+(``AcceptanceStrategies(2)``/``AcceptanceStrategies(3)``), for
+``monitored`` (``BarrierGovernors(1)``), and for ``proximal_switch``
+(``RestorationModes(1)``), which the corpus harness relies on, and the
+feasibility-restoration entry-budget validation (``max_feas_rest`` must be
+non-negative) plus restoration composing with every acceptance strategy
+and barrier governor combination (no matrix restrictions, unlike the
+guards above).
 
 Also regression-tests the "component construction staleness" review
 finding: ``acceptance_``/``mechanism_``/``governor_``/``recovery_`` used to
@@ -229,6 +235,84 @@ class test_NeverMonotoneRoundTrip(unittest.TestCase):
         self.assertEqual(prob.optimizer.never_monotone, False)
 
 
+class test_RestorationModeRoundTrip(unittest.TestCase):
+    def test_default_is_off(self):
+        prob = _make_problem()
+        self.assertEqual(prob.optimizer.restoration_mode, solvs.RestorationModes.off)
+
+    def test_round_trip(self):
+        prob = _make_problem()
+        prob.optimizer.restoration_mode = solvs.RestorationModes.proximal_switch
+        self.assertEqual(
+            prob.optimizer.restoration_mode, solvs.RestorationModes.proximal_switch
+        )
+        prob.optimizer.restoration_mode = solvs.RestorationModes.off
+        self.assertEqual(prob.optimizer.restoration_mode, solvs.RestorationModes.off)
+
+    def test_round_trip_via_int_coercion(self):
+        # The corpus harness selects the mode by raw int; enum-from-int
+        # coercion must resolve to the same member as the named attribute.
+        prob = _make_problem()
+        prob.optimizer.restoration_mode = solvs.RestorationModes(1)
+        self.assertEqual(
+            prob.optimizer.restoration_mode, solvs.RestorationModes.proximal_switch
+        )
+
+
+class test_MaxFeasRestRoundTrip(unittest.TestCase):
+    def test_default_is_two(self):
+        prob = _make_problem()
+        self.assertEqual(prob.optimizer.max_feas_rest, 2)
+
+    def test_round_trip(self):
+        prob = _make_problem()
+        prob.optimizer.max_feas_rest = 5
+        self.assertEqual(prob.optimizer.max_feas_rest, 5)
+        prob.optimizer.max_feas_rest = 2
+        self.assertEqual(prob.optimizer.max_feas_rest, 2)
+
+    def test_zero_is_accepted(self):
+        # 0 disables restoration entry entirely but is itself a valid budget.
+        prob = _make_problem()
+        prob.optimizer.max_feas_rest = 0
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+    def test_zero_disables_restoration_entry(self):
+        # Strengthens test_zero_is_accepted: proves 0 doesn't merely validate
+        # but actually disables entry when restoration_mode is on, by
+        # asserting the entry counter stays at 0 for a proximal_switch solve.
+        prob = _make_problem()
+        prob.optimizer.restoration_mode = solvs.RestorationModes.proximal_switch
+        prob.optimizer.max_feas_rest = 0
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(prob.optimizer.last_feas_rest_entries, 0)
+
+    def test_rejects_negative(self):
+        # max_feas_rest_ now has a dedicated validated setter mirroring
+        # max_soc/ls_extended_iters, so the raise fires immediately on
+        # assignment rather than being deferred to validate() at
+        # optimize()/solve() time.
+        prob = _make_problem()
+        with self.assertRaises(ValueError) as ctx:
+            prob.optimizer.max_feas_rest = -1
+        self.assertIn("max_feas_rest", str(ctx.exception))
+        # Rejected write must not clobber the prior valid value.
+        self.assertEqual(prob.optimizer.max_feas_rest, 2)
+
+
+class test_BadRestorationModeValue(unittest.TestCase):
+    def test_invalid_raw_value_rejected(self):
+        with self.assertRaises(ValueError):
+            solvs.RestorationModes(99)
+
+    def test_enum_property_rejects_raw_int_assignment(self):
+        opt = solvs.PSIOPT()
+        with self.assertRaises(TypeError):
+            opt.restoration_mode = 7
+
+
 class test_BarrierGovernorComboGuard(unittest.TestCase):
     """Settings::validate() rejects funnel/filter combined with
     barrier_governor=classic_adaptive (the default) and never_monotone=False
@@ -331,6 +415,90 @@ class test_MonotoneDiagnostics(unittest.TestCase):
         self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
         self.assertGreaterEqual(prob.optimizer.last_monotone_switches, 0)
         self.assertGreaterEqual(prob.optimizer.last_monotone_iters, 0)
+
+
+class test_FeasRestDiagnostics(unittest.TestCase):
+    """SolveResult.last_feas_rest_entries / last_feas_rest_iters
+    (ProximalSwitchRestoration::append_diagnostics, collected once per
+    phase in PSIOPT::run_phase_sequence -- see psiopt.h for the sentinel
+    semantics). Sentinel -1/-1 unless restoration_mode is proximal_switch
+    (no restoration strategy is constructed when it is off); once a
+    strategy is constructed, both fields report >= 0 even if restoration
+    was never actually entered during the solve.
+    """
+
+    def test_default_solve_reports_sentinels(self):
+        prob = _make_problem()
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(prob.optimizer.last_feas_rest_entries, -1)
+        self.assertEqual(prob.optimizer.last_feas_rest_iters, -1)
+
+    def test_proximal_switch_solve_reports_non_negative_counts(self):
+        prob = _make_problem()
+        prob.optimizer.restoration_mode = solvs.RestorationModes.proximal_switch
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertGreaterEqual(prob.optimizer.last_feas_rest_entries, 0)
+        self.assertGreaterEqual(prob.optimizer.last_feas_rest_iters, 0)
+
+
+class test_RestorationComboMatrix(unittest.TestCase):
+    """restoration_mode=proximal_switch composes with every
+    acceptance_strategy x barrier_governor combination -- no combo guard
+    in Settings::validate() restricts it (unlike the acceptance/governor
+    guards exercised in test_BarrierGovernorComboGuard /
+    test_AcceptanceMeritRecoveryComboGuard above). Spot-checks the matrix,
+    including the funnel/filter + monitored combinations named in the
+    feature's review notes.
+    """
+
+    def _solve_with(self, acceptance_strategy, barrier_governor, **extra_settings):
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = acceptance_strategy
+        prob.optimizer.barrier_governor = barrier_governor
+        prob.optimizer.restoration_mode = solvs.RestorationModes.proximal_switch
+        for name, value in extra_settings.items():
+            setattr(prob.optimizer, name, value)
+        return prob.optimize()
+
+    def test_classic_merit_classic_adaptive_with_restoration_solves(self):
+        flag = self._solve_with(
+            solvs.AcceptanceStrategies.classic_merit, solvs.BarrierGovernors.classic_adaptive
+        )
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+    def test_merit_classic_adaptive_with_restoration_solves(self):
+        flag = self._solve_with(
+            solvs.AcceptanceStrategies.merit, solvs.BarrierGovernors.classic_adaptive
+        )
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+    def test_classic_merit_monitored_with_restoration_solves(self):
+        flag = self._solve_with(
+            solvs.AcceptanceStrategies.classic_merit, solvs.BarrierGovernors.monitored
+        )
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+    def test_funnel_monitored_with_restoration_solves(self):
+        flag = self._solve_with(
+            solvs.AcceptanceStrategies.funnel, solvs.BarrierGovernors.monitored
+        )
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+    def test_filter_monitored_with_restoration_solves(self):
+        flag = self._solve_with(
+            solvs.AcceptanceStrategies.filter, solvs.BarrierGovernors.monitored
+        )
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+    def test_filter_never_monotone_with_restoration_solves(self):
+        flag = self._solve_with(
+            solvs.AcceptanceStrategies.filter,
+            solvs.BarrierGovernors.classic_adaptive,
+            never_monotone=True,
+        )
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
 
 
 class test_BadEnumValues(unittest.TestCase):
@@ -487,7 +655,10 @@ class test_SolveDiagnostics(unittest.TestCase):
         self.assertEqual(prob.optimizer.last_soc_steps, 0)
         self.assertEqual(prob.optimizer.last_watchdog_activations, 0)
         hist = prob.optimizer.last_recovery_depth_histogram
-        self.assertEqual(len(hist), 4)
+        # 5 buckets: SOC, extended backtracking, watchdog, unresolved,
+        # restoration -- the restoration bucket only increments when
+        # restoration_mode is proximal_switch.
+        self.assertEqual(len(hist), 5)
         for count in hist:
             self.assertIsInstance(count, int)
 
