@@ -129,7 +129,7 @@ class PSIOPT:
     @property
     def last_recovery_depth_histogram(self) -> list[int]:
         """
-        Counts of how each rejected step's recovery was resolved during the most recent solve, as a 4-element list: [second-order correction, extended backtracking, watchdog, unresolved].
+        Counts of how each rejected step's recovery was resolved during the most recent solve, as a 5-element list: [second-order correction, extended backtracking, watchdog, unresolved, restoration]. The final bucket only increments when restoration_mode is proximal_switch.
         """
 
     @property
