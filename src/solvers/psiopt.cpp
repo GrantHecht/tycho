@@ -531,8 +531,7 @@ void tycho::solvers::PSIOPT::Settings::validate() const {
         throw std::invalid_argument(fmt::format(
             "ls_extended_iters must be non-negative, got {}", ls_extended_iters_));
     // Per-phase feasibility-restoration entry budget. 0 is valid (disables
-    // restoration entry even when restoration_mode_ == proximal_switch);
-    // negative is not.
+    // restoration entry even when restoration_mode_ != off); negative is not.
     if (max_feas_rest_ < 0)
         throw std::invalid_argument(
             fmt::format("max_feas_rest must be non-negative, got {}", max_feas_rest_));
@@ -989,10 +988,21 @@ void tycho::solvers::PSIOPT::rebuild_globalization_components() {
     // ClassicMeritAcceptance SolverContext below captures a valid (or null)
     // restoration_ pointer. Default (off) leaves it null — no RestorationStrategy
     // is constructed and every restoration branch in the solver stays dead.
-    // proximal_switch builds a ProximalSwitchRestoration; the matching outermost
-    // FeasibilitySwitchRecovery link is wrapped around the recovery chain below.
+    // proximal_switch builds a ProximalSwitchRestoration; l1_nested builds a
+    // NestedL1Restoration instead (the condensed l1 elastic reformulation,
+    // globalization/l1_restoration.h) — either way the matching outermost
+    // FeasibilitySwitchRecovery link is wrapped around the recovery chain
+    // below. No strategy-compatibility validation is needed for either mode:
+    // every shipped acceptance strategy (classic_merit, merit, funnel, filter)
+    // implements RestorationStrategy's exit test (is_infeasibility_
+    // sufficiently_reduced / the strategy-specific equivalent), which is what
+    // FeasibilitySwitchRecovery and alg_impl's restoration-active branches
+    // rely on to end a restoration episode — so restoration_mode_ composes
+    // with all four unconditionally, by construction.
     if (this->settings_.restoration_mode_ == RestorationModes::proximal_switch) {
         this->restoration_ = std::make_unique<ProximalSwitchRestoration>();
+    } else if (this->settings_.restoration_mode_ == RestorationModes::l1_nested) {
+        this->restoration_ = std::make_unique<NestedL1Restoration>();
     } else {
         this->restoration_.reset();
     }
@@ -1087,12 +1097,15 @@ void tycho::solvers::PSIOPT::rebuild_globalization_components() {
     }
 
     // Feasibility restoration wraps the OUTERMOST recovery link (built only when
-    // restoration_mode_ == proximal_switch, i.e. exactly when restoration_ above
-    // is non-null). It delegates to the whole inner chain (Noop/Chained/
-    // Watchdog) and intercepts only its ladder-exhausted kAcceptAsIs to hand off
-    // to restoration — see feasibility_switch_recovery.h. Off by default, so the
-    // recovery chain is unchanged on the default path.
-    if (this->settings_.restoration_mode_ == RestorationModes::proximal_switch) {
+    // restoration_mode_ != off, i.e. exactly when restoration_ above is
+    // non-null — proximal_switch or l1_nested). It delegates to the whole
+    // inner chain (Noop/Chained/Watchdog) and intercepts only its
+    // ladder-exhausted kAcceptAsIs to hand off to restoration — see
+    // feasibility_switch_recovery.h (the nested-vs-non-nested soft-pre-stage
+    // branch inside it is driven by restoration_->is_nested(), so this wrap
+    // condition itself does not need to distinguish the two modes). Off by
+    // default, so the recovery chain is unchanged on the default path.
+    if (this->settings_.restoration_mode_ != RestorationModes::off) {
         this->recovery_ = std::make_unique<FeasibilitySwitchRecovery>(std::move(this->recovery_));
     }
 }

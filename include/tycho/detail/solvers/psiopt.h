@@ -101,12 +101,13 @@ using tycho::EigenRef;
 // alg_impl call site is provably inert (see noop_recovery.h and the call-site
 // comment in alg_impl) — no live recovery dispatcher exists yet.
 // PSIOPT also owns an optional feasibility-restoration mode-switch through a
-// std::unique_ptr<RestorationStrategy> (concrete type ProximalSwitchRestoration,
-// complete only in psiopt.cpp). Unlike the four components above it is NOT
-// always constructed: rebuild_globalization_components() leaves it null unless
-// restoration_mode_ == proximal_switch, so on the default path every
-// restoration branch guards on `restoration_ != nullptr` and is provably dead.
-// Same forward-declare + out-of-line ctor/dtor discipline as the others.
+// std::unique_ptr<RestorationStrategy> (concrete type ProximalSwitchRestoration
+// or NestedL1Restoration depending on restoration_mode_, complete only in
+// psiopt.cpp). Unlike the four components above it is NOT always constructed:
+// rebuild_globalization_components() leaves it null unless restoration_mode_
+// != off, so on the default path every restoration branch guards on
+// `restoration_ != nullptr` and is provably dead. Same forward-declare +
+// out-of-line ctor/dtor discipline as the others.
 class AcceptanceStrategy;
 class GlobalizationMechanism;
 class BarrierGovernor;
@@ -186,9 +187,11 @@ class PSIOPT {
         // Per-phase feasibility-restoration entry budget: the maximum number of
         // times restoration mode may be entered within a single phase. Read by
         // ProximalSwitchRestoration::entry_permitted() (globalization/
-        // proximal_restoration.h) — 0 refuses restoration entirely (budget
-        // exhausted before the first entry). Ignored when restoration_mode_ ==
-        // off. validate() requires it >= 0.
+        // proximal_restoration.h) or NestedL1Restoration::entry_permitted()
+        // (globalization/l1_restoration.h), whichever restoration_mode_
+        // selects — 0 refuses restoration entirely (budget exhausted before
+        // the first entry). Ignored when restoration_mode_ == off. validate()
+        // requires it >= 0.
         int max_feas_rest_ = 2;
 
         // --- Convergence tolerances ---
@@ -251,17 +254,24 @@ class PSIOPT {
         // rejects that combination.
         bool never_monotone_ = false;
 
-        // --- Feasibility restoration (opt-in proximal mode-switch) ---
+        // --- Feasibility restoration (opt-in proximal mode-switch / nested l1) ---
         // off (default) reproduces today's behavior bit-identically: no
         // RestorationStrategy is constructed and every restoration branch in
         // the solver is provably dead. proximal_switch selects the proximal
         // feasibility mode-switch (ProximalSwitchRestoration), which — on a
         // ladder-exhausted step rejection at a not-near-feasible point — swaps
         // the true objective for a proximal term until infeasibility is
-        // sufficiently reduced, then resumes optimality mode. Composes with
+        // sufficiently reduced, then resumes optimality mode. l1_nested
+        // selects the nested l1 elastic feasibility restoration
+        // (NestedL1Restoration, globalization/l1_restoration.h) instead: the
+        // same trigger, but the l1 elastic reformulation runs as a condensed
+        // in-place phase reusing the outer barrier algorithm's KKT system
+        // rather than swapping the outer objective. Both modes compose with
         // every acceptance_strategy_ and barrier_governor_ (no matrix
-        // restrictions). Enum lives in psiopt_fwd.h; the per-phase entry budget
-        // is max_feas_rest_ above.
+        // restrictions — every shipped acceptance strategy implements the
+        // restoration exit test the modes rely on). Enum lives in
+        // psiopt_fwd.h; the per-phase entry budget is max_feas_rest_ above,
+        // shared by both modes.
         RestorationModes restoration_mode_ = RestorationModes::off;
 
         // --- Barrier parameters ---
@@ -387,7 +397,7 @@ class PSIOPT {
         // originally-rejected step was simply taken; this is the ONLY bucket
         // that increments when SOC/extended/watchdog are all off),
         // [4] restoration (a feasibility-restoration mode-switch was taken —
-        // only increments when restoration_mode_ == proximal_switch). Counts
+        // only increments when restoration_mode_ != off). Counts
         // rejections, i.e. every should_dispatch_recovery-gated call, not
         // just ones where a recovery link actually intervened. Reset per
         // solve alongside the other accumulators.
@@ -456,20 +466,26 @@ class PSIOPT {
         // Number of times feasibility restoration was entered during the most
         // recent solve's LAST PHASE, reported by RestorationStrategy::
         // append_diagnostics() (globalization/restoration.h;
-        // ProximalSwitchRestoration is the concrete reporter today —
-        // globalization/proximal_restoration.h). WRITE-ONLY diagnostics field:
-        // no algorithm code reads it back. Sentinel -1 when no restoration
-        // strategy is constructed on the active solve path (today's only
-        // path — feasibility restoration is not yet wired into the solver).
-        // Same last-phase-wins semantics as last_monotone_switches_ once a
-        // restoration strategy is wired and this is collected per phase.
+        // ProximalSwitchRestoration and NestedL1Restoration are today's
+        // concrete reporters — globalization/proximal_restoration.h,
+        // globalization/l1_restoration.h). WRITE-ONLY diagnostics field: no
+        // algorithm code reads it back. Sentinel -1 when no restoration
+        // strategy is constructed, i.e. restoration_mode_ == off. Same
+        // last-phase-wins semantics as last_monotone_switches_. Counting is
+        // identical across both modes: entries_ increments once per
+        // enter_restoration()/enter_nested() call, and iterations_in_mode_
+        // once per note_iteration() call while active — the nested mode has
+        // no separate inner/outer iteration split (its phase shares the
+        // outer loop's own iteration counter; see l1_restoration.h disclosure
+        // (a)), so this field means the same thing under both modes.
         int last_feas_rest_entries_ = -1;
 
         // Number of iterations spent in restoration mode during the most
         // recent solve's LAST PHASE, reported by RestorationStrategy::
         // append_diagnostics(). WRITE-ONLY diagnostics field. Sentinel -1
-        // when no restoration strategy is constructed on the active solve
-        // path. Same per-phase semantics as last_feas_rest_entries_.
+        // when no restoration strategy is constructed. Same per-phase
+        // semantics as last_feas_rest_entries_ (including the nested-mode
+        // counting note above).
         int last_feas_rest_iters_ = -1;
 
         // T6 (dead-status fix): the last non-Success status observed from
@@ -703,10 +719,12 @@ class PSIOPT {
     // RestorationStrategy interface (forward-declared above). Unlike
     // acceptance_/mechanism_/governor_/recovery_ this is NOT always constructed:
     // rebuild_globalization_components() leaves it null unless restoration_mode_
-    // == proximal_switch, in which case it holds a ProximalSwitchRestoration and
-    // FeasibilitySwitchRecovery is wrapped as the outermost recovery link. On
-    // the default path (off) it stays null and every restoration branch in
-    // eval_nlp / the classic+generic trial-eval seams / alg_impl guards on
+    // != off, in which case it holds a ProximalSwitchRestoration
+    // (restoration_mode_ == proximal_switch) or a NestedL1Restoration
+    // (restoration_mode_ == l1_nested), and FeasibilitySwitchRecovery is
+    // wrapped as the outermost recovery link either way. On the default path
+    // (off) it stays null and every restoration branch in eval_nlp / the
+    // classic+generic trial-eval seams / alg_impl guards on
     // `restoration_ != nullptr` (or `ctx.restoration_ != nullptr`) and is
     // provably dead. run_phase_sequence() resets it (when present) at each phase
     // boundary alongside the other components, and collects its diagnostics into
