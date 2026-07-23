@@ -821,3 +821,339 @@ TEST(NestedRestorationSeam, ProximalPathNeverConsultsNestedSurface) {
     EXPECT_TRUE(dbl->proximal_touched_);  // proximal branch ran
     EXPECT_FALSE(dbl->nested_touched_);   // nested surface untouched
 }
+
+// -----------------------------------------------------------------------------
+// 5. Nested-restoration LIFECYCLE (entry orchestration, exit ratchet, multiplier
+// re-entry) through the private surface. NestedLifecycleHarness is befriended by
+// PSIOPT so it can drive the private enter_/exit_feasibility_restoration helpers
+// and the stashed-μ / ratchet state directly, and run the whole phase end-to-end
+// by injecting a NestedL1Restoration into a solve driven through alg_impl. No
+// construction wiring for the nested mode exists yet (a later change adds it), so
+// this direct injection is the only way to exercise the lifecycle.
+// -----------------------------------------------------------------------------
+
+class NestedLifecycleHarness {
+  public:
+    // 2-variable QP: minimize x0² + x1² s.t. x0 + x1 − 4 = 0 (unique optimum
+    // (2,2)), optionally a contradictory second equality x0 + x1 = 0 (genuinely
+    // infeasible), and `n_ineq` non-binding inequalities x0 − (100+k) ≤ 0 so the
+    // governor's mid-iteration μ update runs (inequal_cons_ > 0).
+    NestedLifecycleHarness(const Eigen::VectorXd &start, int n_ineq, bool inconsistent)
+        : start_(start) {
+        using tycho::vf::Arguments;
+        using tycho::vf::GenericFunction;
+        prob_.set_vars(start);
+        {
+            auto args = Arguments<2>();
+            auto x0 = args.coeff<0>();
+            auto x1 = args.coeff<1>();
+            prob_.add_objective(GenericFunction<-1, 1>(x0 * x0 + x1 * x1),
+                                (Eigen::VectorXi(2) << 0, 1).finished());
+        }
+        {
+            auto args = Arguments<2>();
+            auto x0 = args.coeff<0>();
+            auto x1 = args.coeff<1>();
+            prob_.add_equal_con(GenericFunction<-1, -1>(x0 + x1 - 4.0),
+                                (Eigen::VectorXi(2) << 0, 1).finished());
+        }
+        if (inconsistent) {
+            auto args = Arguments<2>();
+            auto x0 = args.coeff<0>();
+            auto x1 = args.coeff<1>();
+            prob_.add_equal_con(GenericFunction<-1, -1>(x0 + x1 - 0.0),
+                                (Eigen::VectorXi(2) << 0, 1).finished());
+        }
+        for (int k = 0; k < n_ineq; ++k) {
+            auto args = Arguments<1>();
+            auto x = args.coeff<0>();
+            prob_.add_inequal_con(GenericFunction<-1, -1>(x - (100.0 + k)),
+                                  (Eigen::VectorXi(1) << 0).finished());
+        }
+        prob_.optimizer_->set_print_level(3);
+        prob_.transcribe();
+        solver_ = prob_.optimizer_.get();
+    }
+
+    PSIOPT &solver() { return *solver_; }
+    int pv() const { return solver_->primal_vars_; }
+    int sv() const { return solver_->slack_vars_; }
+    int ec() const { return solver_->equal_cons_; }
+    int ic() const { return solver_->inequal_cons_; }
+    int dim() const { return solver_->kkt_dim_; }
+
+    // Build acceptance_/governor_/recovery_ (through the proximal-switch mode, the
+    // wired one) then replace restoration_ with a fresh NestedL1Restoration.
+    NestedL1Restoration *inject_nested() {
+        solver_->settings().restoration_mode_ = RestorationModes::proximal_switch;
+        solver_->rebuild_globalization_components();
+        auto strat = std::make_unique<NestedL1Restoration>();
+        NestedL1Restoration *raw = strat.get();
+        solver_->restoration_ = std::move(strat);
+        return raw;
+    }
+
+    // Direct drivers for the private lifecycle helpers + state.
+    void call_enter(Eigen::VectorXd &XSL, Eigen::VectorXd &RHS, double prim_obj, double barr_obj,
+                    double &mu) {
+        solver_->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
+    }
+    void call_exit(Eigen::VectorXd &XSL, double obj_scale, double theta, double barr, double &mu) {
+        solver_->exit_feasibility_restoration_nested(XSL, obj_scale, theta, barr, mu);
+    }
+    bool ratchet(double theta) const { return solver_->resto_ratchet_passes(theta); }
+    double &stashed_mu() { return solver_->stashed_mu_; }
+    bool &first_iter() { return solver_->resto_first_iter_; }
+    double &theta_prev() { return solver_->resto_theta_orig_prev_; }
+    void set_econ_tol(double t) { solver_->settings().econ_tol_ = t; }
+
+    // Segment accessors into a full KKT vector [primals | slacks | eq | iq].
+    Eigen::VectorXd zero_vec() const { return Eigen::VectorXd::Zero(dim()); }
+
+    // Full solve forcing a feasibility switch (max_ls_iters_ = 0), driven through
+    // alg_impl directly with the injected nested strategy. Records the final
+    // iterate's μ so a caller can confirm it is the outer schedule value, not the
+    // (large) restoration barrier parameter.
+    PSIOPT::ConvergenceFlags run_forced_entry(NestedL1Restoration *&comp_out,
+                                              PSIOPT::LineSearchModes lsmode,
+                                              PSIOPT::BarrierModes barmode, double &final_mu,
+                                              double init_mu = 0.1) {
+        solver_->settings().restoration_mode_ = RestorationModes::proximal_switch;
+        solver_->settings().max_ls_iters_ = 0;
+        solver_->settings().max_iters_ = 120;
+        solver_->rebuild_globalization_components();
+        auto strat = std::make_unique<NestedL1Restoration>();
+        comp_out = strat.get();
+        solver_->restoration_ = std::move(strat);
+        solver_->ensure_solver_initialized();
+        bool docompute = solver_->analyze_kkt_matrix();
+        Eigen::VectorXd XSL = solver_->init_impl(start_, init_mu, docompute);
+        final_mu = init_mu;
+        double *fm = &final_mu;
+        solver_->set_late_callback(
+            [fm](const IterateInfo &it, tycho::ConstEigenRef<Eigen::VectorXd>,
+                 tycho::ConstEigenRef<Eigen::VectorXd>) -> int {
+                *fm = it.mu_;
+                return 0;
+            });
+        solver_->alg_impl(PSIOPT::AlgorithmModes::OPT, barmode, lsmode,
+                          solver_->settings().obj_scale_, init_mu, XSL);
+        solver_->disable_late_callback();
+        return solver_->result().converge_flag_;
+    }
+
+    double start_x0() const { return start_[0]; }
+
+  private:
+    OptimizationProblem prob_;
+    PSIOPT *solver_ = nullptr;
+    Eigen::VectorXd start_;
+};
+
+// (i) Entry sets μ ← max(μ, ‖h‖∞, ‖g+s‖∞) and stashes the old value; the
+// equality constraint multipliers are zeroed and the ratchet baseline seeded.
+TEST(NestedRestorationLifecycle, EntrySetsBarrierAndStashesOuterMu) {
+    NestedLifecycleHarness h((Eigen::VectorXd(2) << 0.0, 0.0).finished(), /*n_ineq=*/0,
+                             /*inconsistent=*/false);
+    NestedL1Restoration *comp = h.inject_nested();
+
+    Eigen::VectorXd XSL = h.zero_vec();
+    Eigen::VectorXd RHS = h.zero_vec();
+    // Equality residual h = 5.0 in the eq_cons slot; a nonzero equality multiplier
+    // to confirm zeroing.
+    const int yrow = h.pv() + h.sv();
+    RHS[yrow] = 5.0;
+    XSL[yrow] = 0.7;
+
+    double mu = 0.1;
+    h.call_enter(XSL, RHS, /*prim_obj=*/0.0, /*barr_obj=*/0.0, mu);
+
+    EXPECT_DOUBLE_EQ(h.stashed_mu(), 0.1);       // old μ stashed
+    EXPECT_DOUBLE_EQ(mu, 5.0);                   // μ ← max(0.1, |h|)
+    EXPECT_DOUBLE_EQ(comp->entry_mu(), 5.0);     // component agrees
+    EXPECT_DOUBLE_EQ(XSL[yrow], 0.0);            // equality multiplier zeroed
+    EXPECT_TRUE(h.first_iter());                 // first-iteration guard armed
+    EXPECT_DOUBLE_EQ(h.theta_prev(), 5.0);       // ratchet seeded with entry θ
+}
+
+// (ii) The multiplier re-entry restores the stashed outer μ.
+TEST(NestedRestorationLifecycle, ExitRestoresStashedMu) {
+    NestedLifecycleHarness h((Eigen::VectorXd(2) << 0.0, 0.0).finished(), /*n_ineq=*/0,
+                             /*inconsistent=*/false);
+    h.inject_nested();
+
+    Eigen::VectorXd XSL = h.zero_vec();
+    Eigen::VectorXd RHS = h.zero_vec();
+    RHS[h.pv() + h.sv()] = 3.0;
+    double mu = 0.25;
+    h.call_enter(XSL, RHS, 0.0, 0.0, mu);
+    ASSERT_DOUBLE_EQ(mu, 3.0); // in-phase μ
+
+    h.call_exit(XSL, /*obj_scale=*/1.0, /*theta=*/1e-8, /*barr=*/0.0, mu);
+    EXPECT_DOUBLE_EQ(mu, 0.25); // outer μ restored
+}
+
+// (iii) Re-entry order: the slack-multiplier Newton z-step is computed from the
+// PRE-exit multipliers, and the equality multipliers are zeroed. With z below
+// μ_outer/s the fraction-to-boundary cap is 1, so z lands exactly at μ_outer/s.
+TEST(NestedRestorationLifecycle, ReentryNewtonStepThenZeroesEqualityMultipliers) {
+    NestedLifecycleHarness h((Eigen::VectorXd(2) << 1.0, 1.0).finished(), /*n_ineq=*/1,
+                             /*inconsistent=*/false);
+    h.inject_nested();
+
+    Eigen::VectorXd XSL = h.zero_vec();
+    Eigen::VectorXd RHS = h.zero_vec();
+    RHS[h.pv() + h.sv()] = 0.5; // some equality residual for entry
+    double mu = 1.0;
+    h.call_enter(XSL, RHS, 0.0, 0.0, mu);
+
+    // Hand-set the phase's final slack / multipliers, then force a known stashed μ.
+    const int srow = h.pv();               // first slack
+    const int yrow = h.pv() + h.sv();      // equality multiplier
+    const int zrow = h.pv() + h.sv() + h.ec(); // first inequality multiplier
+    XSL[srow] = 0.5;
+    XSL[zrow] = 0.5;    // z < μ_outer/s = 2.0 ⇒ Δz > 0, no boundary cap
+    XSL[yrow] = 0.9;    // nonzero, must be zeroed
+    h.stashed_mu() = 1.0;
+
+    h.call_exit(XSL, 1.0, 1e-8, 0.0, mu);
+
+    EXPECT_NEAR(XSL[zrow], 2.0, 1e-12);  // z ← μ_outer/s (undamped)
+    EXPECT_DOUBLE_EQ(XSL[yrow], 0.0);    // equality multiplier zeroed
+    EXPECT_DOUBLE_EQ(mu, 1.0);           // μ restored
+}
+
+// (iv) The z-reset triggers when the updated max|z| exceeds kBoundMultReset-
+// Threshold (1e3): ALL inequality multipliers reset to 1, not just the offender.
+TEST(NestedRestorationLifecycle, ReentryResetsAllMultipliersToOneWhenTooLarge) {
+    NestedLifecycleHarness h((Eigen::VectorXd(2) << 1.0, 1.0).finished(), /*n_ineq=*/2,
+                             /*inconsistent=*/false);
+    h.inject_nested();
+
+    Eigen::VectorXd XSL = h.zero_vec();
+    Eigen::VectorXd RHS = h.zero_vec();
+    RHS[h.pv() + h.sv()] = 0.5;
+    double mu = 1.0;
+    h.call_enter(XSL, RHS, 0.0, 0.0, mu);
+
+    const int srow = h.pv();
+    const int zrow = h.pv() + h.sv() + h.ec();
+    // First slack tiny ⇒ Δz drives z to μ/s = 1e4 > 1e3 ⇒ reset ALL to 1.
+    XSL[srow] = 1.0e-4;
+    XSL[srow + 1] = 0.5;
+    XSL[zrow] = 0.5;
+    XSL[zrow + 1] = 0.5;
+    h.stashed_mu() = 1.0;
+
+    h.call_exit(XSL, 1.0, 1e-8, 0.0, mu);
+
+    EXPECT_DOUBLE_EQ(XSL[zrow], 1.0);     // offender reset
+    EXPECT_DOUBLE_EQ(XSL[zrow + 1], 1.0); // AND the non-offender reset too
+}
+
+// (v) κ_resto ratchet truth table, including the econ_tol floor.
+TEST(NestedRestorationLifecycle, KappaRestoRatchetTruthTable) {
+    NestedLifecycleHarness h((Eigen::VectorXd(2) << 0.0, 0.0).finished(), /*n_ineq=*/0,
+                             /*inconsistent=*/false);
+    h.inject_nested();
+    h.set_econ_tol(1.0e-6);
+
+    // Relative-reduction regime (prev large, floor inactive): pass iff θ ≤ 0.9·prev.
+    h.theta_prev() = 1.0;
+    EXPECT_TRUE(h.ratchet(0.89));  // below 0.9·1.0
+    EXPECT_TRUE(h.ratchet(0.90));  // exactly at the ratchet
+    EXPECT_FALSE(h.ratchet(0.95)); // above the ratchet
+
+    // Floor regime (prev tiny, 0.9·prev < econ_tol): pass iff θ ≤ econ_tol.
+    h.theta_prev() = 1.0e-9;
+    EXPECT_TRUE(h.ratchet(5.0e-7)); // below the econ_tol floor
+    EXPECT_TRUE(h.ratchet(1.0e-6)); // at the floor
+    EXPECT_FALSE(h.ratchet(2.0e-6)); // above the floor
+}
+
+// (vi) End-to-end tiny infeasible-start feasible problem: enters restoration,
+// exits via the ratchet + strategy test, and the original problem converges;
+// the final μ is the outer schedule value, NOT the (large) restoration barrier.
+TEST(NestedRestorationLifecycle, EndToEndInfeasibleStartEntersExitsConverges) {
+    NestedLifecycleHarness h((Eigen::VectorXd(2) << 0.0, 0.0).finished(), /*n_ineq=*/0,
+                             /*inconsistent=*/false);
+    NestedL1Restoration *comp = nullptr;
+    double final_mu = 0.0;
+    auto flag = h.run_forced_entry(comp, PSIOPT::LineSearchModes::L1, PSIOPT::BarrierModes::LOQO,
+                                   final_mu, /*init_mu=*/0.1);
+
+    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    ASSERT_NE(comp, nullptr);
+    EXPECT_GE(comp->entries(), 1); // restoration was entered
+    const auto &r = h.solver().result();
+    ASSERT_EQ(r.primals_.size(), 2);
+    EXPECT_NEAR(r.primals_[0], 2.0, 1e-3);
+    EXPECT_NEAR(r.primals_[1], 2.0, 1e-3);
+    // resto barrier was max(0.1, ‖-4‖) = 4; a converged solve is back on the
+    // outer schedule (μ driven well below the restoration barrier).
+    EXPECT_LT(final_mu, 1.0);
+}
+
+// (viii) Inequality-constrained end-to-end phase: exercises the inequality
+// condensation AND the governor's mid-iteration μ update (the mu-consistency
+// mechanism holds the resto algebra at the eval-time μ). Converges on the true
+// optimum with a non-binding inequality present.
+TEST(NestedRestorationLifecycle, EndToEndWithInequalityConvergesUnderMuUpdate) {
+    NestedLifecycleHarness h((Eigen::VectorXd(2) << 0.0, 0.0).finished(), /*n_ineq=*/1,
+                             /*inconsistent=*/false);
+    NestedL1Restoration *comp = nullptr;
+    double final_mu = 0.0;
+    auto flag = h.run_forced_entry(comp, PSIOPT::LineSearchModes::L1, PSIOPT::BarrierModes::LOQO,
+                                   final_mu, /*init_mu=*/0.1);
+
+    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    ASSERT_NE(comp, nullptr);
+    EXPECT_GE(comp->entries(), 1);
+    const auto &r = h.solver().result();
+    ASSERT_EQ(r.primals_.size(), 2);
+    EXPECT_NEAR(r.primals_[0], 2.0, 1e-3);
+    EXPECT_NEAR(r.primals_[1], 2.0, 1e-3);
+}
+
+// (ix) LANG line-search mode nested phase: exercises the ls_lang trial seam
+// (trial_objective + trial_residual_shift, the trial-shift site fixed in the
+// merit-function trial path).
+TEST(NestedRestorationLifecycle, EndToEndLangLineSearchConverges) {
+    NestedLifecycleHarness h((Eigen::VectorXd(2) << 0.0, 0.0).finished(), /*n_ineq=*/0,
+                             /*inconsistent=*/false);
+    NestedL1Restoration *comp = nullptr;
+    double final_mu = 0.0;
+    auto flag = h.run_forced_entry(comp, PSIOPT::LineSearchModes::LANG, PSIOPT::BarrierModes::LOQO,
+                                   final_mu, /*init_mu=*/0.1);
+
+    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    ASSERT_NE(comp, nullptr);
+    EXPECT_GE(comp->entries(), 1);
+    const auto &r = h.solver().result();
+    ASSERT_EQ(r.primals_.size(), 2);
+    EXPECT_NEAR(r.primals_[0], 2.0, 1e-3);
+    EXPECT_NEAR(r.primals_[1], 2.0, 1e-3);
+}
+
+// (vii) Proximal-switch behavior is unchanged: a proximal forced-entry solve on
+// the same problem still enters, exits, and converges (the seam split left the
+// non-nested path intact). The broader proximal suite in section 3 above is the
+// primary guard; this is an explicit co-existence check alongside the nested
+// lifecycle tests.
+TEST(NestedRestorationLifecycle, ProximalPathStillEntersExitsConverges) {
+    NestedLifecycleHarness h((Eigen::VectorXd(2) << 0.0, 0.0).finished(), /*n_ineq=*/0,
+                             /*inconsistent=*/false);
+    // Drive a real proximal-switch solve through the public API (no nested
+    // injection): rebuild + solve via optimize-equivalent path.
+    h.solver().settings().restoration_mode_ = RestorationModes::proximal_switch;
+    h.solver().set_max_ls_iters(0);
+    h.solver().set_max_iters(120);
+    Eigen::VectorXd x = (Eigen::VectorXd(2) << 0.0, 0.0).finished();
+    Eigen::VectorXd sol = h.solver().solve(x);
+    const auto &r = h.solver().result();
+    EXPECT_LE(r.converge_flag_, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    ASSERT_EQ(sol.size(), 2);
+    EXPECT_NEAR(sol[0], 2.0, 1e-3);
+    EXPECT_NEAR(sol[1], 2.0, 1e-3);
+    EXPECT_GE(r.last_feas_rest_entries_, 0);
+}

@@ -57,6 +57,11 @@ class FeasibilitySwitch_FilterSeedsRestorationConstraintTol_Test;
 // Test harness for the nested feasibility-restoration eval/step seam: reaches
 // private eval_nlp / alg_impl / restoration_ / dims to drive the seam directly.
 class NestedSeamHarness;
+// Test harness for the nested feasibility-restoration LIFECYCLE (entry
+// orchestration, exit ratchet, multiplier re-entry): reaches the private
+// enter_/exit_feasibility_restoration helpers, the stashed-μ / ratchet state,
+// restoration_, and alg_impl to drive the whole phase end-to-end.
+class NestedLifecycleHarness;
 
 namespace tycho::solvers {
 
@@ -642,6 +647,7 @@ class PSIOPT {
     friend class ::FeasibilitySwitch_OffModeConstructsNoRestoration_Test;
     friend class ::FeasibilitySwitch_FilterSeedsRestorationConstraintTol_Test;
     friend class ::NestedSeamHarness;
+    friend class ::NestedLifecycleHarness;
 
     Settings settings_;
     SolveResult result_;
@@ -754,6 +760,25 @@ class PSIOPT {
     Eigen::VectorXd resto_ipiv_scratch_;
     Eigen::VectorXd resto_ec_scratch_;
     Eigen::VectorXd resto_ic_scratch_;
+
+    // Nested feasibility-restoration lifecycle state (all dead unless a nested
+    // restoration strategy is active). stashed_mu_ holds the outer barrier
+    // parameter captured at entry; the governor drives a fresh in-phase schedule
+    // in between, and the multiplier re-entry restores it on exit. resto_first_
+    // iter_ guards the first phase iteration (take at least one step before any
+    // exit test fires). resto_theta_orig_prev_ carries the previous phase
+    // iteration's original-problem infeasibility for the per-iteration κ_resto
+    // ratchet (seeded at entry with the entry-point value, ratcheted each
+    // iteration — NOT frozen at entry). resto_dz_scratch_ backs the re-entry
+    // slack-multiplier Newton step, following the *_scratch_ no-per-call-alloc
+    // discipline. This state obeys the same reset invariant as the acceptance
+    // stash: a μ-event reset() mid-phase does NOT touch it (only the phase-
+    // boundary reset in run_phase_sequence() clears it), so the stashed outer μ
+    // survives a barrier subproblem restart inside the phase.
+    double stashed_mu_ = 0.0;
+    bool resto_first_iter_ = false;
+    double resto_theta_orig_prev_ = 0.0;
+    Eigen::VectorXd resto_dz_scratch_;
 
     // --- KKT solver ---
 #ifdef USE_ACCELERATE_SPARSE
@@ -938,6 +963,45 @@ class PSIOPT {
     ProgressMeasures build_restoration_exit_measures(double obj_scale, double infeasibility,
                                                      ConstEigenRef<VectorXd> primals,
                                                      double barr_obj);
+
+    // --- Feasibility-restoration lifecycle (defined in psiopt.cpp) ---
+    // Shared entry orchestration for the kSwitchToFeasibility case. Builds the
+    // (θ,f) entry measures from the current RHS/primals, then dispatches on the
+    // strategy family: the proximal switch takes enter_restoration; the nested
+    // l1 phase takes enter_nested (with the current equality/inequality residual
+    // vectors) and additionally stashes the outer μ, sets μ ← entry_mu(), resets
+    // the governor for a fresh in-phase barrier schedule, and applies the
+    // verified entry multiplier init (equality constraint multipliers ← 0; the
+    // slack/bound multipliers clamped to min(ρ, current)). Both families then
+    // notify the acceptance strategy of the switch and reset the recovery chain.
+    // Passed the raw XSL/RHS blocks (KKTVector views are rebuilt inside) so it is
+    // directly drivable from a friend test harness. `mu` is updated in place.
+    void enter_feasibility_restoration(Eigen::VectorXd &XSL, Eigen::VectorXd &RHS, double prim_obj,
+                                       double barr_obj, double &mu);
+
+    // The nested phase's multiplier re-entry sequence — shared byte-for-byte by
+    // the κ_resto ratchet exit and the near-feasible stall exit (Ipopt
+    // MinC_1NrmRestorationPhase::PerformRestoration, strict order): (1) keep the
+    // phase's final x/s; (2) slack-multiplier Newton complementarity step under
+    // the STASHED outer μ, damped by the dual fraction-to-boundary rule; (3) if
+    // max|z| over ALL inequality multipliers exceeds kBoundMultResetThreshold,
+    // reset every inequality multiplier to 1; (4) equality constraint
+    // multipliers ← 0; (5) restore the stashed outer μ, reset the governor,
+    // exit_restoration, notify the acceptance strategy of the switch back to
+    // optimality (with true-objective exit measures), reset the recovery chain.
+    // `theta_orig` is the current original-problem infeasibility (∞-norm),
+    // carried into the exit measures. `mu` is restored in place.
+    void exit_feasibility_restoration_nested(Eigen::VectorXd &XSL, double obj_scale,
+                                             double theta_orig, double barr_obj, double &mu);
+
+    // Per-iteration κ_resto ratchet test for the nested phase: the current
+    // original-problem infeasibility must fall to at most max(kKappaResto ·
+    // previous-iteration infeasibility, econ_tol_) (Ipopt RestoConvCheck's
+    // orig_inf_pr_max, single-tolerance floor). Reads resto_theta_orig_prev_
+    // (seeded at entry, ratcheted each phase iteration). Defined in psiopt.cpp so
+    // the kKappaResto constant (globalization/acceptance_strategy.h) stays out of
+    // this header's include set.
+    bool resto_ratchet_passes(double theta_orig) const;
 
     // --- Convergence and stepping ---
     // The residual formulas shared by the pre-factorization early
