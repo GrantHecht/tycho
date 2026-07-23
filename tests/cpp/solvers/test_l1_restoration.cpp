@@ -510,7 +510,9 @@ TEST(L1RestoStepApplication, TrialObjectiveBlendsSlacksAndProximalTerm) {
     const double prox = 0.5 * eta * r.dr2().dot(dx.cwiseProduct(dx));
     const double expected = rho * (nt.sum() + pt.sum()) + prox;
 
-    EXPECT_NEAR(r.trial_objective(mu_live, alpha, xt), expected, 1e-12);
+    // Relative tolerance: the recovered steps put |expected| near 4e5, where one
+    // double ULP is ~6e-11 — an absolute 1e-12 bound is tighter than representable.
+    EXPECT_NEAR(r.trial_objective(mu_live, alpha, xt), expected, 1e-12 * std::abs(expected));
 }
 
 // =============================================================================
