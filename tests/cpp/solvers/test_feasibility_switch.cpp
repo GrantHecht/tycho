@@ -1013,6 +1013,13 @@ class NestedSeamIneqHarness {
         rhs_iq_ = AGXS.tail(ic())[0];
     }
 
+    // Drive the private complementarity augmentation the barrier oracle consumes:
+    // seed the aggregates with a (tiny, late-solve) original-pair value and let
+    // the seam fold in the active phase's elastic pairs.
+    void augment_comp(double &avgcomp, double &mincomp, double &maxcomp, int base_count) {
+        solver_->augment_complementarity_nested(avgcomp, mincomp, maxcomp, base_count);
+    }
+
     double kkt_zz_ = 0.0;
     double rhs_iq_ = 0.0;
 
@@ -1067,6 +1074,73 @@ TEST(NestedRestorationSeam, IqRhsSegmentCarriesSlackCompletedCondensedResidual) 
     const double rtilde_raw =
         (c_raw + n - p) + mu / zn - (n / zn) * (rho + z) - mu / zp + (p / zp) * (rho - z);
     EXPECT_GT(std::abs(rtilde - rtilde_raw), 1e-6);
+}
+
+// (iii-comp) nested_complementarity aggregates the elastic (n·z_n, p·z_p) pairs.
+// At entry every pair equals resto_mu exactly (z_n = resto_mu/n, z_p = resto_mu/p),
+// so the aggregate min/max/sum are pinned to resto_mu * count.
+TEST(NestedRestorationComplementarity, AggregatesElasticPairsAtRestoScale) {
+    NestedL1Restoration comp;
+    tycho::solvers::ProgressMeasures ref;
+    ref.infeasibility = 0.0;
+    ref.objective = 0.0;
+    ref.auxiliary = 0.0;
+    Eigen::VectorXd primals = (Eigen::VectorXd(2) << 1.0, 2.0).finished();
+    Eigen::VectorXd eq_res = (Eigen::VectorXd(2) << -4.0, 3.0).finished();
+    Eigen::VectorXd iq_res = (Eigen::VectorXd(1) << 2.0).finished();
+    comp.enter_nested(ref, primals, eq_res, iq_res, /*outer_mu=*/0.1);
+    const double resto_mu = comp.entry_mu(); // max(0.1, 4, 3, 2) = 4.0
+
+    double sum = 0.0, mn = 0.0, mx = 0.0;
+    int count = 0;
+    comp.nested_complementarity(sum, mn, mx, count);
+
+    // 2 equality rows * (n,p) + 1 inequality row * (n,p) = 6 elastic pairs.
+    EXPECT_EQ(count, 6);
+    EXPECT_NEAR(mn, resto_mu, 1e-9 * resto_mu);
+    EXPECT_NEAR(mx, resto_mu, 1e-9 * resto_mu);
+    EXPECT_NEAR(sum, 6.0 * resto_mu, 1e-9 * 6.0 * resto_mu);
+}
+
+// (iv-comp) The μ-oracle input the seam feeds is resto-scale, not floor-scale,
+// once the original slack/multiplier complementarity has collapsed. This is the
+// late-entry pathology: original comp ~1e-12, elastic pairs still ~resto_mu; the
+// union average must track the elastic pairs so the barrier oracle does not drive
+// μ to its floor.
+TEST(NestedRestorationComplementarity, AugmentLiftsCollapsedOriginalToRestoScale) {
+    NestedSeamIneqHarness h;
+    Eigen::VectorXd primals = (Eigen::VectorXd(2) << 0.0, 0.0).finished();
+    const double slack = 3.0; // g(x)+s = (0-5)+3 = -2 -> resto_mu = max(0.1, 2) = 2
+    NestedL1Restoration *comp = h.enter_nested(primals, slack, /*outer_mu=*/0.1);
+    const double resto_mu = comp->entry_mu();
+    ASSERT_NEAR(resto_mu, 2.0, 1e-12);
+
+    // Late-solve original complementarity, collapsed to floor scale.
+    double avg = 1e-12, mn = 1e-12, mx = 1e-12;
+    h.augment_comp(avg, mn, mx, /*base_count=*/1);
+
+    // Union max is the elastic pair (= resto_mu); union average is resto-scale,
+    // decisively above the 1e-12 floor the un-augmented input would have fed.
+    EXPECT_NEAR(mx, resto_mu, 1e-9 * resto_mu);
+    EXPECT_GT(avg, 1e-3);
+    EXPECT_LE(mn, 1e-12); // min still sees the tiny original pair
+}
+
+// (v-comp) Off the nested path the augmentation is a pure no-op: the aggregates
+// are returned byte-identical, so the default/proximal barrier machinery is
+// untouched (the CBWR invariant).
+TEST(NestedRestorationComplementarity, AugmentIsNoOpWhenNotNested) {
+    NestedSeamIneqHarness h;
+    Eigen::VectorXd primals = (Eigen::VectorXd(2) << 0.0, 0.0).finished();
+    NestedL1Restoration *comp = h.enter_nested(primals, /*slack=*/3.0, /*outer_mu=*/0.1);
+    comp->exit_restoration(); // phase no longer active
+
+    double avg = 7.5, mn = 0.25, mx = 11.0;
+    const double avg0 = avg, mn0 = mn, mx0 = mx;
+    h.augment_comp(avg, mn, mx, /*base_count=*/1);
+    EXPECT_EQ(avg, avg0);
+    EXPECT_EQ(mn, mn0);
+    EXPECT_EQ(mx, mx0);
 }
 
 // -----------------------------------------------------------------------------

@@ -941,6 +941,17 @@ class PSIOPT {
     // it is now a private helper of that mechanism.
     void complementarity(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI,
                          double &avgcomp, double &mincomp, double &maxcomp) const;
+    // Folds an active nested restoration phase's elastic complementarity pairs
+    // into complementarity()'s aggregates. base_count is the number of original
+    // slack/multiplier pairs already reduced into avgcomp (so their sum can be
+    // reconstructed as avgcomp*base_count and re-averaged over the union). A pure
+    // no-op unless a nested restoration is active — the aggregates are returned
+    // untouched off that path, so the default/proximal barrier machinery is
+    // byte-identical. Only ever combines separately-computed aggregates (min of
+    // mins, max of maxes, count-weighted average); it never re-reduces the
+    // original pairs, so complementarity()'s reduction ordering is preserved.
+    void augment_complementarity_nested(double &avgcomp, double &mincomp, double &maxcomp,
+                                        int base_count) const;
     void barrier_hessian(Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
                          Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double mu);
     // loqo_mu / mpc_mu were extracted verbatim into ClassicAdaptiveGovernor

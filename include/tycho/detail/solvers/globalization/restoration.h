@@ -178,6 +178,29 @@ class RestorationStrategy {
             "implement the nested restoration surface");
     }
 
+    // Aggregate the elastic bound-variable complementarity products (n·z_n and
+    // p·z_p over every equality- and inequality-channel row) into a sum,
+    // per-element min, per-element max, and count over ONLY those elastic pairs.
+    // All four outputs are (re)initialized by the call: sum and count start at
+    // zero, min/max at +/-infinity, so when no elastic rows exist count is zero
+    // and min/max stay at their infinite sentinels (the caller must guard on
+    // count). These pairs are part of the restoration barrier subproblem exactly
+    // as the original slack/multiplier pairs are part of the outer barrier
+    // subproblem; the barrier-parameter machinery must see them, or a
+    // late-entered phase (whose original complementarity is already at
+    // solve-tolerance) drives the barrier parameter to its floor while the
+    // elastic pairs are still at restoration scale.
+    virtual void nested_complementarity(double &sum, double &min_comp, double &max_comp,
+                                        int &count) const {
+        (void)sum;
+        (void)min_comp;
+        (void)max_comp;
+        (void)count;
+        throw std::logic_error(
+            "RestorationStrategy::nested_complementarity called on a strategy that "
+            "does not implement the nested restoration surface");
+    }
+
     // Condensed constraint-row right-hand sides (r̃), given the live barrier
     // parameter and the CURRENT residual values and multipliers.
     virtual void condensed_residuals(double mu,

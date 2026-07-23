@@ -226,6 +226,9 @@ class NestedL1Restoration final : public RestorationStrategy {
     const Eigen::VectorXd &e_pivots() const override { return e_pivots_; }
     const Eigen::VectorXd &i_pivots() const override { return i_pivots_; }
 
+    void nested_complementarity(double &sum, double &min_comp, double &max_comp,
+                                int &count) const override;
+
     void condensed_residuals(double mu, const Eigen::Ref<const Eigen::VectorXd> &eq_residuals,
                              const Eigen::Ref<const Eigen::VectorXd> &iq_residuals,
                              const Eigen::Ref<const Eigen::VectorXd> &eq_lmults,

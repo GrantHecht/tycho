@@ -1,5 +1,5 @@
 // =============================================================================
-// Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
+// Tycho (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 // =============================================================================
 //
 // Part of the globalization component extraction: definitions for
@@ -2280,6 +2280,30 @@ void NestedL1Restoration::enter_nested(const ProgressMeasures &reference,
 
     active_ = true;
     ++entries_;
+}
+
+void NestedL1Restoration::nested_complementarity(double &sum, double &min_comp, double &max_comp,
+                                                 int &count) const {
+    sum = 0.0;
+    count = 0;
+    min_comp = std::numeric_limits<double>::infinity();
+    max_comp = -std::numeric_limits<double>::infinity();
+    // Fold one channel's elastic complementarity products (v = n or p, z the
+    // paired bound multiplier) into the aggregates. The cwiseProduct reduction
+    // expressions evaluate lazily — no heap temporary is materialized.
+    auto accumulate = [&](const Eigen::VectorXd &v, const Eigen::VectorXd &z) {
+        if (v.size() == 0)
+            return;
+        const auto prod = v.cwiseProduct(z);
+        sum += prod.sum();
+        min_comp = std::min(min_comp, prod.minCoeff());
+        max_comp = std::max(max_comp, prod.maxCoeff());
+        count += static_cast<int>(v.size());
+    };
+    accumulate(n_e_, z_ne_);
+    accumulate(p_e_, z_pe_);
+    accumulate(n_i_, z_ni_);
+    accumulate(p_i_, z_pi_);
 }
 
 void NestedL1Restoration::condensed_residuals(

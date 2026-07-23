@@ -812,6 +812,41 @@ void tycho::solvers::PSIOPT::complementarity(Eigen::Ref<Eigen::VectorXd> S,
     avgcomp = this->stli_scratch_.sum() / double(this->stli_scratch_.size());
 }
 
+void tycho::solvers::PSIOPT::augment_complementarity_nested(double &avgcomp, double &mincomp,
+                                                            double &maxcomp, int base_count) const {
+    // Off the nested restoration path this is a pure no-op: the aggregates keep
+    // the exact values complementarity() produced, so the default/proximal
+    // barrier machinery is byte-identical (the CBWR gate depends on it).
+    if (!(this->restoration_ && this->restoration_->is_active() && this->restoration_->is_nested()))
+        return;
+
+    // The elastic (n,p,z) bound pairs of the restoration barrier subproblem are
+    // complementary at restoration scale even after the ORIGINAL slack/multiplier
+    // pairs collapse to solve-tolerance; feeding only the original pairs to the
+    // barrier-parameter oracle would drive mu to its floor and freeze the phase.
+    // Aggregate the elastic pairs separately, then combine WITHOUT re-reducing
+    // the original pairs: union min is the min of the two mins, union max the max
+    // of the two maxes, and the union average is the count-weighted average
+    // (original sum reconstructed as avgcomp*base_count).
+    double esum = 0.0;
+    double emin = 0.0;
+    double emax = 0.0;
+    int ecount = 0;
+    this->restoration_->nested_complementarity(esum, emin, emax, ecount);
+    if (ecount == 0)
+        return;
+
+    if (base_count > 0) {
+        mincomp = std::min(mincomp, emin);
+        maxcomp = std::max(maxcomp, emax);
+        avgcomp = (avgcomp * double(base_count) + esum) / double(base_count + ecount);
+    } else {
+        mincomp = emin;
+        maxcomp = emax;
+        avgcomp = esum / double(ecount);
+    }
+}
+
 void tycho::solvers::PSIOPT::barrier_hessian(Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
                                              Eigen::Ref<Eigen::VectorXd> S,
                                              Eigen::Ref<Eigen::VectorXd> LI, double mu) {
@@ -1144,6 +1179,11 @@ void tycho::solvers::PSIOPT::fill_residual_info(KKTVector &xsl, KKTVector &rhs, 
         iter.icon_norm_err_ = rhs.iq_cons().norm();
         iter.max_i_mult_ = xsl.iq_lmults().lpNorm<Eigen::Infinity>();
         this->complementarity(xsl.slacks(), xsl.iq_lmults(), avgcomp, mincomp, maxcomp);
+        // While a nested restoration phase is active, the barrier error the
+        // convergence check and the monitored governor's KKT-error monitor read
+        // must reflect the elastic pairs too (dead no-op otherwise).
+        this->augment_complementarity_nested(avgcomp, mincomp, maxcomp,
+                                             static_cast<int>(xsl.slacks().size()));
 
         iter.barr_inf_ = maxcomp;
         iter.barr_norm_err_ = avgcomp;
@@ -1731,6 +1771,13 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             this->barrier_hessian(this->kkt_sol_.get_matrix(), v_xsl.slacks(), v_xsl.iq_lmults(),
                                   mu);
             this->complementarity(v_xsl.slacks(), v_xsl.iq_lmults(), avgcomp, mincomp, maxcomp);
+            // avgcomp/mincomp feed the barrier-parameter oracle (update_barrier
+            // below). During a nested restoration phase they must include the
+            // elastic complementarity pairs, or the oracle collapses mu to its
+            // floor and the elastic condensation pivot explodes (dead no-op off
+            // the nested path — original aggregates returned untouched).
+            this->augment_complementarity_nested(avgcomp, mincomp, maxcomp,
+                                                 static_cast<int>(v_xsl.slacks().size()));
         }
 
         Funtimer.stop();
