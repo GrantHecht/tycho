@@ -21,6 +21,7 @@
 
 #include "tycho/detail/solvers/globalization/feasibility_switch_recovery.h"
 #include "tycho/detail/solvers/globalization/filter_acceptance.h"
+#include "tycho/detail/solvers/globalization/l1_restoration.h"
 #include "tycho/detail/solvers/globalization/proximal_restoration.h"
 
 #include <gtest/gtest.h>
@@ -485,4 +486,338 @@ TEST(FeasibilitySwitch, FilterSeedsRestorationConstraintTol) {
         dynamic_cast<tycho::solvers::FilterAcceptance *>(solver.acceptance_.get());
     ASSERT_NE(filter, nullptr);
     EXPECT_DOUBLE_EQ(filter->restoration_constraint_tol(), 3.0e-7);
+}
+
+// -----------------------------------------------------------------------------
+// 4. Nested-restoration eval/step seam (through the private surface).
+//
+// These tests force a NestedL1Restoration active on a hand-built 2-variable NLP
+// with one violated equality and drive the solver seam directly. NestedSeamHarness
+// is befriended by PSIOPT (psiopt.h) so it can reach the private eval_nlp /
+// alg_impl / restoration_ / dimension members; the tests below assert on its
+// public outputs. Nothing wires nested entry yet (a later change does), so this
+// is the only way to exercise the seam.
+// -----------------------------------------------------------------------------
+
+using tycho::solvers::NestedL1Restoration;
+using tycho::solvers::OptimizationProblem;
+
+// A non-nested restoration double: is_nested() stays false, so a correctly split
+// seam must take the proximal branch and never touch the nested surface. The
+// proximal pieces are recorded when consulted; every nested-surface override
+// flips nested_touched_ so any erroneous nested dispatch is caught (rather than
+// hitting the base class throw).
+class NestedSeamProximalDouble : public tycho::solvers::RestorationStrategy {
+  public:
+    explicit NestedSeamProximalDouble(int primal_vars)
+        : diag_(Eigen::VectorXd::Zero(primal_vars)) {}
+
+    void enter_restoration(const tycho::solvers::ProgressMeasures &,
+                           const Eigen::Ref<const Eigen::VectorXd> &, double) override {
+        active_ = true;
+    }
+    void exit_restoration() override { active_ = false; }
+    bool is_active() const override { return active_; }
+    void reset() override { active_ = false; }
+
+    double proximal_objective(const Eigen::Ref<const Eigen::VectorXd> &) const override {
+        proximal_touched_ = true;
+        return 0.0;
+    }
+    void add_proximal_gradient(const Eigen::Ref<const Eigen::VectorXd> &,
+                               Eigen::Ref<Eigen::VectorXd>) const override {
+        proximal_touched_ = true;
+    }
+    const Eigen::VectorXd &proximal_diagonal() const override {
+        proximal_touched_ = true;
+        return diag_;
+    }
+    bool entry_permitted(double, const tycho::solvers::SolverContext &) const override {
+        return true;
+    }
+    const tycho::solvers::ProgressMeasures &reference() const override { return ref_; }
+    void note_iteration() override {}
+
+    // Nested surface: any of these firing on a non-nested strategy is a seam-split
+    // bug. Record it instead of throwing so the assertion is legible.
+    const Eigen::VectorXd &e_pivots() const override {
+        nested_touched_ = true;
+        return diag_;
+    }
+    const Eigen::VectorXd &i_pivots() const override {
+        nested_touched_ = true;
+        return diag_;
+    }
+    void nested_primal_diagonal(double, Eigen::Ref<Eigen::VectorXd>) const override {
+        nested_touched_ = true;
+    }
+    void condensed_residuals(double, const Eigen::Ref<const Eigen::VectorXd> &,
+                             const Eigen::Ref<const Eigen::VectorXd> &,
+                             const Eigen::Ref<const Eigen::VectorXd> &,
+                             const Eigen::Ref<const Eigen::VectorXd> &, Eigen::Ref<Eigen::VectorXd>,
+                             Eigen::Ref<Eigen::VectorXd>) const override {
+        nested_touched_ = true;
+    }
+    double nested_objective(double, const Eigen::Ref<const Eigen::VectorXd> &) const override {
+        nested_touched_ = true;
+        return 0.0;
+    }
+    void add_nested_gradient(double, const Eigen::Ref<const Eigen::VectorXd> &,
+                             Eigen::Ref<Eigen::VectorXd>) const override {
+        nested_touched_ = true;
+    }
+    void recover_elastic_steps(double, const Eigen::Ref<const Eigen::VectorXd> &,
+                               const Eigen::Ref<const Eigen::VectorXd> &,
+                               const Eigen::Ref<const Eigen::VectorXd> &,
+                               const Eigen::Ref<const Eigen::VectorXd> &) override {
+        nested_touched_ = true;
+    }
+    void apply_elastic_step(double, double) override { nested_touched_ = true; }
+
+    mutable bool proximal_touched_ = false;
+    mutable bool nested_touched_ = false;
+    bool active_ = false;
+
+  private:
+    Eigen::VectorXd diag_;
+    tycho::solvers::ProgressMeasures ref_;
+};
+
+// Test harness reaching PSIOPT's private seam. Befriended by PSIOPT.
+class NestedSeamHarness {
+  public:
+    NestedSeamHarness() {
+        using tycho::vf::Arguments;
+        using tycho::vf::GenericFunction;
+        prob_.set_vars((Eigen::VectorXd(2) << 0.0, 0.0).finished());
+        {
+            auto args = Arguments<2>();
+            auto x0 = args.coeff<0>();
+            auto x1 = args.coeff<1>();
+            prob_.add_objective(GenericFunction<-1, 1>(x0 * x0 + x1 * x1),
+                                (Eigen::VectorXi(2) << 0, 1).finished());
+        }
+        {
+            auto args = Arguments<2>();
+            auto x0 = args.coeff<0>();
+            auto x1 = args.coeff<1>();
+            // Equality x0 + x1 - 4 = 0; at the start (0,0) the residual is -4.
+            prob_.add_equal_con(GenericFunction<-1, -1>(x0 + x1 - 4.0),
+                                (Eigen::VectorXi(2) << 0, 1).finished());
+        }
+        prob_.optimizer_->set_print_level(3);
+        prob_.transcribe();
+        solver_ = prob_.optimizer_.get();
+    }
+
+    PSIOPT &solver() { return *solver_; }
+    int pv() const { return solver_->primal_vars_; }
+    int sv() const { return solver_->slack_vars_; }
+    int ec() const { return solver_->equal_cons_; }
+    int ic() const { return solver_->inequal_cons_; }
+    int dim() const { return solver_->kkt_dim_; }
+
+    // Inject a fresh NestedL1Restoration and enter the nested phase at the given
+    // primals with the equality residual implied by the constraint.
+    NestedL1Restoration *enter_nested(const Eigen::VectorXd &primals, double outer_mu) {
+        auto strat = std::make_unique<NestedL1Restoration>();
+        NestedL1Restoration *raw = strat.get();
+        solver_->restoration_ = std::move(strat);
+        Eigen::VectorXd eq_res(1);
+        eq_res[0] = primals[0] + primals[1] - 4.0;
+        Eigen::VectorXd iq_res(0);
+        tycho::solvers::ProgressMeasures ref;
+        // Zero reference infeasibility floors the exit reduction test at econ_tol,
+        // so the first restoration iterate (a large condensed residual on the
+        // violated row) is NOT judged "sufficiently reduced" and the phase takes
+        // at least one step before any exit is considered.
+        ref.infeasibility = 0.0;
+        ref.objective = 0.0;
+        ref.auxiliary = 0.0;
+        raw->enter_nested(ref, primals, eq_res, iq_res, outer_mu);
+        return raw;
+    }
+
+    // Run the nested eval seam once at (primals, y) with barrier mu; record the
+    // assembled KKT constraint-row diagonal and the RHS eq residual segment.
+    void run_eval_seam(const Eigen::VectorXd &primals, double y, double mu) {
+        Eigen::VectorXd XSL(dim());
+        XSL.head(pv()) = primals;
+        XSL.segment(pv() + sv(), ec())[0] = y;
+        Eigen::VectorXd GX = Eigen::VectorXd::Zero(pv());
+        Eigen::VectorXd AGXS = Eigen::VectorXd::Zero(dim());
+        double val = 0.0;
+        solver_->eval_nlp(PSIOPT::AlgorithmModes::OPTNO, 0.0, XSL, val, GX, AGXS,
+                          solver_->kkt_sol_.get_matrix(), mu);
+        const int yrow = pv() + sv();
+        kkt_yy_ = solver_->kkt_sol_.get_matrix().coeff(yrow, yrow);
+        rhs_eq_ = AGXS.segment(pv() + sv(), ec())[0];
+    }
+
+    // Run the eval seam with a non-nested proximal double, returning it so the
+    // caller can inspect which surface was touched.
+    NestedSeamProximalDouble *run_eval_seam_proximal(const Eigen::VectorXd &primals, double mu) {
+        auto strat = std::make_unique<NestedSeamProximalDouble>(pv());
+        NestedSeamProximalDouble *raw = strat.get();
+        raw->active_ = true;
+        solver_->restoration_ = std::move(strat);
+        Eigen::VectorXd XSL(dim());
+        XSL.head(pv()) = primals;
+        XSL.segment(pv() + sv(), ec())[0] = 0.0;
+        Eigen::VectorXd GX = Eigen::VectorXd::Zero(pv());
+        Eigen::VectorXd AGXS = Eigen::VectorXd::Zero(dim());
+        double val = 0.0;
+        solver_->eval_nlp(PSIOPT::AlgorithmModes::OPTNO, 0.0, XSL, val, GX, AGXS,
+                          solver_->kkt_sol_.get_matrix(), mu);
+        return raw;
+    }
+
+    // Drive one committed nested iteration and capture the elastic state the
+    // instant after that step is applied (at the START of the next iteration,
+    // before its own step recovery overwrites the stored deltas).
+    struct StepCapture {
+        bool captured = false;
+        double n, p, zn, zp;    // elastic state after the applied step
+        double dn, dp, dzn, dzp; // recovered step that was applied
+    };
+
+    StepCapture drive_one_step(double outer_mu) {
+        solver_->settings().max_iters_ = 4;
+        solver_->settings().max_ls_iters_ = 0; // full step, deterministic alpha = 1
+        solver_->settings().print_level_ = 3;
+        solver_->rebuild_globalization_components();
+        solver_->ensure_solver_initialized();
+        bool docompute = solver_->analyze_kkt_matrix();
+        Eigen::VectorXd x = (Eigen::VectorXd(2) << 0.0, 0.0).finished();
+        Eigen::VectorXd XSL = solver_->init_impl(x, outer_mu, docompute);
+
+        NestedL1Restoration *comp = enter_nested(XSL.head(pv()), outer_mu);
+        // Run the phase at the restoration barrier the elastics were initialized
+        // at (what the entry orchestration will set the live μ to).
+        const double phase_mu = comp->entry_mu();
+
+        StepCapture cap;
+        solver_->set_early_callback([comp, &cap](int i, double, Eigen::Ref<Eigen::VectorXd>, double,
+                                                 Eigen::Ref<Eigen::VectorXd>,
+                                                 Eigen::Ref<Eigen::VectorXd>,
+                                                 Eigen::SparseMatrix<double, Eigen::RowMajor> &)
+                                        -> int {
+            if (i == 1 && !cap.captured) {
+                cap.captured = true;
+                cap.n = comp->ec_n()[0];
+                cap.p = comp->ec_p()[0];
+                cap.zn = comp->ec_zn()[0];
+                cap.zp = comp->ec_zp()[0];
+                cap.dn = comp->ec_dn()[0];
+                cap.dp = comp->ec_dp()[0];
+                cap.dzn = comp->ec_dzn()[0];
+                cap.dzp = comp->ec_dzp()[0];
+            }
+            return 0;
+        });
+
+        solver_->alg_impl(PSIOPT::AlgorithmModes::OPT, PSIOPT::BarrierModes::LOQO,
+                          PSIOPT::LineSearchModes::L1, solver_->settings().obj_scale_, phase_mu,
+                          XSL);
+        solver_->disable_early_callback();
+        return cap;
+    }
+
+    double kkt_yy_ = 0.0;
+    double rhs_eq_ = 0.0;
+
+  private:
+    OptimizationProblem prob_;
+    PSIOPT *solver_ = nullptr;
+};
+
+// (i) The assembled KKT constraint-row diagonal equals the NEGATED component
+// pivot (the condensed (y,y) block is −pivot; the solver scatters the pivot slot
+// as a +coefficient onto that diagonal).
+TEST(NestedRestorationSeam, PivotDiagonalNegatesComponentPivot) {
+    NestedSeamHarness h;
+    Eigen::VectorXd primals = (Eigen::VectorXd(2) << 0.0, 0.0).finished();
+    NestedL1Restoration *comp = h.enter_nested(primals, /*outer_mu=*/0.1);
+    h.run_eval_seam(primals, /*y=*/0.5, /*mu=*/comp->entry_mu());
+
+    ASSERT_EQ(comp->e_pivots().size(), 1);
+    EXPECT_GT(comp->e_pivots()[0], 0.0); // component pivot is positive
+    EXPECT_NEAR(h.kkt_yy_, -comp->e_pivots()[0], 1e-10);
+}
+
+// (ii) The RHS equality segment equals the condensed residual r̃ recomputed from
+// the component's live elastic state, the raw residual c, the multiplier y, and μ.
+TEST(NestedRestorationSeam, RhsSegmentCarriesCondensedResidual) {
+    NestedSeamHarness h;
+    Eigen::VectorXd primals = (Eigen::VectorXd(2) << 0.0, 0.0).finished();
+    NestedL1Restoration *comp = h.enter_nested(primals, /*outer_mu=*/0.1);
+    const double y = 0.5;
+    const double mu = comp->entry_mu();
+    h.run_eval_seam(primals, y, mu);
+
+    const double c = primals[0] + primals[1] - 4.0; // raw residual eval_kkt_no stores
+    const double rho = tycho::solvers::kRestoPenaltyParameter;
+    const double n = comp->ec_n()[0];
+    const double p = comp->ec_p()[0];
+    const double zn = comp->ec_zn()[0];
+    const double zp = comp->ec_zp()[0];
+    const double rtilde = (c + n - p) + mu / zn - (n / zn) * (rho + y) - mu / zp +
+                          (p / zp) * (rho - y);
+    EXPECT_NEAR(h.rhs_eq_, rtilde, 1e-8 * (1.0 + std::abs(rtilde)));
+}
+
+// (iii) After one committed iteration the elastic slacks and their bound
+// multipliers moved by the recovered steps damped by a single primal fraction
+// (n,p) and a single dual fraction (z_n,z_p), each in (0,1], with positivity
+// preserved.
+TEST(NestedRestorationSeam, ElasticStepMovesWithDampedAlphas) {
+    NestedSeamHarness h;
+    // Entry state (before any step) for the same residual the harness will use.
+    Eigen::VectorXd primals = (Eigen::VectorXd(2) << 0.0, 0.0).finished();
+    const double c = primals[0] + primals[1] - 4.0;
+    const double outer_mu = 0.1;
+    const double resto_mu = std::max(outer_mu, std::abs(c));
+    const tycho::solvers::ElasticSlackInit init =
+        tycho::solvers::l1_elastic_slack_init(c, resto_mu, tycho::solvers::kRestoPenaltyParameter);
+
+    NestedSeamHarness::StepCapture cap = h.drive_one_step(outer_mu);
+    ASSERT_TRUE(cap.captured);
+
+    // The recovered steps must be nonzero (a genuine Newton step on the violated
+    // row), so the applied fractions are well-defined.
+    ASSERT_GT(std::abs(cap.dn), 1e-12);
+    ASSERT_GT(std::abs(cap.dp), 1e-12);
+    ASSERT_GT(std::abs(cap.dzn), 1e-12);
+    ASSERT_GT(std::abs(cap.dzp), 1e-12);
+
+    const double ap_n = (cap.n - init.n) / cap.dn;
+    const double ap_p = (cap.p - init.p) / cap.dp;
+    const double ad_n = (cap.zn - init.zn) / cap.dzn;
+    const double ad_p = (cap.zp - init.zp) / cap.dzp;
+
+    // n and p share the primal damping; z_n and z_p share the dual damping.
+    EXPECT_NEAR(ap_n, ap_p, 1e-9);
+    EXPECT_NEAR(ad_n, ad_p, 1e-9);
+
+    // Fractions are fraction-to-boundary caps in (0, 1].
+    EXPECT_GT(ap_n, 0.0);
+    EXPECT_LE(ap_n, 1.0 + 1e-12);
+    EXPECT_GT(ad_n, 0.0);
+    EXPECT_LE(ad_n, 1.0 + 1e-12);
+
+    // Positivity of every eliminated variable is preserved.
+    EXPECT_GT(cap.n, 0.0);
+    EXPECT_GT(cap.p, 0.0);
+    EXPECT_GT(cap.zn, 0.0);
+    EXPECT_GT(cap.zp, 0.0);
+}
+
+// (iv) Seam-split correctness: a non-nested (proximal) strategy never reaches the
+// nested surface — the eval seam takes the proximal branch exclusively.
+TEST(NestedRestorationSeam, ProximalPathNeverConsultsNestedSurface) {
+    NestedSeamHarness h;
+    Eigen::VectorXd primals = (Eigen::VectorXd(2) << 0.0, 0.0).finished();
+    NestedSeamProximalDouble *dbl = h.run_eval_seam_proximal(primals, /*mu=*/0.1);
+    EXPECT_TRUE(dbl->proximal_touched_);  // proximal branch ran
+    EXPECT_FALSE(dbl->nested_touched_);   // nested surface untouched
 }

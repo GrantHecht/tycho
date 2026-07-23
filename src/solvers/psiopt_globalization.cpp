@@ -160,12 +160,27 @@ void ClassicMeritAcceptance::eval_trial_point_occ(double obj_scale, double mu, d
     // Feasibility-restoration trial seam (dead on the default path:
     // ctx_.restoration_ is null). Shared by the L1 and AUGLANG variants. While
     // active, obj_scale is 0 (user objective contributes exactly 0.0) and the
-    // proximal objective φ_prox(trial primals) is added — matching the uniform
-    // objective substitution the eval seam applies to prim_obj.
-    if (ctx_.restoration_ && ctx_.restoration_->is_active())
-        ptest += ctx_.restoration_->proximal_objective(xsl2.primals());
+    // restoration objective at the trial primals is added — matching the uniform
+    // objective substitution the eval seam applies to prim_obj. The nested mode
+    // additionally uses the live-μ, step-fraction-α elastic trial objective and
+    // shifts the constraint residuals by the elastic slacks so the merit measures
+    // the restoration subproblem's infeasibility θ_elastic = ‖c + n − p‖.
+    if (ctx_.restoration_ && ctx_.restoration_->is_active()) {
+        if (ctx_.restoration_->is_nested())
+            ptest += ctx_.restoration_->trial_objective(mu, alpha, xsl2.primals());
+        else
+            ptest += ctx_.restoration_->proximal_objective(xsl2.primals());
+    }
     this->apply_reset_slacks(xsl2.slacks(), rhs2.iq_cons());
     btest = this->barrier_objective(xsl2.slacks(), mu);
+    if (ctx_.restoration_ && ctx_.restoration_->is_active() && ctx_.restoration_->is_nested()) {
+        resto_eq_shift_scratch_.resize(ctx_.equal_cons_);
+        resto_iq_shift_scratch_.resize(ctx_.inequal_cons_);
+        ctx_.restoration_->trial_residual_shift(alpha, resto_eq_shift_scratch_,
+                                                resto_iq_shift_scratch_);
+        rhs2.eq_cons() += resto_eq_shift_scratch_;
+        rhs2.iq_cons() += resto_iq_shift_scratch_;
+    }
 }
 
 auto ClassicMeritAcceptance::compute_penalties(KKTVector &xsl, KKTVector &rhs) const
@@ -201,13 +216,25 @@ double ClassicMeritAcceptance::ls_lang(double obj_scale, double mu, double prim_
         // Feasibility-restoration trial seam (dead on the default path:
         // ctx_.restoration_ is null). While active, obj_scale is 0 (the user
         // objective contributes exactly 0.0 to ptest via lsobjscale) and the
-        // proximal objective φ_prox(trial primals) is added instead — matching
+        // restoration objective at the trial primals is added instead — matching
         // the uniform objective substitution the eval seam applies to prim_obj.
-        if (ctx_.restoration_ && ctx_.restoration_->is_active())
-            ptest += ctx_.restoration_->proximal_objective(xsl2.primals());
+        // The nested mode uses the live-μ, α-fraction elastic trial objective and
+        // shifts the residuals by the elastic slacks (see eval_trial_point_occ).
+        if (ctx_.restoration_ && ctx_.restoration_->is_active()) {
+            if (ctx_.restoration_->is_nested())
+                ptest += ctx_.restoration_->trial_objective(mu, alpha, xsl2.primals());
+            else
+                ptest += ctx_.restoration_->proximal_objective(xsl2.primals());
+        }
         this->apply_reset_slacks(xsl2.slacks(), rhs2.iq_cons());
         btest = this->barrier_objective(xsl2.slacks(), mu);
         this->barrier_gradient(xsl2.slacks(), xsl2.iq_lmults(), mu, rhs2.dual_grad());
+        if (ctx_.restoration_ && ctx_.restoration_->is_active() && ctx_.restoration_->is_nested()) {
+            ctx_.restoration_->trial_residual_shift(alpha, resto_eq_shift_scratch_,
+                                                    resto_iq_shift_scratch_);
+            rhs2.eq_cons() += resto_eq_shift_scratch_;
+            rhs2.iq_cons() += resto_iq_shift_scratch_;
+        }
         double LangTest = ptest + btest + xsl2.lmults().dot(rhs2.all_cons());
         if (LangTest < LangInit) {
             citer.ls_iters_ = j;
@@ -605,7 +632,9 @@ bool ModernMeritAcceptance::accept_flexible(const ProgressMeasures &current,
 static void modern_eval_trial_point(SolverContext &ctx, double obj_scale, double mu, double alpha,
                                     const Eigen::VectorXd &XSL, const Eigen::VectorXd &DXSL,
                                     Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS2, double &ptest,
-                                    double &btest, double &theta) {
+                                    double &btest, double &theta,
+                                    Eigen::VectorXd &resto_eq_shift_scratch,
+                                    Eigen::VectorXd &resto_iq_shift_scratch) {
     const int pv = ctx.primal_vars_;
     const int sv = ctx.slack_vars_;
     const int ec = ctx.equal_cons_;
@@ -617,11 +646,18 @@ static void modern_eval_trial_point(SolverContext &ctx, double obj_scale, double
     ctx.nlp_->eval_occ(obj_scale, XSL2.head(pv), ptest, RHS2.segment(pv + sv, ec), RHS2.tail(ic));
     // Feasibility-restoration trial seam (dead on the default path:
     // ctx.restoration_ is null). While active, obj_scale is 0 (user objective
-    // contributes exactly 0.0) and the proximal objective φ_prox(trial primals)
+    // contributes exactly 0.0) and the restoration objective at the trial primals
     // is added, so the generic acceptance loop's trial.objective mirrors the
-    // uniform substitution applied to current.objective (= prim_obj = φ_prox).
-    if (ctx.restoration_ && ctx.restoration_->is_active())
-        ptest += ctx.restoration_->proximal_objective(XSL2.head(pv));
+    // uniform substitution applied to current.objective (= prim_obj). The nested
+    // mode uses the live-μ, α-fraction elastic trial objective and shifts the
+    // residuals by the elastic slacks so θ measures ‖c + n − p‖ (added below,
+    // before θ is taken).
+    if (ctx.restoration_ && ctx.restoration_->is_active()) {
+        if (ctx.restoration_->is_nested())
+            ptest += ctx.restoration_->trial_objective(mu, alpha, XSL2.head(pv));
+        else
+            ptest += ctx.restoration_->proximal_objective(XSL2.head(pv));
+    }
 
     auto S = XSL2.segment(pv, sv);
     auto FXI = RHS2.tail(ic);
@@ -641,6 +677,15 @@ static void modern_eval_trial_point(SolverContext &ctx, double obj_scale, double
     btest = 0.0;
     for (int i = 0; i < ic; i++)
         btest += -mu * std::log(S[i]);
+
+    if (ctx.restoration_ && ctx.restoration_->is_active() && ctx.restoration_->is_nested()) {
+        resto_eq_shift_scratch.resize(ec);
+        resto_iq_shift_scratch.resize(ic);
+        ctx.restoration_->trial_residual_shift(alpha, resto_eq_shift_scratch,
+                                               resto_iq_shift_scratch);
+        RHS2.segment(pv + sv, ec) += resto_eq_shift_scratch;
+        RHS2.tail(ic) += resto_iq_shift_scratch;
+    }
 
     theta = RHS2.tail(ec + ic).template lpNorm<1>();
 }
@@ -678,6 +723,19 @@ void BacktrackingLineSearch::max_primal_dual_step(Eigen::VectorXd &XSL, Eigen::V
     KKTVector dxsl = kkt_view(DXSL, ctx);
     double Smax = this->max_step_to_boundary(xsl.slacks(), dxsl.slacks(), bfrac, ctx);
     double Lmax = this->max_step_to_boundary(xsl.iq_lmults(), dxsl.iq_lmults(), bfrac, ctx);
+
+    // Nested-restoration elastic fraction-to-boundary. Dead unless a nested
+    // restoration strategy is active. The condensed elastic slacks (n,p) and
+    // their bound multipliers (z_n,z_p) live outside the KKT vector, so their
+    // positivity is enforced here: combine their τ-caps (τ = bfrac, the same
+    // fraction the slack/bound steps use) into the primal (Smax) and dual (Lmax)
+    // step lengths, so the pre-scaled DXSL below and the returned alphap/alphad
+    // keep every eliminated variable strictly positive. On the default and
+    // proximal-switch paths ctx.restoration_ is null / not nested → unchanged.
+    if (ctx.restoration_ && ctx.restoration_->is_active() && ctx.restoration_->is_nested()) {
+        Smax = std::min(Smax, ctx.restoration_->primal_boundary_alpha(bfrac));
+        Lmax = std::min(Lmax, ctx.restoration_->dual_boundary_alpha(bfrac));
+    }
 
     double primstep = Smax;
     double slackstep = Smax;
@@ -719,7 +777,13 @@ double BacktrackingLineSearch::compute_step(
     Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
     Eigen::VectorXd &RHS2, AcceptanceStrategy &acceptance, double &alphap, double &alphad,
     IterateInfo &Citer, const std::vector<IterateInfo> &iters, SolverContext &ctx) {
-    if (ctx.inequal_cons_ > 0)
+    // The fraction-to-boundary scaling runs when there are inequality slacks OR
+    // when a nested restoration strategy is active (whose eliminated elastic
+    // variables carry their own positivity caps even for an equality-only
+    // problem). The added disjunct is provably false on the default path
+    // (ctx.restoration_ null → short-circuit), so the guard is byte-identical off.
+    if (ctx.inequal_cons_ > 0 ||
+        (ctx.restoration_ && ctx.restoration_->is_active() && ctx.restoration_->is_nested()))
         this->max_primal_dual_step(XSL, DXSL, ctx.settings_.bound_fraction_, alphap, alphad, ctx);
 
     // Default (classic_merit) path: forward straight to the fused
@@ -770,7 +834,7 @@ double BacktrackingLineSearch::generic_line_search(
         double btest = 0.0;
         double theta_t = 0.0;
         modern_eval_trial_point(ctx, obj_scale, mu, alpha, XSL, DXSL, XSL2, RHS2, ptest, btest,
-                                theta_t);
+                                theta_t, resto_eq_shift_scratch_, resto_iq_shift_scratch_);
         ProgressMeasures trial{theta_t, ptest, btest};
 
         // Predicted reductions (α-scaled; see modern_merit.h): m_f = −α·∇ϕ_μᵀd

@@ -175,6 +175,13 @@ class BacktrackingLineSearch : public GlobalizationMechanism {
                                Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
                                Eigen::VectorXd &RHS2, AcceptanceStrategy &acceptance,
                                IterateInfo &Citer, SolverContext &ctx);
+
+    // Nested-restoration trial-path scratch (dead unless a nested restoration
+    // strategy is active). Back the elastic residual shift added to a trial's
+    // raw residuals in the generic acceptance loop, without per-backtrack heap
+    // allocation.
+    Eigen::VectorXd resto_eq_shift_scratch_;
+    Eigen::VectorXd resto_iq_shift_scratch_;
 };
 
 } // namespace tycho::solvers

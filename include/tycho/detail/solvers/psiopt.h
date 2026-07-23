@@ -54,6 +54,9 @@ class RecoveryDispatchGate_MonitoredSelectionConstructsMonitoredGovernor_Test;
 class FeasibilitySwitch_ProximalSwitchConstructsRestorationAndWrapsRecovery_Test;
 class FeasibilitySwitch_OffModeConstructsNoRestoration_Test;
 class FeasibilitySwitch_FilterSeedsRestorationConstraintTol_Test;
+// Test harness for the nested feasibility-restoration eval/step seam: reaches
+// private eval_nlp / alg_impl / restoration_ / dims to drive the seam directly.
+class NestedSeamHarness;
 
 namespace tycho::solvers {
 
@@ -638,6 +641,7 @@ class PSIOPT {
     friend class ::FeasibilitySwitch_ProximalSwitchConstructsRestorationAndWrapsRecovery_Test;
     friend class ::FeasibilitySwitch_OffModeConstructsNoRestoration_Test;
     friend class ::FeasibilitySwitch_FilterSeedsRestorationConstraintTol_Test;
+    friend class ::NestedSeamHarness;
 
     Settings settings_;
     SolveResult result_;
@@ -735,6 +739,21 @@ class PSIOPT {
     // is then a no-op once kkt_dim_ is stable across a solve.
     Eigen::VectorXd best_xsl_scratch_; ///< @internal alg_impl() return_best_ XSL snapshot.
     Eigen::VectorXd best_rhs_scratch_; ///< @internal alg_impl() return_best_ RHS snapshot.
+
+    // Nested feasibility-restoration eval-seam scratch (all dead unless a nested
+    // restoration strategy is active). The seam runs in the per-iteration hot
+    // path, so these back the condensed-elastic outputs without per-call heap
+    // allocation, following the *_scratch_ discipline above: resize-on-assign is
+    // a no-op once dims are stable across a solve. resto_pdiag_scratch_ holds the
+    // proximal Hessian diagonal η(μ)·D_R² (primal_vars_); resto_epiv_/ipiv_scratch_
+    // hold the NEGATED constraint-row pivots scattered into the KKT (y,y) blocks
+    // (equal_cons_/inequal_cons_); resto_ec_/ic_scratch_ copy the raw constraint
+    // residuals out before the condensed r̃ overwrites the RHS segments in place.
+    Eigen::VectorXd resto_pdiag_scratch_;
+    Eigen::VectorXd resto_epiv_scratch_;
+    Eigen::VectorXd resto_ipiv_scratch_;
+    Eigen::VectorXd resto_ec_scratch_;
+    Eigen::VectorXd resto_ic_scratch_;
 
     // --- KKT solver ---
 #ifdef USE_ACCELERATE_SPARSE
@@ -896,9 +915,14 @@ class PSIOPT {
     void eval_soe(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
                   EigenRef<VectorXd> AGXS_FX, Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
 
+    // `mu` is the live phase barrier parameter. It is consulted only by the
+    // nested feasibility-restoration branch (which recomputes its proximity
+    // weight, pivots, and condensed residuals from the live μ every evaluation);
+    // every other mode ignores it, so the default and proximal-switch paths are
+    // unaffected by its value.
     void eval_nlp(AlgorithmModes algmode, double obj_scale, ConstEigenRef<VectorXd> XSL,
                   double &val, EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
-                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
+                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat, double mu);
 
     // --- Feasibility-restoration exit measures (defined in psiopt.cpp) ---
     // Shared by every restoration exit/teardown site (the two continuing-exit

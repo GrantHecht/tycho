@@ -1157,22 +1157,65 @@ void tycho::solvers::PSIOPT::fill_iter_info(KKTVector &xsl, KKTVector &rhs, doub
 void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
                                       ConstEigenRef<VectorXd> XSL, double &val,
                                       EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
-                                      Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+                                      Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
+                                      double mu) {
     std::fill_n(KKTmat.valuePtr(), KKTmat.nonZeros(), 0.0);
 
     // Feasibility-restoration evaluation seam. Dead on the default path
-    // (restoration_ is null unless restoration_mode_ == proximal_switch). While
-    // restoration is active the true objective is uniformly replaced by the
-    // proximal term φ_prox: route through the objective-free KKT (constraints +
-    // their Hessians, exactly the OPTNO/SOE shape), then inject the proximal
-    // objective value, its gradient into the (now-zero) objective-gradient
-    // block, and its diagonal Hessian via the solver primal-diagonal slot the
-    // SOE/INIT modes already use. The auxiliary/barrier terms and the
-    // infeasibility residuals are untouched, and obj_scale never multiplies
-    // φ_prox (it is a solver-internal objective). The convergence check needs no
-    // mode code: it reads whatever lands in prim_grad() downstream (the
-    // objective-free-mode precedent), which now carries the proximal gradient.
+    // (restoration_ is null unless a restoration mode is selected). While
+    // restoration is active the true objective is uniformly replaced by a
+    // solver-internal restoration objective: route through the objective-free
+    // KKT (constraints + their Hessians, exactly the OPTNO/SOE shape), then
+    // inject the restoration objective value, its gradient into the (now-zero)
+    // objective-gradient block, and its diagonal Hessian via the solver
+    // primal-diagonal slot the SOE/INIT modes already use. The auxiliary/barrier
+    // terms are untouched, and obj_scale never multiplies the restoration
+    // objective. The convergence check needs no mode code: it reads whatever
+    // lands in prim_grad() downstream (the objective-free-mode precedent).
     if (this->restoration_ && this->restoration_->is_active()) {
+        // Nested condensed l1 restoration. The elastic pair (n,p) and their bound
+        // multipliers are eliminated analytically: their curvature lands on the
+        // constraint-row pivot slots — NEGATED, because the (y,y) diagonal of the
+        // condensed system is −pivot while the solver scatters the pivot slot as a
+        // +coefficient onto that diagonal (finalize_data / fill_solver_coeffs) —
+        // their proximal term substitutes the objective exactly as the proximal
+        // switch does, and each constraint-row RHS carries the condensed residual
+        // r̃ in place of the raw residual. μ is the live phase barrier parameter
+        // (η(μ) is recomputed on every evaluation). Pivots and the primal diagonal
+        // must be set BEFORE eval_kkt_no (they scatter inside fill_solver_coeffs)
+        // and reset to 0.0 after, mirroring the set_primal_diags discipline.
+        if (this->restoration_->is_nested()) {
+            const int ec = this->equal_cons_;
+            const int ic = this->inequal_cons_;
+            this->resto_pdiag_scratch_.resize(this->primal_vars_);
+            this->restoration_->nested_primal_diagonal(mu, this->resto_pdiag_scratch_);
+            this->nlp_->set_primal_diags(this->resto_pdiag_scratch_);
+            this->resto_epiv_scratch_ = -this->restoration_->e_pivots();
+            this->resto_ipiv_scratch_ = -this->restoration_->i_pivots();
+            this->nlp_->set_e_pivots(this->resto_epiv_scratch_);
+            this->nlp_->set_i_pivots(this->resto_ipiv_scratch_);
+            eval_kkt_no(0.0, XSL, val, GX, AGXS_FX, KKTmat);
+            this->nlp_->set_primal_diags(0.0);
+            this->nlp_->set_e_pivots(0.0);
+            this->nlp_->set_i_pivots(0.0);
+            val = this->restoration_->nested_objective(mu, XSL.head(primal_vars_));
+            this->restoration_->add_nested_gradient(mu, XSL.head(primal_vars_),
+                                                    GX.head(primal_vars_));
+            // Replace the raw constraint residuals with the condensed r̃. Copy the
+            // raw residual c out first: condensed_residuals reads c and writes r̃,
+            // and the target segments alias the raw-c source in the RHS vector.
+            this->resto_ec_scratch_ = AGXS_FX.segment(primal_vars_ + slack_vars_, ec);
+            this->resto_ic_scratch_ = AGXS_FX.tail(ic);
+            this->restoration_->condensed_residuals(
+                mu, this->resto_ec_scratch_, this->resto_ic_scratch_,
+                XSL.segment(primal_vars_ + slack_vars_, ec), XSL.tail(ic),
+                AGXS_FX.segment(primal_vars_ + slack_vars_, ec), AGXS_FX.tail(ic));
+            return;
+        }
+
+        // Proximal mode-switch: uniform proximal-objective substitution, no
+        // constraint-row modification (the constraints are unchanged in this
+        // mode). Byte-identical to the pre-nested seam.
         this->nlp_->set_primal_diags(this->restoration_->proximal_diagonal());
         eval_kkt_no(0.0, XSL, val, GX, AGXS_FX, KKTmat);
         this->nlp_->set_primal_diags(0.0);
@@ -1443,7 +1486,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // Evaluate NLP and build barrier terms
         Funtimer.start();
 
-        this->eval_nlp(algmode, obj_scale, XSL, prim_obj, PGX, RHS, this->kkt_sol_.get_matrix());
+        this->eval_nlp(algmode, obj_scale, XSL, prim_obj, PGX, RHS, this->kkt_sol_.get_matrix(),
+                       mu);
 
         if (this->inequal_cons_ > 0) {
             this->apply_reset_slacks(v_xsl.slacks(), v_rhs.iq_cons());
@@ -1777,6 +1821,20 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         DXSL = this->kkt_sol_.solve(RHS);
         DXSL = -DXSL;
         bool GoodStep = std::isfinite(DXSL.squaredNorm());
+
+        // Nested-restoration elastic step recovery. Dead unless a nested
+        // restoration strategy is active. The condensed KKT solved for the
+        // constraint-multiplier steps Δy in the DXSL eq/iq blocks; recover the
+        // eliminated elastic slack/bound-multiplier steps from them BEFORE the
+        // fraction-to-boundary machinery scales those blocks in compute_step. The
+        // recovered steps feed the elastic caps consulted inside
+        // max_primal_dual_step and are committed by apply_elastic_step below.
+        if (this->restoration_ && this->restoration_->is_active() &&
+            this->restoration_->is_nested()) {
+            KKTVector v_dxsl = kkt_view(DXSL);
+            this->restoration_->recover_elastic_steps(mu, v_xsl.eq_lmults(), v_xsl.iq_lmults(),
+                                                      v_dxsl.eq_lmults(), v_dxsl.iq_lmults());
+        }
         QPtimer.stop();
 
         // Line search. lsobjscale is hoisted out of the GoodStep block below so
@@ -1975,6 +2033,20 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
 
         // Apply step
         XSL += alpha * DXSL;
+
+        // Commit the recovered elastic step alongside the outer primal/dual step.
+        // Dead unless a nested restoration strategy is active. The outer primal
+        // block was fraction-to-boundary scaled by alphap and the dual block by
+        // alphad inside compute_step, then both damped by the backtrack alpha; the
+        // elastic slacks (n,p) share the primal damping alpha·alphap and their
+        // bound multipliers (z_n,z_p) the dual damping alpha·alphad, so the
+        // condensed elastic variables move in lockstep with the KKT variables they
+        // were eliminated from. Reached only on committed steps (this line is
+        // skipped on the terminating iteration, exactly like the XSL commit).
+        if (this->restoration_ && this->restoration_->is_active() &&
+            this->restoration_->is_nested()) {
+            this->restoration_->apply_elastic_step(alpha * alphap, alpha * alphad);
+        }
     }
 
     // Teardown invariant (dead on the default path: restoration_ is null). Any
@@ -2082,8 +2154,11 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     if (this->inequal_cons_ > 0) {
         this->nlp_->set_slacks_ones();
     }
+    // INIT mode never runs with restoration active (init_impl is the one-shot
+    // multiplier initializer), so the μ argument is inert here; pass mu for
+    // consistency with the live phase parameter.
     this->eval_nlp(AlgorithmModes::INIT, settings_.obj_scale_, XSL, val,
-                   RHS.head(this->primal_vars_), RHS, this->kkt_sol_.get_matrix());
+                   RHS.head(this->primal_vars_), RHS, this->kkt_sol_.get_matrix(), mu);
 
     KKTVector v_xsl = kkt_view(XSL);
     KKTVector v_rhs = kkt_view(RHS);

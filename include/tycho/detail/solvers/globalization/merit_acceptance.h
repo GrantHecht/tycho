@@ -193,6 +193,15 @@ class ClassicMeritAcceptance : public AcceptanceStrategy {
     double barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu) const;
     void barrier_gradient(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double mu,
                           Eigen::Ref<Eigen::VectorXd> AGS) const;
+
+    // Nested-restoration trial-path scratch (dead unless a nested restoration
+    // strategy is active). The trial-point evaluators add the elastic residual
+    // shift (n+αΔn)−(p+αΔp) to a trial's raw constraint residuals so the merit
+    // sees the restoration subproblem's infeasibility; these back that shift
+    // without per-backtrack heap allocation. mutable so the const-facing trial
+    // helpers may fill them.
+    mutable Eigen::VectorXd resto_eq_shift_scratch_;
+    mutable Eigen::VectorXd resto_iq_shift_scratch_;
 };
 
 } // namespace tycho::solvers
