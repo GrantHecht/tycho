@@ -53,6 +53,7 @@ using tycho::solvers::kFilterGammaPhi;
 using tycho::solvers::kFilterGammaTheta;
 using tycho::solvers::kFilterMaxResets;
 using tycho::solvers::kFilterResetTrigger;
+using tycho::solvers::kKappaResto;
 using tycho::solvers::ProgressMeasures;
 
 // File-unique helper (see UNITY RULE above).
@@ -597,6 +598,161 @@ TEST(FilterAcceptance, ResetClearsEverythingAndReArms) {
     const auto [phi_add, theta_add] = a.filter_entry(0);
     EXPECT_DOUBLE_EQ(phi_add, 8.0 - kFilterGammaPhi * 2.0);
     EXPECT_DOUBLE_EQ(theta_add, (1.0 - kFilterGammaTheta) * 2.0);
+}
+
+// ===========================================================================
+// Restoration-exit test (Ipopt IpRestoConvCheck / IpRestoFilterConvCheck):
+//   θ_trial ≤ max(kKappaResto·θ_ref, restoration_constraint_tol_)   (Tmax floor)
+//   AND acceptable to the PRESERVED (stashed) optimality filter
+//   AND acceptable w.r.t. the preserved entry pair (= reference, margined).
+// The stash is set up via notify_switch_to_feasibility(entry); the entry point
+// and the exit test's `reference` are the same frozen point.
+// ===========================================================================
+
+// All three clauses pass; the relative floor 0.9·θ_ref dominates the tolerance
+// floor. entry/reference = (θ=1, φ=10) ⇒ floor = max(0.9·1, 1e-6) = 0.9. Trial
+// (θ=0.5, φ=9): 0.5 ≤ 0.9; not blocked by the stash (φ=9 < entry φ≈10); θ margin
+// 0.5 ≤ (1−γθ)·1 ⇒ acceptable-to-reference. ⇒ EXIT.
+TEST(FilterRestoration, ExitAllClausesPassRelativeFloorDominates) {
+    FilterAcceptance a;
+    a.notify_switch_to_feasibility(FilterMakePm(1.0, 10.0, 0.0));
+    EXPECT_TRUE(a.is_infeasibility_sufficiently_reduced(FilterMakePm(1.0, 10.0, 0.0),
+                                                        FilterMakePm(0.5, 9.0, 0.0)));
+}
+
+// Relative floor rejects independently. Same setup; trial θ = 0.95 > 0.9 = floor
+// ⇒ FALSE, even though the stash does not block it and the θ margin (0.95 ≤
+// 0.99999) would pass acceptable-to-reference.
+TEST(FilterRestoration, ExitRelativeFloorRejects) {
+    FilterAcceptance a;
+    a.notify_switch_to_feasibility(FilterMakePm(1.0, 10.0, 0.0));
+    EXPECT_FALSE(a.is_infeasibility_sufficiently_reduced(FilterMakePm(1.0, 10.0, 0.0),
+                                                         FilterMakePm(0.95, 9.0, 0.0)));
+}
+
+// Tolerance floor waives the relative test when θ_ref is tiny. entry/reference =
+// (θ=1e-9, φ=10) ⇒ 0.9·1e-9 = 9e-10 < 1e-6 (default tol) ⇒ floor = 1e-6. Trial
+// (θ=5e-7, φ=9): 5e-7 ≤ 1e-6 (waived — note 5e-7 > 9e-10, so the relative test
+// alone would reject); stash does not block (φ=9 < ≈10); acceptable-to-reference
+// via the φ margin (9−10 = −1 ≤ −γφ·1e-9). ⇒ EXIT.
+TEST(FilterRestoration, ExitToleranceFloorWaivesRelativeWhenRefTiny) {
+    FilterAcceptance a;
+    a.notify_switch_to_feasibility(FilterMakePm(1.0e-9, 10.0, 0.0));
+    EXPECT_TRUE(a.is_infeasibility_sufficiently_reduced(FilterMakePm(1.0e-9, 10.0, 0.0),
+                                                        FilterMakePm(5.0e-7, 9.0, 0.0)));
+}
+
+// With the injected tolerance driven below the relative target, the floor no
+// longer waives: floor = max(9e-10, 1e-15) = 9e-10, and trial θ = 5e-7 > 9e-10
+// ⇒ FALSE. Proves the exit floor reads the injected constraint tolerance.
+TEST(FilterRestoration, ExitTinyInjectedTolDoesNotWaive) {
+    FilterAcceptance a;
+    a.set_restoration_constraint_tol(1.0e-15);
+    a.notify_switch_to_feasibility(FilterMakePm(1.0e-9, 10.0, 0.0));
+    EXPECT_FALSE(a.is_infeasibility_sufficiently_reduced(FilterMakePm(1.0e-9, 10.0, 0.0),
+                                                         FilterMakePm(5.0e-7, 9.0, 0.0)));
+}
+
+// Three-way AND: the STASHED optimality filter rejects a trial that passes the
+// floor AND acceptable-to-reference. Seed the optimality filter with a small
+// dominating entry E_seed = augment(θ_c=0.1, φ_c=0.1) = (0.1−1e-9, 0.0999990)
+// BEFORE switching, so the stash holds {E_seed, entry_pair}. Trial (θ=0.5, φ=5):
+//   floor: 0.5 ≤ 0.9 ✓ (reference θ=1);
+//   acceptable-to-reference: θ=0.5 ≤ 0.99999 ✓;
+//   stash: E_seed blocks (φ=5 > 0.1−1e-9 AND θ=0.5 > 0.0999990) ⇒ NOT acceptable
+//   ⇒ FALSE. Contrast ExitAllClausesPassRelativeFloorDominates (same floor and
+//   acceptable-to-reference, no dominating stash entry ⇒ EXIT).
+TEST(FilterRestoration, ExitStashedFilterRejectsOtherwisePassingTrial) {
+    FilterAcceptance a;
+    FilterPrimeCeilingReject(a, 1.0);
+    ASSERT_TRUE(FilterHType(a, /*θ_c=*/0.1, /*φ_c=*/0.1, /*θ_t=*/0.05, /*φ_t=*/0.1)); // seed E_seed
+    ASSERT_EQ(a.filter_size(), 1u);
+
+    a.notify_switch_to_feasibility(FilterMakePm(1.0, 10.0, 0.0));
+    ASSERT_EQ(a.stashed_filter_size(), 2u); // E_seed + entry_pair
+    ASSERT_EQ(a.filter_size(), 0u);         // working filter reinitialized fresh
+
+    EXPECT_FALSE(a.is_infeasibility_sufficiently_reduced(FilterMakePm(1.0, 10.0, 0.0),
+                                                         FilterMakePm(0.5, 5.0, 0.0)));
+}
+
+// ===========================================================================
+// Stash / restore round-trip. Entry augments + stashes the optimality filter,
+// reinitializing fresh working state; exit restores it and augments with the
+// exit pair (Uno adds at both transitions).
+// ===========================================================================
+
+TEST(FilterRestoration, StashRestoreRoundTrip) {
+    FilterAcceptance a;
+    // Entry (θ=2, φ=8): entry_pair = (8−2e-8, 1.99998).
+    a.notify_switch_to_feasibility(FilterMakePm(2.0, 8.0, 0.0));
+    EXPECT_TRUE(a.in_feasibility_phase());
+    EXPECT_EQ(a.filter_size(), 0u);         // working state fresh in between
+    ASSERT_EQ(a.stashed_filter_size(), 1u); // optimality filter preserved
+    {
+        const auto [phi_s, theta_s] = a.stashed_filter_entry(0);
+        EXPECT_DOUBLE_EQ(phi_s, 8.0 - kFilterGammaPhi * 2.0);
+        EXPECT_DOUBLE_EQ(theta_s, (1.0 - kFilterGammaTheta) * 2.0);
+    }
+
+    // Exit (θ=0.5, φ=20): exit_pair = (20−5e-9, 0.499995); φ=20 > 8 ⇒ it does not
+    // dominate the entry pair, so both survive ⇒ restored filter size 2.
+    a.notify_switch_to_optimality(FilterMakePm(0.5, 20.0, 0.0));
+    EXPECT_FALSE(a.in_feasibility_phase());
+    ASSERT_EQ(a.filter_size(), 2u);
+    {
+        const auto [phi0, theta0] = a.filter_entry(0); // preserved entry pair
+        EXPECT_DOUBLE_EQ(phi0, 8.0 - kFilterGammaPhi * 2.0);
+        EXPECT_DOUBLE_EQ(theta0, (1.0 - kFilterGammaTheta) * 2.0);
+        const auto [phi1, theta1] = a.filter_entry(1); // exit pair added
+        EXPECT_DOUBLE_EQ(phi1, 20.0 - kFilterGammaPhi * 0.5);
+        EXPECT_DOUBLE_EQ(theta1, (1.0 - kFilterGammaTheta) * 0.5);
+    }
+}
+
+// ===========================================================================
+// Reset invariant (see (6)): a μ-event reset MID-feasibility-phase clears
+// working state only; the stash and the flag survive so exit still restores.
+// ===========================================================================
+
+TEST(FilterRestoration, ResetDuringFeasibilityPreservesStash) {
+    FilterAcceptance a;
+    a.notify_switch_to_feasibility(FilterMakePm(2.0, 8.0, 0.0));
+    ASSERT_EQ(a.stashed_filter_size(), 1u);
+
+    // A feasibility-phase H-type accept populates the WORKING filter (θ₀ = 1.0
+    // re-derived from the current iterate; membership empty ⇒ acceptable).
+    ASSERT_TRUE(FilterHType(a, /*θ_c=*/1.0, /*φ_c=*/1.0, /*θ_t=*/0.5, /*φ_t=*/1.0));
+    ASSERT_EQ(a.filter_size(), 1u);
+
+    // μ-event reset mid-phase.
+    a.reset();
+    EXPECT_TRUE(a.in_feasibility_phase());   // flag survives
+    EXPECT_EQ(a.filter_size(), 0u);          // working state cleared
+    EXPECT_EQ(a.stashed_filter_size(), 1u);  // stash preserved
+
+    // Exit still restores correctly after the mid-phase reset.
+    a.notify_switch_to_optimality(FilterMakePm(0.5, 20.0, 0.0));
+    EXPECT_FALSE(a.in_feasibility_phase());
+    EXPECT_EQ(a.filter_size(), 2u); // restored entry pair + exit pair
+}
+
+// ===========================================================================
+// Reset invariant (see (6)): a reset OUTSIDE the feasibility phase drops the
+// leftover stash defensively.
+// ===========================================================================
+
+TEST(FilterRestoration, ResetOutsidePhaseClearsLeftoverStash) {
+    FilterAcceptance a;
+    a.notify_switch_to_feasibility(FilterMakePm(2.0, 8.0, 0.0));
+    a.notify_switch_to_optimality(FilterMakePm(0.5, 20.0, 0.0));
+    // After exit the flag is clear but the stash is a harmless leftover.
+    ASSERT_FALSE(a.in_feasibility_phase());
+    ASSERT_EQ(a.stashed_filter_size(), 1u);
+
+    a.reset(); // outside the phase ⇒ full clear incl. the leftover stash
+    EXPECT_EQ(a.stashed_filter_size(), 0u);
+    EXPECT_EQ(a.filter_size(), 0u);
 }
 
 } // namespace

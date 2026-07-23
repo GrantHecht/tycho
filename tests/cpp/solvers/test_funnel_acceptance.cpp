@@ -308,4 +308,86 @@ TEST(FunnelAcceptance, WidthMonotoneNonIncreasingAcrossSequence) {
     }
 }
 
+// ===========================================================================
+// Restoration-exit test (Uno FunnelMethod): funnel-membership(θ_trial) AND
+// θ_trial ≤ β·θ_ref. β = kFunnelBeta = 0.9999. The two halves reject
+// independently — this section walks both.
+// ===========================================================================
+
+// Both halves pass. Prime θ₀ = 4.0 ⇒ τ = 6.0. reference θ = 10.0 ⇒ relative
+// threshold 0.9999·10 = 9.999. trial θ = 5.0: membership 5 ≤ 6 AND relative
+// 5 ≤ 9.999 ⇒ ACCEPT-exit.
+TEST(FunnelAcceptance, ExitTestBothHalvesPass) {
+    FunnelAcceptance a;
+    FunnelPrimeRejecting(a, 4.0, 10.0); // τ = 6.0
+    EXPECT_TRUE(a.is_infeasibility_sufficiently_reduced(FunnelMakePm(10.0, 0.0, 0.0),
+                                                        FunnelMakePm(5.0, 0.0, 0.0)));
+}
+
+// Membership half rejects independently: trial θ = 7.0 > τ = 6.0 (outside the
+// funnel) even though the relative half would pass (7 ≤ 0.9999·10 = 9.999).
+TEST(FunnelAcceptance, ExitTestMembershipHalfRejects) {
+    FunnelAcceptance a;
+    FunnelPrimeRejecting(a, 4.0, 10.0); // τ = 6.0
+    EXPECT_FALSE(a.is_infeasibility_sufficiently_reduced(FunnelMakePm(10.0, 0.0, 0.0),
+                                                         FunnelMakePm(7.0, 0.0, 0.0)));
+}
+
+// Relative half rejects independently: reference θ = 5.0 ⇒ threshold 4.9995;
+// trial θ = 5.5 passes membership (5.5 ≤ 6.0) but fails 5.5 ≤ 4.9995.
+TEST(FunnelAcceptance, ExitTestRelativeHalfRejects) {
+    FunnelAcceptance a;
+    FunnelPrimeRejecting(a, 4.0, 10.0); // τ = 6.0
+    EXPECT_FALSE(a.is_infeasibility_sufficiently_reduced(FunnelMakePm(5.0, 0.0, 0.0),
+                                                         FunnelMakePm(5.5, 0.0, 0.0)));
+}
+
+// Relative-half boundary is inclusive. τ = 150 (membership never binds here);
+// reference θ = 10 ⇒ threshold 0.9999·10 = 9.999. trial exactly at threshold ⇒
+// pass; just above ⇒ fail.
+TEST(FunnelAcceptance, ExitTestRelativeBoundaryInclusive) {
+    FunnelAcceptance a;
+    FunnelPrimeRejecting(a, 100.0, 200.0); // τ = 150.0
+    const double threshold = kFunnelBeta * 10.0;
+    EXPECT_TRUE(a.is_infeasibility_sufficiently_reduced(FunnelMakePm(10.0, 0.0, 0.0),
+                                                        FunnelMakePm(threshold, 0.0, 0.0)));
+    EXPECT_FALSE(a.is_infeasibility_sufficiently_reduced(FunnelMakePm(10.0, 0.0, 0.0),
+                                                         FunnelMakePm(threshold * 1.0001, 0.0, 0.0)));
+}
+
+// ===========================================================================
+// Restoration switch notifications (asymmetric, Uno-verbatim): entry is a
+// no-op; exit re-bases the width to κ·τ + (1−κ)·θ_exit, κ = kFunnelKappa = 0.5.
+// ===========================================================================
+
+// notify_switch_to_feasibility leaves the width untouched (the funnel's θ-only
+// state is unaffected by the objective swap).
+TEST(FunnelAcceptance, NotifySwitchToFeasibilityIsNoOp) {
+    FunnelAcceptance a;
+    FunnelPrimeRejecting(a, 4.0, 10.0); // τ = 6.0
+    a.notify_switch_to_feasibility(FunnelMakePm(3.0, 1.0, 0.0));
+    EXPECT_DOUBLE_EQ(a.funnel_width(), 6.0); // unchanged
+}
+
+// notify_switch_to_optimality re-bases: τ = 6.0, θ_exit = 2.0 ⇒
+// τ⁺ = 0.5·6 + 0.5·2 = 3 + 1 = 4.0 (the width tightens toward the reduced exit
+// infeasibility).
+TEST(FunnelAcceptance, NotifySwitchToOptimalityReBasesWidth) {
+    FunnelAcceptance a;
+    FunnelPrimeRejecting(a, 4.0, 10.0); // τ = 6.0
+    a.notify_switch_to_optimality(FunnelMakePm(2.0, 0.0, 0.0));
+    EXPECT_DOUBLE_EQ(a.funnel_width(), kFunnelKappa * 6.0 + (1.0 - kFunnelKappa) * 2.0); // 4.0
+}
+
+// Verbatim convex combination with no guard: an exit infeasibility ABOVE the
+// width re-widens it (κ·6 + (1−κ)·10 = 3 + 5 = 8.0). Uno's update_restoration
+// adds no floor; this pins that behavior.
+TEST(FunnelAcceptance, NotifySwitchToOptimalityAllowsReWidening) {
+    FunnelAcceptance a;
+    FunnelPrimeRejecting(a, 4.0, 10.0); // τ = 6.0
+    a.notify_switch_to_optimality(FunnelMakePm(10.0, 0.0, 0.0));
+    EXPECT_DOUBLE_EQ(a.funnel_width(), kFunnelKappa * 6.0 + (1.0 - kFunnelKappa) * 10.0); // 8.0
+    EXPECT_GT(a.funnel_width(), 6.0);
+}
+
 } // namespace

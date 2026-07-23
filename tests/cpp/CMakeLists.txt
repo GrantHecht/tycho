@@ -175,6 +175,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     solvers/test_soc.cpp
     solvers/test_watchdog.cpp
     solvers/test_merit_rules.cpp
+    solvers/test_classic_merit_restoration.cpp
     solvers/test_switching_acceptance.cpp
     solvers/test_funnel_acceptance.cpp
     solvers/test_filter_acceptance.cpp

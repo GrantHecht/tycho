@@ -109,6 +109,36 @@
 //     no update. This matches Uno, where funnel.update() is called from the
 //     single H-type acceptance branch of FunnelMethod::is_iterate_acceptable.
 //
+// (5) Feasibility-restoration hooks (Uno FunnelMethod, cvanaret/Uno 7481abe):
+//
+//     (5a) Restoration-exit test, is_infeasibility_sufficiently_reduced —
+//          FunnelMethod::is_infeasibility_sufficiently_reduced verbatim:
+//
+//            funnel.acceptable(θ_trial)  AND  θ_trial ≤ β·θ_ref
+//          = θ_trial ≤ τ                AND  θ_trial ≤ kFunnelBeta·θ_ref,
+//
+//          reusing the existing sufficient-decrease margin β (Uno reuses the
+//          same parameters.beta). θ_ref is the infeasibility at the restoration
+//          entry point (reference.infeasibility).
+//
+//     (5b) notify_switch_to_feasibility (entry) — Uno-verbatim NO-OP. The
+//          funnel's whole state is the scalar θ-width; the objective swap that
+//          drives the mode switch does not touch θ, so there is nothing to
+//          stash or re-initialize.
+//
+//     (5c) notify_switch_to_optimality (exit) — Uno Funnel::update_restoration:
+//
+//            τ⁺ = κ·τ + (1−κ)·θ_exit
+//               = convex_combination(τ, θ_exit, κ),   κ = kFunnelKappa,
+//
+//          re-basing the width toward the (reduced) exit infeasibility as
+//          restoration hands control back to the optimality phase. No extra
+//          guard is added beyond Uno's: by the time restoration exits the width
+//          has been lazily derived from the feasibility-phase θ₀ (an
+//          is_iterate_acceptable call precedes any exit), so τ is finite; even
+//          the pathological +∞-width case is FP-inert (κ·∞ + finite = ∞ — no
+//          NaN, the funnel simply stays wide).
+//
 // Divergences from the sources, disclosed:
 //   • KLV Eq. (13) states the update as τ⁺ = (1−κ)·θ_trial + κ·τ (a convex
 //     combination of the OLD WIDTH and the trial). That formula is Uno's
@@ -167,6 +197,16 @@ class FunnelAcceptance final : public SwitchingAcceptance {
     // uninitialized (the pathological case of a phase that never calls
     // is_iterate_acceptable, e.g. converges at the initial iterate).
     void append_diagnostics(PSIOPT::SolveResult &result) const override;
+
+    // --- Feasibility-restoration hooks (see (5) in the file-top formulation) ---
+    // (5a) Restoration-exit test: funnel-membership AND θ_trial ≤ β·θ_ref.
+    bool is_infeasibility_sufficiently_reduced(const ProgressMeasures &reference,
+                                               const ProgressMeasures &trial) const override;
+    // (5b) Entry: Uno-verbatim no-op (the funnel's θ-only state is untouched by
+    // the objective swap).
+    void notify_switch_to_feasibility(const ProgressMeasures &current_progress) override;
+    // (5c) Exit: re-base the width, τ ← κ·τ + (1−κ)·θ_exit.
+    void notify_switch_to_optimality(const ProgressMeasures &current_progress) override;
 
   protected:
     // --- SwitchingAcceptance hooks (see the file-top formulation) ---

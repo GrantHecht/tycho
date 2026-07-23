@@ -71,16 +71,21 @@ class ClassicMeritAcceptance : public AcceptanceStrategy {
     // The classic strategy is the one (and only) fused-path driver.
     bool drives_classic_path() const override { return true; }
 
-    // --- Generic interface (unused on the classic merit path) ---
-    // The classic acceptance test is fused inside classic_line_search's
-    // backtracking loop; these generic (θ, f) hooks are driven only by future
-    // filter/funnel/WMNO strategies. Reaching them on the classic path is a
-    // wiring bug, so they throw (T6: never a silent wrong return) rather than
-    // fabricate an answer. A future filter/funnel acceptance strategy gives
-    // them real bodies.
+    // --- Generic interface ---
+    // is_iterate_acceptable: the classic acceptance test is fused inside
+    // classic_line_search's backtracking loop, so the generic (θ, f) hook is
+    // never driven on the classic path. Reaching it is a wiring bug, so it
+    // throws (T6: never a silent wrong return) rather than fabricate an answer.
     bool is_iterate_acceptable(const ProgressMeasures &current, const ProgressMeasures &trial,
                                const ProgressMeasures &predicted_reduction,
                                double objective_multiplier, double step_length) override;
+    // is_infeasibility_sufficiently_reduced: the restoration-exit test, driven
+    // by the (future) solver seam while the classic strategy runs in feasibility
+    // mode. There is no Uno counterpart — Uno pairs restoration with its own
+    // filter/funnel strategies, not a monolithic merit line search — so the
+    // Ipopt IpRestoConvCheck relative-reduction shape is the reference (see the
+    // definition in psiopt_globalization.cpp for the term-for-term mapping and
+    // the single-tolerance floor adaptation).
     bool is_infeasibility_sufficiently_reduced(const ProgressMeasures &reference,
                                                const ProgressMeasures &trial) const override;
 

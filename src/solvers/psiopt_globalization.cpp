@@ -78,12 +78,22 @@ bool ClassicMeritAcceptance::is_iterate_acceptable(const ProgressMeasures &curre
 
 bool ClassicMeritAcceptance::is_infeasibility_sufficiently_reduced(
     const ProgressMeasures &reference, const ProgressMeasures &trial) const {
-    (void)reference;
-    (void)trial;
-    throw std::logic_error(
-        "ClassicMeritAcceptance::is_infeasibility_sufficiently_reduced is unused "
-        "on the classic merit path; it is driven only by a future feasibility-restoration "
-        "strategy");
+    // Ipopt IpRestoConvCheck::CheckConvergence (coin-or/Ipopt 72a29c9):
+    //   orig_inf_pr_max = Max(kappa_resto_ * orig_curr_inf_pr,
+    //                         Min(orig_ip_data->tol(), orig_constr_viol_tol_));
+    //   ... exit when orig_trial_inf_pr <= orig_inf_pr_max.
+    // orig_curr_inf_pr is the infeasibility at the frozen entry point =
+    // reference.infeasibility; orig_trial_inf_pr = trial.infeasibility.
+    //
+    // Ipopt floors the relative target with Min(tol, constr_viol_tol) — its
+    // separate optimality and constraint-violation tolerances. Tycho carries a
+    // single constraint-violation tolerance (settings_.econ_tol_, the same field
+    // ProximalSwitchRestoration::entry_permitted reads), so the floor here is
+    // that one tolerance — a disclosed single-tolerance adaptation of Ipopt's
+    // two-tolerance minimum. Classic merit has no Uno counterpart; the Ipopt
+    // relative-reduction shape is the reference.
+    const double floor = std::max(kKappaResto * reference.infeasibility, ctx_.settings_.econ_tol_);
+    return trial.infeasibility <= floor;
 }
 
 // ============================================================================
@@ -380,15 +390,23 @@ void ModernMeritAcceptance::reset() {
     nu_ = kWmnoInitPenalty;
     pi_l_ = kFlexInitPiL;
     pi_u_ = kFlexInitPiU;
+    // Uno MeritFunction: smallest_known_infeasibility is +∞-initialized. reset()
+    // (the μ-event / phase-change hook) re-bases it — see modern_merit.h.
+    smallest_known_infeasibility_ = std::numeric_limits<double>::infinity();
 }
 
 bool ModernMeritAcceptance::is_infeasibility_sufficiently_reduced(
     const ProgressMeasures &reference, const ProgressMeasures &trial) const {
+    // Uno MeritFunction::is_infeasibility_sufficiently_reduced (cvanaret/Uno
+    // 7481abe, MeritFunction.cpp) verbatim:
+    //   return trial_progress.infeasibility <=
+    //          sufficient_infeasibility_decrease_ratio * smallest_known_infeasibility;
+    // Uno's signature also takes the reference progress but its body never reads
+    // it — the smallest-known tracker is the reference this rule reduces
+    // against, not the entry point. Mirror that: `reference` is ignored.
     (void)reference;
-    (void)trial;
-    throw std::logic_error(
-        "ModernMeritAcceptance::is_infeasibility_sufficiently_reduced is unused until a "
-        "feasibility-restoration strategy drives it");
+    return trial.infeasibility <=
+           kSufficientInfeasibilityDecreaseRatio * smallest_known_infeasibility_;
 }
 
 bool ModernMeritAcceptance::is_iterate_acceptable(const ProgressMeasures &current,
@@ -401,14 +419,26 @@ bool ModernMeritAcceptance::is_iterate_acceptable(const ProgressMeasures &curren
     // likewise accepted and ignored — see modern_merit.h's declaration comment.
     (void)objective_multiplier;
     (void)step_length;
+    bool accept;
     switch (rule_) {
     case MeritPenaltyRules::wmno:
-        return accept_wmno(current, trial, predicted_reduction);
+        accept = accept_wmno(current, trial, predicted_reduction);
+        break;
     case MeritPenaltyRules::flexible:
-        return accept_flexible(current, trial, predicted_reduction);
+        accept = accept_flexible(current, trial, predicted_reduction);
+        break;
+    default:
+        throw std::logic_error(
+            "ModernMeritAcceptance::is_iterate_acceptable: unknown MeritPenaltyRule");
     }
-    throw std::logic_error(
-        "ModernMeritAcceptance::is_iterate_acceptable: unknown MeritPenaltyRule");
+    // Uno MeritFunction.cpp: the smallest-known-infeasibility tracker is updated
+    // by std::min() ONLY inside the accept branch of is_iterate_acceptable (the
+    // restoration-exit test reduces against it). FP-inert on the default path —
+    // it writes a member that nothing reads unless the exit test runs.
+    if (accept)
+        smallest_known_infeasibility_ =
+            std::min(smallest_known_infeasibility_, trial.infeasibility);
+    return accept;
 }
 
 // WMNO Math. Program. 107 (2006), §3.1. Merit Eq. (3.1), ν_TRIAL Eq. (3.5, σ=0),
@@ -1266,6 +1296,33 @@ void FunnelAcceptance::append_diagnostics(PSIOPT::SolveResult &result) const {
     result.last_funnel_width_ = std::isfinite(width_) ? width_ : -1.0;
 }
 
+bool FunnelAcceptance::is_infeasibility_sufficiently_reduced(const ProgressMeasures &reference,
+                                                             const ProgressMeasures &trial) const {
+    // Uno FunnelMethod::is_infeasibility_sufficiently_reduced (cvanaret/Uno
+    // 7481abe) verbatim:
+    //   return funnel.acceptable(trial.infeasibility) &&
+    //          trial.infeasibility <= parameters.beta * reference.infeasibility;
+    // funnel.acceptable(θ) is the membership test θ ≤ width; parameters.beta is
+    // the funnel's own sufficient-decrease β, reused here (kFunnelBeta) exactly
+    // as Uno reuses it. See (5a) in funnel_acceptance.h.
+    return trial.infeasibility <= width_ &&
+           trial.infeasibility <= kFunnelBeta * reference.infeasibility;
+}
+
+void FunnelAcceptance::notify_switch_to_feasibility(const ProgressMeasures & /*current_progress*/) {
+    // Uno FunnelMethod::notify_switch_to_feasibility is empty: the funnel's
+    // state is the scalar θ-width alone, which the proximal objective swap does
+    // not invalidate. No-op — see (5b) in funnel_acceptance.h.
+}
+
+void FunnelAcceptance::notify_switch_to_optimality(const ProgressMeasures &current_progress) {
+    // Uno Funnel::update_restoration:
+    //   width = convex_combination(width, current_infeasibility, kappa)
+    //         = kappa*width + (1-kappa)*current_infeasibility.
+    // Re-base the width toward the exit infeasibility (see (5c)).
+    width_ = convex_combination(width_, current_progress.infeasibility, kFunnelKappa);
+}
+
 // ============================================================================
 // FilterAcceptance — (θ, φ)-pair filter H-type strategy on the switching
 // skeleton. See globalization/filter_acceptance.h for the full formulation and
@@ -1286,12 +1343,25 @@ void FilterAcceptance::initialize_bounds(double theta_0) {
 }
 
 void FilterAcceptance::reset_bounds() {
-    // Empty the filter and zero the reset-heuristic state so the next θ₀ capture
-    // re-arms a clean per-phase filter.
+    // Always empty the live working state (filter + reset-heuristic counters) so
+    // the next θ₀ capture re-arms a clean per-phase filter.
     filter_.clear();
     successive_filter_rejections_ = 0;
     n_filter_resets_ = 0;
     last_rejection_was_filter_ = false;
+    // Reset invariant (see (6) in filter_acceptance.h): inside the feasibility
+    // phase this is a μ-event reset — clear WORKING state only, preserving the
+    // stashed optimality filter and the in-feasibility flag so the exit test
+    // still has the preserved filter to consult. Outside the phase this is the
+    // full per-phase clear, which also drops any leftover stash/flag
+    // defensively. The injected constraint tolerance is configuration, not
+    // working state, and is intentionally left untouched.
+    if (!in_feasibility_phase_) {
+        stashed_filter_.clear();
+        stashed_successive_filter_rejections_ = 0;
+        stashed_n_filter_resets_ = 0;
+        stashed_last_rejection_was_filter_ = false;
+    }
 }
 
 bool FilterAcceptance::is_acceptable_to_current(double phi_trial, double theta_trial,
@@ -1390,6 +1460,92 @@ void FilterAcceptance::register_accepted_step(const ProgressMeasures &current,
 void FilterAcceptance::append_diagnostics(PSIOPT::SolveResult &result) const {
     result.last_filter_size_ = static_cast<int>(filter_.size());
     result.last_filter_resets_ = n_filter_resets_;
+}
+
+bool FilterAcceptance::is_infeasibility_sufficiently_reduced(const ProgressMeasures &reference,
+                                                             const ProgressMeasures &trial) const {
+    // Ipopt IpRestoConvCheck::CheckConvergence + IpRestoFilterConvCheck::
+    // TestOrigProgress (coin-or/Ipopt 72a29c9). The original problem's current
+    // iterate is FROZEN at the restoration entry point, so its (θ, φ) is
+    // `reference`; the trial's is `trial`. See (5b) in filter_acceptance.h.
+    const double theta_ref = reference.infeasibility;
+    const double theta_trial = trial.infeasibility;
+    const double phi_ref = reference.objective + reference.auxiliary;
+    const double phi_trial = trial.objective + trial.auxiliary;
+
+    // (Tmax) relative θ-reduction with the constraint-tolerance floor:
+    //   orig_inf_pr_max = Max(kappa_resto_ * orig_curr_inf_pr,
+    //                         Min(orig tol, orig constr_viol_tol_));
+    // Tycho's single constraint tolerance stands in for Ipopt's two-tolerance
+    // minimum (injected via set_restoration_constraint_tol; see the divergence
+    // note in the header).
+    const double floor = std::max(kKappaResto * theta_ref, restoration_constraint_tol_);
+    if (theta_trial > floor)
+        return false;
+
+    // Acceptable to the PRESERVED optimality filter (Ipopt
+    // IsAcceptableToCurrentFilter). During feasibility the preserved filter is
+    // the stash (the optimality filter + the entry pair added at (5a)).
+    if (!stashed_filter_.acceptable(phi_trial, theta_trial))
+        return false;
+
+    // Acceptable w.r.t. the preserved (frozen entry) iterate — Ipopt
+    // IsAcceptableToCurrentIterate against `reference`, margined identically to
+    // the live (1a) acceptable-to-current test.
+    return is_acceptable_to_current(phi_trial, theta_trial, phi_ref, theta_ref);
+}
+
+void FilterAcceptance::notify_switch_to_feasibility(const ProgressMeasures &current_progress) {
+    // (5a). Uno FilterMethod::notify_switch_to_feasibility (Ipopt
+    // PrepareRestoPhaseStart analog): augment the optimality filter with the
+    // entry pair BEFORE it is preserved. φ = objective + auxiliary (the
+    // unconstrained merit measure), θ = infeasibility.
+    const double theta_entry = current_progress.infeasibility;
+    const double phi_entry = current_progress.objective + current_progress.auxiliary;
+    filter_.augment(phi_entry, theta_entry);
+
+    // Preserve the optimality-phase working state (the augmented filter + the
+    // reset-heuristic counters) — the exit test consults stashed_filter_.
+    stashed_filter_ = filter_;
+    stashed_successive_filter_rejections_ = successive_filter_rejections_;
+    stashed_n_filter_resets_ = n_filter_resets_;
+    stashed_last_rejection_was_filter_ = last_rejection_was_filter_;
+
+    // Enter feasibility mode, then reinitialize fresh working state via the
+    // reset() machinery (re-arms the lazy θ₀ init so the feasibility phase
+    // derives its own θ_min/θ_max). The flag is set first so the phase-aware
+    // reset_bounds() preserves the stash just written above.
+    in_feasibility_phase_ = true;
+    this->reset();
+}
+
+void FilterAcceptance::notify_switch_to_optimality(const ProgressMeasures &current_progress) {
+    // (5c). Restore the preserved optimality-phase working state and augment the
+    // restored filter with the EXIT pair (Uno FilterMethod::
+    // notify_switch_to_optimality — Uno adds the switch-point pair at BOTH
+    // transitions).
+    const double theta_exit = current_progress.infeasibility;
+    const double phi_exit = current_progress.objective + current_progress.auxiliary;
+
+    // Restore directly (NOT via reset()): the base's lazy θ₀ init is left ARMED
+    // (bounds_initialized_ stays true from the feasibility phase), because
+    // re-arming it would make the next optimality is_iterate_acceptable call
+    // initialize_bounds(), which clears the filter — wiping the very state just
+    // restored. The θ_min/θ_max thresholds therefore retain their feasibility-
+    // phase values until the next phase-boundary reset (see the base-bounds
+    // divergence note); this affects only the heuristic switching/ceiling
+    // scalars, not the restored filter membership/dominance semantics.
+    filter_ = stashed_filter_;
+    successive_filter_rejections_ = stashed_successive_filter_rejections_;
+    n_filter_resets_ = stashed_n_filter_resets_;
+    last_rejection_was_filter_ = stashed_last_rejection_was_filter_;
+    filter_.augment(phi_exit, theta_exit);
+
+    // Leave feasibility mode. The stash is intentionally NOT cleared here: it is
+    // now a harmless leftover (the exit test only reads it while the flag is set,
+    // and the next entry overwrites it). The next reset() OUTSIDE the phase drops
+    // it defensively — the reset invariant, (6) in filter_acceptance.h.
+    in_feasibility_phase_ = false;
 }
 
 // ============================================================================

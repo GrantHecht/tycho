@@ -109,6 +109,8 @@
 
 #pragma once
 
+#include <limits>
+
 #include "tycho/detail/solvers/globalization/acceptance_strategy.h"
 #include "tycho/detail/solvers/globalization/progress_measures.h"
 #include "tycho/detail/solvers/psiopt_fwd.h"
@@ -147,6 +149,14 @@ inline constexpr double kFlexPiLDamping = 0.1;
 inline constexpr double kFlexInitPiL = 1.0e-8;
 inline constexpr double kFlexInitPiU = 1.0e8;
 
+// Restoration-exit sufficient-infeasibility-decrease ratio: the trial's
+// infeasibility must fall to this fraction of the smallest infeasibility seen so
+// far to leave feasibility restoration. Uno option
+// "sufficient_infeasibility_decrease_ratio", shipped default 0.9
+// (cvanaret/Uno 7481abe, DefaultOptions.cpp; consumed verbatim in
+// MeritFunction::is_infeasibility_sufficiently_reduced).
+inline constexpr double kSufficientInfeasibilityDecreaseRatio = 0.9;
+
 // =============================================================================
 // ModernMeritAcceptance — modernized merit family (WMNO / flexible), driven
 // through the generic AcceptanceStrategy path.
@@ -165,14 +175,26 @@ class ModernMeritAcceptance : public AcceptanceStrategy {
                                const ProgressMeasures &predicted_reduction,
                                double objective_multiplier, double step_length) override;
 
-    // Restoration-exit test — unused until a feasibility-restoration strategy
-    // drives it; throws (T6) rather than fabricate an answer.
+    // Restoration-exit test — Uno MeritFunction::is_infeasibility_sufficiently_
+    // reduced verbatim: θ_trial ≤ kSufficientInfeasibilityDecreaseRatio ·
+    // smallest_known_infeasibility_. The `reference` argument is accepted and
+    // ignored — Uno's signature takes the reference progress but its body reads
+    // only the trial and the internal smallest-known tracker (the tracker, not
+    // the entry point, is the reference this rule reduces against). See the
+    // definition in psiopt_globalization.cpp.
     bool is_infeasibility_sufficiently_reduced(const ProgressMeasures &reference,
                                                const ProgressMeasures &trial) const override;
 
-    // μ-event / phase-change hook: restore the penalty state to its initial
-    // value(s). Unlike the classic strategy this is NOT a no-op — the penalty
-    // parameter is per-solve state.
+    // μ-event / phase-change hook: restore the penalty state AND the
+    // smallest-known-infeasibility tracker to their initial values. Unlike the
+    // classic strategy this is NOT a no-op — the penalty parameter and the
+    // tracker are per-solve state. A μ-event that fires mid-restoration
+    // therefore re-bases the tracker to +∞; this is acceptable because the
+    // tracker records the smallest infeasibility SEEN, a μ-event legitimately
+    // starts a fresh barrier subproblem, and the next accepted trial re-seeds
+    // the tracker via the min() update before any exit test can consult a stale
+    // value in practice (the seam only tests for exit after a feasibility-phase
+    // accept has occurred).
     void reset() override;
 
     // Selects the GENERIC driving path in compute_step (see acceptance_strategy.h).
@@ -182,6 +204,7 @@ class ModernMeritAcceptance : public AcceptanceStrategy {
     double wmno_penalty() const { return nu_; }
     double flex_pi_l() const { return pi_l_; }
     double flex_pi_u() const { return pi_u_; }
+    double smallest_known_infeasibility() const { return smallest_known_infeasibility_; }
 
   private:
     // Shared merit primitives (pure arithmetic on ProgressMeasures).
@@ -207,6 +230,13 @@ class ModernMeritAcceptance : public AcceptanceStrategy {
     double nu_ = kWmnoInitPenalty;    // WMNO single penalty ν.
     double pi_l_ = kFlexInitPiL;      // flexible lower penalty π_l.
     double pi_u_ = kFlexInitPiU;      // flexible upper penalty π_u.
+
+    // Restoration-exit tracker (Uno MeritFunction::smallest_known_infeasibility).
+    // +∞-initialized; updated by std::min() ONLY in the accept branch of
+    // is_iterate_acceptable; cleared back to +∞ by reset(). FP-inert on the
+    // default path: it writes a member on every accept but is never read unless
+    // is_infeasibility_sufficiently_reduced (the restoration-exit test) runs.
+    double smallest_known_infeasibility_ = std::numeric_limits<double>::infinity();
 };
 
 } // namespace tycho::solvers

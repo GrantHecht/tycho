@@ -31,12 +31,13 @@
 
 #include <gtest/gtest.h>
 
-#include <stdexcept>
+#include <cmath>
 
 namespace {
 
 using tycho::solvers::kFlexInitPiL;
 using tycho::solvers::kFlexInitPiU;
+using tycho::solvers::kSufficientInfeasibilityDecreaseRatio;
 using tycho::solvers::kWmnoInitPenalty;
 using tycho::solvers::MeritPenaltyRules;
 using tycho::solvers::ModernMeritAcceptance;
@@ -202,13 +203,88 @@ TEST(ModernMerit, ResetClearsPenaltyState) {
     EXPECT_DOUBLE_EQ(f.flex_pi_u(), kFlexInitPiU);
 }
 
-// The restoration-exit hook is unused until a feasibility-restoration strategy
-// drives it: it must throw (T6), not fabricate an answer.
-TEST(ModernMerit, RestorationHookThrows) {
+// ===========================================================================
+// Restoration-exit test (Uno MeritFunction): θ_trial ≤ ratio · smallest-known
+// infeasibility, ratio = 0.9. The tracker is +∞-initialized, updated by min()
+// ONLY in the accept branch of is_iterate_acceptable, and cleared by reset().
+// The `reference` argument is ignored (Uno reads only the trial + tracker).
+// ===========================================================================
+
+// Two accepts drive the tracker down; a reject does NOT update it. Each accept
+// below is a plain descent step (merit decreases, penalty unchanged).
+//   accept 1: cur(θ=8,f=10), tri(θ=5,f=4), pred(m_θ=3,m_f=6): τ<1 ⇒ ν=1;
+//     ared=18−9=9 ≥ η·pred ⇒ ACCEPT ⇒ smallest = min(∞,5) = 5.
+//   accept 2: cur(θ=6,f=10), tri(θ=3,f=4), pred(m_θ=3,m_f=6): ACCEPT ⇒
+//     smallest = min(5,3) = 3.
+//   reject:   cur(θ=10,f=10), tri(θ=1,f=100), pred(m_θ=2,m_f=3): ared=20−101=−81
+//     < η·pred ⇒ REJECT ⇒ tracker UNCHANGED at 3 (the min() runs only on accept).
+TEST(ModernMeritRestoration, SmallestKnownTracksAcceptsNotRejects) {
     ModernMeritAcceptance a(MeritPenaltyRules::wmno);
-    EXPECT_THROW(a.is_infeasibility_sufficiently_reduced(ModernMeritMakePm(1.0, 0.0, 0.0),
-                                                         ModernMeritMakePm(1.0, 0.0, 0.0)),
-                 std::logic_error);
+    EXPECT_TRUE(std::isinf(a.smallest_known_infeasibility()));
+
+    ASSERT_TRUE(a.is_iterate_acceptable(ModernMeritMakePm(8.0, 10.0, 0.0),
+                                        ModernMeritMakePm(5.0, 4.0, 0.0),
+                                        ModernMeritMakePm(3.0, 6.0, 0.0), 1.0, 1.0));
+    EXPECT_DOUBLE_EQ(a.smallest_known_infeasibility(), 5.0);
+
+    ASSERT_TRUE(a.is_iterate_acceptable(ModernMeritMakePm(6.0, 10.0, 0.0),
+                                        ModernMeritMakePm(3.0, 4.0, 0.0),
+                                        ModernMeritMakePm(3.0, 6.0, 0.0), 1.0, 1.0));
+    EXPECT_DOUBLE_EQ(a.smallest_known_infeasibility(), 3.0);
+
+    ASSERT_FALSE(a.is_iterate_acceptable(ModernMeritMakePm(10.0, 10.0, 0.0),
+                                         ModernMeritMakePm(1.0, 100.0, 0.0),
+                                         ModernMeritMakePm(2.0, 3.0, 0.0), 1.0, 1.0));
+    EXPECT_DOUBLE_EQ(a.smallest_known_infeasibility(), 3.0); // reject did NOT lower it
+}
+
+// Exit boundary at 0.9·smallest. Prime the tracker to 3.0 (one descent accept
+// with θ_trial = 3.0), so threshold = 0.9·3 = 2.7.
+TEST(ModernMeritRestoration, ExitBoundaryAtRatioTimesSmallestKnown) {
+    ModernMeritAcceptance a(MeritPenaltyRules::wmno);
+    ASSERT_TRUE(a.is_iterate_acceptable(ModernMeritMakePm(6.0, 10.0, 0.0),
+                                        ModernMeritMakePm(3.0, 4.0, 0.0),
+                                        ModernMeritMakePm(3.0, 6.0, 0.0), 1.0, 1.0));
+    ASSERT_DOUBLE_EQ(a.smallest_known_infeasibility(), 3.0);
+    const double threshold = kSufficientInfeasibilityDecreaseRatio * 3.0; // 2.7
+    const ProgressMeasures ref = ModernMeritMakePm(100.0, 0.0, 0.0);      // ignored
+
+    EXPECT_TRUE(a.is_infeasibility_sufficiently_reduced(ref, ModernMeritMakePm(threshold, 0.0, 0.0)));
+    EXPECT_TRUE(a.is_infeasibility_sufficiently_reduced(ref, ModernMeritMakePm(2.6, 0.0, 0.0)));
+    EXPECT_FALSE(
+        a.is_infeasibility_sufficiently_reduced(ref, ModernMeritMakePm(threshold * 1.0001, 0.0, 0.0)));
+}
+
+// The `reference` argument is ignored: two very different references give the
+// same verdict for the same trial (only the trial + tracker matter).
+TEST(ModernMeritRestoration, ReferenceArgumentIgnored) {
+    ModernMeritAcceptance a(MeritPenaltyRules::wmno);
+    ASSERT_TRUE(a.is_iterate_acceptable(ModernMeritMakePm(6.0, 10.0, 0.0),
+                                        ModernMeritMakePm(3.0, 4.0, 0.0),
+                                        ModernMeritMakePm(3.0, 6.0, 0.0), 1.0, 1.0)); // smallest=3
+    const ProgressMeasures trial = ModernMeritMakePm(2.6, 0.0, 0.0);                  // ≤ 2.7 ⇒ pass
+    const bool with_tiny_ref =
+        a.is_infeasibility_sufficiently_reduced(ModernMeritMakePm(1.0e-12, 0.0, 0.0), trial);
+    const bool with_huge_ref =
+        a.is_infeasibility_sufficiently_reduced(ModernMeritMakePm(1.0e12, 0.0, 0.0), trial);
+    EXPECT_TRUE(with_tiny_ref);
+    EXPECT_EQ(with_tiny_ref, with_huge_ref);
+}
+
+// reset() re-bases the tracker to +∞ (a μ-event mid-restoration): the exit test
+// then trivially passes any finite trial until the next accept re-seeds it.
+TEST(ModernMeritRestoration, ResetReBasesTrackerToInfinity) {
+    ModernMeritAcceptance a(MeritPenaltyRules::wmno);
+    ASSERT_TRUE(a.is_iterate_acceptable(ModernMeritMakePm(6.0, 10.0, 0.0),
+                                        ModernMeritMakePm(3.0, 4.0, 0.0),
+                                        ModernMeritMakePm(3.0, 6.0, 0.0), 1.0, 1.0));
+    ASSERT_DOUBLE_EQ(a.smallest_known_infeasibility(), 3.0);
+
+    a.reset();
+    EXPECT_TRUE(std::isinf(a.smallest_known_infeasibility()));
+    // 0.9·∞ = ∞, so any finite trial passes.
+    EXPECT_TRUE(a.is_infeasibility_sufficiently_reduced(ModernMeritMakePm(1.0, 0.0, 0.0),
+                                                        ModernMeritMakePm(1.0e6, 0.0, 0.0)));
 }
 
 // The modern strategy drives the GENERIC compute_step path, not the fused

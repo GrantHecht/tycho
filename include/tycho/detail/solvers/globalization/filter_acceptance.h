@@ -129,7 +129,96 @@
 //     granularity. n_filter_resets_ caps the number of clears; all reset state
 //     is cleared by reset_bounds() (the per-phase hook), so the cap is per-phase.
 //
+// (5) Feasibility-restoration hooks (Ipopt IpRestoConvCheck /
+//     IpRestoFilterConvCheck; Uno FilterMethod, cvanaret/Uno 7481abe):
+//
+//     (5a) notify_switch_to_feasibility (entry). Augment the (about-to-be-
+//          preserved) optimality filter with the ENTRY pair (θ_entry, φ_entry)
+//          — Uno FilterMethod::notify_switch_to_feasibility (filter->add(...))
+//          = the Ipopt PrepareRestoPhaseStart analog. Then STASH the whole
+//          optimality-phase working state (the augmented filter + the reset-
+//          heuristic counters) and reinitialize FRESH working state for the
+//          feasibility phase (empty filter, zeroed counters), re-arming the
+//          lazy θ₀ init so the next acceptance call re-derives θ_min/θ_max from
+//          the feasibility-phase measures — the same machinery reset() uses.
+//          Sets the in-feasibility flag.
+//
+//     (5b) is_infeasibility_sufficiently_reduced (restoration-exit test) —
+//          Ipopt IpRestoConvCheck::CheckConvergence + IpRestoFilterConvCheck::
+//          TestOrigProgress structure:
+//
+//            θ_trial ≤ max(kKappaResto·θ_ref, econ-tol floor)          (Tmax)
+//            AND acceptable to the PRESERVED (stashed) optimality filter
+//                (Ipopt IsAcceptableToCurrentFilter, (1b) against the stash)
+//            AND acceptable w.r.t. the preserved entry pair
+//                (Ipopt IsAcceptableToCurrentIterate against the frozen entry
+//                 = `reference`, margined exactly like the live (1a) test).
+//
+//          Ipopt's floor is Min(orig tol, orig constr_viol_tol); Tycho carries a
+//          single constraint tolerance (restoration_constraint_tol_, defaulting
+//          to and matching PSIOPT::Settings::econ_tol_'s default). Because the
+//          strategy holds no SolverContext, that tolerance is injected via
+//          set_restoration_constraint_tol() (the future solver seam supplies the
+//          live econ_tol_ at restoration entry); the const exit test then reads
+//          the stored value — see the divergence note below.
+//
+//     (5c) notify_switch_to_optimality (exit). RESTORE the stashed optimality-
+//          phase working state and augment the restored filter with the EXIT
+//          pair (Uno FilterMethod::notify_switch_to_optimality — Uno adds at
+//          BOTH transitions). Clears the in-feasibility flag; the stash itself
+//          is left as a harmless leftover (the exit test reads it only while the
+//          flag is set, and the next entry overwrites it), dropped by the next
+//          outside-phase reset() — see (6).
+//
+// (6) Reset invariant across a μ-event (barrier-parameter reset fires reset()
+//     mid-phase): while the in-feasibility flag is set, reset() clears WORKING
+//     state only (the live feasibility-phase filter + counters, and it re-arms
+//     the lazy θ₀ init) — the STASHED optimality filter and the flag SURVIVE, so
+//     a μ-event mid-restoration cannot destroy the filter the exit test consults.
+//     Outside the feasibility phase reset() is the existing full clear and ALSO
+//     drops any leftover stash/flag defensively. The injected constraint
+//     tolerance is treated as configuration, not working state, and is left
+//     untouched by reset().
+//
+// Cross-phase disclosure (why a stash at all — Ipopt structure, not Uno's).
+//   Uno keeps ONE filter across the optimality and feasibility phases because
+//   its objective MEASURE stays the original objective in both phases, so its
+//   (θ, φ) pairs remain mutually comparable. Tycho's proximal mode-switch
+//   substitutes the PROXIMAL objective into the live objective measure during
+//   feasibility (progress.objective carries the proximal term, auxiliary the
+//   barrier term), which makes an optimality-phase (θ, φ) pair and a
+//   feasibility-phase (θ, φ) pair INCOMPARABLE. So the feasibility phase runs a
+//   FRESH filter (its own φ scale), while the optimality filter is PRESERVED
+//   aside and consulted only by the Ipopt-style exit test. This is exactly
+//   Ipopt's own architecture — the restoration phase runs its own filter; the
+//   original filter is kept aside, augmented at entry, and consulted by the
+//   convergence check — implemented inside a single strategy object rather than
+//   two acceptor instances.
+//
 // Divergences from the sources, disclosed (consequence stated):
+//   • Restoration-exit floor tolerance injection. FilterAcceptance holds no
+//     SolverContext (it is default-constructed and driven purely through
+//     ProgressMeasures), so the const exit test cannot read Settings::econ_tol_
+//     directly the way ClassicMeritAcceptance (which does hold a context) does.
+//     The tolerance is instead a member, restoration_constraint_tol_, defaulting
+//     to PSIOPT::Settings::econ_tol_'s own default (1e-6) and settable by the
+//     solver seam at restoration entry via set_restoration_constraint_tol().
+//     Consequence: with no seam call the exit floor uses the default tolerance;
+//     the seam overrides it to the live value. The polymorphic AcceptanceStrategy
+//     interface is unchanged (the setter is a concrete-class method).
+//   • Base θ_min/θ_max are not byte-stashed. The switching skeleton's
+//     θ_min/θ_max live in SwitchingAcceptance (private), so this strategy
+//     stashes only its OWN working state. At ENTRY it re-arms the base's lazy θ₀
+//     init (via reset()) so the feasibility phase derives its own bounds and a
+//     fresh filter. At EXIT it restores the filter DIRECTLY and deliberately
+//     leaves the lazy init armed-as-initialized: re-arming there would make the
+//     next optimality call run initialize_bounds(), which clears the filter and
+//     would wipe the just-restored state. Consequence: after exit the
+//     θ_min/θ_max thresholds retain their feasibility-phase values until the
+//     next phase-boundary reset, rather than returning to the exact pre-
+//     restoration optimality values; this affects only the heuristic switching/
+//     ceiling scalars, never the filter membership or dominance semantics that
+//     govern acceptance.
 //   • Membership-check ORDER (no longer a rejection-attribution divergence).
 //     The shared skeleton still checks the filter membership (1b) at step 2,
 //     before the switching/Armijo/(1a) tests at step 3 — the unified order
@@ -280,6 +369,34 @@ class FilterAcceptance final : public SwitchingAcceptance {
     // SolveResult::last_filter_resets_.
     void append_diagnostics(PSIOPT::SolveResult &result) const override;
 
+    // --- Feasibility-restoration hooks (see (5) in the file-top formulation) ---
+    // (5b) Restoration-exit test: relative θ-reduction floor AND acceptable to
+    // the PRESERVED (stashed) optimality filter AND acceptable w.r.t. the
+    // preserved entry pair (`reference`).
+    bool is_infeasibility_sufficiently_reduced(const ProgressMeasures &reference,
+                                               const ProgressMeasures &trial) const override;
+    // (5a) Entry: augment the optimality filter with the entry pair, stash it,
+    // reinitialize fresh working state, and set the in-feasibility flag.
+    void notify_switch_to_feasibility(const ProgressMeasures &current_progress) override;
+    // (5c) Exit: restore the stashed optimality state and augment with the exit
+    // pair; clear the in-feasibility flag.
+    void notify_switch_to_optimality(const ProgressMeasures &current_progress) override;
+
+    // Injects the constraint-violation tolerance used as the restoration-exit
+    // floor (see the divergence note in the file-top formulation). Concrete-
+    // class method (NOT on the polymorphic interface); the solver seam calls it
+    // at restoration entry with the live Settings::econ_tol_. Defaults to that
+    // field's own default until set.
+    void set_restoration_constraint_tol(double tol) { restoration_constraint_tol_ = tol; }
+
+    // --- Restoration diagnostics (unit tests) ---
+    double restoration_constraint_tol() const { return restoration_constraint_tol_; }
+    bool in_feasibility_phase() const { return in_feasibility_phase_; }
+    std::size_t stashed_filter_size() const { return stashed_filter_.size(); }
+    std::pair<double, double> stashed_filter_entry(std::size_t i) const {
+        return stashed_filter_.entry(i);
+    }
+
   protected:
     // --- SwitchingAcceptance hooks (see the file-top formulation) ---
     // Start the phase with an empty filter (Ipopt Reset; no θ_max seed).
@@ -312,6 +429,22 @@ class FilterAcceptance final : public SwitchingAcceptance {
     int successive_filter_rejections_ = 0;   // Ipopt count_successive_filter_rejections_.
     int n_filter_resets_ = 0;                // Ipopt n_filter_resets_ (capped by kFilterMaxResets).
     bool last_rejection_was_filter_ = false; // Ipopt last_rejection_due_to_filter_.
+
+    // --- Feasibility-restoration state (see (5)/(6) in the file-top doc) ---
+    // The PRESERVED optimality-phase working state, stashed at
+    // notify_switch_to_feasibility and restored at notify_switch_to_optimality.
+    // The exit test consults stashed_filter_ (the preserved optimality filter).
+    Filter stashed_filter_;
+    int stashed_successive_filter_rejections_ = 0;
+    int stashed_n_filter_resets_ = 0;
+    bool stashed_last_rejection_was_filter_ = false;
+    // Set at entry, cleared at exit. Makes reset() phase-aware (see (6)): a
+    // μ-event reset mid-feasibility-phase must preserve the stash + this flag.
+    bool in_feasibility_phase_ = false;
+    // Injected constraint-violation tolerance for the exit floor; defaults to
+    // PSIOPT::Settings::econ_tol_'s default (1e-6). Configuration, not working
+    // state — left untouched by reset(). See set_restoration_constraint_tol().
+    double restoration_constraint_tol_ = 1.0e-6;
 };
 
 } // namespace tycho::solvers
