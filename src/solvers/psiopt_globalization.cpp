@@ -1352,9 +1352,26 @@ RecoveryChain::Action FeasibilitySwitchRecovery::on_step_rejected(
     if (!ctx.restoration_->entry_permitted(constraint_violation, ctx))
         return inner;
 
-    // Signal the switch. This link mutates nothing; alg_impl's
-    // kSwitchToFeasibility case performs the actual mode entry.
+    // The ladder is exhausted and a real restoration episode is warranted. Both
+    // the soft pre-stage and the full switch belong to the restoration recovery
+    // bucket. This link mutates nothing; alg_impl performs the trial step (soft)
+    // or the actual mode entry (switch).
     resolved_depth = kRecoveryDepthRestoration;
+
+    // Soft feasibility pre-stage (nested restoration only). Before committing to
+    // the full restoration switch, try the full fraction-to-boundary step on the
+    // current search direction under alg_impl's primal-dual-error reduction test.
+    // Escalate to the real switch after more than kMaxSoftRestoIters successive
+    // soft iterations. The proximal switch has no pre-stage — it switches
+    // directly. See the file docstring.
+    if (ctx.restoration_->is_nested()) {
+        ++soft_counter_;
+        if (soft_counter_ <= kMaxSoftRestoIters)
+            return Action::kSoftFeasibilityStep;
+    }
+
+    // Signal the switch. alg_impl's kSwitchToFeasibility case performs the actual
+    // mode entry.
     return Action::kSwitchToFeasibility;
 }
 

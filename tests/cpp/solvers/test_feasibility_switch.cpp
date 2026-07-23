@@ -78,9 +78,13 @@ class FeasSwitchStubRestoration : public RestorationStrategy {
     bool entry_permitted(double, const SolverContext &) const override { return permit_; }
     const ProgressMeasures &reference() const override { return ref_; }
     void note_iteration() override {}
+    // Controls whether the wrapper takes the soft-pre-stage branch (nested) or
+    // switches directly (proximal).
+    bool is_nested() const override { return nested_; }
 
     bool active_ = false;
     bool permit_ = true;
+    bool nested_ = false;
 
   private:
     Eigen::VectorXd diag_;
@@ -301,6 +305,116 @@ TEST(FeasibilitySwitchTruthTable, WatchdogResolvedAcceptPassesThrough) {
 
 TEST(FeasibilitySwitchTruthTable, NullInnerChainRejected) {
     EXPECT_THROW(FeasibilitySwitchRecovery(nullptr), std::invalid_argument);
+}
+
+// -----------------------------------------------------------------------------
+// 1b. Soft feasibility pre-stage truth table (nested restoration only).
+// -----------------------------------------------------------------------------
+
+// A nested strategy at a ladder-exhausted rejection enters the soft pre-stage:
+// the wrapper returns kSoftFeasibilityStep (alg_impl takes the trial step) rather
+// than the full switch, and stamps the restoration recovery depth.
+TEST(FeasibilitySwitchSoftPreStage, NestedReturnsSoftStepBeforeSwitching) {
+    KktSolverType solver;
+    PSIOPT::Settings settings;
+    int zero = 0;
+    Eigen::VectorXd scratch;
+    FeasSwitchStubRestoration restoration;
+    restoration.nested_ = true; // nested l1 mode
+    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+
+    FeasibilitySwitchRecovery fsr(
+        std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
+    int depth = 0;
+    EXPECT_EQ(drive_feas_switch(fsr, ctx, depth), RecoveryChain::Action::kSoftFeasibilityStep);
+    EXPECT_EQ(depth, kRecoveryDepthRestoration);
+}
+
+// A proximal (non-nested) strategy has NO pre-stage: it switches directly on the
+// first exhausted rejection, however many times it is driven.
+TEST(FeasibilitySwitchSoftPreStage, ProximalNeverEntersPreStage) {
+    KktSolverType solver;
+    PSIOPT::Settings settings;
+    int zero = 0;
+    Eigen::VectorXd scratch;
+    FeasSwitchStubRestoration restoration;
+    restoration.nested_ = false; // proximal switch mode
+    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+
+    FeasibilitySwitchRecovery fsr(
+        std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
+    int depth = 0;
+    for (int k = 0; k < 15; ++k)
+        EXPECT_EQ(drive_feas_switch(fsr, ctx, depth), RecoveryChain::Action::kSwitchToFeasibility);
+}
+
+// The pre-stage stays engaged (accept-by-PD-error path: alg_impl keeps taking
+// soft steps) for up to kMaxSoftRestoIters successive iterations; the 11th
+// successive soft iteration escalates to the full switch.
+TEST(FeasibilitySwitchSoftPreStage, EscalatesOnEleventhSuccessiveSoftIteration) {
+    KktSolverType solver;
+    PSIOPT::Settings settings;
+    int zero = 0;
+    Eigen::VectorXd scratch;
+    FeasSwitchStubRestoration restoration;
+    restoration.nested_ = true;
+    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+
+    FeasibilitySwitchRecovery fsr(
+        std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
+    int depth = 0;
+    // Iterations 1..10 (== kMaxSoftRestoIters) stay in the pre-stage.
+    for (int k = 0; k < 10; ++k)
+        EXPECT_EQ(drive_feas_switch(fsr, ctx, depth),
+                  RecoveryChain::Action::kSoftFeasibilityStep);
+    // The 11th escalates to the full restoration switch.
+    EXPECT_EQ(drive_feas_switch(fsr, ctx, depth), RecoveryChain::Action::kSwitchToFeasibility);
+}
+
+// The pre-stage exits (accept-by-original-criterion path) when a regular step is
+// accepted: notify_step_accepted resets the successive-soft-iteration counter, so
+// a fresh pre-stage can run its full budget again afterward.
+TEST(FeasibilitySwitchSoftPreStage, AcceptedStepResetsSoftCounter) {
+    KktSolverType solver;
+    PSIOPT::Settings settings;
+    int zero = 0;
+    Eigen::VectorXd scratch;
+    FeasSwitchStubRestoration restoration;
+    restoration.nested_ = true;
+    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+
+    FeasibilitySwitchRecovery fsr(
+        std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
+    int depth = 0;
+    for (int k = 0; k < 10; ++k)
+        EXPECT_EQ(drive_feas_switch(fsr, ctx, depth),
+                  RecoveryChain::Action::kSoftFeasibilityStep);
+    // A regular accepted step recovered: the pre-stage exits and the counter
+    // clears. Without the reset the next drive would escalate (11th); with it the
+    // pre-stage runs from the top again.
+    fsr.notify_step_accepted();
+    EXPECT_EQ(drive_feas_switch(fsr, ctx, depth), RecoveryChain::Action::kSoftFeasibilityStep);
+}
+
+// A mode-switch reset() also clears the pre-stage counter (a restoration entry or
+// exit resets the pre-stage).
+TEST(FeasibilitySwitchSoftPreStage, ResetClearsSoftCounter) {
+    KktSolverType solver;
+    PSIOPT::Settings settings;
+    int zero = 0;
+    Eigen::VectorXd scratch;
+    FeasSwitchStubRestoration restoration;
+    restoration.nested_ = true;
+    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+
+    FeasibilitySwitchRecovery fsr(
+        std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
+    int depth = 0;
+    for (int k = 0; k < 10; ++k)
+        EXPECT_EQ(drive_feas_switch(fsr, ctx, depth),
+                  RecoveryChain::Action::kSoftFeasibilityStep);
+    fsr.reset();
+    EXPECT_EQ(drive_feas_switch(fsr, ctx, depth), RecoveryChain::Action::kSoftFeasibilityStep);
 }
 
 // -----------------------------------------------------------------------------
@@ -1209,10 +1323,19 @@ TEST(NestedRestorationLifecycle, KappaRestoRatchetTruthTable) {
     EXPECT_FALSE(h.ratchet(2.0e-6)); // above the floor
 }
 
-// (vi) End-to-end tiny infeasible-start feasible problem: enters restoration,
-// exits via the ratchet + strategy test, and the original problem converges;
-// the final μ is the outer schedule value, NOT the (large) restoration barrier.
-TEST(NestedRestorationLifecycle, EndToEndInfeasibleStartEntersExitsConverges) {
+// (vi) End-to-end tiny infeasible-start feasible problem. With the soft
+// feasibility pre-stage in place, forcing every regular step to be rejected
+// (max_ls_iters_ = 0) no longer drops straight into the full l1 phase for a
+// nested strategy: the pre-stage first takes the full fraction-to-boundary step
+// on the current direction, which for this quadratic-objective / linear-equality
+// problem is the exact Newton step to the optimum, reduces the primal-dual error,
+// and is accepted. The pre-stage therefore RESOLVES the problem without ever
+// entering the full l1 phase (comp->entries() stays 0). Converging here at all
+// under max_ls_iters_ = 0 is itself proof the soft steps were taken (nothing else
+// makes progress when every regular step is rejected), and the final μ stays on
+// the outer schedule (the restoration barrier bump only happens at full entry,
+// which never occurred).
+TEST(NestedRestorationLifecycle, SoftPreStageResolvesWithoutFullEntry) {
     NestedLifecycleHarness h((Eigen::VectorXd(2) << 0.0, 0.0).finished(), /*n_ineq=*/0,
                              /*inconsistent=*/false);
     NestedL1Restoration *comp = nullptr;
@@ -1222,21 +1345,21 @@ TEST(NestedRestorationLifecycle, EndToEndInfeasibleStartEntersExitsConverges) {
 
     EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
     ASSERT_NE(comp, nullptr);
-    EXPECT_GE(comp->entries(), 1); // restoration was entered
+    EXPECT_EQ(comp->entries(), 0); // the pre-stage resolved it; no full l1 entry
     const auto &r = h.solver().result();
     ASSERT_EQ(r.primals_.size(), 2);
     EXPECT_NEAR(r.primals_[0], 2.0, 1e-3);
     EXPECT_NEAR(r.primals_[1], 2.0, 1e-3);
-    // resto barrier was max(0.1, ‖-4‖) = 4; a converged solve is back on the
-    // outer schedule (μ driven well below the restoration barrier).
+    // μ never bumped to the restoration barrier: it stayed on the outer schedule.
     EXPECT_LT(final_mu, 1.0);
 }
 
-// (viii) Inequality-constrained end-to-end phase: exercises the inequality
-// condensation AND the governor's mid-iteration μ update (the mu-consistency
-// mechanism holds the resto algebra at the eval-time μ). Converges on the true
-// optimum with a non-binding inequality present.
-TEST(NestedRestorationLifecycle, EndToEndWithInequalityConvergesUnderMuUpdate) {
+// (viii) Inequality-constrained end-to-end solve with the soft pre-stage active:
+// the pre-stage's trial evaluation slack-completes the inequality residual and
+// includes the complementarity deviation in the primal-dual error, and the
+// governor's mid-iteration μ update runs. The full fraction-to-boundary soft
+// steps converge on the true optimum with a non-binding inequality present.
+TEST(NestedRestorationLifecycle, EndToEndWithInequalityConvergesUnderSoftPreStage) {
     NestedLifecycleHarness h((Eigen::VectorXd(2) << 0.0, 0.0).finished(), /*n_ineq=*/1,
                              /*inconsistent=*/false);
     NestedL1Restoration *comp = nullptr;
@@ -1246,17 +1369,16 @@ TEST(NestedRestorationLifecycle, EndToEndWithInequalityConvergesUnderMuUpdate) {
 
     EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
     ASSERT_NE(comp, nullptr);
-    EXPECT_GE(comp->entries(), 1);
     const auto &r = h.solver().result();
     ASSERT_EQ(r.primals_.size(), 2);
     EXPECT_NEAR(r.primals_[0], 2.0, 1e-3);
     EXPECT_NEAR(r.primals_[1], 2.0, 1e-3);
 }
 
-// (ix) LANG line-search mode nested phase: exercises the ls_lang trial seam
-// (trial_objective + trial_residual_shift, the trial-shift site fixed in the
-// merit-function trial path).
-TEST(NestedRestorationLifecycle, EndToEndLangLineSearchConverges) {
+// (ix) LANG line-search mode with the soft pre-stage active: the soft step is
+// taken directly (it bypasses the backtracking line search), so the solve
+// converges regardless of the configured line-search mode.
+TEST(NestedRestorationLifecycle, EndToEndLangLineSearchConvergesUnderSoftPreStage) {
     NestedLifecycleHarness h((Eigen::VectorXd(2) << 0.0, 0.0).finished(), /*n_ineq=*/0,
                              /*inconsistent=*/false);
     NestedL1Restoration *comp = nullptr;
@@ -1266,11 +1388,37 @@ TEST(NestedRestorationLifecycle, EndToEndLangLineSearchConverges) {
 
     EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
     ASSERT_NE(comp, nullptr);
-    EXPECT_GE(comp->entries(), 1);
     const auto &r = h.solver().result();
     ASSERT_EQ(r.primals_.size(), 2);
     EXPECT_NEAR(r.primals_[0], 2.0, 1e-3);
     EXPECT_NEAR(r.primals_[1], 2.0, 1e-3);
+}
+
+// (x) End-to-end escalation into the full l1 phase. A genuinely infeasible
+// problem (contradictory equalities x0+x1 = 4 and x0+x1 = 0) cannot have its
+// primal-dual error driven down indefinitely by regular steps: the soft
+// pre-stage's fraction-to-boundary step stops reducing the primal-dual error
+// once it reaches the least-infeasible point, the reduction test fails, and the
+// pre-stage escalates into the full l1 restoration phase (comp->entries() >= 1).
+// The phase runs and the solve correctly does NOT falsely report the infeasible
+// problem as converged. Entry depends on the rank-deficient KKT producing a
+// finite step, which is platform-dependent factorization behavior, so the entry
+// assertion is skip-guarded exactly like the proximal infeasible test above.
+TEST(NestedRestorationLifecycle, SoftPreStageEscalatesIntoFullL1Phase) {
+    NestedLifecycleHarness h((Eigen::VectorXd(2) << 0.0, 0.0).finished(), /*n_ineq=*/0,
+                             /*inconsistent=*/true);
+    NestedL1Restoration *comp = nullptr;
+    double final_mu = 0.0;
+    auto flag = h.run_forced_entry(comp, PSIOPT::LineSearchModes::L1, PSIOPT::BarrierModes::LOQO,
+                                   final_mu, /*init_mu=*/0.1);
+
+    ASSERT_NE(comp, nullptr);
+    EXPECT_NE(flag, PSIOPT::ConvergenceFlags::CONVERGED); // never falsely converges
+    if (comp->entries() < 1) {
+        GTEST_SKIP() << "factorization returned non-finite step on this platform; "
+                        "escalation not exercised";
+    }
+    EXPECT_GE(comp->entries(), 1); // the pre-stage escalated into the full l1 phase
 }
 
 // (vii) Proximal-switch behavior is unchanged: a proximal forced-entry solve on

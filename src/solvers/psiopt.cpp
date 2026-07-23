@@ -1417,6 +1417,66 @@ bool tycho::solvers::PSIOPT::resto_ratchet_passes(double theta_orig) const {
     return theta_orig <= std::max(kKappaResto * this->resto_theta_orig_prev_, settings_.econ_tol_);
 }
 
+// Primal-dual system error at μ: the ∞-norm of the full KKT residual. See the
+// declaration in psiopt.h for the Ipopt mapping. Dead on the default path.
+double tycho::solvers::PSIOPT::primal_dual_error(KKTVector &xsl, KKTVector &rhs, double mu) const {
+    double err = 0.0;
+    if (this->primal_vars_ > 0)
+        err = std::max(err, rhs.prim_grad().template lpNorm<Eigen::Infinity>());
+    if (this->equal_cons_ > 0)
+        err = std::max(err, rhs.eq_cons().template lpNorm<Eigen::Infinity>());
+    if (this->inequal_cons_ > 0) {
+        err = std::max(err, rhs.iq_cons().template lpNorm<Eigen::Infinity>());
+        // Complementarity deviation max|s_i·z_i − μ| (Ipopt's primal_dual_system_
+        // error uses the shifted complementarity residual, not the raw product).
+        const double comp =
+            (xsl.slacks().cwiseProduct(xsl.iq_lmults()).array() - mu).abs().maxCoeff();
+        err = std::max(err, comp);
+    }
+    return err;
+}
+
+// Nested soft feasibility pre-stage trial. See the declaration in psiopt.h. Dead
+// on the default path (only reached with a nested restoration strategy, via the
+// kSoftFeasibilityStep recovery action; restoration is NOT yet active here).
+bool tycho::solvers::PSIOPT::try_soft_feasibility_step(AlgorithmModes algmode, double obj_scale,
+                                                       double mu, Eigen::VectorXd &XSL,
+                                                       Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2,
+                                                       Eigen::VectorXd &RHS, Eigen::VectorXd &RHS2,
+                                                       Eigen::VectorXd &GX) {
+    KKTVector v_xsl = kkt_view(XSL);
+    KKTVector v_rhs = kkt_view(RHS);
+    // Current point: the live RHS already carries the full stationarity (the
+    // main loop added the objective/barrier gradient before this point) and the
+    // constraint residuals, so no re-evaluation is needed.
+    const double curr_pd = this->primal_dual_error(v_xsl, v_rhs, mu);
+    if (curr_pd == 0.0)
+        return true; // already at the KKT point for this μ — trivially reduced.
+
+    // Full fraction-to-boundary trial step: DXSL already carries compute_step's
+    // fraction-to-boundary scaling, so the full step is the whole of DXSL. The
+    // step keeps the slacks and bound multipliers strictly positive, so the
+    // trial complementarity term is well defined.
+    XSL2 = XSL + DXSL;
+    KKTVector v_xsl2 = kkt_view(XSL2);
+    KKTVector v_rhs2 = kkt_view(RHS2);
+    RHS2.setZero();
+    GX.setZero();
+    double trial_obj = 0.0;
+    // Evaluate exactly as the main loop populates the current iterate's RHS: the
+    // objective/constraint eval, then fold the objective gradient into the
+    // primal stationarity block, then slack-complete the inequality residual.
+    // The throwaway KKT matrix is re-zeroed and re-filled at the next iteration's
+    // eval, so reusing the assembly buffer here is safe.
+    this->eval_nlp(algmode, obj_scale, XSL2, trial_obj, GX, RHS2, this->kkt_sol_.get_matrix(), mu);
+    v_rhs2.prim_grad() += GX;
+    if (this->inequal_cons_ > 0)
+        this->apply_reset_slacks(v_xsl2.slacks(), v_rhs2.iq_cons());
+    const double trial_pd = this->primal_dual_error(v_xsl2, v_rhs2, mu);
+
+    return trial_pd <= kSoftRestoPdErrorReductionFactor * curr_pd;
+}
+
 tycho::ConvergenceFlags tycho::solvers::PSIOPT::converge_check(std::vector<IterateInfo> &iters) {
     assert(!iters.empty() && "converge_check called with empty iteration history");
     ConvergenceFlags Flag = ConvergenceFlags::CONVERGED;
@@ -2225,6 +2285,37 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 // (so the calls below are safe).
                 this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
                 alpha = 0.0;
+                break;
+            }
+            case RecoveryChain::Action::kSoftFeasibilityStep: {
+                // Nested soft feasibility pre-stage. Before committing to the
+                // full l1 restoration phase, try the full fraction-to-boundary
+                // step on the current search direction (DXSL already carries the
+                // fraction-to-boundary scaling) under a primal-dual-error
+                // reduction test. If the trial reduces the primal-dual error,
+                // take the full step and stay in the pre-stage (the successive-
+                // soft-iteration counter persists in FeasibilitySwitchRecovery;
+                // the pre-stage exits when a later iteration's ordinary
+                // acceptance test recovers on its own, resetting the counter via
+                // notify_step_accepted). Otherwise escalate to the full mode
+                // entry here — the same enter_feasibility_restoration the
+                // kSwitchToFeasibility case runs, so the acceptance-strategy
+                // feasibility notification is issued exactly once, at that entry,
+                // and never during the pre-stage. The soft step is an ordinary
+                // optimality-phase step (restoration is not active yet), so it is
+                // evaluated under the current algmode/obj_scale/eval-time μ. Only
+                // FeasibilitySwitchRecovery produces this Action, and only for a
+                // nested strategy that is inactive and entry-permitted.
+                if (this->try_soft_feasibility_step(algmode, obj_scale, eval_mu, XSL, DXSL, Temp,
+                                                    RHS, RHS2, PGX)) {
+                    // Take the full fraction-to-boundary step; the outer loop's
+                    // XSL += alpha*DXSL commit applies it.
+                    alpha = 1.0;
+                    Citer.accepted_ = true;
+                } else {
+                    this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
+                    alpha = 0.0;
+                }
                 break;
             }
             case RecoveryChain::Action::kGiveUp:

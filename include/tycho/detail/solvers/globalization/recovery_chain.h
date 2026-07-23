@@ -84,11 +84,18 @@ class RecoveryChain {
     //                        correction or an extended-backtrack step).
     //   kSwitchToFeasibility — hand off to a restoration strategy (inert
     //                        until a RestorationStrategy exists).
+    //   kSoftFeasibilityStep — take the full fraction-to-boundary step on the
+    //                        current search direction as a soft feasibility
+    //                        pre-stage (evaluated by alg_impl under a
+    //                        primal-dual-error reduction test) before committing
+    //                        to a full restoration switch. Produced only by
+    //                        FeasibilitySwitchRecovery, and only for a nested
+    //                        restoration strategy; see its file docstring.
     //   kGiveUp            — no recovery available. NOTE: today's classic
     //                        behavior is kAcceptAsIs (NoopRecovery) — the
     //                        capped backtrack's surviving alpha is taken;
     //                        there is no give-up branch in the current loop.
-    enum class Action { kAcceptAsIs, kRetry, kSwitchToFeasibility, kGiveUp };
+    enum class Action { kAcceptAsIs, kRetry, kSwitchToFeasibility, kSoftFeasibilityStep, kGiveUp };
 
     // Citer is the just-rejected iterate's record (mutable: an implementation
     // may annotate it, e.g. stamping accepted_ when a correction is taken, and

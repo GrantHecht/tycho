@@ -1008,6 +1008,34 @@ class PSIOPT {
     // this header's include set.
     bool resto_ratchet_passes(double theta_orig) const;
 
+    // Primal-dual system error at barrier parameter `mu`: the ∞-norm of the full
+    // KKT residual — primal stationarity (rhs.prim_grad, the Lagrangian gradient
+    // as assembled for the current iterate), primal infeasibility (equality and
+    // slack-completed inequality residuals), and the complementarity deviation
+    // max|s·z − μ| — as one scalar. Maps Ipopt's primal_dual_system_error(μ)
+    // (coin-or/Ipopt 72a29c9, src/Algorithm/IpBacktrackingLineSearch.cpp
+    // TrySoftRestoStep) onto this solver's single unscaled max-norm KKT measure.
+    // Read-only; the caller passes vectors already populated the same way the
+    // main loop populates the current iterate's RHS (stationarity including the
+    // objective/barrier gradient contribution, inequality residual slack-
+    // completed). Used only by the nested soft feasibility pre-stage.
+    double primal_dual_error(KKTVector &xsl, KKTVector &rhs, double mu) const;
+
+    // Nested soft feasibility pre-stage trial (defined in psiopt.cpp). Forms the
+    // full fraction-to-boundary trial point XSL + DXSL (DXSL already carries the
+    // fraction-to-boundary scaling from compute_step), evaluates the original
+    // problem there (into the caller-supplied XSL2/RHS2/GX scratch), and returns
+    // whether its primal-dual error is at most kSoftRestoPdErrorReductionFactor
+    // times the current point's. A true return means the soft step is accepted
+    // (alg_impl takes the full step and stays in the pre-stage); a false return
+    // means alg_impl escalates to the full restoration switch. Dead on the
+    // default path (only reached with a nested restoration strategy configured,
+    // via the kSoftFeasibilityStep recovery action).
+    bool try_soft_feasibility_step(AlgorithmModes algmode, double obj_scale, double mu,
+                                   Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL,
+                                   Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
+                                   Eigen::VectorXd &RHS2, Eigen::VectorXd &GX);
+
     // --- Convergence and stepping ---
     // The residual formulas shared by the pre-factorization early
     // convergence check and the post-line-search fill_iter_info() call live here
