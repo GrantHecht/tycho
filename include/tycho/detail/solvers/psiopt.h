@@ -905,8 +905,8 @@ class PSIOPT {
     // While restoration is active, the loop's own prim_obj_ is φ_prox (the
     // proximal objective substituted by the eval seam) — never valid outside
     // restoration, since the OPTIMALITY filter/funnel's accumulated pairs are
-    // all true-objective-scale (see the incomparability note in
-    // globalization/progress_measures.h). This helper re-evaluates the TRUE
+    // all true-objective-scale (see the cross-phase pair-incomparability
+    // disclosure in globalization/filter_acceptance.h). This helper re-evaluates the TRUE
     // objective once at the live primals so every exit site hands
     // notify_switch_to_optimality (and, ultimately, obj_val_) a measures
     // triple in the same scale as the filter/funnel it is augmenting into.

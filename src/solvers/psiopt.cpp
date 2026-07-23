@@ -1517,10 +1517,13 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 // restoration BEFORE returning so the phase-boundary reset() sees
                 // optimality mode, then stop with the NOT-converged verdict.
                 {
+                    // The notify measures record the point restoration exited
+                    // (the live iterate) — the filter augment describes the
+                    // exit point itself, independent of the return_best_
+                    // reporting substitution below.
                     ProgressMeasures exit_measures = this->build_restoration_exit_measures(
                         obj_scale, cur.infeasibility, v_xsl.primals(), barr_obj);
                     restoration_was_active = true;
-                    restoration_true_obj = exit_measures.objective;
                     this->restoration_->exit_restoration();
                     this->acceptance_->notify_switch_to_optimality(exit_measures);
                 }
@@ -1531,6 +1534,12 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                     XSL = BestXSL;
                     RHS = BestRHS;
                 }
+                // obj_val_ must describe the RETURNED primals: evaluate after
+                // the return_best_ substitution above (which may have replaced
+                // XSL), unlike the notify measures, which record the exit
+                // point. With return_best_ off the two evaluations coincide.
+                restoration_true_obj = 0.0;
+                this->nlp_->eval_obj(obj_scale, v_xsl.primals(), restoration_true_obj);
                 this->result_.converge_flag_ = ExitCode;
                 if (settings_.print_level_ == 0) {
                     Printtimer.start();
