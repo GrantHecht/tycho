@@ -1164,7 +1164,7 @@ class NestedLifecycleHarness {
     PSIOPT::ConvergenceFlags run_forced_entry(NestedL1Restoration *&comp_out,
                                               PSIOPT::LineSearchModes lsmode,
                                               PSIOPT::BarrierModes barmode, double &final_mu,
-                                              double init_mu = 0.1) {
+                                              double init_mu = 0.1, int preload_soft_counter = 0) {
         solver_->settings().restoration_mode_ = RestorationModes::proximal_switch;
         solver_->settings().max_ls_iters_ = 0;
         solver_->settings().max_iters_ = 120;
@@ -1172,6 +1172,14 @@ class NestedLifecycleHarness {
         auto strat = std::make_unique<NestedL1Restoration>();
         comp_out = strat.get();
         solver_->restoration_ = std::move(strat);
+        if (preload_soft_counter > 0) {
+            // Pre-exhaust the soft pre-stage budget so the first ladder-exhausted
+            // rejection escalates straight into the full restoration phase —
+            // deterministic full-lifecycle coverage on a feasible problem.
+            auto *fsr = dynamic_cast<FeasibilitySwitchRecovery *>(solver_->recovery_.get());
+            if (fsr)
+                fsr->soft_counter_ = preload_soft_counter;
+        }
         solver_->ensure_solver_initialized();
         bool docompute = solver_->analyze_kkt_matrix();
         Eigen::VectorXd XSL = solver_->init_impl(start_, init_mu, docompute);
@@ -1419,6 +1427,33 @@ TEST(NestedRestorationLifecycle, SoftPreStageEscalatesIntoFullL1Phase) {
                         "escalation not exercised";
     }
     EXPECT_GE(comp->entries(), 1); // the pre-stage escalated into the full l1 phase
+}
+
+// The nested full lifecycle on a FEASIBLE problem, unconditionally exercised:
+// pre-exhausting the soft budget makes the first ladder-exhausted rejection
+// escalate immediately, so the solve must enter the l1 phase, exit it cleanly
+// (ratchet + acceptance test + multiplier re-entry), and then converge on the
+// original problem. Deterministic companion to the escalation test above,
+// whose infeasible problem classifies as a failure and whose factorization is
+// platform-sensitive (skip-guarded): entry, clean exit, and post-exit
+// convergence all execute here on every platform.
+TEST(NestedRestorationLifecycle, ForcedEscalationRunsFullPhaseAndConverges) {
+    NestedLifecycleHarness h((Eigen::VectorXd(2) << 0.0, 0.0).finished(), /*n_ineq=*/0,
+                             /*inconsistent=*/false);
+    NestedL1Restoration *comp = nullptr;
+    double final_mu = 0.0;
+    auto flag = h.run_forced_entry(comp, PSIOPT::LineSearchModes::L1, PSIOPT::BarrierModes::LOQO,
+                                   final_mu, /*init_mu=*/0.1,
+                                   /*preload_soft_counter=*/kMaxSoftRestoIters);
+
+    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    ASSERT_NE(comp, nullptr);
+    EXPECT_GE(comp->entries(), 1); // full phase entered
+    const auto &r = h.solver().result();
+    ASSERT_EQ(r.primals_.size(), 2);
+    EXPECT_NEAR(r.primals_[0], 2.0, 1e-3);
+    EXPECT_NEAR(r.primals_[1], 2.0, 1e-3);
+    EXPECT_LT(final_mu, 1.0); // back on the outer barrier schedule after exit
 }
 
 // (vii) Proximal-switch behavior is unchanged: a proximal forced-entry solve on

@@ -61,6 +61,18 @@
 // counter-resetting notify_step_accepted path), and guarantees the augmentation
 // is not issued twice.
 //
+// DISCLOSED CONSEQUENCE of this timing (deviation from Ipopt, which calls
+// PrepareRestoPhaseStart -- a filter-only augmentation -- at soft-stage START,
+// IpBacktrackingLineSearch.cpp): during the pre-stage the trigger point's
+// (theta, phi) pair has NOT yet been added to the filter, so soft steps are
+// tested against the un-augmented optimality-phase acceptance state; under
+// Ipopt they must clear the just-augmented filter. A soft step this solver
+// accepts could therefore be one Ipopt would have rejected (and vice versa
+// never -- augmentation only shrinks the acceptable region). The pre-stage
+// cannot loop on this: the successive counter is cleared only by a genuine
+// optimality acceptance, so at most kMaxSoftRestoIters such steps occur
+// before escalation, and escalation performs the augmentation.
+//
 // Ownership: holds only the inner chain (per RecoveryChain's ownership rule)
 // plus the soft-pre-stage counter (this link's own recovery state, cleared by
 // reset()). reset()/notify_step_accepted() thread straight through to the inner
@@ -75,6 +87,9 @@
 #include <Eigen/Core>
 
 #include "tycho/detail/solvers/globalization/recovery_chain.h"
+
+// Test fixture (declared for the friend grant below).
+class NestedLifecycleHarness;
 
 namespace tycho::solvers {
 
@@ -130,6 +145,8 @@ class FeasibilitySwitchRecovery : public RecoveryChain {
     }
 
   private:
+    friend class ::NestedLifecycleHarness;
+
     std::unique_ptr<RecoveryChain> inner_;
 
     // Number of successive soft pre-stage iterations taken (nested restoration
