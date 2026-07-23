@@ -1126,9 +1126,14 @@ TEST(NestedRestorationLifecycle, ExitRestoresStashedMu) {
     EXPECT_DOUBLE_EQ(mu, 0.25); // outer μ restored
 }
 
-// (iii) Re-entry order: the slack-multiplier Newton z-step is computed from the
-// PRE-exit multipliers, and the equality multipliers are zeroed. With z below
-// μ_outer/s the fraction-to-boundary cap is 1, so z lands exactly at μ_outer/s.
+// (iii) Re-entry values: the slack-multiplier Newton z-step is computed from
+// the PRE-exit multipliers, and the equality multipliers are zeroed. With z
+// below μ_outer/s the fraction-to-boundary cap is 1, so z lands exactly at
+// μ_outer/s. NOTE: the z-step reads only slacks/iq_lmults and the zeroing
+// writes only eq_lmults (disjoint state), so this test cannot detect a
+// reordering of those two steps; the ordering that is actually load-bearing —
+// the z-step reading pre-reset multipliers before the reset-all-to-1 check —
+// is pinned by the reset-threshold test below.
 TEST(NestedRestorationLifecycle, ReentryNewtonStepThenZeroesEqualityMultipliers) {
     NestedLifecycleHarness h((Eigen::VectorXd(2) << 1.0, 1.0).finished(), /*n_ineq=*/1,
                              /*inconsistent=*/false);

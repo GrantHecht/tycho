@@ -1311,6 +1311,14 @@ void tycho::solvers::PSIOPT::enter_feasibility_restoration(Eigen::VectorXd &XSL,
         mu = this->restoration_->entry_mu();
         this->governor_->reset();
         this->resto_first_iter_ = true;
+        // Seed the raw-residual copies the exit tests and the max-iterations
+        // teardown read. The eval seam refreshes them every active iteration,
+        // but if the outer loop exhausts its iteration budget on the very
+        // iteration that entered the phase, no nested evaluation runs — without
+        // this seed the teardown would read empty (first phase) or stale
+        // (later phases) buffers.
+        this->resto_ec_scratch_ = v_rhs.eq_cons();
+        this->resto_ic_scratch_ = v_rhs.iq_cons();
         double theta_orig = 0.0;
         if (this->equal_cons_ > 0)
             theta_orig =
@@ -1692,227 +1700,228 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // must never be reported as a solve. Intercept before the early-exit
         // block below.
         if (this->restoration_ && this->restoration_->is_active()) {
-          if (this->restoration_->is_nested()) {
-            // Nested l1 restoration exit tests (Ipopt RestoConvCheck structure):
-            // first-iteration guard, then the per-iteration κ_resto ratchet, then
-            // the acceptance-strategy exit test; all three pass → the full
-            // multiplier re-entry sequence. θ_orig is the ORIGINAL-problem
-            // infeasibility at the current point. The eval seam replaced the RHS
-            // constraint rows with the condensed r̃, so the raw residuals come
-            // from the seam's saved copies (resto_ec_/ic_scratch_, populated this
-            // same iteration before the r̃ overwrite) — no extra NLP evaluation.
-            double theta_orig = 0.0;
-            if (this->equal_cons_ > 0)
-                theta_orig = std::max(theta_orig,
-                                      this->resto_ec_scratch_.template lpNorm<Eigen::Infinity>());
-            if (this->inequal_cons_ > 0)
-                theta_orig = std::max(theta_orig,
-                                      this->resto_ic_scratch_.template lpNorm<Eigen::Infinity>());
+            if (this->restoration_->is_nested()) {
+                // Nested l1 restoration exit tests (Ipopt RestoConvCheck structure):
+                // first-iteration guard, then the per-iteration κ_resto ratchet, then
+                // the acceptance-strategy exit test; all three pass → the full
+                // multiplier re-entry sequence. θ_orig is the ORIGINAL-problem
+                // infeasibility at the current point. The eval seam replaced the RHS
+                // constraint rows with the condensed r̃, so the raw residuals come
+                // from the seam's saved copies (resto_ec_/ic_scratch_, populated this
+                // same iteration before the r̃ overwrite) — no extra NLP evaluation.
+                double theta_orig = 0.0;
+                if (this->equal_cons_ > 0)
+                    theta_orig = std::max(
+                        theta_orig, this->resto_ec_scratch_.template lpNorm<Eigen::Infinity>());
+                if (this->inequal_cons_ > 0)
+                    theta_orig = std::max(
+                        theta_orig, this->resto_ic_scratch_.template lpNorm<Eigen::Infinity>());
 
-            ProgressMeasures cur;
-            cur.infeasibility = theta_orig; // TRUE original-problem infeasibility.
-            cur.objective = prim_obj; // = φ_l1 while active; the exit test reads only infeasibility.
-            cur.auxiliary = barr_obj;
-            const double resto_failure_threshold =
-                kRestoFailureFeasibilityFactor * settings_.econ_tol_;
+                ProgressMeasures cur;
+                cur.infeasibility = theta_orig; // TRUE original-problem infeasibility.
+                cur.objective =
+                    prim_obj; // = φ_l1 while active; the exit test reads only infeasibility.
+                cur.auxiliary = barr_obj;
+                const double resto_failure_threshold =
+                    kRestoFailureFeasibilityFactor * settings_.econ_tol_;
 
-            if (this->resto_first_iter_) {
-                // First phase iteration: take at least one step before any exit
-                // test (Ipopt first_resto_iter_). Re-seed the ratchet baseline.
-                this->resto_first_iter_ = false;
-                this->resto_theta_orig_prev_ = theta_orig;
-                this->restoration_->note_iteration();
-            } else if (PreExitCode == ConvergenceFlags::CONVERGED ||
-                       PreExitCode == ConvergenceFlags::ACCEPTABLE) {
-                // Condensed subproblem converged/stalled: near-feasible → exit via
-                // the full multiplier re-entry sequence; still infeasible → the
-                // problem is locally infeasible (same classification and failure
-                // threshold as the proximal mode).
-                this->resto_theta_orig_prev_ = theta_orig;
-                if (theta_orig <= resto_failure_threshold) {
+                if (this->resto_first_iter_) {
+                    // First phase iteration: take at least one step before any exit
+                    // test (Ipopt first_resto_iter_). Re-seed the ratchet baseline.
+                    this->resto_first_iter_ = false;
+                    this->resto_theta_orig_prev_ = theta_orig;
                     this->restoration_->note_iteration();
-                    this->exit_feasibility_restoration_nested(XSL, obj_scale, theta_orig, barr_obj,
-                                                              mu);
-                    iters.pop_back();
+                } else if (PreExitCode == ConvergenceFlags::CONVERGED ||
+                           PreExitCode == ConvergenceFlags::ACCEPTABLE) {
+                    // Condensed subproblem converged/stalled: near-feasible → exit via
+                    // the full multiplier re-entry sequence; still infeasible → the
+                    // problem is locally infeasible (same classification and failure
+                    // threshold as the proximal mode).
+                    this->resto_theta_orig_prev_ = theta_orig;
+                    if (theta_orig <= resto_failure_threshold) {
+                        this->restoration_->note_iteration();
+                        this->exit_feasibility_restoration_nested(XSL, obj_scale, theta_orig,
+                                                                  barr_obj, mu);
+                        iters.pop_back();
+                        QPtimer.stop();
+                        continue;
+                    }
+                    // Locally infeasible: tear down (restore μ, reset governor) and
+                    // stop NOT-converged. No multiplier re-entry — the phase failed.
+                    {
+                        ProgressMeasures exit_measures = this->build_restoration_exit_measures(
+                            obj_scale, theta_orig, v_xsl.primals(), barr_obj);
+                        restoration_was_active = true;
+                        this->restoration_->note_iteration();
+                        mu = this->stashed_mu_;
+                        this->governor_->reset();
+                        this->restoration_->exit_restoration();
+                        this->acceptance_->notify_switch_to_optimality(exit_measures);
+                        this->recovery_->reset();
+                    }
+                    iters.back().mu_ = mu;
                     QPtimer.stop();
-                    continue;
-                }
-                // Locally infeasible: tear down (restore μ, reset governor) and
-                // stop NOT-converged. No multiplier re-entry — the phase failed.
-                {
-                    ProgressMeasures exit_measures = this->build_restoration_exit_measures(
-                        obj_scale, theta_orig, v_xsl.primals(), barr_obj);
-                    restoration_was_active = true;
+                    ExitCode = ConvergenceFlags::NOTCONVERGED;
+                    if (settings_.return_best_) {
+                        XSL = BestXSL;
+                        RHS = BestRHS;
+                    }
+                    restoration_true_obj = 0.0;
+                    this->nlp_->eval_obj(obj_scale, v_xsl.primals(), restoration_true_obj);
+                    this->result_.converge_flag_ = ExitCode;
+                    if (settings_.print_level_ == 0) {
+                        Printtimer.start();
+                        this->print_last_iterate(iters);
+                        Printtimer.stop();
+                    }
+                    if (settings_.print_level_ < 3)
+                        fmt::print(fmt::fg(fmt::color::yellow),
+                                   "Feasibility restoration converged to a locally infeasible "
+                                   "point (infeasibility {:.3e} > {:.3e}); stopping "
+                                   "(not converged).\n",
+                                   theta_orig, resto_failure_threshold);
+                    break;
+                } else if (PreExitCode == ConvergenceFlags::NOTCONVERGED) {
+                    // κ_resto ratchet (per-iteration, vs the previous iteration's
+                    // value) AND the acceptance-strategy exit test (vs the frozen
+                    // entry reference): both must pass to leave the phase. The ratchet
+                    // reads resto_theta_orig_prev_ BEFORE it is updated this iteration.
+                    const bool ratchet = this->resto_ratchet_passes(theta_orig);
+                    this->resto_theta_orig_prev_ = theta_orig;
+                    if (ratchet && this->acceptance_->is_infeasibility_sufficiently_reduced(
+                                       this->restoration_->reference(), cur)) {
+                        this->restoration_->note_iteration();
+                        this->exit_feasibility_restoration_nested(XSL, obj_scale, theta_orig,
+                                                                  barr_obj, mu);
+                        iters.pop_back();
+                        QPtimer.stop();
+                        continue;
+                    }
+                    // Staying in restoration mode this iteration.
                     this->restoration_->note_iteration();
-                    mu = this->stashed_mu_;
-                    this->governor_->reset();
-                    this->restoration_->exit_restoration();
-                    this->acceptance_->notify_switch_to_optimality(exit_measures);
-                    this->recovery_->reset();
                 }
-                iters.back().mu_ = mu;
-                QPtimer.stop();
-                ExitCode = ConvergenceFlags::NOTCONVERGED;
-                if (settings_.return_best_) {
-                    XSL = BestXSL;
-                    RHS = BestRHS;
-                }
-                restoration_true_obj = 0.0;
-                this->nlp_->eval_obj(obj_scale, v_xsl.primals(), restoration_true_obj);
-                this->result_.converge_flag_ = ExitCode;
-                if (settings_.print_level_ == 0) {
-                    Printtimer.start();
-                    this->print_last_iterate(iters);
-                    Printtimer.stop();
-                }
-                if (settings_.print_level_ < 3)
-                    fmt::print(fmt::fg(fmt::color::yellow),
-                               "Feasibility restoration converged to a locally infeasible "
-                               "point (infeasibility {:.3e} > {:.3e}); stopping "
-                               "(not converged).\n",
-                               theta_orig, resto_failure_threshold);
-                break;
-            } else if (PreExitCode == ConvergenceFlags::NOTCONVERGED) {
-                // κ_resto ratchet (per-iteration, vs the previous iteration's
-                // value) AND the acceptance-strategy exit test (vs the frozen
-                // entry reference): both must pass to leave the phase. The ratchet
-                // reads resto_theta_orig_prev_ BEFORE it is updated this iteration.
-                const bool ratchet = this->resto_ratchet_passes(theta_orig);
-                this->resto_theta_orig_prev_ = theta_orig;
-                if (ratchet && this->acceptance_->is_infeasibility_sufficiently_reduced(
-                                   this->restoration_->reference(), cur)) {
-                    this->restoration_->note_iteration();
-                    this->exit_feasibility_restoration_nested(XSL, obj_scale, theta_orig, barr_obj,
-                                                              mu);
-                    iters.pop_back();
+                // DIVERGING while active falls through to the early-exit block below;
+                // the post-loop teardown clears restoration before alg_impl returns.
+            } else {
+                ProgressMeasures cur;
+                cur.infeasibility = v_rhs.all_cons().template lpNorm<1>();
+                cur.objective = prim_obj; // = φ_prox while active (set by the eval seam).
+                cur.auxiliary = barr_obj;
+                // Stall classification uses the FAILURE threshold (1e2 · tol), not
+                // the far-stricter entry guard: a proximal-subproblem stall at
+                // violation <= 1e2 · tol is the recoverable "reached a
+                // (near-)feasible point" outcome, and only beyond it is local
+                // infeasibility declared (see kRestoFailureFeasibilityFactor's
+                // citation block in proximal_restoration.h).
+                const double resto_failure_threshold =
+                    kRestoFailureFeasibilityFactor * settings_.econ_tol_;
+
+                if (PreExitCode == ConvergenceFlags::CONVERGED ||
+                    PreExitCode == ConvergenceFlags::ACCEPTABLE) {
+                    if (cur.infeasibility <= resto_failure_threshold) {
+                        // Proximal subproblem converged AND the true constraints are
+                        // near-feasible: leave restoration and resume the true
+                        // objective. The same iterate is re-evaluated in optimality
+                        // mode next iteration (the per-phase budget prevents cycling).
+                        // notify_switch_to_optimality augments this pair into the
+                        // restored OPTIMALITY filter/funnel, whose accumulated pairs
+                        // are all true-objective-scale -- cur.objective (= φ_prox) is
+                        // never valid there, so the true objective is re-evaluated at
+                        // the live primals via the shared exit-measures helper.
+                        // Count this exit iteration in the in-mode total (it was a
+                        // feasibility-mode iterate; the stay-in-mode note_iteration
+                        // below only counts iterations that keep going).
+                        this->restoration_->note_iteration();
+                        this->restoration_->exit_restoration();
+                        this->acceptance_->notify_switch_to_optimality(
+                            this->build_restoration_exit_measures(obj_scale, cur.infeasibility,
+                                                                  v_xsl.primals(), barr_obj));
+                        // Reset the recovery chain across the mode switch (see the
+                        // entry-side rationale at the kSwitchToFeasibility case): the
+                        // watchdog's objective-scale-bound snapshot/counters must not
+                        // survive back into the optimality phase. Once per transition.
+                        this->recovery_->reset();
+                        iters.pop_back();
+                        QPtimer.stop();
+                        continue;
+                    }
+                    // Proximal subproblem converged/stalled at a still-infeasible
+                    // point: the problem is locally infeasible (Ipopt's
+                    // restoration-convergence failure classification). Tear down
+                    // restoration BEFORE returning so the phase-boundary reset() sees
+                    // optimality mode, then stop with the NOT-converged verdict.
+                    {
+                        // The notify measures record the point restoration exited
+                        // (the live iterate) — the filter augment describes the
+                        // exit point itself, independent of the return_best_
+                        // reporting substitution below.
+                        ProgressMeasures exit_measures = this->build_restoration_exit_measures(
+                            obj_scale, cur.infeasibility, v_xsl.primals(), barr_obj);
+                        restoration_was_active = true;
+                        // Count this exit iteration in the in-mode total (see the
+                        // near-feasible exit above).
+                        this->restoration_->note_iteration();
+                        this->restoration_->exit_restoration();
+                        this->acceptance_->notify_switch_to_optimality(exit_measures);
+                        // Reset the recovery chain across the mode switch (see the
+                        // kSwitchToFeasibility entry rationale). Once per transition.
+                        this->recovery_->reset();
+                    }
+                    iters.back().mu_ = mu;
                     QPtimer.stop();
-                    continue;
+                    ExitCode = ConvergenceFlags::NOTCONVERGED;
+                    if (settings_.return_best_) {
+                        XSL = BestXSL;
+                        RHS = BestRHS;
+                    }
+                    // obj_val_ must describe the RETURNED primals: evaluate after
+                    // the return_best_ substitution above (which may have replaced
+                    // XSL), unlike the notify measures, which record the exit
+                    // point. With return_best_ off the two evaluations coincide.
+                    restoration_true_obj = 0.0;
+                    this->nlp_->eval_obj(obj_scale, v_xsl.primals(), restoration_true_obj);
+                    this->result_.converge_flag_ = ExitCode;
+                    if (settings_.print_level_ == 0) {
+                        Printtimer.start();
+                        this->print_last_iterate(iters);
+                        Printtimer.stop();
+                    }
+                    if (settings_.print_level_ < 3)
+                        fmt::print(fmt::fg(fmt::color::yellow),
+                                   "Feasibility restoration converged to a locally infeasible "
+                                   "point (infeasibility {:.3e} > {:.3e}); stopping "
+                                   "(not converged).\n",
+                                   cur.infeasibility, resto_failure_threshold);
+                    break;
                 }
-                // Staying in restoration mode this iteration.
-                this->restoration_->note_iteration();
+
+                if (PreExitCode == ConvergenceFlags::NOTCONVERGED) {
+                    // Subproblem not converged: has infeasibility fallen enough,
+                    // relative to the restoration entry point, to leave restoration?
+                    // Runs from an accepted feasibility-mode iterate; at the entry
+                    // point cur == reference so this cannot fire (θ_trial == θ_ref).
+                    if (this->acceptance_->is_infeasibility_sufficiently_reduced(
+                            this->restoration_->reference(), cur)) {
+                        // Count this exit iteration in the in-mode total (the
+                        // stay-in-mode note_iteration below is skipped on exit).
+                        this->restoration_->note_iteration();
+                        this->restoration_->exit_restoration();
+                        this->acceptance_->notify_switch_to_optimality(
+                            this->build_restoration_exit_measures(obj_scale, cur.infeasibility,
+                                                                  v_xsl.primals(), barr_obj));
+                        // Reset the recovery chain across the mode switch (see the
+                        // kSwitchToFeasibility entry rationale). Once per transition.
+                        this->recovery_->reset();
+                        iters.pop_back();
+                        QPtimer.stop();
+                        continue;
+                    }
+                    // Staying in restoration mode this iteration.
+                    this->restoration_->note_iteration();
+                }
+                // DIVERGING while active falls through to the early-exit block below;
+                // the post-loop teardown clears restoration before alg_impl returns.
             }
-            // DIVERGING while active falls through to the early-exit block below;
-            // the post-loop teardown clears restoration before alg_impl returns.
-          } else {
-            ProgressMeasures cur;
-            cur.infeasibility = v_rhs.all_cons().template lpNorm<1>();
-            cur.objective = prim_obj; // = φ_prox while active (set by the eval seam).
-            cur.auxiliary = barr_obj;
-            // Stall classification uses the FAILURE threshold (1e2 · tol), not
-            // the far-stricter entry guard: a proximal-subproblem stall at
-            // violation <= 1e2 · tol is the recoverable "reached a
-            // (near-)feasible point" outcome, and only beyond it is local
-            // infeasibility declared (see kRestoFailureFeasibilityFactor's
-            // citation block in proximal_restoration.h).
-            const double resto_failure_threshold =
-                kRestoFailureFeasibilityFactor * settings_.econ_tol_;
-
-            if (PreExitCode == ConvergenceFlags::CONVERGED ||
-                PreExitCode == ConvergenceFlags::ACCEPTABLE) {
-                if (cur.infeasibility <= resto_failure_threshold) {
-                    // Proximal subproblem converged AND the true constraints are
-                    // near-feasible: leave restoration and resume the true
-                    // objective. The same iterate is re-evaluated in optimality
-                    // mode next iteration (the per-phase budget prevents cycling).
-                    // notify_switch_to_optimality augments this pair into the
-                    // restored OPTIMALITY filter/funnel, whose accumulated pairs
-                    // are all true-objective-scale -- cur.objective (= φ_prox) is
-                    // never valid there, so the true objective is re-evaluated at
-                    // the live primals via the shared exit-measures helper.
-                    // Count this exit iteration in the in-mode total (it was a
-                    // feasibility-mode iterate; the stay-in-mode note_iteration
-                    // below only counts iterations that keep going).
-                    this->restoration_->note_iteration();
-                    this->restoration_->exit_restoration();
-                    this->acceptance_->notify_switch_to_optimality(
-                        this->build_restoration_exit_measures(obj_scale, cur.infeasibility,
-                                                              v_xsl.primals(), barr_obj));
-                    // Reset the recovery chain across the mode switch (see the
-                    // entry-side rationale at the kSwitchToFeasibility case): the
-                    // watchdog's objective-scale-bound snapshot/counters must not
-                    // survive back into the optimality phase. Once per transition.
-                    this->recovery_->reset();
-                    iters.pop_back();
-                    QPtimer.stop();
-                    continue;
-                }
-                // Proximal subproblem converged/stalled at a still-infeasible
-                // point: the problem is locally infeasible (Ipopt's
-                // restoration-convergence failure classification). Tear down
-                // restoration BEFORE returning so the phase-boundary reset() sees
-                // optimality mode, then stop with the NOT-converged verdict.
-                {
-                    // The notify measures record the point restoration exited
-                    // (the live iterate) — the filter augment describes the
-                    // exit point itself, independent of the return_best_
-                    // reporting substitution below.
-                    ProgressMeasures exit_measures = this->build_restoration_exit_measures(
-                        obj_scale, cur.infeasibility, v_xsl.primals(), barr_obj);
-                    restoration_was_active = true;
-                    // Count this exit iteration in the in-mode total (see the
-                    // near-feasible exit above).
-                    this->restoration_->note_iteration();
-                    this->restoration_->exit_restoration();
-                    this->acceptance_->notify_switch_to_optimality(exit_measures);
-                    // Reset the recovery chain across the mode switch (see the
-                    // kSwitchToFeasibility entry rationale). Once per transition.
-                    this->recovery_->reset();
-                }
-                iters.back().mu_ = mu;
-                QPtimer.stop();
-                ExitCode = ConvergenceFlags::NOTCONVERGED;
-                if (settings_.return_best_) {
-                    XSL = BestXSL;
-                    RHS = BestRHS;
-                }
-                // obj_val_ must describe the RETURNED primals: evaluate after
-                // the return_best_ substitution above (which may have replaced
-                // XSL), unlike the notify measures, which record the exit
-                // point. With return_best_ off the two evaluations coincide.
-                restoration_true_obj = 0.0;
-                this->nlp_->eval_obj(obj_scale, v_xsl.primals(), restoration_true_obj);
-                this->result_.converge_flag_ = ExitCode;
-                if (settings_.print_level_ == 0) {
-                    Printtimer.start();
-                    this->print_last_iterate(iters);
-                    Printtimer.stop();
-                }
-                if (settings_.print_level_ < 3)
-                    fmt::print(fmt::fg(fmt::color::yellow),
-                               "Feasibility restoration converged to a locally infeasible "
-                               "point (infeasibility {:.3e} > {:.3e}); stopping "
-                               "(not converged).\n",
-                               cur.infeasibility, resto_failure_threshold);
-                break;
-            }
-
-            if (PreExitCode == ConvergenceFlags::NOTCONVERGED) {
-                // Subproblem not converged: has infeasibility fallen enough,
-                // relative to the restoration entry point, to leave restoration?
-                // Runs from an accepted feasibility-mode iterate; at the entry
-                // point cur == reference so this cannot fire (θ_trial == θ_ref).
-                if (this->acceptance_->is_infeasibility_sufficiently_reduced(
-                        this->restoration_->reference(), cur)) {
-                    // Count this exit iteration in the in-mode total (the
-                    // stay-in-mode note_iteration below is skipped on exit).
-                    this->restoration_->note_iteration();
-                    this->restoration_->exit_restoration();
-                    this->acceptance_->notify_switch_to_optimality(
-                        this->build_restoration_exit_measures(obj_scale, cur.infeasibility,
-                                                              v_xsl.primals(), barr_obj));
-                    // Reset the recovery chain across the mode switch (see the
-                    // kSwitchToFeasibility entry rationale). Once per transition.
-                    this->recovery_->reset();
-                    iters.pop_back();
-                    QPtimer.stop();
-                    continue;
-                }
-                // Staying in restoration mode this iteration.
-                this->restoration_->note_iteration();
-            }
-            // DIVERGING while active falls through to the early-exit block below;
-            // the post-loop teardown clears restoration before alg_impl returns.
-          }
         }
 
         if (PreExitCode == ConvergenceFlags::CONVERGED ||
