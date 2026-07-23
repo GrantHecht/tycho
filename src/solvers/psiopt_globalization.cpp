@@ -171,6 +171,12 @@ void ClassicMeritAcceptance::eval_trial_point_occ(double obj_scale, double mu, d
         else
             ptest += ctx_.restoration_->proximal_objective(xsl2.primals());
     }
+    // Trial paths keep the reset-completed inequality residual even while a
+    // nested restoration is active (the main evaluation seam uses the direct,
+    // unreset g+s there). The asymmetry is intentional: the trial merit only
+    // ranks step candidates, while the exit/convergence decisions read the
+    // main-seam measure, and the reset completion is conservative for
+    // strictly-feasible rows.
     this->apply_reset_slacks(xsl2.slacks(), rhs2.iq_cons());
     btest = this->barrier_objective(xsl2.slacks(), mu);
     if (ctx_.restoration_ && ctx_.restoration_->is_active() && ctx_.restoration_->is_nested()) {
