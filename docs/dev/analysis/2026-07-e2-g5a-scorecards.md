@@ -58,10 +58,11 @@ across two repeats before any diff is trusted (§4).
 ## 2. Master table (post-fix, repeat 1, status / iterations)
 
 `Mon` = `barrier_governor=monitored`; `Resto` = `restoration_mode=proximal_switch`. The three
-restoration columns report **post-fix** numbers (after `b592d934`, §3); the pre-fix numbers
-that caught the defect are reported separately in §3, not here, so this table reflects what
-ships. Bold marks a status change or a notable iteration swing from the corresponding
-no-restoration column.
+restoration columns report **post-fix** numbers (after `b592d934`, §3, and after the
+transition-state-isolation fixes described in §3.5); the pre-fix numbers that caught the
+`b592d934` defect are reported separately in §3, not here, so this table reflects what ships.
+Bold marks a status change or a notable iteration swing from the corresponding no-restoration
+column.
 
 | Tier | Problem | Defaults | Funnel+Mon | Filter+Mon | Funnel+Mon+Resto | Filter+Mon+Resto | Merit+Resto |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -69,18 +70,18 @@ no-restoration column.
 | degenerate | `deg_conflicting_equality` | failed / 500 | failed / 500 | failed / 500 | failed / 500 | failed / 500 | failed / **498** |
 | degenerate | `deg_zero_objective` | converged / 3 | converged / 3 | converged / 3 | converged / 3 | converged / 3 | converged / 3 |
 | degenerate | `deg_redundant_defects` | converged / 3 | converged / 3 | converged / 3 | converged / 3 | converged / 3 | converged / **58** |
-| degenerate | `deg_near_infeasible` | failed / 500 | failed / 500 | failed / 500 | failed / 500 | failed / 500 | failed / 500 |
+| degenerate | `deg_near_infeasible` | failed / 500 | failed / 500 | failed / 500 | failed / 500 | failed / 500 | failed / **498** |
 | hard | `hard_vanderpol` | diverged / 1 | diverged / 1 | diverged / 1 | diverged / 1 | diverged / 1 | diverged / 1 |
-| hard | `hard_brach_coldstart` | converged / 24 | converged / 22 | converged / 36 | converged / 22 | converged / 36 | converged / **56** |
-| hard | `hard_brach_illscaled` | failed / 500 | failed / 500 | failed / 500 | failed / **498** | failed / **499** | failed / 500 |
+| hard | `hard_brach_coldstart` | converged / 24 | converged / 22 | converged / 36 | converged / 22 | converged / 36 | converged / **48** |
+| hard | `hard_brach_illscaled` | failed / 500 | failed / 500 | failed / 500 | failed / **498** | failed / **499** | failed / **498** |
 | hard | `hard_zermelo_wrongbasin` | diverged / 822 | diverged / 667 | diverged / 845 | diverged / 667 | **failed** / 1000 | **failed** / 1000 |
 | hard | `hard_mountaincar_badguess` | failed / 1000 | failed / 1000 | failed / 1000 | failed / 1000 | failed / **999** | failed / **998** |
 | hard | `hard_lowthrust_badguess` | diverged / 1 | diverged / 1 | diverged / 1 | diverged / 1 | diverged / 1 | diverged / 1 |
 | hard | `hard_cartpole_tightbounds` | converged / 95 | converged / 95 | converged / 95 | converged / 95 | converged / 95 | **failed** / **498** |
 | hard | `hard_hypersens_stiff` | acceptable / 103 | acceptable / 103 | acceptable / 103 | acceptable / 103 | acceptable / **209** | acceptable / **220** |
-| literature | `lit_wb2000` | failed / 500 | converged / 33 | converged / 43 | converged / **34** | converged / **46** | **converged** / **279** |
+| literature | `lit_wb2000` | failed / 500 | converged / 33 | converged / 43 | converged / **34** | converged / **46** | **converged** / **327** |
 | literature | `lit_maratos` | diverged / 2 | diverged / 2 | diverged / 2 | diverged / 2 | diverged / 2 | diverged / 2 |
-| literature | `lit_hs13` | acceptable / 77 | acceptable / 76 | acceptable / 76 | acceptable / 76 | acceptable / 76 | acceptable / **122** |
+| literature | `lit_hs13` | acceptable / 77 | acceptable / 76 | acceptable / 76 | acceptable / 76 | acceptable / 76 | acceptable / **138** |
 | literature | `lit_powell_badscaled` | converged / 22 | converged / 12 | converged / 21 | converged / 12 | converged / **23** | converged / **24** |
 
 Repeat instability beyond LSB float noise: none — all six 34-record captures (post-fix, for the
@@ -137,9 +138,9 @@ band discarded that point before the true objective ever got to see it.
 1e2x factor) in place of the entry guard's factor; the entry guard itself (which correctly
 governs whether restoration may be *entered*, a different question) is unchanged. Re-running
 the full six-configuration campaign after the fix produces the table in §2. Both regressions
-are gone: `hard_brach_coldstart` now **converges** under `merit+resto` (56 iterations, vs 35
-without restoration — restoration entered twice for 9 iterations total and the phase still
-reached the optimum), and `lit_hs13` is back to **acceptable** (122 iterations, vs 142 without
+are gone: `hard_brach_coldstart` now **converges** under `merit+resto` (48 iterations, vs 35
+without restoration — restoration engages during the run and the phase still reaches the
+optimum), and `lit_hs13` is back to **acceptable** (138 iterations, vs 142 without
 restoration). A post-fix ctest run (1557/1557) and a second full campaign confirm no other
 problem regressed as a side effect of the fix (§4).
 
@@ -170,11 +171,11 @@ comparison per §1):
   status. Nothing regressed.
 - **`merit+resto` vs `merit-alone`: 16/17 unchanged, 1 improved (severity demotion), 0
   regressed.** `hard_zermelo_wrongbasin` again demotes (`diverged / 973` → `failed / 1000`).
-  `hard_brach_coldstart` costs 21 more iterations (35 → 56) but stays converged both ways;
-  `lit_hs13` costs 20 *fewer* iterations (142 → 122) at the same acceptable status;
+  `hard_brach_coldstart` costs 13 more iterations (35 → 48) but stays converged both ways;
+  `lit_hs13` costs 4 *fewer* iterations (142 → 138) at the same acceptable status;
   `hard_hypersens_stiff` costs 117 more iterations (103 → 220) at the same acceptable status.
   `lit_wb2000` is **already** `converged` under `merit-alone` (114 iterations, no restoration
-  needed) and stays converged under `merit+resto` (279 iterations) — restoration costs 165
+  needed) and stays converged under `merit+resto` (327 iterations) — restoration costs 213
   iterations here for no status change, so `lit_wb2000` gets **no attribution to restoration**
   under the `merit` strategy specifically (contrast funnel/filter, where `lit_wb2000` needs
   neither restoration nor `merit` — it is rescued by the monitored-governor composition alone,
@@ -231,14 +232,48 @@ Every problem in §3.2 whose iteration count moved without its status moving is 
 restoration entered, ran, and handed control back — a real cost with no visible benefit or harm
 on this corpus: `hard_brach_illscaled` (funnel/filter, -1 to -2 iterations — restoration
 apparently shortens rather than lengthens the run to the cap here), `hard_hypersens_stiff`
-(filter/merit, +106/+117 iterations), `hard_brach_coldstart` (merit, +21 iterations, still
-converged), `lit_hs13` (merit, -20 iterations, still acceptable), `lit_wb2000` (all three
-resto configurations, +1 to +165 iterations, still converged), and `lit_powell_badscaled`
+(filter/merit, +106/+117 iterations), `hard_brach_coldstart` (merit, +13 iterations, still
+converged), `lit_hs13` (merit, -4 iterations, still acceptable), `lit_wb2000` (all three
+resto configurations, +1 to +213 iterations, still converged), and `lit_powell_badscaled`
 (filter/merit, +1 to +2 iterations). None of these are free — every entry costs solver
 iterations even when it resolves cleanly — but none of them change a corpus outcome either.
 That is the same "engaged but harmless" character `2026-07-e2-g4-scorecards.md` §3 found for
 the monitored governor under `classic_merit`: a component that visibly does work on more
 problems than it visibly changes the result of.
+
+### 3.5 Transition state isolation
+
+A second defect wave, distinct from `b592d934`, surfaced after this document's numbers above
+were first captured. External automated review of the pull request, followed up by a further
+internal review, found that the single-strategy-instance mode-switch design let per-strategy
+persistent state keep evolving across the optimality-to-feasibility phase boundary, where the
+reference implementation's two-instance structure freezes it instead. Four distinct
+consequences fell out of that one design gap:
+
+- The merit tracker's penalty parameters and the funnel's width both kept updating while the
+  feasibility phase was running, which made the merit strategy's reduction-based exit test
+  unsatisfiable for any positive violation — the test compared each restoration-phase point
+  against a running minimum that already included that same point, so the reduction it was
+  looking for could never be observed.
+- The recovery chain's watchdog state, including its revert snapshot, crossed the phase
+  boundary carrying values from the wrong objective scale (proximal on one side, true on the
+  other), so a watchdog decision made in one phase could act on a snapshot taken in the other.
+- A watchdog-`RESOLVED` accept-as-is could be misclassified as a restoration entry, because the
+  terminal wrapper keyed its dispatch on the `Action` value alone and could not distinguish a
+  resolved watchdog outcome from an unresolved one that happened to produce the same `Action`.
+- Best-iterate tracking mixed candidates evaluated on the proximal objective with candidates
+  evaluated on the true objective, comparing scales that are not comparable.
+
+All four were fixed by replicating the filter strategy's existing stash/fresh/restore
+transition treatment in the merit and funnel strategies, so their exit tests now read the state
+held from the optimality phase rather than state the feasibility phase kept mutating;
+discriminating resolved from unresolved watchdog accept-as-is outcomes via the recovery-depth
+signal rather than the `Action` value alone; resetting the recovery chain at both the entry and
+exit transitions; and suspending best-iterate tracking for the duration of restoration.
+Statuses were unchanged on the full corpus by these fixes — the tables above are already the
+corrected numbers, and the iteration-count movement they caused was modest throughout (single
+digits to low hundreds, concentrated in the `merit+resto` column; see §2 and §3.4). Commits
+`4bf9b9b9` and `ef5dc8c9`.
 
 ## 4. Determinism
 
@@ -369,5 +404,7 @@ conda run -n tycho python scripts/run_corpus.py --cbwr --repeat 2 --config accep
   chain, acceptance strategies, and Python bindings.
 - Commit `b592d934` — the stall-classification fix this document's own campaign found the need
   for; see §3.1 for the attribution chain that led to it.
+- Commits `4bf9b9b9` and `ef5dc8c9` — the transition-state-isolation fixes described in §3.5,
+  which the tables in §2 already reflect.
 - `tests/corpus/baselines/2026-07-defaults.jsonl` — committed baseline used for the `defaults`
   cross-check in §4.
