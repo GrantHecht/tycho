@@ -186,6 +186,13 @@ void tycho::solvers::PSIOPT::set_ls_extended_iters(int ls_extended_iters) {
     settings_.ls_extended_iters_ = ls_extended_iters;
 }
 
+void tycho::solvers::PSIOPT::set_max_feas_rest(int max_feas_rest) {
+    if (max_feas_rest < 0)
+        throw std::invalid_argument(
+            fmt::format("max_feas_rest must be non-negative, got {}", max_feas_rest));
+    settings_.max_feas_rest_ = max_feas_rest;
+}
+
 void tycho::solvers::PSIOPT::set_kkt_tol(double kkt_tol) {
     if (!std::isfinite(kkt_tol) || kkt_tol <= 0.0)
         throw std::invalid_argument(

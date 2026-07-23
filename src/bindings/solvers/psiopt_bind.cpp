@@ -302,18 +302,20 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
         "to a pure feasibility phase -- the objective is replaced by a proximal term centered on "
         "the switch point (coefficient sqrt(mu) at entry) while all constraints and barrier "
         "machinery keep running -- and returns to the true objective once the acceptance "
-        "strategy's infeasibility-reduction test passes (per-strategy: merit tracks the "
-        "smallest-known infeasibility; funnel/filter use their own reference-solver tests). "
+        "strategy's infeasibility-reduction test passes (per-strategy: classic_merit uses a "
+        "relative infeasibility-reduction test against the entry point, Ipopt "
+        "restoration-convergence style; merit tracks the smallest-known infeasibility; "
+        "funnel/filter use their own reference-solver tests). "
         "Entry is refused at a near-feasible point or once the per-phase budget max_feas_rest is "
         "exhausted. Composes with every acceptance_strategy and barrier_governor (no matrix "
         "restrictions). Mode-switch lineage: Knitro's bar_switchobj=scalarprox, with entry/exit "
         "semantics derived from Ipopt's restoration phase and Uno's phase switching.");
-    BIND_SETTINGS_RW(
-        obj, "max_feas_rest", max_feas_rest_,
+    BIND_SETTINGS_VALIDATED(
+        obj, "max_feas_rest", max_feas_rest_, set_max_feas_rest,
         "Per-phase cap on the number of times feasibility restoration may be entered. 0 "
         "disables restoration entry entirely (the budget is exhausted before the first entry); "
-        "2 (default). Ignored when restoration_mode is off. validate() requires it to be "
-        "non-negative.");
+        "2 (default). Ignored when restoration_mode is off. Negative values raise ValueError "
+        "immediately on assignment; validate() re-checks non-negativity as a backstop.");
 
     // --- QP solver ---
     BIND_SETTINGS_RW(obj, "force_qp_analysis", force_qp_analysis_, "");

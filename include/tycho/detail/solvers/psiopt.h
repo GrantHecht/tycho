@@ -542,6 +542,7 @@ class PSIOPT {
     void set_all_max_iters(int m1, int m2);
     void set_max_soc(int max_soc);
     void set_ls_extended_iters(int ls_extended_iters);
+    void set_max_feas_rest(int max_feas_rest);
 
     void set_kkt_tol(double kkt_tol);
     void set_bar_tol(double bar_tol);

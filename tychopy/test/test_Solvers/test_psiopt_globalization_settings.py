@@ -278,17 +278,28 @@ class test_MaxFeasRestRoundTrip(unittest.TestCase):
         flag = prob.optimize()
         self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
 
-    def test_rejects_negative_before_any_iteration(self):
-        # max_feas_rest_ has no dedicated validated setter -- unlike
-        # max_soc/ls_extended_iters, the negative check lives only in
-        # Settings::validate() (src/solvers/psiopt.cpp), so the raise fires
-        # on optimize()/solve(), not on assignment.
+    def test_zero_disables_restoration_entry(self):
+        # Strengthens test_zero_is_accepted: proves 0 doesn't merely validate
+        # but actually disables entry when restoration_mode is on, by
+        # asserting the entry counter stays at 0 for a proximal_switch solve.
         prob = _make_problem()
-        prob.optimizer.max_feas_rest = -1
+        prob.optimizer.restoration_mode = solvs.RestorationModes.proximal_switch
+        prob.optimizer.max_feas_rest = 0
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(prob.optimizer.last_feas_rest_entries, 0)
+
+    def test_rejects_negative(self):
+        # max_feas_rest_ now has a dedicated validated setter mirroring
+        # max_soc/ls_extended_iters, so the raise fires immediately on
+        # assignment rather than being deferred to validate() at
+        # optimize()/solve() time.
+        prob = _make_problem()
         with self.assertRaises(ValueError) as ctx:
-            prob.optimize()
+            prob.optimizer.max_feas_rest = -1
         self.assertIn("max_feas_rest", str(ctx.exception))
-        self.assertEqual(prob.optimizer.last_iter_num, 0)
+        # Rejected write must not clobber the prior valid value.
+        self.assertEqual(prob.optimizer.max_feas_rest, 2)
 
 
 class test_BadRestorationModeValue(unittest.TestCase):
