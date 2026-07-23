@@ -163,6 +163,18 @@ class PSIOPT:
         """
 
     @property
+    def last_feas_rest_entries(self) -> int:
+        """
+        Number of times feasibility restoration was entered during the most recent solve's last phase. -1 unless restoration_mode is proximal_switch (no restoration strategy is constructed when restoration_mode is off).
+        """
+
+    @property
+    def last_feas_rest_iters(self) -> int:
+        """
+        Number of iterations spent in the feasibility-restoration phase during the most recent solve's last phase. -1 unless restoration_mode is proximal_switch.
+        """
+
+    @property
     def obj_scale(self) -> float: ...
 
     @obj_scale.setter
@@ -463,6 +475,24 @@ class PSIOPT:
     def never_monotone(self, arg: bool, /) -> None: ...
 
     @property
+    def restoration_mode(self) -> RestorationModes:
+        """
+        Feasibility-restoration mode selector: off (default) reproduces today's behavior bit-identically -- no restoration strategy is constructed, so every restoration branch in the solver is provably dead. proximal_switch enables the proximal feasibility mode-switch: when the recovery chain exhausts on a rejected step, the solver switches to a pure feasibility phase -- the objective is replaced by a proximal term centered on the switch point (coefficient sqrt(mu) at entry) while all constraints and barrier machinery keep running -- and returns to the true objective once the acceptance strategy's infeasibility-reduction test passes (per-strategy: merit tracks the smallest-known infeasibility; funnel/filter use their own reference-solver tests). Entry is refused at a near-feasible point or once the per-phase budget max_feas_rest is exhausted. Composes with every acceptance_strategy and barrier_governor (no matrix restrictions). Mode-switch lineage: Knitro's bar_switchobj=scalarprox, with entry/exit semantics derived from Ipopt's restoration phase and Uno's phase switching.
+        """
+
+    @restoration_mode.setter
+    def restoration_mode(self, arg: RestorationModes, /) -> None: ...
+
+    @property
+    def max_feas_rest(self) -> int:
+        """
+        Per-phase cap on the number of times feasibility restoration may be entered. 0 disables restoration entry entirely (the budget is exhausted before the first entry); 2 (default). Ignored when restoration_mode is off. validate() requires it to be non-negative.
+        """
+
+    @max_feas_rest.setter
+    def max_feas_rest(self, arg: int, /) -> None: ...
+
+    @property
     def force_qp_analysis(self) -> bool: ...
 
     @force_qp_analysis.setter
@@ -594,6 +624,17 @@ class BarrierGovernors(enum.Enum):
     monitored = 1
     """
     Free<->monotone monitored barrier governor: a KKT-error monitor hands off to a Fiacco-McCormick monotone mode when free-mode progress stalls, then re-enters free mode once progress resumes -- see the barrier_governor property docstring for the full mechanism.
+    """
+
+class RestorationModes(enum.Enum):
+    off = 0
+    """
+    No feasibility restoration -- the bit-identical default. No restoration strategy is constructed, so every restoration branch in the solver is provably dead.
+    """
+
+    proximal_switch = 1
+    """
+    Proximal feasibility mode-switch: on a ladder-exhausted step rejection, keep the same barrier algorithm running but swap the true objective for a proximal term pulling the primals back toward the switch point, until the acceptance strategy's infeasibility-reduction test passes -- see the restoration_mode property docstring for the full mechanism. Composes with every acceptance_strategy and barrier_governor.
     """
 
 class PDStepStrategies(enum.Enum):
