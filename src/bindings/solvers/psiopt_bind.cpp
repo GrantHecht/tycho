@@ -118,8 +118,9 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
             return std::vector<int>(h.begin(), h.end());
         },
         "Counts of how each rejected step's recovery was resolved during the most recent "
-        "solve, as a 4-element list: [second-order correction, extended backtracking, "
-        "watchdog, unresolved].");
+        "solve, as a 5-element list: [second-order correction, extended backtracking, "
+        "watchdog, unresolved, restoration]. The final bucket only increments when "
+        "restoration_mode is proximal_switch.");
 
     BIND_RESULT_RO(obj, "last_funnel_width", last_funnel_width_,
                    "Final funnel width (tau) at the end of the most recent solve's last phase. "

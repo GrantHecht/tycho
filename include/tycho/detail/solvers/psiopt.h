@@ -85,10 +85,18 @@ using tycho::EigenRef;
 // NoopRecovery implementation shipped today always returns kAcceptAsIs; the
 // alg_impl call site is provably inert (see noop_recovery.h and the call-site
 // comment in alg_impl) — no live recovery dispatcher exists yet.
+// PSIOPT also owns an optional feasibility-restoration mode-switch through a
+// std::unique_ptr<RestorationStrategy> (concrete type ProximalSwitchRestoration,
+// complete only in psiopt.cpp). Unlike the four components above it is NOT
+// always constructed: rebuild_globalization_components() leaves it null unless
+// restoration_mode_ == proximal_switch, so on the default path every
+// restoration branch guards on `restoration_ != nullptr` and is provably dead.
+// Same forward-declare + out-of-line ctor/dtor discipline as the others.
 class AcceptanceStrategy;
 class GlobalizationMechanism;
 class BarrierGovernor;
 class RecoveryChain;
+class RestorationStrategy;
 
 class PSIOPT {
   public:
@@ -159,7 +167,13 @@ class PSIOPT {
         // watchdog existed.
         bool watchdog_ = false;
 
-        int max_feas_rest_ = 2; // reserved — feasibility restoration, not currently implemented
+        // Per-phase feasibility-restoration entry budget: the maximum number of
+        // times restoration mode may be entered within a single phase. Read by
+        // ProximalSwitchRestoration::entry_permitted() (globalization/
+        // proximal_restoration.h) — 0 refuses restoration entirely (budget
+        // exhausted before the first entry). Ignored when restoration_mode_ ==
+        // off. validate() requires it >= 0.
+        int max_feas_rest_ = 2;
 
         // --- Convergence tolerances ---
         double kkt_tol_ = 1.0e-6;
@@ -220,6 +234,19 @@ class PSIOPT {
         // monitored governor already provides the monotone fallback) — validate()
         // rejects that combination.
         bool never_monotone_ = false;
+
+        // --- Feasibility restoration (opt-in proximal mode-switch) ---
+        // off (default) reproduces today's behavior bit-identically: no
+        // RestorationStrategy is constructed and every restoration branch in
+        // the solver is provably dead. proximal_switch selects the proximal
+        // feasibility mode-switch (ProximalSwitchRestoration), which — on a
+        // ladder-exhausted step rejection at a not-near-feasible point — swaps
+        // the true objective for a proximal term until infeasibility is
+        // sufficiently reduced, then resumes optimality mode. Composes with
+        // every acceptance_strategy_ and barrier_governor_ (no matrix
+        // restrictions). Enum lives in psiopt_fwd.h; the per-phase entry budget
+        // is max_feas_rest_ above.
+        RestorationModes restoration_mode_ = RestorationModes::off;
 
         // --- Barrier parameters ---
         double init_mu_ = 0.001;
@@ -342,11 +369,13 @@ class PSIOPT {
         // recovery_depth_histogram_[0] SOC, [1] extended backtracking,
         // [2] watchdog, [3] unresolved (today's classic give-up: the
         // originally-rejected step was simply taken; this is the ONLY bucket
-        // that increments when SOC/extended/watchdog are all off). Counts
+        // that increments when SOC/extended/watchdog are all off),
+        // [4] restoration (a feasibility-restoration mode-switch was taken —
+        // only increments when restoration_mode_ == proximal_switch). Counts
         // rejections, i.e. every should_dispatch_recovery-gated call, not
         // just ones where a recovery link actually intervened. Reset per
         // solve alongside the other accumulators.
-        std::array<int, 4> recovery_depth_histogram_{};
+        std::array<int, 5> recovery_depth_histogram_{};
 
         // Final funnel width (τ) reported by FunnelAcceptance::
         // append_diagnostics() (globalization/funnel_acceptance.h) at the end
@@ -645,8 +674,21 @@ class PSIOPT {
     // (composed in that order by ChainedRecovery) and WatchdogRecovery (an
     // outer decorator over whatever chain results) via the corresponding
     // Settings fields — see globalization/soc.h and globalization/watchdog.h.
-    // The feasibility switch remains a future link.
     std::unique_ptr<RecoveryChain> recovery_;
+
+    // Optional feasibility-restoration mode-switch. Held through the
+    // RestorationStrategy interface (forward-declared above). Unlike
+    // acceptance_/mechanism_/governor_/recovery_ this is NOT always constructed:
+    // rebuild_globalization_components() leaves it null unless restoration_mode_
+    // == proximal_switch, in which case it holds a ProximalSwitchRestoration and
+    // FeasibilitySwitchRecovery is wrapped as the outermost recovery link. On
+    // the default path (off) it stays null and every restoration branch in
+    // eval_nlp / the classic+generic trial-eval seams / alg_impl guards on
+    // `restoration_ != nullptr` (or `ctx.restoration_ != nullptr`) and is
+    // provably dead. run_phase_sequence() resets it (when present) at each phase
+    // boundary alongside the other components, and collects its diagnostics into
+    // SolveResult::last_feas_rest_entries_/last_feas_rest_iters_.
+    std::unique_ptr<RestorationStrategy> restoration_;
 
     // (Re)builds acceptance_/mechanism_/governor_/recovery_ from the current
     // Settings. Called once at the top of every run_phase_sequence() (i.e.

@@ -155,6 +155,13 @@ void ClassicMeritAcceptance::eval_trial_point_occ(double obj_scale, double mu, d
     xsl2.data() = xsl.data() + alpha * dxsl.data();
     rhs2.data().setZero();
     ctx_.nlp_->eval_occ(obj_scale, xsl2.primals(), ptest, rhs2.eq_cons(), rhs2.iq_cons());
+    // Feasibility-restoration trial seam (dead on the default path:
+    // ctx_.restoration_ is null). Shared by the L1 and AUGLANG variants. While
+    // active, obj_scale is 0 (user objective contributes exactly 0.0) and the
+    // proximal objective φ_prox(trial primals) is added — matching the uniform
+    // objective substitution the eval seam applies to prim_obj.
+    if (ctx_.restoration_ && ctx_.restoration_->is_active())
+        ptest += ctx_.restoration_->proximal_objective(xsl2.primals());
     this->apply_reset_slacks(xsl2.slacks(), rhs2.iq_cons());
     btest = this->barrier_objective(xsl2.slacks(), mu);
 }
@@ -189,6 +196,13 @@ double ClassicMeritAcceptance::ls_lang(double obj_scale, double mu, double prim_
         xsl2.data() = xsl.data() + alpha * dxsl.data();
         rhs2.data().setZero();
         this->eval_rhs(obj_scale, xsl2.data(), ptest, rhs2.data(), rhs2.data());
+        // Feasibility-restoration trial seam (dead on the default path:
+        // ctx_.restoration_ is null). While active, obj_scale is 0 (the user
+        // objective contributes exactly 0.0 to ptest via lsobjscale) and the
+        // proximal objective φ_prox(trial primals) is added instead — matching
+        // the uniform objective substitution the eval seam applies to prim_obj.
+        if (ctx_.restoration_ && ctx_.restoration_->is_active())
+            ptest += ctx_.restoration_->proximal_objective(xsl2.primals());
         this->apply_reset_slacks(xsl2.slacks(), rhs2.iq_cons());
         btest = this->barrier_objective(xsl2.slacks(), mu);
         this->barrier_gradient(xsl2.slacks(), xsl2.iq_lmults(), mu, rhs2.dual_grad());
@@ -520,6 +534,13 @@ static void modern_eval_trial_point(SolverContext &ctx, double obj_scale, double
     RHS2.setZero();
     ptest = 0.0;
     ctx.nlp_->eval_occ(obj_scale, XSL2.head(pv), ptest, RHS2.segment(pv + sv, ec), RHS2.tail(ic));
+    // Feasibility-restoration trial seam (dead on the default path:
+    // ctx.restoration_ is null). While active, obj_scale is 0 (user objective
+    // contributes exactly 0.0) and the proximal objective φ_prox(trial primals)
+    // is added, so the generic acceptance loop's trial.objective mirrors the
+    // uniform substitution applied to current.objective (= prim_obj = φ_prox).
+    if (ctx.restoration_ && ctx.restoration_->is_active())
+        ptest += ctx.restoration_->proximal_objective(XSL2.head(pv));
 
     auto S = XSL2.segment(pv, sv);
     auto FXI = RHS2.tail(ic);

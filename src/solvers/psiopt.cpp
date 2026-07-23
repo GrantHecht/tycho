@@ -989,7 +989,7 @@ void tycho::solvers::PSIOPT::rebuild_globalization_components() {
             SolverContext{this->nlp_.get(), this->kkt_sol_, this->settings_, this->primal_vars_,
                           this->slack_vars_, this->equal_cons_, this->inequal_cons_, this->kkt_dim_,
                           this->stli_scratch_, this->hp_scratch_, this->best_xsl_scratch_,
-                          this->best_rhs_scratch_});
+                          this->best_rhs_scratch_, this->restoration_.get()});
     }
 
     // The step-length globalization mechanism. Stateless (holds
@@ -1112,6 +1112,27 @@ void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
                                       EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
                                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
     std::fill_n(KKTmat.valuePtr(), KKTmat.nonZeros(), 0.0);
+
+    // Feasibility-restoration evaluation seam. Dead on the default path
+    // (restoration_ is null unless restoration_mode_ == proximal_switch). While
+    // restoration is active the true objective is uniformly replaced by the
+    // proximal term φ_prox: route through the objective-free KKT (constraints +
+    // their Hessians, exactly the OPTNO/SOE shape), then inject the proximal
+    // objective value, its gradient into the (now-zero) objective-gradient
+    // block, and its diagonal Hessian via the solver primal-diagonal slot the
+    // SOE/INIT modes already use. The auxiliary/barrier terms and the
+    // infeasibility residuals are untouched, and obj_scale never multiplies
+    // φ_prox (it is a solver-internal objective). The convergence check needs no
+    // mode code: it reads whatever lands in prim_grad() downstream (the
+    // objective-free-mode precedent), which now carries the proximal gradient.
+    if (this->restoration_ && this->restoration_->is_active()) {
+        this->nlp_->set_primal_diags(this->restoration_->proximal_diagonal());
+        eval_kkt_no(0.0, XSL, val, GX, AGXS_FX, KKTmat);
+        this->nlp_->set_primal_diags(0.0);
+        val = this->restoration_->proximal_objective(XSL.head(primal_vars_));
+        this->restoration_->add_proximal_gradient(XSL.head(primal_vars_), GX.head(primal_vars_));
+        return;
+    }
 
     switch (algmode) {
     case AlgorithmModes::OPT:
@@ -1305,10 +1326,11 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     // step-length mechanism (mechanism_) at its call sites below. Built once
     // here (dims/settings/scratch are stable for the solve); it must not
     // outlive this alg_impl frame or the PSIOPT members it references.
-    SolverContext ctx{this->nlp_.get(),    this->kkt_sol_,          this->settings_,
-                      this->primal_vars_,  this->slack_vars_,       this->equal_cons_,
-                      this->inequal_cons_, this->kkt_dim_,          this->stli_scratch_,
-                      this->hp_scratch_,   this->best_xsl_scratch_, this->best_rhs_scratch_};
+    SolverContext ctx{this->nlp_.get(),     this->kkt_sol_,           this->settings_,
+                      this->primal_vars_,   this->slack_vars_,        this->equal_cons_,
+                      this->inequal_cons_,  this->kkt_dim_,           this->stli_scratch_,
+                      this->hp_scratch_,    this->best_xsl_scratch_,  this->best_rhs_scratch_,
+                      this->restoration_.get()};
 
     tycho::utils::Timer Runtimer;
     tycho::utils::Timer Funtimer;
