@@ -122,6 +122,21 @@ inline constexpr double kRestoProximityWeight = 1.0;
 // see the file docstring's disclosed single-measure adaptation.
 inline constexpr double kNearFeasibleGuardFactor = 0.1;
 
+// Failure-classification threshold for a restoration STALL (distinct from the
+// ENTRY guard above, and three orders of magnitude looser). When the proximal
+// feasibility subproblem converges/stalls while restoration is active, Ipopt
+// classifies the outcome by comparing the true primal infeasibility against
+// resto_failure_feasibility_threshold, default 1e2 · tol
+// (IpRestoMinC_1Nrm.cpp, commit 72a29c9a): at or below it the restoration is
+// treated as having reached a (near-)feasible point — a soft, recoverable
+// outcome — and only above it is the problem declared locally infeasible.
+// Tycho applies the same 1e2 factor to its unscaled econ_tol_ (same
+// single-measure adaptation as the entry guard above). Using the entry-guard
+// factor here instead would misclassify every stall with violation in
+// (0.1·tol, 1e2·tol] — points Ipopt considers feasible-enough to continue
+// from — as local infeasibility on feasible problems.
+inline constexpr double kRestoFailureFeasibilityFactor = 1.0e2;
+
 // =============================================================================
 // ProximalSwitchRestoration — concrete proximal feasibility mode-switch.
 // See the file docstring for the full formulation and citations.

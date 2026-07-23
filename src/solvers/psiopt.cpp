@@ -1496,11 +1496,18 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             cur.infeasibility = v_rhs.all_cons().template lpNorm<1>();
             cur.objective = prim_obj; // = φ_prox while active (set by the eval seam).
             cur.auxiliary = barr_obj;
-            const double near_feasible_threshold = kNearFeasibleGuardFactor * settings_.econ_tol_;
+            // Stall classification uses the FAILURE threshold (1e2 · tol), not
+            // the far-stricter entry guard: a proximal-subproblem stall at
+            // violation <= 1e2 · tol is the recoverable "reached a
+            // (near-)feasible point" outcome, and only beyond it is local
+            // infeasibility declared (see kRestoFailureFeasibilityFactor's
+            // citation block in proximal_restoration.h).
+            const double resto_failure_threshold =
+                kRestoFailureFeasibilityFactor * settings_.econ_tol_;
 
             if (PreExitCode == ConvergenceFlags::CONVERGED ||
                 PreExitCode == ConvergenceFlags::ACCEPTABLE) {
-                if (cur.infeasibility <= near_feasible_threshold) {
+                if (cur.infeasibility <= resto_failure_threshold) {
                     // Proximal subproblem converged AND the true constraints are
                     // near-feasible: leave restoration and resume the true
                     // objective. The same iterate is re-evaluated in optimality
@@ -1558,7 +1565,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                                "Feasibility restoration converged to a locally infeasible "
                                "point (infeasibility {:.3e} > {:.3e}); stopping "
                                "(not converged).\n",
-                               cur.infeasibility, near_feasible_threshold);
+                               cur.infeasibility, resto_failure_threshold);
                 break;
             }
 
