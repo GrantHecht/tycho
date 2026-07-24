@@ -721,12 +721,12 @@ class test_InertiaModeComboMatrix(unittest.TestCase):
 
 
 class test_ProxRegDiagnostics(unittest.TestCase):
-    """SolveResult.last_prox_reg_primal / last_prox_reg_dual (alg_impl's
-    direct phase-close copy of the final iterate's IterateInfo::
-    prox_reg_primal_/prox_reg_dual_ fields -- see psiopt.h for the sentinel
-    semantics). Sentinel -1.0/-1.0 unless inertia_mode is
-    proximal_regularization; both fields report >= 0.0 once that mode is
-    selected and a solve actually runs at least one iteration.
+    """SolveResult.last_prox_reg_primal / last_prox_reg_dual (written at
+    alg_impl phase close from the last FACTORIZED iteration's applied
+    shifts -- see psiopt.h for the sentinel semantics). Sentinel -1.0/-1.0
+    unless inertia_mode is proximal_regularization; both fields report
+    >= 0.0 once that mode is selected and the solve factorizes at least
+    once.
     """
 
     def test_default_solve_reports_sentinels(self):
@@ -743,6 +743,23 @@ class test_ProxRegDiagnostics(unittest.TestCase):
         self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
         self.assertGreaterEqual(prob.optimizer.last_prox_reg_primal, 0.0)
         self.assertGreaterEqual(prob.optimizer.last_prox_reg_dual, 0.0)
+
+    def test_mode_off_after_mode_on_restores_sentinels(self):
+        # Guards both the mode-gate on the phase-close write and the
+        # reset_accumulators() coverage: a mode-on solve leaves real values
+        # behind, so a following mode-off solve on the SAME optimizer only
+        # reports -1.0 again if the fields were actually re-sentineled and
+        # the classic path really skips the write.
+        prob = _make_problem()
+        prob.optimizer.inertia_mode = solvs.InertiaModes.proximal_regularization
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertGreaterEqual(prob.optimizer.last_prox_reg_primal, 0.0)
+        prob.optimizer.inertia_mode = solvs.InertiaModes.classic
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(prob.optimizer.last_prox_reg_primal, -1.0)
+        self.assertEqual(prob.optimizer.last_prox_reg_dual, -1.0)
 
 
 class test_BadEnumValues(unittest.TestCase):

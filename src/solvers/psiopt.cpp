@@ -1816,6 +1816,12 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     // episode entry/exit, which run in-phase). Initialized at the
     // Cipolla–Gondzio floor; dead (never read) on the classic path.
     double rho_k = tycho::solvers::kProxRegFloor;
+    // Last shifts actually applied at a factorization this phase (sentinel -1
+    // until the first factorized iteration). The convergence probe appended to
+    // `iters` on a converged exit never factorizes, so the trailing history
+    // entry does NOT carry the final applied shifts -- these locals do.
+    double last_prox_primal = -1.0;
+    double last_prox_dual = -1.0;
     std::vector<IterateInfo> iters;
     iters.reserve(settings_.max_iters_);
     ConvergenceFlags ExitCode = ConvergenceFlags::NOTCONVERGED;
@@ -2306,6 +2312,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             // warm-start above is unchanged -- ρ_k is a separate, additional state.
             Citer.prox_reg_primal_ = base_prox;
             Citer.prox_reg_dual_ = dual_shift;
+            last_prox_primal = base_prox;
+            last_prox_dual = dual_shift;
             double applied_total = (Citer.h_facs_ > 0) ? (rho_k + nhpert) : rho_k;
             rho_k = tycho::solvers::prox_reg_decay(applied_total, settings_.decr_h_);
         }
@@ -2759,20 +2767,23 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
 
     this->result_.primals_ = v_xsl.primals();
 
-    // Proximal primal-dual regularization diagnostics: copy the final
-    // iterate's shifts (see IterateInfo::prox_reg_primal_/prox_reg_dual_)
-    // straight from iters.back() -- there is no dedicated component object
-    // here with its own append_diagnostics() hook to collect this from after
-    // alg_impl() returns (unlike the acceptance_/governor_/restoration_
-    // diagnostics collected in run_phase_sequence()), since the shifts are
-    // alg_impl-local mode state. Sentinel -1.0 stays untouched (from
-    // reset_accumulators()) when the mode is off, matching the classic path's
-    // byte-identical guarantee. Same last-phase-wins semantics as the other
-    // diagnostic fields: a multi-phase call ends with the LAST phase's alg_impl
-    // call's values.
+    // Proximal primal-dual regularization diagnostics: report the shifts from
+    // the last FACTORIZED iteration of this phase (tracked in alg_impl locals;
+    // iters.back() is the wrong source -- on a converged exit it is the
+    // non-factorized convergence probe, whose fields still hold the sentinel).
+    // There is no dedicated component object here with its own
+    // append_diagnostics() hook to collect this from after alg_impl() returns
+    // (unlike the acceptance_/governor_/restoration_ diagnostics collected in
+    // run_phase_sequence()), since the shifts are alg_impl-local mode state.
+    // Sentinel -1.0 stays untouched (from reset_accumulators()) when the mode
+    // is off, matching the classic path's byte-identical guarantee, and also
+    // when the mode is on but the phase converged before its first
+    // factorization (no shift was ever applied). Same last-phase-wins
+    // semantics as the other diagnostic fields: a multi-phase call ends with
+    // the LAST phase's alg_impl call's values.
     if (settings_.inertia_mode_ == InertiaModes::proximal_regularization) {
-        this->result_.last_prox_reg_primal_ = iters.back().prox_reg_primal_;
-        this->result_.last_prox_reg_dual_ = iters.back().prox_reg_dual_;
+        this->result_.last_prox_reg_primal_ = last_prox_primal;
+        this->result_.last_prox_reg_dual_ = last_prox_dual;
     }
 
     if (this->equal_cons_ > 0) {

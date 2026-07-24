@@ -538,19 +538,21 @@ class PSIOPT {
         // counting note above).
         int last_feas_rest_iters_ = -1;
 
-        // Proximal primal-dual regularization shifts applied during the FINAL
-        // ITERATE of the most recent solve's LAST PHASE (IterateInfo::
-        // prox_reg_primal_/prox_reg_dual_ — see iterate_info.h), copied by
-        // alg_impl() directly (there is no dedicated component object with its
-        // own append_diagnostics() hook here — the shifts are alg_impl-local
-        // state, unlike the acceptance/governor/restoration fields above).
+        // Proximal primal-dual regularization shifts applied at the LAST
+        // FACTORIZED ITERATION of the most recent solve's LAST PHASE, written
+        // by alg_impl() at phase close from mode-local state (there is no
+        // dedicated component object with its own append_diagnostics() hook
+        // here — unlike the acceptance/governor/restoration fields above; and
+        // the trailing iterate-history entry is the wrong source because a
+        // converged exit appends a non-factorized convergence probe).
         // last_prox_reg_primal_ is the persistent primal base shift ρ_k added
-        // to the Hessian diagonal that iteration; last_prox_reg_dual_ is the
-        // barrier-scaled dual shift δ_c subtracted from the constraint-row
-        // diagonals (0.0 when suppressed inside a nested l1 restoration
-        // phase). Sentinel -1.0 for BOTH fields when inertia_mode_ !=
-        // proximal_regularization — the classic path never writes them. Same
-        // last-phase-wins semantics as the fields above.
+        // to the Hessian diagonal at that iteration; last_prox_reg_dual_ is
+        // the barrier-scaled dual shift δ_c subtracted from the
+        // constraint-row diagonals (0.0 when suppressed inside a nested l1
+        // restoration phase). Sentinel -1.0 for BOTH fields when
+        // inertia_mode_ != proximal_regularization — the classic path never
+        // writes them — and when a mode-on phase converged before its first
+        // factorization. Same last-phase-wins semantics as the fields above.
         double last_prox_reg_primal_ = -1.0;
         double last_prox_reg_dual_ = -1.0;
 

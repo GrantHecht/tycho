@@ -152,14 +152,16 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
                    "proximal_switch or l1_nested.");
 
     BIND_RESULT_RO(obj, "last_prox_reg_primal", last_prox_reg_primal_,
-                   "Persistent primal base shift (rho_k) applied to the Hessian diagonal on the "
-                   "final iterate of the most recent solve's last phase. -1.0 unless "
-                   "inertia_mode is proximal_regularization.");
+                   "Persistent primal base shift (rho_k) applied to the Hessian diagonal at the "
+                   "last factorized iteration of the most recent solve's last phase. -1.0 unless "
+                   "inertia_mode is proximal_regularization (or if that phase converged before "
+                   "its first factorization, so no shift was ever applied).");
     BIND_RESULT_RO(obj, "last_prox_reg_dual", last_prox_reg_dual_,
                    "Barrier-scaled dual shift (delta_c) subtracted from the constraint-row "
-                   "diagonals on the final iterate of the most recent solve's last phase. -1.0 "
-                   "unless inertia_mode is proximal_regularization; 0.0 if that final iterate "
-                   "fell inside a nested l1 restoration phase, where the shift is suppressed.");
+                   "diagonals at the last factorized iteration of the most recent solve's last "
+                   "phase. -1.0 unless inertia_mode is proximal_regularization (or if that phase "
+                   "converged before its first factorization); 0.0 if that iteration fell inside "
+                   "a nested l1 restoration phase, where the shift is suppressed.");
 
     BIND_SETTINGS_VALIDATED(obj, "obj_scale", obj_scale_, set_obj_scale, "");
     BIND_SETTINGS_VALIDATED(obj, "print_level", print_level_, set_print_level, "");
