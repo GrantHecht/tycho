@@ -179,8 +179,8 @@ TEST(WatchdogStateTrial, MuChangeWhileArmedResetsEntirely) {
 // ExtendedBacktrackRecovery — ladder-continuation arithmetic.
 ///////////////////////////////////////////////////////////////////////////////
 
-// Inert AcceptanceStrategy / GlobalizationMechanism: used on the off (cap ==
-// 0) early-exit path, which must never reach either.
+// Inert AcceptanceStrategy: used on the off (cap == 0) early-exit path, which
+// must never reach it.
 class ExtBtUnusedAcceptance : public AcceptanceStrategy {
   public:
     bool drives_classic_path() const override { return true; }
@@ -196,18 +196,35 @@ class ExtBtUnusedAcceptance : public AcceptanceStrategy {
     void reset() override {}
 };
 
-class ExtBtUnusedMechanism : public GlobalizationMechanism {
+// Pass-through GlobalizationMechanism: ExtendedBacktrackRecovery re-drives the
+// acceptance backtrack through the mechanism's run_acceptance_backtrack seam
+// (not by calling the acceptance directly), so this double forwards it verbatim
+// to the (classic) acceptance's classic_line_search — reproducing the routing
+// BacktrackingLineSearch performs for a classic strategy, so the scripted
+// acceptance below still sees each trial's DXSL and stamps the verdict. The
+// fraction-to-boundary halves (compute_step / max_primal_dual_step) are NOT part
+// of the extended-backtracking path and must never be reached.
+class ExtBtPassThroughMechanism : public GlobalizationMechanism {
   public:
     double compute_step(PSIOPT::LineSearchModes, double, double, double, double, Eigen::VectorXd &,
                         Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &,
                         AcceptanceStrategy &, double &, double &, IterateInfo &,
                         const std::vector<IterateInfo> &, SolverContext &) override {
-        ADD_FAILURE() << "mechanism must never be reached by ExtendedBacktrackRecovery";
+        ADD_FAILURE() << "compute_step must never be reached by ExtendedBacktrackRecovery";
         return 1.0;
     }
     void max_primal_dual_step(Eigen::VectorXd &, Eigen::VectorXd &, double, double &, double &,
                               const SolverContext &) override {
-        ADD_FAILURE() << "mechanism must never be reached by ExtendedBacktrackRecovery";
+        ADD_FAILURE() << "max_primal_dual_step must never be reached by ExtendedBacktrackRecovery";
+    }
+    double run_acceptance_backtrack(PSIOPT::LineSearchModes lsmode, double obj_scale, double mu,
+                                    double prim_obj, double barr_obj, Eigen::VectorXd &XSL,
+                                    Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2,
+                                    Eigen::VectorXd &RHS, Eigen::VectorXd &RHS2,
+                                    AcceptanceStrategy &acceptance, IterateInfo &Citer,
+                                    const std::vector<IterateInfo> &iters, SolverContext &) override {
+        return acceptance.classic_line_search(lsmode, obj_scale, mu, prim_obj, barr_obj, XSL, DXSL,
+                                              XSL2, RHS, RHS2, Citer, iters);
     }
     void reset() override {}
 };
@@ -270,7 +287,7 @@ TEST(ExtendedBacktrackGuards, DisabledDeclines) {
     Eigen::VectorXd scratch;
     SolverContext ctx = extbt_dummy_context(solver, settings, zero, scratch);
     ExtBtUnusedAcceptance acceptance;
-    ExtBtUnusedMechanism mechanism;
+    ExtBtPassThroughMechanism mechanism;
     IterateInfo citer;
     const std::vector<IterateInfo> iters;
     Eigen::VectorXd XSL(1), DXSL(1), XSL2(1), RHS(1), RHS2(1);
@@ -298,7 +315,7 @@ TEST(ExtendedBacktrackLadder, ContinuesFromLiveAlphaAndHonorsCap) {
     int zero = 0;
     Eigen::VectorXd scratch;
     SolverContext ctx = extbt_dummy_context(solver, settings, zero, scratch);
-    ExtBtUnusedMechanism mechanism;
+    ExtBtPassThroughMechanism mechanism;
     IterateInfo citer;
     const std::vector<IterateInfo> iters;
 
@@ -342,7 +359,7 @@ TEST(ExtendedBacktrackLadder, AcceptsAndStopsEarly) {
     int zero = 0;
     Eigen::VectorXd scratch;
     SolverContext ctx = extbt_dummy_context(solver, settings, zero, scratch);
-    ExtBtUnusedMechanism mechanism;
+    ExtBtPassThroughMechanism mechanism;
     IterateInfo citer;
     const std::vector<IterateInfo> iters;
 

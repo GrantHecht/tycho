@@ -96,6 +96,22 @@ class BacktrackingLineSearch : public GlobalizationMechanism {
     void max_primal_dual_step(Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, double bfrac,
                               double &alphap, double &alphad, const SolverContext &ctx) override;
 
+    // Acceptance backtrack only (no fraction-to-boundary scaling), dispatching
+    // classic-vs-generic per the strategy — see GlobalizationMechanism::
+    // run_acceptance_backtrack. compute_step's tail delegates to this so the
+    // dispatch lives in one place; the recovery links re-drive it on a prepared
+    // direction. On the classic path this forwards verbatim to
+    // acceptance.classic_line_search; on the generic path it runs
+    // generic_line_search (which owns the trial-point evaluation the recovery
+    // links cannot reach on their own).
+    double run_acceptance_backtrack(PSIOPT::LineSearchModes lsmode, double obj_scale, double mu,
+                                    double prim_obj, double barr_obj, Eigen::VectorXd &XSL,
+                                    Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2,
+                                    Eigen::VectorXd &RHS, Eigen::VectorXd &RHS2,
+                                    AcceptanceStrategy &acceptance, IterateInfo &Citer,
+                                    const std::vector<IterateInfo> &iters,
+                                    SolverContext &ctx) override;
+
   private:
     // =========================================================================
     // KKTVector — VERBATIM copy of PSIOPT::KKTVector (psiopt.h). Reproduced

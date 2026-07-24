@@ -369,8 +369,8 @@ struct InterpTable2D {
     /// @internal
     /// @brief Precompute and cache every cell's bicubic coefficient matrix.
     ///
-    /// Mirrors InterpTable3D::cache_alphavecs()/InterpTable4D::cache_alphavecs():
-    /// populated once, up-front (construction/set_data time), never lazily on
+    /// Mirrors the analogous `cache_alphavecs()` helper on `InterpTable3D` and
+    /// `InterpTable4D`: populated once, up-front (construction/set_data time), never lazily on
     /// the read path, so tables shared across threads for concurrent queries
     /// never race a cache write. Calls calc_amatrix() with the exact same
     /// arguments/arithmetic get_amatrix() would use on the fly, so a cached

@@ -18,8 +18,19 @@
 //     right-hand side replaced by an accumulated corrected value; the objective
 //     block is unchanged.
 //   * The corrected direction is fraction-to-boundary scaled and the full
-//     acceptance backtrack is re-run on it. If it is accepted, the corrected
-//     step replaces the rejected one (RecoveryChain::Action::kRetry).
+//     acceptance backtrack is re-run on it THROUGH THE MECHANISM
+//     (GlobalizationMechanism::run_acceptance_backtrack), so the corrected
+//     trial is tested against the SAME acceptance criteria the ordinary step
+//     faced — Ipopt tests its SOC step via the same
+//     CheckAcceptabilityOfTrialPoint (coin-or/Ipopt 72a29c9,
+//     IpFilterLSAcceptor.cpp TrySecondOrderCorrection). On the classic merit
+//     path that is the fused classic_line_search (byte-identical to the
+//     pre-generic behavior); on the generic path (modern merit / filter /
+//     funnel) it is AcceptanceStrategy::is_iterate_acceptable via
+//     generic_line_search. This is what lets SOC compose with every acceptance
+//     strategy rather than only classic merit. If the corrected trial is
+//     accepted, the corrected step replaces the rejected one
+//     (RecoveryChain::Action::kRetry).
 //   * Otherwise corrections repeat while the corrected trial's violation keeps
 //     dropping by at least the kSocViolationDecrease factor, up to
 //     Settings::max_soc_ corrections; once the violation stagnates or the cap
@@ -32,6 +43,48 @@
 // numeric path is exercised
 // end-to-end by the solver corpus; the unit tests here truth-table the trigger,
 // the termination policy, and the correction counter with scripted outcomes.
+//
+// Interaction rules with the generic-path acceptance strategies (resolved):
+//
+//   (a) Funnel width / filter augmentation on a corrected accept. Because the
+//       corrected re-test routes through is_iterate_acceptable, the strategy's
+//       own accept-time bookkeeping runs on the ACCEPTED trial — i.e. the
+//       funnel width tightens from the CORRECTED trial's (θ, φ), and the filter
+//       is augmented with the current-iterate reference exactly as for an
+//       ordinary accepted H-type step. This matches Ipopt/Uno structure (the
+//       accepted point, corrected or not, drives the filter/funnel update) and
+//       is the intended, disclosed behavior. Rejected corrections invoke
+//       is_iterate_acceptable too (the re-run backtrack ladder), so the filter's
+//       last-rejection reset heuristic advances per rejected rung, identically
+//       to any other line-search invocation — the corrected re-test is treated
+//       as just another line search, which is the reference-faithful reading.
+//
+//   (b) SOC during an active (nested l1) feasibility-restoration phase. The
+//       recovery chain runs in-phase, so a correction can be attempted on the
+//       elastic-modified system. The acceptance re-test uses the phase's trial
+//       machinery: run_acceptance_backtrack -> generic_line_search /
+//       classic_line_search both go through the restoration trial seam
+//       (trial_objective + trial_residual_shift), so the accept/reject verdict
+//       on a corrected step measures the elastic subproblem's objective and
+//       infeasibility ‖c + n − p‖, not the raw problem's. The c_soc constraint
+//       accumulation and the CURRENT-side trigger/termination violation
+//       measures stay in the raw-slack-reset space (eval_trial_constraints, and
+//       the RHS constraint block which carries the condensed residual r̃
+//       in-phase), while the TRIAL-side trigger measure recorded at the first
+//       rejection is elastic-shifted in-phase (it comes off the shifted trial
+//       residuals) — a mixed-space trigger comparison — EXACTLY as the
+//       classic SOC link computes them in-phase, since both paths share that
+//       machinery unchanged. The generic path is therefore consistent with the
+//       classic path here; the raw-vs-elastic space asymmetry in the corrective
+//       direction/trigger is a pre-existing property of the classic link,
+//       affecting only the heuristic correction and trigger sensitivity, never
+//       the rigor of the phase-aware acceptance decision.
+//
+//   (c) Watchdog composition is unchanged. WatchdogRecovery wraps the chain and
+//       delegates rejections to the inner ChainedRecovery(SOC, extended); its
+//       own arm/revert logic uses the strategy-agnostic prim_obj + barr_obj
+//       proxy, so SOC and extended backtracking under a generic strategy compose
+//       with the watchdog exactly as under classic merit.
 //
 // Ownership: stateless, per RecoveryChain's ownership rule — the correction
 // loop's transient buffers are local to on_step_rejected, and reset() has
