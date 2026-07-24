@@ -94,7 +94,17 @@
 //       fresh inner algorithm; iteration-level trajectories differ from Ipopt's
 //       even where the per-step algebra matches, and there is no inner/outer
 //       iteration-count split — the phase counts iterations with the in-mode
-//       counter.
+//       counter. A further structural consequence is a CONDITIONING asymmetry:
+//       the elimination concentrates the elastic barrier curvature into a
+//       single constraint-row pivot (n/z_n + p/z_p, which grows like 1/μ as
+//       the barrier parameter falls) where Ipopt's enlarged system carries the
+//       same information in separate bounded diagonal blocks. The condensed
+//       KKT is therefore more sensitive to a barrier parameter that runs ahead
+//       of the elastic complementarity — the reason the phase's barrier
+//       schedule feeds the elastic pairs to the oracle and runs the monotone
+//       safeguard (see the barrier-schedule notes in psiopt.cpp); the
+//       asymmetry itself is inherent to the condensation and is the price of
+//       avoiding the enlarged system.
 //
 //   (b) η(μ) is recomputed live on every evaluation (η = kRestoProximityWeight·
 //       sqrt(μ)), matching Ipopt's Eta(mu) method — UNLIKE the proximal-switch
