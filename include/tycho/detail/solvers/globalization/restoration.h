@@ -268,6 +268,27 @@ class RestorationStrategy {
             "not implement the nested restoration surface");
     }
 
+    // Second-level elastic re-centering fallback. When the in-phase line search
+    // exhausts the recovery ladder, re-solve the separable elastic subproblem in
+    // closed form holding x and s FIXED — the same per-row quadratic the entry
+    // initializer uses, evaluated at the LIVE barrier parameter `mu` and the
+    // CURRENT raw constraint residuals (equality h(x); inequality g(x)+s) — and
+    // adopt the re-centered pairs as the live elastic state (n,p from the closed
+    // form; z_n=μ/n, z_p=μ/p). See l1_restoration.h's disclosure for why the
+    // condensed representation re-centers z alongside n,p rather than keeping the
+    // stale multipliers (Ipopt's RestoRestorationPhase leaves z untouched because
+    // its z are real variables the next Newton step updates).
+    virtual void recenter_elastics(double mu,
+                                   const Eigen::Ref<const Eigen::VectorXd> &eq_residuals,
+                                   const Eigen::Ref<const Eigen::VectorXd> &iq_residuals) {
+        (void)mu;
+        (void)eq_residuals;
+        (void)iq_residuals;
+        throw std::logic_error(
+            "RestorationStrategy::recenter_elastics called on a strategy that does "
+            "not implement the nested restoration surface");
+    }
+
     // Fraction-to-boundary caps for the recovered elastic steps: primal cap from
     // the slacks (n,p), dual cap from their bound multipliers (z_n,z_p).
     virtual double primal_boundary_alpha(double tau) const {

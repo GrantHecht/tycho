@@ -811,6 +811,14 @@ class NestedSeamHarness {
         Eigen::VectorXd XSL = solver_->init_impl(x, outer_mu, docompute);
 
         NestedL1Restoration *comp = enter_nested(XSL.head(pv()), outer_mu);
+        // This harness isolates the elastic step-recovery seam (recover → apply)
+        // from the second-level re-center fallback: with max_ls_iters_ = 0 every
+        // in-phase line search is a ladder exhaustion, which would otherwise
+        // re-center on the first iteration and discard the recovered step this
+        // test observes. Consuming the one-shot budget up front keeps every
+        // iteration on the ordinary accept-as-is path. The re-center fallback has
+        // its own coverage (NestedRestorationRecenter suite).
+        solver_->resto_recentered_ = true;
         // Run the phase at the restoration barrier the elastics were initialized
         // at (what the entry orchestration will set the live μ to).
         const double phase_mu = comp->entry_mu();
@@ -1230,6 +1238,9 @@ class NestedLifecycleHarness {
     bool ratchet(double theta) const { return solver_->resto_ratchet_passes(theta); }
     double &stashed_mu() { return solver_->stashed_mu_; }
     bool &first_iter() { return solver_->resto_first_iter_; }
+    // Second-level re-center one-shot flag + the production re-center seam.
+    bool &recentered() { return solver_->resto_recentered_; }
+    bool call_try_recenter(double mu) { return solver_->try_recenter_elastics(mu); }
     double &theta_prev() { return solver_->resto_theta_orig_prev_; }
     void set_econ_tol(double t) { solver_->settings().econ_tol_ = t; }
 
@@ -1573,6 +1584,96 @@ TEST(NestedRestorationLifecycle, ProximalPathStillEntersExitsConverges) {
     EXPECT_NEAR(sol[0], 2.0, 1e-3);
     EXPECT_NEAR(sol[1], 2.0, 1e-3);
     EXPECT_GE(r.last_feas_rest_entries_, 0);
+}
+
+// -----------------------------------------------------------------------------
+// 5b. Second-level elastic re-centering fallback (disclosure (f)). When an
+// in-phase line search exhausts the recovery ladder, alg_impl's kAcceptAsIs case
+// re-centers the elastic pairs once (INSTEAD of taking the failed step) and then
+// falls through to accept-as-is on the next consecutive exhaustion; the one-shot
+// budget re-arms on any accepted step and at each phase entry.
+// -----------------------------------------------------------------------------
+
+// (b1) End-to-end one-shot. Forcing every regular step to be rejected
+// (max_ls_iters_ = 0) and pre-exhausting the soft budget drives the solve
+// straight into the full l1 phase, whose every in-phase iteration is then a
+// ladder-exhausted kAcceptAsIs. The second-level fallback re-centers on the FIRST
+// such exhaustion and — because no step is ever accepted under max_ls_iters_ = 0,
+// so the one-shot flag never re-arms — every later exhaustion falls through to
+// accept-as-is. The observer therefore records EXACTLY one re-center across the
+// whole phase (without the guard it would re-center every in-phase iteration),
+// and the phase still runs and converges on the original problem.
+TEST(NestedRestorationRecenter, FiresExactlyOncePerFailureRunEndToEnd) {
+    NestedLifecycleHarness h((Eigen::VectorXd(2) << 0.0, 0.0).finished(), /*n_ineq=*/0,
+                             /*inconsistent=*/false);
+    NestedL1Restoration *comp = nullptr;
+    double final_mu = 0.0;
+    auto flag = h.run_forced_entry(comp, PSIOPT::LineSearchModes::L1, PSIOPT::BarrierModes::LOQO,
+                                   final_mu, /*init_mu=*/0.1,
+                                   /*preload_soft_counter=*/kMaxSoftRestoIters);
+
+    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    ASSERT_NE(comp, nullptr);
+    EXPECT_GE(comp->entries(), 1);           // full phase entered
+    EXPECT_EQ(comp->recenter_calls(), 1);    // exactly one re-center; rest fall through
+    const auto &r = h.solver().result();
+    ASSERT_EQ(r.primals_.size(), 2);
+    EXPECT_NEAR(r.primals_[0], 2.0, 1e-3);
+    EXPECT_NEAR(r.primals_[1], 2.0, 1e-3);
+}
+
+// (b2) The one-shot budget re-arms at each phase entry: a stale set flag from a
+// prior episode does not suppress a re-center in the next.
+TEST(NestedRestorationRecenter, EntryReArmsOneShotBudget) {
+    NestedLifecycleHarness h((Eigen::VectorXd(2) << 0.0, 0.0).finished(), /*n_ineq=*/0,
+                             /*inconsistent=*/false);
+    h.inject_nested();
+
+    Eigen::VectorXd XSL = h.zero_vec();
+    Eigen::VectorXd RHS = h.zero_vec();
+    RHS[h.pv() + h.sv()] = 0.5; // equality residual for entry
+    double mu = 0.1;
+
+    h.recentered() = true; // pretend a prior episode consumed the budget
+    h.call_enter(XSL, RHS, 0.0, 0.0, mu);
+    EXPECT_FALSE(h.recentered()); // entry re-armed it
+}
+
+// (b3) The one-shot guard + clear-then-re-arm state machine, driven through the
+// production try_recenter_elastics seam (the exact call alg_impl's kAcceptAsIs
+// case makes). Deterministic: the first call re-centers, a second consecutive
+// call falls through (returns false, no re-center), and clearing the flag — what
+// alg_impl does on any accepted step — re-arms the budget so the next exhaustion
+// re-centers again.
+TEST(NestedRestorationRecenter, TrySeamIsOneShotAndReArmsOnClear) {
+    NestedLifecycleHarness h((Eigen::VectorXd(2) << 0.0, 0.0).finished(), /*n_ineq=*/1,
+                             /*inconsistent=*/false);
+    NestedL1Restoration *comp = h.inject_nested();
+
+    Eigen::VectorXd XSL = h.zero_vec();
+    Eigen::VectorXd RHS = h.zero_vec();
+    RHS[h.pv() + h.sv()] = 0.5;
+    double mu = 0.1;
+    h.call_enter(XSL, RHS, 0.0, 0.0, mu); // activates + seeds resto_ec_/ic_scratch_
+    ASSERT_TRUE(h.nested_active());
+    ASSERT_FALSE(h.recentered());
+    ASSERT_EQ(comp->recenter_calls(), 0);
+
+    // First ladder exhaustion of the run: re-centers, consumes the budget.
+    EXPECT_TRUE(h.call_try_recenter(mu));
+    EXPECT_TRUE(h.recentered());
+    EXPECT_EQ(comp->recenter_calls(), 1);
+
+    // Second consecutive exhaustion while set: falls through, no re-center.
+    EXPECT_FALSE(h.call_try_recenter(mu));
+    EXPECT_TRUE(h.recentered());
+    EXPECT_EQ(comp->recenter_calls(), 1);
+
+    // An accepted step clears the flag (what alg_impl does): the budget re-arms.
+    h.recentered() = false;
+    EXPECT_TRUE(h.call_try_recenter(mu));
+    EXPECT_TRUE(h.recentered());
+    EXPECT_EQ(comp->recenter_calls(), 2);
 }
 
 // -----------------------------------------------------------------------------

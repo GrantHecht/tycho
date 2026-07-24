@@ -516,6 +516,91 @@ TEST(L1RestoStepApplication, TrialObjectiveBlendsSlacksAndProximalTerm) {
 }
 
 // =============================================================================
+// Second-level elastic re-centering fallback (recenter_elastics). Re-solving the
+// separable elastic subproblem at a NEW barrier parameter and NEW residuals must
+// match the entry-init closed form on both channels, hold c + n − p = 0 (mixed
+// sign), pair n·z = μ / p·z = μ exactly, and refresh the pivots. The one-shot
+// guard itself lives in alg_impl and is exercised by the wiring suite.
+// =============================================================================
+
+TEST(L1RestoRecenter, ClosedFormBothChannelsAtNewMuAndResiduals) {
+    NestedL1Restoration r;
+    Eigen::VectorXd xr(2);
+    xr << 1.0, 2.0;
+    // Entry residuals differ from the re-center residuals, and the entry μ differs
+    // from the re-center μ, so a stale-state re-center would be caught.
+    Eigen::VectorXd eq0(2), iq0(1);
+    eq0 << 0.6, -0.4;
+    iq0 << 0.3;
+    const ProgressMeasures ref{0.6, 0.0, 0.0};
+    r.enter_nested(ref, xr, eq0, iq0, /*outer_mu=*/0.1);
+    ASSERT_EQ(r.recenter_calls(), 0);
+
+    // Re-center at a new μ with fresh mixed-sign residuals on both channels.
+    const double mu = 0.037;
+    Eigen::VectorXd eq(2), iq(1);
+    eq << 1.25, -0.8;
+    iq << -0.5;
+    r.recenter_elastics(mu, eq, iq);
+    EXPECT_EQ(r.recenter_calls(), 1);
+
+    const double rho = kRestoPenaltyParameter;
+    auto check_channel = [&](const Eigen::VectorXd &c, const Eigen::VectorXd &n,
+                             const Eigen::VectorXd &p, const Eigen::VectorXd &zn,
+                             const Eigen::VectorXd &zp) {
+        ASSERT_EQ(n.size(), c.size());
+        for (Eigen::Index i = 0; i < c.size(); ++i) {
+            const ElasticSlackInit s = l1_elastic_slack_init(c[i], mu, rho);
+            EXPECT_DOUBLE_EQ(n[i], s.n) << "row " << i;
+            EXPECT_DOUBLE_EQ(p[i], s.p) << "row " << i;
+            EXPECT_DOUBLE_EQ(zn[i], s.zn) << "row " << i;
+            EXPECT_DOUBLE_EQ(zp[i], s.zp) << "row " << i;
+            // c + n − p = 0 exactly (p = c + n), mixed sign.
+            EXPECT_NEAR(c[i] + n[i] - p[i], 0.0, 1e-12) << "row " << i;
+            // Complementarity pairing n·z_n = μ, p·z_p = μ.
+            EXPECT_NEAR(n[i] * zn[i], mu, 1e-12) << "row " << i;
+            EXPECT_NEAR(p[i] * zp[i], mu, 1e-12) << "row " << i;
+            EXPECT_GT(n[i], 0.0) << "row " << i;
+            EXPECT_GT(p[i], 0.0) << "row " << i;
+        }
+    };
+    check_channel(eq, r.ec_n(), r.ec_p(), r.ec_zn(), r.ec_zp());
+    check_channel(iq, r.ic_n(), r.ic_p(), r.ic_zn(), r.ic_zp());
+
+    // Pivots refreshed from the re-centered state: pivot = n/z_n + p/z_p.
+    const Eigen::VectorXd e_piv_expected =
+        r.ec_n().cwiseQuotient(r.ec_zn()) + r.ec_p().cwiseQuotient(r.ec_zp());
+    const Eigen::VectorXd i_piv_expected =
+        r.ic_n().cwiseQuotient(r.ic_zn()) + r.ic_p().cwiseQuotient(r.ic_zp());
+    ASSERT_EQ(r.e_pivots().size(), 2);
+    ASSERT_EQ(r.i_pivots().size(), 1);
+    for (Eigen::Index i = 0; i < 2; ++i)
+        EXPECT_DOUBLE_EQ(r.e_pivots()[i], e_piv_expected[i]) << "eq pivot " << i;
+    EXPECT_DOUBLE_EQ(r.i_pivots()[0], i_piv_expected[0]);
+
+    // A second re-center is a fresh full re-solve (the one-shot guard is an
+    // alg_impl-level concern; the component method itself always re-centers).
+    r.recenter_elastics(mu, eq, iq);
+    EXPECT_EQ(r.recenter_calls(), 2);
+}
+
+// reset() clears the re-center observer alongside the other diagnostics.
+TEST(L1RestoRecenter, ResetClearsRecenterCount) {
+    NestedL1Restoration r;
+    Eigen::VectorXd xr(1);
+    xr << 1.0;
+    Eigen::VectorXd eq(1);
+    eq << 0.5;
+    const Eigen::VectorXd empty(0);
+    const ProgressMeasures ref{0.5, 0.0, 0.0};
+    r.enter_nested(ref, xr, eq, empty, 0.1);
+    r.recenter_elastics(0.05, eq, empty);
+    ASSERT_EQ(r.recenter_calls(), 1);
+    r.reset();
+    EXPECT_EQ(r.recenter_calls(), 0);
+}
+
+// =============================================================================
 // (f) Budget / near-feasible guard parity with the shipped entry-permitted
 // semantics (same constants as the proximal switch).
 // =============================================================================

@@ -133,6 +133,38 @@
 //       remains the shared max_feas_rest_ (Settings), gated by entry_permitted()
 //       exactly as the proximal switch gates it.
 //
+//   (f) Second-level elastic re-centering fallback (recenter_elastics). Ipopt's
+//       RestoRestorationPhase (IpRestoRestoPhase.cpp) handles a restoration-phase
+//       line-search failure with a closed-form, NON-iterative re-solve of the
+//       separable elastic subproblem holding x and s fixed: per row, with the
+//       current μ and fixed ρ, n and p are recomputed from the same quadratic the
+//       entry initializer uses, adopted as the trial point, and the phase always
+//       "succeeds". This component adopts that fallback when its own in-phase line
+//       search exhausts the recovery ladder (the wiring lives in alg_impl), with
+//       two disclosed adaptations:
+//
+//       - RE-CENTERING z ALONGSIDE n,p. Ipopt moves ONLY n,p and leaves the
+//         elastic bound multipliers z_n,z_p untouched — meaningful there because
+//         its z are real variables the next Newton step updates back toward the
+//         n·z=μ pairing. Here z_n,z_p are STRATEGY state the block-condensation
+//         formulas ((5): pivot = n/z_n + p/z_p, the condensed r̃, and the step
+//         recovery) are built from; re-centering n,p while keeping stale z would
+//         break the n·z=μ pairing the pivots and recovery assume and leave the
+//         condensed KKT inconsistent. The faithful-in-spirit adaptation re-centers
+//         the pairs consistently — n,p from the closed form at the live μ, then
+//         z_n=μ/n, z_p=μ/p, exactly the entry-init pairing at that μ. (Reuses the
+//         same init_channel closed form, at the live μ instead of resto_mu_.)
+//
+//       - BOUNDED, ONE-SHOT RETRY. Ipopt's fallback always "succeeds", so it can
+//         re-solve every failed restoration step; this condensed in-place phase
+//         has no separate inner solver to guarantee forward progress, so an
+//         unbounded re-center would risk a no-progress loop (each re-center takes
+//         a zero primal/dual step). The wiring therefore re-centers AT MOST ONCE
+//         per consecutive-failure run: a second consecutive ladder exhaustion
+//         after a re-center falls through to the classic accept-as-is fallback,
+//         and the one-shot budget re-arms on any accepted step (and at each phase
+//         entry). recenter_calls() observes the invocation count.
+//
 // Ownership: the only state cached across calls is the entry snapshot
 // (x_r_/dr2_/resto_mu_), the live elastic state (n,p,z per channel), the last
 // recovered steps (Δn,Δp,Δz per channel), the cached pivots, and the per-phase
@@ -258,6 +290,9 @@ class NestedL1Restoration final : public RestorationStrategy {
                                const Eigen::Ref<const Eigen::VectorXd> &eq_dy,
                                const Eigen::Ref<const Eigen::VectorXd> &iq_dy) override;
 
+    void recenter_elastics(double mu, const Eigen::Ref<const Eigen::VectorXd> &eq_residuals,
+                           const Eigen::Ref<const Eigen::VectorXd> &iq_residuals) override;
+
     double primal_boundary_alpha(double tau) const override;
     double dual_boundary_alpha(double tau) const override;
     void apply_elastic_step(double alpha_primal, double alpha_dual) override;
@@ -273,6 +308,7 @@ class NestedL1Restoration final : public RestorationStrategy {
     double resto_mu() const { return resto_mu_; }
     int entries() const { return entries_; }
     int iterations_in_mode() const { return iterations_in_mode_; }
+    int recenter_calls() const { return recenter_calls_; }
 
     const Eigen::VectorXd &ec_n() const { return n_e_; }
     const Eigen::VectorXd &ec_p() const { return p_e_; }
@@ -293,9 +329,13 @@ class NestedL1Restoration final : public RestorationStrategy {
     const Eigen::VectorXd &ic_dzp() const { return dzp_i_; }
 
   private:
-    // Initializes one channel's elastic state from residual values.
-    void init_channel(const Eigen::Ref<const Eigen::VectorXd> &residuals, Eigen::VectorXd &n,
-                      Eigen::VectorXd &p, Eigen::VectorXd &zn, Eigen::VectorXd &zp) const;
+    // Initializes one channel's elastic state from residual values at the given
+    // barrier parameter (the closed-form positive-root solve, (4)). Used both by
+    // the entry init (at resto_mu_) and the second-level re-center (at the live
+    // μ) — the single home for the quadratic solve, never duplicated.
+    void init_channel(const Eigen::Ref<const Eigen::VectorXd> &residuals, double mu,
+                      Eigen::VectorXd &n, Eigen::VectorXd &p, Eigen::VectorXd &zn,
+                      Eigen::VectorXd &zp) const;
     // Recomputes a channel's pivot vector from its live elastic state.
     static void update_pivots(const Eigen::VectorXd &n, const Eigen::VectorXd &p,
                               const Eigen::VectorXd &zn, const Eigen::VectorXd &zp,
@@ -323,6 +363,9 @@ class NestedL1Restoration final : public RestorationStrategy {
     // Per-phase diagnostics (write-only, see append_diagnostics()).
     int entries_ = 0;
     int iterations_in_mode_ = 0;
+    // Count of second-level re-center invocations (recenter_elastics), a test/
+    // diagnostic observer of the fallback; not folded into SolveResult.
+    int recenter_calls_ = 0;
 };
 
 } // namespace tycho::solvers

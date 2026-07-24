@@ -803,6 +803,15 @@ class PSIOPT {
     double resto_theta_orig_prev_ = 0.0;
     Eigen::VectorXd resto_dz_scratch_;
 
+    // One-shot guard for the second-level elastic re-centering fallback (nested l1
+    // restoration only, disclosure (f) in l1_restoration.h). Set true when an
+    // in-phase ladder-exhausted rejection re-centers the elastic pairs instead of
+    // taking the failed step; a second consecutive ladder exhaustion while set
+    // falls through to accept-as-is (no re-center loop). Cleared on any accepted
+    // step and re-armed at each phase entry / phase-boundary reset. Dead unless a
+    // nested restoration phase is active.
+    bool resto_recentered_ = false;
+
     // --- KKT solver ---
 #ifdef USE_ACCELERATE_SPARSE
     Eigen::AccelerateLDLTTPP<Eigen::SparseMatrix<double, Eigen::RowMajor>, Eigen::Upper> kkt_sol_;
@@ -1036,6 +1045,19 @@ class PSIOPT {
     // the kKappaResto constant (globalization/acceptance_strategy.h) stays out of
     // this header's include set.
     bool resto_ratchet_passes(double theta_orig) const;
+
+    // Second-level elastic re-centering fallback for the nested l1 phase
+    // (disclosure (f) in l1_restoration.h). Invoked by alg_impl's kAcceptAsIs case
+    // when an in-phase line search exhausts the recovery ladder (a nested phase is
+    // active and no recovery link resolved the rejection). Re-centers the elastic
+    // pairs in closed form at the current phase μ from the raw residuals held in
+    // resto_ec_/ic_scratch_ (this iteration's eval seam), INSTEAD of taking the
+    // failed step. One-shot per consecutive-failure run: returns true and consumes
+    // the resto_recentered_ budget on the first call; returns false (fall through
+    // to accept-as-is) while the flag is still set. The flag re-arms on any
+    // accepted step and at each phase entry. Reachable only with restoration_
+    // non-null, active, and nested (the call site gates on nested_active).
+    bool try_recenter_elastics(double mu);
 
     // Primal-dual system error at barrier parameter `mu`: the ∞-norm of the full
     // KKT residual — primal stationarity (rhs.prim_grad, the Lagrangian gradient

@@ -1364,6 +1364,8 @@ void tycho::solvers::PSIOPT::enter_feasibility_restoration(Eigen::VectorXd &XSL,
         mu = this->restoration_->entry_mu();
         this->governor_->reset();
         this->resto_first_iter_ = true;
+        // Re-arm the one-shot second-level re-center budget for this episode.
+        this->resto_recentered_ = false;
         // Seed the raw-residual copies the exit tests and the max-iterations
         // teardown read. The eval seam refreshes them every active iteration,
         // but if the outer loop exhausts its iteration budget on the very
@@ -1468,6 +1470,20 @@ void tycho::solvers::PSIOPT::exit_feasibility_restoration_nested(Eigen::VectorXd
 // RestoConvCheck::CheckConvergence's orig_inf_pr_max, single-tolerance floor).
 bool tycho::solvers::PSIOPT::resto_ratchet_passes(double theta_orig) const {
     return theta_orig <= std::max(kKappaResto * this->resto_theta_orig_prev_, settings_.econ_tol_);
+}
+
+// Second-level elastic re-centering fallback (nested l1 phase, disclosure (f) in
+// l1_restoration.h). Dead on the default path. One-shot per consecutive-failure
+// run: the resto_recentered_ flag blocks a re-center loop (a re-center takes a
+// zero primal/dual step, so an unbounded retry could stall). Reads the raw
+// residuals the eval seam saved this iteration (resto_ec_/ic_scratch_) and
+// re-solves the elastic pairs in closed form at the current phase μ.
+bool tycho::solvers::PSIOPT::try_recenter_elastics(double mu) {
+    if (this->resto_recentered_)
+        return false; // budget already consumed this failure run — fall through.
+    this->restoration_->recenter_elastics(mu, this->resto_ec_scratch_, this->resto_ic_scratch_);
+    this->resto_recentered_ = true;
+    return true;
 }
 
 // Primal-dual system error at μ: the ∞-norm of the full KKT residual. See the
@@ -2356,7 +2372,29 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 this->result_.watchdog_activations_);
             switch (recovery_action) {
             case RecoveryChain::Action::kAcceptAsIs:
-                // Take the step compute_step produced (DXSL/alpha unchanged).
+                // Classic ladder-exhaustion fallback: take the step compute_step
+                // produced (DXSL/alpha unchanged). EXCEPTION (dead off the nested
+                // path): while a nested l1 restoration phase is active and no
+                // recovery link resolved the rejection (resolved_depth still the
+                // unresolved sentinel — the discriminator FeasibilitySwitchRecovery
+                // uses, since a watchdog-resolved kAcceptAsIs stamps its own depth),
+                // the second-level fallback re-centers the elastic pairs in closed
+                // form at the current phase μ INSTEAD of taking the failed step
+                // (disclosure (f) in l1_restoration.h). try_recenter_elastics
+                // enforces the one-shot budget: on the first exhaustion of a
+                // consecutive-failure run it re-centers, discards the failed step
+                // (alpha = 0 no-ops the XSL += alpha*DXSL commit — the re-centered
+                // elastics change the NEXT iteration's condensed system), and marks
+                // the iterate into the restoration recovery bucket; a second
+                // consecutive exhaustion falls through here to accept-as-is. The
+                // iteration is already counted in the in-mode total by the
+                // top-of-loop stay-in-mode note_iteration(), so it is not
+                // re-counted here.
+                if (nested_active && resolved_depth == kRecoveryDepthUnresolved &&
+                    this->try_recenter_elastics(step_mu)) {
+                    alpha = 0.0;
+                    resolved_depth = kRecoveryDepthRestoration;
+                }
                 break;
             case RecoveryChain::Action::kRetry:
                 // The recovery chain committed a corrected/reverted step into
@@ -2429,6 +2467,15 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             // iteration count here (watchdog.h).
             this->recovery_->notify_step_accepted();
         }
+
+        // Re-arm the one-shot second-level re-center budget on any accepted step
+        // (nested l1 restoration only, disclosure (f) in l1_restoration.h): an
+        // accepted step ends the consecutive-failure run the one-shot guard
+        // protects against, so a later ladder exhaustion may re-center again.
+        // Reached by both branches above (recovery-resolved accept and the
+        // no-recovery accept). Dead off the nested path (nested_active false).
+        if (nested_active && Citer.accepted_)
+            this->resto_recentered_ = false;
 
         Citer.alpha_p_ = alphap;
         Citer.alpha_d_ = alphad;
@@ -2826,6 +2873,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
             this->stashed_mu_ = 0.0;
             this->resto_first_iter_ = false;
             this->resto_theta_orig_prev_ = 0.0;
+            this->resto_recentered_ = false;
         }
 
         XSL = this->alg_impl(step.alg_mode_, step.bar_mode_, step.ls_mode_, settings_.obj_scale_,

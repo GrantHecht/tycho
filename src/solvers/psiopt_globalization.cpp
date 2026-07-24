@@ -2231,6 +2231,7 @@ void NestedL1Restoration::reset() {
     i_pivots_.resize(0);
     entries_ = 0;
     iterations_in_mode_ = 0;
+    recenter_calls_ = 0;
 }
 
 double
@@ -2272,17 +2273,17 @@ void NestedL1Restoration::append_diagnostics(PSIOPT::SolveResult &result) const 
 }
 
 void NestedL1Restoration::init_channel(const Eigen::Ref<const Eigen::VectorXd> &residuals,
-                                       Eigen::VectorXd &n, Eigen::VectorXd &p, Eigen::VectorXd &zn,
-                                       Eigen::VectorXd &zp) const {
+                                       double mu, Eigen::VectorXd &n, Eigen::VectorXd &p,
+                                       Eigen::VectorXd &zn, Eigen::VectorXd &zp) const {
     const Eigen::Index m = residuals.size();
     n.resize(m);
     p.resize(m);
     zn.resize(m);
     zp.resize(m);
     for (Eigen::Index i = 0; i < m; ++i) {
-        // (4): closed-form positive-root init at the entry barrier parameter.
-        const ElasticSlackInit s = l1_elastic_slack_init(residuals[i], resto_mu_,
-                                                         kRestoPenaltyParameter);
+        // (4): closed-form positive-root init at the given barrier parameter
+        // (resto_mu_ at entry; the live μ at a second-level re-center).
+        const ElasticSlackInit s = l1_elastic_slack_init(residuals[i], mu, kRestoPenaltyParameter);
         n[i] = s.n;
         p[i] = s.p;
         zn[i] = s.zn;
@@ -2322,9 +2323,9 @@ void NestedL1Restoration::enter_nested(const ProgressMeasures &reference,
     }
     resto_mu_ = m;
 
-    // (4): closed-form elastic init per channel.
-    init_channel(eq_residuals, n_e_, p_e_, z_ne_, z_pe_);
-    init_channel(iq_residuals, n_i_, p_i_, z_ni_, z_pi_);
+    // (4): closed-form elastic init per channel at the entry barrier parameter.
+    init_channel(eq_residuals, resto_mu_, n_e_, p_e_, z_ne_, z_pe_);
+    init_channel(iq_residuals, resto_mu_, n_i_, p_i_, z_ni_, z_pi_);
 
     // (5): pivots from the fresh elastic state.
     update_pivots(n_e_, p_e_, z_ne_, z_pe_, e_pivots_);
@@ -2443,6 +2444,33 @@ void NestedL1Restoration::recover_elastic_steps(
     };
     recover(n_e_, p_e_, z_ne_, z_pe_, eq_lmults, eq_dy, dn_e_, dp_e_, dzn_e_, dzp_e_);
     recover(n_i_, p_i_, z_ni_, z_pi_, iq_lmults, iq_dy, dn_i_, dp_i_, dzn_i_, dzp_i_);
+}
+
+void NestedL1Restoration::recenter_elastics(
+    double mu, const Eigen::Ref<const Eigen::VectorXd> &eq_residuals,
+    const Eigen::Ref<const Eigen::VectorXd> &iq_residuals) {
+    // (f): second-level closed-form re-solve of the separable elastic subproblem
+    // holding x and s fixed. Re-center BOTH channels' pairs at the LIVE μ from the
+    // current raw residuals, reusing the entry-init quadratic (init_channel) — the
+    // pairs land on the exact n·z=μ pairing the pivots/recovery are built from
+    // (disclosure (f): z is re-centered alongside n,p, unlike Ipopt's keep-z).
+    init_channel(eq_residuals, mu, n_e_, p_e_, z_ne_, z_pe_);
+    init_channel(iq_residuals, mu, n_i_, p_i_, z_ni_, z_pi_);
+
+    // Pivots track the re-centered state; the stale recovered steps are dropped
+    // (the next iteration recovers fresh steps from the re-centered pairs).
+    update_pivots(n_e_, p_e_, z_ne_, z_pe_, e_pivots_);
+    update_pivots(n_i_, p_i_, z_ni_, z_pi_, i_pivots_);
+    dn_e_ = Eigen::VectorXd::Zero(n_e_.size());
+    dp_e_ = Eigen::VectorXd::Zero(p_e_.size());
+    dzn_e_ = Eigen::VectorXd::Zero(z_ne_.size());
+    dzp_e_ = Eigen::VectorXd::Zero(z_pe_.size());
+    dn_i_ = Eigen::VectorXd::Zero(n_i_.size());
+    dp_i_ = Eigen::VectorXd::Zero(p_i_.size());
+    dzn_i_ = Eigen::VectorXd::Zero(z_ni_.size());
+    dzp_i_ = Eigen::VectorXd::Zero(z_pi_.size());
+
+    ++recenter_calls_;
 }
 
 namespace {
