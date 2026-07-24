@@ -209,6 +209,12 @@ class MonitoredBarrierGovernor : public BarrierGovernor {
 
     bool in_monotone_mode() const override { return monotone_mode_; }
 
+    // This governor supplies its own safeguarded barrier schedule during a nested
+    // restoration phase (its free<->monotone monitor forces the Fiacco-McCormick
+    // decrease), so the alg_impl seam does NOT overlay update_barrier_monotone on
+    // it — see BarrierGovernor::provides_restoration_barrier_safeguard().
+    bool provides_restoration_barrier_safeguard() const override { return true; }
+
     // Clears the reference window, mode, monotone-mu bookkeeping, and the
     // write-only diagnostics; also resets the free-mode delegate. Phase
     // boundaries start in free mode.

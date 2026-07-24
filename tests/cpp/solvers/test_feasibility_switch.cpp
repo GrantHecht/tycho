@@ -19,13 +19,18 @@
 
 #include "solver_test_utils.h"
 
+#include "tycho/detail/solvers/globalization/classic_adaptive_governor.h"
 #include "tycho/detail/solvers/globalization/feasibility_switch_recovery.h"
 #include "tycho/detail/solvers/globalization/filter_acceptance.h"
+#include "tycho/detail/solvers/globalization/globalization_mechanism.h"
 #include "tycho/detail/solvers/globalization/l1_restoration.h"
+#include "tycho/detail/solvers/globalization/monitored_governor.h"
 #include "tycho/detail/solvers/globalization/proximal_restoration.h"
 
 #include <gtest/gtest.h>
 
+#include <cmath>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -1228,6 +1233,18 @@ class NestedLifecycleHarness {
     double &theta_prev() { return solver_->resto_theta_orig_prev_; }
     void set_econ_tol(double t) { solver_->settings().econ_tol_ = t; }
 
+    // True exactly when a nested l1 restoration phase is live — the same predicate
+    // the alg_impl barrier-update seam gates the monotone schedule on.
+    bool nested_active() const {
+        return solver_->restoration_ && solver_->restoration_->is_active() &&
+               solver_->restoration_->is_nested();
+    }
+    // Replace the configured barrier governor (used to install a recording guard
+    // after rebuild_globalization_components() has built the default one).
+    void set_governor(std::unique_ptr<tycho::solvers::BarrierGovernor> g) {
+        solver_->governor_ = std::move(g);
+    }
+
     // Segment accessors into a full KKT vector [primals | slacks | eq | iq].
     Eigen::VectorXd zero_vec() const { return Eigen::VectorXd::Zero(dim()); }
 
@@ -1238,11 +1255,16 @@ class NestedLifecycleHarness {
     PSIOPT::ConvergenceFlags run_forced_entry(NestedL1Restoration *&comp_out,
                                               PSIOPT::LineSearchModes lsmode,
                                               PSIOPT::BarrierModes barmode, double &final_mu,
-                                              double init_mu = 0.1, int preload_soft_counter = 0) {
+                                              double init_mu = 0.1, int preload_soft_counter = 0,
+                                              const std::function<void()> &after_rebuild = {}) {
         solver_->settings().restoration_mode_ = RestorationModes::proximal_switch;
         solver_->settings().max_ls_iters_ = 0;
         solver_->settings().max_iters_ = 120;
         solver_->rebuild_globalization_components();
+        // Optional hook: swap in a test governor now that the default one has been
+        // built (see FreeOracleUnreachableDuringNestedPhase).
+        if (after_rebuild)
+            after_rebuild();
         auto strat = std::make_unique<NestedL1Restoration>();
         comp_out = strat.get();
         solver_->restoration_ = std::move(strat);
@@ -1551,4 +1573,171 @@ TEST(NestedRestorationLifecycle, ProximalPathStillEntersExitsConverges) {
     EXPECT_NEAR(sol[0], 2.0, 1e-3);
     EXPECT_NEAR(sol[1], 2.0, 1e-3);
     EXPECT_GE(r.last_feas_rest_entries_, 0);
+}
+
+// -----------------------------------------------------------------------------
+// 6. Monotone in-phase barrier schedule (Ipopt default restoration mu_strategy).
+//
+// While a nested l1 restoration phase is active, a governor that lacks its own
+// monotone safeguard (the free-mode classic_adaptive governor) has its in-phase
+// barrier update routed to BarrierGovernor::update_barrier_monotone: the
+// safeguarded Fiacco-McCormick ladder anchored at resto_mu, never a free-mode
+// oracle. A governor that supplies its own safeguard (the monitored governor)
+// keeps driving its own in-phase update. Layers below:
+//   (a) update_barrier_monotone in isolation — μ holds while the restoration
+//       barrier subproblem is unsolved and advances only when the progress gate
+//       fires; it never jumps to the μ floor while complementarity is at
+//       restoration scale.
+//   (b) end-to-end, free governor — the free oracle is NEVER consulted during
+//       the phase (routing bypasses it), yet the phase runs and the configured
+//       governor still drives the pre/post optimality iterations.
+//   (b') end-to-end, self-safeguarding governor — the seam leaves it driving its
+//       own in-phase update (its oracle IS consulted while nested-active).
+// -----------------------------------------------------------------------------
+
+// A recording governor: delegates the free-mode oracle to a real
+// ClassicAdaptiveGovernor but counts every update_barrier call, and separately
+// counts any that land while a nested phase is active. `safeguard` controls
+// provides_restoration_barrier_safeguard(): when false (a free-type governor)
+// the alg_impl seam routes the in-phase update to update_barrier_monotone (the
+// non-virtual base method, NOT overridden here), so update_barrier must never be
+// consulted while nested-active; when true (a self-safeguarding governor) the
+// seam leaves this governor driving its own in-phase update, so update_barrier
+// IS consulted while nested-active. Unity-unique name (FeasSwitch* prefix).
+class FeasSwitchRecordingGovernor : public BarrierGovernor {
+  public:
+    FeasSwitchRecordingGovernor(std::function<bool()> nested_active, bool safeguard)
+        : nested_active_(std::move(nested_active)), safeguard_(safeguard) {}
+
+    double update_barrier(PSIOPT::BarrierModes barmode, double mu_in, double avgcomp,
+                          double mincomp, Eigen::VectorXd &XSL, Eigen::VectorXd &RHS,
+                          Eigen::VectorXd &DXSL, Eigen::VectorXd &Temp,
+                          GlobalizationMechanism &mechanism, SolverContext &ctx, double &barr_obj,
+                          const IterateInfo &current, bool &mu_event) override {
+        ++total_calls_;
+        if (nested_active_ && nested_active_())
+            ++calls_during_nested_;
+        return delegate_.update_barrier(barmode, mu_in, avgcomp, mincomp, XSL, RHS, DXSL, Temp,
+                                        mechanism, ctx, barr_obj, current, mu_event);
+    }
+    void reset() override { delegate_.reset(); }
+    bool provides_restoration_barrier_safeguard() const override { return safeguard_; }
+
+    int total_calls() const { return total_calls_; }
+    int calls_during_nested() const { return calls_during_nested_; }
+
+  private:
+    ClassicAdaptiveGovernor delegate_;
+    std::function<bool()> nested_active_;
+    bool safeguard_;
+    int total_calls_ = 0;
+    int calls_during_nested_ = 0;
+};
+
+// (a) update_barrier_monotone: hold vs advance on the Fiacco-McCormick gate, the
+// barrier tail, and the no-collapse-to-floor property. Driven on a
+// ClassicAdaptiveGovernor instance to prove the schedule is governor-agnostic
+// (it is the non-virtual base method).
+TEST(NestedRestorationMonotoneSchedule, HoldsThenAdvancesOnBarrierProgressGate) {
+    ClassicAdaptiveGovernor g; // the free-mode merit governor; monotone is on the base.
+
+    PSIOPT::Settings settings; // defaults: bar_tol_=kkt_tol_=1e-6, min_mu_=1e-12, max_mu_=100.
+    KktSolverType solver;
+    Eigen::VectorXd scratch;
+    int pv = 1, sv = 2, ec = 0, ic = 2, kkt = 5;
+    SolverContext ctx{nullptr, solver,  settings, pv,      sv,      ec,
+                      ic,      kkt,     scratch,  scratch, scratch, scratch};
+
+    // Layout [primals(1) | slacks(2) | eq(0) | iq(2)]: slacks = {2,4}, iq_lmults = {0.5,0.25}.
+    Eigen::VectorXd XSL(5);
+    XSL << 1.0, 2.0, 4.0, 0.5, 0.25;
+    const double log_sum = std::log(2.0) + std::log(4.0);
+
+    // --- HOLD: barr_inf_ = 100 > kBarrierTolFactor * mu_in (10*4=40): gate blocks. ---
+    {
+        Eigen::VectorXd RHS = Eigen::VectorXd::Zero(5);
+        IterateInfo cur;
+        cur.kkt_inf_ = 0.0;
+        cur.econ_inf_ = 0.0;
+        cur.icon_inf_ = 0.0;
+        cur.barr_inf_ = 100.0; // restoration-scale complementarity: subproblem NOT solved.
+        double barr_obj = 0.0;
+        bool mu_event = true; // must be cleared by the call.
+        const double mu = g.update_barrier_monotone(/*mu_in=*/4.0, XSL, RHS, ctx, barr_obj, cur,
+                                                     mu_event);
+        EXPECT_DOUBLE_EQ(mu, 4.0);          // held at the anchored resto μ.
+        EXPECT_FALSE(mu_event);             // no new subproblem.
+        EXPECT_GT(mu, settings.min_mu_);    // never collapsed to the μ floor.
+        EXPECT_DOUBLE_EQ(barr_obj, -4.0 * log_sum);
+        EXPECT_DOUBLE_EQ(RHS[1], 0.5 - 4.0 / 2.0);  // iq_lmult - μ/slack
+        EXPECT_DOUBLE_EQ(RHS[2], 0.25 - 4.0 / 4.0);
+    }
+
+    // --- ADVANCE: every residual 0.05 <= 40: gate passes, Fiacco-McCormick step. ---
+    {
+        Eigen::VectorXd RHS = Eigen::VectorXd::Zero(5);
+        IterateInfo cur;
+        cur.kkt_inf_ = 0.05;
+        cur.econ_inf_ = 0.05;
+        cur.icon_inf_ = 0.05;
+        cur.barr_inf_ = 0.05; // subproblem sufficiently solved at μ=4.
+        double barr_obj = 0.0;
+        bool mu_event = false;
+        const double mu = g.update_barrier_monotone(/*mu_in=*/4.0, XSL, RHS, ctx, barr_obj, cur,
+                                                     mu_event);
+        // fiacco_mccormick_mu(4, 1e-6,1e-6,1e-12,100) = min(0.2*4=0.8, 4^1.5=8) = 0.8.
+        EXPECT_DOUBLE_EQ(mu, 0.8);
+        EXPECT_TRUE(mu_event); // strict decrease -> a new barrier subproblem.
+        EXPECT_DOUBLE_EQ(barr_obj, -0.8 * log_sum);
+        EXPECT_DOUBLE_EQ(RHS[1], 0.5 - 0.8 / 2.0);
+        EXPECT_DOUBLE_EQ(RHS[2], 0.25 - 0.8 / 4.0);
+    }
+}
+
+// (b) End-to-end, FREE governor (no own safeguard): the free oracle is NEVER
+// consulted while a nested phase is active — the seam routes the in-phase update
+// to update_barrier_monotone — yet the phase is entered, the solve reaches
+// optimality, and the configured governor still runs the optimality iterations
+// (total calls > 0), i.e. the configured mode resumes at exit.
+TEST(NestedRestorationLifecycle, FreeOracleUnreachableDuringNestedPhase) {
+    NestedLifecycleHarness h((Eigen::VectorXd(2) << 0.0, 0.0).finished(), /*n_ineq=*/1,
+                             /*inconsistent=*/false);
+    auto guard = std::make_unique<FeasSwitchRecordingGovernor>([&h] { return h.nested_active(); },
+                                                               /*safeguard=*/false);
+    FeasSwitchRecordingGovernor *raw = guard.get();
+
+    NestedL1Restoration *comp = nullptr;
+    double final_mu = 0.0;
+    auto flag = h.run_forced_entry(comp, PSIOPT::LineSearchModes::L1, PSIOPT::BarrierModes::LOQO,
+                                   final_mu, /*init_mu=*/0.1,
+                                   /*preload_soft_counter=*/kMaxSoftRestoIters,
+                                   /*after_rebuild=*/[&] { h.set_governor(std::move(guard)); });
+
+    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    ASSERT_NE(comp, nullptr);
+    EXPECT_GE(comp->entries(), 1);            // the full l1 phase was entered
+    EXPECT_EQ(raw->calls_during_nested(), 0); // free oracle never consulted while active
+    EXPECT_GT(raw->total_calls(), 0);         // configured governor drives the optimality iters
+}
+
+// (b') The gate's other direction: a governor that reports its OWN restoration
+// safeguard is left to drive the in-phase update itself — the seam does NOT
+// route it through update_barrier_monotone, so its update_barrier IS consulted
+// while nested-active (calls_during_nested > 0).
+TEST(NestedRestorationLifecycle, SelfSafeguardingGovernorDrivesInPhaseUpdate) {
+    NestedLifecycleHarness h((Eigen::VectorXd(2) << 0.0, 0.0).finished(), /*n_ineq=*/1,
+                             /*inconsistent=*/false);
+    auto guard = std::make_unique<FeasSwitchRecordingGovernor>([&h] { return h.nested_active(); },
+                                                               /*safeguard=*/true);
+    FeasSwitchRecordingGovernor *raw = guard.get();
+
+    NestedL1Restoration *comp = nullptr;
+    double final_mu = 0.0;
+    h.run_forced_entry(comp, PSIOPT::LineSearchModes::L1, PSIOPT::BarrierModes::LOQO, final_mu,
+                       /*init_mu=*/0.1, /*preload_soft_counter=*/kMaxSoftRestoIters,
+                       /*after_rebuild=*/[&] { h.set_governor(std::move(guard)); });
+
+    ASSERT_NE(comp, nullptr);
+    EXPECT_GE(comp->entries(), 1);            // the full l1 phase was entered
+    EXPECT_GT(raw->calls_during_nested(), 0); // its own oracle drives the in-phase update
 }

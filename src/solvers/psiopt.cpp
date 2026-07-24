@@ -1771,11 +1771,17 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             this->barrier_hessian(this->kkt_sol_.get_matrix(), v_xsl.slacks(), v_xsl.iq_lmults(),
                                   mu);
             this->complementarity(v_xsl.slacks(), v_xsl.iq_lmults(), avgcomp, mincomp, maxcomp);
-            // avgcomp/mincomp feed the barrier-parameter oracle (update_barrier
-            // below). During a nested restoration phase they must include the
-            // elastic complementarity pairs, or the oracle collapses mu to its
-            // floor and the elastic condensation pivot explodes (dead no-op off
-            // the nested path — original aggregates returned untouched).
+            // avgcomp/mincomp feed the free-mode barrier-parameter oracle
+            // (update_barrier below). This augmentation is load-bearing on every
+            // path that reaches that oracle while a nested phase is active: the
+            // monitored governor still consults it in its own guarded free mode,
+            // where omitting the elastic pairs would let the oracle collapse mu.
+            // Under a free (classic_adaptive) governor the in-phase update is
+            // instead routed to update_barrier_monotone (which ignores these
+            // aggregates); there the elastic complementarity that matters is the
+            // copy folded into barr_inf_ via fill_residual_info, read by the
+            // Fiacco-McCormick subproblem-convergence gate and converge_check. Dead
+            // no-op off the nested path (original aggregates returned untouched).
             this->augment_complementarity_nested(avgcomp, mincomp, maxcomp,
                                                  static_cast<int>(v_xsl.slacks().size()));
         }
@@ -2202,12 +2208,42 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // step_mu == mu (post-update), so every downstream FP op is byte-identical
         // when restoration is off or non-nested.
         const double eval_mu = mu;
-        if (this->inequal_cons_ > 0) {
-            mu = governor_->update_barrier(barmode, mu, avgcomp, mincomp, XSL, RHS, DXSL, Temp,
-                                           *mechanism_, ctx, barr_obj, Citer, mu_event);
-        }
+        // nested_active is computed BEFORE the barrier update so the update can
+        // route to the monotone schedule. Provably false on the default path
+        // (restoration_ null → short-circuit); the value is the same one the
+        // step_mu select below already needed, only hoisted, so no FP changes.
         const bool nested_active = this->restoration_ && this->restoration_->is_active() &&
                                    this->restoration_->is_nested();
+        // Force the monotone in-phase barrier schedule only for a governor that
+        // does not supply its own safeguard (the free-mode classic_adaptive
+        // governor). The monitored governor already forces a safeguarded
+        // Fiacco-McCormick decrease in its own update_barrier, so it drives the
+        // in-phase update itself — overlaying a second, differently anchored
+        // monotone schedule would perturb its established convergence.
+        const bool force_monotone_barrier =
+            nested_active && !governor_->provides_restoration_barrier_safeguard();
+        if (this->inequal_cons_ > 0) {
+            if (force_monotone_barrier) {
+                // Ipopt's default restoration mu_strategy is MONOTONE: while the
+                // nested l1 phase is active the barrier parameter must follow the
+                // safeguarded Fiacco-McCormick ladder anchored at the entry
+                // resto_mu, NOT the free-mode oracle. Under a free oracle every
+                // complementarity product (including the elastic bound pairs) chases
+                // whatever mu the oracle proposes, so any mu is self-consistent and
+                // mu collapses to its floor before the elastics shrink — the
+                // condensed elastic pivot then explodes and the phase freezes on a
+                // wrong-basin l1 minimizer. Routing here makes the free-mode oracles
+                // (LOQO and PROBE's predictor) UNREACHABLE for the duration of the
+                // phase under a free governor; the configured mode resumes at exit
+                // (which restores the stashed mu and resets the governor). See
+                // BarrierGovernor::update_barrier_monotone.
+                mu = governor_->update_barrier_monotone(mu, XSL, RHS, ctx, barr_obj, Citer,
+                                                        mu_event);
+            } else {
+                mu = governor_->update_barrier(barmode, mu, avgcomp, mincomp, XSL, RHS, DXSL, Temp,
+                                               *mechanism_, ctx, barr_obj, Citer, mu_event);
+            }
+        }
         const double step_mu = nested_active ? eval_mu : mu;
 
         // Per-barrier-subproblem acceptance reset: when the governor's monotone

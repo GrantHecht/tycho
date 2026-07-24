@@ -936,6 +936,17 @@ double ClassicAdaptiveGovernor::loqo_mu(Eigen::Ref<Eigen::VectorXd> S,
 double ClassicAdaptiveGovernor::mpc_mu(Eigen::Ref<Eigen::VectorXd> S,
                                        Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
                                        double mincomp, const SolverContext &ctx) const {
+    // The PROBE predictor recomputes complementarity on the predictor point from
+    // the ORIGINAL slack/multiplier pairs only (no elastic augmentation), so the
+    // ratio (navgcomp/avgcomp)³ would drive mu toward its floor during a nested
+    // restoration phase. Under a free (classic_adaptive) governor that collapse is
+    // avoided by construction: the alg_impl seam routes the in-phase barrier
+    // update to BarrierGovernor::update_barrier_monotone (Ipopt's default
+    // restoration mu_strategy) whenever the governor lacks its own safeguard, so
+    // this free-mode predictor is UNREACHABLE while nested-active under such a
+    // governor. Under the monitored governor it is reachable only inside that
+    // governor's own guarded free mode, where the monitor forces a monotone
+    // fallback on stall (and avgcomp/mincomp carry the elastic complementarity).
     double navgcomp = 0;
     double nmincomp = 0;
     double nmaxcomp = 0;
@@ -992,6 +1003,56 @@ double ClassicAdaptiveGovernor::update_barrier(PSIOPT::BarrierModes barmode, dou
     mu = std::min(mu, ctx.settings_.max_mu_);
     barr_obj = this->barrier_objective(v_xsl.slacks(), mu, ctx);
     this->barrier_gradient(v_xsl.slacks(), v_xsl.iq_lmults(), mu, v_rhs.dual_grad());
+    return mu;
+}
+
+// ============================================================================
+// BarrierGovernor::update_barrier_monotone — the monotone (Fiacco-McCormick)
+// barrier schedule forced while a nested l1 feasibility-restoration phase is
+// active, transcribing Ipopt's default restoration mu_strategy. Non-virtual and
+// shared by every governor: the configured free-mode oracle is bypassed for the
+// duration of the phase (see the rationale on the declaration in
+// barrier_governor.h). Reuses MonitoredBarrierGovernor's pure static
+// Fiacco-McCormick helpers — the same safeguarded rule the monitored governor
+// runs in its own monotone mode — so the two paths share one arithmetic.
+// ============================================================================
+double BarrierGovernor::update_barrier_monotone(double mu_in, Eigen::VectorXd &XSL,
+                                                Eigen::VectorXd &RHS, SolverContext &ctx,
+                                                double &barr_obj, const IterateInfo &current,
+                                                bool &mu_event) {
+    double mu = mu_in;
+    mu_event = false;
+
+    // Advance mu only when the restoration barrier subproblem is sufficiently
+    // solved — the Fiacco-McCormick gate (monitored_governor.h (6)): advance iff
+    // barrier_subproblem_error <= kBarrierTolFactor · mu. barrier_subproblem_error
+    // reads barr_inf_, into which the elastic complementarity is folded while
+    // nested-active, so the gate cannot fire while the elastics are still at
+    // restoration scale — mu stays anchored at the entry resto_mu until they
+    // shrink. Never decrease mu unconditionally.
+    const double sub_err = MonitoredBarrierGovernor::barrier_subproblem_error(current);
+    if (sub_err <= kBarrierTolFactor * mu_in) {
+        const double new_mu = MonitoredBarrierGovernor::fiacco_mccormick_mu(
+            mu_in, ctx.settings_.bar_tol_, ctx.settings_.kkt_tol_, ctx.settings_.min_mu_,
+            ctx.settings_.max_mu_);
+        if (new_mu < mu_in) {
+            mu = new_mu;      // advance (a new barrier subproblem)
+            mu_event = true;  // -> acceptance per-subproblem reset
+        }
+    }
+
+    // Log-barrier objective/dual-gradient tail at the resulting mu — the same
+    // segments (slacks/iq_lmults on XSL, dual_grad on RHS) and the same
+    // arithmetic the free-mode common tail writes.
+    auto slacks = XSL.segment(ctx.primal_vars_, ctx.slack_vars_);
+    auto iq_lmults = XSL.tail(ctx.inequal_cons_);
+    auto dual_grad = RHS.segment(ctx.primal_vars_, ctx.slack_vars_);
+    double psi = 0.0;
+    for (int k = 0; k < ctx.inequal_cons_; ++k) {
+        psi += -mu * std::log(slacks[k]);
+    }
+    barr_obj = psi;
+    dual_grad = iq_lmults - mu * slacks.cwiseInverse();
     return mu;
 }
 
