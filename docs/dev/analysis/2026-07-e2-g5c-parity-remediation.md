@@ -142,11 +142,13 @@ the subsequent gates in this stage.
 
 ### 2.4 Repeat-exactness
 
-Every reclassified configuration is repeat-1/repeat-2 identical on status, iteration
-count, and objective, with the single known exception of `hard_cartpole_tightbounds`
-under the merit family — the multithreaded solver's documented iteration-count jitter on
-that problem, consistent with its behavior in the prior stage and not a persistence
-effect.
+Every reclassified configuration is repeat-1/repeat-2 identical on status and iteration
+count, with the single known exception of `hard_cartpole_tightbounds` under the merit
+family (iteration-count jitter). The same documented-noisy problem also jitters its
+reported objective in other families — at the ~14th digit where it converges, and more
+visibly where it fails at the iteration cap — always with stable status. All of this is
+the multithreaded solver's known reduction-order jitter on that one problem, consistent
+with its behavior in the prior stage and not a persistence effect.
 
 ## 3. Correction and extended-backtracking under generic-path acceptance
 
