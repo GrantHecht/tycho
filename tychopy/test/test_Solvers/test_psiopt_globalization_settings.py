@@ -1,13 +1,14 @@
 """Coverage for PSIOPT's globalization-knob bindings.
 
-Exercises the Python surface for the nine PSIOPT.Settings fields
+Exercises the Python surface for the ten PSIOPT.Settings fields
 (``acceptance_strategy``, ``merit_penalty_rule``, ``max_soc``,
 ``ls_extended_iters``, ``watchdog``, ``barrier_governor``,
-``never_monotone``, ``restoration_mode``, ``max_feas_rest``) and the
-seven SolveResult diagnostics (``last_soc_steps``,
+``never_monotone``, ``restoration_mode``, ``max_feas_rest``,
+``inertia_mode``) and the nine SolveResult diagnostics (``last_soc_steps``,
 ``last_watchdog_activations``, ``last_recovery_depth_histogram``,
 ``last_monotone_switches``, ``last_monotone_iters``,
-``last_feas_rest_entries``, ``last_feas_rest_iters``): property
+``last_feas_rest_entries``, ``last_feas_rest_iters``,
+``last_prox_reg_primal``, ``last_prox_reg_dual``): property
 round-trips, per-field validation, invalid enum construction, the
 composition of the SOC and extended-backtracking recovery links with
 every acceptance strategy (``max_soc``/``ls_extended_iters`` now re-drive
@@ -20,14 +21,20 @@ paired with ``barrier_governor=classic_adaptive`` (the default) unless
 ``barrier_governor=monitored`` as a direct contradiction. Also covers
 enum-from-int coercion for ``funnel``/``filter``
 (``AcceptanceStrategies(2)``/``AcceptanceStrategies(3)``), for
-``monitored`` (``BarrierGovernors(1)``), and for ``proximal_switch``/
-``l1_nested`` (``RestorationModes(1)``/``RestorationModes(2)``), which the
-corpus harness relies on, and the feasibility-restoration entry-budget
+``monitored`` (``BarrierGovernors(1)``), for ``proximal_switch``/
+``l1_nested`` (``RestorationModes(1)``/``RestorationModes(2)``), and for
+``proximal_regularization`` (``InertiaModes(1)``), which the corpus
+harness relies on, and the feasibility-restoration entry-budget
 validation (``max_feas_rest`` must be non-negative) plus restoration
 composing with every acceptance strategy and barrier governor combination
 (no matrix restrictions, unlike the guards above) -- exercised for BOTH
 ``restoration_mode`` values (``proximal_switch`` and the nested l1 elastic
 mode, ``l1_nested``), since neither mode restricts the combination.
+``inertia_mode=proximal_regularization`` composes the same way -- it only
+changes factor_impl's KKT diagonal shifts, so no combination guard applies
+to it either -- and is exercised against the same acceptance/governor/
+restoration matrix, plus the ``last_prox_reg_primal``/``last_prox_reg_dual``
+diagnostics it populates.
 
 Also regression-tests the "component construction staleness" review
 finding: ``acceptance_``/``mechanism_``/``governor_``/``recovery_`` used to
@@ -579,6 +586,163 @@ class test_RestorationComboMatrix(unittest.TestCase):
                     never_monotone=True,
                 )
                 self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+
+class test_InertiaModeRoundTrip(unittest.TestCase):
+    def test_default_is_classic(self):
+        prob = _make_problem()
+        self.assertEqual(prob.optimizer.inertia_mode, solvs.InertiaModes.classic)
+
+    def test_round_trip(self):
+        prob = _make_problem()
+        prob.optimizer.inertia_mode = solvs.InertiaModes.proximal_regularization
+        self.assertEqual(
+            prob.optimizer.inertia_mode, solvs.InertiaModes.proximal_regularization
+        )
+        prob.optimizer.inertia_mode = solvs.InertiaModes.classic
+        self.assertEqual(prob.optimizer.inertia_mode, solvs.InertiaModes.classic)
+
+    def test_round_trip_via_int_coercion(self):
+        # The corpus harness selects the mode by raw int; enum-from-int
+        # coercion must resolve to the same member as the named attribute.
+        prob = _make_problem()
+        prob.optimizer.inertia_mode = solvs.InertiaModes(1)
+        self.assertEqual(
+            prob.optimizer.inertia_mode, solvs.InertiaModes.proximal_regularization
+        )
+
+
+class test_BadInertiaModeValue(unittest.TestCase):
+    def test_invalid_raw_value_rejected(self):
+        with self.assertRaises(ValueError):
+            solvs.InertiaModes(99)
+
+    def test_enum_property_rejects_raw_int_assignment(self):
+        opt = solvs.PSIOPT()
+        with self.assertRaises(TypeError):
+            opt.inertia_mode = 7
+
+
+class test_InertiaModeComboMatrix(unittest.TestCase):
+    """inertia_mode=proximal_regularization composes with every
+    acceptance_strategy x barrier_governor combination the existing
+    matrices cover (see test_BarrierGovernorComboGuard /
+    test_RestorationComboMatrix above), plus every restoration_mode and
+    the SOC/extended-backtracking/watchdog recovery links -- the mode only
+    changes factor_impl's KKT diagonal shifts and adds no new combination
+    guard in Settings::validate().
+    """
+
+    def _solve_with(
+        self,
+        acceptance_strategy,
+        barrier_governor,
+        restoration_mode=solvs.RestorationModes.off,
+        **extra_settings,
+    ):
+        prob = _make_problem()
+        prob.optimizer.inertia_mode = solvs.InertiaModes.proximal_regularization
+        prob.optimizer.acceptance_strategy = acceptance_strategy
+        prob.optimizer.barrier_governor = barrier_governor
+        prob.optimizer.restoration_mode = restoration_mode
+        for name, value in extra_settings.items():
+            setattr(prob.optimizer, name, value)
+        return prob.optimize()
+
+    def test_classic_merit_classic_adaptive_solves(self):
+        flag = self._solve_with(
+            solvs.AcceptanceStrategies.classic_merit,
+            solvs.BarrierGovernors.classic_adaptive,
+        )
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+    def test_merit_classic_adaptive_solves(self):
+        flag = self._solve_with(
+            solvs.AcceptanceStrategies.merit,
+            solvs.BarrierGovernors.classic_adaptive,
+        )
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+    def test_classic_merit_monitored_solves(self):
+        flag = self._solve_with(
+            solvs.AcceptanceStrategies.classic_merit,
+            solvs.BarrierGovernors.monitored,
+        )
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+    def test_funnel_monitored_solves(self):
+        flag = self._solve_with(
+            solvs.AcceptanceStrategies.funnel,
+            solvs.BarrierGovernors.monitored,
+        )
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+    def test_filter_monitored_solves(self):
+        flag = self._solve_with(
+            solvs.AcceptanceStrategies.filter,
+            solvs.BarrierGovernors.monitored,
+        )
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+    def test_filter_never_monotone_solves(self):
+        flag = self._solve_with(
+            solvs.AcceptanceStrategies.filter,
+            solvs.BarrierGovernors.classic_adaptive,
+            never_monotone=True,
+        )
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+    def test_with_proximal_switch_restoration_solves(self):
+        flag = self._solve_with(
+            solvs.AcceptanceStrategies.classic_merit,
+            solvs.BarrierGovernors.classic_adaptive,
+            restoration_mode=solvs.RestorationModes.proximal_switch,
+        )
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+    def test_with_l1_nested_restoration_solves(self):
+        flag = self._solve_with(
+            solvs.AcceptanceStrategies.classic_merit,
+            solvs.BarrierGovernors.classic_adaptive,
+            restoration_mode=solvs.RestorationModes.l1_nested,
+        )
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+    def test_watchdog_max_soc_ls_extended_iters_compose(self):
+        # inertia_mode is orthogonal to the recovery-link knobs too.
+        flag = self._solve_with(
+            solvs.AcceptanceStrategies.filter,
+            solvs.BarrierGovernors.monitored,
+            max_soc=4,
+            ls_extended_iters=2,
+            watchdog=True,
+        )
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+
+class test_ProxRegDiagnostics(unittest.TestCase):
+    """SolveResult.last_prox_reg_primal / last_prox_reg_dual (alg_impl's
+    direct phase-close copy of the final iterate's IterateInfo::
+    prox_reg_primal_/prox_reg_dual_ fields -- see psiopt.h for the sentinel
+    semantics). Sentinel -1.0/-1.0 unless inertia_mode is
+    proximal_regularization; both fields report >= 0.0 once that mode is
+    selected and a solve actually runs at least one iteration.
+    """
+
+    def test_default_solve_reports_sentinels(self):
+        prob = _make_problem()
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(prob.optimizer.last_prox_reg_primal, -1.0)
+        self.assertEqual(prob.optimizer.last_prox_reg_dual, -1.0)
+
+    def test_proximal_regularization_solve_reports_non_negative_shifts(self):
+        prob = _make_problem()
+        prob.optimizer.inertia_mode = solvs.InertiaModes.proximal_regularization
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertGreaterEqual(prob.optimizer.last_prox_reg_primal, 0.0)
+        self.assertGreaterEqual(prob.optimizer.last_prox_reg_dual, 0.0)
 
 
 class test_BadEnumValues(unittest.TestCase):

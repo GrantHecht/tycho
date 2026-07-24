@@ -2759,6 +2759,22 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
 
     this->result_.primals_ = v_xsl.primals();
 
+    // Proximal primal-dual regularization diagnostics: copy the final
+    // iterate's shifts (see IterateInfo::prox_reg_primal_/prox_reg_dual_)
+    // straight from iters.back() -- there is no dedicated component object
+    // here with its own append_diagnostics() hook to collect this from after
+    // alg_impl() returns (unlike the acceptance_/governor_/restoration_
+    // diagnostics collected in run_phase_sequence()), since the shifts are
+    // alg_impl-local mode state. Sentinel -1.0 stays untouched (from
+    // reset_accumulators()) when the mode is off, matching the classic path's
+    // byte-identical guarantee. Same last-phase-wins semantics as the other
+    // diagnostic fields: a multi-phase call ends with the LAST phase's alg_impl
+    // call's values.
+    if (settings_.inertia_mode_ == InertiaModes::proximal_regularization) {
+        this->result_.last_prox_reg_primal_ = iters.back().prox_reg_primal_;
+        this->result_.last_prox_reg_dual_ = iters.back().prox_reg_dual_;
+    }
+
     if (this->equal_cons_ > 0) {
         this->result_.eq_cons_ = v_rhs.eq_cons();
         this->result_.eq_lmults_ = v_xsl.eq_lmults();

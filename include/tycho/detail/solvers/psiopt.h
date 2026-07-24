@@ -538,6 +538,22 @@ class PSIOPT {
         // counting note above).
         int last_feas_rest_iters_ = -1;
 
+        // Proximal primal-dual regularization shifts applied during the FINAL
+        // ITERATE of the most recent solve's LAST PHASE (IterateInfo::
+        // prox_reg_primal_/prox_reg_dual_ — see iterate_info.h), copied by
+        // alg_impl() directly (there is no dedicated component object with its
+        // own append_diagnostics() hook here — the shifts are alg_impl-local
+        // state, unlike the acceptance/governor/restoration fields above).
+        // last_prox_reg_primal_ is the persistent primal base shift ρ_k added
+        // to the Hessian diagonal that iteration; last_prox_reg_dual_ is the
+        // barrier-scaled dual shift δ_c subtracted from the constraint-row
+        // diagonals (0.0 when suppressed inside a nested l1 restoration
+        // phase). Sentinel -1.0 for BOTH fields when inertia_mode_ !=
+        // proximal_regularization — the classic path never writes them. Same
+        // last-phase-wins semantics as the fields above.
+        double last_prox_reg_primal_ = -1.0;
+        double last_prox_reg_dual_ = -1.0;
+
         // T6 (dead-status fix): the last non-Success status observed from
         // kkt_sol_.info() by factor_impl() within the CURRENT phase (alg_impl
         // resets it on entry, so print_exit_stats reports per-phase status).
@@ -573,6 +589,8 @@ class PSIOPT {
             last_monotone_iters_ = -1;
             last_feas_rest_entries_ = -1;
             last_feas_rest_iters_ = -1;
+            last_prox_reg_primal_ = -1.0;
+            last_prox_reg_dual_ = -1.0;
         }
     };
 
