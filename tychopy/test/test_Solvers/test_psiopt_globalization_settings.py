@@ -9,12 +9,13 @@ seven SolveResult diagnostics (``last_soc_steps``,
 ``last_monotone_switches``, ``last_monotone_iters``,
 ``last_feas_rest_entries``, ``last_feas_rest_iters``): property
 round-trips, per-field validation, invalid enum construction, the
-classic-path-recovery combo guard in ``Settings::validate()``
-(src/solvers/psiopt.cpp), which rejects ``max_soc``/``ls_extended_iters``
-in combination with any of the three generic-path acceptance strategies
-(``merit``, ``funnel``, ``filter``), and the barrier-governor combo
-guard, which rejects ``funnel``/``filter`` paired with
-``barrier_governor=classic_adaptive`` (the default) unless
+composition of the SOC and extended-backtracking recovery links with
+every acceptance strategy (``max_soc``/``ls_extended_iters`` now re-drive
+the acceptance backtrack through the mechanism, so they compose with the
+generic-path strategies ``merit``/``funnel``/``filter`` as well as
+``classic_merit`` -- there is no longer a classic-only restriction), and
+the barrier-governor combo guard, which rejects ``funnel``/``filter``
+paired with ``barrier_governor=classic_adaptive`` (the default) unless
 ``never_monotone`` is set, and rejects ``never_monotone=True`` paired with
 ``barrier_governor=monitored`` as a direct contradiction. Also covers
 enum-from-int coercion for ``funnel``/``filter``
@@ -612,100 +613,93 @@ class test_BadEnumValues(unittest.TestCase):
             opt.barrier_governor = 7
 
 
-class test_AcceptanceMeritRecoveryComboGuard(unittest.TestCase):
-    """Settings::validate() rejects any non-classic acceptance strategy
-    (merit, funnel, filter) combined with max_soc > 0 or
-    ls_extended_iters > 0: none of the three generic-path acceptance
-    strategies implement the classic-path recovery links (SOC / extended
-    backtracking re-drive the fused classic line search). validate() runs
-    at PSIOPT::run_phase_sequence() entry -- i.e. on the very first call to
-    optimize()/solve(), before any iteration -- so triggering it only
-    requires a single solve() call on an otherwise-trivial problem. The
-    watchdog link is compatible with all four acceptance strategies.
+class test_AcceptanceGenericRecoveryComposition(unittest.TestCase):
+    """The SOC (max_soc > 0) and extended-backtracking (ls_extended_iters >
+    0) recovery links compose with every acceptance strategy. They re-drive
+    the acceptance backtrack through GlobalizationMechanism::
+    run_acceptance_backtrack, which dispatches to the classic merit test or
+    to the generic AcceptanceStrategy::is_iterate_acceptable surface
+    (merit / funnel / filter) as appropriate, so a corrected or extended
+    step is tested against the SAME acceptance criteria the ordinary step
+    faced. Settings::validate() therefore no longer rejects these knobs in
+    combination with a generic-path strategy (the former classic-only
+    restriction has been lifted). funnel/filter still require their own
+    monotone-barrier opt-in (barrier_governor=monitored or
+    never_monotone=True -- test_BarrierGovernorComboGuard), so the
+    funnel/filter cases below set it. The watchdog link was always
+    compatible with all four acceptance strategies.
     """
 
-    def test_max_soc_combo_raises_before_any_iteration(self):
+    def test_merit_max_soc_composes_and_solves(self):
         prob = _make_problem()
         prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.merit
         prob.optimizer.max_soc = 4
-        with self.assertRaises(ValueError) as ctx:
-            prob.optimize()
-        msg = str(ctx.exception)
-        self.assertIn("max_soc", msg)
-        self.assertIn("ls_extended_iters", msg)
-        # Validation fires before any solve activity -- no iterations recorded.
-        self.assertEqual(prob.optimizer.last_iter_num, 0)
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
 
-    def test_ls_extended_iters_combo_raises_before_any_iteration(self):
+    def test_merit_ls_extended_iters_composes_and_solves(self):
         prob = _make_problem()
         prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.merit
         prob.optimizer.ls_extended_iters = 2
-        with self.assertRaises(ValueError) as ctx:
-            prob.optimize()
-        msg = str(ctx.exception)
-        self.assertIn("max_soc", msg)
-        self.assertIn("ls_extended_iters", msg)
-        self.assertEqual(prob.optimizer.last_iter_num, 0)
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_watchdog_alone_is_compatible_with_merit(self):
-        # The watchdog link is compatible with either acceptance strategy --
-        # only SOC / extended backtracking are rejected in combination with
-        # acceptance_strategy=merit.
+        # The watchdog link is compatible with every acceptance strategy;
+        # SOC / extended backtracking now are too (see the sibling tests).
         prob = _make_problem()
         prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.merit
         prob.optimizer.watchdog = True
         flag = prob.optimize()
         self.assertEqual(flag, ast.solvers.ConvergenceFlags.CONVERGED)
 
-    def test_funnel_max_soc_combo_raises_before_any_iteration(self):
+    def test_funnel_max_soc_composes_and_solves(self):
         prob = _make_problem()
         prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.funnel
+        prob.optimizer.barrier_governor = solvs.BarrierGovernors.monitored
         prob.optimizer.max_soc = 4
-        with self.assertRaises(ValueError) as ctx:
-            prob.optimize()
-        msg = str(ctx.exception)
-        self.assertIn("max_soc", msg)
-        self.assertIn("ls_extended_iters", msg)
-        self.assertEqual(prob.optimizer.last_iter_num, 0)
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
 
-    def test_funnel_ls_extended_iters_combo_raises_before_any_iteration(self):
+    def test_funnel_ls_extended_iters_composes_and_solves(self):
         prob = _make_problem()
         prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.funnel
+        prob.optimizer.barrier_governor = solvs.BarrierGovernors.monitored
         prob.optimizer.ls_extended_iters = 2
-        with self.assertRaises(ValueError) as ctx:
-            prob.optimize()
-        msg = str(ctx.exception)
-        self.assertIn("max_soc", msg)
-        self.assertIn("ls_extended_iters", msg)
-        self.assertEqual(prob.optimizer.last_iter_num, 0)
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
 
-    def test_filter_max_soc_combo_raises_before_any_iteration(self):
+    def test_filter_max_soc_composes_and_solves(self):
         prob = _make_problem()
         prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.filter
+        prob.optimizer.never_monotone = True
         prob.optimizer.max_soc = 4
-        with self.assertRaises(ValueError) as ctx:
-            prob.optimize()
-        msg = str(ctx.exception)
-        self.assertIn("max_soc", msg)
-        self.assertIn("ls_extended_iters", msg)
-        self.assertEqual(prob.optimizer.last_iter_num, 0)
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
 
-    def test_filter_ls_extended_iters_combo_raises_before_any_iteration(self):
+    def test_filter_ls_extended_iters_composes_and_solves(self):
         prob = _make_problem()
         prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.filter
+        prob.optimizer.never_monotone = True
         prob.optimizer.ls_extended_iters = 2
-        with self.assertRaises(ValueError) as ctx:
-            prob.optimize()
-        msg = str(ctx.exception)
-        self.assertIn("max_soc", msg)
-        self.assertIn("ls_extended_iters", msg)
-        self.assertEqual(prob.optimizer.last_iter_num, 0)
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+    def test_filter_soc_and_extended_and_watchdog_compose_and_solve(self):
+        # All three recovery links enabled at once under a generic strategy.
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.filter
+        prob.optimizer.barrier_governor = solvs.BarrierGovernors.monitored
+        prob.optimizer.max_soc = 4
+        prob.optimizer.ls_extended_iters = 2
+        prob.optimizer.watchdog = True
+        flag = prob.optimize()
+        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_watchdog_alone_is_compatible_with_funnel(self):
-        # The watchdog link is compatible with either acceptance strategy --
-        # only SOC / extended backtracking are rejected in combination with
-        # acceptance_strategy=merit. funnel/filter also require an explicit
-        # barrier_governor/never_monotone opt-in (see
+        # The watchdog link is compatible with every acceptance strategy (as
+        # are SOC / extended backtracking now). funnel/filter also require an
+        # explicit barrier_governor/never_monotone opt-in (see
         # test_BarrierGovernorRoundTrip / test_BarrierGovernorComboGuard
         # below) -- never_monotone is used here, barrier_governor=monitored
         # is used in the filter sibling below, to exercise both opt-ins.

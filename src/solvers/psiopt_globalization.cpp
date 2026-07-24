@@ -795,10 +795,26 @@ double BacktrackingLineSearch::compute_step(
         (ctx.restoration_ && ctx.restoration_->is_active() && ctx.restoration_->is_nested()))
         this->max_primal_dual_step(XSL, DXSL, ctx.settings_.bound_fraction_, alphap, alphad, ctx);
 
-    // Default (classic_merit) path: forward straight to the fused
-    // classic_line_search — byte-identical to pre-modern-merit behavior. The
-    // generic path (ModernMeritAcceptance -> drives_classic_path() == false)
-    // runs the loop here instead.
+    // Second half: the acceptance backtrack on the scaled DXSL, dispatched
+    // classic-vs-generic. Factored into run_acceptance_backtrack so the same
+    // dispatch is reachable by the recovery links (SOC / extended backtracking)
+    // on a prepared direction. The classic path still forwards verbatim to
+    // classic_line_search with the identical arguments — byte-identical to
+    // pre-modern-merit behavior.
+    return this->run_acceptance_backtrack(lsmode, obj_scale, mu, prim_obj, barr_obj, XSL, DXSL,
+                                          XSL2, RHS, RHS2, acceptance, Citer, iters, ctx);
+}
+
+// Acceptance backtrack only — the classic-vs-generic dispatch, without the
+// fraction-to-boundary scaling (compute_step's first half). See
+// backtracking_line_search.h. The classic path forwards straight to the fused
+// classic_line_search; the generic path (drives_classic_path() == false) runs
+// the loop-in-mechanism generic_line_search.
+double BacktrackingLineSearch::run_acceptance_backtrack(
+    PSIOPT::LineSearchModes lsmode, double obj_scale, double mu, double prim_obj, double barr_obj,
+    Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
+    Eigen::VectorXd &RHS2, AcceptanceStrategy &acceptance, IterateInfo &Citer,
+    const std::vector<IterateInfo> &iters, SolverContext &ctx) {
     if (acceptance.drives_classic_path())
         return acceptance.classic_line_search(lsmode, obj_scale, mu, prim_obj, barr_obj, XSL, DXSL,
                                               XSL2, RHS, RHS2, Citer, iters);
@@ -1114,10 +1130,21 @@ RecoveryChain::Action SocRecovery::on_step_rejected(
 
     const int ncons = ctx.equal_cons_ + ctx.inequal_cons_;
 
-    // Current-iterate constraint violation: the same squared-L2 all_cons
-    // quantity theta_at_first_rejection_ records (RHS's inequality block already
-    // carries the merit slack reset — see the RHS assembly in psiopt.cpp).
-    const double current_infeasibility = RHS.tail(ncons).squaredNorm();
+    // Current-iterate constraint violation, in the SAME norm the driving line
+    // search records into theta_at_first_rejection_ so the trigger compares like
+    // with like. The classic merit path records the squared-L2 all_cons penalty
+    // (test.l2_ / TestL2Pen); the generic path (filter / funnel / modern merit)
+    // records the L1 merit norm ‖c‖₁ (generic_line_search's theta_t). Selecting
+    // the norm by drives_classic_path() keeps the classic path byte-identical
+    // (squaredNorm, unchanged) while making the generic trigger dimensionally
+    // consistent. RHS's inequality block already carries the merit slack reset
+    // (see the RHS assembly in psiopt.cpp), and during a nested restoration
+    // phase it carries the condensed residual r̃ — the same quantity the driving
+    // line search's current measure reads, so the comparison stays internally
+    // consistent on that path too.
+    const double current_infeasibility = acceptance.drives_classic_path()
+                                             ? RHS.tail(ncons).squaredNorm()
+                                             : RHS.tail(ncons).template lpNorm<1>();
     if (!soc_should_trigger(Citer, current_infeasibility))
         return Action::kAcceptAsIs;
 
@@ -1159,14 +1186,19 @@ RecoveryChain::Action SocRecovery::on_step_rejected(
             mechanism.max_primal_dual_step(XSL, dxsl_soc, ctx.settings_.bound_fraction_, alphap,
                                            alphad, ctx);
 
-        // Re-run the full acceptance backtrack on the corrected direction. A
-        // fresh IterateInfo captures the verdict and, on rejection, the first
-        // corrected trial's L2 infeasibility (theta_at_first_rejection_) without
+        // Re-run the full acceptance backtrack on the corrected direction,
+        // through the mechanism so the SAME acceptance criteria the ordinary
+        // step faced are applied to the corrected trial — the classic merit
+        // test on the classic path, or the generic
+        // AcceptanceStrategy::is_iterate_acceptable surface (filter / funnel /
+        // modern merit) on the generic path. A fresh IterateInfo captures the
+        // verdict and, on rejection, the first corrected trial's infeasibility
+        // (theta_at_first_rejection_, in the driving path's own norm) without
         // clobbering Citer's recorded signals.
         IterateInfo trial_iter;
-        const double alpha_soc =
-            acceptance.classic_line_search(lsmode, obj_scale, mu, prim_obj, barr_obj, XSL, dxsl_soc,
-                                           XSL2, RHS, RHS2, trial_iter, iters);
+        const double alpha_soc = mechanism.run_acceptance_backtrack(
+            lsmode, obj_scale, mu, prim_obj, barr_obj, XSL, dxsl_soc, XSL2, RHS, RHS2, acceptance,
+            trial_iter, iters, ctx);
 
         if (trial_iter.accepted_) {
             // Commit the corrected step in place: alg_impl's XSL += alpha*DXSL
@@ -1214,7 +1246,7 @@ RecoveryChain::Action SocRecovery::on_step_rejected(
 // ============================================================================
 RecoveryChain::Action ExtendedBacktrackRecovery::on_step_rejected(
     IterateInfo &Citer, const std::vector<IterateInfo> &iters, SolverContext &ctx,
-    AcceptanceStrategy &acceptance, GlobalizationMechanism & /*mechanism*/,
+    AcceptanceStrategy &acceptance, GlobalizationMechanism &mechanism,
     PSIOPT::LineSearchModes lsmode, double obj_scale, double mu, double prim_obj, double barr_obj,
     Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
     Eigen::VectorXd &RHS2, double &alpha, double & /*alphap*/, double & /*alphad*/,
@@ -1223,19 +1255,23 @@ RecoveryChain::Action ExtendedBacktrackRecovery::on_step_rejected(
     if (max_extended <= 0)
         return Action::kAcceptAsIs; // defensive: only built when ls_extended_iters_ > 0.
 
-    // `scale` continues the SAME ladder from the live alpha (compute_step's
-    // return value, passed in as `alpha`) — NOT a restart at 1.0. DXSL itself
-    // is never touched here (only read): the direction that was rejected is
-    // the SAME direction extended backtracking keeps testing at smaller
-    // alpha, exactly like the classic loop's own internal divisions do.
+    // Extended backtracking is a pure α-schedule extension — acceptance-
+    // strategy-neutral. It re-drives the acceptance backtrack (through the
+    // mechanism, so the SAME acceptance criteria apply on the classic and the
+    // generic paths) on the SAME rejected direction, further scaled. `scale`
+    // continues the SAME ladder from the live alpha (compute_step's return
+    // value, passed in as `alpha`) — NOT a restart at 1.0. DXSL itself is never
+    // touched here (only read): the direction that was rejected is the SAME
+    // direction extended backtracking keeps testing at smaller alpha, exactly
+    // like the classic loop's own internal divisions do.
     Eigen::VectorXd dxsl_ext(DXSL.size());
     double scale = alpha;
     for (int i = 0; i < max_extended; ++i) {
         dxsl_ext = scale * DXSL;
         IterateInfo trial_iter;
-        const double alpha_result = acceptance.classic_line_search(
-            lsmode, obj_scale, mu, prim_obj, barr_obj, XSL, dxsl_ext, XSL2, RHS, RHS2, trial_iter,
-            iters);
+        const double alpha_result = mechanism.run_acceptance_backtrack(
+            lsmode, obj_scale, mu, prim_obj, barr_obj, XSL, dxsl_ext, XSL2, RHS, RHS2, acceptance,
+            trial_iter, iters, ctx);
         if (trial_iter.accepted_) {
             // Commit the accepted (still-original-direction, further-scaled)
             // step in place: alg_impl's XSL += alpha*DXSL applies it.

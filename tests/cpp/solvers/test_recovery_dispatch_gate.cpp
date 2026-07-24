@@ -206,36 +206,44 @@ TEST(RecoveryDispatchGate, StubAcceptanceDrivesHook) {
     }
 }
 
-// Settings::validate()'s strategy-combination guard: originally scoped to
-// acceptance_strategy_ == merit, now generalized to every non-classic_merit
-// strategy (see the guard's comment in psiopt.cpp). Exercise both new
-// strategies against both offending knobs.
-TEST(RecoveryDispatchGate, ValidateRejectsFunnelWithMaxSoc) {
+// Settings::validate() no longer rejects the SOC / extended-backtracking knobs
+// in combination with a generic-path acceptance strategy: those links re-drive
+// the acceptance backtrack through the mechanism, which dispatches to the
+// generic AcceptanceStrategy surface (see the guard's removal in psiopt.cpp and
+// GlobalizationMechanism::run_acceptance_backtrack). Exercise both generic
+// strategies against both knobs, paired with the monotone-barrier opt-in
+// funnel/filter separately require (so the OTHER, still-live guard does not
+// mask the result).
+TEST(RecoveryDispatchGate, ValidateAcceptsFunnelWithMaxSoc) {
     PSIOPT::Settings settings;
     settings.acceptance_strategy_ = AcceptanceStrategies::funnel;
+    settings.barrier_governor_ = BarrierGovernors::monitored;
     settings.max_soc_ = 1;
-    EXPECT_THROW(settings.validate(), std::invalid_argument);
+    EXPECT_NO_THROW(settings.validate());
 }
 
-TEST(RecoveryDispatchGate, ValidateRejectsFunnelWithLsExtendedIters) {
+TEST(RecoveryDispatchGate, ValidateAcceptsFunnelWithLsExtendedIters) {
     PSIOPT::Settings settings;
     settings.acceptance_strategy_ = AcceptanceStrategies::funnel;
+    settings.barrier_governor_ = BarrierGovernors::monitored;
     settings.ls_extended_iters_ = 1;
-    EXPECT_THROW(settings.validate(), std::invalid_argument);
+    EXPECT_NO_THROW(settings.validate());
 }
 
-TEST(RecoveryDispatchGate, ValidateRejectsFilterWithMaxSoc) {
+TEST(RecoveryDispatchGate, ValidateAcceptsFilterWithMaxSoc) {
     PSIOPT::Settings settings;
     settings.acceptance_strategy_ = AcceptanceStrategies::filter;
+    settings.barrier_governor_ = BarrierGovernors::monitored;
     settings.max_soc_ = 1;
-    EXPECT_THROW(settings.validate(), std::invalid_argument);
+    EXPECT_NO_THROW(settings.validate());
 }
 
-TEST(RecoveryDispatchGate, ValidateRejectsFilterWithLsExtendedIters) {
+TEST(RecoveryDispatchGate, ValidateAcceptsFilterWithLsExtendedIters) {
     PSIOPT::Settings settings;
     settings.acceptance_strategy_ = AcceptanceStrategies::filter;
+    settings.barrier_governor_ = BarrierGovernors::monitored;
     settings.ls_extended_iters_ = 1;
-    EXPECT_THROW(settings.validate(), std::invalid_argument);
+    EXPECT_NO_THROW(settings.validate());
 }
 
 // Settings::validate()'s feasibility-restoration budget guard: max_feas_rest_
@@ -279,17 +287,18 @@ TEST(RecoveryDispatchGate, ValidateAcceptsClassicMeritWithMaxSoc) {
     EXPECT_NO_THROW(settings.validate());
 }
 
-// merit's pre-existing rejection still fires under the generalized guard.
-TEST(RecoveryDispatchGate, ValidateStillRejectsMeritWithMaxSoc) {
+// merit composes with the recovery knobs too (no monotone opt-in needed — only
+// funnel/filter carry that separate requirement).
+TEST(RecoveryDispatchGate, ValidateAcceptsMeritWithMaxSoc) {
     PSIOPT::Settings settings;
     settings.acceptance_strategy_ = AcceptanceStrategies::merit;
     settings.max_soc_ = 1;
-    EXPECT_THROW(settings.validate(), std::invalid_argument);
+    settings.ls_extended_iters_ = 1;
+    EXPECT_NO_THROW(settings.validate());
 }
 
-// The recovery-link guard covers only max_soc_/ls_extended_iters_; watchdog_
-// combines freely with every acceptance strategy, including the two newly
-// wired non-classic strategies.
+// Every recovery link (SOC, extended backtracking, watchdog) combines freely
+// with every acceptance strategy, including the two non-classic strategies.
 TEST(RecoveryDispatchGate, ValidateAcceptsFunnelWithWatchdog) {
     PSIOPT::Settings settings;
     settings.acceptance_strategy_ = AcceptanceStrategies::funnel;

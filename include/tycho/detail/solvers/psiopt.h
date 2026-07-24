@@ -71,6 +71,12 @@ class NestedLifecycleHarness;
 // trailing-window logic can be exercised directly on synthetic iterate
 // histories.
 class DivergencePersistenceHarness;
+// Test harness for the SOC / extended-backtracking recovery links under the
+// generic-path acceptance strategies: reaches the private nlp_ / kkt_sol_ /
+// dims / scratch / restoration_ / acceptance_ / recovery_ so it can build a
+// live SolverContext and drive the mechanism's acceptance-backtrack seam with a
+// generic acceptance strategy (see test_soc_generic_acceptance.cpp).
+class SocGenericHarness;
 
 namespace tycho::solvers {
 
@@ -701,6 +707,7 @@ class PSIOPT {
     friend class ::NestedSeamIneqHarness;
     friend class ::NestedLifecycleHarness;
     friend class ::DivergencePersistenceHarness;
+    friend class ::SocGenericHarness;
 
     Settings settings_;
     SolveResult result_;

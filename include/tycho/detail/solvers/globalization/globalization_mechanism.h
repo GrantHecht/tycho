@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include <stdexcept>
 #include <vector>
 
 #include <Eigen/Core>
@@ -109,6 +110,56 @@ class GlobalizationMechanism {
     // discarded before the state commit on that path).
     virtual void max_primal_dual_step(Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, double bfrac,
                                        double &alphap, double &alphad, const SolverContext &ctx) = 0;
+
+    // Run ONLY the acceptance backtrack on an already-fraction-to-boundary-
+    // scaled DXSL, dispatching classic-vs-generic per the strategy — i.e.
+    // compute_step's SECOND half (the backtrack) without its first half (the
+    // fraction-to-boundary scaling). compute_step calls this after applying the
+    // scaling; the recovery links (SOC / extended backtracking) call it to
+    // re-drive acceptance on a corrected or further-scaled direction they have
+    // already prepared, so a corrected trial is tested against the SAME
+    // acceptance criteria the ordinary step was — the classic merit test on the
+    // classic path, or the generic AcceptanceStrategy::is_iterate_acceptable
+    // surface (filter / funnel / modern merit) on the generic path.
+    // This is the seam that lets SOC and extended backtracking compose with
+    // every acceptance strategy rather than only classic merit: they must NOT
+    // call AcceptanceStrategy::classic_line_search directly (it throws on the
+    // generic strategies), and only the mechanism can reach the generic
+    // driving path (which owns the trial-point evaluation). `iters` is
+    // forwarded for the classic dispatcher's signature; the generic path does
+    // not read it.
+    //
+    // Default body is a T6-style logic error (matching
+    // AcceptanceStrategy::classic_line_search): a mechanism that hosts a
+    // generic driving path must override it. It is never reached on any
+    // configuration that does not enable a recovery link that re-drives
+    // acceptance.
+    virtual double run_acceptance_backtrack(PSIOPT::LineSearchModes lsmode, double obj_scale,
+                                            double mu, double prim_obj, double barr_obj,
+                                            Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL,
+                                            Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
+                                            Eigen::VectorXd &RHS2, AcceptanceStrategy &acceptance,
+                                            IterateInfo &Citer,
+                                            const std::vector<IterateInfo> &iters,
+                                            SolverContext &ctx) {
+        (void)lsmode;
+        (void)obj_scale;
+        (void)mu;
+        (void)prim_obj;
+        (void)barr_obj;
+        (void)XSL;
+        (void)DXSL;
+        (void)XSL2;
+        (void)RHS;
+        (void)RHS2;
+        (void)acceptance;
+        (void)Citer;
+        (void)iters;
+        (void)ctx;
+        throw std::logic_error("GlobalizationMechanism::run_acceptance_backtrack is only "
+                               "implemented by mechanisms that host an acceptance backtrack "
+                               "(BacktrackingLineSearch)");
+    }
 
     // μ-event / phase-change reset hook — see the ownership-rule note above.
     virtual void reset() = 0;

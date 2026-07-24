@@ -537,19 +537,15 @@ void tycho::solvers::PSIOPT::Settings::validate() const {
             fmt::format("max_feas_rest must be non-negative, got {}", max_feas_rest_));
 
     // --- Strategy-combination guards ---
-    // The SOC and extended-backtracking recovery links re-drive the fused
-    // classic line search, which none of the generic-path strategies
-    // (merit, funnel, filter) implement (their acceptance runs on the
-    // generic path). Reject the combination here so the user gets an
-    // upfront error instead of a mid-solve throw. The watchdog alone is
-    // compatible with every strategy.
-    if (acceptance_strategy_ != AcceptanceStrategies::classic_merit &&
-        (max_soc_ > 0 || ls_extended_iters_ > 0))
-        throw std::invalid_argument(fmt::format(
-            "acceptance_strategy={} does not support the classic-path recovery links: "
-            "max_soc ({}) and ls_extended_iters ({}) must both be 0 with a generic-path "
-            "acceptance strategy (use acceptance_strategy=classic_merit to combine them)",
-            acceptance_strategy_name(acceptance_strategy_), max_soc_, ls_extended_iters_));
+    // The SOC and extended-backtracking recovery links re-drive the acceptance
+    // backtrack through the mechanism (GlobalizationMechanism::
+    // run_acceptance_backtrack), which dispatches to the classic merit test or
+    // to the generic AcceptanceStrategy::is_iterate_acceptable surface
+    // (merit / funnel / filter) as appropriate — so a corrected or extended
+    // step is tested against the SAME acceptance criteria the ordinary step
+    // faced. Both links therefore compose with every acceptance strategy; there
+    // is no classic-merit-only restriction. (The watchdog was always compatible
+    // with every strategy.)
 
     // funnel/filter are designed to operate above a monotone barrier safeguard
     // (this is a factual dependency statement, not a convergence-guarantee
