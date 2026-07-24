@@ -1,7 +1,7 @@
 # PSIOPT nested ℓ1 feasibility-restoration scorecards
 
 **Date:** 2026-07-23
-**Branch:** `feat/e2-g5b-nested-l1-restoration` (HEAD `a1ddb02b`)
+**Branch:** `feat/e2-g5b-nested-l1-restoration` (algorithmic HEAD `a1ddb02b`; two documentation commits follow)
 **Data:** nine `scripts/run_corpus.py --cbwr --repeat 2` captures (17 problems × 2 repeats =
 34 records each) — three engaged acceptance families (`merit`, `filter`+monitored governor,
 `funnel`+monitored governor), each in the final `restoration_mode = l1_nested` state, plus the
@@ -160,7 +160,7 @@ close the coverage gap that let it slip. Commit `71c17882`.
 With the seam correct, the first full corpus scorecard still showed a systematic regression
 under both the merit and filter families: `lit_wb2000` went from converged (without restoration)
 to failed at the iteration cap, and `hard_zermelo_wrongbasin` from failed to diverged. A probe
-reading the solver's restoration counters directly (`g5b-probe-wb2000.log`) pinned the
+reading the solver's restoration counters directly (session-local diagnostic trace, summarized in §4.2) pinned the
 mechanism. During a nested phase the barrier-parameter oracle — the governor's `update_barrier`
 and the monitored governor's KKT-error monitor — read complementarity from the **original**
 slack/multiplier pairs only. When restoration is entered late in a solve, the original
@@ -197,7 +197,7 @@ Commit `bfa869ca`.
 
 The elastic-complementarity fix did **not** clear the merit family: `lit_wb2000` under merit
 (classic adaptive governor) was still frozen at the cap. A second probe
-(`g5b-probe-wb2000-merit.log`) exposed a distinct mechanism. Under a *free*-mode oracle the
+(session-local diagnostic trace, summarized here) exposed a distinct mechanism. Under a *free*-mode oracle the
 barrier machinery drives every complementarity product — including the elastic bound pairs —
 toward whatever μ the oracle proposes, so any μ is self-consistent. Feeding the elastic
 complementarity in cannot prevent the collapse, because the products simply chase μ down. The

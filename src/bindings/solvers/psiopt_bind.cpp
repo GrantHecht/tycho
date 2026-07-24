@@ -441,7 +441,7 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
                "separate nested solver. Constants (the penalty rho, the proximity weight "
                "factor, the entry/re-entry rules) are pinned at Ipopt's restoration-phase "
                "literature defaults (coin-or/Ipopt's IpRestoIpoptNLP / "
-               "IpRestoIterateInitializer / IpRestoMinC_1Nrm). Before commiting to the full "
+               "IpRestoIterateInitializer / IpRestoMinC_1Nrm). Before committing to the full "
                "elastic switch, a soft feasibility pre-stage first tries ordinary "
                "fraction-to-boundary steps under a primal-dual-error reduction rule for a "
                "bounded number of consecutive iterations (adapted from Ipopt's soft "
