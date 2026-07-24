@@ -66,6 +66,11 @@ class NestedSeamIneqHarness;
 // enter_/exit_feasibility_restoration helpers, the stashed-μ / ratchet state,
 // restoration_, and alg_impl to drive the whole phase end-to-end.
 class NestedLifecycleHarness;
+// Test harness for the persistence-based divergence classification in
+// converge_check(): reaches the private converge_check() and settings_ so the
+// trailing-window logic can be exercised directly on synthetic iterate
+// histories.
+class DivergencePersistenceHarness;
 
 namespace tycho::solvers {
 
@@ -74,6 +79,32 @@ namespace tycho::solvers {
 // without full qualification inside this namespace.
 using tycho::ConstEigenRef;
 using tycho::EigenRef;
+
+// Number of consecutive trailing iterates that must ALL exceed a divergence
+// threshold before converge_check() declares DIVERGING on a finite (but large)
+// residual. A single iterate breaching a threshold no longer aborts the solve;
+// the breach must persist across this many iterations in a row.
+//
+// Rationale. Non-finite residuals (NaN/Inf) remain an immediate hard abort — no
+// iterate recovers from a corrupted state — so this window governs only the
+// finite-overshoot case, where a single blown-up iterate can be a recoverable
+// transient rather than true divergence. The classic Maratos-effect example
+// (min 2(x1²+x2²−1)−x1 s.t. x1²+x2²−1=0, started on the constraint manifold)
+// makes the case concrete: under every solver configuration it takes one step
+// whose equality residual momentarily explodes to ~5e15, then converges in
+// roughly forty iterations to the textbook optimum (obj −1) with no recovery
+// machinery engaged. A per-iterate abort mistakes that single-iteration
+// excursion for divergence and kills an otherwise convergent solve.
+//
+// Three is the smallest window that survives the observed one- and
+// two-iteration recoverable excursions (Maratos-class overshoots,
+// restoration-entry transients) while still failing fast — within three
+// iterations of the onset — on genuine divergence. It is a Tycho policy choice
+// with no external reference: Ipopt ships no divergence abort at all. The
+// supporting evidence is the corpus differential — the same literature problem
+// diverges at iteration two with the per-iterate abort and converges to the
+// optimum without it.
+inline constexpr int kDivergencePersistIters = 3;
 
 // Part of the globalization component extraction: PSIOPT owns its
 // step-acceptance strategy through a std::unique_ptr<AcceptanceStrategy>.
@@ -669,6 +700,7 @@ class PSIOPT {
     friend class ::NestedSeamHarness;
     friend class ::NestedSeamIneqHarness;
     friend class ::NestedLifecycleHarness;
+    friend class ::DivergencePersistenceHarness;
 
     Settings settings_;
     SolveResult result_;

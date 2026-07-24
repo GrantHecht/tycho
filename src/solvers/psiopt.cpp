@@ -1555,15 +1555,62 @@ tycho::ConvergenceFlags tycho::solvers::PSIOPT::converge_check(std::vector<Itera
     bool IConFeas = (last.icon_inf_ < settings_.icon_tol_);
     bool BarFeas = (last.barr_inf_ < settings_.bar_tol_);
 
-    bool KKTDiv = (last.kkt_inf_ > settings_.div_kkt_tol_) || !std::isfinite(last.kkt_inf_);
-    bool EConDiv = (last.econ_inf_ > settings_.div_econ_tol_) || !std::isfinite(last.econ_inf_);
-    bool IConDiv = (last.icon_inf_ > settings_.div_icon_tol_) || !std::isfinite(last.icon_inf_);
-    bool BarDiv = (last.barr_inf_ > settings_.div_bar_tol_) || !std::isfinite(last.barr_inf_);
+    // Per-iterate divergent predicate: any monitored residual either non-finite
+    // or past its divergence threshold. This is the exact condition that used to
+    // abort the solve outright; it now splits into two disjoint verdicts. A
+    // non-finite residual (nan_inf) is an immediate, unrecoverable abort. A
+    // finite residual merely past threshold (beyond_thresholds) is treated as a
+    // possibly-recoverable transient and only aborts once it has persisted for
+    // kDivergencePersistIters iterations in a row (see the constant's rationale
+    // in psiopt.h). Splitting the two keeps the hard-error path immediate while
+    // giving genuinely recoverable overshoots (Maratos-class) room to recover.
+    auto iterate_divergent = [this](const IterateInfo &it) {
+        return (it.kkt_inf_ > settings_.div_kkt_tol_) || !std::isfinite(it.kkt_inf_) ||
+               (it.econ_inf_ > settings_.div_econ_tol_) || !std::isfinite(it.econ_inf_) ||
+               (it.icon_inf_ > settings_.div_icon_tol_) || !std::isfinite(it.icon_inf_) ||
+               (it.barr_inf_ > settings_.div_bar_tol_) || !std::isfinite(it.barr_inf_);
+    };
 
-    if (KKTDiv || EConDiv || IConDiv || BarDiv) {
+    bool nan_inf = !std::isfinite(last.kkt_inf_) || !std::isfinite(last.econ_inf_) ||
+                   !std::isfinite(last.icon_inf_) || !std::isfinite(last.barr_inf_);
+    bool beyond_thresholds =
+        (last.kkt_inf_ > settings_.div_kkt_tol_) || (last.econ_inf_ > settings_.div_econ_tol_) ||
+        (last.icon_inf_ > settings_.div_icon_tol_) || (last.barr_inf_ > settings_.div_bar_tol_);
+
+    if (nan_inf) {
+        // Non-finite residual: unrecoverable, abort immediately regardless of
+        // history length. Preserves the original hard-error semantics.
         Flag = ConvergenceFlags::DIVERGING;
         return Flag;
-    } else if (KKTFeas && EConFeas && IConFeas && BarFeas) {
+    }
+    if (beyond_thresholds) {
+        // Finite overshoot. Declare DIVERGING only once the trailing window of
+        // kDivergencePersistIters iterates is ALL divergent (this iterate is the
+        // newest of that window, and is divergent by construction). Histories
+        // shorter than the window cannot declare DIVERGING. Scans trailing
+        // history exactly as the acceptable-classification loop below does. Only
+        // runs when a threshold has tripped, so the common (non-diverging) path
+        // pays nothing beyond the comparisons above.
+        if (int(iters.size()) >= kDivergencePersistIters) {
+            bool window_all_divergent = true;
+            for (int i = 0; i < kDivergencePersistIters; i++) {
+                if (!iterate_divergent(iters[int(iters.size()) - i - 1])) {
+                    window_all_divergent = false;
+                    break;
+                }
+            }
+            if (window_all_divergent) {
+                Flag = ConvergenceFlags::DIVERGING;
+                return Flag;
+            }
+        }
+        // Window not yet full of divergent iterates: fall through to the ordinary
+        // convergence classification (below) and keep iterating. A residual past
+        // the divergence threshold cannot satisfy the convergence or acceptable
+        // tolerances, so this necessarily yields NOTCONVERGED.
+    }
+
+    if (KKTFeas && EConFeas && IConFeas && BarFeas) {
         Flag = ConvergenceFlags::CONVERGED;
         return Flag;
     } else if (int(iters.size()) > settings_.max_acc_iters_) {
