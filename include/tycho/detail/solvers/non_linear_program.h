@@ -250,7 +250,9 @@ struct NonLinearProgram {
     void set_primal_diags(double val) { this->primal_diag_coeffs().setConstant(val); }
     void set_slack_diags(const Eigen::VectorXd &sdiags) { this->slack_diag_coeffs() = sdiags; }
     void set_slack_diags(double val) { this->slack_diag_coeffs().setConstant(val); }
+    void set_e_pivots(const Eigen::VectorXd &epivs) { this->e_pivot_coeffs() = epivs; }
     void set_e_pivots(double val) { this->e_pivot_coeffs().setConstant(val); }
+    void set_i_pivots(const Eigen::VectorXd &ipivs) { this->i_pivot_coeffs() = ipivs; }
     void set_i_pivots(double val) { this->i_pivot_coeffs().setConstant(val); }
     void set_slacks_ones() { this->slack_coeffs().setConstant(1.0); }
 

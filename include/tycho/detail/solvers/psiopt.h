@@ -54,6 +54,18 @@ class RecoveryDispatchGate_MonitoredSelectionConstructsMonitoredGovernor_Test;
 class FeasibilitySwitch_ProximalSwitchConstructsRestorationAndWrapsRecovery_Test;
 class FeasibilitySwitch_OffModeConstructsNoRestoration_Test;
 class FeasibilitySwitch_FilterSeedsRestorationConstraintTol_Test;
+// Test harness for the nested feasibility-restoration eval/step seam: reaches
+// private eval_nlp / alg_impl / restoration_ / dims to drive the seam directly.
+class NestedSeamHarness;
+// Inequality-row variant of the seam harness: drives the eval seam on a problem
+// with an inequality constraint so the slack-completed inequality condensation is
+// verified through the assembled KKT.
+class NestedSeamIneqHarness;
+// Test harness for the nested feasibility-restoration LIFECYCLE (entry
+// orchestration, exit ratchet, multiplier re-entry): reaches the private
+// enter_/exit_feasibility_restoration helpers, the stashed-μ / ratchet state,
+// restoration_, and alg_impl to drive the whole phase end-to-end.
+class NestedLifecycleHarness;
 
 namespace tycho::solvers {
 
@@ -89,12 +101,13 @@ using tycho::EigenRef;
 // alg_impl call site is provably inert (see noop_recovery.h and the call-site
 // comment in alg_impl) — no live recovery dispatcher exists yet.
 // PSIOPT also owns an optional feasibility-restoration mode-switch through a
-// std::unique_ptr<RestorationStrategy> (concrete type ProximalSwitchRestoration,
-// complete only in psiopt.cpp). Unlike the four components above it is NOT
-// always constructed: rebuild_globalization_components() leaves it null unless
-// restoration_mode_ == proximal_switch, so on the default path every
-// restoration branch guards on `restoration_ != nullptr` and is provably dead.
-// Same forward-declare + out-of-line ctor/dtor discipline as the others.
+// std::unique_ptr<RestorationStrategy> (concrete type ProximalSwitchRestoration
+// or NestedL1Restoration depending on restoration_mode_, complete only in
+// psiopt.cpp). Unlike the four components above it is NOT always constructed:
+// rebuild_globalization_components() leaves it null unless restoration_mode_
+// != off, so on the default path every restoration branch guards on
+// `restoration_ != nullptr` and is provably dead. Same forward-declare +
+// out-of-line ctor/dtor discipline as the others.
 class AcceptanceStrategy;
 class GlobalizationMechanism;
 class BarrierGovernor;
@@ -174,9 +187,11 @@ class PSIOPT {
         // Per-phase feasibility-restoration entry budget: the maximum number of
         // times restoration mode may be entered within a single phase. Read by
         // ProximalSwitchRestoration::entry_permitted() (globalization/
-        // proximal_restoration.h) — 0 refuses restoration entirely (budget
-        // exhausted before the first entry). Ignored when restoration_mode_ ==
-        // off. validate() requires it >= 0.
+        // proximal_restoration.h) or NestedL1Restoration::entry_permitted()
+        // (globalization/l1_restoration.h), whichever restoration_mode_
+        // selects — 0 refuses restoration entirely (budget exhausted before
+        // the first entry). Ignored when restoration_mode_ == off. validate()
+        // requires it >= 0.
         int max_feas_rest_ = 2;
 
         // --- Convergence tolerances ---
@@ -239,17 +254,24 @@ class PSIOPT {
         // rejects that combination.
         bool never_monotone_ = false;
 
-        // --- Feasibility restoration (opt-in proximal mode-switch) ---
+        // --- Feasibility restoration (opt-in proximal mode-switch / nested l1) ---
         // off (default) reproduces today's behavior bit-identically: no
         // RestorationStrategy is constructed and every restoration branch in
         // the solver is provably dead. proximal_switch selects the proximal
         // feasibility mode-switch (ProximalSwitchRestoration), which — on a
         // ladder-exhausted step rejection at a not-near-feasible point — swaps
         // the true objective for a proximal term until infeasibility is
-        // sufficiently reduced, then resumes optimality mode. Composes with
+        // sufficiently reduced, then resumes optimality mode. l1_nested
+        // selects the nested l1 elastic feasibility restoration
+        // (NestedL1Restoration, globalization/l1_restoration.h) instead: the
+        // same trigger, but the l1 elastic reformulation runs as a condensed
+        // in-place phase reusing the outer barrier algorithm's KKT system
+        // rather than swapping the outer objective. Both modes compose with
         // every acceptance_strategy_ and barrier_governor_ (no matrix
-        // restrictions). Enum lives in psiopt_fwd.h; the per-phase entry budget
-        // is max_feas_rest_ above.
+        // restrictions — every shipped acceptance strategy implements the
+        // restoration exit test the modes rely on). Enum lives in
+        // psiopt_fwd.h; the per-phase entry budget is max_feas_rest_ above,
+        // shared by both modes.
         RestorationModes restoration_mode_ = RestorationModes::off;
 
         // --- Barrier parameters ---
@@ -375,7 +397,7 @@ class PSIOPT {
         // originally-rejected step was simply taken; this is the ONLY bucket
         // that increments when SOC/extended/watchdog are all off),
         // [4] restoration (a feasibility-restoration mode-switch was taken —
-        // only increments when restoration_mode_ == proximal_switch). Counts
+        // only increments when restoration_mode_ != off). Counts
         // rejections, i.e. every should_dispatch_recovery-gated call, not
         // just ones where a recovery link actually intervened. Reset per
         // solve alongside the other accumulators.
@@ -444,20 +466,26 @@ class PSIOPT {
         // Number of times feasibility restoration was entered during the most
         // recent solve's LAST PHASE, reported by RestorationStrategy::
         // append_diagnostics() (globalization/restoration.h;
-        // ProximalSwitchRestoration is the concrete reporter today —
-        // globalization/proximal_restoration.h). WRITE-ONLY diagnostics field:
-        // no algorithm code reads it back. Sentinel -1 when no restoration
-        // strategy is constructed on the active solve path (today's only
-        // path — feasibility restoration is not yet wired into the solver).
-        // Same last-phase-wins semantics as last_monotone_switches_ once a
-        // restoration strategy is wired and this is collected per phase.
+        // ProximalSwitchRestoration and NestedL1Restoration are today's
+        // concrete reporters — globalization/proximal_restoration.h,
+        // globalization/l1_restoration.h). WRITE-ONLY diagnostics field: no
+        // algorithm code reads it back. Sentinel -1 when no restoration
+        // strategy is constructed, i.e. restoration_mode_ == off. Same
+        // last-phase-wins semantics as last_monotone_switches_. Counting is
+        // identical across both modes: entries_ increments once per
+        // enter_restoration()/enter_nested() call, and iterations_in_mode_
+        // once per note_iteration() call while active — the nested mode has
+        // no separate inner/outer iteration split (its phase shares the
+        // outer loop's own iteration counter; see l1_restoration.h disclosure
+        // (a)), so this field means the same thing under both modes.
         int last_feas_rest_entries_ = -1;
 
         // Number of iterations spent in restoration mode during the most
         // recent solve's LAST PHASE, reported by RestorationStrategy::
         // append_diagnostics(). WRITE-ONLY diagnostics field. Sentinel -1
-        // when no restoration strategy is constructed on the active solve
-        // path. Same per-phase semantics as last_feas_rest_entries_.
+        // when no restoration strategy is constructed. Same per-phase
+        // semantics as last_feas_rest_entries_ (including the nested-mode
+        // counting note above).
         int last_feas_rest_iters_ = -1;
 
         // T6 (dead-status fix): the last non-Success status observed from
@@ -638,6 +666,9 @@ class PSIOPT {
     friend class ::FeasibilitySwitch_ProximalSwitchConstructsRestorationAndWrapsRecovery_Test;
     friend class ::FeasibilitySwitch_OffModeConstructsNoRestoration_Test;
     friend class ::FeasibilitySwitch_FilterSeedsRestorationConstraintTol_Test;
+    friend class ::NestedSeamHarness;
+    friend class ::NestedSeamIneqHarness;
+    friend class ::NestedLifecycleHarness;
 
     Settings settings_;
     SolveResult result_;
@@ -688,10 +719,12 @@ class PSIOPT {
     // RestorationStrategy interface (forward-declared above). Unlike
     // acceptance_/mechanism_/governor_/recovery_ this is NOT always constructed:
     // rebuild_globalization_components() leaves it null unless restoration_mode_
-    // == proximal_switch, in which case it holds a ProximalSwitchRestoration and
-    // FeasibilitySwitchRecovery is wrapped as the outermost recovery link. On
-    // the default path (off) it stays null and every restoration branch in
-    // eval_nlp / the classic+generic trial-eval seams / alg_impl guards on
+    // != off, in which case it holds a ProximalSwitchRestoration
+    // (restoration_mode_ == proximal_switch) or a NestedL1Restoration
+    // (restoration_mode_ == l1_nested), and FeasibilitySwitchRecovery is
+    // wrapped as the outermost recovery link either way. On the default path
+    // (off) it stays null and every restoration branch in eval_nlp / the
+    // classic+generic trial-eval seams / alg_impl guards on
     // `restoration_ != nullptr` (or `ctx.restoration_ != nullptr`) and is
     // provably dead. run_phase_sequence() resets it (when present) at each phase
     // boundary alongside the other components, and collects its diagnostics into
@@ -735,6 +768,49 @@ class PSIOPT {
     // is then a no-op once kkt_dim_ is stable across a solve.
     Eigen::VectorXd best_xsl_scratch_; ///< @internal alg_impl() return_best_ XSL snapshot.
     Eigen::VectorXd best_rhs_scratch_; ///< @internal alg_impl() return_best_ RHS snapshot.
+
+    // Nested feasibility-restoration eval-seam scratch (all dead unless a nested
+    // restoration strategy is active). The seam runs in the per-iteration hot
+    // path, so these back the condensed-elastic outputs without per-call heap
+    // allocation, following the *_scratch_ discipline above: resize-on-assign is
+    // a no-op once dims are stable across a solve. resto_pdiag_scratch_ holds the
+    // proximal Hessian diagonal η(μ)·D_R² (primal_vars_); resto_epiv_/ipiv_scratch_
+    // hold the NEGATED constraint-row pivots scattered into the KKT (y,y) blocks
+    // (equal_cons_/inequal_cons_); resto_ec_/ic_scratch_ copy the raw constraint
+    // residuals out before the condensed r̃ overwrites the RHS segments in place.
+    Eigen::VectorXd resto_pdiag_scratch_;
+    Eigen::VectorXd resto_epiv_scratch_;
+    Eigen::VectorXd resto_ipiv_scratch_;
+    Eigen::VectorXd resto_ec_scratch_;
+    Eigen::VectorXd resto_ic_scratch_;
+
+    // Nested feasibility-restoration lifecycle state (all dead unless a nested
+    // restoration strategy is active). stashed_mu_ holds the outer barrier
+    // parameter captured at entry; the governor drives a fresh in-phase schedule
+    // in between, and the multiplier re-entry restores it on exit. resto_first_
+    // iter_ guards the first phase iteration (take at least one step before any
+    // exit test fires). resto_theta_orig_prev_ carries the previous phase
+    // iteration's original-problem infeasibility for the per-iteration κ_resto
+    // ratchet (seeded at entry with the entry-point value, ratcheted each
+    // iteration — NOT frozen at entry). resto_dz_scratch_ backs the re-entry
+    // slack-multiplier Newton step, following the *_scratch_ no-per-call-alloc
+    // discipline. This state obeys the same reset invariant as the acceptance
+    // stash: a μ-event reset() mid-phase does NOT touch it (only the phase-
+    // boundary reset in run_phase_sequence() clears it), so the stashed outer μ
+    // survives a barrier subproblem restart inside the phase.
+    double stashed_mu_ = 0.0;
+    bool resto_first_iter_ = false;
+    double resto_theta_orig_prev_ = 0.0;
+    Eigen::VectorXd resto_dz_scratch_;
+
+    // One-shot guard for the second-level elastic re-centering fallback (nested l1
+    // restoration only, disclosure (f) in l1_restoration.h). Set true when an
+    // in-phase ladder-exhausted rejection re-centers the elastic pairs instead of
+    // taking the failed step; a second consecutive ladder exhaustion while set
+    // falls through to accept-as-is (no re-center loop). Cleared on any accepted
+    // step and re-armed at each phase entry / phase-boundary reset. Dead unless a
+    // nested restoration phase is active.
+    bool resto_recentered_ = false;
 
     // --- KKT solver ---
 #ifdef USE_ACCELERATE_SPARSE
@@ -874,6 +950,17 @@ class PSIOPT {
     // it is now a private helper of that mechanism.
     void complementarity(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI,
                          double &avgcomp, double &mincomp, double &maxcomp) const;
+    // Folds an active nested restoration phase's elastic complementarity pairs
+    // into complementarity()'s aggregates. base_count is the number of original
+    // slack/multiplier pairs already reduced into avgcomp (so their sum can be
+    // reconstructed as avgcomp*base_count and re-averaged over the union). A pure
+    // no-op unless a nested restoration is active — the aggregates are returned
+    // untouched off that path, so the default/proximal barrier machinery is
+    // byte-identical. Only ever combines separately-computed aggregates (min of
+    // mins, max of maxes, count-weighted average); it never re-reduces the
+    // original pairs, so complementarity()'s reduction ordering is preserved.
+    void augment_complementarity_nested(double &avgcomp, double &mincomp, double &maxcomp,
+                                        int base_count) const;
     void barrier_hessian(Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
                          Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double mu);
     // loqo_mu / mpc_mu were extracted verbatim into ClassicAdaptiveGovernor
@@ -896,9 +983,14 @@ class PSIOPT {
     void eval_soe(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
                   EigenRef<VectorXd> AGXS_FX, Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
 
+    // `mu` is the live phase barrier parameter. It is consulted only by the
+    // nested feasibility-restoration branch (which recomputes its proximity
+    // weight, pivots, and condensed residuals from the live μ every evaluation);
+    // every other mode ignores it, so the default and proximal-switch paths are
+    // unaffected by its value.
     void eval_nlp(AlgorithmModes algmode, double obj_scale, ConstEigenRef<VectorXd> XSL,
                   double &val, EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
-                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
+                  Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat, double mu);
 
     // --- Feasibility-restoration exit measures (defined in psiopt.cpp) ---
     // Shared by every restoration exit/teardown site (the two continuing-exit
@@ -914,6 +1006,86 @@ class PSIOPT {
     ProgressMeasures build_restoration_exit_measures(double obj_scale, double infeasibility,
                                                      ConstEigenRef<VectorXd> primals,
                                                      double barr_obj);
+
+    // --- Feasibility-restoration lifecycle (defined in psiopt.cpp) ---
+    // Shared entry orchestration for the kSwitchToFeasibility case. Builds the
+    // (θ,f) entry measures from the current RHS/primals, then dispatches on the
+    // strategy family: the proximal switch takes enter_restoration; the nested
+    // l1 phase takes enter_nested (with the current equality/inequality residual
+    // vectors) and additionally stashes the outer μ, sets μ ← entry_mu(), resets
+    // the governor for a fresh in-phase barrier schedule, and applies the
+    // verified entry multiplier init (equality constraint multipliers ← 0; the
+    // slack/bound multipliers clamped to min(ρ, current)). Both families then
+    // notify the acceptance strategy of the switch and reset the recovery chain.
+    // Passed the raw XSL/RHS blocks (KKTVector views are rebuilt inside) so it is
+    // directly drivable from a friend test harness. `mu` is updated in place.
+    void enter_feasibility_restoration(Eigen::VectorXd &XSL, Eigen::VectorXd &RHS, double prim_obj,
+                                       double barr_obj, double &mu);
+
+    // The nested phase's multiplier re-entry sequence — shared byte-for-byte by
+    // the κ_resto ratchet exit and the near-feasible stall exit (Ipopt
+    // MinC_1NrmRestorationPhase::PerformRestoration, strict order): (1) keep the
+    // phase's final x/s; (2) slack-multiplier Newton complementarity step under
+    // the STASHED outer μ, damped by the dual fraction-to-boundary rule; (3) if
+    // max|z| over ALL inequality multipliers exceeds kBoundMultResetThreshold,
+    // reset every inequality multiplier to 1; (4) equality constraint
+    // multipliers ← 0; (5) restore the stashed outer μ, reset the governor,
+    // exit_restoration, notify the acceptance strategy of the switch back to
+    // optimality (with true-objective exit measures), reset the recovery chain.
+    // `theta_orig` is the current original-problem infeasibility (∞-norm),
+    // carried into the exit measures. `mu` is restored in place.
+    void exit_feasibility_restoration_nested(Eigen::VectorXd &XSL, double obj_scale,
+                                             double theta_orig, double barr_obj, double &mu);
+
+    // Per-iteration κ_resto ratchet test for the nested phase: the current
+    // original-problem infeasibility must fall to at most max(kKappaResto ·
+    // previous-iteration infeasibility, econ_tol_) (Ipopt RestoConvCheck's
+    // orig_inf_pr_max, single-tolerance floor). Reads resto_theta_orig_prev_
+    // (seeded at entry, ratcheted each phase iteration). Defined in psiopt.cpp so
+    // the kKappaResto constant (globalization/acceptance_strategy.h) stays out of
+    // this header's include set.
+    bool resto_ratchet_passes(double theta_orig) const;
+
+    // Second-level elastic re-centering fallback for the nested l1 phase
+    // (disclosure (f) in l1_restoration.h). Invoked by alg_impl's kAcceptAsIs case
+    // when an in-phase line search exhausts the recovery ladder (a nested phase is
+    // active and no recovery link resolved the rejection). Re-centers the elastic
+    // pairs in closed form at the current phase μ from the raw residuals held in
+    // resto_ec_/ic_scratch_ (this iteration's eval seam), INSTEAD of taking the
+    // failed step. One-shot per consecutive-failure run: returns true and consumes
+    // the resto_recentered_ budget on the first call; returns false (fall through
+    // to accept-as-is) while the flag is still set. The flag re-arms on any
+    // accepted step and at each phase entry. Reachable only with restoration_
+    // non-null, active, and nested (the call site gates on nested_active).
+    bool try_recenter_elastics(double mu);
+
+    // Primal-dual system error at barrier parameter `mu`: the ∞-norm of the full
+    // KKT residual — primal stationarity (rhs.prim_grad, the Lagrangian gradient
+    // as assembled for the current iterate), primal infeasibility (equality and
+    // slack-completed inequality residuals), and the complementarity deviation
+    // max|s·z − μ| — as one scalar. Maps Ipopt's primal_dual_system_error(μ)
+    // (coin-or/Ipopt 72a29c9, src/Algorithm/IpBacktrackingLineSearch.cpp
+    // TrySoftRestoStep) onto this solver's single unscaled max-norm KKT measure.
+    // Read-only; the caller passes vectors already populated the same way the
+    // main loop populates the current iterate's RHS (stationarity including the
+    // objective/barrier gradient contribution, inequality residual slack-
+    // completed). Used only by the nested soft feasibility pre-stage.
+    double primal_dual_error(KKTVector &xsl, KKTVector &rhs, double mu) const;
+
+    // Nested soft feasibility pre-stage trial (defined in psiopt.cpp). Forms the
+    // full fraction-to-boundary trial point XSL + DXSL (DXSL already carries the
+    // fraction-to-boundary scaling from compute_step), evaluates the original
+    // problem there (into the caller-supplied XSL2/RHS2/GX scratch), and returns
+    // whether its primal-dual error is at most kSoftRestoPdErrorReductionFactor
+    // times the current point's. A true return means the soft step is accepted
+    // (alg_impl takes the full step and stays in the pre-stage); a false return
+    // means alg_impl escalates to the full restoration switch. Dead on the
+    // default path (only reached with a nested restoration strategy configured,
+    // via the kSoftFeasibilityStep recovery action).
+    bool try_soft_feasibility_step(AlgorithmModes algmode, double obj_scale, double mu,
+                                   Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL,
+                                   Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
+                                   Eigen::VectorXd &RHS2, Eigen::VectorXd &GX);
 
     // --- Convergence and stepping ---
     // The residual formulas shared by the pre-factorization early

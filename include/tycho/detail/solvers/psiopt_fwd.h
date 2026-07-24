@@ -98,6 +98,17 @@ enum class BarrierGovernors { classic_adaptive = 0, monitored = 1 };
 //                     primals back toward the entry point, until infeasibility
 //                     is sufficiently reduced. Composes with every acceptance
 //                     strategy and barrier governor.
-enum class RestorationModes { off = 0, proximal_switch = 1 };
+//   l1_nested       — the nested l1 elastic feasibility restoration
+//                     (NestedL1Restoration, globalization/l1_restoration.h):
+//                     on a ladder-exhausted rejection, solve the l1 elastic
+//                     reformulation (Ipopt-lineage restoration NLP) as a
+//                     CONDENSED in-place phase that reuses the outer barrier
+//                     algorithm's KKT system, rather than switching the outer
+//                     objective the way proximal_switch does. Every shipped
+//                     acceptance strategy implements the restoration exit
+//                     test, so l1_nested composes with every
+//                     acceptance_strategy and barrier_governor exactly like
+//                     proximal_switch (no matrix restrictions).
+enum class RestorationModes { off = 0, proximal_switch = 1, l1_nested = 2 };
 
 } // namespace tycho::solvers

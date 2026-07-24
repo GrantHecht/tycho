@@ -209,6 +209,26 @@ class MonitoredBarrierGovernor : public BarrierGovernor {
 
     bool in_monotone_mode() const override { return monotone_mode_; }
 
+    // This governor supplies its own safeguarded barrier schedule during a nested
+    // restoration phase (its free<->monotone monitor forces the Fiacco-McCormick
+    // decrease), so the alg_impl seam does NOT overlay update_barrier_monotone on
+    // it — see BarrierGovernor::provides_restoration_barrier_safeguard().
+    //
+    // Scope of the safeguard, per oracle: under the LOQO oracle the free-mode
+    // update reads the elastic-augmented complementarity aggregates directly, so
+    // the barrier parameter tracks the restoration problem's own barrier state.
+    // Under the PROBE oracle the predictor recomputes complementarity from the
+    // original slack/multiplier pairs only (see mpc_mu), so the free window after
+    // the phase-entry reset (up to the reference-fill length plus one monitor
+    // reaction) runs without the augmented signal; containment then rests on the
+    // monitor's error measure (which does fold the elastic complementarity) and
+    // its monotone handoff re-anchoring at the augmented average. Validated
+    // empirically on the restoration-exercising corpus cases: under PROBE the
+    // phase enters, iterates, and exits normally with no barrier collapse or
+    // frozen-phase behavior, and outcomes match the no-restoration PROBE
+    // baseline within a few iterations.
+    bool provides_restoration_barrier_safeguard() const override { return true; }
+
     // Clears the reference window, mode, monotone-mu bookkeeping, and the
     // write-only diagnostics; also resets the free-mode delegate. Phase
     // boundaries start in free mode.

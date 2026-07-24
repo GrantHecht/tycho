@@ -112,6 +112,62 @@ class BarrierGovernor {
                                   double &barr_obj, const IterateInfo &current,
                                   bool &mu_event) = 0;
 
+    // Barrier update while a nested l1 feasibility-restoration phase is active,
+    // used for governors that do NOT supply their own monotone safeguard (see
+    // provides_restoration_barrier_safeguard() below — the free-mode
+    // ClassicAdaptiveGovernor is the case). This transcribes Ipopt's default
+    // restoration mu_strategy, which is MONOTONE: the restoration phase runs the
+    // safeguarded Fiacco-McCormick ladder anchored at the entry resto_mu, never a
+    // free-mode oracle. It is NON-VIRTUAL and identical for every governor — the
+    // configured governor/barmode (its free-mode LOQO/PROBE oracles) is bypassed
+    // for the duration of the phase and resumes at exit, so those free oracles
+    // are UNREACHABLE while nested-active under a free governor.
+    //
+    // Why the free oracle cannot be used here: under a free oracle the barrier
+    // machinery drives EVERY complementarity product — including the elastic
+    // (n,p,z) bound pairs of the restoration subproblem — toward whatever mu it
+    // proposes, so any mu is self-consistent. The oracle then collapses mu to
+    // its floor within a handful of iterations, before the elastics shrink; the
+    // condensed elastic pivot (n²+p²)/mu explodes, the constraint rows decouple,
+    // and the phase freezes on a wrong-basin l1 minimizer (p>0) until the
+    // iteration cap. The monotone schedule instead decreases mu only when the
+    // restoration barrier subproblem is sufficiently solved — the same
+    // Fiacco-McCormick gate MonitoredBarrierGovernor implements: advance iff
+    // barrier_subproblem_error <= barrier_tol_factor · mu, where the subproblem
+    // error reads barr_inf_ (into which the elastic complementarity is folded
+    // while nested-active), so mu stays anchored at resto scale until the
+    // elastics actually shrink.
+    //
+    // mu_in is the current (held) monotone parameter carried across phase
+    // iterations; the returned mu is the possibly-advanced one. mu_event is set
+    // true on a strict decrease (a new barrier subproblem — the acceptance
+    // per-subproblem reset trigger). The log-barrier objective/dual-gradient
+    // tail is written at the resulting mu, exactly as the free-mode common tail
+    // does (slacks/iq_lmults on XSL, dual_grad on RHS). Never reached off the
+    // nested path — the alg_impl call site gates it on nested-active.
+    double update_barrier_monotone(double mu_in, Eigen::VectorXd &XSL, Eigen::VectorXd &RHS,
+                                   SolverContext &ctx, double &barr_obj, const IterateInfo &current,
+                                   bool &mu_event);
+
+    // Whether this governor supplies its OWN safeguarded (monotone) barrier
+    // schedule while a nested l1 restoration phase is active. When false (the
+    // default — the free-mode ClassicAdaptiveGovernor, which has no monotone
+    // safeguard), the alg_impl seam routes the in-phase barrier update through
+    // update_barrier_monotone above, transcribing Ipopt's default restoration
+    // mu_strategy so the free-oracle μ-race cannot freeze the phase. When true
+    // (MonitoredBarrierGovernor), the governor's own free<->monotone monitor
+    // forces the safeguarded Fiacco-McCormick decrease in-phase, so the seam
+    // leaves it to drive its own update: overlaying a second (differently
+    // anchored) monotone schedule would only perturb its established
+    // convergence. Note the scope this places on the "free oracle unreachable
+    // in-phase" guarantee: it holds unconditionally under a free governor;
+    // under the monitored governor the free oracle is reached only inside the
+    // monitor's own guarded free mode. How complete that guard is depends on
+    // the oracle — the LOQO update consumes the elastic-augmented
+    // complementarity directly, while the PROBE predictor does not (see the
+    // per-oracle scope note on the monitored governor's override).
+    virtual bool provides_restoration_barrier_safeguard() const { return false; }
+
     // Free vs. monotone mode query. ClassicAdaptiveGovernor keeps this
     // default (always free); MonitoredBarrierGovernor overrides it to report
     // its live state-machine mode.
