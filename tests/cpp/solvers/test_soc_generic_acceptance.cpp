@@ -25,7 +25,7 @@
 // The classic-path SOC policy truth-tables live in test_soc.cpp (untouched); the
 // end-to-end evidence that a SOC correction FIRES and is accepted/rejected via a
 // generic strategy on a Maratos-class problem is carried by the solver corpus
-// scorecards named in the feature brief.
+// scorecards (the second-order-correction configurations of the corpus sweep).
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "solver_test_utils.h"
@@ -346,7 +346,11 @@ TEST(SocGenericAcceptanceIntegration, MeritWithSocAndExtendedBacktrackSolves) {
 // SOC composes with the phase's trial machinery without breaking the in-phase
 // path (the corrected re-test routes through the same generic acceptance surface
 // the phase uses; see soc.h's interaction-rule (b)).
-TEST(SocGenericAcceptanceIntegration, L1NestedRestorationWithSocComposesInPhase) {
+// On a feasible problem the correction rescues the rejected step before the
+// recovery ladder can exhaust, so restoration is never entered at all — the
+// correction pre-empting the (more expensive) feasibility phase is the desired
+// composition on feasible problems, pinned here.
+TEST(SocGenericAcceptanceIntegration, SocRescuePreemptsRestorationOnFeasibleProblem) {
     auto prob = build_soc_nlp(/*start=*/0.0, /*a=*/1.0);
     prob->optimizer_->settings().acceptance_strategy_ = AcceptanceStrategies::merit;
     prob->optimizer_->settings().restoration_mode_ = RestorationModes::l1_nested;
@@ -356,9 +360,35 @@ TEST(SocGenericAcceptanceIntegration, L1NestedRestorationWithSocComposesInPhase)
     auto flag = prob->optimize();
     EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
     const auto &r = prob->optimizer_->result();
-    EXPECT_GE(r.last_feas_rest_entries_, 1); // restoration entered with SOC in the chain
+    EXPECT_EQ(r.last_feas_rest_entries_, 0); // corrections rescued every rejection
     ASSERT_EQ(r.primals_.size(), 1);
     EXPECT_NEAR(r.primals_[0], 1.0, 1e-4);
+}
+
+// On a genuinely infeasible problem no correction can cure the rejection, the
+// ladder (including the correction link) exhausts, and the restoration phase
+// must still engage and run with the correction link active in-chain — the
+// in-phase composition this suite exists to cover.
+TEST(SocGenericAcceptanceIntegration, L1NestedRestorationWithSocComposesInPhase) {
+    auto prob = build_soc_nlp(/*start=*/0.0, /*a=*/1.0);
+    {
+        using tycho::vf::Arguments;
+        using tycho::vf::GenericFunction;
+        auto args = Arguments<1>();
+        auto x = args.coeff<0>();
+        // Contradicts x - 1 = 0: jointly infeasible, violation bounded below by 1.
+        prob->add_equal_con(GenericFunction<-1, -1>(x + 1.0),
+                            (Eigen::VectorXi(1) << 0).finished());
+    }
+    prob->optimizer_->settings().acceptance_strategy_ = AcceptanceStrategies::merit;
+    prob->optimizer_->settings().restoration_mode_ = RestorationModes::l1_nested;
+    prob->optimizer_->settings().max_soc_ = 4;
+    prob->optimizer_->set_max_ls_iters(0);
+    prob->optimizer_->set_max_iters(80);
+    auto flag = prob->optimize();
+    const auto &r = prob->optimizer_->result();
+    EXPECT_GE(r.last_feas_rest_entries_, 1); // restoration entered with SOC in the chain
+    EXPECT_NE(flag, PSIOPT::ConvergenceFlags::CONVERGED); // never falsely converges
 }
 
 } // namespace

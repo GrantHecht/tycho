@@ -67,9 +67,12 @@
 //       (trial_objective + trial_residual_shift), so the accept/reject verdict
 //       on a corrected step measures the elastic subproblem's objective and
 //       infeasibility ‖c + n − p‖, not the raw problem's. The c_soc constraint
-//       accumulation and the trigger/termination violation measures stay in the
-//       raw-slack-reset space (eval_trial_constraints, and the RHS constraint
-//       block which carries the condensed residual r̃ in-phase) — EXACTLY as the
+//       accumulation and the CURRENT-side trigger/termination violation
+//       measures stay in the raw-slack-reset space (eval_trial_constraints, and
+//       the RHS constraint block which carries the condensed residual r̃
+//       in-phase), while the TRIAL-side trigger measure recorded at the first
+//       rejection is elastic-shifted in-phase (it comes off the shifted trial
+//       residuals) — a mixed-space trigger comparison — EXACTLY as the
 //       classic SOC link computes them in-phase, since both paths share that
 //       machinery unchanged. The generic path is therefore consistent with the
 //       classic path here; the raw-vs-elastic space asymmetry in the corrective
