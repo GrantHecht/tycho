@@ -12,13 +12,20 @@ scored (never gated) by the harness, not by this test.
 
 import importlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+# This file lives at <repo>/tychopy/test/test_corpus_smoke.py, so
+# parents[2] is the repo root when it runs in place. Some harnesses copy the
+# test files elsewhere (e.g. the wheel-layout CI job runs pytest against the
+# packaged wheel from a scratch directory) where that relative depth no
+# longer holds — TYCHO_REPO_ROOT lets such a harness point back at the real
+# checkout, which still holds tests/corpus/ and scripts/run_corpus.py.
+REPO_ROOT = Path(os.environ.get("TYCHO_REPO_ROOT", Path(__file__).resolve().parents[2]))
 CORPUS_DIR = REPO_ROOT / "tests" / "corpus"
 RUN_CORPUS = REPO_ROOT / "scripts" / "run_corpus.py"
 

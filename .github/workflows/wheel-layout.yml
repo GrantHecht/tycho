@@ -107,6 +107,10 @@ jobs:
       - name: Run pytest suite (against the installed wheel)
         env:
           MPLBACKEND: Agg
+          # test_corpus_smoke.py needs tests/corpus/ and scripts/run_corpus.py,
+          # neither of which ships in the wheel; point it back at the real
+          # checkout since the suite itself is copied to /tmp below.
+          TYCHO_REPO_ROOT: ${{ github.workspace }}
         # Fresh venv from the wheel's own [test] extra, then run the suite from
         # /tmp so the source ./tychopy package is NOT on sys.path — both
         # `import tychopy` (pure-Python layer) and `import _tychopy` (the .so)
