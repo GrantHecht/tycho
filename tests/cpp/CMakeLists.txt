@@ -186,6 +186,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     solvers/test_l1_restoration.cpp
     solvers/test_feasibility_switch.cpp
     solvers/test_divergence_persistence.cpp
+    solvers/test_inertia_regularization.cpp
 )
 
 #-------------------------------------------------------------------------------

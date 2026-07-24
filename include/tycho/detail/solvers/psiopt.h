@@ -328,6 +328,19 @@ class PSIOPT {
         double incr_h_ = 8.0;
         double decr_h_ = 0.333333;
 
+        // KKT inertia-correction / regularization mode. classic (default) runs
+        // the on-demand inertia ladder exactly as before — bit-identical.
+        // proximal_regularization bakes a persistent, decaying primal base shift
+        // ρ_k and an always-on barrier-scaled dual shift −δ_c into the base
+        // matrix each iteration (the same ladder still escalates on top when the
+        // base attempt has wrong inertia or is singular). ρ_k starts at
+        // kProxRegFloor and decays by decr_h_ toward that floor; δ_c uses the
+        // δ_c-ladder constants in globalization/inertia_regularization.h and is
+        // suppressed while a nested l1 restoration phase is active. Closed-set
+        // enum, so validate() needs no range check; no other setting is
+        // required. Enum lives in psiopt_fwd.h.
+        InertiaModes inertia_mode_ = InertiaModes::classic;
+
         // --- QP solver ---
         int qp_threads_ = TYCHO_DEFAULT_QP_THREADS;
         QPAlgModes qp_alg_ = QPAlgModes::Classic;
@@ -976,8 +989,13 @@ class PSIOPT {
     // delta applied during this call (i.e. the actual total added to the KKT
     // diagonal), used only for the HPert iteration-table column. Neither
     // `finalpert` nor any control-flow decision in factor_impl reads `cumpert`.
+    // `base_prox` and `dual_shift` are the proximal-regularization base shifts
+    // (ρ_k on the Hessian diagonal, δ_c on the constraint-row diagonals); both
+    // are read only when inertia_mode_ == proximal_regularization and default to
+    // 0.0, so the classic path is byte-identical regardless of their values.
     int factor_impl(bool docompute, bool ZFac, double ipurt, double incpurt0, double incpurt,
-                    double &finalpert, double &cumpert);
+                    double &finalpert, double &cumpert, double base_prox = 0.0,
+                    double dual_shift = 0.0);
 
     bool analyze_kkt_matrix();
 

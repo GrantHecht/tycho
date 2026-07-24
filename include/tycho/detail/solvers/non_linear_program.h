@@ -280,6 +280,22 @@ struct NonLinearProgram {
             mat.valuePtr()[this->kkt_locations_[ofs + i]] += pert;
         }
     }
+    // Post-assembly `+=` onto every constraint-row diagonal slot (the equality
+    // and inequality pivot ranges), the mirror of perturb_kkt_p_diags over the
+    // constraint block. Used by the proximal primal-dual regularization mode to
+    // apply the dual shift (−δ_c) as part of the base matrix, after the KKT
+    // assembly and before the first factorization; on the default path these
+    // slots are 0.0 and this helper is never called.
+    void perturb_kkt_c_diags(double pert, Eigen::SparseMatrix<double, Eigen::RowMajor> &mat) {
+        int eofs = this->e_pivot_data_start_ + this->num_user_kkt_elems_;
+        for (int i = 0; i < this->equal_cons_; i++) {
+            mat.valuePtr()[this->kkt_locations_[eofs + i]] += pert;
+        }
+        int iofs = this->i_pivot_data_start_ + this->num_user_kkt_elems_;
+        for (int i = 0; i < this->inequal_cons_; i++) {
+            mat.valuePtr()[this->kkt_locations_[iofs + i]] += pert;
+        }
+    }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     EigenRef<VectorXd> pgx_coeffs() {
         return this->rhs_coeffs_.segment(this->pgx_data_start_, this->num_pgx_elems_);
