@@ -11,8 +11,8 @@
 // This file: pure interface declaration, no implementation. IMPORTANT scope
 // note: the inertia/perturbation LADDER itself (factor_impl's Zfac cycling +
 // the 8x/(1/3) escalation) is NOT what this interface wraps — it stays
-// inside PSIOPT::factor_impl until the proximal-regularization inertia mode
-// is implemented. This interface is the POST-REJECTION dispatcher: what to
+// inside PSIOPT::factor_impl; a future inertia-dispatch stage may fold it
+// into this chain. This interface is the POST-REJECTION dispatcher: what to
 // do once a trial step has already been rejected by an AcceptanceStrategy.
 // The implementation shipped alongside it (NoopRecovery, noop_recovery.h) is
 // an empty chain that always returns kAcceptAsIs, i.e. today's behavior: the

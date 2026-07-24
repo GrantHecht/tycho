@@ -2457,8 +2457,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // wiring comment); the feasibility switch remains a future link. The
         // inertia/perturbation ladder above (factor_impl's Zfac cycling +
         // escalation) is a SEPARATE mechanism and stays out of this chain
-        // until the proximal-regularization inertia mode is implemented --
-        // it is NOT invoked or bypassed here.
+        // (a future inertia-dispatch stage may wire it in) -- it is NOT
+        // invoked or bypassed here.
         //
         // The call is GATED on an actual rejection: should_dispatch_recovery
         // fires the hook only when the line search reported the trial step

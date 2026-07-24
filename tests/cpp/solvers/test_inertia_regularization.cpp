@@ -22,7 +22,6 @@
 
 #include <gtest/gtest.h>
 
-#include <cmath>
 
 #include <Eigen/Core>
 
@@ -37,7 +36,6 @@ using tycho::solvers::kDualRegScale;
 using tycho::solvers::kProxRegFloor;
 using tycho::solvers::OptimizationProblem;
 using tycho::solvers::prox_reg_decay;
-using tycho::solvers::PSIOPT;
 using tycho::solvers::RestorationModes;
 
 namespace {
