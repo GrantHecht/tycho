@@ -155,6 +155,9 @@ class FeasibilitySwitchRecovery : public RecoveryChain {
     // only). Incremented each time the ladder-exhausted rejection yields a soft
     // step; once it exceeds kMaxSoftRestoIters the link escalates to the full
     // restoration switch. Cleared by notify_step_accepted()/reset() (see above).
+    // A mid-pre-stage accept-as-is (entry refused by guard/budget) does NOT
+    // clear it — at worst the pre-stage escalates one episode early into the
+    // full restoration backstop, which is the safe direction.
     int soft_counter_ = 0;
 };
 

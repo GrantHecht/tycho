@@ -156,13 +156,16 @@ class BarrierGovernor {
     // update_barrier_monotone above, transcribing Ipopt's default restoration
     // mu_strategy so the free-oracle μ-race cannot freeze the phase. When true
     // (MonitoredBarrierGovernor), the governor's own free<->monotone monitor
-    // already forces the safeguarded Fiacco-McCormick decrease in-phase — the
-    // reason the monitored family does NOT suffer the race — so the seam leaves
-    // it to drive its own update: overlaying a second (differently anchored)
-    // monotone schedule would only perturb its established convergence. Note the
-    // scope this places on the "free oracle unreachable in-phase" guarantee: it
-    // holds unconditionally under a free governor; under the monitored governor
-    // the free oracle is reached only inside the monitor's own guarded free mode.
+    // forces the safeguarded Fiacco-McCormick decrease in-phase, so the seam
+    // leaves it to drive its own update: overlaying a second (differently
+    // anchored) monotone schedule would only perturb its established
+    // convergence. Note the scope this places on the "free oracle unreachable
+    // in-phase" guarantee: it holds unconditionally under a free governor;
+    // under the monitored governor the free oracle is reached only inside the
+    // monitor's own guarded free mode. How complete that guard is depends on
+    // the oracle — the LOQO update consumes the elastic-augmented
+    // complementarity directly, while the PROBE predictor does not (see the
+    // per-oracle scope note on the monitored governor's override).
     virtual bool provides_restoration_barrier_safeguard() const { return false; }
 
     // Free vs. monotone mode query. ClassicAdaptiveGovernor keeps this

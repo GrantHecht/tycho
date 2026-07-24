@@ -12,12 +12,12 @@
 // This file: interface declaration only, finalized against the first
 // concrete implementation, ProximalSwitchRestoration (proximal_restoration.h).
 // The feasibility-restoration plan ships as a trio of strategies — a proximal
-// feasibility mode-switch (this one), a nested l1 proximal restoration, and
-// an elastic/penalty relaxation — and this interface is shaped to host all
-// three, though only the proximal switch exists so far. NO solver wiring
-// exists yet: nothing constructs a RestorationStrategy on any solve path, and
-// RecoveryChain::Action::kSwitchToFeasibility (recovery_chain.h) still has
-// nowhere to dispatch to. Do not infer wiring behavior from this header alone.
+// feasibility mode-switch (proximal_restoration.h), a nested l1 proximal
+// restoration (l1_restoration.h), and an elastic/penalty relaxation (not yet
+// implemented) — and this interface is shaped to host all three. The first two
+// are wired: rebuild_globalization_components constructs the strategy selected
+// by Settings::restoration_mode_, and RecoveryChain::Action::kSwitchToFeasibility
+// (recovery_chain.h) dispatches into the entry orchestration in alg_impl.
 //
 // Ownership rule: like the other globalization interfaces, a
 // RestorationStrategy caches NO live solver state beyond what defines its own

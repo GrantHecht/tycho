@@ -6,11 +6,12 @@
 // barrier algorithm running on globalization failure, but swaps the true
 // objective for a proximal term pulling the primal variables back toward the
 // point restoration was entered from. This is the first of the
-// feasibility-restoration trio (restoration.h); a nested l1 proximal
-// restoration and an elastic/penalty relaxation are expected to follow as
-// separate strategies. NO solver wiring exists yet — nothing constructs this
-// class on any solve path (see restoration.h's file docstring); this header
-// is the standalone component only.
+// feasibility-restoration trio (restoration.h); the nested l1 proximal
+// restoration (l1_restoration.h) is the second, and an elastic/penalty
+// relaxation is expected to follow as a separate strategy. Constructed by
+// rebuild_globalization_components when Settings::restoration_mode_ selects
+// the proximal switch (see restoration.h's file docstring for the wiring
+// overview).
 //
 // =============================================================================
 // FORMULATION — derived from the two primary sources (fetched + read, not

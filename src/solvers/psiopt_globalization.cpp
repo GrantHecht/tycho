@@ -31,10 +31,11 @@
 // ExtendedBacktrackRecovery, WatchdogRecovery, and the ChainedRecovery
 // composition — see watchdog.h's file docstring for the full design.
 //
-// This file also hosts ProximalSwitchRestoration (the proximal feasibility
-// mode-switch, first of the feasibility-restoration trio) — see
-// proximal_restoration.h's file docstring for the full formulation and
-// citations. No solver wiring exists yet; this is the standalone component.
+// This file also hosts the feasibility-restoration strategies:
+// ProximalSwitchRestoration (the proximal mode-switch) and NestedL1Restoration
+// (the condensed elastic l1 phase) — see proximal_restoration.h and
+// l1_restoration.h for the formulations and citations, and restoration.h for
+// the wiring overview.
 // =============================================================================
 
 #include "tycho/detail/solvers/globalization/backtracking_line_search.h"

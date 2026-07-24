@@ -7,9 +7,10 @@
 // barrier algorithm's KKT system rather than spinning up a separate nested
 // solver instance. Second of the feasibility-restoration trio (restoration.h);
 // the proximal mode-switch (proximal_restoration.h) precedes it and an
-// elastic/penalty relaxation is expected to follow. NO solver wiring exists yet
-// — nothing constructs this class on any solve path (see restoration.h's file
-// docstring); this header is the standalone component only. Definitions live in
+// elastic/penalty relaxation is expected to follow. Constructed by
+// rebuild_globalization_components when Settings::restoration_mode_ selects the
+// nested l1 mode; the evaluation/step seam and the entry/exit orchestration
+// live in src/solvers/psiopt.cpp, definitions in
 // src/solvers/psiopt_globalization.cpp.
 //
 // =============================================================================

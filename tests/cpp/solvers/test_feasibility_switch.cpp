@@ -1718,6 +1718,13 @@ TEST(NestedRestorationLifecycle, FreeOracleUnreachableDuringNestedPhase) {
     EXPECT_GE(comp->entries(), 1);            // the full l1 phase was entered
     EXPECT_EQ(raw->calls_during_nested(), 0); // free oracle never consulted while active
     EXPECT_GT(raw->total_calls(), 0);         // configured governor drives the optimality iters
+    // The solve converged and ended back on the outer barrier schedule, which
+    // legitimately drives μ to its floor at convergence — so no lower bound
+    // applies here. The frozen-phase signature (floor-scale μ while stuck
+    // in-phase for hundreds of iterations) is excluded by the convergence flag
+    // above together with the harness's tight iteration cap; this assertion
+    // pins only that the schedule advanced below the entry-time outer μ.
+    EXPECT_LT(final_mu, 0.1);
 }
 
 // (b') The gate's other direction: a governor that reports its OWN restoration
