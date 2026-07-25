@@ -32,7 +32,7 @@ namespace {
 // A well-conditioned equality NLP: min x^2 s.t. x - 1 = 0, optimum x = 1,
 // objective 1 -- the same smallest problem the inertia-regularization parity
 // test drives through the public solve path.
-std::unique_ptr<OptimizationProblem> build_wellcond_nlp() {
+std::unique_ptr<OptimizationProblem> build_dispatch_test_nlp() {
     using tycho::vf::Arguments;
     using tycho::vf::GenericFunction;
     auto prob = std::make_unique<OptimizationProblem>();
@@ -52,7 +52,7 @@ std::unique_ptr<OptimizationProblem> build_wellcond_nlp() {
 }
 
 TEST(NlpSolverDispatch, DefaultsToPsiopt) {
-    auto prob = build_wellcond_nlp();
+    auto prob = build_dispatch_test_nlp();
     EXPECT_EQ(prob->nlp_solver_, ts::NLPSolvers::psiopt);
     auto flag = prob->optimize();
     EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
@@ -63,7 +63,7 @@ TEST(NlpSolverDispatch, IpoptWithoutBuildSupportThrows) {
     if (ts::ipopt_backend::available()) {
         GTEST_SKIP() << "built with Ipopt support";
     }
-    auto prob = build_wellcond_nlp();
+    auto prob = build_dispatch_test_nlp();
     prob->nlp_solver_ = ts::NLPSolvers::ipopt;
     EXPECT_THROW(prob->optimize(), std::runtime_error);
 }
