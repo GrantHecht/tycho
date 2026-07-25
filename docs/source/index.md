@@ -227,7 +227,7 @@ If you use Tycho in published work, please cite the original ASSET paper:
 Pezent, J. B., Sikes, J., Ledbetter, W., Sood, R., Howell, K. C., & Stuart, J. R.
 (2022). *ASSET: Astrodynamics Software and Science Enabling Toolkit.* AIAA
 SciTech 2022 Forum, AIAA 2022-1131.
-[doi:10.2514/6.2022-1131](https://doi.org/10.2514/6.2022-1131)
+[doi:10.2514/6.2022-1131](https://arc.aiaa.org/doi/abs/10.2514/6.2022-1131)
 ```
 
 ```{toctree}

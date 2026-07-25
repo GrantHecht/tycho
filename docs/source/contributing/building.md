@@ -116,7 +116,7 @@ sudo dnf install ninja-build ccache    # Fedora
 The sparse linear solver on Linux is **Intel oneAPI MKL**. Install
 oneAPI MKL via the Intel apt repository (Debian/Ubuntu instructions —
 see [the Intel oneAPI installation
-guide](https://www.intel.com/content/www/us/en/developer/articles/guide/installation-guide-for-oneapi-toolkits.html)
+guide](https://www.intel.com/content/www/us/en/developer/articles/guide/install-intel-oneapi-linux.html)
 for other distros):
 
 ```bash
