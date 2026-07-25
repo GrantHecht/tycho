@@ -54,7 +54,10 @@ Subcommands:
                 is recorded in ``<store>/invalid.json`` and skipped for
                 every repeat. Resumable: a cell/repeat whose file already
                 holds >= ``EXPECTED_PROBLEM_COUNT`` parseable JSONL rows is
-                skipped. ``--dry-run`` prints the planned commands without
+                skipped; if EVERY requested repeat for a cell is already
+                complete, the cell is skipped before the validity probe
+                even runs (no wasted solver call). ``--dry-run`` prints the
+                planned commands without
                 probing validity or running anything (no solver calls at
                 all). ``--only-cell k=v,k=v,...`` runs exactly one cell
                 (bypassing the full 192-cell product) -- used for targeted
@@ -62,15 +65,25 @@ Subcommands:
     shortlist   Selects cells whose solve-or-acceptable count is within one
                 problem of the best cell's AND whose per-problem status
                 vector is IDENTICAL across both repeats (status-stability),
-                capped at ``cap``, tie-broken by total iterations on the
-                commonly solved set.
+                capped at ``cap``, tie-broken by total repeat-1 iterations
+                over the INTERSECTION of problems solved by every cell in
+                that qualifying band (not each cell's own solved set -- see
+                ``shortlist()``'s docstring for the precise rule and the
+                empty-intersection fallback).
     aggregate   Reads every complete cell under ``--store`` into one CSV +
                 one JSON summary (hash, axis values, per-status counts,
-                repeat-stability, per-problem status string);
-                ``--context NAME=SCORECARD`` appends a fixed reference row
-                read from an existing ``run_corpus.py`` JSONL scorecard
-                (e.g. the PSIOPT-defaults or Ipopt baselines) for
-                side-by-side comparison.
+                repeat-stability, per-problem status string for EVERY
+                present repeat -- CSV column ``statuses`` is repeat-1's
+                vector (or the sole present repeat's, if only one exists),
+                with a second column ``statuses_r2`` populated when a
+                repeat-2 file is also present; JSON ``detail`` is a dict
+                keyed by repeat number ("1"/"2") holding that repeat's raw
+                corpus rows -- so a status-unstable cell (``repeat_stable``
+                false) still exposes both repeats' full detail instead of
+                only the higher-indexed one); ``--context NAME=SCORECARD``
+                appends a fixed reference row read from an existing
+                ``run_corpus.py`` JSONL scorecard (e.g. the PSIOPT-defaults
+                or Ipopt baselines) for side-by-side comparison.
 
 Coercion note (``is_cell_valid``): ``expand_config()`` already returns typed
 Python values (int/bool), so there is no CLI-string parsing step to reuse
@@ -242,6 +255,14 @@ def is_cell_valid(config: dict) -> bool:
     _small_problem), applies expand_config(config), and calls optimize()
     with print_level=0. Convergence is irrelevant; only whether validate()
     accepts the combination (raises ValueError) matters.
+
+    _apply_config() itself is applied inside its own try/except: a
+    malformed cell (e.g. an out-of-range axis value from a hand-typed
+    --only-cell spec) can make the enum-coercion fallback raise ValueError
+    (no such enum member) or TypeError (unsupported setattr type) before
+    optimize() is ever reached -- those must land the cell in
+    invalid.json via a plain False return, same as a Settings::validate()
+    rejection, rather than crashing the whole sweep.
     """
     import tychopy.solvers as solvs
     from tychopy.vector_functions import Arguments as Args
@@ -252,7 +273,10 @@ def is_cell_valid(config: dict) -> bool:
     prob.add_equal_con(Args(2).squared_norm() - 4.0, [0, 1])
     prob.optimizer.print_level = 0
 
-    _apply_config(prob.optimizer, expand_config(config))
+    try:
+        _apply_config(prob.optimizer, expand_config(config))
+    except (ValueError, TypeError):
+        return False
 
     try:
         prob.optimize()
@@ -303,7 +327,12 @@ def _parse_only_cell(spec: str) -> dict:
             raise SystemExit(
                 f"--only-cell: unknown axis {key!r} (expected one of {sorted(AXES)})"
             )
-        cell[key] = int(raw)
+        try:
+            cell[key] = int(raw)
+        except ValueError:
+            raise SystemExit(
+                f"--only-cell: bad value for axis {key!r}: {raw!r} (expected an int)"
+            )
     missing = set(AXES) - set(cell)
     if missing:
         raise SystemExit(f"--only-cell is missing axes: {sorted(missing)}")
@@ -336,6 +365,15 @@ def cmd_sweep(args) -> None:
 
     for cell in cells:
         h = cell_hash(cell)
+
+        if all(
+            is_cell_complete(store, cell, repeat)
+            for repeat in range(1, args.repeats + 1)
+        ):
+            for repeat in range(1, args.repeats + 1):
+                n += 1
+                print(f"[{n}/{total}] cell {h} r{repeat}: already complete, skipping")
+            continue
 
         if h in invalid:
             n += args.repeats
@@ -384,10 +422,29 @@ def _status_vector(rows: list) -> list:
 
 def shortlist(store, cap: int = 8, expected_problems=None, cells=None) -> list:
     """Shortlist rule: cells whose solve-or-acceptable count is within ONE
-    problem of the best cell's, AND status-stable across both repeats; cap
-    `cap`; tie-break by total iterations on the commonly solved set.
-    Status-stability = identical per-problem status vectors across r1/r2.
+    problem of the best cell's, AND status-stable across both repeats
+    (identical per-problem status vectors across r1/r2); capped at `cap`.
     Solve-or-acceptable count from statuses in {"converged", "acceptable"}.
+
+    Tie-break (cross-cell, not per-cell): among the qualifying band (every
+    candidate within one problem of the best solve-or-acceptable count),
+    compute the INTERSECTION of the problems solved -- status in
+    {"converged", "acceptable"} -- by EVERY cell in that band (equivalently
+    "in both repeats", since the status-stability filter above already
+    guarantees each candidate's r1 and r2 status vectors are identical).
+    The tie-break score is each cell's total repeat-1 ``iterations`` summed
+    over that intersection, not over the cell's own solved-problem set --
+    a cell that solves (and is fast on) a problem no other band member
+    solves must not be rewarded for it, since that problem isn't part of
+    what the band is actually being compared on. Band cells sort by
+    (solve count descending, intersection-iteration total ascending).
+
+    If the band's solved-problem intersection is empty (no problem is
+    solved by every band member), the iteration tie-break is not
+    applicable and is skipped entirely -- the band instead keeps its
+    existing solve-count-only order (a stable sort, so cells that tie on
+    solve count keep their relative input order).
+
     Returns the winning cell dicts, sorted best-first.
     """
     store = Path(store)
@@ -417,24 +474,41 @@ def shortlist(store, cap: int = 8, expected_problems=None, cells=None) -> list:
         if vec1 != vec2:
             continue  # status-unstable across repeats
 
-        solve_count = sum(1 for s in vec1 if s in ("converged", "acceptable"))
         solved_problems = {
             r["problem"]
             for r in repeats[1]
             if r["status"] in ("converged", "acceptable")
         }
-        total_iters = sum(
-            r["iterations"] for r in repeats[1] if r["problem"] in solved_problems
-        )
+        iters_by_problem = {r["problem"]: r["iterations"] for r in repeats[1]}
 
-        candidates.append((cell, solve_count, total_iters))
+        candidates.append(
+            (cell, len(solved_problems), solved_problems, iters_by_problem)
+        )
 
     if not candidates:
         return []
 
     best_count = max(c[1] for c in candidates)
     band = [c for c in candidates if c[1] >= best_count - 1]
-    band.sort(key=lambda c: (-c[1], c[2]))
+
+    common_solved = None
+    for _, _, solved_problems, _ in band:
+        common_solved = (
+            solved_problems
+            if common_solved is None
+            else common_solved & solved_problems
+        )
+
+    if common_solved:
+        band.sort(
+            key=lambda c: (
+                -c[1],
+                sum(c[3][p] for p in common_solved),
+            )
+        )
+    else:
+        band.sort(key=lambda c: -c[1])
+
     return [c[0] for c in band[:cap]]
 
 
@@ -463,6 +537,7 @@ _CSV_FIELDS = [
     *_STATUS_COLUMNS,
     "repeat_stable",
     "statuses",
+    "statuses_r2",
 ]
 
 
@@ -483,6 +558,23 @@ def _statuses_string(rows: list) -> str:
 
 
 def _cell_summary(store: Path, cell: dict, expected_problems: int):
+    """Build one aggregate record for a cell from whichever repeat(s) are
+    complete.
+
+    Per-status counts (the ``_STATUS_COLUMNS`` columns) are taken from the
+    lowest-indexed present repeat (repeat 1 if present, else repeat 2) so
+    they always agree with the ``statuses`` column below. Both repeats'
+    per-problem detail are always exposed -- not just the higher-indexed
+    one -- because when ``repeat_stable`` is False that's exactly the
+    divergence a human needs to see:
+
+    - CSV: ``statuses`` is the lowest-indexed present repeat's per-problem
+      status string; ``statuses_r2`` is repeat 2's status string when a
+      repeat-2 file is also present (blank otherwise).
+    - JSON: ``detail`` is a dict keyed by repeat number as a string
+      ("1"/"2") holding that repeat's raw corpus rows, for every present
+      repeat.
+    """
     repeats = {}
     for repeat in (1, 2):
         path = cell_file_path(store, cell, repeat)
@@ -494,7 +586,8 @@ def _cell_summary(store: Path, cell: dict, expected_problems: int):
     if not repeats:
         return None
 
-    primary_rows = repeats[max(repeats)]
+    primary_repeat = min(repeats)
+    primary_rows = repeats[primary_repeat]
     repeat_stable = None
     if 1 in repeats and 2 in repeats:
         repeat_stable = _status_vector(repeats[1]) == _status_vector(repeats[2])
@@ -506,11 +599,17 @@ def _cell_summary(store: Path, cell: dict, expected_problems: int):
         **_status_counts(primary_rows),
         "repeat_stable": repeat_stable,
         "statuses": _statuses_string(primary_rows),
-        "detail": primary_rows,
+        "statuses_r2": _statuses_string(repeats[2]) if 2 in repeats else "",
+        "detail": {str(r): rows for r, rows in sorted(repeats.items())},
     }
 
 
 def _context_summary(name: str, rows: list) -> dict:
+    # repeat_stable is None (not "") for the same reason it's None for a
+    # single-repeat cell in _cell_summary: a context row has no repeat
+    # structure at all, so stability can't be assessed -- both cases should
+    # serialize identically (JSON null) rather than as null vs "" depending
+    # on which code path produced the record.
     return {
         "hash": "",
         "context": name,
@@ -521,8 +620,9 @@ def _context_summary(name: str, rows: list) -> dict:
         "max_soc": "",
         "recovery": "",
         **_status_counts(rows),
-        "repeat_stable": "",
+        "repeat_stable": None,
         "statuses": _statuses_string(rows),
+        "statuses_r2": "",
         "detail": rows,
     }
 
@@ -554,7 +654,10 @@ def cmd_aggregate(args) -> None:
         if "=" not in spec:
             raise SystemExit(f"--context expects NAME=PATH, got: {spec!r}")
         name, _, path = spec.partition("=")
-        context_records.append(_context_summary(name, _parse_jsonl_rows(Path(path))))
+        context_path = Path(path)
+        if not context_path.exists():
+            raise SystemExit(f"--context {name!r}: file not found: {context_path}")
+        context_records.append(_context_summary(name, _parse_jsonl_rows(context_path)))
 
     _write_csv(Path(args.out_csv), cell_records, context_records)
     _write_json(Path(args.out_json), cell_records, context_records)
