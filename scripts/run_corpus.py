@@ -318,6 +318,8 @@ def _score_one(
         child_iterations = child_result.get("iterations")
         if isinstance(child_iterations, int):
             iterations = child_iterations
+        else:
+            notes = f"{notes}; iterations unavailable from instrument".strip("; ")
 
     return {
         "problem": name,
@@ -411,11 +413,11 @@ def _print_diff(path_a: str, path_b: str) -> None:
         ra, rb = a.get(name), b.get(name)
         if ra is None:
             only_b += 1
-            print(f"  {name.ljust(col)}{'(missing) -> ' + rb['status']}")
+            print(f"  {name.ljust(col)}{'':<20}{'(missing) -> ' + rb['status']}")
             continue
         if rb is None:
             only_a += 1
-            print(f"  {name.ljust(col)}{ra['status'] + ' -> (missing)'}")
+            print(f"  {name.ljust(col)}{'':<20}{ra['status'] + ' -> (missing)'}")
             continue
 
         ba, bb = ra["backend"], rb["backend"]

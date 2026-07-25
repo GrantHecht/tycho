@@ -61,9 +61,11 @@ def build():
     """Construct the problem (fully, but unsolved) and return it -- a
     Phase or an OptimizationProblem, both of which expose `.optimizer`,
     `.optimize()`/`.solve()`/etc, and `.nlp_solver`/`.ipopt_options`/
-    `.last_ipopt_result` for backend selection. Must not configure the optimizer,
-    must not call any solve entry point, must not plot, must not write
-    files, must not read wall clock."""
+    `.last_ipopt_result` for backend selection. Must not call the harness's
+    `configure` callback and must not call any solve entry point (optimizer
+    knobs the *problem itself* owns do belong here -- see the `build()`
+    bullet below), must not plot, must not write files, must not read wall
+    clock."""
 ```
 
 and, optionally, at most one of:
@@ -258,7 +260,7 @@ On the **ipopt backend**, each `VALUE` stays a plain string (no int/float
 casting — Ipopt's own option parser does its own type coercion) and the
 whole `{KEY: VALUE}` mapping populates `problem.ipopt_options` verbatim
 (e.g. `--config linear_solver=pardisomkl tol=1e-8`), applied after the
-driver's matched-tolerance baseline so these entries win.
+Ipopt adapter's matched-tolerance baseline so these entries win.
 
 ## Backend selection
 
@@ -272,10 +274,12 @@ the driver's dispatch after `build()` returns changes:
   calls `prob.optimize()` — a single NLP solve, regardless of the module's
   `SOLVE_MODE` (the staging modes `solve_optimize`/`optimize_solve`/
   `solve_optimize_solve` have no Ipopt analog). `SOLVE_MODE` is recorded in
-  `notes` on this path instead of being honored, and `POST_SOLVE` is not
-  called (it only ever inspects psiopt-specific post-solve state, e.g.
-  `phase.mesh_converged`, which is orthogonal to what an ipopt-backend
-  solve leaves behind). `"objective"`/`"iterations"` come from
+  `notes` on this path instead of being honored. `NOTES` (when the module
+  defines it) is still included in the ipopt-backend notes string, but
+  `POST_SOLVE` is skipped on the ipopt backend (it only ever inspects
+  psiopt-specific post-solve state, e.g. `phase.mesh_converged`, which is
+  orthogonal to what an ipopt-backend solve leaves behind).
+  `"objective"`/`"iterations"` come from
   `prob.last_ipopt_result`, not from `optimizer.last_obj_val`/
   `last_iter_num` (those reflect only the most recent PSIOPT run and are
   left untouched by an ipopt-backend solve).
@@ -341,7 +345,7 @@ One JSON object per line, one line per (problem, repeat):
   (`"psiopt"` by default). `--diff` default-fills `"psiopt"` for records
   from before this column existed, so old scorecards still compare cleanly.
 
-## Literature tier (Task 4)
+## Literature tier
 
 The literature tier's problems (`lit_*.py`) are small, static (dynamics-free)
 NLPs from the optimization literature, each chosen because a specific class

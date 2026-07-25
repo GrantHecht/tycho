@@ -59,6 +59,9 @@ def test_problem_contract(module_name):
         f"{module_name}: invalid SOLVE_MODE {mod.SOLVE_MODE!r}"
     )
     assert callable(mod.build), f"{module_name}: build must be callable"
+    assert not (hasattr(mod, "NOTES") and hasattr(mod, "POST_SOLVE")), (
+        f"{module_name}: define at most one of NOTES/POST_SOLVE"
+    )
 
 
 def test_harness_end_to_end_fast_problems(tmp_path):
@@ -91,6 +94,7 @@ def test_harness_end_to_end_fast_problems(tmp_path):
 
         record = json.loads(lines[0])
         assert record["problem"] == name
+        assert record["backend"] == "psiopt"
         by_problem[name] = record
 
     assert by_problem["deg_dup_equality"]["status"] == "converged"

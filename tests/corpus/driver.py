@@ -93,14 +93,16 @@ def run(module, configure, backend="psiopt", backend_options=None):
         flag = prob.optimize()
 
         info = prob.last_ipopt_result
+        module_notes = getattr(module, "NOTES", "")
+        ipopt_notes = (
+            f"ipopt backend: single-solve mapping of SOLVE_MODE="
+            f"{module.SOLVE_MODE!r}; ipopt status={info.status!r}"
+        )
         result = {
             "flag": flag.name,
             "objective": float(info.objective),
             "iterations": int(info.iterations),
-            "notes": (
-                f"ipopt backend: single-solve mapping of SOLVE_MODE="
-                f"{module.SOLVE_MODE!r}; ipopt status={info.status!r}"
-            ),
+            "notes": f"{module_notes}; {ipopt_notes}" if module_notes else ipopt_notes,
         }
     else:
         raise ValueError(f"unknown backend: {backend!r}")
