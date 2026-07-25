@@ -10,3 +10,4 @@ doc-legacy/** linguist-documentation
 # The large interactive trajectory pages are generated artifacts — also collapse
 # them in diffs.
 doc-legacy/tutorials/_static/*.html linguist-generated
+tests/corpus/campaign/*.json -diff

@@ -416,3 +416,18 @@ exist, and repointed the smoke test at the two fastest real problems instead:
 the other candidate failures in the degenerate tier grind through the full
 500-iteration `max_iters` cap before reporting `NOTCONVERGED`). See those
 two modules' docstrings for their own problem descriptions.
+
+## Campaign sweeps (`scripts/run_campaign.py`)
+
+`scripts/run_campaign.py` sweeps the globalization configuration space over
+this corpus: it enumerates the six settings axes, pre-probes each cell against
+`Settings::validate()`, runs valid cells through `run_corpus.py` under
+`MKL_CBWR` with per-cell, config-hash-keyed scorecards (crash-resumable), and
+provides `aggregate` (one table over all complete cells, plus fixed context
+rows from named scorecards) and `shortlist` (top solve-rate band, repeat-
+stable, capped, intersection-tie-broken) subcommands. The committed evidence
+from the 2026-07 sweep lives in `tests/corpus/campaign/` (aggregate CSV/JSON
+plus the example-arm capture CSVs); regenerate with `sweep --store <dir>
+--repeats 2` followed by `aggregate`/`shortlist` against the same store. See
+`scripts/capture_example_iters.py` for the per-example iteration instrument
+used by the example arm.
