@@ -51,19 +51,26 @@ Static NLP via ``tychopy.solvers.OptimizationProblem`` (see
 tests/corpus/README.md). No inequality constraints or bounds are needed:
 just the objective and the single equality constraint.
 
-Observed on defaults 2026-07-16: DIVERGING (harness status "diverged"),
+Previously observed 2026-07-16: DIVERGING (harness status "diverged"),
 2 iterations, objective ~1e16, byte-identical across a --repeat 2
 determinism check. Console trace: iteration 0 takes a short step
 (alpha_p = alpha_d = 0.25) from the exactly-feasible start; iteration 1's
 step blows the equality-constraint residual up to ~5e15 and PSIOPT
-immediately reports "Solution Diverging." This is a FINDING TO REPORT: on
-this classic textbook example, PSIOPT does not exhibit the "slow/stalled
+immediately reports "Solution Diverging." This was a FINDING TO REPORT: on
+this classic textbook example, PSIOPT did not exhibit the "slow/stalled
 progress near the solution" flavor of the Maratos effect that motivates
-the example in Nocedal-Wright -- instead it diverges outright, in just 2
+the example in Nocedal-Wright -- instead it diverged outright, in just 2
 iterations, from a start that is already exactly ON the constraint
 manifold. Not force-fixed or reformulated to produce a different
 outcome, per the Task 4 instructions to record observed behavior rather
 than engineer a particular one.
+
+Observed on defaults 2026-07-25: CONVERGED (harness status "converged"),
+40 iterations, objective ~-1.0. The divergent behavior recorded above has
+since drifted away (upstream toolchain/library changes between the two
+observation dates); it is retained above as a documented prior
+observation of this same corpus problem, not as the current behavior --
+the drift itself is documented information.
 """
 
 import tychopy as typy
@@ -74,10 +81,11 @@ Args = vf.Arguments
 
 TIER = "literature"
 TIMEOUT = 30
+SOLVE_MODE = "optimize"
 
 
-def build_and_solve(configure) -> dict:
-    """Construct, configure, and solve the Maratos-effect example.
+def build():
+    """Construct the Maratos-effect example (unsolved).
 
     See tests/corpus/README.md for the full problem-module contract.
     """
@@ -90,22 +98,4 @@ def build_and_solve(configure) -> dict:
     # x1^2 + x2^2 - 1 = 0
     prob.add_equal_con(Args(2).squared_norm() - 1.0, [0, 1])
 
-    configure(prob.optimizer)
-    flag = prob.optimize()
-
-    optimizer = prob.optimizer
-    try:
-        objective = float(optimizer.last_obj_val)
-    except AttributeError:
-        objective = None
-    try:
-        iterations = int(optimizer.last_iter_num)
-    except AttributeError:
-        iterations = None
-
-    return {
-        "flag": flag.name,
-        "objective": objective,
-        "iterations": iterations,
-        "notes": "",
-    }
+    return prob

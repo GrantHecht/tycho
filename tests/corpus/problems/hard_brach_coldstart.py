@@ -41,6 +41,7 @@ oc = typy.optimal_control
 
 TIER = "hard"
 TIMEOUT = 60
+SOLVE_MODE = "optimize"
 
 
 class _Brachistochrone(oc.ODEBase):
@@ -57,8 +58,8 @@ class _Brachistochrone(oc.ODEBase):
         super().__init__(ode, XVars, UVars)
 
 
-def build_and_solve(configure) -> dict:
-    """Construct, configure, and solve the cold-started Brachistochrone problem.
+def build():
+    """Construct the cold-started Brachistochrone problem (unsolved).
 
     See tests/corpus/README.md for the full problem-module contract.
     """
@@ -91,22 +92,4 @@ def build_and_solve(configure) -> dict:
     phase.add_boundary_value("Back", [0, 1], [xf, yf])
     phase.add_delta_time_objective(1.0)
 
-    configure(phase.optimizer)
-    flag = phase.optimize()
-
-    optimizer = phase.optimizer
-    try:
-        objective = float(optimizer.last_obj_val)
-    except AttributeError:
-        objective = None
-    try:
-        iterations = int(optimizer.last_iter_num)
-    except AttributeError:
-        iterations = None
-
-    return {
-        "flag": flag.name,
-        "objective": objective,
-        "iterations": iterations,
-        "notes": "",
-    }
+    return phase

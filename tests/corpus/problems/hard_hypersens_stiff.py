@@ -83,6 +83,7 @@ Args = vf.Arguments
 
 TIER = "hard"
 TIMEOUT = 60
+SOLVE_MODE = "optimize_solve"
 
 # Deviation from the parent's nsegs=10 / adaptive-mesh-on / tol=1e-7 — see
 # module docstring for why a single-lever nsegs change was insufficient.
@@ -99,8 +100,8 @@ class _HyperSens(oc.ODEBase):
         super().__init__(xdot, 1, 1)
 
 
-def build_and_solve(configure) -> dict:
-    """Construct, configure, and solve the under-resolved HyperSens problem.
+def build():
+    """Construct the under-resolved HyperSens problem (unsolved).
 
     See tests/corpus/README.md for the full problem-module contract.
     """
@@ -132,32 +133,20 @@ def build_and_solve(configure) -> dict:
     phase.optimizer.set_eq_con_tol(_TOL)
     phase.optimizer.set_kkt_tol(_TOL)
 
-    configure(phase.optimizer)
-    flag = phase.optimize_solve()
+    return phase
 
-    optimizer = phase.optimizer
-    try:
-        objective = float(optimizer.last_obj_val)
-    except AttributeError:
-        objective = None
-    try:
-        iterations = int(optimizer.last_iter_num)
-    except AttributeError:
-        iterations = None
 
-    mesh_converged = bool(phase.mesh_converged)
-    notes = ""
-    if not mesh_converged:
-        notes = (
-            "mesh_converged=False despite a non-DIVERGING flag: the "
-            "2-segment fixed mesh under-resolves the boundary layer, so "
-            "the reported objective is far from the true converged value "
-            "(~1.669) even though the flag alone would not show this."
-        )
+def POST_SOLVE(prob) -> str:
+    """Post-solve notes: flag alone hides the under-resolved-mesh outcome.
 
-    return {
-        "flag": flag.name,
-        "objective": objective,
-        "iterations": iterations,
-        "notes": notes,
-    }
+    See tests/corpus/README.md for the full problem-module contract and
+    module docstring above for why this check is needed.
+    """
+    if bool(prob.mesh_converged):
+        return ""
+    return (
+        "mesh_converged=False despite a non-DIVERGING flag: the "
+        "2-segment fixed mesh under-resolves the boundary layer, so "
+        "the reported objective is far from the true converged value "
+        "(~1.669) even though the flag alone would not show this."
+    )

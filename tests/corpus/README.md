@@ -28,7 +28,13 @@ python scripts/run_corpus.py --out results.jsonl                # custom output 
 python scripts/run_corpus.py --config max_iters=200 kkt_tol=1e-8  # tweak the optimizer
 python scripts/run_corpus.py --cbwr --repeat 2                 # determinism check
 python scripts/run_corpus.py --diff a.jsonl b.jsonl             # compare two runs
+python scripts/run_corpus.py --backend ipopt --filter lit_      # drive the literature tier through Ipopt
+python scripts/run_corpus.py --backend ipopt --config linear_solver=pardisomkl  # Ipopt options (verbatim strings)
 ```
+
+`--backend ipopt` requires a Tycho build configured with `-DENABLE_IPOPT=ON`;
+the harness checks `tychopy.solvers.ipopt_available()` up front and fails
+fast (before spawning any child) if that build support is missing.
 
 Run from the repo root, in the `tycho` conda environment. **Stale user-site
 trap:** if you have ever `pip install --user`-ed a tychopy build, Python's
@@ -49,15 +55,29 @@ Every module under `tests/corpus/problems/` defines exactly:
 ```python
 TIER = "degenerate" | "hard" | "literature"
 TIMEOUT = <int seconds>          # subprocess kill ceiling
+SOLVE_MODE = "solve" | "optimize" | "solve_optimize" | "solve_optimize_solve" | "optimize_solve"
 
-def build_and_solve(configure) -> dict:
-    """Construct the problem, call configure(optimizer) immediately before
-    optimize/solve_optimize, run it, and return:
-      {"flag": <str name of the returned convergence flag>,
-       "objective": <float or None>,
-       "iterations": <int or None>,     # optimizer.last_iter_num if reachable, else None
-       "notes": <str>}                  # anything odd, "" normally
-    Must not plot, must not write files, must not read wall clock."""
+def build():
+    """Construct the problem (fully, but unsolved) and return it -- a
+    Phase or an OptimizationProblem, both of which expose `.optimizer`,
+    `.optimize()`/`.solve()`/etc, and `.nlp_solver`/`.ipopt_options`/
+    `.last_ipopt_result` for backend selection. Must not call the harness's
+    `configure` callback and must not call any solve entry point (optimizer
+    knobs the *problem itself* owns do belong here -- see the `build()`
+    bullet below), must not plot, must not write files, must not read wall
+    clock."""
+```
+
+and, optionally, at most one of:
+
+```python
+NOTES = "<static string>"          # most modules omit this (implicit "")
+
+def POST_SOLVE(prob) -> str:
+    """Called only on the psiopt backend, only after the SOLVE_MODE entry
+    point has run, to compute notes that depend on post-solve state (e.g.
+    hard_hypersens_stiff's `phase.mesh_converged` check -- the one module
+    in the corpus that needs this)."""
 ```
 
 - `TIER` groups problems by why they're hard: `"degenerate"` (structurally
@@ -68,23 +88,41 @@ def build_and_solve(configure) -> dict:
 - `TIMEOUT` is a plain `int` (seconds); the harness passes it straight to
   `subprocess.run(..., timeout=TIMEOUT)` for the child process running this
   problem.
-- `build_and_solve(configure)` receives a single callable, `configure`,
-  which it must call with the live PSIOPT optimizer handle (e.g.
-  `phase.optimizer`) *immediately before* the call that actually runs the
-  solve (`.optimize()`, `.solve_optimize()`, etc). This is how
-  `--config KEY=VALUE` reaches the solver: the harness's `configure` does
-  `setattr(optimizer, key, value)` for each pair. A problem module that
-  never calls `configure` breaks `--config` for that problem.
-- The returned dict's `"flag"` is the *name* of the convergence flag
+- `SOLVE_MODE` names the entry point the pre-split `build_and_solve` used to
+  call (`getattr(prob, SOLVE_MODE)()` on the psiopt backend -- see
+  `tests/corpus/driver.py`). Only `"optimize"`, `"solve_optimize"`, and
+  `"optimize_solve"` are used by any module today; `"solve"` and
+  `"solve_optimize_solve"` are valid contract values with no current user.
+- `build()` does everything the old `build_and_solve` did up to (excluding)
+  the `configure(...)` call -- construct the ODE/dynamics, the phase or
+  `OptimizationProblem`, boundary values/bounds/objective, and any
+  optimizer knobs the problem itself sets (tolerances, `opt_ls_mode`,
+  `num_partitions`, ...) -- and returns the unsolved problem object.
+- The shared driver (`tests/corpus/driver.py::run`) owns everything the old
+  `build_and_solve` tail used to do: calling `configure(prob.optimizer)`
+  *immediately before* the solve (this is how `--config KEY=VALUE` reaches
+  PSIOPT -- the harness's `configure` does `setattr(optimizer, key, value)`
+  for each pair), dispatching `SOLVE_MODE`, and normalizing the result dict.
+  A problem module has no way to opt out of `configure` being called on the
+  psiopt backend.
+- The result dict's `"flag"` is the *name* of the convergence flag
   (`flag.name`, e.g. `"CONVERGED"`), not the enum member itself, so it
-  round-trips through JSON without a custom encoder.
-- `"objective"` / `"iterations"` should come from `optimizer.last_obj_val`
-  / `optimizer.last_iter_num` when reachable; `None` if not (e.g. the solve
-  raised before those properties were ever populated).
-- The function must be silent w.r.t. side effects that would make corpus
-  runs non-reproducible or slow: no plotting, no file writes, no wall-clock
-  reads. (PSIOPT's own console printing is fine and in fact required — see
+  round-trips through JSON without a custom encoder. On the psiopt backend
+  this comes from the module's own `SOLVE_MODE` call; on the ipopt backend,
+  from `prob.optimize()` (which still returns a `ConvergenceFlags` member
+  under that backend).
+- `"objective"` / `"iterations"` come from `optimizer.last_obj_val` /
+  `optimizer.last_iter_num` on the psiopt backend (`None` if unreachable,
+  e.g. the solve raised before those properties were ever populated -- each
+  guarded independently by its own `try/except AttributeError`), or from
+  `prob.last_ipopt_result.objective` / `.iterations` on the ipopt backend.
+- `build()` (and `POST_SOLVE`, if defined) must be silent w.r.t. side
+  effects that would make corpus runs non-reproducible or slow: no
+  plotting, no file writes, no wall-clock reads. (PSIOPT's own console
+  printing is fine and in fact required on the psiopt backend — see
   "Iteration counting" below.)
+- See "Backend selection" below for what changes (and what a module cannot
+  control) when `--backend ipopt` is used instead.
 
 `registry.py` exposes `ALL_PROBLEMS: list[str]` — the tier-grouped list of
 module names (no package prefix) that both the harness and the smoke test
@@ -137,16 +175,24 @@ This file is *also* its own subprocess child entry point — there is no
 separate child script. Per-problem execution:
 
 1. The parent imports `problems.<name>` just far enough to read its `TIER`
-   and `TIMEOUT` (module-level constants only; `build_and_solve` is not
-   called in the parent process).
+   and `TIMEOUT` (module-level constants only; `build()` is not called in
+   the parent process).
 2. The parent spawns
-   `python scripts/run_corpus.py --_child <name> --_config <json> --_result-file <path>`
+   `python scripts/run_corpus.py --_child <name> --_config <json> --_result-file <path> --_backend <psiopt|ipopt>`
    and waits up to `TIMEOUT` seconds.
-3. The child imports the module, calls `build_and_solve(configure)`, and
-   writes the returned dict as JSON to `--_result-file`.
+3. The child imports the module and `tests/corpus/driver.py`, calls
+   `driver.run(module, configure, backend=..., backend_options=...)`
+   (`--_config`'s JSON doubles as both the psiopt-backend `configure`
+   source and the ipopt-backend `backend_options` — the driver only
+   consults whichever one the backend actually uses), and writes the
+   returned dict as JSON to `--_result-file`.
 4. The parent reads that file (if the child exited 0 and it exists), maps
-   the flag to a status, and also greps the child's captured stdout for
-   PSIOPT's own iteration-count line (see below) to populate `iterations`.
+   the flag to a status, and (psiopt backend only) also greps the child's
+   captured stdout for PSIOPT's own iteration-count line (see below) to
+   populate `iterations`; on the ipopt backend, `iterations` instead comes
+   straight from the child's own result dict (`IpoptRunInfo.iterations` via
+   the driver — see "Backend selection" below for why the stdout instrument
+   doesn't apply there).
 
 ### Why the result is a file, not a printed line
 
@@ -167,11 +213,12 @@ integrity — only about how many times the pattern occurs.
 
 ### Iteration counting
 
-`iterations` in the JSONL record is **not** taken from the child's returned
-dict — it is `sum(re.findall(r"Iterations : *([0-9]+)", ansi_stripped_stdout))`
-over the child's full captured stdout (ANSI SGR sequences stripped first
-with `\x1b\[[0-9;]*m`). This is the same instrument proven in the earlier
-CBWR work (PR 9): PSIOPT's console printer emits a line of the form
+On the **psiopt backend**, `iterations` in the JSONL record is **not** taken
+from the child's returned dict — it is
+`sum(re.findall(r"Iterations : *([0-9]+)", ansi_stripped_stdout))` over the
+child's full captured stdout (ANSI SGR sequences stripped first with
+`\x1b\[[0-9;]*m`). This is the same instrument proven in the earlier CBWR
+work (PR 9): PSIOPT's console printer emits a line of the form
 `" Iterations : N"` once per solve, whenever `print_level < 2` (the
 library default, so problem modules should not raise their print level
 above that unless they want to lose this signal). Summing over all matches
@@ -180,17 +227,65 @@ solve) gets its iteration counts combined. `-1` means no match was found
 (e.g. the child crashed before ever calling into PSIOPT, or print_level was
 raised too high).
 
+On the **ipopt backend**, PSIOPT's console printer never runs (Ipopt solves
+the identical transcribed NLP directly), so this stdout instrument has
+nothing to match. The parent instead trusts the child's own reported
+`iterations` (`driver.py`'s ipopt branch reads it straight from
+`prob.last_ipopt_result.iterations`).
+
+### `--backend {psiopt,ipopt}`
+
+Selects the NLP solver backend every selected problem is driven through
+(default: `psiopt`). `ipopt` requires a Tycho build configured with
+`-DENABLE_IPOPT=ON`; the parent process checks
+`tychopy.solvers.ipopt_available()` before spawning any child and exits
+immediately with a clear message if it's `False`, rather than letting all
+17 children fail one at a time. See "Backend selection" below for what a
+problem module does and does not control on this path.
+
 ### `--config KEY=VALUE ...`
 
-Applied via `setattr(optimizer, key, value)` inside the child, immediately
-before the solve (see the problem-module contract above). Each `VALUE` is
-parsed as `int`, then `float`, then left as a plain `str` (first cast that
-doesn't raise wins) — e.g. `--config max_iters=200 kkt_tol=1e-8 opt_ls_mode=L1`
-sets an int, a float, and a string respectively. `KEY` must name a
-*settable* PSIOPT property (see `tychopy/_stubs/_tychopy/solvers.pyi` for
-the full list — `max_iters`, `kkt_tol`, `print_level`, `opt_ls_mode`, ...);
-`setattr` on a read-only property (e.g. `last_iter_num`) raises inside the
-child, which the parent then records as `status: "error"`.
+On the **psiopt backend**, applied via `setattr(optimizer, key, value)`
+inside the child, immediately before the solve (see the problem-module
+contract above). Each `VALUE` is parsed as `int`, then `float`, then left
+as a plain `str` (first cast that doesn't raise wins) — e.g.
+`--config max_iters=200 kkt_tol=1e-8 opt_ls_mode=L1` sets an int, a float,
+and a string respectively. `KEY` must name a *settable* PSIOPT property
+(see `tychopy/_stubs/_tychopy/solvers.pyi` for the full list — `max_iters`,
+`kkt_tol`, `print_level`, `opt_ls_mode`, ...); `setattr` on a read-only
+property (e.g. `last_iter_num`) raises inside the child, which the parent
+then records as `status: "error"`.
+
+On the **ipopt backend**, each `VALUE` stays a plain string (no int/float
+casting — Ipopt's own option parser does its own type coercion) and the
+whole `{KEY: VALUE}` mapping populates `problem.ipopt_options` verbatim
+(e.g. `--config linear_solver=pardisomkl tol=1e-8`), applied after the
+Ipopt adapter's matched-tolerance baseline so these entries win.
+
+## Backend selection
+
+Every problem module's `build()` is identical regardless of backend — only
+the driver's dispatch after `build()` returns changes:
+
+- **psiopt** (default): `configure(prob.optimizer)` then the module's
+  `SOLVE_MODE` entry point, exactly reproducing the pre-split behavior.
+- **ipopt**: sets `prob.nlp_solver = NLPSolvers.ipopt` and forwards
+  `--config` (as verbatim strings) into `prob.ipopt_options`, then always
+  calls `prob.optimize()` — a single NLP solve, regardless of the module's
+  `SOLVE_MODE` (the staging modes `solve_optimize`/`optimize_solve`/
+  `solve_optimize_solve` have no Ipopt analog). `SOLVE_MODE` is recorded in
+  `notes` on this path instead of being honored. `NOTES` (when the module
+  defines it) is still included in the ipopt-backend notes string, but
+  `POST_SOLVE` is skipped on the ipopt backend (it only ever inspects
+  psiopt-specific post-solve state, e.g. `phase.mesh_converged`, which is
+  orthogonal to what an ipopt-backend solve leaves behind).
+  `"objective"`/`"iterations"` come from
+  `prob.last_ipopt_result`, not from `optimizer.last_obj_val`/
+  `last_iter_num` (those reflect only the most recent PSIOPT run and are
+  left untouched by an ipopt-backend solve).
+
+A problem module cannot select or refuse a backend — that is exclusively
+the harness's `--backend` flag.
 
 ### `--preset NAME`
 
@@ -233,7 +328,8 @@ One JSON object per line, one line per (problem, repeat):
 ```json
 {"problem": "...", "tier": "...", "status": "converged|acceptable|failed|diverged|timeout|error",
  "flag": "..." | null, "iterations": <int, -1 if unmatched>, "wall_s": <float>,
- "objective": <float | null>, "returncode": <int | null>, "notes": "..."}
+ "objective": <float | null>, "returncode": <int | null>, "notes": "...",
+ "backend": "psiopt" | "ipopt"}
 ```
 
 - `flag` is `null` for the harness-synthesized statuses (`timeout`, and the
@@ -244,9 +340,12 @@ One JSON object per line, one line per (problem, repeat):
 - `wall_s` is measured by the parent around the child subprocess call
   (`time.monotonic()` before/after `subprocess.run`) — this is the one
   wall-clock read in the whole system, and it lives in the parent, never in
-  a problem module's `build_and_solve`.
+  a problem module's `build()`.
+- `backend` is whichever backend `--backend` selected for this run
+  (`"psiopt"` by default). `--diff` default-fills `"psiopt"` for records
+  from before this column existed, so old scorecards still compare cleanly.
 
-## Literature tier (Task 4)
+## Literature tier
 
 The literature tier's problems (`lit_*.py`) are small, static (dynamics-free)
 NLPs from the optimization literature, each chosen because a specific class

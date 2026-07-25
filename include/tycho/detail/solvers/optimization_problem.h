@@ -161,46 +161,51 @@ struct OptimizationProblem : OptimizationProblemBase {
     PSIOPT::ConvergenceFlags solve() {
         if (this->do_transcription_)
             this->transcribe();
-        this->active_variables_ = this->optimizer_->solve(this->active_variables_);
-        this->active_eq_lmults_ = this->optimizer_->result().eq_lmults_;
-        this->active_iq_lmults_ = this->optimizer_->result().iq_lmults_;
-        return this->optimizer_->result().converge_flag_;
+        auto out = this->run_nlp_solver(JetJobModes::Solve, this->active_variables_);
+        this->active_variables_ = out.variables_;
+        this->active_eq_lmults_ = out.eq_lmults_;
+        this->active_iq_lmults_ = out.iq_lmults_;
+        return out.flag_;
     }
 
     PSIOPT::ConvergenceFlags optimize() {
         if (this->do_transcription_)
             this->transcribe();
-        this->active_variables_ = this->optimizer_->optimize(this->active_variables_);
-        this->active_eq_lmults_ = this->optimizer_->result().eq_lmults_;
-        this->active_iq_lmults_ = this->optimizer_->result().iq_lmults_;
-        return this->optimizer_->result().converge_flag_;
+        auto out = this->run_nlp_solver(JetJobModes::Optimize, this->active_variables_);
+        this->active_variables_ = out.variables_;
+        this->active_eq_lmults_ = out.eq_lmults_;
+        this->active_iq_lmults_ = out.iq_lmults_;
+        return out.flag_;
     }
 
     PSIOPT::ConvergenceFlags solve_optimize() {
         if (this->do_transcription_)
             this->transcribe();
-        this->active_variables_ = this->optimizer_->solve_optimize(this->active_variables_);
-        this->active_eq_lmults_ = this->optimizer_->result().eq_lmults_;
-        this->active_iq_lmults_ = this->optimizer_->result().iq_lmults_;
-        return this->optimizer_->result().converge_flag_;
+        auto out = this->run_nlp_solver(JetJobModes::SolveOptimize, this->active_variables_);
+        this->active_variables_ = out.variables_;
+        this->active_eq_lmults_ = out.eq_lmults_;
+        this->active_iq_lmults_ = out.iq_lmults_;
+        return out.flag_;
     }
 
     PSIOPT::ConvergenceFlags solve_optimize_solve() {
         if (this->do_transcription_)
             this->transcribe();
-        this->active_variables_ = this->optimizer_->solve_optimize_solve(this->active_variables_);
-        this->active_eq_lmults_ = this->optimizer_->result().eq_lmults_;
-        this->active_iq_lmults_ = this->optimizer_->result().iq_lmults_;
-        return this->optimizer_->result().converge_flag_;
+        auto out = this->run_nlp_solver(JetJobModes::SolveOptimizeSolve, this->active_variables_);
+        this->active_variables_ = out.variables_;
+        this->active_eq_lmults_ = out.eq_lmults_;
+        this->active_iq_lmults_ = out.iq_lmults_;
+        return out.flag_;
     }
 
     PSIOPT::ConvergenceFlags optimize_solve() {
         if (this->do_transcription_)
             this->transcribe();
-        this->active_variables_ = this->optimizer_->optimize_solve(this->active_variables_);
-        this->active_eq_lmults_ = this->optimizer_->result().eq_lmults_;
-        this->active_iq_lmults_ = this->optimizer_->result().iq_lmults_;
-        return this->optimizer_->result().converge_flag_;
+        auto out = this->run_nlp_solver(JetJobModes::OptimizeSolve, this->active_variables_);
+        this->active_variables_ = out.variables_;
+        this->active_eq_lmults_ = out.eq_lmults_;
+        this->active_iq_lmults_ = out.iq_lmults_;
+        return out.flag_;
     }
 };
 

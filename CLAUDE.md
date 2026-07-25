@@ -522,6 +522,7 @@ revisit `simd_math.h` and the rule-of-thumb above.
 | `BUILD_CPP_BENCHMARKS`        | `ON` to build C++ benchmarks via Google Benchmark (fetched via FetchContent)                  |
 | `BUILD_CPP_BENCHMARKS_LEGACY` | `ON` to build legacy hand-rolled benchmark executables                                        |
 | `TYCHO_HEAVY_COMPILE_JOBS`    | Max concurrent heavy TU compiles; auto-detected (1 per 10 GB RAM). Override for your system.  |
+| `ENABLE_IPOPT`                | `ON` to link an installed Ipopt (pkg-config discovery) and enable the alternative NLP solver backend (default OFF) |
 
 ## Code Style
 

@@ -1,6 +1,6 @@
 """SubModule Containing PSIOPT,NLP, and Solver Flags"""
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 import enum
 from typing import Callable, overload
 
@@ -674,6 +674,45 @@ class InertiaModes(enum.Enum):
     Proximal primal-dual regularization: a small persistent, decaying primal base shift (rho_k, floored at 1e-10, the Cipolla-Gondzio floor) on the Hessian diagonal, plus an always-on barrier-scaled dual shift (delta_c = 1e-8 * mu^0.25, Ipopt's jacobian_regularization_value/exponent constants, matching its perturb_always_cd semantics) on the constraint-row diagonals, are baked into the base matrix every iteration in place of the classic zero-perturbation first attempt -- the same escalation ladder still fires on top when the base attempt has wrong inertia or is singular (a singular base attempt is itself treated as wrong inertia under this mode, unlike classic's warn-and-proceed). rho_k decays toward its floor by decr_h each iteration the base attempt sufficed, or persists at the decayed total shift (rho_k plus the ladder's last delta) when the ladder fired. The dual shift is suppressed while a nested l1 restoration phase is active -- the elastic pivots already regularize those constraint rows at a magnitude the dual shift would be negligible against, and stacking it would make the elastic step-recovery algebra inconsistent with the solved system; the proximal mode-switch restoration touches only the primal diagonal, so the dual shift stays on under it. No new tunable constants -- rho_k's floor and the dual shift's scale/exponent are fixed. See last_prox_reg_primal/last_prox_reg_dual for the per-solve diagnostics this mode reports.
     """
 
+class IpoptRunInfo:
+    @property
+    def ran(self) -> bool: ...
+
+    @property
+    def status(self) -> str: ...
+
+    @property
+    def normalized(self) -> str: ...
+
+    @property
+    def converge_flag(self) -> ConvergenceFlags: ...
+
+    @property
+    def iterations(self) -> int: ...
+
+    @property
+    def objective(self) -> float: ...
+
+    @property
+    def constraint_violation(self) -> float: ...
+
+    @property
+    def wall_time_s(self) -> float: ...
+
+class NLPSolvers(enum.Enum):
+    """NLP solver backend selector for the solve/optimize entry points."""
+
+    psiopt = 0
+    """Built-in interior-point solver (default)."""
+
+    ipopt = 1
+    """
+    Linked Ipopt on the identical transcribed NLP (requires ENABLE_IPOPT build).
+    """
+
+def ipopt_available() -> bool:
+    """True when this build was configured with ENABLE_IPOPT."""
+
 class PDStepStrategies(enum.Enum):
     PrimSlackEq_Iq = 0
 
@@ -739,6 +778,47 @@ class OptimizationProblemBase:
 
     @property
     def optimizer(self) -> PSIOPT: ...
+
+    @property
+    def nlp_solver(self) -> NLPSolvers:
+        """
+        NLP solver backend for the solve/optimize entry points.
+
+        NLPSolvers.psiopt (default) is the built-in solver, byte-identical to
+        previous behavior. NLPSolvers.ipopt runs the identical transcribed NLP
+        through a linked Ipopt installation; requires a build configured with
+        ENABLE_IPOPT (raises RuntimeError otherwise). The ipopt backend always
+        performs a single NLP solve: the feasibility-then-optimize staging modes
+        have no Ipopt analog.
+
+        The built-in solver's own diagnostics (``optimizer.last_obj_val``,
+        ``optimizer.last_iter_num``, and every other result()-backed property on
+        ``optimizer``) reflect only the most recent PSIOPT run and are left
+        untouched by an ipopt-backend run -- use ``last_ipopt_result`` as the
+        source of truth for diagnostics of the most recent ipopt-backend
+        solve.
+        """
+
+    @nlp_solver.setter
+    def nlp_solver(self, arg: NLPSolvers, /) -> None: ...
+
+    @property
+    def ipopt_options(self) -> dict[str, str]:
+        """
+        String key/value options forwarded verbatim to Ipopt (e.g.
+        {"linear_solver": "pardisomkl"}). Applied after the matched-tolerance
+        baseline, so entries here win. Ignored by the psiopt backend.
+        """
+
+    @ipopt_options.setter
+    def ipopt_options(self, arg: Mapping[str, str], /) -> None: ...
+
+    @property
+    def last_ipopt_result(self) -> IpoptRunInfo:
+        """
+        Diagnostics of the most recent ipopt-backend run on this problem
+        (sentinel values with ran == False before any such run).
+        """
 
     @overload
     def set_num_partitions(self, num_partitions: int, qp_threads: int) -> None: ...

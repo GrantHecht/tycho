@@ -53,6 +53,11 @@ Args = vf.Arguments
 
 TIER = "hard"
 TIMEOUT = 60
+SOLVE_MODE = "optimize"
+NOTES = (
+    "Diverges toolchain-dependently (KKT=nan at iter 0) on "
+    "clang22/MKL2026 fast-math; see project_vanderpol_diverges memory."
+)
 
 
 class _VanderPol(oc.ODEBase):
@@ -67,8 +72,8 @@ class _VanderPol(oc.ODEBase):
         super().__init__(ode, 2, 1)
 
 
-def build_and_solve(configure) -> dict:
-    """Construct, configure, and solve the (verbatim) Van der Pol problem.
+def build():
+    """Construct the (verbatim) Van der Pol problem (unsolved).
 
     See tests/corpus/README.md for the full problem-module contract.
     """
@@ -86,23 +91,4 @@ def build_and_solve(configure) -> dict:
     phase.set_num_partitions(8, 8)
     phase.optimizer.set_tols(1.0e-8, 1.0e-8, 1.0e-8)
 
-    configure(phase.optimizer)
-    flag = phase.optimize()
-
-    optimizer = phase.optimizer
-    try:
-        objective = float(optimizer.last_obj_val)
-    except AttributeError:
-        objective = None
-    try:
-        iterations = int(optimizer.last_iter_num)
-    except AttributeError:
-        iterations = None
-
-    return {
-        "flag": flag.name,
-        "objective": objective,
-        "iterations": iterations,
-        "notes": "Diverges toolchain-dependently (KKT=nan at iter 0) on "
-        "clang22/MKL2026 fast-math; see project_vanderpol_diverges memory.",
-    }
+    return phase

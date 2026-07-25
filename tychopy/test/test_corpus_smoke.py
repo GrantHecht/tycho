@@ -37,6 +37,15 @@ import registry  # noqa: E402  (tests/corpus/ must be on sys.path first)
 VALID_TIERS = {"degenerate", "hard", "literature"}
 
 
+VALID_SOLVE_MODES = {
+    "solve",
+    "optimize",
+    "solve_optimize",
+    "solve_optimize_solve",
+    "optimize_solve",
+}
+
+
 @pytest.mark.parametrize("module_name", registry.ALL_PROBLEMS)
 def test_problem_contract(module_name):
     """Every registered problem module exposes the required contract surface."""
@@ -46,8 +55,12 @@ def test_problem_contract(module_name):
     assert isinstance(mod.TIMEOUT, int) and mod.TIMEOUT > 0, (
         f"{module_name}: TIMEOUT must be a positive int, got {mod.TIMEOUT!r}"
     )
-    assert callable(mod.build_and_solve), (
-        f"{module_name}: build_and_solve must be callable"
+    assert mod.SOLVE_MODE in VALID_SOLVE_MODES, (
+        f"{module_name}: invalid SOLVE_MODE {mod.SOLVE_MODE!r}"
+    )
+    assert callable(mod.build), f"{module_name}: build must be callable"
+    assert not (hasattr(mod, "NOTES") and hasattr(mod, "POST_SOLVE")), (
+        f"{module_name}: define at most one of NOTES/POST_SOLVE"
     )
 
 
@@ -81,6 +94,7 @@ def test_harness_end_to_end_fast_problems(tmp_path):
 
         record = json.loads(lines[0])
         assert record["problem"] == name
+        assert record["backend"] == "psiopt"
         by_problem[name] = record
 
     assert by_problem["deg_dup_equality"]["status"] == "converged"

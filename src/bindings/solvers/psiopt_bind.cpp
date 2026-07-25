@@ -16,6 +16,7 @@
 // =============================================================================
 
 #include "psiopt_bind.h"
+#include "tycho/detail/solvers/ipopt_backend.h"
 #include "tycho/detail/solvers/psiopt.h"
 
 using namespace tycho;
@@ -510,6 +511,26 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
                "shift stays on under it. No new tunable constants -- rho_k's floor and the dual "
                "shift's scale/exponent are fixed. See last_prox_reg_primal/last_prox_reg_dual "
                "for the per-solve diagnostics this mode reports.");
+
+    nb::class_<IpoptRunInfo>(m, "IpoptRunInfo")
+        .def_ro("ran", &IpoptRunInfo::ran_)
+        .def_ro("status", &IpoptRunInfo::status_)
+        .def_ro("normalized", &IpoptRunInfo::normalized_)
+        .def_ro("converge_flag", &IpoptRunInfo::converge_flag_)
+        .def_ro("iterations", &IpoptRunInfo::iterations_)
+        .def_ro("objective", &IpoptRunInfo::objective_)
+        .def_ro("constraint_violation", &IpoptRunInfo::constraint_violation_)
+        .def_ro("wall_time_s", &IpoptRunInfo::wall_time_s_);
+
+    nb::enum_<NLPSolvers>(m, "NLPSolvers",
+                          "NLP solver backend selector for the solve/optimize entry points.")
+        .value("psiopt", NLPSolvers::psiopt, "Built-in interior-point solver (default).")
+        .value("ipopt", NLPSolvers::ipopt,
+               "Linked Ipopt on the identical transcribed NLP (requires ENABLE_IPOPT build).");
+
+    m.def("ipopt_available", &ipopt_backend::available,
+          "True when this build was configured with ENABLE_IPOPT.");
+
     nb::enum_<PDStepStrategies>(m, "PDStepStrategies")
         .value("PrimSlackEq_Iq", PDStepStrategies::PrimSlackEq_Iq)
         .value("AllMinimum", PDStepStrategies::AllMinimum)

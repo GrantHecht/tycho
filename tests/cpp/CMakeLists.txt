@@ -187,6 +187,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     solvers/test_feasibility_switch.cpp
     solvers/test_divergence_persistence.cpp
     solvers/test_inertia_regularization.cpp
+    solvers/test_ipopt_backend_dispatch.cpp
 )
 
 #-------------------------------------------------------------------------------
@@ -469,4 +470,13 @@ endif()
 #-------------------------------------------------------------------------------
 if(ENABLE_ENZYME_AD AND BUILD_CPP_TESTS)
     add_subdirectory(enzyme)
+endif()
+
+#-------------------------------------------------------------------------------
+# Ipopt-backend test executable (gated on ENABLE_IPOPT).  Ipopt headers and the
+# link are scoped to that target inside tests/cpp/solvers/ipopt/CMakeLists.txt;
+# the rest of the test suite stays Ipopt-free.
+#-------------------------------------------------------------------------------
+if(ENABLE_IPOPT AND BUILD_CPP_TESTS)
+    add_subdirectory(solvers/ipopt)
 endif()

@@ -15,14 +15,18 @@
 #pragma once
 
 #include <algorithm>
+#include <map>
 #include <memory>
 #include <stdexcept>
 #include <string>
+
+#include <Eigen/Core>
 
 #include <fmt/color.h>
 #include <fmt/core.h>
 #include <fmt/format.h>
 
+#include "tycho/detail/solvers/ipopt_backend.h"
 #include "tycho/detail/solvers/non_linear_program.h"
 #include "tycho/detail/solvers/psiopt.h"
 #include "tycho/detail/utils/get_core_count.h"
@@ -47,6 +51,21 @@ struct OptimizationProblemBase {
 
     std::shared_ptr<NonLinearProgram> nlp_;
     std::shared_ptr<PSIOPT> optimizer_;
+
+    /// NLP solver backend for the solve/optimize entry points. psiopt (default)
+    /// is the built-in path, byte-identical to previous behavior. ipopt runs
+    /// the identical transcribed NLP through a linked Ipopt installation
+    /// (requires a build with Ipopt support; throws std::runtime_error
+    /// otherwise).
+    NLPSolvers nlp_solver_ = NLPSolvers::psiopt;
+
+    /// String key/value options forwarded verbatim to Ipopt (e.g.
+    /// {"linear_solver", "pardisomkl"}). Applied after the matched-tolerance
+    /// baseline, so user entries win. Ignored by the psiopt backend.
+    std::map<std::string, std::string> ipopt_options_;
+
+    /// Diagnostics of the most recent ipopt-backend run on this problem.
+    IpoptRunInfo last_ipopt_result_;
 
     virtual ~OptimizationProblemBase() = default;
 
@@ -137,6 +156,25 @@ struct OptimizationProblemBase {
         return flag;
     }
 
+    /// Uniform output of one backend solve: the updated variable vector, the
+    /// constraint multipliers, and the convergence flag, regardless of backend.
+    struct NlpSolveOutput {
+        Eigen::VectorXd variables_;
+        Eigen::VectorXd eq_lmults_;
+        Eigen::VectorXd iq_lmults_;
+        ConvergenceFlags flag_ = ConvergenceFlags::NOTCONVERGED;
+    };
+
+    /// Single backend dispatch point for the five solve modes. The psiopt
+    /// branch reproduces the historic call and result reads exactly; the
+    /// ipopt branch always runs a single NLP solve from the given input (the
+    /// feasibility-then-optimize staging has no Ipopt analog).
+    ///
+    /// Defined out of line below, after the ipopt_backend::solve declaration
+    /// it calls (a member function body defined in the class cannot name a
+    /// namespace-scope function declared later in the file).
+    NlpSolveOutput run_nlp_solver(JetJobModes mode, const Eigen::VectorXd &input);
+
     static JetJobModes strto_jet_job_mode(const std::string &str) {
 
         if (str == "solve" || str == "Solve")
@@ -163,5 +201,45 @@ struct OptimizationProblemBase {
         this->set_jet_job_mode(strto_jet_job_mode(str));
     }
 };
+
+namespace ipopt_backend {
+/// Run Ipopt on the problem's transcribed NLP. A real implementation is linked
+/// only in builds configured with Ipopt support; the stub throws
+/// std::runtime_error.
+OptimizationProblemBase::NlpSolveOutput solve(OptimizationProblemBase &prob,
+                                              OptimizationProblemBase::JetJobModes mode,
+                                              const Eigen::VectorXd &input);
+} // namespace ipopt_backend
+
+inline OptimizationProblemBase::NlpSolveOutput
+OptimizationProblemBase::run_nlp_solver(JetJobModes mode, const Eigen::VectorXd &input) {
+    if (this->nlp_solver_ == NLPSolvers::ipopt) {
+        return ipopt_backend::solve(*this, mode, input);
+    }
+    NlpSolveOutput out;
+    switch (mode) {
+    case JetJobModes::Solve:
+        out.variables_ = this->optimizer_->solve(input);
+        break;
+    case JetJobModes::Optimize:
+        out.variables_ = this->optimizer_->optimize(input);
+        break;
+    case JetJobModes::SolveOptimize:
+        out.variables_ = this->optimizer_->solve_optimize(input);
+        break;
+    case JetJobModes::SolveOptimizeSolve:
+        out.variables_ = this->optimizer_->solve_optimize_solve(input);
+        break;
+    case JetJobModes::OptimizeSolve:
+        out.variables_ = this->optimizer_->optimize_solve(input);
+        break;
+    default:
+        throw std::invalid_argument("Unrecognized NLP solve mode");
+    }
+    out.eq_lmults_ = this->optimizer_->result().eq_lmults_;
+    out.iq_lmults_ = this->optimizer_->result().iq_lmults_;
+    out.flag_ = this->optimizer_->result().converge_flag_;
+    return out;
+}
 
 } // namespace tycho::solvers

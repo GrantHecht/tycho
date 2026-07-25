@@ -70,6 +70,13 @@ oc = typy.optimal_control
 
 TIER = "hard"
 TIMEOUT = 120
+SOLVE_MODE = "solve_optimize"
+NOTES = (
+    "Order-sensitive (also true of the unperturbed parent); "
+    "iteration count at the two solve_optimize stages' max_iters cap "
+    "is stable, objective is not guaranteed byte-identical. See "
+    "module docstring."
+)
 
 
 class _MountainCar(oc.ODEBase):
@@ -84,8 +91,8 @@ class _MountainCar(oc.ODEBase):
         super().__init__(ode, 2, 1)
 
 
-def build_and_solve(configure) -> dict:
-    """Construct, configure, and solve the bad-guess MountainCar problem.
+def build():
+    """Construct the bad-guess MountainCar problem (unsolved).
 
     See tests/corpus/README.md for the full problem-module contract.
     """
@@ -111,25 +118,4 @@ def build_and_solve(configure) -> dict:
 
     phase.optimizer.set_opt_ls_mode("L1")
 
-    configure(phase.optimizer)
-    flag = phase.solve_optimize()
-
-    optimizer = phase.optimizer
-    try:
-        objective = float(optimizer.last_obj_val)
-    except AttributeError:
-        objective = None
-    try:
-        iterations = int(optimizer.last_iter_num)
-    except AttributeError:
-        iterations = None
-
-    return {
-        "flag": flag.name,
-        "objective": objective,
-        "iterations": iterations,
-        "notes": "Order-sensitive (also true of the unperturbed parent); "
-        "iteration count at the two solve_optimize stages' max_iters cap "
-        "is stable, objective is not guaranteed byte-identical. See "
-        "module docstring.",
-    }
+    return phase
