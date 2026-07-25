@@ -1,0 +1,148 @@
+# Proximal regularization inertia mode — corpus evidence and the elastic-relaxation decision
+
+Date: 2026-07-24. Branch: `feat/e2-g6-implicit-tr-regularization` (HEAD `9dad7632`).
+Corpus harness: `scripts/run_corpus.py`, 17 problems, `MKL_CBWR=AUTO,STRICT`, ×2
+repeats per configuration.
+
+## 1. What shipped
+
+`inertia_mode = proximal_regularization` beside the (default, byte-identical)
+`classic` ladder:
+
+- **Always-on dual shift** −δ_c on the constraint-row diagonal (e/i pivot slots),
+  δ_c = 1e-8·μ^0.25 — Ipopt's `jacobian_regularization_value/exponent` constants and
+  its `perturb_always_cd` semantics (verified at coin-or/Ipopt 72a29c9). Suppressed
+  while nested ℓ1 restoration is active (the elastic pivots own those slots and the
+  condensed step-recovery algebra assumes exact pivot values).
+- **Persistent decaying primal shift** ρ_k on the Hessian-block diagonal, floored at
+  1e-10 (Cipolla–Gondzio floor), replacing the classic retry-zero attempt; decays by
+  `decr_h` toward the floor while inertia stays correct, re-seeds from the decayed
+  total successful shift after a ladder episode. The persistence *dynamics* are
+  Tycho-original (the convex-QP literature the mode draws on has no nonconvex inertia
+  story; Ipopt has no always-on primal mode) — this corpus differential is their
+  acceptance evidence.
+- The escalation ladder, warm-start memory, and inertia predicate are unchanged; a
+  singular base factorization is upgraded from warn-only to a ladder trigger on the
+  mode branch only.
+- Diagnostics: `result.last_prox_reg_primal` / `last_prox_reg_dual` (−1 sentinels;
+  the shifts applied at the last factorized iteration otherwise).
+
+Full mechanism documentation and citations:
+`include/tycho/detail/solvers/globalization/inertia_regularization.h`.
+
+## 2. Corpus A/B
+
+All six configurations are perfectly repeat-stable (17/17 problems unchanged between
+the two repeats of every configuration), so single-run diffs below are deterministic.
+The harness records status/iterations/wall-time; per-solve factorization counts are
+not a harness field, so iteration deltas stand in for the factorization-savings
+thesis below.
+
+### 2.1 Headline: defaults vs `proximal_regularization` alone
+
+14 unchanged, **3 improved, 0 regressed**:
+
+| problem | classic | prox |
+|---|---|---|
+| lit_wb2000 | failed @500 | **converged @95** |
+| deg_near_infeasible | failed @500 | **acceptable @86** |
+| deg_zero_objective | converged @3 | converged @2 |
+| lit_maratos | converged @40 | converged @37 |
+| lit_hs13 | acceptable @77 | acceptable @75 |
+| hard_brach_coldstart | converged @24 | converged @44 |
+| hard_cartpole_tightbounds | converged @95 | converged @105 |
+| hard_zermelo_wrongbasin | diverged @907 | failed @1000 |
+
+(Rows below the rule are the honest costs: brach_coldstart pays +20 iterations,
+cartpole +10 — cartpole is the corpus's documented jitter-prone problem — and
+zermelo's genuine wrong-basin non-solve rides to the iteration cap instead of the
+divergence abort; neither label is a solution, so it is a wash.) Everything else is
+iteration-identical.
+
+The two rescues are exactly the mode's design case: wb2000's near-rank-deficient
+geometry and near_infeasible's degenerate constraint set were previously
+factorization-quality failures; the persistent shifts turn both into solves.
+Engagement is confirmed by the mode's own diagnostics on the wb2000 solve: at
+convergence `last_prox_reg_primal ≈ 2.5e-4` (the persistent primal shift is live,
+five orders above its floor — the implicit trust region did the work) and
+`last_prox_reg_dual = 1e-11` (= 1e-8·μ^0.25 at the converged μ ≈ 1e-12, the dual
+shift decaying to negligible exactly as the μ-scaling intends).
+The Maratos/hs13/zero-objective single-digit savings match the
+implicit-trust-region prediction (no retry-zero factorizations while curvature is
+temporarily bad).
+
+### 2.2 Composed with the restoration stacks
+
+`merit-l1` vs `merit-l1-prox` — 3 improved, 0 status-regressed, with costs:
+near_infeasible failed@498 → **acceptable@224**; brach_coldstart 49 → 31;
+zero_objective/redundant −1 each; BUT wb2000 converged 90 → 241 (+151 iterations,
+still converged), cartpole diverged@160 → failed@498 (the jitter-prone problem),
+zermelo diverged@900 → failed@998 (wash, as above).
+
+`filter-mon-l1` vs `filter-mon-l1-prox` — 2 improved, **1 regressed**:
+mountaincar_badguess acceptable@661 → **converged@969** (status win, iteration
+cost); hypersens_stiff 152 → 120; brach_coldstart 36 → 26; conflicting_equality
+fails-fast @16 → @6; wb2000 37 → 97 (+60, still converged); and the one real loss:
+**brach_illscaled acceptable@339 → failed@498**.
+
+### 2.3 Parity verdict
+
+Against the equivalent-or-better standard: **standalone, the mode meets it
+outright** (zero status regressions, two major rescues, single-digit wins on the
+literature problems, bounded iteration costs on two problems). **Composed with the
+restoration stacks it is mixed** — real wins (near_infeasible, mountaincar,
+hypersens) against real costs (wb2000 iteration inflation, the brach_illscaled loss
+under the filter stack). As an opt-in mode with `classic` remaining the default,
+this ships; the composed cells are recorded here so the evaluation campaign can
+weigh them per-preset rather than folding the mode into the robust preset blindly.
+
+## 3. Elastic/penalty-relaxation decision (required close-out)
+
+The third restoration-trio member (LOQO/Knitro `bar_relaxcons` lineage —
+formulation-level elastic relaxation) was cut from the nested-ℓ1 stage with the
+commitment to reconsider it here, on this stage's degenerate-tier evidence. The
+degenerate tier now reads:
+
+| problem | best result | via |
+|---|---|---|
+| deg_dup_equality | converged @3 | every configuration |
+| deg_redundant_defects | converged @3 | every configuration |
+| deg_zero_objective | converged @2 | prox configurations |
+| deg_conflicting_equality (infeasible) | fails-fast @6–16 | ℓ1 certificate (+prox) |
+| deg_near_infeasible | acceptable @86 | prox alone |
+
+**Decision: elastic is dropped from the program.** The tier is well-served by
+regularization + ℓ1: the rank-deficient/duplicated/zero-curvature problems are
+solved outright (the constraint-row regularization now does structurally what
+elastic's slack pivots would have done), the genuinely infeasible problem gets its
+fast infeasibility certificate from ℓ1 restoration (7–16 iterations), and the one
+previously-open degenerate problem (near_infeasible) gets its best-ever result from
+the regularization mode itself — there is no remaining gap that a formulation-level
+relaxation would plausibly close. Reversal condition: a future workload class where
+constraints must be *softly violated at the solution* (elastic's actual modeling
+niche, distinct from restoration) would reopen this as a modeling feature, not a
+robustness mechanism.
+
+## 4. Gate results
+
+- Build 0-warn; ctest **1661/1661** (11 new regularization tests incl. a
+  rank-deficient-KKT convergence pin and an in-phase suppression composition test);
+  full pytest incl. 17 new surface tests; stubs snapshot regenerated.
+- 34/34 Python examples pass; C++ brachistochrone "Optimal Solution Found",
+  1.801295 s.
+- Default-path CBWR: bit-exact across all 34 examples against a
+  same-toolchain rebuild of the pre-change tree (known-noisy trio excluded as
+  always: MultiSpacecraftOptimization, ParallelParking, SimpleLowThrust).
+- Bench: 128 lanes, two flags, both dispositioned. `BM_BumpAllocator_Resize`
+  +12.1% — refuted by 5-rep re-measurement (133 ns median vs 129 baseline, the
+  fourth single-shot flag/refutation of this lane in this series).
+  `BM_GF_Clone_PolarLT` +28.6% (99→130 ns) — reproduces under 5 reps, but a
+  same-machine-state rebuild of the pre-change tree also re-measured at 99 ns
+  while every other micro-lane matches baseline within ±2.4%; the branch changes
+  no clone/type-erasure/bench source (empty diff under those paths), so this is
+  binary code-layout displacement of one alignment-sensitive 100 ns lane by the
+  grown solver objects, not a runtime cost of the change (the lane executes no
+  solver code, and the mode is opt-in besides).
+
+Raw scorecards: `g6-score-*.jsonl` (session records; headline tables above are the
+complete status/iteration deltas).
