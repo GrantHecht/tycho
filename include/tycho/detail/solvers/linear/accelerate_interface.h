@@ -771,9 +771,13 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::_solve_impl(
 
     SparseSolve(*m_numericFactorization, bmat, xmat, ws);
 
-    // SparseSolve() returns void; Accelerate does not expose a per-call solve
-    // status. The factorization's own status field is the only documented
-    // failure channel available post-solve.
+    // Provably a no-op, kept for documentation/defensiveness rather than
+    // effect: Apple's SDK passes the factorization to SparseSolve() BY VALUE
+    // (SolveImplementationTyped.h), so a solve can never mutate the stored
+    // status, and the guard above already established status == SparseStatusOK
+    // on entry -- so this can only ever rewrite Success over Success. Solve
+    // failures are not detectable at all through this API; do not read this
+    // call as a post-solve failure check.
     updateInfoStatus(m_numericFactorization->status);
 
     if (do_iterative_refinement_) {

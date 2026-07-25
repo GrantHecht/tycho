@@ -227,6 +227,30 @@ TEST(AccelerateInterface, FailedFactorizationIsReported) {
     EXPECT_NE(s.info(), Eigen::Success);
 }
 
+// The null-pointer branch must PRESERVE the specific status a failed
+// factorize() recorded, not recompute the vaguer InvalidInput. Guards the
+// `else if (info_ == Success)` gate in _solve_impl.
+TEST(AccelerateInterface, SolveAfterFailedFactorizePreservesClassification) {
+    LLT s;
+    s.analyze_pattern(spd_full_upper());
+    ASSERT_EQ(s.info(), Eigen::Success);
+
+    s.factorize(indefinite_full_upper());
+    const Eigen::ComputationInfo after_factorize = s.info();
+    // Pin the value, so the test cannot go vacuous if this ever becomes InvalidInput.
+    ASSERT_EQ(after_factorize, Eigen::NumericalIssue);
+
+    Eigen::VectorXd b(3);
+    b << 1.0, 2.0, 3.0;
+    Eigen::VectorXd x(3);
+    x.setConstant(-12345.0);
+
+    x = s.solve(b); // null numeric factorization -> the preserve branch
+
+    EXPECT_EQ(s.info(), after_factorize); // NOT downgraded to InvalidInput
+    EXPECT_DOUBLE_EQ(x[0], -12345.0);
+}
+
 // Contract, matching PardisoImpl::_solve_impl: a solve on a bad factorization
 // reports through info() and leaves the destination alone. Zeroing it instead
 // is deferred to issue #105 (both backends together).
