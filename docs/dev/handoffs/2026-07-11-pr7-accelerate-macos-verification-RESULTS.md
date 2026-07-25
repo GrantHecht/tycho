@@ -59,7 +59,7 @@ performed (which confirmed `-Wunused-result` was never in Eigen's suppressed set
 balancing the pragma did not expose them). **Follow-up worth filing separately:** these are
 ignored `nodiscard` results on `std::future`, which can silently swallow exceptions.
 
-## C++ unit tests — RED (11 failures, triaged below)
+## C++ unit tests — RED (11 failures, ALL exonerated by A/B on 2026-07-25)
 
 ```
 99% tests passed, 11 tests failed out of 1668
@@ -73,49 +73,61 @@ predating both this branch and the 13-commit merge from `main`. Any `ctest` resu
 before the full rebuild was meaningless; the run above is post-rebuild and therefore the
 first meaningful full-suite result on macOS in months.
 
-| # | Test | Reaches the Accelerate solver? |
+### A/B method (no rebuild required)
+
+The 6 `libpsiopt.a` TUs are the only objects in the build carrying `AccelerateImpl`
+symbols (verified by `nm` across all archives), and they compile without the PCH. So the
+decisive experiment cost seconds, not a 20–40 min rebuild: recompile those 6 TUs against
+`origin/main`'s `accelerate_interface.h`/`accelerate_utils.h` via a shadow `-I` directory,
+relink `tycho_tests` and the docking example against the swapped objects, and re-run every
+failure. All 11 also re-ran deterministically beforehand (`ctest --rerun-failed`: same 11,
+same values).
+
+**Result: every failure reproduces bit-for-bit identically under `origin/main`'s
+Accelerate headers** — down to the last printed digit (e.g. L1Resto residual
+`6.763923865449443e-14`, DivergencePersistence 500/500 iters, Kepler lane delta
+`1.624300693947589e-11`, docking Form2 flag 2 / Form1 PASS). **Zero of the 11 failures
+are attributable to this PR.** They are macOS-first-run discoveries, invisible until now
+because CI is Linux/MKL and no macOS build had run since 2026-04-26.
+
+| # | Test | Verdict |
 |---|---|---|
-| 1482 | `RegressionIVPTest.Case01_TwoBody_DOPRI54` | **No** |
-| 1486 | `RegressionIVPTest.Case05_EventCrossing` | **No** |
-| 1488 | `RegressionIVPTest.Case07_Backward` | **No** |
-| 1489 | `RegressionTranscriptionTest.Case08_Jacobian` | **No** |
-| 1490 | `RegressionTranscriptionTest.Case09_JacobianHessian` | **No** |
-| 1491 | `RegressionTranscriptionTest.Case10_BatchJacobians` | **No** |
-| 807 | `EventRefinementCoverageTest.ResetPerCall_SecondCallIndependent` | **No** |
-| 29 | `cpp_example_optimal_docking_builder` | Possibly |
-| 256 | `L1RestoStepApplication.ApplyMovesSlacksAndUpdatesPivots` | Possibly |
-| 375 | `DivergencePersistence.MaratosCorpusConvergesAtDefaults` | Possibly |
-| 1402 | `KeplerLCDKernelSS.UniformEllipticFourLanesHitsSimdPath` | Possibly |
+| 1482/1486/1488 | `RegressionIVPTest` Case01/05/07 | Golden-value drift: ulp-scale (≤2.6e-11 on values up to 7000) vs 1e-12 **absolute** tolerances; gtest itself flags the tolerance as below double spacing at that magnitude. No solver involvement. Recalibrate goldens/tolerances for arm64. |
+| 1489/1490/1491 | `RegressionTranscriptionTest` Case08/09/10 | Same class (tolerances 1e-13/1e-14). |
+| 1402 | `KeplerLCDKernelSS` | SIMD lane vs scalar at 1.29e-13 relative vs 1e-13 relative bound — NEON vs AVX ulp drift, no solver. |
+| 807 | `EventRefinementCoverageTest.ResetPerCall` | Test premise ("impossibly tight tol must yield ≥1 nullopt") not portable: on this platform the refinement residual lands exactly within tol. No solver. |
+| 256 | `L1RestoStepApplication` | 6.76e-14 vs 1e-14 bound — FP-noise scale through a KKT solve; backend/arch ulp drift. Fails identically pre/post PR. |
+| 29 | `cpp_example_optimal_docking_builder` | Form2 flag 2 / Form1 PASS, identical pre/post PR. Backend-inherent convergence difference. |
+| 375 | `DivergencePersistence.MaratosCorpus` | Identical pre/post PR. **Root cause fully diagnosed — see below.** |
 
-**7 of 11 are provably not attributable to this PR.** `test_regression_ivp.cpp`,
-`test_regression_transcription.cpp` and `test_event_refinement_coverage.cpp` contain **zero**
-references to `PSIOPT` or `kkt_sol_` (grep-verified). They are integrator and event tests,
-unreachable from the Accelerate *linear solver* interface, which is the only code this PR
-modifies. Independently: the merged `main` commits never touched `accelerate_interface.h`
-(0 commits for that path in `889faab~13..889faab`).
+### DivergencePersistence root cause: PSIOPT has no rank-deficiency correction
 
-**The remaining 4 cannot be excluded by inspection.** The worst signature is
-`DivergencePersistence`, which failed to converge — `iter_num_` 500 against an expected
-`<= 60`, plus a flag mismatch (2 vs 0) at `test_divergence_persistence.cpp:234-237`.
+Instrumented the interface (debug prints in `doFactorization`/`doRefactorization`/
+`_solve_impl`, same shadow-header relink) and probed the standalone 3×3 system:
 
-Two facts bear on attribution, in opposite directions:
+1. At the start point (0,1), PSIOPT's least-squares multiplier initialization yields the
+   multiplier that makes **∇²L exactly zero** (λ·∇²c = −∇²f: 4I − 2·2I). The assembled
+   KKT matrix is exactly `[[0,0,0],[0,0,2],[0,2,0]]` (verified: refactor values print as
+   `0 0 0 0 2 0`) with true inertia **(1 pos, 1 neg, 1 zero)** — exactly singular.
+2. Accelerate's LDLT-TPP factors it, reports `status=OK`, inertia `p/n/z = 1/1/1` —
+   **honest and correct** (a standalone probe of the well-conditioned variant returns
+   (2,1,0) and exact solves, so the backend itself is sound).
+3. `PSIOPT::factor_impl` (psiopt.cpp:1690) corrects inertia only when
+   `neigs − m > 0`. Here `IncEigs = 1 − 1 = 0 ≤ 0` → **accepted without perturbation**;
+   `zeigs > 0` only triggers the "Potential Rank Deficiency" *warning*. The singular
+   solve returns a zero step (`b=(-1,0,0) → x=(0,0,0)`), the iterate and multipliers
+   never move, the same singular matrix is refactored every iteration — 500 identical
+   iterations to the max-iter flag.
+4. On MKL the same test passes: consistent with Pardiso's documented automatic pivot
+   perturbation for near-zero pivots, which prevents an exact `zeigs` from surfacing
+   (it manifests as perturbed pivots / wrong inertia instead, which **does** enter the
+   correction loop). The gap is latent on MKL, exposed by Accelerate's honest inertia.
 
-- **Against:** `test_divergence_persistence.cpp` was added by `889faab` (main's HEAD) and
-  `test_l1_restoration.cpp` by `36fe4f5` — both from the globalization series merged into
-  this branch. They are new and have **never executed against the Accelerate backend**: CI
-  runs Linux/MKL, and the Accelerate path is CI-invisible, which is the premise of this PR.
-- **For:** this PR's one plausible mechanism for perturbing PSIOPT convergence is the I3
-  inertia reset. On success paths the changes are behaviorally inert — `doAnalysis()` →
-  `doFactorization()` → `cacheInertia()` repopulates; `_solve_impl`'s guard only changes
-  `info()` classification, which PSIOPT never reads for control flow; the alias-copy never
-  triggers for any in-tree caller; `makeCompressed()` is a no-op on an already-compressed
-  matrix; MT-METIS passes through unchanged on macOS 26.5. But on a **factorization
-  failure**, the inertia-correction loop now reads zeroed inertia where it previously read
-  stale values, which can change perturbation decisions.
-
-**Resolution deferred by decision:** these are being investigated as part of the ongoing
-globalization campaign rather than in this PR. Settling attribution requires building
-`origin/main` (or reverting the two Accelerate headers) and re-running those 4 tests.
+**This is a PSIOPT globalization-campaign item, pre-existing on `main`:** the
+inertia-correction loop needs a `neigs + peigs < n` (rank-deficient) branch that
+regularizes — the standard IPOPT-style dual/primal regularization case — rather than
+accepting the factorization. The docking Form2 failure is plausibly the same mechanism
+and should be re-checked once that branch exists.
 
 ## C++ brachistochrone — PASS
 
