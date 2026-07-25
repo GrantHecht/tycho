@@ -813,6 +813,27 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::_solve_impl(
     bmat.columnStride = bmat.rowCount;
     bmat.data = b_ptr;
 
+    // b and x may alias (Eigen's Solve assignment forwards both straight here).
+    // Without iterative refinement, an aliased solve was measured bit-identical
+    // to an out-of-place one (n=200, nrhs in {1,3}: diff == 0.000e+00 every
+    // run) -- Accelerate's SparseSolve itself tolerates it. WITH iterative
+    // refinement it does not: the loop below re-reads bmat.data as "the
+    // original b" AFTER SparseSolve has already overwritten xmat.data, and
+    // when the buffers alias that is the same memory -- silently corrupting x
+    // (measured residual 2.3 at n=3, 0.94 at n=200; not a tolerance issue, a
+    // wrong answer with info() == Success). Copy unconditionally rather than
+    // gate on do_iterative_refinement_, so correctness does not depend on that
+    // runtime setting. Mirrors PardisoImpl::_solve_impl
+    // (pardiso_interface.h:392-399). Do not switch to Accelerate's in-place
+    // SparseSolve overload instead: it destroys b, which the refinement block
+    // still needs as its residual reference.
+    Matrix<Scalar, Dynamic, Dynamic, ColMajor> b_tmp;
+    if (b_ptr == x_ptr) {
+        b_tmp = b;
+        b_ptr = b_tmp.data();
+        bmat.data = b_ptr;
+    }
+
     const int nrhs = (bmat.attributes.transpose) ? bmat.rowCount : bmat.columnCount;
     const size_t workspaceSize =
         m_numericFactorization->solveWorkspaceRequiredStatic +
@@ -832,11 +853,6 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::_solve_impl(
         return;
     }
 
-    // b and x may alias (Eigen's Solve assignment forwards both straight here).
-    // Accelerate does not document the out-of-place overload as alias-safe, but
-    // probing at n=200 with nrhs in {1,3} showed correct results; revisit if a
-    // caller ever depends on it. Pardiso, by contrast, must copy (see
-    // PardisoImpl::_solve_impl).
     SparseSolve(*m_numericFactorization, bmat, xmat, ws);
 
     // Provably a no-op, kept for documentation/defensiveness rather than

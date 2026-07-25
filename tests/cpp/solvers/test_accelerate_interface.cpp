@@ -303,6 +303,25 @@ TEST(AccelerateInterface, SolveAfterFailedRefactorDoesNotCorruptUnderRefinement)
     EXPECT_DOUBLE_EQ(x[2], -12345.0);
 }
 
+// An aliased solve (b and x the same buffer) must be correct even with
+// iterative refinement enabled. Pre-fix the refinement loop rebuilt -b from
+// a buffer SparseSolve had already overwritten, silently corrupting x.
+TEST(AccelerateInterface, AliasedSolveIsCorrectUnderRefinement) {
+    LDLT s;
+    s.set_iterative_refinement(true);
+    s.set_iterative_refinement_iterations(2);
+    const SpMat A = spd_both_triangles();
+    s.compute(A);
+    ASSERT_EQ(s.info(), Eigen::Success);
+
+    Eigen::VectorXd b(3);
+    b << 1.0, 2.0, 3.0;
+    Eigen::VectorXd x = b;
+    x = s.solve(x); // aliased: x is both the rhs and the destination
+
+    EXPECT_LT((dense_symmetric(A) * x - b).cwiseAbs().maxCoeff(), 1e-10);
+}
+
 // The reason doRefactorization deliberately does NOT reset the numeric
 // factorization on failure: Apple documents the failed object as refactorable,
 // and PSIOPT's perturb-and-retry loop depends on that cheap recovery.
