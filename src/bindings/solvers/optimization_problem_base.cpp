@@ -16,6 +16,8 @@
 #include "tycho/detail/solvers/optimization_problem_base.h"
 #include "optimization_problem_bind.h"
 
+#include <nanobind/stl/map.h>
+
 using namespace tycho;
 using namespace tycho::vf;
 using namespace tycho::oc;
@@ -36,6 +38,30 @@ Assignment routes through :meth:`set_num_partitions` and raises
 ``ValueError`` for values < 1. Use ``set_num_partitions(n, qp_threads)`` to
 also set the QP thread count.)doc");
     obj.def_ro("optimizer", &OptimizationProblemBase::optimizer_);
+
+    obj.def_rw("nlp_solver", &OptimizationProblemBase::nlp_solver_,
+               R"doc(NLP solver backend for the solve/optimize entry points.
+
+NLPSolvers.psiopt (default) is the built-in solver, byte-identical to
+previous behavior. NLPSolvers.ipopt runs the identical transcribed NLP
+through a linked Ipopt installation; requires a build configured with
+ENABLE_IPOPT (raises RuntimeError otherwise). The ipopt backend always
+performs a single NLP solve: the feasibility-then-optimize staging modes
+have no Ipopt analog.
+
+The built-in solver's own diagnostics (``optimizer.last_obj_val``,
+``optimizer.last_iter_num``, and every other result()-backed property on
+``optimizer``) reflect only the most recent PSIOPT run and are left
+untouched by an ipopt-backend run -- use ``last_ipopt_result`` as the
+source of truth for diagnostics of the most recent ipopt-backend
+solve.)doc");
+    obj.def_rw("ipopt_options", &OptimizationProblemBase::ipopt_options_,
+               R"doc(String key/value options forwarded verbatim to Ipopt (e.g.
+{"linear_solver": "pardisomkl"}). Applied after the matched-tolerance
+baseline, so entries here win. Ignored by the psiopt backend.)doc");
+    obj.def_ro("last_ipopt_result", &OptimizationProblemBase::last_ipopt_result_,
+               R"doc(Diagnostics of the most recent ipopt-backend run on this problem
+(sentinel values with ran == False before any such run).)doc");
 
     obj.def("set_num_partitions",
             nb::overload_cast<int, int>(&OptimizationProblemBase::set_num_partitions),
