@@ -128,10 +128,25 @@ exit 0
 Positive evidence that PSIOPT driving the Accelerate backend converges correctly on the
 happy path, which is the configuration all 32 examples and normal use exercise.
 
-## Python examples — see PR discussion
+## Python examples — PASS (34/34)
 
-Run separately; result recorded in the PR thread rather than inlined here, since the
-C++-suite triage above is the gating question.
+```
+Results: 34 passed, 0 failed, 0 skipped
+EXAMPLES_EXIT=0
+```
+
+Run as `MPLBACKEND=Agg python scripts/run_examples.py` in the `tycho` conda env. Nothing
+skipped, so every optional dependency (seaborn, spiceypy, basemap) was present.
+
+**This is the strongest single piece of evidence bearing on the `ctest` triage above.** The
+example suite is the project's stated integration/acceptance gate, every example drives
+PSIOPT end-to-end, and on macOS PSIOPT's KKT solver *is* the Accelerate backend this PR
+rewrites. If these changes had broken PSIOPT's normal operation, this suite would show it.
+All 34 pass.
+
+It does not fully exonerate the 4 PSIOPT-adjacent unit-test failures, which may probe
+failure paths the examples never enter — and the I3 inertia reset only changes behavior on a
+factorization failure. But it does rule out a broad regression in ordinary solver operation.
 
 ## Benchmarks — NOT RUN (no baseline)
 
