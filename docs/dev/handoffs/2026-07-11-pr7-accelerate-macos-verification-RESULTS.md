@@ -59,14 +59,20 @@ performed (which confirmed `-Wunused-result` was never in Eigen's suppressed set
 balancing the pragma did not expose them). **Follow-up worth filing separately:** these are
 ignored `nodiscard` results on `std::future`, which can silently swallow exceptions.
 
-## C++ unit tests — RED (11 failures, ALL exonerated by A/B on 2026-07-25)
+## C++ unit tests — 11 failures, ALL exonerated by A/B; 9 fixed in-PR (2026-07-25)
 
 ```
-99% tests passed, 11 tests failed out of 1668
-CTEST_EXIT=8
+Initial gate:            99% tests passed, 11 tests failed out of 1668
+After commit b880f60:    99% tests passed,  2 tests failed out of 1668  (62 s wall)
 ```
 
-**All 20 `AccelerateInterface` tests PASS.**
+**All 20 `AccelerateInterface` tests PASS.** The 9 calibration failures below were fixed
+in this PR (`b880f60`) by making their FP bounds portable to arm64 — existing rel/close
+matchers at justified bounds (≥8× headroom over observed drift, orders below any
+behavioral-regression signal), plus one deterministic rewrite of EventRefinement's
+satisfiable-on-arm64 "impossible tolerance" premise. Loosening cannot un-pass x86. The
+2 remaining failures (`DivergencePersistence`, docking Form2) are the PSIOPT
+rank-deficiency gap documented below, deferred to the globalization campaign.
 
 Note: four test executables in `build/` were stale from 2026-04-26 — three months old,
 predating both this branch and the 13-commit merge from `main`. Any `ctest` result taken
