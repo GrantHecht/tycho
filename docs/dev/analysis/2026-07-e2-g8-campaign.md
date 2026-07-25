@@ -23,8 +23,13 @@ therefore not linear-algebra artifacts).
 every Ipopt reference column on identical NLPs — with one caveat the flag
 alone hides.** The winner (`62994231856d`) scores 8 converged + 4 acceptable;
 one of those acceptables is `hard_brach_illscaled`, where the exit lands at
-objective **−2.410** while Ipopt converges to **1.801** on the identical NLP —
-a flag-level acceptable at a non-matching point. Read strictly, the winner is
+objective **−2.410** while Ipopt converges to **1.801** on the identical NLP.
+The objective is a delta-time — the accepted point has NEGATIVE transfer time,
+a structurally meaningless iterate the acceptable tier's loosened tolerances
+signed off on under the deliberate ill-scaling. Whether the acceptable tier
+should carry an original-units feasibility sanity check is recorded as an open
+question for the presets/docs stage; until then this row is best read as a
+non-solve. Read strictly, the winner is
 **11 solid + 1 flag-only**; the campaign machinery classifies on exit flag
 alone and never checks objective agreement (recorded in §6). Under either
 reading it beats or ties every Ipopt column.
@@ -70,6 +75,27 @@ still doubles two deterministic examples and blows up one noisy-set example by
 7.8×. The noisy-trio exclusion exists for bit-exactness diffing, not for
 absorbing magnitude changes of that size — hence the widened reversal
 condition below.
+
+**Both "new failures" were diagnosed to root cause and are evaluation-domain
+exceptions, not solver regressions.** MinimumTimeToClimb under prox+ℓ1 dies on
+`InterpTable2D: query x=1.80012 outside table x range [0, 1.8]` — the iterate
+path grazes 0.007% past the aero-table edge and the table throws.
+BettsLowThrustCentralShooting under the robust configuration dies inside the
+shooting integrator (`ParallelDriver: step size underflowed ... non-finite
+derivatives`). In both cases the mechanisms legitimately visit trial points
+the legacy path never did, and the evaluation layer converts an out-of-domain
+state into a hard exception that aborts the entire solve. Notably, the Ipopt
+backend built alongside this campaign already handles this correctly for
+Ipopt — evaluator exceptions are latched and reported as a failed evaluation,
+which Ipopt treats as a rejected trial point — while the built-in solver has
+no equivalent: a thrown evaluation exception bypasses the step-rejection
+machinery entirely. Treating trial-evaluation exceptions as rejected steps
+(bounded retries, matching the reference solver's semantics) is recorded as a
+follow-up mechanism with direct evidence from both failures. The tail
+magnitudes on the prox cells are additionally consistent with the shift
+double-memory observation from the regularization mode's review (the first
+ladder rung after an episode landing at roughly twice the intended shift) —
+that tuning target now has measured example-suite costs attached.
 
 ## 3. Promotion recommendation: NO DEFAULT FLIP
 
