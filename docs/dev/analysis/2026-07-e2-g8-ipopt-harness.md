@@ -23,10 +23,12 @@ backend:
 - **`Ipopt::TNLP` adapter** over the transcribed `NonLinearProgram`: one-time
   slot maps slice the fused upper-triangular KKT CSR into Ipopt's Jacobian
   triplets (constraint-row × primal-col; slack completion excluded) and
-  lower-triangle Lagrangian-Hessian triplets; per-iteration evaluation is one
-  fused eval plus a flat value copy, and the multi-partition threaded function
-  evaluation is identical for both solvers (a fairness property: wall-time
-  differences isolate solver algorithms, not evaluation paths). Multiplier
+  lower-triangle Lagrangian-Hessian triplets; each callback is one fused eval
+  plus a flat value copy through the maps. The multi-partition threaded
+  evaluation machinery is identical for both solvers, but the per-iteration
+  cost composition is not (per Ipopt major iteration the adapter runs
+  `eval_ogc` + `eval_soe` + `eval_kkt`, evaluating the constraint Jacobian
+  twice), so wall-time comparisons carry that qualifier. Multiplier
   convention is identity (pinned by an FD cross-check test and a cross-backend
   multiplier assertion). Bounds stay general inequalities on BOTH sides —
   Tycho has no variable-bound concept, so the NLP really is identical.
@@ -113,11 +115,12 @@ formatting fix; status/iterations/objective unaffected.
   the pre-change baseline, at every task boundary and at final HEAD.
 - Corpus psiopt backend: **status/iteration/objective-identical 17/17** vs the
   pre-change scorecard (captured on the pre-change install, same session).
-- Bench: 128 lanes, one flag — `BM_Phase_Transcribe_64seg` +28.5% single-shot,
-  **refuted** by 5-rep re-measurement (median 340 μs vs 319 μs baseline,
-  +6.6%, cv 1%): under threshold, does not reproduce; residual consistent with
-  code-layout displacement from the enlarged problem-base object (the branch
-  touches no transcription code, and the backend is opt-in besides).
+- Bench: 128 lanes, one flag — `BM_Phase_Transcribe_64seg` +28.5% single-shot.
+  The +28.5% figure is **refuted** by 5-rep re-measurement; what remains is a
+  stable, reproducible **+6.6%** residual (median 340 μs vs 319 μs baseline,
+  cv 1%), under the 10% threshold and consistent with code-layout displacement
+  from the enlarged problem-base object (the branch touches no transcription
+  code, and the backend is opt-in besides).
 - ENABLE_IPOPT config validated end-to-end on this machine per the
   build-config rule: configure (pkg-config discovery from the conda env),
   full build, full ctest, Python solve, full-corpus backend run.
@@ -130,7 +133,11 @@ formatting fix; status/iterations/objective unaffected.
   algebra; the conda MUMPS build is the adapter-validation vehicle only.
 - The evaluation campaign proper: full-factorial PSIOPT configuration sweep ×
   corpus × examples, with this backend as the reference column; promotion
-  criteria per the program design.
+  criteria per the program design. One stopping-rule mismatch inside the
+  matched-tolerance bar to resolve there: the baseline sets neither
+  `acceptable_iter` (Ipopt default 15 vs PSIOPT's 50-consecutive acceptable
+  rule) nor `max_cpu_time` — match them or record the choice; no row in this
+  run's table was decided by it.
 - Lifted-bounds arm (Ipopt-side `x_L/x_U` lifting) to price first-class
   variable bounds — see the bounds note.
 - Secondary build dirs re-run the user-site install on relink (a
