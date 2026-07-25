@@ -386,6 +386,22 @@ TEST(IpoptBackend, ParityWithPsioptOnSmoothProblem) {
     EXPECT_NEAR(psiopt_obj, ipopt_adapter_optimal_objective(), 1e-6);
     EXPECT_NEAR(ipopt_prob->last_ipopt_result_.objective_, psiopt_obj, 1e-6);
 
+    // Multiplier direction: eval_h and finalize_solution both document that
+    // Ipopt's lambda maps onto (LE, LI) with no sign flip, so the two
+    // backends' reported multipliers should agree, not just be equal up to
+    // sign. A regression here would silently corrupt phase costates that
+    // downstream code reads off active_eq_lmults_/active_iq_lmults_.
+    ASSERT_EQ(ipopt_prob->active_eq_lmults_.size(), psiopt_prob->active_eq_lmults_.size());
+    for (int i = 0; i < ipopt_prob->active_eq_lmults_.size(); ++i) {
+        EXPECT_NEAR(ipopt_prob->active_eq_lmults_[i], psiopt_prob->active_eq_lmults_[i], 1e-4)
+            << "equality multiplier " << i;
+    }
+    ASSERT_EQ(ipopt_prob->active_iq_lmults_.size(), psiopt_prob->active_iq_lmults_.size());
+    for (int i = 0; i < ipopt_prob->active_iq_lmults_.size(); ++i) {
+        EXPECT_NEAR(ipopt_prob->active_iq_lmults_[i], psiopt_prob->active_iq_lmults_[i], 1e-4)
+            << "inequality multiplier " << i;
+    }
+
     EXPECT_TRUE(ipopt_prob->last_ipopt_result_.ran_);
     EXPECT_EQ(ipopt_prob->last_ipopt_result_.normalized_, "converged");
     EXPECT_EQ(ipopt_prob->last_ipopt_result_.converge_flag_, tycho::ConvergenceFlags::CONVERGED);

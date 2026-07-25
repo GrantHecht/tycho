@@ -21,6 +21,7 @@
 #include <fmt/format.h>
 
 #include <IpIpoptApplication.hpp>
+#include <IpRegOptions.hpp>
 #include <IpSolveStatistics.hpp>
 
 #include "tycho/detail/solvers/ipopt_backend.h"
@@ -99,49 +100,67 @@ std::pair<std::string, ConvergenceFlags> normalize_status(Ipopt::ApplicationRetu
     }
 }
 
-/// Apply one user option, choosing the setter by how the value parses. The
-/// integer setter is tried first because Ipopt refuses an integer-typed option
-/// (max_iter, print_level, ...) set through the numeric setter; each refusal
-/// falls through to the next setter, so a numeric option given an
-/// integer-looking value still lands correctly. All three refusing means the
-/// key or the value is not one Ipopt accepts.
-void apply_user_option(Ipopt::SmartPtr<Ipopt::OptionsList> options, const std::string &key,
+/// Apply one user option, routed by the type the option was registered with
+/// (rather than by how the value happens to parse): an integer-typed option
+/// goes through the integer setter, a number-typed option through the
+/// numeric setter, and everything else (including string-typed options)
+/// through the string setter. This avoids the parse-and-retry approach's
+/// failure mode, where a valid option still triggers one or two rejected
+/// Ipopt::SetIntegerValue/SetNumericValue attempts that Ipopt logs verbosely
+/// to stdout before the setter that actually applies the option is tried.
+void apply_user_option(Ipopt::IpoptApplication &app, const std::string &key,
                        const std::string &value) {
-    bool applied = false;
-
-    try {
-        std::size_t pos = 0;
-        const long long as_int = std::stoll(value, &pos);
-        const long long lo = static_cast<long long>(std::numeric_limits<Ipopt::Index>::min());
-        const long long hi = static_cast<long long>(std::numeric_limits<Ipopt::Index>::max());
-        if (pos == value.size() && as_int >= lo && as_int <= hi) {
-            applied = options->SetIntegerValue(key, static_cast<Ipopt::Index>(as_int), true, true);
-        }
-    } catch (const std::exception &) {
-        // Not an integer literal; fall through to the numeric/string setters.
+    Ipopt::SmartPtr<Ipopt::OptionsList> options = app.Options();
+    Ipopt::SmartPtr<const Ipopt::RegisteredOption> reg_option = app.RegOptions()->GetOption(key);
+    if (Ipopt::IsNull(reg_option)) {
+        throw std::runtime_error(fmt::format("no Ipopt option named '{0}'", key));
     }
 
-    if (!applied) {
+    bool applied = false;
+    switch (reg_option->Type()) {
+    case Ipopt::OT_Integer: {
+        long long as_int = 0;
+        bool parsed = false;
         try {
             std::size_t pos = 0;
-            const double as_num = std::stod(value, &pos);
-            if (pos == value.size()) {
-                applied = options->SetNumericValue(key, as_num, true, true);
-            }
+            as_int = std::stoll(value, &pos);
+            parsed = (pos == value.size());
         } catch (const std::exception &) {
-            // Not a numeric literal; fall through to the string setter.
+            parsed = false;
         }
+        const long long lo = static_cast<long long>(std::numeric_limits<Ipopt::Index>::min());
+        const long long hi = static_cast<long long>(std::numeric_limits<Ipopt::Index>::max());
+        if (!parsed || as_int < lo || as_int > hi) {
+            throw std::runtime_error(
+                fmt::format("Ipopt option '{0}' expects an integer value, got '{1}'", key, value));
+        }
+        applied = options->SetIntegerValue(key, static_cast<Ipopt::Index>(as_int), true, true);
+        break;
     }
-
-    if (!applied) {
+    case Ipopt::OT_Number: {
+        double as_num = 0.0;
+        bool parsed = false;
+        try {
+            std::size_t pos = 0;
+            as_num = std::stod(value, &pos);
+            parsed = (pos == value.size());
+        } catch (const std::exception &) {
+            parsed = false;
+        }
+        if (!parsed) {
+            throw std::runtime_error(
+                fmt::format("Ipopt option '{0}' expects a numeric value, got '{1}'", key, value));
+        }
+        applied = options->SetNumericValue(key, as_num, true, true);
+        break;
+    }
+    default:
         applied = options->SetStringValue(key, value, true, true);
+        break;
     }
 
     if (!applied) {
-        throw std::runtime_error(
-            fmt::format("Ipopt rejected option '{0}' = '{1}': no Ipopt option of that name accepts "
-                        "that value (see the Ipopt options reference for valid names and values)",
-                        key, value));
+        throw std::runtime_error(fmt::format("Ipopt rejected option '{0}' = '{1}'", key, value));
     }
 }
 
@@ -221,6 +240,18 @@ void TychoTNLP::build_slot_maps() {
     jac_cols_.clear();
     hess_rows_.clear();
     hess_cols_.clear();
+
+    // Every stored KKT entry is classified into at most one of these six
+    // vectors, so nonZeros() is a safe (if loose, since it also bounds the
+    // solver-bookkeeping entries none of these vectors receive) upper bound
+    // that avoids reallocation growth during the walk below.
+    const std::size_t nnz = static_cast<std::size_t>(kkt_.nonZeros());
+    jac_slots_.reserve(nnz);
+    hess_slots_.reserve(nnz);
+    jac_rows_.reserve(nnz);
+    jac_cols_.reserve(nnz);
+    hess_rows_.reserve(nnz);
+    hess_cols_.reserve(nnz);
 
     const auto *outer = kkt_.outerIndexPtr();
     const auto *inner = kkt_.innerIndexPtr();
@@ -312,67 +343,87 @@ double TychoTNLP::constraint_violation(const Eigen::VectorXd &x) {
 
 bool TychoTNLP::get_nlp_info(Index &n, Index &m, Index &nnz_jac_g, Index &nnz_h_lag,
                              IndexStyleEnum &index_style) {
-    n = static_cast<Index>(primal_vars_);
-    m = static_cast<Index>(equal_cons_ + inequal_cons_);
-    nnz_jac_g = static_cast<Index>(jac_slots_.size());
-    nnz_h_lag = static_cast<Index>(hess_slots_.size());
-    index_style = TNLP::C_STYLE;
-    return true;
+    try {
+        n = static_cast<Index>(primal_vars_);
+        m = static_cast<Index>(equal_cons_ + inequal_cons_);
+        nnz_jac_g = static_cast<Index>(jac_slots_.size());
+        nnz_h_lag = static_cast<Index>(hess_slots_.size());
+        index_style = TNLP::C_STYLE;
+        return true;
+    } catch (const std::exception &e) {
+        if (latched_error_.empty()) {
+            latched_error_ = e.what();
+        }
+        return false;
+    }
 }
 
 bool TychoTNLP::get_bounds_info(Index n, Number *x_l, Number *x_u, Index m, Number *g_l,
                                 Number *g_u) {
-    if (n != static_cast<Index>(primal_vars_) ||
-        m != static_cast<Index>(equal_cons_ + inequal_cons_)) {
-        latched_error_ = fmt::format("get_bounds_info called with n={0}, m={1}; expected n={2}, "
-                                     "m={3}",
-                                     n, m, primal_vars_, equal_cons_ + inequal_cons_);
+    try {
+        if (n != static_cast<Index>(primal_vars_) ||
+            m != static_cast<Index>(equal_cons_ + inequal_cons_)) {
+            throw std::logic_error(
+                fmt::format("get_bounds_info called with n={0}, m={1}; expected n={2}, m={3}", n, m,
+                            primal_vars_, equal_cons_ + inequal_cons_));
+        }
+
+        // The NLP has no variable bounds: every bound the user expressed is
+        // already a general constraint, and lifting some of them into
+        // variable bounds would hand Ipopt a different problem than the
+        // built-in solver solves.
+        for (Index i = 0; i < n; ++i) {
+            x_l[i] = -kIpoptInfinity;
+            x_u[i] = kIpoptInfinity;
+        }
+
+        // Equalities h(x) = 0 first, then inequalities g(x) <= 0.
+        for (int i = 0; i < equal_cons_; ++i) {
+            g_l[i] = 0.0;
+            g_u[i] = 0.0;
+        }
+        for (int i = 0; i < inequal_cons_; ++i) {
+            g_l[equal_cons_ + i] = -kIpoptInfinity;
+            g_u[equal_cons_ + i] = 0.0;
+        }
+        return true;
+    } catch (const std::exception &e) {
+        if (latched_error_.empty()) {
+            latched_error_ = e.what();
+        }
         return false;
     }
-
-    // The NLP has no variable bounds: every bound the user expressed is already
-    // a general constraint, and lifting some of them into variable bounds would
-    // hand Ipopt a different problem than the built-in solver solves.
-    for (Index i = 0; i < n; ++i) {
-        x_l[i] = -kIpoptInfinity;
-        x_u[i] = kIpoptInfinity;
-    }
-
-    // Equalities h(x) = 0 first, then inequalities g(x) <= 0.
-    for (int i = 0; i < equal_cons_; ++i) {
-        g_l[i] = 0.0;
-        g_u[i] = 0.0;
-    }
-    for (int i = 0; i < inequal_cons_; ++i) {
-        g_l[equal_cons_ + i] = -kIpoptInfinity;
-        g_u[equal_cons_ + i] = 0.0;
-    }
-    return true;
 }
 
 bool TychoTNLP::get_starting_point(Index n, bool init_x, Number *x, bool init_z, Number *z_L,
                                    Number *z_U, Index m, bool init_lambda, Number *lambda) {
-    if (n != static_cast<Index>(primal_vars_) ||
-        m != static_cast<Index>(equal_cons_ + inequal_cons_)) {
-        latched_error_ = fmt::format("get_starting_point called with n={0}, m={1}; expected n={2}, "
-                                     "m={3}",
-                                     n, m, primal_vars_, equal_cons_ + inequal_cons_);
+    try {
+        if (n != static_cast<Index>(primal_vars_) ||
+            m != static_cast<Index>(equal_cons_ + inequal_cons_)) {
+            throw std::logic_error(
+                fmt::format("get_starting_point called with n={0}, m={1}; expected n={2}, m={3}", n,
+                            m, primal_vars_, equal_cons_ + inequal_cons_));
+        }
+
+        if (init_x) {
+            Eigen::Map<Eigen::VectorXd>(x, primal_vars_) = x0_;
+        }
+        // No multiplier estimate is carried across the seam, so a
+        // warm-started run gets neutral duals rather than a stale guess.
+        if (init_z) {
+            std::fill_n(z_L, primal_vars_, 1.0);
+            std::fill_n(z_U, primal_vars_, 1.0);
+        }
+        if (init_lambda) {
+            std::fill_n(lambda, equal_cons_ + inequal_cons_, 0.0);
+        }
+        return true;
+    } catch (const std::exception &e) {
+        if (latched_error_.empty()) {
+            latched_error_ = e.what();
+        }
         return false;
     }
-
-    if (init_x) {
-        Eigen::Map<Eigen::VectorXd>(x, primal_vars_) = x0_;
-    }
-    // No multiplier estimate is carried across the seam, so a warm-started run
-    // gets neutral duals rather than a stale guess.
-    if (init_z) {
-        std::fill_n(z_L, primal_vars_, 1.0);
-        std::fill_n(z_U, primal_vars_, 1.0);
-    }
-    if (init_lambda) {
-        std::fill_n(lambda, equal_cons_ + inequal_cons_, 0.0);
-    }
-    return true;
 }
 
 bool TychoTNLP::eval_f(Index n, const Number *x, bool new_x, Number &obj_value) {
@@ -534,20 +585,36 @@ void TychoTNLP::finalize_solution(Ipopt::SolverReturn status, Index n, const Num
     (void)ip_data;
     (void)ip_cq;
 
-    if (x != nullptr && n == static_cast<Index>(primal_vars_)) {
-        x_final_ = Eigen::Map<const Eigen::VectorXd>(x, primal_vars_);
-    }
-    if (lambda != nullptr && m == static_cast<Index>(equal_cons_ + inequal_cons_)) {
-        // Same sign mapping as eval_h: no negation between the two conventions.
-        if (equal_cons_ > 0) {
-            eq_lmults_final_ = Eigen::Map<const Eigen::VectorXd>(lambda, equal_cons_);
+    // finalize_solution returns void, so an evaluation error latches into
+    // latched_error_ the same as the bool-returning callbacks rather than
+    // unwinding through Ipopt's C++ stack; a bad_alloc from the Eigen::Map
+    // assignments below must not cross the Ipopt ABI either.
+    try {
+        if (x != nullptr && n == static_cast<Index>(primal_vars_)) {
+            x_final_ = Eigen::Map<const Eigen::VectorXd>(x, primal_vars_);
+        } else if (x != nullptr) {
+            throw std::logic_error(
+                fmt::format("finalize_solution called with n={0}, expected {1}", n, primal_vars_));
         }
-        if (inequal_cons_ > 0) {
-            iq_lmults_final_ =
-                Eigen::Map<const Eigen::VectorXd>(lambda + equal_cons_, inequal_cons_);
+        if (lambda != nullptr && m == static_cast<Index>(equal_cons_ + inequal_cons_)) {
+            // Same sign mapping as eval_h: no negation between the two conventions.
+            if (equal_cons_ > 0) {
+                eq_lmults_final_ = Eigen::Map<const Eigen::VectorXd>(lambda, equal_cons_);
+            }
+            if (inequal_cons_ > 0) {
+                iq_lmults_final_ =
+                    Eigen::Map<const Eigen::VectorXd>(lambda + equal_cons_, inequal_cons_);
+            }
+        } else if (lambda != nullptr) {
+            throw std::logic_error(fmt::format("finalize_solution called with m={0}, expected {1}",
+                                               m, equal_cons_ + inequal_cons_));
+        }
+        obj_final_ = obj_value;
+    } catch (const std::exception &e) {
+        if (latched_error_.empty()) {
+            latched_error_ = e.what();
         }
     }
-    obj_final_ = obj_value;
 }
 
 // -----------------------------------------------------------------------------
@@ -610,7 +677,7 @@ OptimizationProblemBase::NlpSolveOutput solve(OptimizationProblemBase &prob,
     (void)options->SetStringValue("sb", "yes", true, true);
 
     for (const auto &[key, value] : prob.ipopt_options_) {
-        apply_user_option(options, key, value);
+        apply_user_option(*app, key, value);
     }
 
     const Ipopt::ApplicationReturnStatus init_status = app->Initialize();

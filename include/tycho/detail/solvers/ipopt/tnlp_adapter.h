@@ -29,6 +29,13 @@
 //   wrapped NonLinearProgram must not be evaluated concurrently from anywhere
 //   else for the duration of a run: the adapter mutates the NLP's shared
 //   scatter buffers on every evaluation, exactly as the built-in solver does.
+//   The one place this adapter writes into the shared NLP itself (rather than
+//   into its own KKT matrix or scratch buffers) is prepare_kkt_assembly,
+//   which resets the NLP's set_primal_diags/e_pivots/i_pivots coefficient
+//   counters before every Jacobian/Hessian assembly; this is safe because the
+//   built-in solver re-seeds those same counters at the start of every
+//   factorization, so nothing downstream of this adapter observes a stale
+//   value.
 //
 //   Exception latching. A Tycho evaluation error cannot be allowed to unwind
 //   through Ipopt's C++ stack, so every callback catches, stores the message,
@@ -37,6 +44,7 @@
 
 #pragma once
 
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -173,7 +181,12 @@ class TychoTNLP final : public Ipopt::TNLP {
     Eigen::VectorXd x_final_;
     Eigen::VectorXd eq_lmults_final_;
     Eigen::VectorXd iq_lmults_final_;
-    double obj_final_ = 0.0;
+    // NaN rather than 0.0 so a run that never reaches finalize_solution (an
+    // early abort) reports an implausible sentinel instead of a plausible
+    // objective value; IpoptRunInfo::ran_ is the authoritative "did this run"
+    // flag, but final_objective() should not silently look like a converged
+    // zero-cost solution on the no-run path.
+    double obj_final_ = std::numeric_limits<double>::quiet_NaN();
 
     std::string latched_error_;
 };
