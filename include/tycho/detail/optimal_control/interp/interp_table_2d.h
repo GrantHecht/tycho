@@ -13,8 +13,9 @@
 // =============================================================================
 
 #pragma once
+#include <vector>
+
 #include "tycho/detail/optimal_control/interp/interp_type.h"
-#include "tycho/detail/utils/timer.h"
 #include "tycho/detail/vf/core/vector_function.h"
 
 namespace tycho::oc {
@@ -54,9 +55,14 @@ struct InterpTable2D {
     MatType dzxs_;       ///< Cached @f$\partial z/\partial x@f$ at grid nodes.
     MatType dzys_;       ///< Cached @f$\partial z/\partial y@f$ at grid nodes.
     MatType dzys_dxs_;   ///< Cached @f$\partial^2 z/\partial x\partial y@f$ at grid nodes.
-    Eigen::Matrix<Eigen::Array4d, -1, -1, Eigen::RowMajor>
-        all_dat_;                                ///< Per-cell coefficient cache.
     InterpType interp_kind_ = InterpType::Cubic; ///< Interpolation kind.
+
+    // Per-cell bicubic coefficient cache (populated by cache_amats(), only
+    // when cache_alpha_ is set). Mirrors InterpTable3D/4D's alphavecs_/
+    // cache_alpha_ pattern: built once, up-front, at set_data() time -- never
+    // lazily on the read path -- so concurrent queries never race a write.
+    // Indexed amats_[yelem * (xsize_ - 1) + xelem].
+    std::vector<Eigen::Matrix4<double>> amats_;
 
   public:
     bool xeven_ = true; ///< Whether the X grid is evenly spaced.
@@ -65,6 +71,7 @@ struct InterpTable2D {
     double xtotal_;     ///< Total X span.
     int ysize_;         ///< Number of Y grid nodes.
     double ytotal_;     ///< Total Y span.
+    bool cache_alpha_ = true; ///< Whether per-cell bicubic coefficients are precomputed.
 
     /// @brief Default constructor; produces an empty table (call @ref set_data first).
     InterpTable2D() {}
@@ -74,9 +81,16 @@ struct InterpTable2D {
     /// @param Ys    Y grid coordinates (ascending, length >= 5).
     /// @param Zs    Field values (rows index Y, cols index X).
     /// @param kind  Interpolation kind.
+    /// @param cache Whether to precompute per-cell bicubic coefficients (cubic mode only).
+    ///              Default @c true: a 2-D cell's coefficient matrix is only 128 B
+    ///              (a @c Matrix4d), and cell count grows as O(nx*ny), so the memory
+    ///              cost stays modest even for large grids -- unlike 3-D/4-D, where
+    ///              cell count grows as O(n^3)/O(n^4) and caching therefore defaults
+    ///              to off. Pass @c false to opt out for very large/memory-constrained
+    ///              tables.
     InterpTable2D(const Eigen::VectorXd &Xs, const Eigen::VectorXd &Ys, const MatType &Zs,
-                  InterpType kind) {
-        set_data(Xs, Ys, Zs, kind);
+                  InterpType kind, bool cache = true) {
+        set_data(Xs, Ys, Zs, kind, cache);
     }
 
     /// @brief Set the table data and (for cubic mode) precompute derivatives.
@@ -84,11 +98,21 @@ struct InterpTable2D {
     /// @param Ys    Y grid coordinates (ascending, length >= 5).
     /// @param Zs    Field values (rows index Y, cols index X).
     /// @param kind  Interpolation kind.
+    /// @param cache Whether to precompute per-cell bicubic coefficients (cubic mode only).
+    ///              See the constructor overload's docstring for the default rationale.
     /// @throws std::invalid_argument on too-few nodes, size mismatch, or non-ascending grids.
     void set_data(const Eigen::VectorXd &Xs, const Eigen::VectorXd &Ys, const MatType &Zs,
-                  InterpType kind) {
+                  InterpType kind, bool cache = true) {
 
         this->interp_kind_ = kind;
+        this->cache_alpha_ = cache;
+
+        // Reset before re-deriving below -- set_data() may be called again on
+        // an already-constructed table (a prior call may have left these
+        // false for an uneven grid; a re-entry with a now-even grid must not
+        // silently keep the slower general-grid search path).
+        this->xeven_ = true;
+        this->yeven_ = true;
 
         this->xs_ = Xs;
         this->ys_ = Ys;
@@ -137,15 +161,28 @@ struct InterpTable2D {
         double xerr = (xs_ - testx).lpNorm<Eigen::Infinity>();
         double yerr = (ys_ - testy).lpNorm<Eigen::Infinity>();
 
-        if (xerr > abs(xtotal_) * 1.0e-12) {
+        if (xerr > std::abs(xtotal_) * 1.0e-12) {
             this->xeven_ = false;
         }
-        if (yerr > abs(ytotal_) * 1.0e-12) {
+        if (yerr > std::abs(ytotal_) * 1.0e-12) {
             this->yeven_ = false;
         }
 
-        if (this->interp_kind_ == InterpType::Cubic)
+        if (this->interp_kind_ == InterpType::Cubic) {
             calc_derivs();
+            if (this->cache_alpha_) {
+                cache_amats();
+            } else {
+                // Release any cache populated by a prior set_data() call on
+                // this instance (re-entry with cache=false must not leave a
+                // stale amats_ around).
+                amats_.clear();
+                amats_.shrink_to_fit();
+            }
+        } else {
+            amats_.clear();
+            amats_.shrink_to_fit();
+        }
     }
 
     /// @internal
@@ -155,7 +192,6 @@ struct InterpTable2D {
         dzxs_.resize(ysize_, xsize_);
         dzys_.resize(ysize_, xsize_);
         dzys_dxs_.resize(ysize_, xsize_);
-        all_dat_.resize(ysize_, xsize_);
 
         Eigen::Matrix<double, 5, 5> stens;
         stens.row(0).setOnes();
@@ -284,12 +320,12 @@ struct InterpTable2D {
     }
 
     /// @internal
-    /// @brief Build the 4x4 bicubic coefficient matrix for one grid cell.
+    /// @brief Compute the 4x4 bicubic coefficient matrix for one grid cell (uncached).
     /// @param xelem  X-interval index.
     /// @param yelem  Y-interval index.
     /// @return The bicubic coefficient matrix for the cell.
     /// @endinternal
-    Eigen::Matrix4<double> get_amatrix(int xelem, int yelem) const {
+    Eigen::Matrix4<double> calc_amatrix(int xelem, int yelem) const {
 
         double xstep = xs_[xelem + 1] - xs_[xelem];
         double ystep = ys_[yelem + 1] - ys_[yelem];
@@ -328,6 +364,41 @@ struct InterpTable2D {
 
         a = L * Z * R;
         return a;
+    }
+
+    /// @internal
+    /// @brief Precompute and cache every cell's bicubic coefficient matrix.
+    ///
+    /// Mirrors the analogous `cache_alphavecs()` helper on `InterpTable3D` and
+    /// `InterpTable4D`: populated once, up-front (construction/set_data time), never lazily on
+    /// the read path, so tables shared across threads for concurrent queries
+    /// never race a cache write. Calls calc_amatrix() with the exact same
+    /// arguments/arithmetic get_amatrix() would use on the fly, so a cached
+    /// lookup and a fresh computation are bit-identical.
+    /// @endinternal
+    void cache_amats() {
+        const int nxc = xsize_ - 1;
+        const int nyc = ysize_ - 1;
+        amats_.resize(size_t(nxc) * size_t(nyc));
+        for (int yelem = 0; yelem < nyc; yelem++) {
+            for (int xelem = 0; xelem < nxc; xelem++) {
+                amats_[size_t(yelem) * size_t(nxc) + size_t(xelem)] = calc_amatrix(xelem, yelem);
+            }
+        }
+    }
+
+    /// @internal
+    /// @brief Return a cell's bicubic coefficient matrix (cached or freshly computed).
+    /// @param xelem  X-interval index.
+    /// @param yelem  Y-interval index.
+    /// @return The bicubic coefficient matrix for the cell.
+    /// @endinternal
+    Eigen::Matrix4<double> get_amatrix(int xelem, int yelem) const {
+        if (this->cache_alpha_) {
+            return this->amats_[size_t(yelem) * size_t(xsize_ - 1) + size_t(xelem)];
+        } else {
+            return this->calc_amatrix(xelem, yelem);
+        }
     }
 
     /// @internal

@@ -1,0 +1,34 @@
+name: repo-lint
+
+# Repo-hygiene lint greps: prevents recurrence of two swept bug classes from
+# the PR7 review series —
+#   - bare (unqualified) abs()/pow() calls on floating-point values, which can
+#     silently resolve to an integer overload depending on include order (T1)
+#   - CRTP hook near-misses in the VectorFunction dispatch hierarchy, e.g.
+#     `hessian_elem_is_non_zero` (typo of `hessian_elem_is_nonzero`) or a
+#     derived class defining `compute` instead of `compute_impl` (T4)
+# Both checks are pure bash+grep (scripts/check_abs_sweep.sh,
+# scripts/check_crtp_hooks.sh) — no build, no Python required.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: repo-lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: false}
+      - name: abs()/pow() qualification sweep (T1)
+        run: scripts/check_abs_sweep.sh
+      - name: CRTP hook near-miss check (T4)
+        run: scripts/check_crtp_hooks.sh

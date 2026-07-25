@@ -169,6 +169,7 @@ class task {
         static_assert(sizeof(Fn) <= BUF_SIZE, "Callable exceeds task SBO buffer (64 bytes)");
         static_assert(alignof(Fn) <= ALIGN);
         static_assert(std::is_nothrow_move_constructible_v<Fn>);
+        static_assert(std::is_nothrow_constructible_v<Fn, F &&>);
         ::new (m_buf) Fn(std::forward<F>(f));
         m_invoke = [](void *p) { (*static_cast<Fn *>(p))(); };
         m_destroy = [](void *p) { static_cast<Fn *>(p)->~Fn(); };
@@ -457,7 +458,13 @@ class ThreadPool {
     void reset(unsigned n) {
         if (n == 0)
             throw std::invalid_argument("ThreadPool: thread count must be > 0");
-        wait(); // drain pending tasks (one atomic load when idle)
+        if (n == m_count)
+            return; // Already at the requested size — no caller wants a same-size
+                    // join-all/respawn-all cycle. Notably this is what makes first
+                    // construction via default_thread_count() landing exactly on n
+                    // (the common case: set_num_threads(n) as the first threading
+                    // call in a process) a no-op instead of churn.
+        wait();     // drain pending tasks (one atomic load when idle)
         for (auto &q : m_queues)
             q.done();
         for (auto &t : m_threads)
@@ -469,16 +476,60 @@ class ThreadPool {
         start_workers();
     }
 
+    /// @internal
+    /// @brief Desired thread count stashed by set_num_threads() ahead of the pool
+    /// singleton's first construction. 0 = unset (construct at hardware_concurrency()).
+    ///
+    /// Concurrency note: set_num_threads() stores here (under g_set_threads_mutex,
+    /// a cold/startup-only path) strictly before it first touches thread_pool().
+    /// If some *other* thread races to first-construct the Meyers singleton
+    /// concurrently — e.g. a dispatch call that reaches thread_pool() just before
+    /// the stash store below has landed — that thread may still observe 0 here and
+    /// construct the pool at hardware_concurrency(). This is benign and not a new
+    /// hazard: it is exactly the pre-existing behavior (the pool always used to
+    /// unconditionally construct at hardware_concurrency()), and the reset(n) call
+    /// inside set_num_threads() — which runs after the stash store, still under
+    /// g_set_threads_mutex — corrects the pool to n regardless of which count it
+    /// happened to be born with. The only thing this change removes is the
+    /// *guaranteed* churn on the common path where set_num_threads(n) is the very
+    /// first threading call in the process (no concurrent first-access race).
+    static std::atomic<unsigned> &requested_thread_count() {
+        static std::atomic<unsigned> c{0};
+        return c;
+    }
+
+    /// @internal
+    /// @brief Default construction size: the count stashed by set_num_threads() if
+    /// it got there first, otherwise hardware_concurrency().
+    static unsigned default_thread_count() {
+        unsigned stashed = requested_thread_count().load(std::memory_order_acquire);
+        return stashed != 0 ? stashed : std::max(1u, std::thread::hardware_concurrency());
+    }
+
   public:
     /// @internal
-    /// @brief Construct the pool with `threads` worker threads (default: hardware concurrency).
-    explicit ThreadPool(unsigned threads = std::max(1u, std::thread::hardware_concurrency()))
+    /// @brief Construct the pool with `threads` worker threads (default: the count
+    /// stashed by set_num_threads() if set, otherwise hardware concurrency).
+    explicit ThreadPool(unsigned threads = default_thread_count())
         : m_queues(threads), m_count(threads) {
         if (threads == 0)
             throw std::invalid_argument("ThreadPool: thread count must be > 0");
         start_workers();
     }
 
+    /// Joins all worker threads. When this `ThreadPool` is the process-global
+    /// Meyers singleton (see thread_pool()), this destructor runs during static
+    /// destruction at process exit.
+    ///
+    /// CAVEAT (static destruction order): any other static-storage-duration object
+    /// whose destructor dispatches parallel work (parallel_blocks, parallel_sequence,
+    /// parallel_task, submit_task, or anything that reaches enqueue_work) *after*
+    /// this destructor has already run will deadlock (blocking on workers that will
+    /// never wake) or crash (pushing into queues that are already shut down). This
+    /// is the standard C++ static-destruction-order problem — the relative
+    /// destruction order of unrelated statics across translation units is
+    /// unspecified, so this cannot be fixed locally. Do not dispatch parallel work
+    /// from any static (or function-local static) object's destructor.
     ~ThreadPool() noexcept {
         wait();
         for (auto &q : m_queues)
@@ -543,8 +594,17 @@ class ThreadPool {
 
 /// @brief Return the process-global thread pool (Meyers singleton, fixed address).
 ///
-/// Created lazily on first call, sized to `std::thread::hardware_concurrency()`.
-/// The returned reference is stable for the lifetime of the process.
+/// Created lazily on first call, sized to `std::thread::hardware_concurrency()` —
+/// unless `set_num_threads()` has already stashed a desired count (see
+/// `ThreadPool::requested_thread_count()`), in which case the pool is born at that
+/// size directly instead of constructing at the hardware default and immediately
+/// resizing. The returned reference is stable for the lifetime of the process.
+///
+/// CAVEAT (static destruction order): as a static-storage-duration singleton, this
+/// pool's destructor runs during static destruction at process exit and joins all
+/// worker threads. Any other static object whose destructor dispatches parallel
+/// work after this singleton has already been destroyed will deadlock or crash —
+/// see `ThreadPool`'s destructor doc for details.
 ThreadPool &thread_pool();
 
 /// @brief Set the number of threads used for parallel work.

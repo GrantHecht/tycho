@@ -183,43 +183,18 @@ template <class Derived> class PardisoImpl : public SparseSolverBase<Derived> {
         }
     }
 
+    // Sets `type_` and zeroes the PARDISO internal handle (`pt_`). Does NOT set any `iparm_`
+    // values: on the only in-tree path that constructs these classes (PSIOPT's `kkt_sol_`),
+    // `set_params()` (below) always runs before any analyze_pattern()/factorize()/compute()
+    // call and unconditionally assigns every `iparm_` index this class touches, so per-type
+    // defaults set here would be dead writes, overwritten before first use. If a future
+    // caller drives factorization without first calling `set_params()`, `iparm_` is left
+    // zero-initialized (see the `PardisoImpl` constructor); PARDISO interprets `iparm[0] == 0`
+    // as "use library default values for iparm[1..63]", which is well-defined but is NOT the
+    // same default set `pardiso_init` used to assign here -- such a caller should call
+    // `set_params()` explicitly.
     void pardiso_init(int type) {
         type_ = type;
-        bool symmetric = std::abs(type_) < 10;
-        iparm_[0] = 1;                  // No solver default
-        iparm_[1] = 3;                  // use Metis for the ordering
-        iparm_[2] = 0;                  // Reserved. Set to zero. (??Numbers of processors, value
-                                        // of OMP_NUM_THREADS??)
-        iparm_[3] = 0;                  // No iterative-direct algorithm
-        iparm_[4] = 0;                  // No user fill-in reducing permutation
-        iparm_[5] = 0;                  // Write solution into x, b is left unchanged
-        iparm_[6] = 0;                  // Not in use
-        iparm_[7] = 2;                  // Max numbers of iterative refinement steps
-        iparm_[8] = 0;                  // Not in use
-        iparm_[9] = 13;                 // Perturb the pivot elements with 1E-13
-        iparm_[10] = symmetric ? 0 : 1; // Use nonsymmetric permutation and scaling MPS
-        iparm_[11] = 0;                 // Not in use
-        iparm_[12] = symmetric ? 0 : 1; // Maximum weighted matching algorithm is
-                                        // switched-off (default for symmetric). Try
-                                        // iparm_[12] = 1 in case of inappropriate accuracy
-        iparm_[13] = 0;                 // Output: Number of perturbed pivots
-        iparm_[14] = 0;                 // Not in use
-        iparm_[15] = 0;                 // Not in use
-        iparm_[16] = 0;                 // Not in use
-        iparm_[17] = -1;                // Output: Number of nonzeros in the factor LU
-        iparm_[18] = -1;                // Output: Mflops for LU factorization
-        iparm_[19] = 0;                 // Output: Numbers of CG Iterations
-
-        iparm_[20] = 0; // 1x1 pivoting
-        iparm_[23] = 1; // Two level
-        // iparm_[24] = 1;  // Parsolve
-
-        iparm_[26] = 0; // No matrix checker
-        iparm_[27] = (sizeof(RealScalar) == 4) ? 1 : 0;
-        iparm_[34] = 1; // C indexing
-        iparm_[36] = 0; // CSR
-        iparm_[59] = 0; // 0 - In-Core ; 1 - Automatic switch between In-Core and
-                        // Out-of-Core modes ; 2 - Out-of-Core
 
         for (int i = 0; i < 64; i++)
             pt_[i] = 0;
@@ -642,8 +617,7 @@ class PardisoLDLT : public PardisoImpl<PardisoLDLT<MatrixType, Options>> {
     void set_params() {
         iparm_[0] = 1;           // No solver default
         iparm_[1] = ord_;        // use Metis for the ordering
-        iparm_[2] = 0;           // Reserved. Set to zero. (??Numbers of processors, value
-                                 // of OMP_NUM_THREADS??)
+        iparm_[2] = 0;           // Reserved by MKL PARDISO; must be set to zero.
         iparm_[3] = 0;           // No iterative-direct algorithm
         iparm_[4] = store_perm_; // No user fill-in reducing permutation
         iparm_[5] = 0;           // Write solution into x, b is left unchanged
@@ -666,7 +640,7 @@ class PardisoLDLT : public PardisoImpl<PardisoLDLT<MatrixType, Options>> {
 
         iparm_[20] = pivotstrat_; // 1x1 pivoting
         iparm_[23] = alg_;        // Two level
-        iparm_[24] = parsolve_;   // Two level
+        iparm_[24] = parsolve_;   // Parallel forward/backward solve
 
         iparm_[26] = 0; // No matrix checker
         iparm_[27] = (sizeof(RealScalar) == 4) ? 1 : 0;

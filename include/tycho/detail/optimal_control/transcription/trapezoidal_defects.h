@@ -103,7 +103,7 @@ struct TrapezoidalDefects
         for (int i = 0; i < this->input_rows(); i++) {
             for (int j = 0; j < this->input_rows(); j++) {
                 if (nz_locs_(i, j) == 1) {
-                    if (abs(hess(i, j)) == 0.0) {
+                    if (std::abs(hess(i, j)) == 0.0) {
                         nz_locs_(i, j) = 0;
                     }
                 }

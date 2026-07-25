@@ -253,8 +253,8 @@ struct NestedCallAndAppendChain2
         // xchain.setZero();
         // xchain.template head<Base::IRC>() = x;
 
-        auto Impl = [&](auto &xchain, auto &jx1, auto &gx1, auto &hx1, auto &jxi, auto &gxi,
-                        auto &hxi, auto &jx_o, auto &gx_o, auto &hx_o, auto &j0s) {
+        auto Impl = [&](auto &xchain, auto &jx1, auto &jxi, auto &gxi, auto &hxi, auto &jx_o,
+                        auto &gx_o, auto &hx_o, auto &j0s) {
             xchain.template head<Base::IRC>(this->input_rows()) = x;
             this->inner_func1_.compute(
                 x, xchain.template segment<InnerFunc1::ORC>(this->input_rows(),
@@ -327,7 +327,15 @@ struct NestedCallAndAppendChain2
                     tycho::utils::SZ_DIFF<FTtype::IRC, Base::IRC>::value; // FTtype::IRC - Base::IRC
                 const int ev = func_i.input_rows() - this->input_rows();
 
-                j0s.template middleRows<FTtype::ORC>(func_i.input_rows(), func_i.output_rows()) =
+                // .noalias(): the target row block [func_i.input_rows(),
+                // func_i.input_rows()+func_i.output_rows()) and the source row
+                // block read by the product below
+                // (j0s.middleRows<Ev>(this->input_rows(), ...)) are disjoint --
+                // the source always ends exactly where the target begins, since
+                // func_i.input_rows() only grows across the chain -- so no
+                // temporary is needed for the matrix product.
+                j0s.template middleRows<FTtype::ORC>(func_i.input_rows(), func_i.output_rows())
+                    .noalias() =
                     std::get<i.value>(jxi).template leftCols<Base::IRC>(this->input_rows()) +
                     std::get<i.value>(jxi).template rightCols<Ev>(func_i.input_rows() -
                                                                   this->input_rows()) *
@@ -403,16 +411,17 @@ struct NestedCallAndAppendChain2
             tycho::utils::TupleOfTempSpecs<typename InnerFuncs::template Hessian<Scalar>...>{
                 make_temp_tuple(his)};
 
+        // Note: no TempSpec for InnerFunc1's own Gradient/Hessian -- the
+        // inner_func1_ JGH call below writes directly into the output
+        // adjgrad_/adjhess_ accumulators, so a separate gx1/hx1 scratch
+        // buffer is never read (see the Impl lambda: only `jx1` and the
+        // per-stage jxi/gxi/hxi tuples are consumed).
         tycho::utils::BumpAllocator::allocate_run(
             Impl,
             tycho::utils::TempSpec<typename OuterFunc::template Input<Scalar>>(
                 this->outer_func_.input_rows(), 1),
             tycho::utils::TempSpec<typename InnerFunc1::template Jacobian<Scalar>>(
                 this->inner_func1_.output_rows(), this->inner_func1_.input_rows()),
-            tycho::utils::TempSpec<typename InnerFunc1::template Gradient<Scalar>>(
-                this->inner_func1_.input_rows(), 1),
-            tycho::utils::TempSpec<typename InnerFunc1::template Hessian<Scalar>>(
-                this->inner_func1_.input_rows(), this->inner_func1_.input_rows()),
             JITemps, GITemps, HITemps,
             tycho::utils::TempSpec<typename OuterFunc::template Jacobian<Scalar>>(
                 this->outer_func_.output_rows(), this->outer_func_.input_rows()),
@@ -817,7 +826,15 @@ struct NestedCallAndAppendChain
                 using FTtype = typename std::remove_const<
                     typename std::remove_reference<decltype(func_i)>::type>::type;
 
-                j0s.template middleRows<FTtype::ORC>(func_i.input_rows(), func_i.output_rows()) =
+                // .noalias(): the target row block [func_i.input_rows(),
+                // func_i.input_rows()+func_i.output_rows()) and the source row
+                // block read by the product below
+                // (j0s.middleRows<Ev>(this->input_rows(), ...)) are disjoint --
+                // the source always ends exactly where the target begins, since
+                // func_i.input_rows() only grows across the chain -- so no
+                // temporary is needed for the matrix product.
+                j0s.template middleRows<FTtype::ORC>(func_i.input_rows(), func_i.output_rows())
+                    .noalias() =
                     std::get<i.value>(jxi).template leftCols<Base::IRC>(this->input_rows()) +
                     std::get<i.value>(jxi).template rightCols<FTtype::IRC - Base::IRC>(
                         func_i.input_rows() - this->input_rows()) *

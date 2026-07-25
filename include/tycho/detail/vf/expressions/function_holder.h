@@ -60,6 +60,17 @@ struct FunctionHolder : VectorFunction<Derived, IR, OR, DenseDerivativeMode::Ana
         this->set_io_rows(this->func_.input_rows(), this->func_.output_rows());
         this->set_input_domain(this->input_rows(), {func_.input_domain()});
     }
+    /// @brief Runtime linearity, forwarded from the wrapped function.
+    ///
+    /// The CRTP base default (@ref ComputableBase::is_linear) only reports the
+    /// compile-time `is_linear_function` flag, which is `false` for any wrapped
+    /// type whose linearity is data-dependent (e.g. a type-erased
+    /// `GenericFunction` or a `DynamicStackedOutputs` of such functions).
+    /// Forwarding to the held instance's own runtime `is_linear()` lets a
+    /// FunctionHolder correctly report linearity in those cases instead of
+    /// silently under-reporting it.
+    /// @return `func_.is_linear()`.
+    [[nodiscard]] bool is_linear() const { return this->func_.is_linear(); }
     /// @brief Evaluate the wrapped function: `fx = func_(x)`.
     /// @tparam InType   Concrete Eigen input expression type.
     /// @tparam OutType  Concrete Eigen output buffer type.

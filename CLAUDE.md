@@ -43,9 +43,11 @@ include/                Public C++ API headers
     solvers.h           Solvers umbrella
     astro.h             Astrodynamics umbrella
     detail/             Template implementation bodies (included automatically)
-      utils/            Threading, math helpers, type utilities, CRTP base
+      utils/            Threading, math helpers, type utilities
       typedefs/         Eigen type aliases
-      vf/               VectorFunction implementation (core/, expressions/, operators/,
+      vf/               VectorFunction implementation (core/ — incl. the CRTP base,
+                          ComputableBase/DenseFunctionBase in core/computable_base.h
+                          and core/dense_function_base.h — expressions/, operators/,
                           derivatives/, scaling/, type_erasure/, common/)
       integrators/      RK steppers and coefficients
       optimal_control/  Phase/ODE transcription (core/, phase/, transcription/,
@@ -661,6 +663,10 @@ red/green.
   link/ODR/binding/integration issues and build-flag-gated paths (Enzyme,
   SuperScalar) still need the real build. Always run the full `ninja all` +
   `ctest` before committing a change to a core header.
+- A probe that includes the `tycho/tycho.h` umbrella must also pass
+  `-DEIGEN_INITIALIZE_MATRICES_BY_ZERO` on the command line — `tycho.h` has a
+  `#error` guard enforcing it. Probes that only include `tycho/vector_functions.h`
+  (the common case above) are unaffected.
 
 ### Python examples (integration tests)
 

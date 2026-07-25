@@ -307,16 +307,20 @@ scalar VectorFunction suitable for use in an optimal-control problem.  Derivativ
 are evaluated analytically.
 
 Available interpolation kinds: ``"cubic"`` (default, bicubic) and ``"linear"``
-(bilinear).
+(bilinear).  The ``cache`` option pre-computes and stores the per-cell bicubic
+coefficient matrices to accelerate repeated evaluations; it defaults to
+``True`` since a 2-D cell's coefficient matrix is small (128 B) and the cell
+count grows only as O(Nx*Ny).
 )doc");
 
     obj.def(
         "__init__",
         [](InterpTable2D *self, const Eigen::VectorXd &xs, const Eigen::VectorXd &ys,
-           const MatType &z, const std::string &kind) {
-            new (self) InterpTable2D(xs, ys, z, parse_interp_type(kind));
+           const MatType &z, const std::string &kind, bool cache) {
+            new (self) InterpTable2D(xs, ys, z, parse_interp_type(kind), cache);
         },
         nb::arg("xs"), nb::arg("ys"), nb::arg("z"), nb::arg("kind") = std::string("cubic"),
+        nb::arg("cache") = true,
         R"doc(Construct a 2-D interpolation table.
 
 Parameters
@@ -331,12 +335,19 @@ z : array_like, shape (Ny, Nx)
     Scalar values on the ``(xs, ys)`` grid in row-major order.
 kind : str, optional
     Interpolation method: ``"cubic"`` (default) or ``"linear"``.
+cache : bool, optional
+    If ``True`` (default), pre-compute and cache all per-cell bicubic
+    coefficient matrices at construction time.  Speeds up repeated queries
+    at a modest memory cost (128 B per grid cell).  Pass ``False`` to opt
+    out for very large or memory-constrained tables.
 )doc");
 
     // InterpType-enum overload — same semantics as the string overload above.
     obj.def(
-        nb::init<const Eigen::VectorXd &, const Eigen::VectorXd &, const MatType &, InterpType>(),
-        nb::arg("xs"), nb::arg("ys"), nb::arg("z"), nb::arg("kind") = InterpType::Cubic);
+        nb::init<const Eigen::VectorXd &, const Eigen::VectorXd &, const MatType &, InterpType,
+                 bool>(),
+        nb::arg("xs"), nb::arg("ys"), nb::arg("z"), nb::arg("kind") = InterpType::Cubic,
+        nb::arg("cache") = true);
 
     obj.def("interp", nb::overload_cast<double, double>(&InterpTable2D::interp, nb::const_),
             nb::arg("x"), nb::arg("y"),

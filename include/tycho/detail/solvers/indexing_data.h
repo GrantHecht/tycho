@@ -34,6 +34,8 @@
 #include <Eigen/Geometry>
 #include <Eigen/Sparse>
 
+#include <fmt/format.h>
+
 #include "tycho/detail/typedefs/eigen_types.h"
 #include "tycho/detail/utils/flat_map.h"
 #include "tycho/detail/utils/function_return_type.h"
@@ -46,6 +48,22 @@
 #include "tycho/detail/utils/type_storage.h"
 
 namespace tycho::solvers {
+
+/// @brief Canonical KKT lock column for the physical slot coupling global indices
+/// @p a and @p b: the smaller of the two.
+///
+/// The KKT sparsity routine (NonLinearProgram::analyze_sparsity) canonicalizes every
+/// element to the lower triangle (col <= row) and stores its value offset under the
+/// SMALLER endpoint, so both mirror orderings of a symmetric Hessian pair collapse to
+/// one physical double filed under min(a, b). Any two writers of that double are only
+/// serialized if they take the same mutex, so every KKT scatter site
+/// (DenseFunctionBase::kkt_fill_all / kkt_fill_hess) keys its per-element lock on this
+/// function, and NonLinearProgram::get_mat_space marks contested columns (and sizes
+/// kkt_locks_) with this same function. Because all claimants of a slot derive their
+/// lock column from this single shared keying, cross-partition agreement is structural
+/// -- there is no per-site convention that can drift. Do NOT introduce a second keying
+/// convention at any of those sites.
+inline constexpr int kkt_canonical_lock_col(int a, int b) { return (a < b) ? a : b; }
 
 struct SolverIndexingData {
     using MatrixXi = Eigen::MatrixXi;
@@ -134,6 +152,10 @@ struct SolverIndexingData {
     }
 
     std::vector<SolverIndexingData> thread_split(int Threads) const {
+        if (Threads <= 0)
+            throw std::invalid_argument(
+                fmt::format("thread_split: Threads must be positive, got {}", Threads));
+
         std::vector<SolverIndexingData> split;
         split.reserve(Threads);
 
@@ -165,6 +187,11 @@ struct SolverIndexingData {
     }
 
     void set_v_index(const MatrixXi &vt) {
+        if (vt.rows() != this->input_size_)
+            throw std::invalid_argument(
+                fmt::format("SolverIndexingData::set_v_index: expected {} rows (input_size_), "
+                            "got {}",
+                            this->input_size_, vt.rows()));
         this->v_index_ = vt;
         this->vindex_init_ = true;
         this->num_funcappl_ = this->v_index_.cols();
@@ -174,6 +201,11 @@ struct SolverIndexingData {
         }
     }
     void set_c_index(const MatrixXi &ct) {
+        if (ct.rows() != this->output_size_)
+            throw std::invalid_argument(
+                fmt::format("SolverIndexingData::set_c_index: expected {} rows (output_size_), "
+                            "got {}",
+                            this->output_size_, ct.rows()));
         this->c_index_ = ct;
         this->c_index_continuity_.resize(this->c_index_.cols());
         this->cindex_init_ = true;

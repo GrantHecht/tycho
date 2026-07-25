@@ -276,6 +276,15 @@ template <class... T> struct TupleOfTempSpecs {
     /// @internal @brief Scalar type of the first element.
     using Scalar =
         typename std::remove_cvref_t<decltype(std::get<0>(std::tuple<T...>()))>::Scalar;
+    // count_blocksize_aligned sizes each element in units of that element's own
+    // Scalar, while make_temps computes every offset in units of the first
+    // element's Scalar — a tuple mixing e.g. `double` and `DefaultSuperScalar`
+    // elements would therefore compute overlapping/overrunning offsets and
+    // silently corrupt memory. No current instantiation mixes scalars; this
+    // guard turns a latent miscompute into a compile error if one ever does.
+    static_assert((... && std::is_same_v<typename T::Scalar, Scalar>),
+                  "TupleOfTempSpecs: all elements must share the same Scalar type — "
+                  "mixed-scalar tuples compute misaligned offsets and corrupt memory");
     using ExactTempType = std::tuple<T...>; ///< @internal Exact `std::tuple` type to instantiate.
 
     /// @internal @brief True when all elements have compile-time dimensions.
@@ -299,7 +308,8 @@ template <class... T> struct TupleOfTempSpecs {
 /// are placed on the real stack with zero arena overhead.
 ///
 /// Call `resize()` at startup to pre-size the per-thread arenas and avoid reallocation
-/// during hot-path evaluation.
+/// during hot-path evaluation. Resizes only the calling thread's arenas; thread-pool
+/// workers are unaffected and warm up independently via high-water learning.
 struct BumpAllocator {
     using ScalarStackType = detail::BumpStack<double>;         ///< @internal Scalar arena type.
     /// @internal @brief SuperScalar arena type.
@@ -353,6 +363,9 @@ struct BumpAllocator {
         if constexpr (std::is_same_v<Scalar, double>) {
             return BumpAllocator::ScalarStack;
         } else {
+            static_assert(std::is_same_v<Scalar, tycho::DefaultSuperScalar>,
+                          "get_stack: unsupported Scalar — only double and the default "
+                          "SuperScalar have arenas");
             return BumpAllocator::SuperScalarStack;
         }
     }

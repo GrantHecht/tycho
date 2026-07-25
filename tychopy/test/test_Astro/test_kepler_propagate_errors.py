@@ -110,24 +110,71 @@ class TestKeplerPropagateErrors(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"propagate_modified.*mu"):
             typy.astro.propagate_modified(mee, 100.0, 0.0)
 
-    # ----- classic_to_cartesian (elliptic non-convergence -> RuntimeError) -----
+    # ----- classic_to_cartesian / classic_to_modified -----
+    # (elliptic near-parabolic anomaly solve: Markley hybrid seed vs.
+    # genuinely degenerate input -> RuntimeError)
 
-    def test_classic_to_cartesian_divergent_raises(self):
-        # OC 1.14 completion: the elliptic-anomaly Newton solve now NaN-poisons
-        # its output on non-convergence, and the binding translates the
-        # non-finite result to RuntimeError (parity with the propagate_*
-        # siblings).  Probed divergent input: near-parabolic e = 1 - 1e-9
-        # sampled near periapsis (M = 1e-8), where the E = M seed leaves the
-        # Newton basin and MAXITERS_ELLIPTIC = 17 (raised from 15 to retain a
-        # knife-edge band of near-convergent inputs -- this one is genuinely
-        # divergent and re-verified to still poison at 17) is exhausted.
-        oe = [1.0e5, 1.0 - 1e-9, 0.1, 0.1, 0.1, 1e-8]
+    def test_classic_to_cartesian_near_parabolic_converges(self):
+        # perf/review-8a: the Markley-cubic-starter threshold hybrid seed
+        # (used above e = 0.9) closes the near-parabolic divergence band that
+        # the old E = M seed left open. These three cells -- mirroring the
+        # C++ twin ``KeplerEdgeCases.EllipticNearParabolicNowConverges`` in
+        # tests/cpp/astro/test_kepler_edge_cases.cpp -- were the probe's
+        # confirmed gain set (converged-new, divergent-old); the headline
+        # case (e = 1 - 1e-9, M = 1e-8) is the former
+        # ``EllipticNonConvergencePoisonsOutput`` control input. This test
+        # used to assert RuntimeError here; it now asserts success plus a
+        # round-trip check that the Newton solve landed on the true root
+        # (not merely produced *some* finite state).
+        cells = [(1.0 - 1e-9, 1e-8), (1.0 - 1e-9, 0.12), (0.99, 0.105)]
+        for e, m in cells:
+            oe = [1.0e5, e, 0.1, 0.1, 0.1, m]
+            rv = typy.astro.classic_to_cartesian(oe, 398600.4418)
+            self.assertTrue(
+                np.all(np.isfinite(rv)),
+                msg=f"classic_to_cartesian non-finite at e={e}, M={m}",
+            )
+            # Independent correctness check, mirroring the C++ twin:
+            # modified_to_classic recomputes M via the closed-form
+            # (Newton-free) arctan relation, so recovering the input M
+            # confirms the Newton-solved E landed on the true root.
+            mee = typy.astro.classic_to_modified(oe, 398600.4418)
+            oe2 = typy.astro.modified_to_classic(mee, 398600.4418)
+            d_m = (oe2[5] - m + math.pi) % (2.0 * math.pi) - math.pi
+            self.assertAlmostEqual(
+                d_m,
+                0.0,
+                delta=1e-6,
+                msg=f"recovered mean anomaly wrong at e={e}, M={m}",
+            )
+
+    def test_classic_to_modified_near_parabolic_converges(self):
+        # Same three cells through the classic_to_modified sibling.
+        cells = [(1.0 - 1e-9, 1e-8), (1.0 - 1e-9, 0.12), (0.99, 0.105)]
+        for e, m in cells:
+            oe = [1.0e5, e, 0.1, 0.1, 0.1, m]
+            mee = typy.astro.classic_to_modified(oe, 398600.4418)
+            self.assertTrue(
+                np.all(np.isfinite(mee)),
+                msg=f"classic_to_modified non-finite at e={e}, M={m}",
+            )
+
+    def test_classic_to_cartesian_degenerate_input_raises(self):
+        # Raise-path coverage is preserved: a non-finite mean anomaly (NaN M)
+        # can never satisfy the Newton step-convergence test, so
+        # MAXITERS_ELLIPTIC is still exhausted and the whole output is
+        # NaN-poisoned -- mirroring the C++ twin
+        # ``KeplerEdgeCases.EllipticDegenerateInputPoisonsOutput``. This
+        # documents that the poison -> allFinite -> ValueError/RuntimeError
+        # chain at the binding is retained and still fires.
+        oe = [1.0e5, 0.5, 0.1, 0.1, 0.1, math.nan]
         with self.assertRaisesRegex(RuntimeError, r"classic_to_cartesian.*converge"):
             typy.astro.classic_to_cartesian(oe, 398600.4418)
 
-    def test_classic_to_modified_divergent_raises(self):
-        # Same divergent input through the classic_to_modified sibling.
-        oe = [1.0e5, 1.0 - 1e-9, 0.1, 0.1, 0.1, 1e-8]
+    def test_classic_to_modified_degenerate_input_raises(self):
+        # Same degenerate (NaN M) input through the classic_to_modified
+        # sibling.
+        oe = [1.0e5, 0.5, 0.1, 0.1, 0.1, math.nan]
         with self.assertRaisesRegex(RuntimeError, r"classic_to_modified.*converge"):
             typy.astro.classic_to_modified(oe, 398600.4418)
 

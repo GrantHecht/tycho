@@ -108,14 +108,18 @@ class VarRegistry {
             throw std::invalid_argument(fmt::format(
                 "VarRegistry::add_group: member list for '{}' must not be empty", name));
         }
+        // resolve() once per member, not twice (see resolve_impl()'s identical
+        // fix below) -- collect the per-member index vectors, then concatenate.
+        std::vector<Eigen::VectorXi> resolved;
         int total = 0;
-        for (const auto &m : members)
-            total += resolve(m).size();
+        for (const auto &m : members) {
+            resolved.push_back(resolve(m));
+            total += resolved.back().size();
+        }
 
         Eigen::VectorXi idx(total);
         int pos = 0;
-        for (const auto &m : members) {
-            auto sub = resolve(m);
+        for (const auto &sub : resolved) {
             for (int i = 0; i < sub.size(); ++i)
                 idx[pos++] = sub[i];
         }
@@ -253,14 +257,18 @@ class VarRegistry {
     std::unordered_map<std::string, Eigen::VectorXi> map_;
 
     template <typename Range> Eigen::VectorXi resolve_impl(const Range &names) const {
+        // resolve() once per name (a map_.find() + throw-on-miss check),
+        // not twice -- collect the per-name index vectors, then concatenate.
+        std::vector<Eigen::VectorXi> resolved;
         int total = 0;
-        for (const auto &n : names)
-            total += resolve(n).size();
+        for (const auto &n : names) {
+            resolved.push_back(resolve(n));
+            total += resolved.back().size();
+        }
 
         Eigen::VectorXi idx(total);
         int pos = 0;
-        for (const auto &n : names) {
-            auto sub = resolve(n);
+        for (const auto &sub : resolved) {
             for (int i = 0; i < sub.size(); ++i)
                 idx[pos++] = sub[i];
         }

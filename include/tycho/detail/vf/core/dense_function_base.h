@@ -62,6 +62,7 @@ namespace tycho::vf {
 /// @tparam IR       Input rows at compile time (`-1` for dynamic).
 /// @tparam OR       Output rows at compile time (`-1` for dynamic).
 /// @ingroup vf
+// Canonical CRTP hook inventory: see computable_base.h ("Canonical CRTP hook inventory").
 template <class Derived, int IR, int OR>
 struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
     /// @brief Immediate base class supplying the evaluation interface.
@@ -552,8 +553,13 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
                         for (int k = 0; k < ORR; k++)
                             jx(k, j)[i] = jx_r(k, j);
 
-                    fx_r.setZero();
-                    jx_r.setZero();
+                    // See computable_base.h::compute's identical comment: only
+                    // the NEXT lane needs fx_r/jx_r re-zeroed; skip on the
+                    // final lane where they are dead.
+                    if (i + 1 < Scalar::SizeAtCompileTime) {
+                        fx_r.setZero();
+                        jx_r.setZero();
+                    }
                 }
 
             } else {
@@ -751,10 +757,15 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
                         for (int k = 0; k < IRR; k++)
                             adjhess(k, j)[i] = hx_r(k, j);
 
-                    fx_r.setZero();
-                    jx_r.setZero();
-                    gx_r.setZero();
-                    hx_r.setZero();
+                    // See computable_base.h::compute's identical comment: only
+                    // the NEXT lane needs these re-zeroed; skip on the final
+                    // lane where they are dead.
+                    if (i + 1 < Scalar::SizeAtCompileTime) {
+                        fx_r.setZero();
+                        jx_r.setZero();
+                        gx_r.setZero();
+                        hx_r.setZero();
+                    }
                 }
 
             } else {
@@ -1766,8 +1777,15 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
   protected:
     /// @brief Scatter a scalar function's Hessian into the KKT matrix (objective path).
     /// @internal
-    /// Locks each variable's column (per the clash table), accumulates the lower
-    /// triangle of @p hx into the KKT value array, and unlocks. `OR == 1` only.
+    /// Accumulates the lower triangle of @p hx into the KKT value array under the
+    /// canonical-column lock protocol: each element (j, i) locks the mutex of
+    /// `tycho::solvers::kkt_canonical_lock_col(v_loc(j), v_loc(i))` -- the same
+    /// keying used by `kkt_fill_all` and by `get_mat_space`'s clash detection --
+    /// via a single-held-lock hand-off (see the comment in `kkt_fill_all`).
+    /// Objective and constraint scatters for different partitions run concurrently
+    /// into the same KKT matrix (`eval_kkt`), so an objective Hessian term and a
+    /// constraint Hessian term coupling the same primal pair must resolve to the
+    /// same mutex; the shared keying makes that structural. `OR == 1` only.
     ///
     /// @param Apl         Application index.
     /// @param hx          Local Hessian for this application.
@@ -1801,16 +1819,32 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
                 ClashLocks[VarClashes[var]].unlock();
             }
         };
+        // Same single-held-lock hand-off as kkt_fill_all: release before acquire, at most
+        // one lock held at any instant (no hold-and-wait -> deadlock-free).
+        auto Relock = [&](int cur, int want) {
+            if (want != cur) {
+                if (cur != -1)
+                    UnLock(cur);
+                Lock(want);
+            }
+            return want;
+        };
 
         const int IRR = (IR > 0) ? IR : this->input_rows();
 
         for (int i = 0; i < IRR; i++) {
             ActiveVar = data.v_loc(i, Apl);
-            Lock(ActiveVar);
-            for (int j = i; j < IRR; j++) {
-                this->derived().add_hessian_elem(hx(j, i), j, i, mpt, lpt, freeloc);
+            int held = -1;
+            if constexpr (!LinearVF<Derived>) {
+                for (int j = i; j < IRR; j++) {
+                    const int lockcol =
+                        tycho::solvers::kkt_canonical_lock_col(data.v_loc(j, Apl), ActiveVar);
+                    held = Relock(held, lockcol);
+                    this->derived().add_hessian_elem(hx(j, i), j, i, mpt, lpt, freeloc);
+                }
             }
-            UnLock(ActiveVar);
+            if (held != -1)
+                UnLock(held);
         }
     }
 
@@ -1864,8 +1898,10 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
     /// @brief Scatter both Jacobian and Hessian of one application into the KKT matrix.
     /// @internal
     /// Per input column, symmetrically inserts the Hessian column then the
-    /// Jacobian column under the per-variable lock protocol; lock granularity
-    /// depends on whether the constraints are unique.
+    /// Jacobian column under the canonical-column lock protocol (each Hessian
+    /// element keyed on `tycho::solvers::kkt_canonical_lock_col`; see the comment
+    /// in the body); the Jacobian column is unlocked when the constraint rows are
+    /// unique to this application.
     ///
     /// @tparam JacType   Eigen matrix type of the local Jacobian @p jx.
     /// @tparam HessType  Eigen matrix type of the local Hessian @p hx.
@@ -1891,6 +1927,32 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
         const int IRR = (Base::IRC > 0) ? Base::IRC : this->input_rows();
         const int ORR = (Base::ORC > 0) ? Base::ORC : this->output_rows();
 
+        // Canonical-column lock protocol (load-bearing; see kkt_canonical_lock_col in
+        // indexing_data.h and NonLinearProgram::get_mat_space). A Hessian element couples the
+        // two *global* variables (v_loc(j), v_loc(i)); the sparsity routine stores the
+        // physical KKT slot it writes under the SMALLER of the two endpoints, min(row, col)
+        // (analyze_sparsity keeps the lower triangle: col <= row, value offset
+        // outerIndexPtr()[col]). Locking the outer variable v_loc(i) alone -- as this scatter
+        // historically did -- is unsafe: when v_loc(j) < v_loc(i) the symmetric partner in
+        // another partition iterates the pair in the opposite local order and would lock the
+        // *other* endpoint, so the two claimants of one physical double take different mutexes
+        // and their non-atomic += race. The fix: every element locks its slot's canonical
+        // column via the ONE shared keying function tycho::solvers::kkt_canonical_lock_col,
+        // used identically by kkt_fill_hess (the objective Hessian scatter, which runs
+        // concurrently with this one in eval_kkt) and by get_mat_space's clash detection --
+        // so all claimants of a slot agree on the mutex BY CONSTRUCTION; there is no per-site
+        // convention that can drift. For the Jacobian block the row is a constraint row,
+        // which sorts above every variable column, so its canonical column is always
+        // ActiveVar == v_loc(i) -- unchanged from before.
+        //
+        // Writes within one partition need no mutual exclusion (each partition's scatter runs
+        // serially on one thread; single-partition problems take no locks at all -- `Lock` is
+        // a no-op for uncontested columns), so two elements of the SAME partition may still
+        // touch a slot under different canonical columns; that is serialized by the partition
+        // thread itself. At most ONE lock is held at any instant (a mirror element hands the
+        // lock from ActiveVar over to the smaller column and back), so the protocol is
+        // deadlock-free. Consecutive writes that share a canonical column reuse the held lock,
+        // so the common already-ordered case still costs exactly one lock per column.
         auto Lock = [&](int var) {
             if (VarClashes[var] == -1) {
                 //// uncontested
@@ -1910,23 +1972,48 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
 
         const bool uniquecon = data.unique_constraints_;
 
-        // bool uc = data.unique_constraints_;
+        // Hand the single held lock from column `cur` to column `want`, coalescing runs of
+        // writes that share a canonical column. Returns the now-held column. `cur == -1`
+        // means no lock is held; the held lock is released BEFORE the next is acquired, so a
+        // thread never holds two locks at once (no hold-and-wait -> deadlock-free).
+        auto Relock = [&](int cur, int want) {
+            if (want != cur) {
+                if (cur != -1)
+                    UnLock(cur);
+                Lock(want);
+            }
+            return want;
+        };
+
         for (int i = 0; i < IRR; i++) {
             ActiveVar = data.v_loc(i, Apl);
-            Lock(ActiveVar);
-            ///// insert hessian column symetrically
-            for (int j = i; j < IRR; j++) {
-                this->derived().add_hessian_elem(hx(j, i), j, i, mpt, lpt, freeloc);
+            int held = -1;
+            ///// insert hessian column symetrically -- each element under its canonical
+            ///// (min-endpoint) lock column min(v_loc(j), v_loc(i))
+            if constexpr (!LinearVF<Derived>) {
+                for (int j = i; j < IRR; j++) {
+                    const int lockcol =
+                        tycho::solvers::kkt_canonical_lock_col(data.v_loc(j, Apl), ActiveVar);
+                    held = Relock(held, lockcol);
+                    this->derived().add_hessian_elem(hx(j, i), j, i, mpt, lpt, freeloc);
+                }
             }
-            if (uniquecon)
-                UnLock(ActiveVar);
-            ///// insert jacobian column
+            ///// insert jacobian column -- canonical lock column is always ActiveVar
+            ///// (constraint rows sort above every variable column); unlocked when the
+            ///// constraint rows are unique to this application (no cross-partition clash)
+            if (uniquecon) {
+                if (held != -1)
+                    UnLock(held);
+                held = -1;
+            } else {
+                held = Relock(held, ActiveVar);
+            }
             for (int j = 0; j < ORR; j++) {
                 this->derived().add_jacobian_elem(jx(j, i), j, i, mpt, lpt, freeloc);
             }
             ///////////////////////////////////////////////////////////////////////////////
-            if (!uniquecon)
-                UnLock(ActiveVar);
+            if (held != -1)
+                UnLock(held);
         }
     }
 

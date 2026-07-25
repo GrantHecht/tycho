@@ -97,15 +97,11 @@ struct IOScaled
         VecRef<OutType> fx = fx_.const_cast_derived();
 
         auto Impl = [&](auto &x_scaled) {
-            for (int i = 0; i < this->input_rows(); i++) {
-                x_scaled[i] = this->input_scales[i] * x[i];
-            }
+            x_scaled = this->input_scales.template cast<Scalar>().cwiseProduct(x);
 
             this->func_.compute(x_scaled, fx);
 
-            for (int i = 0; i < this->output_rows(); i++) {
-                fx[i] *= this->output_scales[i];
-            }
+            fx = fx.cwiseProduct(this->output_scales.template cast<Scalar>());
         };
 
         tycho::utils::BumpAllocator::allocate_run(
@@ -132,19 +128,13 @@ struct IOScaled
         MatRef<JacType> jx = jx_.const_cast_derived();
 
         auto Impl = [&](auto &x_scaled) {
-            for (int i = 0; i < this->input_rows(); i++) {
-                x_scaled[i] = this->input_scales[i] * x[i];
-            }
+            x_scaled = this->input_scales.template cast<Scalar>().cwiseProduct(x);
 
             this->func_.compute_jacobian(x_scaled, fx, jx);
 
-            for (int i = 0; i < this->output_rows(); i++) {
-                fx[i] *= this->output_scales[i];
-                jx.row(i) *= Scalar(this->output_scales[i]);
-            }
-            for (int i = 0; i < this->input_rows(); i++) {
-                jx.col(i) *= Scalar(this->input_scales[i]);
-            }
+            fx = fx.cwiseProduct(this->output_scales.template cast<Scalar>());
+            jx.array().colwise() *= this->output_scales.template cast<Scalar>().array();
+            jx.array().rowwise() *= this->input_scales.transpose().template cast<Scalar>().array();
         };
 
         tycho::utils::BumpAllocator::allocate_run(
@@ -183,28 +173,21 @@ struct IOScaled
         MatRef<AdjHessType> adjhess = adjhess_.const_cast_derived();
 
         auto Impl = [&](auto &x_scaled, auto &l_scaled) {
-            for (int i = 0; i < this->input_rows(); i++) {
-                x_scaled[i] = this->input_scales[i] * x[i];
-            }
-            for (int i = 0; i < this->output_rows(); i++) {
-                l_scaled[i] = this->output_scales[i] * adjvars[i];
-            }
+            x_scaled = this->input_scales.template cast<Scalar>().cwiseProduct(x);
+            l_scaled = this->output_scales.template cast<Scalar>().cwiseProduct(adjvars);
+
             this->func_.compute_jacobian_adjointgradient_adjointhessian(x_scaled, fx, jx, adjgrad,
                                                                         adjhess, l_scaled);
 
-            for (int i = 0; i < this->output_rows(); i++) {
-                fx[i] *= this->output_scales[i];
-                jx.row(i) *= Scalar(this->output_scales[i]);
-            }
-            for (int i = 0; i < this->input_rows(); i++) {
-                jx.col(i) *= Scalar(this->input_scales[i]);
-                adjhess.col(i) *= Scalar(this->input_scales[i]);
-                adjgrad[i] *= this->input_scales[i];
-            }
+            fx = fx.cwiseProduct(this->output_scales.template cast<Scalar>());
+            jx.array().colwise() *= this->output_scales.template cast<Scalar>().array();
 
-            for (int i = 0; i < this->input_rows(); i++) {
-                adjhess.row(i) *= Scalar(this->input_scales[i]);
-            }
+            jx.array().rowwise() *= this->input_scales.transpose().template cast<Scalar>().array();
+            adjhess.array().rowwise() *=
+                this->input_scales.transpose().template cast<Scalar>().array();
+            adjgrad = adjgrad.cwiseProduct(this->input_scales.template cast<Scalar>());
+
+            adjhess.array().colwise() *= this->input_scales.template cast<Scalar>().array();
         };
 
         tycho::utils::BumpAllocator::allocate_run(

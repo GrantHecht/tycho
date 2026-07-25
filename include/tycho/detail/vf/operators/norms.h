@@ -143,6 +143,7 @@ struct IntegralNorm_Impl : VectorFunction<Derived, USZ, 1> {
     /// @return @f$n^{Power}@f$.
     /// @endinternal
     template <class Scalar> inline Scalar calc_pow_n(Scalar n) const {
+        using std::pow;
         Scalar pow_n;
         if constexpr (power == 1)
             pow_n = n;
@@ -177,7 +178,6 @@ struct IntegralNorm_Impl : VectorFunction<Derived, USZ, 1> {
                              Eigen::MatrixBase<OutType> const &fx_) const {
         typedef typename InType::Scalar Scalar;
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
-        // using std::pow;
         using std::sqrt;
         Scalar n;
         if constexpr (std::is_same<Scalar, DefaultSuperScalar>::value) {
@@ -206,7 +206,6 @@ struct IntegralNorm_Impl : VectorFunction<Derived, USZ, 1> {
         typedef typename InType::Scalar Scalar;
         Eigen::MatrixBase<JacType> &jx = jx_.const_cast_derived();
         Eigen::MatrixBase<OutType> &fx = fx_.const_cast_derived();
-        // using std::pow;
 
         using std::sqrt;
         Scalar n;

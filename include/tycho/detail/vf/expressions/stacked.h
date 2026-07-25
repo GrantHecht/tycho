@@ -518,6 +518,7 @@ struct DynamicStackedOutputs : VectorFunction<DynamicStackedOutputs<Func>, Func:
 
         std::vector<DomainMatrix> dmn;
 
+        this->_linear = true;
         for (auto &func : this->funcs) {
             ortemp += func.output_rows();
             dmn.push_back(func.input_domain());

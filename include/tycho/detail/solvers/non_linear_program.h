@@ -250,7 +250,9 @@ struct NonLinearProgram {
     void set_primal_diags(double val) { this->primal_diag_coeffs().setConstant(val); }
     void set_slack_diags(const Eigen::VectorXd &sdiags) { this->slack_diag_coeffs() = sdiags; }
     void set_slack_diags(double val) { this->slack_diag_coeffs().setConstant(val); }
+    void set_e_pivots(const Eigen::VectorXd &epivs) { this->e_pivot_coeffs() = epivs; }
     void set_e_pivots(double val) { this->e_pivot_coeffs().setConstant(val); }
+    void set_i_pivots(const Eigen::VectorXd &ipivs) { this->i_pivot_coeffs() = ipivs; }
     void set_i_pivots(double val) { this->i_pivot_coeffs().setConstant(val); }
     void set_slacks_ones() { this->slack_coeffs().setConstant(1.0); }
 
@@ -348,6 +350,20 @@ struct NonLinearProgram {
             target[sourcelocs[i]] += source[i];
         }
     }
+
+    /// <summary>
+    /// Per-partition objective/value accumulator scratch, shared across
+    /// eval_rhs/eval_ogc/eval_occ/eval_obj/eval_kkt/eval_aug. Each of those
+    /// entry points is only ever invoked serially on this NLP instance -- a
+    /// single NLP is inside at most one alg_impl call at a time (PSIOPT's
+    /// outer control loop is single-threaded; the only concurrency is the
+    /// parallel_sequence dispatch *within* one call, which writes disjoint
+    /// vals_scratch_[thrnum] entries, exactly as the old per-call local
+    /// `Vals` vector did). Resized in place (assign() re-zeros without a
+    /// realloc once sized to num_partitions_).
+    /// </summary>
+    std::vector<double> vals_scratch_;
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

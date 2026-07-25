@@ -1425,7 +1425,6 @@ include/tycho/detail/vf/
         dense_function_operations.h  right_jacobian_product implementations
         dense_function_specs.h    Concepts for compute/jacobian interfaces
         expression_fwd_declarations.h  forward declarations for expression types
-        function_templates.h      CRTP helper templates
         function_type_def_macros.h    VF_TYPE_ALIASES and related macros
         object_detectors.h        Is_VectorFunction, Is_DenseFunction traits
         sparse_function_base.h    SparseFunctionBase (solver-interface layer)

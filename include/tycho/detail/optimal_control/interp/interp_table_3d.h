@@ -84,7 +84,6 @@ struct InterpTable3D {
     int zsize_;                ///< Number of Z grid nodes.
     double ztotal_;            ///< Total Z span.
     bool cache_alpha_ = false; ///< Whether per-cell tricubic coefficients are precomputed.
-    int cache_threads_ = 1;    ///< Threads used to populate the coefficient cache.
 
     /// @brief Default constructor; produces an empty table.
     InterpTable3D() {}
@@ -168,13 +167,13 @@ struct InterpTable3D {
         double yerr = (ys_ - testy).lpNorm<Eigen::Infinity>();
         double zerr = (zs_ - testz).lpNorm<Eigen::Infinity>();
 
-        if (xerr > abs(xtotal_) * 1.0e-12) {
+        if (xerr > std::abs(xtotal_) * 1.0e-12) {
             this->xeven_ = false;
         }
-        if (yerr > abs(ytotal_) * 1.0e-12) {
+        if (yerr > std::abs(ytotal_) * 1.0e-12) {
             this->yeven_ = false;
         }
-        if (zerr > abs(ztotal_) * 1.0e-12) {
+        if (zerr > std::abs(ztotal_) * 1.0e-12) {
             this->zeven_ = false;
         }
 

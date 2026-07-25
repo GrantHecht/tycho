@@ -93,6 +93,7 @@ struct NormalizedPower_Impl : VectorFunction<Derived, IR, IR> {
     /// @return @f$n^{PW}@f$.
     /// @endinternal
     template <class Scalar> inline Scalar calc_pow_n(Scalar n) const {
+        using std::pow;
         Scalar pow_n;
         if constexpr (power == 1)
             pow_n = n;

@@ -68,12 +68,12 @@ int tycho::utils::get_core_count() {
             DWORD size = 0;
             GetLogicalProcessorInformation(NULL, &size);
             if (ERROR_INSUFFICIENT_BUFFER != GetLastError())
-                return 0;
+                return tcount;
             const size_t Elements = size / sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION);
 
             std::vector<SYSTEM_LOGICAL_PROCESSOR_INFORMATION> buffer(Elements);
             if (GetLogicalProcessorInformation(&buffer.front(), &size) == FALSE)
-                return 0;
+                return tcount;
 
             for (size_t i = 0; i < Elements; ++i) {
                 if (buffer[i].Relationship == RelationProcessorCore)
@@ -159,6 +159,7 @@ int tycho::utils::get_core_count() {
 #endif
 
     int ccount = std::max<int>(1, Run());
-    ccount = std::min<int>(tcount, ccount);
-    return ccount;
+    if (tcount > 0)
+        ccount = std::min<int>(tcount, ccount);
+    return std::max<int>(1, ccount);
 }

@@ -50,10 +50,10 @@ void tycho::extensions_build(FunctionRegistry &reg, nb::module_ &extmod) {
 
         auto V = args.segment<3, 3>(); //.segment<size,start>()
 
-        Vector3<double> p1loc;
+        Vector3<double> p1loc = Vector3<double>::Zero();
         p1loc[0] = -mu;
 
-        Vector3<double> p2loc;
+        Vector3<double> p2loc = Vector3<double>::Zero();
         p2loc[0] = 1.0 - mu;
 
         auto dvec = X - p1loc;

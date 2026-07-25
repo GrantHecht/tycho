@@ -1262,7 +1262,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         xf = this->integrate_impl(x0, tf, events, eventtimes, storestates, storederivs,
                                   storemidpoints, xs, d_xs, controller, naccept, nreject);
         EventLocsType eventlocs(events.size());
-        for (auto etimes : eventtimes) {
+        for (const auto &etimes : eventtimes) {
             if (etimes.size() > 0) {
                 auto tab = this->make_table(xs, d_xs, false);
                 eventlocs =
@@ -1318,7 +1318,7 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         xf = this->integrate_impl(x0, tf, events, eventtimes, storestates, storederivs,
                                   storemidpoints, xs, d_xs, controller, naccept, nreject);
         EventLocsType eventlocs(events.size());
-        for (auto etimes : eventtimes) {
+        for (const auto &etimes : eventtimes) {
             if (etimes.size() > 0) {
                 auto tab = this->make_table(xs, d_xs, false);
                 eventlocs =
@@ -1454,11 +1454,6 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
     /// find_events without re-running a dense integrate.
     std::shared_ptr<LGLInterpTable> make_table(const std::vector<ODEState<double>> &xs,
                                                bool fifthorder) const {
-        std::vector<Eigen::VectorXd> xs_in;
-        for (auto &X : xs) {
-            xs_in.push_back(X);
-        }
-
         GenericFunction<-1, -1> odetemp;
         if constexpr (DODE::IsGenericODE) {
             odetemp = this->ode_.func_;
@@ -1469,7 +1464,21 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
         std::shared_ptr<LGLInterpTable> tab = std::make_shared<LGLInterpTable>(
             odetemp, this->ode_.x_vars(), this->ode_.u_vars() + this->ode_.p_vars(), m);
 
-        tab->load_exact_data(xs_in);
+        // load_exact_data requires vector<Eigen::VectorXd>. When ODEState<double>
+        // already IS Eigen::VectorXd (dynamic-size DODE), xs can be passed
+        // directly -- the intermediate xs_in was a pure deep copy of an
+        // already-compatible trajectory (INTEGRATORS §2.6). Fixed-size DODEs
+        // still need the genuine per-element type conversion.
+        if constexpr (std::is_same_v<ODEState<double>, Eigen::VectorXd>) {
+            tab->load_exact_data(xs);
+        } else {
+            std::vector<Eigen::VectorXd> xs_in;
+            xs_in.reserve(xs.size());
+            for (auto &X : xs) {
+                xs_in.push_back(X);
+            }
+            tab->load_exact_data(xs_in);
+        }
 
         return tab;
     }
@@ -2256,16 +2265,27 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
                         main_ctrl = this->make_worker_controller();
                         main_na = 0;
                         main_nr = 0;
-                        // Use integrate_stm_core (discarding the STM) so the
-                        // main thread exercises the same FP arithmetic as the
-                        // workers. xs[i+1] becomes worker (i+1)'s starting
-                        // state; if it diverged from worker i's xf in FP, the
-                        // chain-rule product in jxall would reflect sensitivity
-                        // at a mismatched linearization point. Identical
-                        // codepaths ⇒ bit-identical xs ⇒ exact chaining.
-                        auto stm_result =
-                            this->integrate_stm_core(xs[i], ts[i + 1], main_ctrl, main_na, main_nr);
-                        xs[i + 1] = std::get<0>(stm_result);
+                        // Use integrate_dense_core directly instead of
+                        // integrate_stm_core: the main thread only needs
+                        // xs[i+1] to hand worker (i+1) a bit-identical start
+                        // state, and integrate_stm_core is exactly
+                        // integrate_dense_core(...).back() plus a
+                        // calculate_jacobian(xs) call whose STM is discarded
+                        // here (see integrate_stm_core's definition above) --
+                        // that discarded Jacobian is the dominant extra cost
+                        // (~IR x the propagation cost), so skipping it removes
+                        // nearly the entire redundant main-thread STM workload
+                        // this loop was paying for. xs[i+1] becomes worker
+                        // (i+1)'s starting state; if it diverged from worker
+                        // i's xf in FP, the chain-rule product in jxall would
+                        // reflect sensitivity at a mismatched linearization
+                        // point. integrate_dense_core is the same propagation
+                        // call integrate_stm_core makes internally ⇒
+                        // bit-identical xs ⇒ exact chaining, without the
+                        // discarded Jacobian.
+                        auto dense_result = this->integrate_dense_core(
+                            xs[i], ts[i + 1], main_ctrl, main_na, main_nr);
+                        xs[i + 1] = dense_result.back();
                         total_main_na += main_na;
                         total_main_nr += main_nr;
                     }
@@ -2420,7 +2440,9 @@ struct Integrator : VectorFunction<Integrator<DODE>, SZ_SUM<DODE::IRC, 1>::value
 
         jx = std::get<0>(res);
         adjhess = std::get<1>(res);
-        adjgrad = jx.transpose() * adjvars;
+        // adjgrad doesn't appear on the RHS -- no aliasing hazard, pure
+        // drop-in .noalias() (INTEGRATORS §2.6).
+        adjgrad.noalias() = jx.transpose() * adjvars;
         // jx and adjhess are guarded inside STMDriver via check_stm_finite_or_throw,
         // but adjgrad = jx^T · adjvars can still produce NaN if the caller
         // supplied non-finite adjvars. Localize that failure here rather than

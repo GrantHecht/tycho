@@ -74,6 +74,18 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     obj.def("set_max_acc_iters", &PSIOPT::set_max_acc_iters);
     obj.def("set_max_ls_iters", &PSIOPT::set_max_ls_iters);
 
+    BIND_SETTINGS_VALIDATED(
+        obj, "max_soc", max_soc_, set_max_soc,
+        "Maximum number of second-order correction steps attempted after a rejected trial "
+        "step. 0 (default) disables second-order correction entirely, so the solver behaves "
+        "exactly as it did before this feature existed; the recommended enable value is 4 "
+        "(Wachter & Biegler 2006).");
+    BIND_SETTINGS_VALIDATED(
+        obj, "ls_extended_iters", ls_extended_iters_, set_ls_extended_iters,
+        "Extra backtracking trials allowed on the classic line-search ladder once the normal "
+        "cap and second-order correction (if enabled) are exhausted. 0 (default) disables "
+        "extended backtracking entirely.");
+
     BIND_SETTINGS_VALIDATED(obj, "alpha_red", alpha_red_, set_alpha_red, "");
     obj.def("set_alpha_red", &PSIOPT::set_alpha_red);
 
@@ -92,6 +104,52 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     BIND_RESULT_RO(obj, "last_iter_num", iter_num_, "");
     BIND_RESULT_RO(obj, "last_obj_val", obj_val_);
     BIND_RESULT_RO(obj, "last_primals", primals_, "");
+
+    BIND_RESULT_RO(obj, "last_soc_steps", soc_steps_taken_,
+                   "Number of second-order correction back-substitutions performed during the most "
+                   "recent solve. Always 0 unless max_soc is set > 0.");
+    BIND_RESULT_RO(obj, "last_watchdog_activations", watchdog_activations_,
+                   "Number of times the watchdog recovery heuristic armed during the most recent "
+                   "solve. Always 0 unless watchdog is enabled.");
+    obj.def_prop_ro(
+        "last_recovery_depth_histogram",
+        [](const PSIOPT &self) {
+            const auto &h = self.result().recovery_depth_histogram_;
+            return std::vector<int>(h.begin(), h.end());
+        },
+        "Counts of how each rejected step's recovery was resolved during the most recent "
+        "solve, as a 5-element list: [second-order correction, extended backtracking, "
+        "watchdog, unresolved, restoration]. The final bucket only increments when "
+        "restoration_mode is proximal_switch or l1_nested.");
+
+    BIND_RESULT_RO(obj, "last_funnel_width", last_funnel_width_,
+                   "Final funnel width (tau) at the end of the most recent solve's last phase. "
+                   "-1.0 unless acceptance_strategy is funnel, or if no acceptance test ran.");
+    BIND_RESULT_RO(obj, "last_filter_size", last_filter_size_,
+                   "Final number of stored filter (theta, phi) pairs at the end of the most "
+                   "recent solve's last phase. -1 unless acceptance_strategy is filter.");
+    BIND_RESULT_RO(obj, "last_filter_resets", last_filter_resets_,
+                   "Number of filter-reset-heuristic clears during the most recent solve's last "
+                   "phase. -1 unless acceptance_strategy is filter.");
+
+    BIND_RESULT_RO(obj, "last_monotone_switches", last_monotone_switches_,
+                   "Number of free -> monotone handoffs during the most recent solve's last "
+                   "phase. -1 unless barrier_governor is monitored.");
+    BIND_RESULT_RO(obj, "last_monotone_iters", last_monotone_iters_,
+                   "Number of iterations spent in monotone mode during the most recent solve's "
+                   "last phase. -1 unless barrier_governor is monitored.");
+
+    BIND_RESULT_RO(obj, "last_feas_rest_entries", last_feas_rest_entries_,
+                   "Number of times feasibility restoration was entered during the most recent "
+                   "solve's last phase. -1 unless restoration_mode is proximal_switch or "
+                   "l1_nested (no restoration strategy is constructed when restoration_mode is "
+                   "off). Counts identically under both modes -- l1_nested has no separate "
+                   "inner/outer iteration split, so this and last_feas_rest_iters mean the same "
+                   "thing regardless of which mode is selected.");
+    BIND_RESULT_RO(obj, "last_feas_rest_iters", last_feas_rest_iters_,
+                   "Number of iterations spent in the feasibility-restoration phase during the "
+                   "most recent solve's last phase. -1 unless restoration_mode is "
+                   "proximal_switch or l1_nested.");
 
     BIND_SETTINGS_VALIDATED(obj, "obj_scale", obj_scale_, set_obj_scale, "");
     BIND_SETTINGS_VALIDATED(obj, "print_level", print_level_, set_print_level, "");
@@ -187,10 +245,98 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     obj.def("set_soe_ls_mode", nb::overload_cast<LineSearchModes>(&PSIOPT::set_soe_ls_mode));
     obj.def("set_soe_ls_mode", nb::overload_cast<const std::string &>(&PSIOPT::set_soe_ls_mode));
 
+    // --- Step-acceptance / recovery strategy ---
+    BIND_SETTINGS_RW(
+        obj, "acceptance_strategy", acceptance_strategy_,
+        "Step-acceptance strategy: classic_merit (default) reproduces the original fused "
+        "backtracking merit line search bit-for-bit; merit switches to the modernized "
+        "penalty-based acceptance test selected by merit_penalty_rule; funnel switches to a "
+        "single-scalar bound on constraint violation, tightened while accepted iterates stay "
+        "within it; filter switches to a (violation, objective) Wachter-Biegler-style filter. "
+        "merit, funnel, and filter each require max_soc == 0 and ls_extended_iters == 0 "
+        "(ValueError raised otherwise); watchdog is compatible with all four strategies. These are "
+        "heuristically-motivated acceptance alternatives, not one another's strict "
+        "improvement -- compare against classic_merit on your own problem before adopting "
+        "one.");
+    BIND_SETTINGS_RW(
+        obj, "merit_penalty_rule", merit_penalty_rule_,
+        "Penalty-parameter update rule for the modernized merit strategy; only read when "
+        "acceptance_strategy is merit. wmno (default) updates a single penalty value from "
+        "the directional-derivative condition; flexible tracks a penalty interval and "
+        "accepts a step that improves the merit for at least one value in that interval.");
+    BIND_SETTINGS_RW(
+        obj, "watchdog", watchdog_,
+        "Enables the watchdog recovery heuristic, which tolerates a temporarily worse step "
+        "after repeated rejections instead of immediately shrinking the step further. false "
+        "(default) preserves the original behavior.");
+    BIND_SETTINGS_RW(
+        obj, "barrier_governor", barrier_governor_,
+        "Barrier-parameter governor: classic_adaptive (default) reproduces the original "
+        "PROBE/LOQO free-mode barrier update bit-for-bit; monitored composes a "
+        "classic_adaptive delegate with a KKT-error monitor that watches a sliding reference "
+        "window of recent iterations and, when free-mode progress is no longer a sufficient "
+        "decrease relative to that window, hands off to a monotone (Fiacco-McCormick) mode "
+        "with the barrier parameter initialized to 0.8 times the average complementarity and "
+        "held fixed until the barrier subproblem converges, then decreased; the monitor "
+        "re-enters free mode once progress against the (frozen) reference window resumes. "
+        "Each free->monotone handoff and each monotone barrier-parameter decrease resets the "
+        "acceptance strategy's per-barrier-subproblem state — the filter set is cleared and "
+        "the violation thresholds (and funnel width) are RE-DERIVED from the current "
+        "iterate's violation on the next acceptance test, exactly as a new barrier "
+        "subproblem re-bases them in Ipopt. The funnel/filter "
+        "acceptance strategies are designed to operate above a monotone barrier safeguard, "
+        "which classic_adaptive does not provide; validate() raises ValueError if they are "
+        "combined with classic_adaptive unless never_monotone is set. Any acceptance_strategy "
+        "may pair with monitored.");
+    BIND_SETTINGS_RW(
+        obj, "never_monotone", never_monotone_,
+        "Expert escape hatch, mirroring Ipopt's never-monotone-mode: explicitly accepts "
+        "running funnel/filter above barrier_governor=classic_adaptive without its monotone "
+        "safeguard, forfeiting that guard rather than switching to barrier_governor=monitored. "
+        "false (default). Contradictory with barrier_governor=monitored (which already "
+        "supplies the monotone fallback this knob opts out of) -- validate() raises ValueError "
+        "on that combination.");
+    BIND_SETTINGS_RW(
+        obj, "restoration_mode", restoration_mode_,
+        "Feasibility-restoration mode selector: off (default) reproduces today's behavior "
+        "bit-identically -- no restoration strategy is constructed, so every restoration branch "
+        "in the solver is provably dead. proximal_switch enables the proximal feasibility "
+        "mode-switch: when the recovery chain exhausts on a rejected step, the solver switches "
+        "to a pure feasibility phase -- the objective is replaced by a proximal term centered on "
+        "the switch point (coefficient sqrt(mu) at entry) while all constraints and barrier "
+        "machinery keep running -- and returns to the true objective once the acceptance "
+        "strategy's infeasibility-reduction test passes (per-strategy: classic_merit uses a "
+        "relative infeasibility-reduction test against the entry point, Ipopt "
+        "restoration-convergence style; merit reduces against the smallest-known infeasibility "
+        "held from the optimality phase -- frozen at restoration entry and unchanged by "
+        "feasibility-phase iterates; funnel/filter use their own reference-solver tests). "
+        "l1_nested enables the nested l1 elastic feasibility restoration instead: the same "
+        "trigger and the same acceptance-strategy exit test, but the elastic reformulation runs "
+        "as a condensed in-place phase reusing the outer barrier algorithm's own KKT system, "
+        "rather than swapping the outer objective for a proximal term -- see RestorationModes "
+        "for the mechanism and Ipopt-lineage citations. Unlike proximal_switch, l1_nested first "
+        "tries a soft feasibility pre-stage (full fraction-to-boundary steps tested under a "
+        "primal-dual-error reduction rule) and only escalates to the full elastic switch after "
+        "several soft steps in a row fail to recover; proximal_switch has no pre-stage and "
+        "switches directly. Both modes refuse entry at a near-feasible point or once the "
+        "per-phase budget max_feas_rest is exhausted. Composes with every acceptance_strategy "
+        "and barrier_governor (no matrix restrictions -- every shipped acceptance strategy "
+        "implements the exit test either mode relies on). Mode-switch lineage: Knitro's "
+        "bar_switchobj=scalarprox for proximal_switch, with entry/exit semantics derived from "
+        "Ipopt's restoration phase and Uno's phase switching for both modes.");
+    BIND_SETTINGS_VALIDATED(
+        obj, "max_feas_rest", max_feas_rest_, set_max_feas_rest,
+        "Per-phase cap on the number of times feasibility restoration may be entered. 0 "
+        "disables restoration entry entirely (the budget is exhausted before the first entry); "
+        "2 (default). Ignored when restoration_mode is off. Negative values raise ValueError "
+        "immediately on assignment; validate() re-checks non-negativity as a backstop.");
+
     // --- QP solver ---
     BIND_SETTINGS_RW(obj, "force_qp_analysis", force_qp_analysis_, "");
     BIND_SETTINGS_VALIDATED(obj, "qp_ref_steps", qp_ref_steps_, set_qp_ref_steps, "");
     BIND_SETTINGS_VALIDATED(obj, "qp_pivot_perturb", qp_pivot_perturb_, set_qp_pivot_perturb, "");
+    BIND_SETTINGS_VALIDATED(obj, "qp_matching", qp_matching_, set_qp_matching, "");
+    BIND_SETTINGS_VALIDATED(obj, "qp_scaling", qp_scaling_, set_qp_scaling, "");
     BIND_SETTINGS_VALIDATED(obj, "qp_threads", qp_threads_, set_qp_threads, "");
     BIND_SETTINGS_RW(obj, "qp_pivot_strategy", qp_pivot_strategy_, "");
 
@@ -243,6 +389,73 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     nb::enum_<QPPivotModes>(m, "QPPivotModes")
         .value("OneByOne", QPPivotModes::OneByOne)
         .value("TwoByTwo", QPPivotModes::TwoByTwo);
+    nb::enum_<AcceptanceStrategies>(m, "AcceptanceStrategies")
+        .value("classic_merit", AcceptanceStrategies::classic_merit)
+        .value("merit", AcceptanceStrategies::merit)
+        .value("funnel", AcceptanceStrategies::funnel,
+               "Single-scalar upper bound on constraint violation (the funnel width), "
+               "tightened while accepted iterates remain within it (Kiessling, "
+               "Leyffer & Vanaret funnel formulation, implemented after Uno's funnel). "
+               "Rejects combination with max_soc > 0 or ls_extended_iters > 0 (ValueError "
+               "at validate() time); composes with watchdog. Heuristically motivated -- no "
+               "convergence guarantee is implied; compare against classic_merit and filter "
+               "on your own problem.")
+        .value("filter", AcceptanceStrategies::filter,
+               "(Constraint violation, objective) pair filter with margined dominance "
+               "(Wachter-Biegler filter line search, Ipopt lineage). Rejects combination "
+               "with max_soc > 0 or ls_extended_iters > 0 (ValueError at validate() time); "
+               "composes with watchdog. Heuristically motivated -- no convergence guarantee "
+               "is implied; compare against classic_merit and funnel on your own problem.");
+    nb::enum_<MeritPenaltyRules>(m, "MeritPenaltyRules")
+        .value("wmno", MeritPenaltyRules::wmno)
+        .value("flexible", MeritPenaltyRules::flexible);
+    nb::enum_<BarrierGovernors>(m, "BarrierGovernors")
+        .value("classic_adaptive", BarrierGovernors::classic_adaptive,
+               "The classic PROBE/LOQO free-mode barrier update, unchanged -- the "
+               "bit-identical default.")
+        .value("monitored", BarrierGovernors::monitored,
+               "Free<->monotone monitored barrier governor: a KKT-error monitor hands off "
+               "to a Fiacco-McCormick monotone mode when free-mode progress stalls, then "
+               "re-enters free mode once progress resumes -- see the barrier_governor "
+               "property docstring for the full mechanism.");
+    nb::enum_<RestorationModes>(m, "RestorationModes")
+        .value("off", RestorationModes::off,
+               "No feasibility restoration -- the bit-identical default. No restoration "
+               "strategy is constructed, so every restoration branch in the solver is provably "
+               "dead.")
+        .value("proximal_switch", RestorationModes::proximal_switch,
+               "Proximal feasibility mode-switch: on a ladder-exhausted step rejection, keep "
+               "the same barrier algorithm running but swap the true objective for a proximal "
+               "term pulling the primals back toward the switch point, until the acceptance "
+               "strategy's infeasibility-reduction test passes -- see the restoration_mode "
+               "property docstring for the full mechanism. Composes with every "
+               "acceptance_strategy and barrier_governor.")
+        .value("l1_nested", RestorationModes::l1_nested,
+               "Nested l1 elastic feasibility restoration: on a ladder-exhausted step "
+               "rejection, solve the l1 elastic reformulation of the current KKT system as a "
+               "condensed in-place phase -- each row gets a pair of nonnegative elastic slacks "
+               "(n, p) absorbing the residual, penalized at rho=1e3 plus a proximity term "
+               "pulling the primals back toward the switch point with weight sqrt(mu) -- rather "
+               "than switching the outer objective the way proximal_switch does; the phase "
+               "reuses the outer barrier algorithm's own KKT system instead of spinning up a "
+               "separate nested solver. Constants (the penalty rho, the proximity weight "
+               "factor, the entry/re-entry rules) are pinned at Ipopt's restoration-phase "
+               "literature defaults (coin-or/Ipopt's IpRestoIpoptNLP / "
+               "IpRestoIterateInitializer / IpRestoMinC_1Nrm). Before committing to the full "
+               "elastic switch, a soft feasibility pre-stage first tries ordinary "
+               "fraction-to-boundary steps under a primal-dual-error reduction rule for a "
+               "bounded number of consecutive iterations (adapted from Ipopt's soft "
+               "restoration phase) and only escalates once that budget is exhausted; "
+               "proximal_switch has no such pre-stage. Prefer l1_nested over proximal_switch "
+               "when a stall is a genuinely constraint-infeasible point the elastic "
+               "reformulation can relax productively (the pre-stage also gives it a cheaper "
+               "recovery attempt before the full switch); prefer proximal_switch for a simpler, "
+               "cheaper mode-switch with no elastic-slack bookkeeping. Returns to the true "
+               "objective on the same acceptance-strategy infeasibility-reduction test "
+               "proximal_switch uses -- see the restoration_mode property docstring. Composes "
+               "with every acceptance_strategy and barrier_governor; the diagnostics "
+               "last_feas_rest_entries/last_feas_rest_iters count identically for both "
+               "modes.");
     nb::enum_<PDStepStrategies>(m, "PDStepStrategies")
         .value("PrimSlackEq_Iq", PDStepStrategies::PrimSlackEq_Iq)
         .value("AllMinimum", PDStepStrategies::AllMinimum)

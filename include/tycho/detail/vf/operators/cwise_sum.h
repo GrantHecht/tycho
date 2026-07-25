@@ -108,13 +108,14 @@ template <class Derived, class Func> struct CwiseSum_Impl : VectorFunction<Deriv
             fx[0] = x.template segment<Func::ORC>(this->func_.seg_start_, this->func_.output_rows())
                         .sum();
         } else {
-            typename Func::template Output<Scalar> fxv;
-            if constexpr (Func::OutputIsDynamic) {
-                fxv.resize(this->func_.output_rows());
-            }
+            auto Impl = [&](auto &fxv) {
+                this->func_.compute(x, fxv);
+                fx[0] = fxv.sum();
+            };
 
-            this->func_.compute(x, fxv);
-            fx[0] = fxv.sum();
+            tycho::utils::BumpAllocator::allocate_run(
+                Impl, tycho::utils::TempSpec<typename Func::template Output<Scalar>>(
+                          this->func_.output_rows(), 1));
         }
     }
     /// @internal

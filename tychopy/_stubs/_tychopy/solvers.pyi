@@ -47,6 +47,24 @@ class PSIOPT:
     def set_max_ls_iters(self, arg: int, /) -> None: ...
 
     @property
+    def max_soc(self) -> int:
+        """
+        Maximum number of second-order correction steps attempted after a rejected trial step. 0 (default) disables second-order correction entirely, so the solver behaves exactly as it did before this feature existed; the recommended enable value is 4 (Wachter & Biegler 2006).
+        """
+
+    @max_soc.setter
+    def max_soc(self, arg: int, /) -> None: ...
+
+    @property
+    def ls_extended_iters(self) -> int:
+        """
+        Extra backtracking trials allowed on the classic line-search ladder once the normal cap and second-order correction (if enabled) are exhausted. 0 (default) disables extended backtracking entirely.
+        """
+
+    @ls_extended_iters.setter
+    def ls_extended_iters(self, arg: int, /) -> None: ...
+
+    @property
     def alpha_red(self) -> float: ...
 
     @alpha_red.setter
@@ -95,6 +113,66 @@ class PSIOPT:
 
     @property
     def last_primals(self) -> numpy.ndarray: ...
+
+    @property
+    def last_soc_steps(self) -> int:
+        """
+        Number of second-order correction back-substitutions performed during the most recent solve. Always 0 unless max_soc is set > 0.
+        """
+
+    @property
+    def last_watchdog_activations(self) -> int:
+        """
+        Number of times the watchdog recovery heuristic armed during the most recent solve. Always 0 unless watchdog is enabled.
+        """
+
+    @property
+    def last_recovery_depth_histogram(self) -> list[int]:
+        """
+        Counts of how each rejected step's recovery was resolved during the most recent solve, as a 5-element list: [second-order correction, extended backtracking, watchdog, unresolved, restoration]. The final bucket only increments when restoration_mode is proximal_switch or l1_nested.
+        """
+
+    @property
+    def last_funnel_width(self) -> float:
+        """
+        Final funnel width (tau) at the end of the most recent solve's last phase. -1.0 unless acceptance_strategy is funnel, or if no acceptance test ran.
+        """
+
+    @property
+    def last_filter_size(self) -> int:
+        """
+        Final number of stored filter (theta, phi) pairs at the end of the most recent solve's last phase. -1 unless acceptance_strategy is filter.
+        """
+
+    @property
+    def last_filter_resets(self) -> int:
+        """
+        Number of filter-reset-heuristic clears during the most recent solve's last phase. -1 unless acceptance_strategy is filter.
+        """
+
+    @property
+    def last_monotone_switches(self) -> int:
+        """
+        Number of free -> monotone handoffs during the most recent solve's last phase. -1 unless barrier_governor is monitored.
+        """
+
+    @property
+    def last_monotone_iters(self) -> int:
+        """
+        Number of iterations spent in monotone mode during the most recent solve's last phase. -1 unless barrier_governor is monitored.
+        """
+
+    @property
+    def last_feas_rest_entries(self) -> int:
+        """
+        Number of times feasibility restoration was entered during the most recent solve's last phase. -1 unless restoration_mode is proximal_switch or l1_nested (no restoration strategy is constructed when restoration_mode is off). Counts identically under both modes -- l1_nested has no separate inner/outer iteration split, so this and last_feas_rest_iters mean the same thing regardless of which mode is selected.
+        """
+
+    @property
+    def last_feas_rest_iters(self) -> int:
+        """
+        Number of iterations spent in the feasibility-restoration phase during the most recent solve's last phase. -1 unless restoration_mode is proximal_switch or l1_nested.
+        """
 
     @property
     def obj_scale(self) -> float: ...
@@ -352,6 +430,69 @@ class PSIOPT:
     def set_soe_ls_mode(self, arg: str, /) -> None: ...
 
     @property
+    def acceptance_strategy(self) -> AcceptanceStrategies:
+        """
+        Step-acceptance strategy: classic_merit (default) reproduces the original fused backtracking merit line search bit-for-bit; merit switches to the modernized penalty-based acceptance test selected by merit_penalty_rule; funnel switches to a single-scalar bound on constraint violation, tightened while accepted iterates stay within it; filter switches to a (violation, objective) Wachter-Biegler-style filter. merit, funnel, and filter each require max_soc == 0 and ls_extended_iters == 0 (ValueError raised otherwise); watchdog is compatible with all four strategies. These are heuristically-motivated acceptance alternatives, not one another's strict improvement -- compare against classic_merit on your own problem before adopting one.
+        """
+
+    @acceptance_strategy.setter
+    def acceptance_strategy(self, arg: AcceptanceStrategies, /) -> None: ...
+
+    @property
+    def merit_penalty_rule(self) -> MeritPenaltyRules:
+        """
+        Penalty-parameter update rule for the modernized merit strategy; only read when acceptance_strategy is merit. wmno (default) updates a single penalty value from the directional-derivative condition; flexible tracks a penalty interval and accepts a step that improves the merit for at least one value in that interval.
+        """
+
+    @merit_penalty_rule.setter
+    def merit_penalty_rule(self, arg: MeritPenaltyRules, /) -> None: ...
+
+    @property
+    def watchdog(self) -> bool:
+        """
+        Enables the watchdog recovery heuristic, which tolerates a temporarily worse step after repeated rejections instead of immediately shrinking the step further. false (default) preserves the original behavior.
+        """
+
+    @watchdog.setter
+    def watchdog(self, arg: bool, /) -> None: ...
+
+    @property
+    def barrier_governor(self) -> BarrierGovernors:
+        """
+        Barrier-parameter governor: classic_adaptive (default) reproduces the original PROBE/LOQO free-mode barrier update bit-for-bit; monitored composes a classic_adaptive delegate with a KKT-error monitor that watches a sliding reference window of recent iterations and, when free-mode progress is no longer a sufficient decrease relative to that window, hands off to a monotone (Fiacco-McCormick) mode with the barrier parameter initialized to 0.8 times the average complementarity and held fixed until the barrier subproblem converges, then decreased; the monitor re-enters free mode once progress against the (frozen) reference window resumes. Each free->monotone handoff and each monotone barrier-parameter decrease resets the acceptance strategy's per-barrier-subproblem state — the filter set is cleared and the violation thresholds (and funnel width) are RE-DERIVED from the current iterate's violation on the next acceptance test, exactly as a new barrier subproblem re-bases them in Ipopt. The funnel/filter acceptance strategies are designed to operate above a monotone barrier safeguard, which classic_adaptive does not provide; validate() raises ValueError if they are combined with classic_adaptive unless never_monotone is set. Any acceptance_strategy may pair with monitored.
+        """
+
+    @barrier_governor.setter
+    def barrier_governor(self, arg: BarrierGovernors, /) -> None: ...
+
+    @property
+    def never_monotone(self) -> bool:
+        """
+        Expert escape hatch, mirroring Ipopt's never-monotone-mode: explicitly accepts running funnel/filter above barrier_governor=classic_adaptive without its monotone safeguard, forfeiting that guard rather than switching to barrier_governor=monitored. false (default). Contradictory with barrier_governor=monitored (which already supplies the monotone fallback this knob opts out of) -- validate() raises ValueError on that combination.
+        """
+
+    @never_monotone.setter
+    def never_monotone(self, arg: bool, /) -> None: ...
+
+    @property
+    def restoration_mode(self) -> RestorationModes:
+        """
+        Feasibility-restoration mode selector: off (default) reproduces today's behavior bit-identically -- no restoration strategy is constructed, so every restoration branch in the solver is provably dead. proximal_switch enables the proximal feasibility mode-switch: when the recovery chain exhausts on a rejected step, the solver switches to a pure feasibility phase -- the objective is replaced by a proximal term centered on the switch point (coefficient sqrt(mu) at entry) while all constraints and barrier machinery keep running -- and returns to the true objective once the acceptance strategy's infeasibility-reduction test passes (per-strategy: classic_merit uses a relative infeasibility-reduction test against the entry point, Ipopt restoration-convergence style; merit reduces against the smallest-known infeasibility held from the optimality phase -- frozen at restoration entry and unchanged by feasibility-phase iterates; funnel/filter use their own reference-solver tests). l1_nested enables the nested l1 elastic feasibility restoration instead: the same trigger and the same acceptance-strategy exit test, but the elastic reformulation runs as a condensed in-place phase reusing the outer barrier algorithm's own KKT system, rather than swapping the outer objective for a proximal term -- see RestorationModes for the mechanism and Ipopt-lineage citations. Unlike proximal_switch, l1_nested first tries a soft feasibility pre-stage (full fraction-to-boundary steps tested under a primal-dual-error reduction rule) and only escalates to the full elastic switch after several soft steps in a row fail to recover; proximal_switch has no pre-stage and switches directly. Both modes refuse entry at a near-feasible point or once the per-phase budget max_feas_rest is exhausted. Composes with every acceptance_strategy and barrier_governor (no matrix restrictions -- every shipped acceptance strategy implements the exit test either mode relies on). Mode-switch lineage: Knitro's bar_switchobj=scalarprox for proximal_switch, with entry/exit semantics derived from Ipopt's restoration phase and Uno's phase switching for both modes.
+        """
+
+    @restoration_mode.setter
+    def restoration_mode(self, arg: RestorationModes, /) -> None: ...
+
+    @property
+    def max_feas_rest(self) -> int:
+        """
+        Per-phase cap on the number of times feasibility restoration may be entered. 0 disables restoration entry entirely (the budget is exhausted before the first entry); 2 (default). Ignored when restoration_mode is off. Negative values raise ValueError immediately on assignment; validate() re-checks non-negativity as a backstop.
+        """
+
+    @max_feas_rest.setter
+    def max_feas_rest(self, arg: int, /) -> None: ...
+
+    @property
     def force_qp_analysis(self) -> bool: ...
 
     @force_qp_analysis.setter
@@ -368,6 +509,18 @@ class PSIOPT:
 
     @qp_pivot_perturb.setter
     def qp_pivot_perturb(self, arg: int, /) -> None: ...
+
+    @property
+    def qp_matching(self) -> int: ...
+
+    @qp_matching.setter
+    def qp_matching(self, arg: int, /) -> None: ...
+
+    @property
+    def qp_scaling(self) -> int: ...
+
+    @qp_scaling.setter
+    def qp_scaling(self, arg: int, /) -> None: ...
 
     @property
     def qp_threads(self) -> int: ...
@@ -441,6 +594,53 @@ class QPPivotModes(enum.Enum):
     OneByOne = 0
 
     TwoByTwo = 1
+
+class AcceptanceStrategies(enum.Enum):
+    classic_merit = 0
+
+    merit = 1
+
+    funnel = 2
+    """
+    Single-scalar upper bound on constraint violation (the funnel width), tightened while accepted iterates remain within it (Kiessling, Leyffer & Vanaret funnel formulation, implemented after Uno's funnel). Rejects combination with max_soc > 0 or ls_extended_iters > 0 (ValueError at validate() time); composes with watchdog. Heuristically motivated -- no convergence guarantee is implied; compare against classic_merit and filter on your own problem.
+    """
+
+    filter = 3
+    """
+    (Constraint violation, objective) pair filter with margined dominance (Wachter-Biegler filter line search, Ipopt lineage). Rejects combination with max_soc > 0 or ls_extended_iters > 0 (ValueError at validate() time); composes with watchdog. Heuristically motivated -- no convergence guarantee is implied; compare against classic_merit and funnel on your own problem.
+    """
+
+class MeritPenaltyRules(enum.Enum):
+    wmno = 0
+
+    flexible = 1
+
+class BarrierGovernors(enum.Enum):
+    classic_adaptive = 0
+    """
+    The classic PROBE/LOQO free-mode barrier update, unchanged -- the bit-identical default.
+    """
+
+    monitored = 1
+    """
+    Free<->monotone monitored barrier governor: a KKT-error monitor hands off to a Fiacco-McCormick monotone mode when free-mode progress stalls, then re-enters free mode once progress resumes -- see the barrier_governor property docstring for the full mechanism.
+    """
+
+class RestorationModes(enum.Enum):
+    off = 0
+    """
+    No feasibility restoration -- the bit-identical default. No restoration strategy is constructed, so every restoration branch in the solver is provably dead.
+    """
+
+    proximal_switch = 1
+    """
+    Proximal feasibility mode-switch: on a ladder-exhausted step rejection, keep the same barrier algorithm running but swap the true objective for a proximal term pulling the primals back toward the switch point, until the acceptance strategy's infeasibility-reduction test passes -- see the restoration_mode property docstring for the full mechanism. Composes with every acceptance_strategy and barrier_governor.
+    """
+
+    l1_nested = 2
+    """
+    Nested l1 elastic feasibility restoration: on a ladder-exhausted step rejection, solve the l1 elastic reformulation of the current KKT system as a condensed in-place phase -- each row gets a pair of nonnegative elastic slacks (n, p) absorbing the residual, penalized at rho=1e3 plus a proximity term pulling the primals back toward the switch point with weight sqrt(mu) -- rather than switching the outer objective the way proximal_switch does; the phase reuses the outer barrier algorithm's own KKT system instead of spinning up a separate nested solver. Constants (the penalty rho, the proximity weight factor, the entry/re-entry rules) are pinned at Ipopt's restoration-phase literature defaults (coin-or/Ipopt's IpRestoIpoptNLP / IpRestoIterateInitializer / IpRestoMinC_1Nrm). Before committing to the full elastic switch, a soft feasibility pre-stage first tries ordinary fraction-to-boundary steps under a primal-dual-error reduction rule for a bounded number of consecutive iterations (adapted from Ipopt's soft restoration phase) and only escalates once that budget is exhausted; proximal_switch has no such pre-stage. Prefer l1_nested over proximal_switch when a stall is a genuinely constraint-infeasible point the elastic reformulation can relax productively (the pre-stage also gives it a cheaper recovery attempt before the full switch); prefer proximal_switch for a simpler, cheaper mode-switch with no elastic-slack bookkeeping. Returns to the true objective on the same acceptance-strategy infeasibility-reduction test proximal_switch uses -- see the restoration_mode property docstring. Composes with every acceptance_strategy and barrier_governor; the diagnostics last_feas_rest_entries/last_feas_rest_iters count identically for both modes.
+    """
 
 class PDStepStrategies(enum.Enum):
     PrimSlackEq_Iq = 0

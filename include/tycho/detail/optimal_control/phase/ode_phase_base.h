@@ -28,6 +28,7 @@
 #include "tycho/vector_functions.h"
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <functional>
 #include <iostream>
 #include <numeric>
@@ -215,25 +216,25 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     void set_adaptive_mesh(bool amesh) { this->adaptive_mesh_ = amesh; }
     /// @brief Set the target mesh-error tolerance.
     /// @param t  Tolerance (its absolute value is used).
-    void set_mesh_tol(double t) { this->mesh_tol_ = abs(t); }
+    void set_mesh_tol(double t) { this->mesh_tol_ = std::abs(t); }
     /// @brief Set the segment-count reduction factor.
     /// @param t  Reduction factor (its absolute value is used).
-    void set_mesh_red_factor(double t) { this->mesh_red_factor_ = abs(t); }
+    void set_mesh_red_factor(double t) { this->mesh_red_factor_ = std::abs(t); }
     /// @brief Set the segment-count increase factor.
     /// @param t  Increase factor (its absolute value is used).
-    void set_mesh_inc_factor(double t) { this->mesh_inc_factor_ = abs(t); }
+    void set_mesh_inc_factor(double t) { this->mesh_inc_factor_ = std::abs(t); }
     /// @brief Set the error-overshoot factor that triggers refinement.
     /// @param t  Error factor (its absolute value is used).
-    void set_mesh_err_factor(double t) { this->mesh_err_factor_ = abs(t); }
+    void set_mesh_err_factor(double t) { this->mesh_err_factor_ = std::abs(t); }
     /// @brief Set the maximum number of mesh-refinement iterations.
     /// @param it  Iteration cap (its absolute value is used).
-    void set_max_mesh_iters(int it) { this->max_mesh_iters_ = abs(it); }
+    void set_max_mesh_iters(int it) { this->max_mesh_iters_ = std::abs(it); }
     /// @brief Set the minimum number of mesh segments.
     /// @param it  Minimum segment count (its absolute value is used).
-    void set_min_segments(int it) { this->min_segments_ = abs(it); }
+    void set_min_segments(int it) { this->min_segments_ = std::abs(it); }
     /// @brief Set the maximum number of mesh segments.
     /// @param it  Maximum segment count (its absolute value is used).
-    void set_max_segments(int it) { this->max_segments_ = abs(it); }
+    void set_max_segments(int it) { this->max_segments_ = std::abs(it); }
     /// @brief Set the mesh-error convergence aggregation.
     /// @param m  Aggregation mode.
     void set_mesh_error_criteria(MeshErrorAggregation m) { this->mesh_error_criteria_ = m; }
