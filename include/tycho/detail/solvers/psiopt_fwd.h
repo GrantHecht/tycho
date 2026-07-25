@@ -111,4 +111,27 @@ enum class BarrierGovernors { classic_adaptive = 0, monitored = 1 };
 //                     proximal_switch (no matrix restrictions).
 enum class RestorationModes { off = 0, proximal_switch = 1, l1_nested = 2 };
 
+// KKT inertia-correction / regularization mode selector
+// (PSIOPT::Settings::inertia_mode_). Declared here alongside the other strategy
+// selectors so both PSIOPT::Settings (psiopt.h) and the regularization helpers
+// (globalization/inertia_regularization.h) can name it without a circular
+// include. Strongly-typed with explicit values, matching the neighbors.
+//   classic                 — the on-demand inertia ladder inline in
+//                             PSIOPT::factor_impl (the bit-identical default):
+//                             each iteration first attempts an unperturbed
+//                             factorization and only shifts the Hessian diagonal
+//                             (by increasing amounts) when the factorization
+//                             reports wrong inertia. No constraint-block shift.
+//   proximal_regularization — proximal primal-dual regularization
+//                             (globalization/inertia_regularization.h): a small
+//                             persistent, decaying primal base shift ρ_k on the
+//                             Hessian diagonal plus an always-on barrier-scaled
+//                             dual shift −δ_c on the constraint-row diagonals are
+//                             baked into the base matrix each iteration, and the
+//                             same ladder escalates on top when the base attempt
+//                             has wrong inertia or is singular. The dual shift is
+//                             suppressed while a nested l1 restoration phase is
+//                             active (the elastic pivots own those slots).
+enum class InertiaModes { classic = 0, proximal_regularization = 1 };
+
 } // namespace tycho::solvers

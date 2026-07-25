@@ -151,6 +151,18 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
                    "most recent solve's last phase. -1 unless restoration_mode is "
                    "proximal_switch or l1_nested.");
 
+    BIND_RESULT_RO(obj, "last_prox_reg_primal", last_prox_reg_primal_,
+                   "Persistent primal base shift (rho_k) applied to the Hessian diagonal at the "
+                   "last factorized iteration of the most recent solve's last phase. -1.0 unless "
+                   "inertia_mode is proximal_regularization (or if that phase converged before "
+                   "its first factorization, so no shift was ever applied).");
+    BIND_RESULT_RO(obj, "last_prox_reg_dual", last_prox_reg_dual_,
+                   "Barrier-scaled dual shift (delta_c) subtracted from the constraint-row "
+                   "diagonals at the last factorized iteration of the most recent solve's last "
+                   "phase. -1.0 unless inertia_mode is proximal_regularization (or if that phase "
+                   "converged before its first factorization); 0.0 if that iteration fell inside "
+                   "a nested l1 restoration phase, where the shift is suppressed.");
+
     BIND_SETTINGS_VALIDATED(obj, "obj_scale", obj_scale_, set_obj_scale, "");
     BIND_SETTINGS_VALIDATED(obj, "print_level", print_level_, set_print_level, "");
     obj.def("set_print_level", &PSIOPT::set_print_level);
@@ -215,6 +227,22 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
 
     obj.def("set_hpert_params", &PSIOPT::set_hpert_params, nb::arg("delta_h"), nb::arg("incr_h"),
             nb::arg("decr_h"));
+
+    BIND_SETTINGS_RW(
+        obj, "inertia_mode", inertia_mode_,
+        "KKT inertia-correction / regularization mode: classic (default) reproduces the "
+        "on-demand inertia ladder bit-for-bit -- each iteration first attempts an unperturbed "
+        "factorization and only shifts the Hessian diagonal (by increasing amounts) when the "
+        "factorization reports wrong inertia, with no constraint-block shift. "
+        "proximal_regularization bakes two shifts into the base matrix every iteration instead "
+        "of the classic zero-perturbation first attempt: a small persistent, decaying primal "
+        "base shift on the Hessian diagonal, and an always-on barrier-scaled dual shift on the "
+        "constraint-row diagonals (suppressed while a nested l1 restoration phase is active, "
+        "since the elastic pivots already regularize those rows). The same incr_h/decr_h "
+        "escalation ladder still fires on top when the base attempt has wrong inertia or is "
+        "singular; a singular base attempt is treated as wrong inertia under this mode (classic "
+        "only warns and proceeds). See InertiaModes for the full mechanism and literature "
+        "citations, and last_prox_reg_primal/last_prox_reg_dual for the resulting diagnostics.");
 
     // --- Barrier parameters ---
     BIND_SETTINGS_VALIDATED(obj, "init_mu", init_mu_, set_init_mu, "");
@@ -456,6 +484,32 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
                "with every acceptance_strategy and barrier_governor; the diagnostics "
                "last_feas_rest_entries/last_feas_rest_iters count identically for both "
                "modes.");
+    nb::enum_<InertiaModes>(m, "InertiaModes")
+        .value("classic", InertiaModes::classic,
+               "The on-demand inertia ladder inline in factor_impl -- the bit-identical "
+               "default. Each iteration first attempts an unperturbed factorization and only "
+               "shifts the Hessian diagonal (by increasing amounts) when the factorization "
+               "reports wrong inertia. No constraint-block shift.")
+        .value("proximal_regularization", InertiaModes::proximal_regularization,
+               "Proximal primal-dual regularization: a small persistent, decaying primal base "
+               "shift (rho_k, floored at 1e-10, the Cipolla-Gondzio floor) on the Hessian "
+               "diagonal, plus an always-on barrier-scaled dual shift (delta_c = 1e-8 * "
+               "mu^0.25, Ipopt's jacobian_regularization_value/exponent constants, matching its "
+               "perturb_always_cd semantics) on the constraint-row diagonals, are baked into "
+               "the base matrix every iteration in place of the classic zero-perturbation first "
+               "attempt -- the same escalation ladder still fires on top when the base attempt "
+               "has wrong inertia or is singular (a singular base attempt is itself treated as "
+               "wrong inertia under this mode, unlike classic's warn-and-proceed). rho_k decays "
+               "toward its floor by decr_h each iteration the base attempt sufficed, or "
+               "persists at the decayed total shift (rho_k plus the ladder's last delta) when "
+               "the ladder fired. The dual shift is suppressed while a nested l1 restoration "
+               "phase is active -- the elastic pivots already regularize those constraint rows "
+               "at a magnitude the dual shift would be negligible against, and stacking it would "
+               "make the elastic step-recovery algebra inconsistent with the solved system; the "
+               "proximal mode-switch restoration touches only the primal diagonal, so the dual "
+               "shift stays on under it. No new tunable constants -- rho_k's floor and the dual "
+               "shift's scale/exponent are fixed. See last_prox_reg_primal/last_prox_reg_dual "
+               "for the per-solve diagnostics this mode reports.");
     nb::enum_<PDStepStrategies>(m, "PDStepStrategies")
         .value("PrimSlackEq_Iq", PDStepStrategies::PrimSlackEq_Iq)
         .value("AllMinimum", PDStepStrategies::AllMinimum)

@@ -328,6 +328,19 @@ class PSIOPT {
         double incr_h_ = 8.0;
         double decr_h_ = 0.333333;
 
+        // KKT inertia-correction / regularization mode. classic (default) runs
+        // the on-demand inertia ladder exactly as before — bit-identical.
+        // proximal_regularization bakes a persistent, decaying primal base shift
+        // ρ_k and an always-on barrier-scaled dual shift −δ_c into the base
+        // matrix each iteration (the same ladder still escalates on top when the
+        // base attempt has wrong inertia or is singular). ρ_k starts at
+        // kProxRegFloor and decays by decr_h_ toward that floor; δ_c uses the
+        // δ_c-ladder constants in globalization/inertia_regularization.h and is
+        // suppressed while a nested l1 restoration phase is active. Closed-set
+        // enum, so validate() needs no range check; no other setting is
+        // required. Enum lives in psiopt_fwd.h.
+        InertiaModes inertia_mode_ = InertiaModes::classic;
+
         // --- QP solver ---
         int qp_threads_ = TYCHO_DEFAULT_QP_THREADS;
         QPAlgModes qp_alg_ = QPAlgModes::Classic;
@@ -525,6 +538,24 @@ class PSIOPT {
         // counting note above).
         int last_feas_rest_iters_ = -1;
 
+        // Proximal primal-dual regularization shifts applied at the LAST
+        // FACTORIZED ITERATION of the most recent solve's LAST PHASE, written
+        // by alg_impl() at phase close from mode-local state (there is no
+        // dedicated component object with its own append_diagnostics() hook
+        // here — unlike the acceptance/governor/restoration fields above; and
+        // the trailing iterate-history entry is the wrong source because a
+        // converged exit appends a non-factorized convergence probe).
+        // last_prox_reg_primal_ is the persistent primal base shift ρ_k added
+        // to the Hessian diagonal at that iteration; last_prox_reg_dual_ is
+        // the barrier-scaled dual shift δ_c subtracted from the
+        // constraint-row diagonals (0.0 when suppressed inside a nested l1
+        // restoration phase). Sentinel -1.0 for BOTH fields when
+        // inertia_mode_ != proximal_regularization — the classic path never
+        // writes them — and when a mode-on phase converged before its first
+        // factorization. Same last-phase-wins semantics as the fields above.
+        double last_prox_reg_primal_ = -1.0;
+        double last_prox_reg_dual_ = -1.0;
+
         // T6 (dead-status fix): the last non-Success status observed from
         // kkt_sol_.info() by factor_impl() within the CURRENT phase (alg_impl
         // resets it on entry, so print_exit_stats reports per-phase status).
@@ -560,6 +591,8 @@ class PSIOPT {
             last_monotone_iters_ = -1;
             last_feas_rest_entries_ = -1;
             last_feas_rest_iters_ = -1;
+            last_prox_reg_primal_ = -1.0;
+            last_prox_reg_dual_ = -1.0;
         }
     };
 
@@ -976,8 +1009,13 @@ class PSIOPT {
     // delta applied during this call (i.e. the actual total added to the KKT
     // diagonal), used only for the HPert iteration-table column. Neither
     // `finalpert` nor any control-flow decision in factor_impl reads `cumpert`.
+    // `base_prox` and `dual_shift` are the proximal-regularization base shifts
+    // (ρ_k on the Hessian diagonal, δ_c on the constraint-row diagonals); both
+    // are read only when inertia_mode_ == proximal_regularization and default to
+    // 0.0, so the classic path is byte-identical regardless of their values.
     int factor_impl(bool docompute, bool ZFac, double ipurt, double incpurt0, double incpurt,
-                    double &finalpert, double &cumpert);
+                    double &finalpert, double &cumpert, double base_prox = 0.0,
+                    double dual_shift = 0.0);
 
     bool analyze_kkt_matrix();
 

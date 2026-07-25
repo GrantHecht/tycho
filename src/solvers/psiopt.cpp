@@ -44,6 +44,7 @@
 #include "tycho/detail/solvers/globalization/modern_merit.h"
 #include "tycho/detail/solvers/globalization/funnel_acceptance.h"
 #include "tycho/detail/solvers/globalization/filter_acceptance.h"
+#include "tycho/detail/solvers/globalization/inertia_regularization.h"
 #include "tycho/detail/solvers/globalization/recovery_chain.h"
 #include "tycho/detail/solvers/globalization/noop_recovery.h"
 #include "tycho/detail/solvers/globalization/soc.h"
@@ -1636,7 +1637,8 @@ tycho::ConvergenceFlags tycho::solvers::PSIOPT::converge_check(std::vector<Itera
 // perturb the primal diagonal by increasing amounts until correct inertia is
 // achieved or max_refac_ attempts are exhausted.
 int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt, double incpurt0,
-                                        double incpurt, double &finalpert, double &cumpert) {
+                                        double incpurt, double &finalpert, double &cumpert,
+                                        double base_prox, double dual_shift) {
     auto Inertia = [&]() {
         return this->kkt_sol_.neigs() - (this->equal_cons_ + this->inequal_cons_);
     };
@@ -1678,7 +1680,43 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
     int IncEigs;
     cumpert = 0.0;
 
-    if (Zfac || docompute) {
+    if (settings_.inertia_mode_ == InertiaModes::proximal_regularization) {
+        // Proximal primal-dual base shift. The persistent primal shift base_prox
+        // (ρ_k, decayed across iterations by alg_impl) is added to the (1,1)
+        // Hessian-block diagonal, and the barrier-scaled dual shift dual_shift
+        // (δ_c) is subtracted from every constraint-row diagonal, ONCE per
+        // iteration before the first factorization -- so both are part of the
+        // base matrix for the whole ladder and stable across every
+        // back-substitution on the live factorization (SOC, elastic recovery).
+        // This informed base attempt replaces the classic zero-perturbation
+        // attempt; the Zfac cycling heuristic is not consulted (the base attempt
+        // IS the informed attempt, so there is no wasted unperturbed
+        // factorization for it to skip). The ladder's finalpert/cumpert
+        // accounting below is unchanged -- it counts only the ladder increments,
+        // never the base shifts, which alg_impl tracks separately.
+        auto PerturbC = [&](double p) {
+            this->nlp_->perturb_kkt_c_diags(p, this->kkt_sol_.get_matrix());
+        };
+        Perturb(base_prox);
+        if (dual_shift != 0.0)
+            PerturbC(-dual_shift);
+        if (!docompute)
+            Refactor();
+        else
+            Compute();
+        CheckInfo();
+        RankDef();
+        IncEigs = Inertia();
+        finalpert = 0.0;
+        // A singular base factorization is treated as wrong inertia (enter the
+        // ladder) -- the reference fallback once the dual shift is already
+        // applied and the matrix is still singular. Classic treats the same
+        // condition as warn-and-proceed (RankDef only warns); that behavior is
+        // untouched on the classic branch below.
+        bool singular = (this->kkt_sol_.neigs() + this->kkt_sol_.peigs() - this->kkt_dim_) != 0;
+        if (IncEigs <= 0 && !singular)
+            return 0;
+    } else if (Zfac || docompute) {
         if (!docompute)
             Refactor();
         else
@@ -1772,6 +1810,18 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     tycho::utils::Timer Printtimer;
 
     double Hpert0 = settings_.delta_h_;
+    // Persistent primal base shift ρ_k for the proximal_regularization inertia
+    // mode. Per-phase lifetime, exactly like the ladder's Hpert0/FirstPert
+    // warm-start memory (one alg_impl call = one phase; NOT reset at restoration
+    // episode entry/exit, which run in-phase). Initialized at the
+    // Cipolla–Gondzio floor; dead (never read) on the classic path.
+    double rho_k = tycho::solvers::kProxRegFloor;
+    // Last shifts actually applied at a factorization this phase (sentinel -1
+    // until the first factorized iteration). The convergence probe appended to
+    // `iters` on a converged exit never factorizes, so the trailing history
+    // entry does NOT carry the final applied shifts -- these locals do.
+    double last_prox_primal = -1.0;
+    double last_prox_dual = -1.0;
     std::vector<IterateInfo> iters;
     iters.reserve(settings_.max_iters_);
     ConvergenceFlags ExitCode = ConvergenceFlags::NOTCONVERGED;
@@ -2216,7 +2266,27 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             Zfac = !cycling;
         }
 
-        Citer.h_facs_ = this->factor_impl(false, Zfac, Hpert0, Incr, Incr2, nhpert, nhpert_cum);
+        // Proximal primal-dual regularization base shifts for this iteration
+        // (0.0 on the classic path, which leaves factor_impl byte-identical).
+        // base_prox = ρ_k, the persistent primal shift. dual_shift = δ_c, the
+        // barrier-scaled dual shift, computed against the same μ the KKT assembly
+        // used above -- SUPPRESSED to 0.0 while a nested l1 restoration phase is
+        // active, because the elastic pivots already own the constraint-row
+        // diagonals (~1/μ) and the condensed elastic step recovery assumes the
+        // (y,y) diagonal equals the elastic pivot exactly (see
+        // globalization/inertia_regularization.h). The proximal mode-switch
+        // restoration touches only the primal diagonal, so δ_c stays on under it.
+        double base_prox = 0.0;
+        double dual_shift = 0.0;
+        if (settings_.inertia_mode_ == InertiaModes::proximal_regularization) {
+            base_prox = rho_k;
+            bool nested_active = this->restoration_ && this->restoration_->is_active() &&
+                                 this->restoration_->is_nested();
+            dual_shift = nested_active ? 0.0 : tycho::solvers::dual_regularization(mu);
+        }
+
+        Citer.h_facs_ = this->factor_impl(false, Zfac, Hpert0, Incr, Incr2, nhpert, nhpert_cum,
+                                          base_prox, dual_shift);
         // Note: if factor_impl exhausted all perturbation attempts (h_facs_ == max_refac_),
         // we proceed rather than aborting. The line search evaluates actual function values
         // and will reject truly bad steps by reducing alpha. Forcing GoodStep=false here
@@ -2231,6 +2301,22 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         }
         Citer.h_pert_ = nhpert;
         Citer.h_pert_cum_ = nhpert_cum;
+
+        if (settings_.inertia_mode_ == InertiaModes::proximal_regularization) {
+            // Record the shifts applied this iteration (sentinel -1 on the
+            // classic path), then decay the persistent primal base shift toward
+            // its floor. If the base attempt sufficed (h_facs_ == 0) the implicit
+            // trust-region radius grows while curvature stays good; if the ladder
+            // fired, the decayed total successful shift (ρ_k plus the last ladder
+            // delta nhpert) persists into the next iteration. The Hpert0/FirstPert
+            // warm-start above is unchanged -- ρ_k is a separate, additional state.
+            Citer.prox_reg_primal_ = base_prox;
+            Citer.prox_reg_dual_ = dual_shift;
+            last_prox_primal = base_prox;
+            last_prox_dual = dual_shift;
+            double applied_total = (Citer.h_facs_ > 0) ? (rho_k + nhpert) : rho_k;
+            rho_k = tycho::solvers::prox_reg_decay(applied_total, settings_.decr_h_);
+        }
 
         // Update barrier parameter and compute search direction. The whole
         // PROBE/LOQO switch + common clamp/objective/gradient tail is now
@@ -2379,8 +2465,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // wiring comment); the feasibility switch remains a future link. The
         // inertia/perturbation ladder above (factor_impl's Zfac cycling +
         // escalation) is a SEPARATE mechanism and stays out of this chain
-        // until the proximal-regularization inertia mode is implemented --
-        // it is NOT invoked or bypassed here.
+        // (a future inertia-dispatch stage may wire it in) -- it is NOT
+        // invoked or bypassed here.
         //
         // The call is GATED on an actual rejection: should_dispatch_recovery
         // fires the hook only when the line search reported the trial step
@@ -2680,6 +2766,25 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     }
 
     this->result_.primals_ = v_xsl.primals();
+
+    // Proximal primal-dual regularization diagnostics: report the shifts from
+    // the last FACTORIZED iteration of this phase (tracked in alg_impl locals;
+    // iters.back() is the wrong source -- on a converged exit it is the
+    // non-factorized convergence probe, whose fields still hold the sentinel).
+    // There is no dedicated component object here with its own
+    // append_diagnostics() hook to collect this from after alg_impl() returns
+    // (unlike the acceptance_/governor_/restoration_ diagnostics collected in
+    // run_phase_sequence()), since the shifts are alg_impl-local mode state.
+    // Sentinel -1.0 stays untouched (from reset_accumulators()) when the mode
+    // is off, matching the classic path's byte-identical guarantee, and also
+    // when the mode is on but the phase converged before its first
+    // factorization (no shift was ever applied). Same last-phase-wins
+    // semantics as the other diagnostic fields: a multi-phase call ends with
+    // the LAST phase's alg_impl call's values.
+    if (settings_.inertia_mode_ == InertiaModes::proximal_regularization) {
+        this->result_.last_prox_reg_primal_ = last_prox_primal;
+        this->result_.last_prox_reg_dual_ = last_prox_dual;
+    }
 
     if (this->equal_cons_ > 0) {
         this->result_.eq_cons_ = v_rhs.eq_cons();

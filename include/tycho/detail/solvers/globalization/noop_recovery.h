@@ -24,8 +24,8 @@
 // extended-backtrack -> watchdog -> feasibility-switch dispatcher. The
 // inertia/perturbation ladder (factor_impl's Zfac cycling + 8x/(1/3)
 // escalation) is a SEPARATE mechanism that stays inside PSIOPT::factor_impl
-// and is NOT part of this chain until the proximal-regularization inertia
-// mode is implemented.
+// and is not part of this chain; a future inertia-dispatch stage may wire
+// it in.
 //
 // Ownership: stateless, per RecoveryChain's ownership rule — reset() has
 // nothing to clear.

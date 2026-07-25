@@ -175,6 +175,18 @@ class PSIOPT:
         """
 
     @property
+    def last_prox_reg_primal(self) -> float:
+        """
+        Persistent primal base shift (rho_k) applied to the Hessian diagonal at the last factorized iteration of the most recent solve's last phase. -1.0 unless inertia_mode is proximal_regularization (or if that phase converged before its first factorization, so no shift was ever applied).
+        """
+
+    @property
+    def last_prox_reg_dual(self) -> float:
+        """
+        Barrier-scaled dual shift (delta_c) subtracted from the constraint-row diagonals at the last factorized iteration of the most recent solve's last phase. -1.0 unless inertia_mode is proximal_regularization (or if that phase converged before its first factorization); 0.0 if that iteration fell inside a nested l1 restoration phase, where the shift is suppressed.
+        """
+
+    @property
     def obj_scale(self) -> float: ...
 
     @obj_scale.setter
@@ -338,6 +350,15 @@ class PSIOPT:
     def set_decr_h(self, arg: float, /) -> None: ...
 
     def set_hpert_params(self, delta_h: float, incr_h: float, decr_h: float) -> None: ...
+
+    @property
+    def inertia_mode(self) -> InertiaModes:
+        """
+        KKT inertia-correction / regularization mode: classic (default) reproduces the on-demand inertia ladder bit-for-bit -- each iteration first attempts an unperturbed factorization and only shifts the Hessian diagonal (by increasing amounts) when the factorization reports wrong inertia, with no constraint-block shift. proximal_regularization bakes two shifts into the base matrix every iteration instead of the classic zero-perturbation first attempt: a small persistent, decaying primal base shift on the Hessian diagonal, and an always-on barrier-scaled dual shift on the constraint-row diagonals (suppressed while a nested l1 restoration phase is active, since the elastic pivots already regularize those rows). The same incr_h/decr_h escalation ladder still fires on top when the base attempt has wrong inertia or is singular; a singular base attempt is treated as wrong inertia under this mode (classic only warns and proceeds). See InertiaModes for the full mechanism and literature citations, and last_prox_reg_primal/last_prox_reg_dual for the resulting diagnostics.
+        """
+
+    @inertia_mode.setter
+    def inertia_mode(self, arg: InertiaModes, /) -> None: ...
 
     @property
     def init_mu(self) -> float: ...
@@ -640,6 +661,17 @@ class RestorationModes(enum.Enum):
     l1_nested = 2
     """
     Nested l1 elastic feasibility restoration: on a ladder-exhausted step rejection, solve the l1 elastic reformulation of the current KKT system as a condensed in-place phase -- each row gets a pair of nonnegative elastic slacks (n, p) absorbing the residual, penalized at rho=1e3 plus a proximity term pulling the primals back toward the switch point with weight sqrt(mu) -- rather than switching the outer objective the way proximal_switch does; the phase reuses the outer barrier algorithm's own KKT system instead of spinning up a separate nested solver. Constants (the penalty rho, the proximity weight factor, the entry/re-entry rules) are pinned at Ipopt's restoration-phase literature defaults (coin-or/Ipopt's IpRestoIpoptNLP / IpRestoIterateInitializer / IpRestoMinC_1Nrm). Before committing to the full elastic switch, a soft feasibility pre-stage first tries ordinary fraction-to-boundary steps under a primal-dual-error reduction rule for a bounded number of consecutive iterations (adapted from Ipopt's soft restoration phase) and only escalates once that budget is exhausted; proximal_switch has no such pre-stage. Prefer l1_nested over proximal_switch when a stall is a genuinely constraint-infeasible point the elastic reformulation can relax productively (the pre-stage also gives it a cheaper recovery attempt before the full switch); prefer proximal_switch for a simpler, cheaper mode-switch with no elastic-slack bookkeeping. Returns to the true objective on the same acceptance-strategy infeasibility-reduction test proximal_switch uses -- see the restoration_mode property docstring. Composes with every acceptance_strategy and barrier_governor; the diagnostics last_feas_rest_entries/last_feas_rest_iters count identically for both modes.
+    """
+
+class InertiaModes(enum.Enum):
+    classic = 0
+    """
+    The on-demand inertia ladder inline in factor_impl -- the bit-identical default. Each iteration first attempts an unperturbed factorization and only shifts the Hessian diagonal (by increasing amounts) when the factorization reports wrong inertia. No constraint-block shift.
+    """
+
+    proximal_regularization = 1
+    """
+    Proximal primal-dual regularization: a small persistent, decaying primal base shift (rho_k, floored at 1e-10, the Cipolla-Gondzio floor) on the Hessian diagonal, plus an always-on barrier-scaled dual shift (delta_c = 1e-8 * mu^0.25, Ipopt's jacobian_regularization_value/exponent constants, matching its perturb_always_cd semantics) on the constraint-row diagonals, are baked into the base matrix every iteration in place of the classic zero-perturbation first attempt -- the same escalation ladder still fires on top when the base attempt has wrong inertia or is singular (a singular base attempt is itself treated as wrong inertia under this mode, unlike classic's warn-and-proceed). rho_k decays toward its floor by decr_h each iteration the base attempt sufficed, or persists at the decayed total shift (rho_k plus the ladder's last delta) when the ladder fired. The dual shift is suppressed while a nested l1 restoration phase is active -- the elastic pivots already regularize those constraint rows at a magnitude the dual shift would be negligible against, and stacking it would make the elastic step-recovery algebra inconsistent with the solved system; the proximal mode-switch restoration touches only the primal diagonal, so the dual shift stays on under it. No new tunable constants -- rho_k's floor and the dual shift's scale/exponent are fixed. See last_prox_reg_primal/last_prox_reg_dual for the per-solve diagnostics this mode reports.
     """
 
 class PDStepStrategies(enum.Enum):

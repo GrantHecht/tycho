@@ -47,6 +47,18 @@ struct IterateInfo {
     // existing meaning or its Hpert0 warm-start producer/consumer in alg_impl().
     double h_pert_cum_ = 0;
 
+    // Proximal primal-dual regularization shifts applied this iteration (written
+    // only when Settings::inertia_mode_ == proximal_regularization; sentinel -1
+    // on the classic path, which applies neither). prox_reg_primal_ is the
+    // persistent primal base shift ρ_k added to the Hessian diagonal;
+    // prox_reg_dual_ is the barrier-scaled dual shift δ_c subtracted from the
+    // constraint-row diagonals (0 when suppressed inside a nested l1 restoration
+    // phase). Both are >= 0 when active; a negative value means "mode off". Not
+    // printed (the iteration table formats an explicit field list), so adding
+    // them leaves console output byte-identical.
+    double prox_reg_primal_ = -1.0;
+    double prox_reg_dual_ = -1.0;
+
     double kkt_norm_err_ = 0;
     double barr_norm_err_ = 0;
     double econ_norm_err_ = 0;
