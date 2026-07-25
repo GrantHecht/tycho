@@ -599,9 +599,14 @@ class AccelerateImpl
 
         void *ws = getAlignedPointer(workspace_);
         if (!ws) {
-            // Accelerate's workspace parameter is _Nonnull; a null here would
-            // be a dereference, not a diagnosable failure.
+            // Accelerate's workspace parameter is _Nonnull; a null here would be a
+            // dereference, not a diagnosable failure. Reset derived state for the
+            // same reason the status-failure branch below does: the cached inertia
+            // and metrics describe a factorization we are now abandoning.
             updateInfoStatus(SparseInternalError);
+            resetInertia();
+            flops_ = 0;
+            mem_ = 0;
             return;
         }
         SparseRefactor(accel_matrix_, m_numericFactorization.get(), ws);
