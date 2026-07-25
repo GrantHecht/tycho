@@ -509,8 +509,10 @@ class AccelerateImpl
         fopts.free = free;
 
         fopts.reportError = [](const char *msg) {
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Accelerate Sparse Symbolic Factorization Error: {}\n", msg);
+            // Accelerate stores this callback in the symbolic factorization and
+            // reuses it for numeric-factor, refactor and solve-time errors too,
+            // so the label must not name a phase.
+            fmt::print(fmt::fg(fmt::color::red), "Accelerate Sparse Solver Error: {}\n", msg);
         };
 
         m_symbolicFactorization.reset(
@@ -714,8 +716,22 @@ template <typename MatrixType_, int UpLo_, SparseFactorization_t Solver_, bool E
 template <typename Rhs, typename Dest>
 void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::_solve_impl(
     const MatrixBase<Rhs> &b, MatrixBase<Dest> &x) const {
-    if (!m_numericFactorization) {
-        info_ = InvalidInput;
+    // A factorization that is absent or not in a good state cannot be solved
+    // with. Accelerate would accept the call, no-op it via its own parameter
+    // check, and return -- leaving x holding whatever it held before, which in
+    // PSIOPT is the previous iteration's step. Under iterative refinement it is
+    // worse: the refinement loop would then apply x -= (A*x - b) per iteration.
+    //
+    // x is deliberately left untouched rather than zeroed, matching
+    // PardisoImpl::_solve_impl. Unifying both backends on a zero-x contract is
+    // tracked in issue #105 -- do not "fix" this in isolation.
+    if (!m_numericFactorization || m_numericFactorization->status != SparseStatusOK) {
+        if (m_numericFactorization)
+            updateInfoStatus(m_numericFactorization->status);
+        else if (info_ == Success)
+            // Never computed. A failed factorize() already recorded a more
+            // specific status, so do not overwrite it.
+            info_ = InvalidInput;
         return;
     }
 

@@ -209,6 +209,102 @@ TEST(AccelerateInterface, AnalyzePatternInternalClearsStaleInertia) {
     EXPECT_EQ(s.zeigs(), 0);
 }
 
+// Drives doRefactorization() to failure the way PSIOPT does: mutate values in
+// the internal matrix in place (pattern unchanged), then refactor.
+void break_factorization_in_place(LLT &s) {
+    s.get_matrix().coeffRef(0, 1) = 8.0;
+    s.get_matrix().coeffRef(0, 2) = 8.0;
+    s.refactorize_internal();
+}
+
+TEST(AccelerateInterface, FailedFactorizationIsReported) {
+    LLT s;
+    s.analyze_pattern(spd_full_upper());
+    ASSERT_EQ(s.info(), Eigen::Success);
+
+    s.factorize(indefinite_full_upper());
+
+    EXPECT_NE(s.info(), Eigen::Success);
+}
+
+// Contract, matching PardisoImpl::_solve_impl: a solve on a bad factorization
+// reports through info() and leaves the destination alone. Zeroing it instead
+// is deferred to issue #105 (both backends together).
+TEST(AccelerateInterface, SolveAfterFailedRefactorReportsAndLeavesDestination) {
+    LLT s;
+    s.compute(spd_full_upper());
+    ASSERT_EQ(s.info(), Eigen::Success);
+
+    break_factorization_in_place(s);
+    ASSERT_NE(s.info(), Eigen::Success);
+
+    Eigen::VectorXd b(3);
+    b << 1.0, 2.0, 3.0;
+    Eigen::VectorXd x(3);
+    x.setConstant(-12345.0);
+
+    x = s.solve(b);
+
+    EXPECT_NE(s.info(), Eigen::Success);
+    EXPECT_DOUBLE_EQ(x[0], -12345.0);
+    EXPECT_DOUBLE_EQ(x[1], -12345.0);
+    EXPECT_DOUBLE_EQ(x[2], -12345.0);
+}
+
+// Pre-fix this is worse than stale: the main SparseSolve no-ops, then the
+// refinement loop computes r = A*x - b (SparseMultiplyAdd takes the MATRIX, so
+// it works fine), the inner SparseSolve also no-ops leaving r as the raw
+// residual rather than a correction, and x -= r actively corrupts x -- once per
+// refinement iteration.
+TEST(AccelerateInterface, SolveAfterFailedRefactorDoesNotCorruptUnderRefinement) {
+    LLT s;
+    s.set_iterative_refinement(true);
+    s.set_iterative_refinement_iterations(2);
+    s.compute(spd_full_upper());
+    ASSERT_EQ(s.info(), Eigen::Success);
+
+    break_factorization_in_place(s);
+    ASSERT_NE(s.info(), Eigen::Success);
+
+    Eigen::VectorXd b(3);
+    b << 1.0, 2.0, 3.0;
+    Eigen::VectorXd x(3);
+    x.setConstant(-12345.0);
+
+    x = s.solve(b);
+
+    EXPECT_NE(s.info(), Eigen::Success);
+    EXPECT_DOUBLE_EQ(x[0], -12345.0);
+    EXPECT_DOUBLE_EQ(x[1], -12345.0);
+    EXPECT_DOUBLE_EQ(x[2], -12345.0);
+}
+
+// The reason doRefactorization deliberately does NOT reset the numeric
+// factorization on failure: Apple documents the failed object as refactorable,
+// and PSIOPT's perturb-and-retry loop depends on that cheap recovery.
+TEST(AccelerateInterface, RefactorRecoversAfterAFailedRefactor) {
+    LLT s;
+    const SpMat A = spd_full_upper();
+    s.compute(A);
+    ASSERT_EQ(s.info(), Eigen::Success);
+
+    const double saved01 = s.get_matrix().coeff(0, 1);
+    const double saved02 = s.get_matrix().coeff(0, 2);
+
+    break_factorization_in_place(s);
+    ASSERT_NE(s.info(), Eigen::Success);
+
+    s.get_matrix().coeffRef(0, 1) = saved01;
+    s.get_matrix().coeffRef(0, 2) = saved02;
+    s.refactorize_internal();
+    ASSERT_EQ(s.info(), Eigen::Success);
+
+    Eigen::VectorXd b(3);
+    b << 1.0, 2.0, 3.0;
+    const Eigen::VectorXd x = s.solve(b);
+    EXPECT_LT((dense_symmetric(A) * x - b).cwiseAbs().maxCoeff(), 1e-10);
+}
+
 } // namespace
 
 #endif // USE_ACCELERATE_SPARSE
