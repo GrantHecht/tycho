@@ -486,6 +486,13 @@ class AccelerateImpl
 
     void doAnalysis() {
         m_numericFactorization.reset(nullptr);
+        // Any cached inertia and factor metrics describe the factorization just
+        // destroyed above. doAnalysis() is the single point every analysis path
+        // funnels through, so resetting here closes compute_internal() and
+        // analyze_pattern_internal() as well as the direct callers.
+        resetInertia();
+        flops_ = 0;
+        mem_ = 0;
 
         // Only resize permutation if necessary to avoid unnecessary allocations
         if (permutation_.size() != static_cast<size_t>(n_rows_)) {

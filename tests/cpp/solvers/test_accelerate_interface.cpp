@@ -187,6 +187,28 @@ TEST(AccelerateInterface, ReinitializeClearsStaleInertia) {
     EXPECT_EQ(s.zeigs(), 0);
 }
 
+// doAnalysis() destroys the numeric factorization, so any cached inertia
+// describes something that no longer exists. analyze_pattern_internal()
+// reaches that state without ever calling doFactorization().
+TEST(AccelerateInterface, AnalyzePatternInternalClearsStaleInertia) {
+    SpMat indefinite(3, 3);
+    indefinite.insert(0, 0) = 1.0;
+    indefinite.insert(1, 1) = 1.0;
+    indefinite.insert(2, 2) = -1.0;
+    indefinite.makeCompressed();
+
+    LDLT s;
+    s.compute(indefinite);
+    ASSERT_EQ(s.info(), Eigen::Success);
+    ASSERT_GT(s.peigs() + s.neigs(), 0);
+
+    s.analyze_pattern_internal();
+
+    EXPECT_EQ(s.peigs(), 0);
+    EXPECT_EQ(s.neigs(), 0);
+    EXPECT_EQ(s.zeigs(), 0);
+}
+
 } // namespace
 
 #endif // USE_ACCELERATE_SPARSE
