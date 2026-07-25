@@ -11,7 +11,10 @@
 # Two checks:
 #   1. LEAK  -- a deliberate int->double conversion AFTER the include must warn.
 #              Silence means the suppression leaked.
-#   2. CLEAN -- accelerate_interface.h must emit no warnings of its own.
+#   2. CLEAN -- accelerate_interface.h AND accelerate_utils.h (which it
+#              includes, and whose diagnostics would otherwise be reported
+#              under a different file path and slip past a narrower grep)
+#              must emit no warnings of their own.
 #
 # Usage: scripts/check_accelerate_warnings.sh
 #
@@ -109,12 +112,12 @@ else
     RESULT=1
 fi
 
-if grep -q 'accelerate_interface\.h.*warning:' "${LOG}"; then
-    echo "CHECK 2 (clean): FAIL -- accelerate_interface.h emits its own warnings:"
-    grep 'accelerate_interface\.h.*warning:' "${LOG}" | sort -u | sed 's/^/                 /'
+if grep -Eq '(accelerate_interface|accelerate_utils)\.h.*warning:' "${LOG}"; then
+    echo "CHECK 2 (clean): FAIL -- accelerate_interface.h/accelerate_utils.h emit their own warnings:"
+    grep -E '(accelerate_interface|accelerate_utils)\.h.*warning:' "${LOG}" | sort -u | sed 's/^/                 /'
     RESULT=1
 else
-    echo "CHECK 2 (clean): PASS -- header emits no warnings."
+    echo "CHECK 2 (clean): PASS -- accelerate_interface.h and accelerate_utils.h emit no warnings."
 fi
 
 if [[ ${RESULT} -eq 0 ]]; then
