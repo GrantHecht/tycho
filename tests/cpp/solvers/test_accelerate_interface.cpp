@@ -96,6 +96,42 @@ TEST(AccelerateInterface, SolvesAnSpdSystem) {
     EXPECT_LT((Eigen::MatrixXd(A) * x - b).cwiseAbs().maxCoeff(), 1e-12);
 }
 
+TEST(AccelerateInterface, DefaultConstructedDimsAreZero) {
+    LDLT s;
+    EXPECT_EQ(s.rows(), 0);
+    EXPECT_EQ(s.cols(), 0);
+}
+
+#ifdef NDEBUG
+// info() guards with eigen_assert(m_isInitialized), which only vanishes under
+// NDEBUG -- so this test is Release-only by construction. Pre-fix, info_ is
+// uninitialized and this reads indeterminate memory (it may pass by luck; it
+// is a regression guard, not a demonstration).
+TEST(AccelerateInterface, DefaultConstructedInfoIsInitialized) {
+    LDLT s;
+    EXPECT_EQ(s.info(), Eigen::Success);
+}
+#endif
+
+TEST(AccelerateInterface, ReleaseRestoresDefaultConstructedState) {
+    LDLT s;
+    s.compute(spd_both_triangles());
+    ASSERT_EQ(s.info(), Eigen::Success);
+    ASSERT_EQ(s.rows(), 3);
+
+    s.release();
+
+    EXPECT_EQ(s.rows(), 0);
+    EXPECT_EQ(s.cols(), 0);
+    EXPECT_EQ(s.peigs(), 0);
+    EXPECT_EQ(s.neigs(), 0);
+    EXPECT_EQ(s.zeigs(), 0);
+
+    // ...and the solver is still reusable afterwards.
+    s.compute(spd_both_triangles());
+    EXPECT_EQ(s.info(), Eigen::Success);
+}
+
 } // namespace
 
 #endif // USE_ACCELERATE_SPARSE

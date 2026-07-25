@@ -158,7 +158,6 @@ template <typename T> struct AccelFactorizationDeleter {
         if (sym) {
             SparseCleanup(*sym);
             delete sym;
-            sym = nullptr;
         }
     }
 };
@@ -268,15 +267,15 @@ class AccelerateImpl
             m_sparseKind = SparseOrdinary;
             m_triType = (UpLo_ & Lower) ? SparseLowerTriangle : SparseUpperTriangle;
         }
-
-        order_ = SparseOrderMetis;
-        do_iterative_refinement_ = false;
-        iterative_refinement_iterations_ = 2;
     }
 
     explicit AccelerateImpl(const MatrixType &matrix) : AccelerateImpl() { compute(matrix); }
 
-    ~AccelerateImpl() {}
+    // Defaulted, not removed: a user-declared destructor suppresses the
+    // implicit move constructor, and this type MUST stay non-movable --
+    // accel_matrix_ caches raw pointers into matrix_'s buffers, which a move
+    // would silently invalidate.
+    ~AccelerateImpl() = default;
 
     inline Index cols() const { return n_cols_; }
     inline Index rows() const { return n_rows_; }
@@ -423,6 +422,12 @@ class AccelerateImpl
                 }
             }
         }
+    }
+
+    void resetInertia() {
+        peigs_ = 0;
+        neigs_ = 0;
+        zeigs_ = 0;
     }
 
     void updatePerformanceMetrics() {
@@ -592,7 +597,7 @@ class AccelerateImpl
     std::vector<long> m_columnStarts;
     mutable MatrixType matrix_;
     mutable AccelSparseMatrix accel_matrix_;
-    mutable ComputationInfo info_;
+    mutable ComputationInfo info_ = Success;
     mutable std::vector<uint8_t> factor_storage_;
     mutable std::vector<uint8_t> workspace_;
     mutable std::vector<uint8_t> solve_workspace_; // Cache solve workspace
@@ -603,9 +608,9 @@ class AccelerateImpl
     std::unique_ptr<NumericFactorization, NumericFactorizationDeleter> m_numericFactorization;
     SparseKind_t m_sparseKind;
     SparseTriangle_t m_triType;
-    SparseOrder_t order_;
-    bool do_iterative_refinement_;
-    int iterative_refinement_iterations_;
+    SparseOrder_t order_ = SparseOrderMetis;
+    bool do_iterative_refinement_ = false;
+    int iterative_refinement_iterations_ = 2;
     Scalar pivot_tolerance_ = Scalar(0.01);
     Scalar zero_tolerance_ = Scalar(1e-4) * std::numeric_limits<Scalar>::epsilon();
     mutable int peigs_ = 0;
@@ -878,6 +883,15 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::release() {
 
     // Clear permutation
     permutation_.clear();
+
+    // Restore the default-constructed invariant. rows()/cols() must not report
+    // dimensions for an emptied solver, and accel_matrix_ must not retain
+    // pointers into matrix_'s just-freed buffers.
+    n_rows_ = 0;
+    n_cols_ = 0;
+    accel_matrix_ = AccelSparseMatrix{};
+    m_columnStarts.clear();
+    resetInertia();
 
     // Reset cached sizes
     cached_solve_workspace_size_ = 0;
