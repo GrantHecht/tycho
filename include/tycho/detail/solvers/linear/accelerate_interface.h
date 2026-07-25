@@ -546,9 +546,12 @@ class AccelerateImpl
 
             status = m_numericFactorization->status;
 
-            if (status != SparseStatusOK)
+            if (status != SparseStatusOK) {
                 m_numericFactorization.reset(nullptr);
-            else
+                resetInertia();
+                flops_ = 0;
+                mem_ = 0;
+            } else
                 cacheInertia();
         }
 
@@ -572,6 +575,10 @@ class AccelerateImpl
         if (status == SparseStatusOK) {
             cacheInertia();
             updatePerformanceMetrics();
+        } else {
+            resetInertia();
+            flops_ = 0;
+            mem_ = 0;
         }
     }
 
@@ -638,6 +645,7 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::set_matrix(
     m_numericFactorization.reset(nullptr);
     cached_solve_workspace_size_ = 0; // Clear cached workspace size
     info_ = Success;
+    resetInertia();
 }
 
 /** Computes the symbolic and numeric decomposition of matrix \a a */
@@ -807,6 +815,9 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_,
 
     // Reset computation info
     info_ = Success;
+
+    // Reset cached inertia -- it described the (now-discarded) prior factorization
+    resetInertia();
 }
 
 template <typename MatrixType_, int UpLo_, SparseFactorization_t Solver_, bool EnforceSquare_>

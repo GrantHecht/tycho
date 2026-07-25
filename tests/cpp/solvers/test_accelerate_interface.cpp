@@ -132,6 +132,61 @@ TEST(AccelerateInterface, ReleaseRestoresDefaultConstructedState) {
     EXPECT_EQ(s.info(), Eigen::Success);
 }
 
+TEST(AccelerateInterface, InertiaOnKnownIndefiniteMatrix) {
+    SpMat A(3, 3);
+    A.insert(0, 0) = 1.0;
+    A.insert(1, 1) = 1.0;
+    A.insert(2, 2) = -1.0;
+    A.makeCompressed();
+
+    LDLT s;
+    s.compute(A);
+    ASSERT_EQ(s.info(), Eigen::Success);
+    EXPECT_EQ(s.peigs(), 2);
+    EXPECT_EQ(s.neigs(), 1);
+    EXPECT_EQ(s.zeigs(), 0);
+}
+
+// PSIOPT's inertia-correction loop reads neigs()/peigs() right after
+// Compute()/Refactor() without consulting info(), so cached inertia must never
+// outlive the factorization it describes.
+TEST(AccelerateInterface, SetMatrixClearsStaleInertia) {
+    SpMat indefinite(3, 3);
+    indefinite.insert(0, 0) = 1.0;
+    indefinite.insert(1, 1) = 1.0;
+    indefinite.insert(2, 2) = -1.0;
+    indefinite.makeCompressed();
+
+    LDLT s;
+    s.compute(indefinite);
+    ASSERT_EQ(s.info(), Eigen::Success);
+    ASSERT_GT(s.peigs() + s.neigs(), 0);
+
+    s.set_matrix(spd_both_triangles());
+
+    EXPECT_EQ(s.peigs(), 0);
+    EXPECT_EQ(s.neigs(), 0);
+    EXPECT_EQ(s.zeigs(), 0);
+}
+
+TEST(AccelerateInterface, ReinitializeClearsStaleInertia) {
+    SpMat indefinite(3, 3);
+    indefinite.insert(0, 0) = 1.0;
+    indefinite.insert(1, 1) = 1.0;
+    indefinite.insert(2, 2) = -1.0;
+    indefinite.makeCompressed();
+
+    LDLT s;
+    s.compute(indefinite);
+    ASSERT_GT(s.peigs() + s.neigs(), 0);
+
+    s.reinitialize_internal_matrix_representation();
+
+    EXPECT_EQ(s.peigs(), 0);
+    EXPECT_EQ(s.neigs(), 0);
+    EXPECT_EQ(s.zeigs(), 0);
+}
+
 } // namespace
 
 #endif // USE_ACCELERATE_SPARSE
