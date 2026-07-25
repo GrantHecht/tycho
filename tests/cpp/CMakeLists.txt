@@ -471,3 +471,12 @@ endif()
 if(ENABLE_ENZYME_AD AND BUILD_CPP_TESTS)
     add_subdirectory(enzyme)
 endif()
+
+#-------------------------------------------------------------------------------
+# Ipopt-backend test executable (gated on ENABLE_IPOPT).  Ipopt headers and the
+# link are scoped to that target inside tests/cpp/solvers/ipopt/CMakeLists.txt;
+# the rest of the test suite stays Ipopt-free.
+#-------------------------------------------------------------------------------
+if(ENABLE_IPOPT AND BUILD_CPP_TESTS)
+    add_subdirectory(solvers/ipopt)
+endif()

@@ -10,16 +10,11 @@
 
 #pragma once
 
-#include <map>
 #include <string>
-
-#include <Eigen/Core>
 
 #include "tycho/detail/solvers/psiopt_fwd.h"
 
 namespace tycho::solvers {
-
-struct OptimizationProblemBase;
 
 /// Outcome of one Ipopt run on the transcribed NLP. Sentinel values (-1 /
 /// empty / ran_ == false) mean no Ipopt solve has run on this problem object.

@@ -78,11 +78,30 @@ add_library(psiopt STATIC
     solvers/non_linear_program.cpp
     solvers/optimization_problem.cpp
     solvers/solver_init.cpp
-    solvers/ipopt_backend_stub.cpp
 )
 target_include_directories(psiopt PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
 target_compile_options(psiopt PRIVATE ${COMPILE_FLAGS})
 target_link_libraries(psiopt PRIVATE utils)
+
+# Alternative NLP solver backend. Exactly one of the two implementations of the
+# backend entry points is compiled in: the real adapter when Ipopt is linked,
+# the fallback that reports the missing build support otherwise.
+#
+# The Ipopt imported target is wrapped in BUILD_INTERFACE because psiopt is part
+# of the installed export set: a PRIVATE dependency on a static library is still
+# recorded (as $<LINK_ONLY:...>) in its interface, and install(EXPORT) rejects an
+# imported target that is not itself exported. Build-tree consumers still link
+# Ipopt transitively; the include directories are attached explicitly so they do
+# not depend on that wrapping.
+if(ENABLE_IPOPT)
+    target_sources(psiopt PRIVATE solvers/ipopt_tnlp_adapter.cpp)
+    target_compile_definitions(psiopt PRIVATE TYCHO_ENABLE_IPOPT)
+    target_include_directories(psiopt PRIVATE ${IPOPT_INCLUDE_DIRS})
+    target_link_libraries(psiopt PRIVATE $<BUILD_INTERFACE:PkgConfig::IPOPT>)
+else()
+    target_sources(psiopt PRIVATE solvers/ipopt_backend_stub.cpp)
+endif()
+
 if(APPLE)
     target_link_libraries(psiopt PUBLIC AccelerateSparse::AccelerateSparse)
 endif()

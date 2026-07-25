@@ -131,6 +131,14 @@ option(ENABLE_ENZYME_AD
 option(BUILD_SPHINX_DOCS
     "Build Sphinx documentation (requires sphinx, breathe, doxygen, pydata-sphinx-theme)"
     OFF)
+option(ENABLE_IPOPT
+    "Link against an installed Ipopt (found via pkg-config; set CMAKE_PREFIX_PATH or PKG_CONFIG_PATH to a custom install) to enable the alternative NLP solver backend"
+    OFF)
+
+if(ENABLE_IPOPT)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(IPOPT REQUIRED IMPORTED_TARGET ipopt)
+endif()
 
 if(ENABLE_ENZYME_AD)
     if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
