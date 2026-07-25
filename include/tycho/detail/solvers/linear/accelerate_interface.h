@@ -596,7 +596,7 @@ class AccelerateImpl
 
     std::vector<long> m_columnStarts;
     mutable MatrixType matrix_;
-    mutable AccelSparseMatrix accel_matrix_;
+    mutable AccelSparseMatrix accel_matrix_{};
     mutable ComputationInfo info_ = Success;
     mutable std::vector<uint8_t> factor_storage_;
     mutable std::vector<uint8_t> workspace_;
