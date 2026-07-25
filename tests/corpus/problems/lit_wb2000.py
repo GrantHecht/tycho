@@ -84,6 +84,7 @@ Args = vf.Arguments
 
 TIER = "literature"
 TIMEOUT = 30
+SOLVE_MODE = "optimize"
 
 # Wächter-Biegler constants verified against Benson-Shanno-Vanderbei's
 # reproduction (see docstring above) -- NOT the brief's original (a=1, b=0.5),
@@ -92,8 +93,8 @@ _A = -1.0
 _B = 1.0
 
 
-def build_and_solve(configure) -> dict:
-    """Construct, configure, and solve the Wächter-Biegler counterexample.
+def build():
+    """Construct the Wächter-Biegler counterexample (unsolved).
 
     See tests/corpus/README.md for the full problem-module contract.
     """
@@ -112,22 +113,4 @@ def build_and_solve(configure) -> dict:
     prob.add_inequal_con(-Args(1)[0], [1])
     prob.add_inequal_con(-Args(1)[0], [2])
 
-    configure(prob.optimizer)
-    flag = prob.optimize()
-
-    optimizer = prob.optimizer
-    try:
-        objective = float(optimizer.last_obj_val)
-    except AttributeError:
-        objective = None
-    try:
-        iterations = int(optimizer.last_iter_num)
-    except AttributeError:
-        iterations = None
-
-    return {
-        "flag": flag.name,
-        "objective": objective,
-        "iterations": iterations,
-        "notes": "",
-    }
+    return prob

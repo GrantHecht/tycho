@@ -58,10 +58,11 @@ Args = vf.Arguments
 
 TIER = "literature"
 TIMEOUT = 30
+SOLVE_MODE = "optimize"
 
 
-def build_and_solve(configure) -> dict:
-    """Construct, configure, and solve Powell's badly scaled system.
+def build():
+    """Construct Powell's badly scaled system (unsolved).
 
     See tests/corpus/README.md for the full problem-module contract.
     """
@@ -74,22 +75,4 @@ def build_and_solve(configure) -> dict:
     prob.add_equal_con((-Args(2)[0]).exp() + (-Args(2)[1]).exp() - 1.0001, [0, 1])
     # Deliberately no objective term of any kind (pure feasibility).
 
-    configure(prob.optimizer)
-    flag = prob.optimize()
-
-    optimizer = prob.optimizer
-    try:
-        objective = float(optimizer.last_obj_val)
-    except AttributeError:
-        objective = None
-    try:
-        iterations = int(optimizer.last_iter_num)
-    except AttributeError:
-        iterations = None
-
-    return {
-        "flag": flag.name,
-        "objective": objective,
-        "iterations": iterations,
-        "notes": "",
-    }
+    return prob

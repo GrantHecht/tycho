@@ -74,10 +74,11 @@ Args = vf.Arguments
 
 TIER = "literature"
 TIMEOUT = 30
+SOLVE_MODE = "optimize"
 
 
-def build_and_solve(configure) -> dict:
-    """Construct, configure, and solve the Maratos-effect example.
+def build():
+    """Construct the Maratos-effect example (unsolved).
 
     See tests/corpus/README.md for the full problem-module contract.
     """
@@ -90,22 +91,4 @@ def build_and_solve(configure) -> dict:
     # x1^2 + x2^2 - 1 = 0
     prob.add_equal_con(Args(2).squared_norm() - 1.0, [0, 1])
 
-    configure(prob.optimizer)
-    flag = prob.optimize()
-
-    optimizer = prob.optimizer
-    try:
-        objective = float(optimizer.last_obj_val)
-    except AttributeError:
-        objective = None
-    try:
-        iterations = int(optimizer.last_iter_num)
-    except AttributeError:
-        iterations = None
-
-    return {
-        "flag": flag.name,
-        "objective": objective,
-        "iterations": iterations,
-        "notes": "",
-    }
+    return prob

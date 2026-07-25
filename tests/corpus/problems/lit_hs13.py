@@ -63,10 +63,11 @@ Args = vf.Arguments
 
 TIER = "literature"
 TIMEOUT = 30
+SOLVE_MODE = "optimize"
 
 
-def build_and_solve(configure) -> dict:
-    """Construct, configure, and solve HS13.
+def build():
+    """Construct HS13 (unsolved).
 
     See tests/corpus/README.md for the full problem-module contract.
     """
@@ -82,22 +83,4 @@ def build_and_solve(configure) -> dict:
     prob.add_inequal_con(-Args(1)[0], [0])
     prob.add_inequal_con(-Args(1)[0], [1])
 
-    configure(prob.optimizer)
-    flag = prob.optimize()
-
-    optimizer = prob.optimizer
-    try:
-        objective = float(optimizer.last_obj_val)
-    except AttributeError:
-        objective = None
-    try:
-        iterations = int(optimizer.last_iter_num)
-    except AttributeError:
-        iterations = None
-
-    return {
-        "flag": flag.name,
-        "objective": objective,
-        "iterations": iterations,
-        "notes": "",
-    }
+    return prob

@@ -53,6 +53,7 @@ oc = typy.optimal_control
 
 TIER = "degenerate"
 TIMEOUT = 30
+SOLVE_MODE = "optimize"
 
 
 class _DoubleIntegrator(oc.ODEBase):
@@ -72,8 +73,8 @@ def _initial_guess(n=100):
     return [[x, 0.0, t, 0.0] for x, t in zip(xs, ts)]
 
 
-def build_and_solve(configure) -> dict:
-    """Construct, configure, and solve the pure-feasibility (no-objective) problem.
+def build():
+    """Construct the pure-feasibility (no-objective) problem (unsolved).
 
     See tests/corpus/README.md for the full problem-module contract.
     """
@@ -89,22 +90,4 @@ def build_and_solve(configure) -> dict:
     phase.add_boundary_value("Back", range(0, 3), [1.0, 0.0, 1.0])
     # Deliberately no objective term of any kind.
 
-    configure(phase.optimizer)
-    flag = phase.optimize()
-
-    optimizer = phase.optimizer
-    try:
-        objective = float(optimizer.last_obj_val)
-    except AttributeError:
-        objective = None
-    try:
-        iterations = int(optimizer.last_iter_num)
-    except AttributeError:
-        iterations = None
-
-    return {
-        "flag": flag.name,
-        "objective": objective,
-        "iterations": iterations,
-        "notes": "",
-    }
+    return phase

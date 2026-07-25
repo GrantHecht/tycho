@@ -63,6 +63,12 @@ tModes = oc.TranscriptionModes
 
 TIER = "hard"
 TIMEOUT = 90
+SOLVE_MODE = "solve_optimize"
+NOTES = (
+    "Order-sensitive: iteration count and objective vary "
+    "run-to-run near this DIVERGING failure; flag and failure "
+    "magnitude are stable. See module docstring."
+)
 
 _NSEG = 250
 _TOL = 1e-12
@@ -86,8 +92,8 @@ def _uniform_wind(xyt, ang=135 * np.pi / 180, vel=2):
     return vel * np.cos(ang), vel * np.sin(ang)
 
 
-def build_and_solve(configure) -> dict:
-    """Construct, configure, and solve the wrong-basin-heading Zermelo problem.
+def build():
+    """Construct the wrong-basin-heading Zermelo problem (unsolved).
 
     See tests/corpus/README.md for the full problem-module contract.
     """
@@ -121,24 +127,4 @@ def build_and_solve(configure) -> dict:
     phase.optimizer.set_eq_con_tol(_TOL)
     phase.optimizer.set_kkt_tol(_TOL)
 
-    configure(phase.optimizer)
-    flag = phase.solve_optimize()
-
-    optimizer = phase.optimizer
-    try:
-        objective = float(optimizer.last_obj_val)
-    except AttributeError:
-        objective = None
-    try:
-        iterations = int(optimizer.last_iter_num)
-    except AttributeError:
-        iterations = None
-
-    return {
-        "flag": flag.name,
-        "objective": objective,
-        "iterations": iterations,
-        "notes": "Order-sensitive: iteration count and objective vary "
-        "run-to-run near this DIVERGING failure; flag and failure "
-        "magnitude are stable. See module docstring.",
-    }
+    return phase

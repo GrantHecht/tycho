@@ -18,11 +18,20 @@ Usage:
 Options:
     --out PATH            Output JSONL path (default: corpus_results.jsonl
                            in the current directory).
-    --config KEY=VALUE...  Zero or more KEY=VALUE pairs applied to the
-                           PSIOPT optimizer via setattr() inside the child
-                           subprocess, immediately before optimize/solve.
-                           Values are parsed as int, then float, then left
-                           as str (in that order).
+    --backend {psiopt,ipopt}  NLP solver backend to drive every selected
+                           problem through (default: psiopt). ipopt requires
+                           a Tycho build configured with -DENABLE_IPOPT=ON
+                           (checked up front via tychopy.solvers.ipopt_available()
+                           before any child is spawned).
+    --config KEY=VALUE...  Zero or more KEY=VALUE pairs. On the psiopt
+                           backend these are applied to the PSIOPT optimizer
+                           via setattr() inside the child subprocess,
+                           immediately before optimize/solve (values are
+                           parsed as int, then float, then left as str, in
+                           that order). On the ipopt backend these instead
+                           populate problem.ipopt_options verbatim as
+                           strings (Ipopt's own option parser does its own
+                           type coercion).
     --preset NAME          Reserved for a future named-configuration table.
                            No presets are defined yet; passing this always
                            errors with a clear message.
@@ -36,7 +45,8 @@ Options:
     --diff A.jsonl B.jsonl  Instead of running anything, print a per-problem
                            table of status/iteration changes between two
                            previously recorded JSONL files, plus summary
-                           counts, and exit.
+                           counts, and exit. Records from before the
+                           --backend column existed are treated as "psiopt".
 
 See tests/corpus/README.md for the full problem-module contract, the exact
 PSIOPT-ConvergenceFlags -> status mapping, and the JSONL schema.
@@ -118,13 +128,21 @@ def _parse_config_value(raw: str):
     return raw
 
 
-def _parse_config_args(pairs) -> dict:
+def _parse_config_args(pairs, verbatim: bool = False) -> dict:
+    """Parse --config KEY=VALUE pairs.
+
+    ``verbatim`` selects the ipopt backend's semantics: every value stays a
+    plain string (Ipopt's own option parser does its own type coercion) and
+    populates ``problem.ipopt_options`` rather than being setattr()'d onto
+    the PSIOPT optimizer, where values are cast int, then float, then left
+    as str (see the psiopt-backend docstring at the top of this file).
+    """
     config = {}
     for item in pairs or []:
         if "=" not in item:
             raise SystemExit(f"--config expects KEY=VALUE, got: {item!r}")
         key, _, raw = item.partition("=")
-        config[key] = _parse_config_value(raw)
+        config[key] = raw if verbatim else _parse_config_value(raw)
     return config
 
 
@@ -144,11 +162,13 @@ def _parse_config_args(pairs) -> dict:
 # never needs a specific line to be intact).
 
 
-def _run_child(module_name: str, config: dict, result_file: str) -> int:
+def _run_child(module_name: str, config: dict, result_file: str, backend: str) -> int:
     registry = _import_registry()
     if module_name not in registry.ALL_PROBLEMS:
         print(f"Unknown corpus problem module: {module_name!r}", file=sys.stderr)
         return 2
+
+    import driver  # tests/corpus/driver.py
 
     mod = importlib.import_module(f"problems.{module_name}")
 
@@ -167,7 +187,11 @@ def _run_child(module_name: str, config: dict, result_file: str) -> int:
                 else:
                     setattr(optimizer, key, getattr(enum_type, str(value)))
 
-    result = mod.build_and_solve(configure)
+    # config doubles as backend_options on the ipopt backend (see
+    # _parse_config_args's verbatim mode, selected by the parent when
+    # --backend ipopt); the psiopt-only `configure` closure above is simply
+    # unused on that path (driver.run never calls it for backend="ipopt").
+    result = driver.run(mod, configure, backend=backend, backend_options=config)
     with open(result_file, "w", encoding="utf-8") as f:
         json.dump(result, f)
     return 0
@@ -178,7 +202,9 @@ def _run_child(module_name: str, config: dict, result_file: str) -> int:
 # ---------------------------------------------------------------------------
 
 
-def _score_one(name: str, tier: str, timeout: int, config: dict, env: dict) -> dict:
+def _score_one(
+    name: str, tier: str, timeout: int, config: dict, env: dict, backend: str
+) -> dict:
     fd, result_path = tempfile.mkstemp(prefix="corpus_result_", suffix=".json")
     os.close(fd)
     os.remove(result_path)  # only reserve the name; the child creates the file
@@ -192,6 +218,8 @@ def _score_one(name: str, tier: str, timeout: int, config: dict, env: dict) -> d
             json.dumps(config),
             "--_result-file",
             result_path,
+            "--_backend",
+            backend,
         ]
         t0 = time.monotonic()
         try:
@@ -217,6 +245,7 @@ def _score_one(name: str, tier: str, timeout: int, config: dict, env: dict) -> d
                 "objective": None,
                 "returncode": None,
                 "notes": f"killed after {timeout}s timeout",
+                "backend": backend,
             }
 
         wall_s = time.monotonic() - t0
@@ -250,6 +279,7 @@ def _score_one(name: str, tier: str, timeout: int, config: dict, env: dict) -> d
                 "objective": None,
                 "returncode": proc.returncode,
                 "notes": note,
+                "backend": backend,
             }
 
         try:
@@ -265,6 +295,7 @@ def _score_one(name: str, tier: str, timeout: int, config: dict, env: dict) -> d
                 "objective": None,
                 "returncode": proc.returncode,
                 "notes": f"malformed result file: {exc}",
+                "backend": backend,
             }
     finally:
         if os.path.exists(result_path):
@@ -277,6 +308,17 @@ def _score_one(name: str, tier: str, timeout: int, config: dict, env: dict) -> d
         status = "error"
         notes = f"{notes}; unknown convergence flag {flag_name!r}".strip("; ")
 
+    if backend == "ipopt":
+        # PSIOPT's own console printer never runs a solve under this
+        # backend, so the "Iterations : N" instrument the psiopt path
+        # relies on (see the module docstring's "Iteration counting"
+        # description in tests/corpus/README.md) has nothing to match;
+        # trust the child's own count (driver.py's ipopt branch reads it
+        # straight from IpoptRunInfo.iterations) instead.
+        child_iterations = child_result.get("iterations")
+        if isinstance(child_iterations, int):
+            iterations = child_iterations
+
     return {
         "problem": name,
         "tier": tier,
@@ -287,6 +329,7 @@ def _score_one(name: str, tier: str, timeout: int, config: dict, env: dict) -> d
         "objective": child_result.get("objective"),
         "returncode": proc.returncode,
         "notes": notes,
+        "backend": backend,
     }
 
 
@@ -306,13 +349,13 @@ def _print_table(records: list, out_path: Path) -> None:
     col = max(len(r["problem"]) for r in records) + 2
     print(f"Ran {len(records)} corpus record(s)  ->  {out_path}\n" + "=" * 78)
     print(
-        f"  {'problem'.ljust(col)}{'tier':<12}{'status':<10}"
+        f"  {'problem'.ljust(col)}{'tier':<12}{'backend':<9}{'status':<10}"
         f"{'iters':>7}{'wall_s':>9}{'objective':>16}"
     )
     for r in records:
         obj = "None" if r["objective"] is None else f"{r['objective']:.6g}"
         print(
-            f"  {r['problem'].ljust(col)}{r['tier']:<12}{r['status']:<10}"
+            f"  {r['problem'].ljust(col)}{r['tier']:<12}{r['backend']:<9}{r['status']:<10}"
             f"{r['iterations']:>7}{r['wall_s']:>9.2f}{obj:>16}"
         )
 
@@ -334,7 +377,11 @@ def _load_jsonl(path: str) -> list:
         for line in f:
             line = line.strip()
             if line:
-                records.append(json.loads(line))
+                record = json.loads(line)
+                # Records recorded before the backend column existed are
+                # implicitly psiopt runs (that was the only backend then).
+                record.setdefault("backend", "psiopt")
+                records.append(record)
     return records
 
 
@@ -354,7 +401,10 @@ def _print_diff(path_a: str, path_b: str) -> None:
     col = max((len(n) for n in names), default=8) + 2
 
     print(f"Diff: {path_a}  ->  {path_b}\n" + "=" * 78)
-    print(f"  {'problem'.ljust(col)}{'status (a -> b)':<28}{'iterations (a -> b)'}")
+    print(
+        f"  {'problem'.ljust(col)}{'backend (a -> b)':<20}"
+        f"{'status (a -> b)':<28}{'iterations (a -> b)'}"
+    )
 
     unchanged = improved = regressed = only_a = only_b = 0
     for name in names:
@@ -368,6 +418,9 @@ def _print_diff(path_a: str, path_b: str) -> None:
             print(f"  {name.ljust(col)}{ra['status'] + ' -> (missing)'}")
             continue
 
+        ba, bb = ra["backend"], rb["backend"]
+        backend_str = f"{ba} -> {bb}" if ba != bb else ba
+
         sa, sb = ra["status"], rb["status"]
         ia, ib = ra["iterations"], rb["iterations"]
         delta_str = f"{ia} -> {ib}"
@@ -375,7 +428,7 @@ def _print_diff(path_a: str, path_b: str) -> None:
             delta_str += f" ({ib - ia:+d})"
 
         status_str = f"{sa} -> {sb}" if sa != sb else sa
-        print(f"  {name.ljust(col)}{status_str:<28}{delta_str}")
+        print(f"  {name.ljust(col)}{backend_str:<20}{status_str:<28}{delta_str}")
 
         if sa == sb:
             unchanged += 1
@@ -405,11 +458,21 @@ def _parse_args():
     )
     parser.add_argument("--out", default=DEFAULT_OUT, help="Output JSONL path.")
     parser.add_argument(
+        "--backend",
+        choices=("psiopt", "ipopt"),
+        default="psiopt",
+        help="NLP solver backend to drive every selected problem through "
+        "(default: psiopt). ipopt requires a Tycho build configured with "
+        "-DENABLE_IPOPT=ON.",
+    )
+    parser.add_argument(
         "--config",
         nargs="*",
         default=[],
         metavar="KEY=VALUE",
-        help="KEY=VALUE pairs applied to the optimizer via setattr in the child.",
+        help="KEY=VALUE pairs: setattr onto the optimizer in the child "
+        "(--backend psiopt) or populate problem.ipopt_options verbatim as "
+        "strings (--backend ipopt).",
     )
     parser.add_argument(
         "--preset",
@@ -445,7 +508,20 @@ def _parse_args():
     parser.add_argument("--_child", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--_config", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--_result-file", default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--_backend", default="psiopt", help=argparse.SUPPRESS)
     return parser.parse_args()
+
+
+def _check_ipopt_available() -> None:
+    """Parent-side fast-fail for --backend ipopt: don't spawn 17 doomed children."""
+    import tychopy.solvers as solvs
+
+    if not solvs.ipopt_available():
+        raise SystemExit(
+            "--backend ipopt requires a Tycho build configured with "
+            "-DENABLE_IPOPT=ON (tychopy.solvers.ipopt_available() is False "
+            "in this environment)."
+        )
 
 
 def main() -> None:
@@ -453,7 +529,7 @@ def main() -> None:
 
     if args._child:
         config = json.loads(args._config) if args._config else {}
-        sys.exit(_run_child(args._child, config, args._result_file))
+        sys.exit(_run_child(args._child, config, args._result_file, args._backend))
 
     if args.diff is not None:
         _print_diff(args.diff[0], args.diff[1])
@@ -465,8 +541,11 @@ def main() -> None:
             "presets are defined yet. Use --config KEY=VALUE instead."
         )
 
+    if args.backend == "ipopt":
+        _check_ipopt_available()
+
     registry = _import_registry()
-    config = _parse_config_args(args.config)
+    config = _parse_config_args(args.config, verbatim=(args.backend == "ipopt"))
     names = [n for n in registry.ALL_PROBLEMS if args.filter in n]
     if not names:
         print(f"No corpus problems match filter {args.filter!r}.")
@@ -480,7 +559,7 @@ def main() -> None:
         tier = mod.TIER
         timeout = mod.TIMEOUT
         for _ in range(args.repeat):
-            records.append(_score_one(name, tier, timeout, config, env))
+            records.append(_score_one(name, tier, timeout, config, env, args.backend))
 
     out_path = Path(args.out)
     with out_path.open("w", encoding="utf-8") as f:

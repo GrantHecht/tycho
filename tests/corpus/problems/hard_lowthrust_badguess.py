@@ -59,6 +59,7 @@ Args = vf.Arguments
 
 TIER = "hard"
 TIMEOUT = 120
+SOLVE_MODE = "optimize"
 
 
 class _LTModel(oc.ODEBase):
@@ -76,8 +77,8 @@ class _LTModel(oc.ODEBase):
         super().__init__(ode, Xvars, Uvars)
 
 
-def build_and_solve(configure) -> dict:
-    """Construct, configure, and solve the bad-guess SimpleLowThrust problem.
+def build():
+    """Construct the bad-guess SimpleLowThrust problem (unsolved).
 
     See tests/corpus/README.md for the full problem-module contract.
     """
@@ -119,22 +120,4 @@ def build_and_solve(configure) -> dict:
     phase.optimizer.set_delta_h(1.0e-6)
     phase.add_delta_time_objective(1.0)
 
-    configure(phase.optimizer)
-    flag = phase.optimize()
-
-    optimizer = phase.optimizer
-    try:
-        objective = float(optimizer.last_obj_val)
-    except AttributeError:
-        objective = None
-    try:
-        iterations = int(optimizer.last_iter_num)
-    except AttributeError:
-        iterations = None
-
-    return {
-        "flag": flag.name,
-        "objective": objective,
-        "iterations": iterations,
-        "notes": "",
-    }
+    return phase

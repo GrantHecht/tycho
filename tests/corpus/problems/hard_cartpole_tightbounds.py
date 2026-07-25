@@ -59,6 +59,7 @@ Args = vf.Arguments
 
 TIER = "hard"
 TIMEOUT = 60
+SOLVE_MODE = "optimize"
 
 # Deviation from the parent's Fmax=20: see module docstring for the
 # manual bisection that led to this value.
@@ -80,8 +81,8 @@ class _CartPole(oc.ODEBase):
         super().__init__(ode, Xvars, Uvars)
 
 
-def build_and_solve(configure) -> dict:
-    """Construct, configure, and solve the tight-bounds CartPole problem.
+def build():
+    """Construct the tight-bounds CartPole problem (unsolved).
 
     See tests/corpus/README.md for the full problem-module contract.
     """
@@ -108,22 +109,4 @@ def build_and_solve(configure) -> dict:
 
     phase.set_num_partitions(8, 8)
 
-    configure(phase.optimizer)
-    flag = phase.optimize()
-
-    optimizer = phase.optimizer
-    try:
-        objective = float(optimizer.last_obj_val)
-    except AttributeError:
-        objective = None
-    try:
-        iterations = int(optimizer.last_iter_num)
-    except AttributeError:
-        iterations = None
-
-    return {
-        "flag": flag.name,
-        "objective": objective,
-        "iterations": iterations,
-        "notes": "",
-    }
+    return phase

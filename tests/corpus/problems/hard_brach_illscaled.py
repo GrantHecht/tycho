@@ -55,6 +55,7 @@ oc = typy.optimal_control
 
 TIER = "hard"
 TIMEOUT = 60
+SOLVE_MODE = "optimize"
 
 # Deviation from the brief's literal 1e-6: see module docstring — 1e-6 only
 # strains 1.57x (short of the ≥2x rule) while 1e-7 already fails cleanly.
@@ -75,8 +76,8 @@ class _Brachistochrone(oc.ODEBase):
         super().__init__(ode, XVars, UVars)
 
 
-def build_and_solve(configure) -> dict:
-    """Construct, configure, and solve the ill-scaled Brachistochrone problem.
+def build():
+    """Construct the ill-scaled Brachistochrone problem (unsolved).
 
     See tests/corpus/README.md for the full problem-module contract.
     """
@@ -106,22 +107,4 @@ def build_and_solve(configure) -> dict:
     phase.add_boundary_value("Back", [0, 1], [xf, yf])
     phase.add_delta_time_objective(1.0)
 
-    configure(phase.optimizer)
-    flag = phase.optimize()
-
-    optimizer = phase.optimizer
-    try:
-        objective = float(optimizer.last_obj_val)
-    except AttributeError:
-        objective = None
-    try:
-        iterations = int(optimizer.last_iter_num)
-    except AttributeError:
-        iterations = None
-
-    return {
-        "flag": flag.name,
-        "objective": objective,
-        "iterations": iterations,
-        "notes": "",
-    }
+    return phase

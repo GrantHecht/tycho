@@ -61,6 +61,7 @@ Args = vf.Arguments
 
 TIER = "degenerate"
 TIMEOUT = 30
+SOLVE_MODE = "optimize"
 
 
 class _DoubleIntegrator(oc.ODEBase):
@@ -80,8 +81,8 @@ def _initial_guess(n=100):
     return [[x, 0.0, t, 0.0] for x, t in zip(xs, ts)]
 
 
-def build_and_solve(configure) -> dict:
-    """Construct, configure, and solve the duplicated-terminal-BC problem.
+def build():
+    """Construct the duplicated-terminal-BC problem (unsolved).
 
     See tests/corpus/README.md for the full problem-module contract.
     """
@@ -102,22 +103,4 @@ def build_and_solve(configure) -> dict:
     phase.add_boundary_value("Back", range(0, 3), [1.0, 0.0, 1.0])
     phase.add_integral_objective((Args(1)[0] ** 2) / 2, [3])
 
-    configure(phase.optimizer)
-    flag = phase.optimize()
-
-    optimizer = phase.optimizer
-    try:
-        objective = float(optimizer.last_obj_val)
-    except AttributeError:
-        objective = None
-    try:
-        iterations = int(optimizer.last_iter_num)
-    except AttributeError:
-        iterations = None
-
-    return {
-        "flag": flag.name,
-        "objective": objective,
-        "iterations": iterations,
-        "notes": "",
-    }
+    return phase
