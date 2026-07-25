@@ -328,7 +328,7 @@ class AccelerateImpl
         PermutationMatrix<Dynamic, Dynamic, StorageIndex> p_null;
         matrix_.resize(matrix.rows(), matrix.cols());
 
-        constexpr int TriangleType = (UpLo & Lower) ? Lower : Upper;
+        constexpr int TriangleType = (U & Lower) ? Lower : Upper;
         matrix_.template selfadjointView<TriangleType>() =
             matrix.template selfadjointView<TriangleType>().twistedBy(p_null);
         matrix_.makeCompressed();
@@ -906,5 +906,7 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::release() {
 }
 
 } // end namespace Eigen
+
+#include <Eigen/src/Core/util/ReenableStupidWarnings.h>
 
 #endif // EIGEN_ACCELERATESUPPORT_H
