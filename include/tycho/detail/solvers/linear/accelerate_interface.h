@@ -26,6 +26,7 @@
 #include "tycho/detail/solvers/linear/accelerate_utils.h"
 
 #include <limits>
+#include <type_traits>
 
 #include <fmt/color.h>
 #include <fmt/core.h>
@@ -241,6 +242,16 @@ class AccelerateImpl
     typedef MatrixType_ MatrixType;
     typedef typename MatrixType::Scalar Scalar;
     typedef typename MatrixType::StorageIndex StorageIndex;
+
+    // Accelerate's SparseMatrixStructure::rowIndices and
+    // SparseSymbolicFactorOptions::order are both int*, and this class hands
+    // matrix_.innerIndexPtr() and permutation_.data() to them directly. A
+    // different StorageIndex is already ill-formed (const_cast cannot change a
+    // pointee type); this turns that into one readable message.
+    static_assert(std::is_same<StorageIndex, int>::value,
+                  "AccelerateImpl requires StorageIndex == int: Accelerate's sparse "
+                  "structure and ordering fields are int*.");
+
     enum { ColsAtCompileTime = Dynamic, MaxColsAtCompileTime = Dynamic };
     enum { UpLo = UpLo_ };
 
@@ -467,6 +478,10 @@ class AccelerateImpl
         SparseMatrixStructure structure{};
         structure.blockSize = 1;
 
+        eigen_assert(matrix_.rows() <= std::numeric_limits<int>::max() &&
+                     matrix_.cols() <= std::numeric_limits<int>::max() &&
+                     "Accelerate's sparse structure uses int dimensions");
+
         if constexpr (MatrixType::IsRowMajor) { // RowMajor (CSR) format
             // For CSR, Accelerate expects CSC. We use the 'transpose' attribute
             // to tell Accelerate to interpret the CSR matrix as a transposed CSC matrix.
@@ -516,9 +531,14 @@ class AccelerateImpl
         flops_ = 0;
         mem_ = 0;
 
-        // Only resize permutation if necessary to avoid unnecessary allocations
-        if (permutation_.size() != static_cast<size_t>(n_rows_)) {
-            permutation_.resize(n_rows_);
+        // fopts.order is a symmetric row-and-column permutation for the
+        // symmetric and QR cases (Solve.h:1310-1319), so size it for the larger
+        // dimension. No-op for square matrices, which is every type
+        // instantiated in-tree -- this hardens AccelerateQR/AccelerateCholeskyAtA,
+        // which are declared EnforceSquare_ = false but never instantiated.
+        const Index perm_size = std::max(n_rows_, n_cols_);
+        if (permutation_.size() != static_cast<size_t>(perm_size)) {
+            permutation_.resize(perm_size);
         }
         std::iota(permutation_.begin(), permutation_.end(), 0); // Initialize with identity
 
@@ -771,6 +791,10 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::_solve_impl(
 
     eigen_assert(n_rows_ == b.rows());
     eigen_assert(((b.cols() == 1) || b.outerStride() == b.rows()));
+    eigen_assert(((MatrixBase<Rhs>::Flags & RowMajorBit) == 0 || b.cols() == 1) &&
+                 "Row-major right hand sides are not supported");
+    eigen_assert(((MatrixBase<Dest>::Flags & RowMajorBit) == 0 || x.cols() == 1) &&
+                 "Row-major matrices of unknowns are not supported");
 
     Scalar *b_ptr = const_cast<Scalar *>(b.derived().data());
     Scalar *x_ptr = const_cast<Scalar *>(x.derived().data());
@@ -808,6 +832,11 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::_solve_impl(
         return;
     }
 
+    // b and x may alias (Eigen's Solve assignment forwards both straight here).
+    // Accelerate does not document the out-of-place overload as alias-safe, but
+    // probing at n=200 with nrhs in {1,3} showed correct results; revisit if a
+    // caller ever depends on it. Pardiso, by contrast, must copy (see
+    // PardisoImpl::_solve_impl).
     SparseSolve(*m_numericFactorization, bmat, xmat, ws);
 
     // Provably a no-op, kept for documentation/defensiveness rather than
@@ -865,6 +894,11 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_,
     // Update matrix dimensions in case they changed when the sparsity pattern was modified
     n_rows_ = matrix_.rows();
     n_cols_ = matrix_.cols();
+
+    // buildAccelSparseMatrix reads outerIndexPtr/innerIndexPtr/valuePtr raw,
+    // which only describe a valid CSR/CSC layout when the matrix is compressed.
+    // No-op when it already is.
+    matrix_.makeCompressed();
 
     // Build/rebuild the internal AccelSparseMatrix from the current state of matrix_
     buildAccelSparseMatrix();

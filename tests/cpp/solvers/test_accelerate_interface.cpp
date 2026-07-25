@@ -329,14 +329,45 @@ TEST(AccelerateInterface, RefactorRecoversAfterAFailedRefactor) {
     EXPECT_LT((dense_symmetric(A) * x - b).cwiseAbs().maxCoeff(), 1e-10);
 }
 
+// PSIOPT assembles the KKT matrix in place through get_matrix() and then calls
+// reinitialize_internal_matrix_representation(). buildAccelSparseMatrix reads
+// outerIndexPtr/innerIndexPtr/valuePtr raw, which describe nothing coherent
+// unless the matrix is compressed -- safe in-tree today only because
+// analyze_sparsity happens to end with makeCompressed().
+TEST(AccelerateInterface, ReinitializeToleratesUncompressedMatrix) {
+    LDLT s;
+    s.compute(spd_both_triangles());
+    ASSERT_EQ(s.info(), Eigen::Success);
+
+    // Force the internal matrix into uncompressed mode, as an in-place
+    // assembler that inserts a new entry would.
+    s.get_matrix().uncompress();
+    ASSERT_FALSE(s.get_matrix().isCompressed());
+
+    s.reinitialize_internal_matrix_representation();
+    EXPECT_TRUE(s.get_matrix().isCompressed());
+
+    s.compute_internal();
+    ASSERT_EQ(s.info(), Eigen::Success);
+
+    Eigen::VectorXd b(3);
+    b << 1.0, 2.0, 3.0;
+    const Eigen::VectorXd x = s.solve(b);
+    EXPECT_LT((Eigen::MatrixXd(spd_both_triangles()) * x - b).cwiseAbs().maxCoeff(), 1e-10);
+}
+
 // The alignment arithmetic lives in Eigen::internal so it can be tested
 // directly: its only in-class caller is private, and the size==0 path is
 // unreachable through the public API.
 TEST(AccelerateInterface, AlignedSubbufferRejectsUndersizedStorage) {
-    std::vector<uint8_t> empty(0), small(8), exact(16), ample(64);
+    std::vector<uint8_t> empty(0), small(8), almost(15), exact(16), ample(64);
 
     EXPECT_EQ(Eigen::internal::aligned_subbuffer(empty), nullptr);
     EXPECT_EQ(Eigen::internal::aligned_subbuffer(small), nullptr);
+    // N = 15 is the value directly adjacent to the success/failure threshold
+    // (16) -- the exact case that would catch the size guard being weakened
+    // by one.
+    EXPECT_EQ(Eigen::internal::aligned_subbuffer(almost), nullptr);
 
     void *p_exact = Eigen::internal::aligned_subbuffer(exact);
     void *p_ample = Eigen::internal::aligned_subbuffer(ample);
