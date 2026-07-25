@@ -8,6 +8,7 @@
 !scripts/upstream_canary/check.sh
 !scripts/check_abs_sweep.sh
 !scripts/check_crtp_hooks.sh
+!scripts/check_accelerate_warnings.sh
 
 ### C++ ###
 # Prerequisites

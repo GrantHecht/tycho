@@ -308,9 +308,12 @@ TEST(KeplerLCDKernelSS, UniformEllipticFourLanesHitsSimdPath) {
     EXPECT_TRUE(all_converged(k_ss.converged));
 
     // Tolerance is relative — SIMD evaluation re-orders sums vs scalar, so
-    // sub-ULP rounding differences (~1e-15 relative) are expected.
+    // rounding differences are expected. The drift is ISA-dependent: ~1e-15
+    // relative on x86/AVX, but 1.3e-13 relative observed on arm64/NEON (U3,
+    // via different FMA contraction through the Stumpff recurrences), so the
+    // bound is 1e-12 to hold on both with headroom.
     auto rel_near = [](double a, double b) {
-        return std::max(1e-13, 1e-13 * std::max(std::abs(a), std::abs(b)));
+        return std::max(1e-12, 1e-12 * std::max(std::abs(a), std::abs(b)));
     };
     for (int lane = 0; lane < 4; ++lane) {
         auto k = kepler_lcd_iterate<double>(rvs[lane].head<3>(), rvs[lane].tail<3>(), dts[lane],

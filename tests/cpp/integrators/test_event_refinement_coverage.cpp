@@ -327,9 +327,14 @@ TEST_F(EventRefinementCoverageTest, ResetPerCall_SecondCallIndependent) {
     Integrator<astro::Kepler> integ(kep, IVPAlg::DOPRI54, 10.0);
     integ.set_abs_tol(1e-12);
     integ.set_rel_tol(1e-13);
-    // 1e-300 is unattainable: FP residuals bottom out at ~1e-16, so every
-    // refinement fails the residual check and emits std::nullopt.
-    integ.set_event_residual_tol(1.0e-300);
+    // The tolerance must be unsatisfiable so every refinement fails the
+    // residual check and emits std::nullopt. 1e-300 is NOT unsatisfiable: on
+    // arm64 the polished residual of this round-number event lands on exactly
+    // 0.0 (observed on Apple Silicon: |0.0| <= 1e-300 held, count stayed 0).
+    // A negative tolerance is unsatisfiable for every residual including an
+    // exact zero; the public setter rejects non-positive values precisely
+    // because no real caller should want this, so write the member directly.
+    integ.event_residual_tol_ = -1.0;
     integ.set_max_event_iters(4);
 
     auto x0 = erc_eccentric_x0();

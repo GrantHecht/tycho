@@ -5,10 +5,18 @@
 // generate_golden.cpp. Any deviation indicates a behavioral change that
 // must be reviewed before proceeding with refactoring.
 //
-// Tolerances are 1e-12 absolute (matches expect_vector_match's EXPECT_NEAR
-// semantics) — comfortably tight on unit-magnitude state vectors while
-// accommodating ULP-level libm/Eigen 5 trig drift across CPUs (see
-// commit babc607 for the original drift incident).
+// Unit-magnitude states (CR3BP, brachistochrone) use 1e-12 absolute —
+// comfortably tight while accommodating ULP-level libm/Eigen 5 trig drift
+// across CPUs (see commit babc607 for the original drift incident).
+//
+// Km-scale two-body states (|x| up to ~7000) use expect_vector_close with
+// rtol=1e-12, atol=1e-9 instead: 1e-12 ABSOLUTE on a 7000-magnitude value
+// demands 1.4e-16 relative agreement — below double ULP at that magnitude —
+// so goldens recorded on x86 could never portably match arm64 (observed
+// drift up to 2.6e-11 abs; first caught on Apple Silicon, 2026-07-25). The
+// atol floor covers should-be-zero components that carry only integration
+// noise (|golden| ~ 1e-9). Any behavioral regression moves results by orders
+// of magnitude more than either bound.
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "regression_utils.h"
@@ -66,7 +74,7 @@ TEST_F(RegressionIVPTest, Case01_TwoBody_DOPRI54) {
     ASSERT_TRUE(f.good()) << "Golden file not found: ivp_01_twobody_dopri54.bin";
     auto golden_xf = read_vector(f);
 
-    expect_vector_match(xf, golden_xf, 1e-12, "Case01_xf");
+    expect_vector_close(xf, golden_xf, 1e-12, 1e-9, "Case01_xf");
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -86,7 +94,7 @@ TEST_F(RegressionIVPTest, Case02_TwoBody_DOPRI87) {
     ASSERT_TRUE(f.good()) << "Golden file not found: ivp_02_twobody_dopri87.bin";
     auto golden_xf = read_vector(f);
 
-    expect_vector_match(xf, golden_xf, 1e-12, "Case02_xf");
+    expect_vector_close(xf, golden_xf, 1e-12, 1e-9, "Case02_xf");
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -160,7 +168,7 @@ TEST_F(RegressionIVPTest, Case05_EventCrossing) {
     // Final state comparison — event detection introduces some FP noise.
     // 1e-12 absolute accommodates ULP-level libm/Eigen 5 trig drift across
     // CPUs (see commit babc607).
-    expect_vector_match(xf, golden_xf, 1e-12, "Case05_xf");
+    expect_vector_close(xf, golden_xf, 1e-12, 1e-9, "Case05_xf");
 
     // Read and compare event locations
     int32_t ngroups = read_int32(f);
@@ -252,6 +260,6 @@ TEST_F(RegressionIVPTest, Case07_Backward) {
     auto golden_xf = read_vector(f);
     auto golden_xr = read_vector(f);
 
-    expect_vector_match(xf, golden_xf, 1e-12, "Case07_forward");
-    expect_vector_match(xr, golden_xr, 1e-12, "Case07_backward");
+    expect_vector_close(xf, golden_xf, 1e-12, 1e-9, "Case07_forward");
+    expect_vector_close(xr, golden_xr, 1e-12, 1e-9, "Case07_backward");
 }

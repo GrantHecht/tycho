@@ -19,12 +19,14 @@
 #include <Eigen/src/Core/util/DisableStupidWarnings.h>
 
 #include <Eigen/Sparse>
+#include <algorithm>
 #include <cmath>
 #include <numeric>
 
 #include "tycho/detail/solvers/linear/accelerate_utils.h"
 
 #include <limits>
+#include <type_traits>
 
 #include <fmt/color.h>
 #include <fmt/core.h>
@@ -158,7 +160,6 @@ template <typename T> struct AccelFactorizationDeleter {
         if (sym) {
             SparseCleanup(*sym);
             delete sym;
-            sym = nullptr;
         }
     }
 };
@@ -208,6 +209,23 @@ inline void *resizeForAccelerateAlignment(const size_t required_size,
     return aligned_solve_workspace_start;
 }
 
+// Returns a 16-byte-aligned pointer into an ALREADY-SIZED buffer, or nullptr if
+// the buffer cannot contain one. Callers must treat nullptr as a failure:
+// Accelerate's workspace parameters are _Nonnull.
+//
+// Split out of AccelerateImpl::getAlignedPointer, whose `space - kAlign`
+// underflowed for buffers smaller than the alignment, making std::align return
+// nullptr behind an assert that NDEBUG deletes.
+inline void *aligned_subbuffer(std::vector<uint8_t> &storage) {
+    constexpr size_t kAccelerateRequiredAlignment = 16;
+    if (storage.size() < kAccelerateRequiredAlignment)
+        return nullptr;
+    void *ptr = static_cast<void *>(storage.data());
+    size_t space = storage.size();
+    return std::align(kAccelerateRequiredAlignment, storage.size() - kAccelerateRequiredAlignment,
+                      ptr, space);
+}
+
 } // end namespace internal
 
 template <typename MatrixType_, int UpLo_, SparseFactorization_t Solver_, bool EnforceSquare_>
@@ -224,6 +242,16 @@ class AccelerateImpl
     typedef MatrixType_ MatrixType;
     typedef typename MatrixType::Scalar Scalar;
     typedef typename MatrixType::StorageIndex StorageIndex;
+
+    // Accelerate's SparseMatrixStructure::rowIndices and
+    // SparseSymbolicFactorOptions::order are both int*, and this class hands
+    // matrix_.innerIndexPtr() and permutation_.data() to them directly. A
+    // different StorageIndex is already ill-formed (const_cast cannot change a
+    // pointee type); this turns that into one readable message.
+    static_assert(std::is_same<StorageIndex, int>::value,
+                  "AccelerateImpl requires StorageIndex == int: Accelerate's sparse "
+                  "structure and ordering fields are int*.");
+
     enum { ColsAtCompileTime = Dynamic, MaxColsAtCompileTime = Dynamic };
     enum { UpLo = UpLo_ };
 
@@ -268,15 +296,15 @@ class AccelerateImpl
             m_sparseKind = SparseOrdinary;
             m_triType = (UpLo_ & Lower) ? SparseLowerTriangle : SparseUpperTriangle;
         }
-
-        order_ = SparseOrderMetis;
-        do_iterative_refinement_ = false;
-        iterative_refinement_iterations_ = 2;
     }
 
     explicit AccelerateImpl(const MatrixType &matrix) : AccelerateImpl() { compute(matrix); }
 
-    ~AccelerateImpl() {}
+    // Defaulted, not removed: a user-declared destructor suppresses the
+    // implicit move constructor, and this type MUST stay non-movable --
+    // accel_matrix_ caches raw pointers into matrix_'s buffers, which a move
+    // would silently invalidate.
+    ~AccelerateImpl() = default;
 
     inline Index cols() const { return n_cols_; }
     inline Index rows() const { return n_rows_; }
@@ -297,8 +325,15 @@ class AccelerateImpl
     template <typename Rhs, typename Dest>
     void _solve_impl(const MatrixBase<Rhs> &b, MatrixBase<Dest> &dest) const;
 
-    /** Sets the ordering algorithm to use. */
-    void set_order(SparseOrder_t order) { order_ = order; }
+    /** Sets the ordering algorithm to use.
+     *
+     * An ordering the running OS does not support is downgraded (see
+     * accelerate_supported_order); query effective_order() for what was kept.
+     */
+    void set_order(SparseOrder_t order) { order_ = accelerate_supported_order(order); }
+
+    /** The ordering actually in use, after any runtime capability downgrade. */
+    SparseOrder_t effective_order() const { return order_; }
 
     /** Sets the number of threads for accelerate */
     inline void set_num_threads(int num_threads) { accelerate_set_num_threads(num_threads); }
@@ -329,7 +364,7 @@ class AccelerateImpl
         PermutationMatrix<Dynamic, Dynamic, StorageIndex> p_null;
         matrix_.resize(matrix.rows(), matrix.cols());
 
-        constexpr int TriangleType = (UpLo & Lower) ? Lower : Upper;
+        constexpr int TriangleType = (U & Lower) ? Lower : Upper;
         matrix_.template selfadjointView<TriangleType>() =
             matrix.template selfadjointView<TriangleType>().twistedBy(p_null);
         matrix_.makeCompressed();
@@ -402,10 +437,7 @@ class AccelerateImpl
 
   private:
     void *getAlignedPointer(std::vector<uint8_t> &storage) const {
-        constexpr int kAlign = 16;
-        void *ptr = reinterpret_cast<void *>(storage.data());
-        size_t space = storage.size();
-        return std::align(kAlign, space - kAlign, ptr, space);
+        return internal::aligned_subbuffer(storage);
     }
 
     void cacheInertia() {
@@ -425,12 +457,25 @@ class AccelerateImpl
         }
     }
 
+    void resetInertia() {
+        peigs_ = 0;
+        neigs_ = 0;
+        zeigs_ = 0;
+    }
+
     void updatePerformanceMetrics() {
         if (m_symbolicFactorization) {
-            mem_ = std::is_same<Scalar, double>::value ? m_symbolicFactorization->factorSize_Double
-                                                       : m_symbolicFactorization->factorSize_Float;
+            // NOTE: this is the factor size in BYTES, whereas Pardiso's mem_ is
+            // the NUMBER OF NONZEROS in the factor (iparm_[17]). Both surface as
+            // result_.factor_mem_, so the reported number means different things
+            // per platform. Unifying is tracked in issue #105.
+            const size_t bytes = std::is_same<Scalar, double>::value
+                                     ? m_symbolicFactorization->factorSize_Double
+                                     : m_symbolicFactorization->factorSize_Float;
+            mem_ = static_cast<int>(
+                std::min<size_t>(bytes, static_cast<size_t>(std::numeric_limits<int>::max())));
         }
-        flops_ = 0;
+        flops_ = 0; // Accelerate exposes no FLOP count; psiopt guards its print with > 0.
     }
 
     void buildAccelSparseMatrix() {
@@ -439,6 +484,10 @@ class AccelerateImpl
 
         SparseMatrixStructure structure{};
         structure.blockSize = 1;
+
+        eigen_assert(matrix_.rows() <= std::numeric_limits<int>::max() &&
+                     matrix_.cols() <= std::numeric_limits<int>::max() &&
+                     "Accelerate's sparse structure uses int dimensions");
 
         if constexpr (MatrixType::IsRowMajor) { // RowMajor (CSR) format
             // For CSR, Accelerate expects CSC. We use the 'transpose' attribute
@@ -481,10 +530,22 @@ class AccelerateImpl
 
     void doAnalysis() {
         m_numericFactorization.reset(nullptr);
+        // Any cached inertia and factor metrics describe the factorization just
+        // destroyed above. doAnalysis() is the single point every analysis path
+        // funnels through, so resetting here closes compute_internal() and
+        // analyze_pattern_internal() as well as the direct callers.
+        resetInertia();
+        flops_ = 0;
+        mem_ = 0;
 
-        // Only resize permutation if necessary to avoid unnecessary allocations
-        if (permutation_.size() != static_cast<size_t>(n_rows_)) {
-            permutation_.resize(n_rows_);
+        // fopts.order is a symmetric row-and-column permutation for the
+        // symmetric and QR cases (Solve.h:1310-1319), so size it for the larger
+        // dimension. No-op for square matrices, which is every type
+        // instantiated in-tree -- this hardens AccelerateQR/AccelerateCholeskyAtA,
+        // which are declared EnforceSquare_ = false but never instantiated.
+        const Index perm_size = std::max(n_rows_, n_cols_);
+        if (permutation_.size() != static_cast<size_t>(perm_size)) {
+            permutation_.resize(perm_size);
         }
         std::iota(permutation_.begin(), permutation_.end(), 0); // Initialize with identity
 
@@ -497,8 +558,10 @@ class AccelerateImpl
         fopts.free = free;
 
         fopts.reportError = [](const char *msg) {
-            fmt::print(fmt::fg(fmt::color::red),
-                       "Accelerate Sparse Symbolic Factorization Error: {}\n", msg);
+            // Accelerate stores this callback in the symbolic factorization and
+            // reuses it for numeric-factor, refactor and solve-time errors too,
+            // so the label must not name a phase.
+            fmt::print(fmt::fg(fmt::color::red), "Accelerate Sparse Solver Error: {}\n", msg);
         };
 
         m_symbolicFactorization.reset(
@@ -527,12 +590,12 @@ class AccelerateImpl
             nopts.zeroTolerance = zero_tolerance_;
 
             // Get factor and workspace size
-            const int factorSize = std::is_same<Scalar, double>::value
-                                       ? m_symbolicFactorization->factorSize_Double
-                                       : m_symbolicFactorization->factorSize_Float;
-            const int workspaceSize = std::is_same<Scalar, double>::value
-                                          ? m_symbolicFactorization->workspaceSize_Double
-                                          : m_symbolicFactorization->workspaceSize_Float;
+            const size_t factorSize = std::is_same<Scalar, double>::value
+                                          ? m_symbolicFactorization->factorSize_Double
+                                          : m_symbolicFactorization->factorSize_Float;
+            const size_t workspaceSize = std::is_same<Scalar, double>::value
+                                             ? m_symbolicFactorization->workspaceSize_Double
+                                             : m_symbolicFactorization->workspaceSize_Float;
 
             m_numericFactorization.reset(new NumericFactorization(
                 SparseFactor(*m_symbolicFactorization, accel_matrix_, nopts,
@@ -541,9 +604,12 @@ class AccelerateImpl
 
             status = m_numericFactorization->status;
 
-            if (status != SparseStatusOK)
+            if (status != SparseStatusOK) {
                 m_numericFactorization.reset(nullptr);
-            else
+                resetInertia();
+                flops_ = 0;
+                mem_ = 0;
+            } else
                 cacheInertia();
         }
 
@@ -559,6 +625,17 @@ class AccelerateImpl
         }
 
         void *ws = getAlignedPointer(workspace_);
+        if (!ws) {
+            // Accelerate's workspace parameter is _Nonnull; a null here would be a
+            // dereference, not a diagnosable failure. Reset derived state for the
+            // same reason the status-failure branch below does: the cached inertia
+            // and metrics describe a factorization we are now abandoning.
+            updateInfoStatus(SparseInternalError);
+            resetInertia();
+            flops_ = 0;
+            mem_ = 0;
+            return;
+        }
         SparseRefactor(accel_matrix_, m_numericFactorization.get(), ws);
 
         SparseStatus_t status = m_numericFactorization->status;
@@ -567,6 +644,10 @@ class AccelerateImpl
         if (status == SparseStatusOK) {
             cacheInertia();
             updatePerformanceMetrics();
+        } else {
+            resetInertia();
+            flops_ = 0;
+            mem_ = 0;
         }
     }
 
@@ -591,21 +672,22 @@ class AccelerateImpl
 
     std::vector<long> m_columnStarts;
     mutable MatrixType matrix_;
-    mutable AccelSparseMatrix accel_matrix_;
-    mutable ComputationInfo info_;
+    mutable AccelSparseMatrix accel_matrix_{};
+    mutable ComputationInfo info_ = Success;
     mutable std::vector<uint8_t> factor_storage_;
     mutable std::vector<uint8_t> workspace_;
     mutable std::vector<uint8_t> solve_workspace_; // Cache solve workspace
     mutable std::vector<Scalar> r_mem_;
-    mutable int cached_solve_workspace_size_ = 0; // Track cached size
-    Index n_rows_, n_cols_;
+    // Allocated size, not requested size: the buffer is a high-water mark.
+    mutable size_t cached_solve_workspace_size_ = 0;
+    Index n_rows_ = 0, n_cols_ = 0;
     std::unique_ptr<SymbolicFactorization, SymbolicFactorizationDeleter> m_symbolicFactorization;
     std::unique_ptr<NumericFactorization, NumericFactorizationDeleter> m_numericFactorization;
     SparseKind_t m_sparseKind;
     SparseTriangle_t m_triType;
-    SparseOrder_t order_;
-    bool do_iterative_refinement_;
-    int iterative_refinement_iterations_;
+    SparseOrder_t order_ = SparseOrderMetis;
+    bool do_iterative_refinement_ = false;
+    int iterative_refinement_iterations_ = 2;
     Scalar pivot_tolerance_ = Scalar(0.01);
     Scalar zero_tolerance_ = Scalar(1e-4) * std::numeric_limits<Scalar>::epsilon();
     mutable int peigs_ = 0;
@@ -633,6 +715,7 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::set_matrix(
     m_numericFactorization.reset(nullptr);
     cached_solve_workspace_size_ = 0; // Clear cached workspace size
     info_ = Success;
+    resetInertia();
 }
 
 /** Computes the symbolic and numeric decomposition of matrix \a a */
@@ -683,7 +766,7 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::factorize(cons
         eigen_assert(a.rows() == a.cols());
     }
 
-    matrix_ = a;
+    get_matrix(a);
     buildAccelSparseMatrix();
     m_numericFactorization.reset(nullptr);
 
@@ -694,15 +777,31 @@ template <typename MatrixType_, int UpLo_, SparseFactorization_t Solver_, bool E
 template <typename Rhs, typename Dest>
 void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::_solve_impl(
     const MatrixBase<Rhs> &b, MatrixBase<Dest> &x) const {
-    if (!m_numericFactorization) {
-        info_ = InvalidInput;
+    // A factorization that is absent or not in a good state cannot be solved
+    // with. Accelerate would accept the call, no-op it via its own parameter
+    // check, and return -- leaving x holding whatever it held before, which in
+    // PSIOPT is the previous iteration's step. Under iterative refinement it is
+    // worse: the refinement loop would then apply x -= (A*x - b) per iteration.
+    //
+    // x is deliberately left untouched rather than zeroed, matching
+    // PardisoImpl::_solve_impl. Unifying both backends on a zero-x contract is
+    // tracked in issue #105 -- do not "fix" this in isolation.
+    if (!m_numericFactorization || m_numericFactorization->status != SparseStatusOK) {
+        if (m_numericFactorization)
+            updateInfoStatus(m_numericFactorization->status);
+        else if (info_ == Success)
+            // Never computed. A failed factorize() already recorded a more
+            // specific status, so do not overwrite it.
+            info_ = InvalidInput;
         return;
     }
 
     eigen_assert(n_rows_ == b.rows());
     eigen_assert(((b.cols() == 1) || b.outerStride() == b.rows()));
-
-    SparseStatus_t status = SparseStatusOK;
+    eigen_assert(((MatrixBase<Rhs>::Flags & RowMajorBit) == 0 || b.cols() == 1) &&
+                 "Row-major right hand sides are not supported");
+    eigen_assert(((MatrixBase<Dest>::Flags & RowMajorBit) == 0 || x.cols() == 1) &&
+                 "Row-major matrices of unknowns are not supported");
 
     Scalar *b_ptr = const_cast<Scalar *>(b.derived().data());
     Scalar *x_ptr = const_cast<Scalar *>(x.derived().data());
@@ -721,23 +820,56 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::_solve_impl(
     bmat.columnStride = bmat.rowCount;
     bmat.data = b_ptr;
 
-    const int nrhs = (bmat.attributes.transpose) ? bmat.rowCount : bmat.columnCount;
-    const int workspaceSize = m_numericFactorization->solveWorkspaceRequiredStatic +
-                              nrhs * m_numericFactorization->solveWorkspaceRequiredPerRHS;
+    // b and x may alias (Eigen's Solve assignment forwards both straight here).
+    // Without iterative refinement, an aliased solve was measured bit-identical
+    // to an out-of-place one (n=200, nrhs in {1,3}: diff == 0.000e+00 every
+    // run) -- Accelerate's SparseSolve itself tolerates it. WITH iterative
+    // refinement it does not: the loop below re-reads bmat.data as "the
+    // original b" AFTER SparseSolve has already overwritten xmat.data, and
+    // when the buffers alias that is the same memory -- silently corrupting x
+    // (measured residual 2.3 at n=3, 0.94 at n=200; not a tolerance issue, a
+    // wrong answer with info() == Success). Copy unconditionally rather than
+    // gate on do_iterative_refinement_, so correctness does not depend on that
+    // runtime setting. Mirrors PardisoImpl::_solve_impl
+    // (pardiso_interface.h:392-399). Do not switch to Accelerate's in-place
+    // SparseSolve overload instead: it destroys b, which the refinement block
+    // still needs as its residual reference.
+    Matrix<Scalar, Dynamic, Dynamic, ColMajor> b_tmp;
+    if (b_ptr == x_ptr) {
+        b_tmp = b;
+        b_ptr = b_tmp.data();
+        bmat.data = b_ptr;
+    }
 
-    // Use cached solve workspace to avoid repeated allocations
+    const int nrhs = (bmat.attributes.transpose) ? bmat.rowCount : bmat.columnCount;
+    const size_t workspaceSize =
+        m_numericFactorization->solveWorkspaceRequiredStatic +
+        static_cast<size_t>(nrhs) * m_numericFactorization->solveWorkspaceRequiredPerRHS;
+
+    // Use cached solve workspace to avoid repeated allocations. Grow only: a
+    // shrinking nrhs must not trigger a resize round-trip.
     void *ws;
-    if (workspaceSize != cached_solve_workspace_size_) {
+    if (workspaceSize > cached_solve_workspace_size_) {
         ws = internal::resizeForAccelerateAlignment(workspaceSize, &solve_workspace_);
         cached_solve_workspace_size_ = workspaceSize;
     } else {
         ws = getAlignedPointer(solve_workspace_);
     }
-    assert(ws != nullptr && "Accelerate workspace alignment failed");
+    if (!ws) {
+        info_ = InvalidInput;
+        return;
+    }
 
     SparseSolve(*m_numericFactorization, bmat, xmat, ws);
 
-    updateInfoStatus(status);
+    // Provably a no-op, kept for documentation/defensiveness rather than
+    // effect: Apple's SDK passes the factorization to SparseSolve() BY VALUE
+    // (SolveImplementationTyped.h), so a solve can never mutate the stored
+    // status, and the guard above already established status == SparseStatusOK
+    // on entry -- so this can only ever rewrite Success over Success. Solve
+    // failures are not detectable at all through this API; do not read this
+    // call as a post-solve failure check.
+    updateInfoStatus(m_numericFactorization->status);
 
     if (do_iterative_refinement_) {
         auto n = vDSP_Length(x.rows() * x.cols());
@@ -786,6 +918,11 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_,
     n_rows_ = matrix_.rows();
     n_cols_ = matrix_.cols();
 
+    // buildAccelSparseMatrix reads outerIndexPtr/innerIndexPtr/valuePtr raw,
+    // which only describe a valid CSR/CSC layout when the matrix is compressed.
+    // No-op when it already is.
+    matrix_.makeCompressed();
+
     // Build/rebuild the internal AccelSparseMatrix from the current state of matrix_
     buildAccelSparseMatrix();
 
@@ -801,6 +938,9 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_,
 
     // Reset computation info
     info_ = Success;
+
+    // Reset cached inertia -- it described the (now-discarded) prior factorization
+    resetInertia();
 }
 
 template <typename MatrixType_, int UpLo_, SparseFactorization_t Solver_, bool EnforceSquare_>
@@ -878,6 +1018,15 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::release() {
     // Clear permutation
     permutation_.clear();
 
+    // Restore the default-constructed invariant. rows()/cols() must not report
+    // dimensions for an emptied solver, and accel_matrix_ must not retain
+    // pointers into matrix_'s just-freed buffers.
+    n_rows_ = 0;
+    n_cols_ = 0;
+    accel_matrix_ = AccelSparseMatrix{};
+    m_columnStarts.clear();
+    resetInertia();
+
     // Reset cached sizes
     cached_solve_workspace_size_ = 0;
 
@@ -891,5 +1040,7 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::release() {
 }
 
 } // end namespace Eigen
+
+#include <Eigen/src/Core/util/ReenableStupidWarnings.h>
 
 #endif // EIGEN_ACCELERATESUPPORT_H

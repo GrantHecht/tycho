@@ -448,15 +448,19 @@ TEST(L1RestoStepApplication, ApplyMovesSlacksAndUpdatesPivots) {
     const double ap = 0.3, ad = 0.4;
     r.apply_elastic_step(ap, ad);
 
-    EXPECT_NEAR((r.ec_n() - (n0 + ap * dn)).cwiseAbs().maxCoeff(), 0.0, 1e-14);
-    EXPECT_NEAR((r.ec_p() - (p0 + ap * dp)).cwiseAbs().maxCoeff(), 0.0, 1e-14);
-    EXPECT_NEAR((r.ec_zn() - (zn0 + ad * dzn)).cwiseAbs().maxCoeff(), 0.0, 1e-14);
-    EXPECT_NEAR((r.ec_zp() - (zp0 + ad * dzp)).cwiseAbs().maxCoeff(), 0.0, 1e-14);
+    // 1e-12, not 1e-14: apply_elastic_step's internal x + a*dx and this
+    // expression contract FMAs differently per compiler/ISA (observed up to
+    // 6.8e-14 on arm64 vs 1e-14 passing on x86). The bound stays far below
+    // any behavioral-change signal.
+    EXPECT_NEAR((r.ec_n() - (n0 + ap * dn)).cwiseAbs().maxCoeff(), 0.0, 1e-12);
+    EXPECT_NEAR((r.ec_p() - (p0 + ap * dp)).cwiseAbs().maxCoeff(), 0.0, 1e-12);
+    EXPECT_NEAR((r.ec_zn() - (zn0 + ad * dzn)).cwiseAbs().maxCoeff(), 0.0, 1e-12);
+    EXPECT_NEAR((r.ec_zp() - (zp0 + ad * dzp)).cwiseAbs().maxCoeff(), 0.0, 1e-12);
 
     // pivot = n/z_n + p/z_p recomputed from the moved state.
     Eigen::VectorXd expected_piv =
         r.ec_n().cwiseQuotient(r.ec_zn()) + r.ec_p().cwiseQuotient(r.ec_zp());
-    EXPECT_NEAR((r.e_pivots() - expected_piv).cwiseAbs().maxCoeff(), 0.0, 1e-14);
+    EXPECT_NEAR((r.e_pivots() - expected_piv).cwiseAbs().maxCoeff(), 0.0, 1e-12);
 }
 
 TEST(L1RestoStepApplication, TrialResidualShiftIsAlphaBlendedSlackDifference) {
