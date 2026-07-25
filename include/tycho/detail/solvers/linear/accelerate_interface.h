@@ -19,6 +19,7 @@
 #include <Eigen/src/Core/util/DisableStupidWarnings.h>
 
 #include <Eigen/Sparse>
+#include <algorithm>
 #include <cmath>
 #include <numeric>
 
@@ -205,6 +206,23 @@ inline void *resizeForAccelerateAlignment(const size_t required_size,
         std::align(kAccelerateRequiredAlignment, required_size, aligned_solve_workspace_start,
                    size_from_aligned_start);
     return aligned_solve_workspace_start;
+}
+
+// Returns a 16-byte-aligned pointer into an ALREADY-SIZED buffer, or nullptr if
+// the buffer cannot contain one. Callers must treat nullptr as a failure:
+// Accelerate's workspace parameters are _Nonnull.
+//
+// Split out of AccelerateImpl::getAlignedPointer, whose `space - kAlign`
+// underflowed for buffers smaller than the alignment, making std::align return
+// nullptr behind an assert that NDEBUG deletes.
+inline void *aligned_subbuffer(std::vector<uint8_t> &storage) {
+    constexpr size_t kAccelerateRequiredAlignment = 16;
+    if (storage.size() < kAccelerateRequiredAlignment)
+        return nullptr;
+    void *ptr = static_cast<void *>(storage.data());
+    size_t space = storage.size();
+    return std::align(kAccelerateRequiredAlignment, storage.size() - kAccelerateRequiredAlignment,
+                      ptr, space);
 }
 
 } // end namespace internal
@@ -401,10 +419,7 @@ class AccelerateImpl
 
   private:
     void *getAlignedPointer(std::vector<uint8_t> &storage) const {
-        constexpr int kAlign = 16;
-        void *ptr = reinterpret_cast<void *>(storage.data());
-        size_t space = storage.size();
-        return std::align(kAlign, space - kAlign, ptr, space);
+        return internal::aligned_subbuffer(storage);
     }
 
     void cacheInertia() {
@@ -432,10 +447,17 @@ class AccelerateImpl
 
     void updatePerformanceMetrics() {
         if (m_symbolicFactorization) {
-            mem_ = std::is_same<Scalar, double>::value ? m_symbolicFactorization->factorSize_Double
-                                                       : m_symbolicFactorization->factorSize_Float;
+            // NOTE: this is the factor size in BYTES, whereas Pardiso's mem_ is
+            // the NUMBER OF NONZEROS in the factor (iparm_[17]). Both surface as
+            // result_.factor_mem_, so the reported number means different things
+            // per platform. Unifying is tracked in issue #105.
+            const size_t bytes = std::is_same<Scalar, double>::value
+                                     ? m_symbolicFactorization->factorSize_Double
+                                     : m_symbolicFactorization->factorSize_Float;
+            mem_ = static_cast<int>(
+                std::min<size_t>(bytes, static_cast<size_t>(std::numeric_limits<int>::max())));
         }
-        flops_ = 0;
+        flops_ = 0; // Accelerate exposes no FLOP count; psiopt guards its print with > 0.
     }
 
     void buildAccelSparseMatrix() {
@@ -576,6 +598,12 @@ class AccelerateImpl
         }
 
         void *ws = getAlignedPointer(workspace_);
+        if (!ws) {
+            // Accelerate's workspace parameter is _Nonnull; a null here would
+            // be a dereference, not a diagnosable failure.
+            updateInfoStatus(SparseInternalError);
+            return;
+        }
         SparseRefactor(accel_matrix_, m_numericFactorization.get(), ws);
 
         SparseStatus_t status = m_numericFactorization->status;
@@ -618,7 +646,8 @@ class AccelerateImpl
     mutable std::vector<uint8_t> workspace_;
     mutable std::vector<uint8_t> solve_workspace_; // Cache solve workspace
     mutable std::vector<Scalar> r_mem_;
-    mutable int cached_solve_workspace_size_ = 0; // Track cached size
+    // Allocated size, not requested size: the buffer is a high-water mark.
+    mutable size_t cached_solve_workspace_size_ = 0;
     Index n_rows_ = 0, n_cols_ = 0;
     std::unique_ptr<SymbolicFactorization, SymbolicFactorizationDeleter> m_symbolicFactorization;
     std::unique_ptr<NumericFactorization, NumericFactorizationDeleter> m_numericFactorization;
@@ -756,18 +785,23 @@ void AccelerateImpl<MatrixType_, UpLo_, Solver_, EnforceSquare_>::_solve_impl(
     bmat.data = b_ptr;
 
     const int nrhs = (bmat.attributes.transpose) ? bmat.rowCount : bmat.columnCount;
-    const int workspaceSize = m_numericFactorization->solveWorkspaceRequiredStatic +
-                              nrhs * m_numericFactorization->solveWorkspaceRequiredPerRHS;
+    const size_t workspaceSize =
+        m_numericFactorization->solveWorkspaceRequiredStatic +
+        static_cast<size_t>(nrhs) * m_numericFactorization->solveWorkspaceRequiredPerRHS;
 
-    // Use cached solve workspace to avoid repeated allocations
+    // Use cached solve workspace to avoid repeated allocations. Grow only: a
+    // shrinking nrhs must not trigger a resize round-trip.
     void *ws;
-    if (workspaceSize != cached_solve_workspace_size_) {
+    if (workspaceSize > cached_solve_workspace_size_) {
         ws = internal::resizeForAccelerateAlignment(workspaceSize, &solve_workspace_);
         cached_solve_workspace_size_ = workspaceSize;
     } else {
         ws = getAlignedPointer(solve_workspace_);
     }
-    assert(ws != nullptr && "Accelerate workspace alignment failed");
+    if (!ws) {
+        info_ = InvalidInput;
+        return;
+    }
 
     SparseSolve(*m_numericFactorization, bmat, xmat, ws);
 

@@ -329,6 +329,23 @@ TEST(AccelerateInterface, RefactorRecoversAfterAFailedRefactor) {
     EXPECT_LT((dense_symmetric(A) * x - b).cwiseAbs().maxCoeff(), 1e-10);
 }
 
+// The alignment arithmetic lives in Eigen::internal so it can be tested
+// directly: its only in-class caller is private, and the size==0 path is
+// unreachable through the public API.
+TEST(AccelerateInterface, AlignedSubbufferRejectsUndersizedStorage) {
+    std::vector<uint8_t> empty(0), small(8), exact(16), ample(64);
+
+    EXPECT_EQ(Eigen::internal::aligned_subbuffer(empty), nullptr);
+    EXPECT_EQ(Eigen::internal::aligned_subbuffer(small), nullptr);
+
+    void *p_exact = Eigen::internal::aligned_subbuffer(exact);
+    void *p_ample = Eigen::internal::aligned_subbuffer(ample);
+    ASSERT_NE(p_exact, nullptr);
+    ASSERT_NE(p_ample, nullptr);
+    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(p_exact) % 16u, 0u);
+    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(p_ample) % 16u, 0u);
+}
+
 } // namespace
 
 #endif // USE_ACCELERATE_SPARSE
