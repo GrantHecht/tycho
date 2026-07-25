@@ -136,7 +136,12 @@ matters more than the status channel it sits beside.
   Cholesky refactor: status `SparseFactorizationFailed`, pointer non-NULL, `x` untouched.
 
   The retained hazard is deliberate parity. An in-code comment says so and points at the issue in
-  §4, so a future reader does not "fix" it unaware. Note the guard does **not** make every bad solve
+  §4, so a future reader does not "fix" it unaware.
+
+  Precise severity: `EIGEN_INITIALIZE_MATRICES_BY_ZERO` is defined globally
+  (`CMakeLists.txt:562`), so a failure on the **first** iteration leaves `DXSL` zeroed — a benign
+  no-move step. The hazard is iterations ≥ 2, where `DXSL` holds the previous step and
+  `psiopt.cpp:2324` negates it. Note the guard does **not** make every bad solve
   impossible: solve-time parameter failures (dimension or stride mismatch, whose `eigen_assert`s
   vanish under `NDEBUG`) still no-op while the factorization status the guard reads is healthy, so
   `info()` stays `Success`. That residue is inherent to the API, as §1.1 concedes.
@@ -389,7 +394,7 @@ the handoff doc, whose step 0 predates it.
 |---|---|
 | ~~`accelerate_interface.h` is not self-contained as a leaf TU~~ | **Retired** — verified by probe, 3.3 s standalone compile (§6.1) |
 | The aliasing guard (I5) may be solving a non-problem | Probe showed the current aliased path returns correct results; a plan-stage probe characterizes larger/multi-RHS cases, and the item reduces to a comment if aliasing proves safe |
-| Keeping the failed numeric factorization diverges from `doFactorization`'s reset-on-failure | Intentional and documented; Apple's state-3 semantics (`Solve.h:1568-1576`) make it the supported path, and the `_solve_impl` status guard closes the hazard the reset was protecting against |
+| Keeping the failed numeric factorization diverges from `doFactorization`'s reset-on-failure | Intentional and documented; Apple's state-3 semantics make it the supported path (cite the *double*-variant doc block — the float variant's identical list says "pass this object to `SparseRefactor_Double`", an upstream copy-paste, so citing it is misleading), and the `_solve_impl` status guard closes the hazard the reset was protecting against |
 | Behavior change on the failure path could perturb PSIOPT convergence | The failure path is unreachable on converging problems; the full gate (32 examples + benchmarks) is the check |
 | Runtime `__builtin_available` gates cannot be tested on this machine (macOS 26.5 host) | Inspection-only, and stated as such. The `set_order` test exercises the **pass-through** branch, not the downgrade — on this host `accelerate_supported_order(MTMetis)` returns MTMetis unchanged. Neither the `macOS < 15` nor the `< 26` branch can be reached here |
 | ~~Keeping the failed numeric factorization may not actually be supported by `SparseRefactor`~~ | **Retired** — probe-confirmed recovery through both the C API and `refactorize_internal()` (§6.1) |
