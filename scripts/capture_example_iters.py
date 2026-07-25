@@ -15,8 +15,10 @@ solver/library changes).
 
 CSV schema: header row `example,total_iters,status`, one data row per
 example run, in run_examples.ALL_EXAMPLES order (or the --start:--end slice
-of it). `total_iters` is -1 if the example timed out or if PSIOPT printed no
-"Iterations : N" line (unmatched); `status` is "ok" (exit 0), "exitN"
+of it). `total_iters` is -1 only when the example timed out; a run whose output
+contains no "Iterations : N" line records 0 with its exit status
+unchanged (several examples legitimately print none); `status` is "ok"
+(exit 0), "exitN"
 (nonzero exit N), or "timeout".
 
 Known-noisy trio: MultiSpacecraftOptimization.py, ParallelParking.py, and

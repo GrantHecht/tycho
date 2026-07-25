@@ -408,7 +408,14 @@ def cmd_sweep(args) -> None:
                 *_config_cli_pairs(config),
             ]
             print(f"[{n}/{total}] cell {h} r{repeat}: running -> {cellfile.name}")
-            subprocess.run(cmd, cwd=str(REPO_ROOT), check=False)
+            proc = subprocess.run(cmd, cwd=str(REPO_ROOT), check=False)
+            if proc.returncode != 0:
+                print(
+                    f"WARNING: harness exited {proc.returncode} for cell "
+                    f"{cell_hash(cell)} repeat {repeat}; its scorecard may be "
+                    "incomplete and will be skipped by aggregation",
+                    flush=True,
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -649,6 +656,23 @@ def cmd_aggregate(args) -> None:
         if summary is not None:
             cell_records.append(summary)
 
+    invalid_path = store / "invalid.json"
+    invalid_count = 0
+    if invalid_path.exists():
+        import json as _json
+
+        invalid_count = len(_json.loads(invalid_path.read_text(encoding="utf-8")))
+    incomplete = (
+        len([c for c in enumerate_cells() if c not in ()])
+        - invalid_count
+        - len(cell_records)
+    )
+    print(
+        f"{len(cell_records)} cells aggregated; {invalid_count} invalid; "
+        f"{incomplete} incomplete",
+        flush=True,
+    )
+
     context_records = []
     for spec in args.context:
         if "=" not in spec:
@@ -688,7 +712,10 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--repeats",
         type=int,
         default=2,
-        help="Repeats per cell (default: %(default)s).",
+        choices=(1, 2),
+        help="Repeats per cell (default: %(default)s). Aggregation and the "
+        "shortlist read repeats 1 and 2 only, so higher counts are rejected "
+        "rather than silently ignored.",
     )
     p_sweep.add_argument(
         "--dry-run",
