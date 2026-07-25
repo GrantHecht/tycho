@@ -325,8 +325,15 @@ class AccelerateImpl
     template <typename Rhs, typename Dest>
     void _solve_impl(const MatrixBase<Rhs> &b, MatrixBase<Dest> &dest) const;
 
-    /** Sets the ordering algorithm to use. */
-    void set_order(SparseOrder_t order) { order_ = order; }
+    /** Sets the ordering algorithm to use.
+     *
+     * An ordering the running OS does not support is downgraded (see
+     * accelerate_supported_order); query effective_order() for what was kept.
+     */
+    void set_order(SparseOrder_t order) { order_ = accelerate_supported_order(order); }
+
+    /** The ordering actually in use, after any runtime capability downgrade. */
+    SparseOrder_t effective_order() const { return order_; }
 
     /** Sets the number of threads for accelerate */
     inline void set_num_threads(int num_threads) { accelerate_set_num_threads(num_threads); }

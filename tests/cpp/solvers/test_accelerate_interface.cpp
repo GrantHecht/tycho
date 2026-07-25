@@ -396,6 +396,33 @@ TEST(AccelerateInterface, AlignedSubbufferRejectsUndersizedStorage) {
     EXPECT_EQ(reinterpret_cast<std::uintptr_t>(p_ample) % 16u, 0u);
 }
 
+#ifdef TYCHO_HAS_MTMETIS
+// MT-METIS is macOS 26+. The SDK-version macro only says the enum exists, not
+// that the host supports it, so set_order downgrades at runtime. A silent
+// downgrade of an explicit request must be observable.
+TEST(AccelerateInterface, MtMetisOrderIsDowngradedWhenUnavailable) {
+    LDLT s;
+    s.set_order(SparseOrderMTMetis);
+
+    if (__builtin_available(macOS 26.0, *)) {
+        EXPECT_EQ(s.effective_order(), SparseOrderMTMetis);
+    } else {
+        EXPECT_EQ(s.effective_order(), SparseOrderMetis);
+    }
+
+    s.compute(spd_both_triangles());
+    EXPECT_EQ(s.info(), Eigen::Success);
+}
+#endif
+
+TEST(AccelerateInterface, SupportedOrdersPassThroughUnchanged) {
+    LDLT s;
+    s.set_order(SparseOrderAMD);
+    EXPECT_EQ(s.effective_order(), SparseOrderAMD);
+    s.set_order(SparseOrderMetis);
+    EXPECT_EQ(s.effective_order(), SparseOrderMetis);
+}
+
 } // namespace
 
 #endif // USE_ACCELERATE_SPARSE

@@ -36,6 +36,28 @@
 #define TYCHO_HAS_MTMETIS 1
 #endif
 
+// Maps a requested ordering onto one this HOST supports.
+//
+// TYCHO_HAS_MTMETIS is an SDK-version macro: it says the enum constant exists
+// at compile time, not that the running OS implements it. Passing
+// SparseOrderMTMetis on macOS < 26 yields SparseParameterError and a dead
+// solver, so downgrade at runtime instead.
+inline SparseOrder_t accelerate_supported_order(SparseOrder_t order) {
+#ifdef TYCHO_HAS_MTMETIS
+    // __builtin_available must be the sole condition of its `if` -- combining
+    // it with `&&`/`!` in one expression (as a first draft of this function
+    // did) trips -Wunsupported-availability-guard, because the compiler can
+    // no longer identify the guarded scope. Two single-condition ifs instead.
+    if (order != SparseOrderMTMetis)
+        return order;
+    if (__builtin_available(macOS 26.0, *))
+        return order;
+    return SparseOrderMetis;
+#else
+    return order;
+#endif
+}
+
 // Warm up the Accelerate sparse solver subsystem by performing a trivial
 // LDLT factorization. On macOS 26+, this triggers MT-METIS thread pool
 // initialization so the first real solve doesn't pay the cold-start penalty.
@@ -60,21 +82,27 @@ inline void warmup_sparse_solver() {
 
     SparseSymbolicFactorOptions fopts{};
     fopts.control = SparseDefaultControl;
+    fopts.orderMethod = accelerate_supported_order(
 #ifdef TYCHO_HAS_MTMETIS
-    fopts.orderMethod = SparseOrderMTMetis;
+        SparseOrderMTMetis
 #else
-    fopts.orderMethod = SparseOrderMetis;
+        SparseOrderMetis
 #endif
+    );
     fopts.malloc = malloc;
     fopts.free = free;
+    // Without a reportError callback, an Accelerate parameter-check failure
+    // takes its null-callback branch: os_log_error followed by _SparseTrap(),
+    // i.e. an abort on the startup path.
+    fopts.reportError = [](const char *) {};
 
     auto sym = SparseFactor(SparseFactorizationLDLTTPP, structure, fopts);
     if (sym.status == SparseStatusOK) {
         auto num = SparseFactor(sym, A);
-        if (num.status == SparseStatusOK)
-            SparseCleanup(num);
-        SparseCleanup(sym);
+        // Apple requires SparseCleanup even for a FAILED factorization.
+        SparseCleanup(num);
     }
+    SparseCleanup(sym);
 }
 
 // Called once at startup (before any BLAS call) to set the Accelerate thread
@@ -96,11 +124,17 @@ inline void ensure_accelerate_initialized(int num_threads) {
 // (global, only effective before first BLAS call).
 inline void accelerate_set_num_threads(int num_threads) {
 #ifdef TYCHO_HAS_BLAS_SET_THREADING
-    if (num_threads <= 1)
-        BLASSetThreading(BLAS_THREADING_SINGLE_THREADED);
-    else
-        BLASSetThreading(BLAS_THREADING_MULTI_THREADED);
-#else
-    setenv("VECLIB_MAXIMUM_THREADS", std::to_string(num_threads).c_str(), 1);
+    // The #ifdef only guarantees the DECLARATION exists in this SDK.
+    // BLASSetThreading is API_AVAILABLE(macos(15.0)) and therefore weak-linked,
+    // so a binary built against a newer SDK with an older deployment target
+    // would null-call it. The runtime check is the actual guard.
+    if (__builtin_available(macOS 15.0, *)) {
+        if (num_threads <= 1)
+            BLASSetThreading(BLAS_THREADING_SINGLE_THREADED);
+        else
+            BLASSetThreading(BLAS_THREADING_MULTI_THREADED);
+        return;
+    }
 #endif
+    setenv("VECLIB_MAXIMUM_THREADS", std::to_string(num_threads).c_str(), 1);
 }
