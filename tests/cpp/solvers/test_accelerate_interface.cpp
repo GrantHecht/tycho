@@ -1,0 +1,101 @@
+///////////////////////////////////////////////////////////////////////////////
+// Apple Accelerate sparse-solver interface tests.
+//
+// LEAF-HEADER TU: includes only accelerate_interface.h + Eigen + gtest, never
+// tycho/tycho.h or test_utils.h, so this stays in TYCHO_TEST_LIGHT_SOURCES
+// (~200 MB, seconds to compile) rather than the 4-7 GB heavy target. Do not
+// add includes that pull in the tycho umbrella.
+//
+// macOS-only: the interface under test is Apple-only, so off-platform this
+// compiles to an empty TU -- the inverse of solvers/test_jet_mkl_guard.cpp.
+//
+// Design: docs/dev/plans/2026-07-24-accelerate-interface-overhaul-design.md
+///////////////////////////////////////////////////////////////////////////////
+
+#ifdef USE_ACCELERATE_SPARSE
+
+#include "tycho/detail/solvers/linear/accelerate_interface.h"
+
+#include <Eigen/Sparse>
+#include <Eigen/SparseCholesky>
+#include <gtest/gtest.h>
+
+#include <cstdint>
+#include <vector>
+
+namespace {
+
+using SpMat = Eigen::SparseMatrix<double, Eigen::RowMajor>;
+using LDLT = Eigen::AccelerateLDLTTPP<SpMat, Eigen::Upper>;
+using LLT = Eigen::AccelerateLLT<SpMat, Eigen::Upper>;
+
+// A = [[4,1,0],[1,3,1],[0,1,2]] -- SPD, with BOTH triangles populated so the
+// triangle-canonicalization path (PR 88's P1 fix) is exercised.
+SpMat spd_both_triangles() {
+    SpMat A(3, 3);
+    A.insert(0, 0) = 4.0;
+    A.insert(0, 1) = 1.0;
+    A.insert(1, 0) = 1.0;
+    A.insert(1, 1) = 3.0;
+    A.insert(1, 2) = 1.0;
+    A.insert(2, 1) = 1.0;
+    A.insert(2, 2) = 2.0;
+    A.makeCompressed();
+    return A;
+}
+
+// Dense upper triangle, SPD. Shares its nonzero pattern with
+// indefinite_full_upper() so one can be refactored into the other.
+SpMat spd_full_upper() {
+    SpMat A(3, 3);
+    A.insert(0, 0) = 4.0;
+    A.insert(0, 1) = 1.0;
+    A.insert(0, 2) = 1.0;
+    A.insert(1, 1) = 4.0;
+    A.insert(1, 2) = 1.0;
+    A.insert(2, 2) = 4.0;
+    A.makeCompressed();
+    return A;
+}
+
+// Same pattern as spd_full_upper(), but indefinite: Cholesky MUST fail on it.
+// (LDLT^TPP will not -- it handles indefinite matrices by design, and probing
+// showed it reports SparseStatusOK even for a zero matrix. Failure tests must
+// use LLT.)
+SpMat indefinite_full_upper() {
+    SpMat A(3, 3);
+    A.insert(0, 0) = 1.0;
+    A.insert(0, 1) = 8.0;
+    A.insert(0, 2) = 8.0;
+    A.insert(1, 1) = 1.0;
+    A.insert(1, 2) = 8.0;
+    A.insert(2, 2) = 1.0;
+    A.makeCompressed();
+    return A;
+}
+
+// Expand a triangle-stored sparse matrix to its full dense symmetric form,
+// for residual checks.
+Eigen::MatrixXd dense_symmetric(const SpMat &A) {
+    Eigen::MatrixXd d = Eigen::MatrixXd(A);
+    Eigen::MatrixXd full = d;
+    full.triangularView<Eigen::Lower>() = d.transpose();
+    return full;
+}
+
+TEST(AccelerateInterface, SolvesAnSpdSystem) {
+    LDLT s;
+    const SpMat A = spd_both_triangles();
+    s.compute(A);
+    ASSERT_EQ(s.info(), Eigen::Success);
+
+    Eigen::VectorXd b(3);
+    b << 1.0, 2.0, 3.0;
+    const Eigen::VectorXd x = s.solve(b);
+
+    EXPECT_LT((Eigen::MatrixXd(A) * x - b).cwiseAbs().maxCoeff(), 1e-12);
+}
+
+} // namespace
+
+#endif // USE_ACCELERATE_SPARSE

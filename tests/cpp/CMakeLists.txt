@@ -53,6 +53,7 @@ set(TYCHO_TEST_LIGHT_SOURCES
     integrators/test_rk_tableau_consistency.cpp
     vector_functions/test_fd_coeffs.cpp
     solvers/test_kkt_canonical_lock.cpp
+    solvers/test_accelerate_interface.cpp
 )
 
 set(TYCHO_TEST_HEAVY_SOURCES
