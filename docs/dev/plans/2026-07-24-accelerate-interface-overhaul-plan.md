@@ -39,6 +39,7 @@
 | `include/tycho/detail/solvers/linear/accelerate_utils.h` | Process-wide Accelerate init, thread control, warmup | Modify (107 lines) |
 | `tests/cpp/solvers/test_accelerate_interface.cpp` | Regression coverage for every invariant | **Create** |
 | `tests/cpp/CMakeLists.txt` | Register the new test in the light target | Modify (one line at `:55`) |
+| `scripts/check_accelerate_warnings.sh` | Canary: pragma balance + header warning cleanliness (I2 has no runtime test) | **Create** |
 | `docs/dev/handoffs/2026-07-11-pr7-accelerate-macos-verification.md` | macOS verification handoff | Modify |
 
 Everything lands in the light test target: `tycho_add_test_executable(tycho_tests_light ...)` at `tests/cpp/CMakeLists.txt:214` already links `-framework Accelerate` (verified in `build/build.ninja:2110`) and `USE_ACCELERATE_SPARSE` is global, so **no build-system change beyond the one source line is needed.**
@@ -371,28 +372,82 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 Also carries the `:332` deprecation fix, which the spec files under I5. Reassigned deliberately: both are compile-time diagnostic concerns sharing one verification step (a warning-free probe compile), so they form one reviewer gate.
 
 **Files:**
+- Create: `scripts/check_accelerate_warnings.sh`
 - Modify: `include/tycho/detail/solvers/linear/accelerate_interface.h` (`:332`, `:896`)
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: nothing.
+- Produces: `scripts/check_accelerate_warnings.sh` — exit 0 when the pragma is balanced and the header is warning-clean; non-zero otherwise.
 
-- [ ] **Step 1: Reproduce the leaked-suppression and deprecation warnings**
+Warning suppression is not observable from gtest, so this invariant gets a
+committed canary script instead of a runtime test, mirroring
+`scripts/upstream_canary/check.sh` (which CLAUDE.md documents as the
+run-before-bumping-dependencies canary). Unlike a throwaway probe, it stays
+runnable after this PR.
 
-Write `/tmp/accel_warn_probe.cpp` in the scratchpad:
+- [ ] **Step 1: Create the canary script**
 
-```cpp
-// Does accelerate_interface.h leave warnings suppressed for the rest of the TU,
-// and does it emit its own deprecation warning?
+Create `scripts/check_accelerate_warnings.sh` with exactly this content, then `chmod +x` it:
+
+```bash
+#!/usr/bin/env bash
+# Tycho Accelerate header hygiene canary.
+#
+# accelerate_interface.h includes Eigen's DisableStupidWarnings.h, which issues
+# `#pragma clang diagnostic push`. If the matching ReenableStupidWarnings.h
+# include is ever dropped again, Eigen's suppressions -- including
+# -Wimplicit-int-float-conversion -- silently leak into the remainder of every
+# TU that includes the header, which is most of the solver TUs plus the PCH.
+# That is the warning class that masked the P3/P4 narrowing bugs.
+#
+# Two checks:
+#   1. LEAK  -- a deliberate int->double conversion AFTER the include must warn.
+#              Silence means the suppression leaked.
+#   2. CLEAN -- accelerate_interface.h must emit no warnings of its own.
+#
+# Usage: scripts/check_accelerate_warnings.sh
+#
+# Environment overrides:
+#   CXX -- C++ compiler (default: /opt/homebrew/opt/llvm/bin/clang++, then clang++)
+#
+# Exit code: 0 if both checks pass. Non-zero otherwise.
+
+set -u
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+if [[ "$(uname -s)" != "Darwin" ]]; then
+    echo "SKIP: Apple-only header (USE_ACCELERATE_SPARSE); nothing to check on $(uname -s)."
+    exit 0
+fi
+
+if [[ -z "${CXX:-}" ]]; then
+    if [[ -x /opt/homebrew/opt/llvm/bin/clang++ ]]; then
+        CXX=/opt/homebrew/opt/llvm/bin/clang++
+    else
+        CXX=clang++
+    fi
+fi
+
+echo "==== Tycho Accelerate header hygiene canary ===="
+echo "CXX : ${CXX} ($(${CXX} --version | head -1))"
+echo "================================================"
+
+WORK_DIR=$(mktemp -d -t tycho_accel_canary.XXXXXX)
+trap 'rm -rf "${WORK_DIR}"' EXIT
+
+cat >"${WORK_DIR}/canary.cpp" <<'EOF'
 #include "tycho/detail/solvers/linear/accelerate_interface.h"
 
 #include <Eigen/Sparse>
 
-// If the Disable/Reenable pragma pair were balanced, this would warn under
-// -Wimplicit-int-float-conversion. If suppression leaked, it stays silent.
-double leaked_suppression_canary(int i) { return i; }
+// Must warn under -Wimplicit-int-float-conversion. Silence => Eigen's
+// suppression leaked past accelerate_interface.h.
+double tycho_accel_leak_canary(int i) { return i; }
 
-int main() {
+// Instantiate the solver so the header's own templates are compiled: a
+// deprecation or narrowing warning inside them only fires on instantiation.
+int tycho_accel_instantiate_canary() {
     using SpMat = Eigen::SparseMatrix<double, Eigen::RowMajor>;
     Eigen::AccelerateLDLTTPP<SpMat, Eigen::Upper> s;
     SpMat A(2, 2);
@@ -401,20 +456,70 @@ int main() {
     A.insert(1, 1) = 2.0;
     A.makeCompressed();
     s.compute(A);
-    return s.info() == Eigen::Success ? 0 : 1;
+    Eigen::VectorXd b(2);
+    b << 1.0, 1.0;
+    Eigen::VectorXd x = s.solve(b);
+    s.release();
+    return (s.info() == Eigen::Success) ? 0 : static_cast<int>(x.size());
 }
+EOF
+
+LOG="${WORK_DIR}/compile.log"
+set +e
+"${CXX}" -std=c++20 -O2 -DNDEBUG -DFMT_HEADER_ONLY -DUSE_ACCELERATE_SPARSE \
+    -Wimplicit-int-float-conversion \
+    -I "${REPO_ROOT}/include" -I "${REPO_ROOT}/dep/eigen" \
+    -I "${REPO_ROOT}/dep/fmt/include" \
+    -c "${WORK_DIR}/canary.cpp" -o "${WORK_DIR}/canary.o" 2>"${LOG}"
+COMPILE_STATUS=$?
+set -e
+
+if [[ ${COMPILE_STATUS} -ne 0 ]]; then
+    echo "FAIL: canary TU did not compile."
+    tail -30 "${LOG}"
+    exit 2
+fi
+
+RESULT=0
+
+if grep -q 'tycho_accel_leak_canary' "${LOG}"; then
+    echo "CHECK 1 (leak) : PASS -- suppression does not leak past the header."
+else
+    echo "CHECK 1 (leak) : FAIL -- int->double conversion after the include did NOT warn."
+    echo "                 Eigen's diagnostic push is unbalanced: is"
+    echo "                 ReenableStupidWarnings.h still included at the end of"
+    echo "                 accelerate_interface.h?"
+    RESULT=1
+fi
+
+if grep -q 'accelerate_interface\.h.*warning:' "${LOG}"; then
+    echo "CHECK 2 (clean): FAIL -- accelerate_interface.h emits its own warnings:"
+    grep 'accelerate_interface\.h.*warning:' "${LOG}" | sort -u | sed 's/^/                 /'
+    RESULT=1
+else
+    echo "CHECK 2 (clean): PASS -- header emits no warnings."
+fi
+
+if [[ ${RESULT} -eq 0 ]]; then
+    echo "==== OK ===="
+else
+    echo "==== CHANGED -- see docs/dev/plans/2026-07-24-accelerate-interface-overhaul-design.md I2 ===="
+fi
+exit ${RESULT}
 ```
 
-Run:
+- [ ] **Step 2: Run the canary to verify it reports the bugs (red)**
+
 ```bash
-/opt/homebrew/opt/llvm/bin/clang++ -std=c++20 -O2 -DNDEBUG -DFMT_HEADER_ONLY \
-  -Wimplicit-int-float-conversion -I include -I dep/eigen -I dep/fmt/include \
-  -c /tmp/accel_warn_probe.cpp -o /tmp/accel_warn_probe.o
+chmod +x scripts/check_accelerate_warnings.sh
+scripts/check_accelerate_warnings.sh; echo "exit: $?"
 ```
 
-Expected before the fix: **no** warning for `leaked_suppression_canary` (proving suppression leaked past the header), and **two** `-Wdeprecated-anon-enum-enum-conversion` warnings pointing at `accelerate_interface.h:332`.
+Expected before the fix: `CHECK 1 (leak) : FAIL` (the conversion did not warn, proving suppression leaked) and `CHECK 2 (clean): FAIL` listing the `:332` `-Wdeprecated-anon-enum-enum-conversion` warning. Exit 1.
 
-- [ ] **Step 2: Balance the warning pragma**
+If CHECK 1 already passes, STOP and report — the premise that suppression leaks is wrong and I2 needs re-derivation.
+
+- [ ] **Step 3: Balance the warning pragma**
 
 At the very end of `accelerate_interface.h`, between `} // end namespace Eigen` and the final `#endif`, add:
 
@@ -426,7 +531,7 @@ At the very end of `accelerate_interface.h`, between `} // end namespace Eigen` 
 #endif // EIGEN_ACCELERATESUPPORT_H
 ```
 
-- [ ] **Step 3: Fix the deprecated enum-mixing at `:332`**
+- [ ] **Step 4: Fix the deprecated enum-mixing at `:332`**
 
 `get_matrix`'s symmetric overload is `template <int U = UpLo>`, but its body uses the anonymous enum member `UpLo` in a bitwise op with `Eigen::UpLoType`. Its sibling at `:356` already uses `U`. Change `:332` from:
 ```cpp
@@ -437,17 +542,15 @@ to:
         constexpr int TriangleType = (U & Lower) ? Lower : Upper;
 ```
 
-- [ ] **Step 4: Re-run the probe to verify both are fixed**
+- [ ] **Step 5: Re-run the canary to verify both checks pass (green)**
 
 ```bash
-/opt/homebrew/opt/llvm/bin/clang++ -std=c++20 -O2 -DNDEBUG -DFMT_HEADER_ONLY \
-  -Wimplicit-int-float-conversion -I include -I dep/eigen -I dep/fmt/include \
-  -c /tmp/accel_warn_probe.cpp -o /tmp/accel_warn_probe.o
+scripts/check_accelerate_warnings.sh; echo "exit: $?"
 ```
 
-Expected after: **one** warning, on `leaked_suppression_canary` (suppression no longer leaks), and **zero** warnings from `accelerate_interface.h`.
+Expected after: `CHECK 1 (leak) : PASS`, `CHECK 2 (clean): PASS`, `==== OK ====`, exit 0.
 
-- [ ] **Step 5: Rebuild the light target and check for newly-exposed warnings**
+- [ ] **Step 6: Rebuild the light target and check for newly-exposed warnings**
 
 ```bash
 cd build && ninja -j4 tycho_tests_light 2>&1 | grep -i warning | head -20
@@ -455,7 +558,7 @@ cd build && ninja -j4 tycho_tests_light 2>&1 | grep -i warning | head -20
 
 Any warnings that appear here were previously masked by the leaked suppression. Triage each: fix it if it is in a file this PR already touches, otherwise record it in the PR body as follow-up. Do **not** silence it by reverting this change.
 
-- [ ] **Step 6: Run tests**
+- [ ] **Step 7: Run tests**
 
 ```bash
 cd build && ctest -R AccelerateInterface --output-on-failure
@@ -463,11 +566,11 @@ cd build && ctest -R AccelerateInterface --output-on-failure
 
 Expected: all PASS (no behavior change).
 
-- [ ] **Step 7: Format and commit**
+- [ ] **Step 8: Format and commit**
 
 ```bash
 /opt/homebrew/opt/llvm/bin/clang-format -i include/tycho/detail/solvers/linear/accelerate_interface.h
-git add include/tycho/detail/solvers/linear/accelerate_interface.h
+git add include/tycho/detail/solvers/linear/accelerate_interface.h scripts/check_accelerate_warnings.sh
 git commit -m "fix(solvers): Accelerate — balance Eigen warning pragma, fix deprecated enum mix (I2)
 
 accelerate_interface.h included DisableStupidWarnings.h (which issues
@@ -478,6 +581,11 @@ most of the Accelerate-enabled TUs plus the PCH, via psiopt.h,
 solver_context.h and tycho_solvers.h. pardiso_interface.h balances it
 correctly. Notably the leaked suppression covers the warning class that
 would have flagged PR 88's P3/P4 narrowing bugs.
+
+Warning suppression is not observable from gtest, so this invariant gets a
+committed canary instead: scripts/check_accelerate_warnings.sh, mirroring
+scripts/upstream_canary/check.sh. It fails if the suppression leaks again
+or if the header emits warnings of its own.
 
 Also fixes the file's own -Wdeprecated-anon-enum-enum-conversion at :332,
 where get_matrix used the anonymous enum member UpLo instead of its int
