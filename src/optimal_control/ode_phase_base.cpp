@@ -1544,38 +1544,34 @@ tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::psipot_call_impl(JetJobModes mo
     if (this->do_transcription_)
         this->transcribe();
     VectorXd input = this->make_solver_input();
-    VectorXd output;
-
-    switch (mode) {
-    case JetJobModes::Solve:
-        output = this->optimizer_->solve(input);
-        break;
-    case JetJobModes::Optimize:
-        output = this->optimizer_->optimize(input);
-        break;
-    case JetJobModes::SolveOptimize:
-        output = this->optimizer_->solve_optimize(input);
-        break;
-    case JetJobModes::SolveOptimizeSolve:
-        output = this->optimizer_->solve_optimize_solve(input);
-        break;
-    case JetJobModes::OptimizeSolve:
-        output = this->optimizer_->optimize_solve(input);
-        break;
-    default:
-        throw std::invalid_argument("Unrecognized PSIOPT mode");
-    }
+    auto out = this->run_nlp_solver(mode, input);
+    VectorXd output = out.variables_;
 
     this->collect_solver_output(output);
 
-    this->collect_post_opt_info(
-        this->optimizer_->result().eq_cons_, this->optimizer_->result().eq_lmults_,
-        this->optimizer_->result().iq_cons_, this->optimizer_->result().iq_lmults_);
+    if (this->nlp_solver_ == solvers::NLPSolvers::psiopt) {
+        this->collect_post_opt_info(this->optimizer_->result().eq_cons_, out.eq_lmults_,
+                                    this->optimizer_->result().iq_cons_, out.iq_lmults_);
+    } else {
+        // Constraint residuals at the solution are an artifact of the built-in
+        // solver's KKT bookkeeping and have no counterpart from another
+        // backend, so the post-solve constraint data is marked unavailable and
+        // only the multipliers are stored.
+        this->collect_solver_multipliers(out.eq_lmults_, out.iq_lmults_);
+        this->invalidate_post_opt_info();
+    }
 
-    return this->optimizer_->result().converge_flag_;
+    return out.flag_;
 }
 
 tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::phase_call_impl(JetJobModes mode) {
+
+    // Mesh refinement is driven by the built-in solver's constraint residuals at
+    // the solution, which no other backend reports, so the refinement loop is
+    // only defined for the built-in solver.
+    if (this->adaptive_mesh_ && this->nlp_solver_ != solvers::NLPSolvers::psiopt) {
+        throw std::invalid_argument("adaptive mesh refinement requires nlp_solver = psiopt");
+    }
 
     if (this->print_mesh_info_ && this->adaptive_mesh_) {
         fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65);

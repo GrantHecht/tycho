@@ -78,6 +78,7 @@ add_library(psiopt STATIC
     solvers/non_linear_program.cpp
     solvers/optimization_problem.cpp
     solvers/solver_init.cpp
+    solvers/ipopt_backend_stub.cpp
 )
 target_include_directories(psiopt PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
 target_compile_options(psiopt PRIVATE ${COMPILE_FLAGS})

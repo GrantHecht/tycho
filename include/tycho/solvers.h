@@ -9,6 +9,7 @@
 #include "tycho/detail/solvers/constraint_function.h"
 #include "tycho/detail/solvers/objective_function.h"
 #include "tycho/detail/solvers/non_linear_program.h"
+#include "tycho/detail/solvers/ipopt_backend.h"
 #include "tycho/detail/solvers/optimization_problem_base.h"
 #include "tycho/detail/solvers/optimization_problem.h"
 #include "tycho/detail/solvers/psiopt_fwd.h"

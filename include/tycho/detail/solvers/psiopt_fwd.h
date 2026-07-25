@@ -134,4 +134,10 @@ enum class RestorationModes { off = 0, proximal_switch = 1, l1_nested = 2 };
 //                             active (the elastic pivots own those slots).
 enum class InertiaModes { classic = 0, proximal_regularization = 1 };
 
+/// NLP solver backend selector (OptimizationProblemBase::nlp_solver_).
+/// psiopt is the built-in interior-point solver (default). ipopt hands the
+/// identical transcribed NLP to a linked Ipopt installation for reference
+/// comparison; dispatching it requires a build configured with Ipopt support.
+enum class NLPSolvers { psiopt = 0, ipopt = 1 };
+
 } // namespace tycho::solvers
