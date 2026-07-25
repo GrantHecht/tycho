@@ -83,6 +83,52 @@ Eigen::MatrixXd dense_symmetric(const SpMat &A) {
     return full;
 }
 
+// Handoff check 1 / PR 88 P1: factorize() must apply the same triangle
+// canonicalization analyze_pattern() did, or the numeric structure will not
+// match the symbolic one for both-triangle symmetric input.
+TEST(AccelerateInterface, BothTrianglePatternSurvivesAnalyzeThenFactorize) {
+    const SpMat A1 = spd_both_triangles();
+    SpMat A2 = A1;
+    for (Eigen::Index k = 0; k < A2.nonZeros(); ++k)
+        A2.valuePtr()[k] *= 1.5; // same pattern, different values, still symmetric
+
+    LDLT s;
+    s.analyze_pattern(A1);
+    ASSERT_EQ(s.info(), Eigen::Success);
+    s.factorize(A2);
+    ASSERT_EQ(s.info(), Eigen::Success);
+
+    Eigen::VectorXd b(3);
+    b << 1.0, 2.0, 3.0;
+    const Eigen::VectorXd x = s.solve(b);
+
+    Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> ref;
+    const Eigen::SparseMatrix<double> A2_colmajor = A2;
+    ref.compute(A2_colmajor);
+    ASSERT_EQ(ref.info(), Eigen::Success);
+    const Eigen::VectorXd x_ref = ref.solve(b);
+
+    EXPECT_LT((x - x_ref).cwiseAbs().maxCoeff(), 1e-10);
+}
+
+// Regression guard: single-triangle input must stay correct.
+TEST(AccelerateInterface, SingleTrianglePatternSurvivesAnalyzeThenFactorize) {
+    const SpMat A1 = spd_full_upper();
+    SpMat A2 = A1;
+    for (Eigen::Index k = 0; k < A2.nonZeros(); ++k)
+        A2.valuePtr()[k] *= 1.5;
+
+    LDLT s;
+    s.analyze_pattern(A1);
+    s.factorize(A2);
+    ASSERT_EQ(s.info(), Eigen::Success);
+
+    Eigen::VectorXd b(3);
+    b << 1.0, 2.0, 3.0;
+    const Eigen::VectorXd x = s.solve(b);
+    EXPECT_LT((dense_symmetric(A2) * x - b).cwiseAbs().maxCoeff(), 1e-10);
+}
+
 TEST(AccelerateInterface, SolvesAnSpdSystem) {
     LDLT s;
     const SpMat A = spd_both_triangles();
