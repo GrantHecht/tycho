@@ -136,7 +136,7 @@ matters more than the status channel it sits beside.
   Cholesky refactor: status `SparseFactorizationFailed`, pointer non-NULL, `x` untouched.
 
   The retained hazard is deliberate parity. An in-code comment says so and points at the issue in
-  §4, so a future reader does not "fix" it unaware.
+  #105, so a future reader does not "fix" it unaware.
 
   Precise severity: `EIGEN_INITIALIZE_MATRICES_BY_ZERO` is defined globally
   (`CMakeLists.txt:562`), so a failure on the **first** iteration leaves `DXSL` zeroed — a benign
@@ -266,10 +266,10 @@ version, which says nothing about the runtime OS or the deployment target.
 
 | Deferred | Destination |
 |---|---|
-| Unifying the failure contract (`info() != Success` **and** `x` zeroed) across both backends | New GitHub issue |
-| Pardiso's uninitialized `analysis_is_ok_`/`factorization_is_ok_` (`:223`); dead `factorization_is_ok_`; success flags set unconditionally ignoring the error code (`:258-259`, `:281-282`); the `iparm_[0] == 0` guard (`:368`) that never fires because PSIOPT always calls `set_params()` (`psiopt.cpp:737`) | Same issue |
-| The PSIOPT stale-step hazard (`DXSL` reused then negated) | Same issue |
-| `set_matrix()` semantic divergence — Accelerate canonicalizes, rebuilds, and invalidates; `PardisoLDLT::set_matrix()` (`:605`) is a bare `matrix_ = mat` | Documented in both headers; issue tracks alignment |
+| Unifying the failure contract (`info() != Success` **and** `x` zeroed) across both backends | [#105](https://github.com/GrantHecht/tycho/issues/105) |
+| Pardiso's uninitialized `analysis_is_ok_`/`factorization_is_ok_` (`:223`); dead `factorization_is_ok_`; success flags set unconditionally ignoring the error code (`:258-259`, `:281-282`); the `iparm_[0] == 0` guard (`:368`) that never fires because PSIOPT always calls `set_params()` (`psiopt.cpp:737`) | #105 |
+| The PSIOPT stale-step hazard (`DXSL` reused then negated) | #105 |
+| `set_matrix()` semantic divergence — Accelerate canonicalizes, rebuilds, and invalidates; `PardisoLDLT::set_matrix()` (`:605`) is a bare `matrix_ = mat` | Documented in both headers; #105 tracks alignment |
 | `mem_` unit divergence — Accelerate reports factor size in **bytes**, Pardiso reports **nonzeros** in the factor (`iparm_[17]`), both surfaced as `result_.factor_mem_` (`psiopt.cpp:2770-2771`) | Documented; the narrowing *is* fixed here, on real grounds: bytes means 2 GB factors are reachable, so the `int` truncation is a plausible display bug at scale rather than hygiene |
 | `flops_` hardwired to 0 (`:433`) and `ppivs()` hardwired to 0 (`:379-383`) — Accelerate exposes neither | Documented in the same divergence table. PSIOPT guards the FLOPs print with `> 0` (`psiopt.cpp:2778`) so the line is simply absent rather than wrong |
 | PSIOPT reacting to `info()` | Same issue; PSIOPT internals are CLAUDE.md-flagged and would need an E2 G0 corpus re-run |
