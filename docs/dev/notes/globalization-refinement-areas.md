@@ -54,22 +54,47 @@ reversal condition.
 ACCEPTABLE at objective −2.410 — a negative transfer time — where Ipopt
 converges to 1.801 on the identical NLP.
 
-**Open question (investigate before changing code):** does that point satisfy
-the constraints (in scaled and original units)? If yes, the formulation
-genuinely admits it (nothing forbids negative delta-time in the corpus
-problem) and this is a problem-classification note, not a solver deficiency;
-if no, the acceptable tier's loosened tolerances signed off on an infeasible
-point and need an original-units feasibility guard.
+**RESOLVED (2026-07-25 deep-dive): formulation admits it; no solver change
+warranted.** The point is feasible to 3.1e-8 (inside even the strict equality
+tolerance); the NLP is unbounded below via time-reversal symmetry with
+delta-time unbounded; the acceptable tier applied its tolerances exactly as
+written; and Ipopt applied no scaling on this problem (its 1.801 exit is basin
+selection). Remaining action: an unboundedness note in the corpus module
+docstring only.
 
-## Deep-dive addendum: the two Ipopt-only successes
+## 4. Feasibility-only stage has no globalization (deep-dive finding)
 
-Across all 144 swept configurations, exactly two corpus problems are solved by
-stock Ipopt and by no PSIOPT configuration at flag level (treating the
-negative-time acceptable as a non-solve): `hard_zermelo_wrongbasin` (Ipopt
-converges @28 where every restoration-bearing PSIOPT configuration rides its
-iteration cap) and `hard_brach_illscaled` (native NLP scaling). Both implicate
-mechanisms this program implemented from the same literature Ipopt implements
-— the zermelo case specifically pits Ipopt's restoration against the nested
-ℓ1 restoration on the same start point, making it the sharpest available
-probe for implementation-vs-intention deviations. Findings from that probe
-belong in this note when they land.
+**Evidence:** `solve()` / the feasibility stage of `solve_optimize` force the
+objective scale to zero, under which every trial step is accepted — the
+backtracking line search, recovery chain, and restoration are structurally
+unreachable from that path (zermelo: 0 backtracks, 0 restoration entries,
+empty filter across a 500-iteration stall while the equality residual grew
+1.9×; the same problem run as a single `optimize()` with merit + nested-ℓ1
+converges to Ipopt's exact point, 2.4e-15 relative agreement). The
+globalization program scoped the optimize path; the feasibility path never
+gained any of it.
+
+**Refinement:** extend acceptance/recovery dispatch to the feasibility stage
+(a feasibility-norm acceptance test is well-defined without an objective; the
+candidate designs are in the deep-dive report). Likely the highest-value
+remaining robustness item — it affects every `solve()`/`solve_optimize` user.
+
+## 5. Harness follow-ups (deep-dive finding)
+
+The corpus driver compares mismatched call shapes across backends (psiopt runs
+each module's `SOLVE_MODE`; the ipopt backend always runs a single solve) —
+add a matched-call option before quoting cross-backend rows for
+non-`optimize` modules. (`run_corpus.py --config`'s repeated-flag handling was
+fixed on the campaign branch after the deep-dive hit it.)
+
+## Deep-dive resolution record
+
+The addendum's original two "Ipopt-only successes" both dissolved on
+investigation: zermelo is solved by the stack under a matched call
+(restoration head-to-head agreeing with Ipopt to machine precision — the
+strongest correctness evidence produced for the restoration implementation),
+and brach_illscaled is an unbounded formulation where Ipopt's advantage is
+basin selection, not scaling (the earlier native-scaling attribution is
+retracted). The implementations behaved as designed in both cases; the real
+findings were the un-globalized feasibility stage (area 4) and the harness
+call-shape confound (area 5).

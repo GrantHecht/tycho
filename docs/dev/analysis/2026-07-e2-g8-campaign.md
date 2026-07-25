@@ -24,12 +24,18 @@ every Ipopt reference column on identical NLPs — with one caveat the flag
 alone hides.** The winner (`62994231856d`) scores 8 converged + 4 acceptable;
 one of those acceptables is `hard_brach_illscaled`, where the exit lands at
 objective **−2.410** while Ipopt converges to **1.801** on the identical NLP.
-The objective is a delta-time — the accepted point has NEGATIVE transfer time,
-a structurally meaningless iterate the acceptable tier's loosened tolerances
-signed off on under the deliberate ill-scaling. Whether the acceptable tier
-should carry an original-units feasibility sanity check is recorded as an open
-question for the presets/docs stage; until then this row is best read as a
-non-solve. Read strictly, the winner is
+The objective is a delta-time and the accepted point has NEGATIVE transfer
+time — but a follow-up investigation resolved this as FORMULATION, not solver:
+the ODE is time-reversal symmetric, time is pinned only at the front, nothing
+bounds delta-time positive, and the NLP is unbounded below (pinning delta-time
+at −1000 also solves cleanly, in the ill-scaled AND unit-scale variants). The
+accepted point is feasible to well inside even the STRICT equality tolerance
+(ECons 3.1e-8); only the KKT norm sat in the acceptable band. The acceptable
+tier applied its tolerances exactly as written. Ipopt applied NO problem
+scaling here (its scaled and unscaled residual columns are identical) — its
+1.801 exit is basin selection on an unbounded problem, not a scaling
+capability. This row is a legitimate exit on a pathological formulation; the
+corpus module now warrants a docstring note about the unboundedness. Read strictly, the winner is
 **11 solid + 1 flag-only**; the campaign machinery classifies on exit flag
 alone and never checks objective agreement (recorded in §6). Under either
 reading it beats or ties every Ipopt column.
@@ -136,19 +142,37 @@ observations recorded in its review.
 
 ## 5. Reference-solver checkpoint (composite-step activation reading)
 
-With the full stack measured across all 144 cells: the only corpus problem
-stock Ipopt solves that no PSIOPT cell solves at flag level is
-`hard_zermelo_wrongbasin` (Ipopt converges to a KKT point in the wrong basin —
-a basin-selection outcome, not a step-robustness one). `hard_brach_illscaled`
-is cleared by one PSIOPT cell but only at the flag-only acceptable described
-in §1 — objective −2.410 vs Ipopt's 1.801 on the identical NLP — so the
-substantive gap it exposes is **native NLP scaling**, which Ipopt applies from
-stock and PSIOPT does not possess; that is a formulation-conditioning
-capability, distinct from step computation. **No systematic step-robustness
-gap remains that the composite-step recovery engine (the
-Waltz–Morales–Nocedal–Orban hybrid, per the trust-region decision record)
-would close; the checkpoint stays closed.** Native NLP scaling is recorded as
-the future study candidate instead.
+Initially the sweep showed two problems only stock Ipopt solves; a follow-up
+deep-dive dissolved both. `hard_zermelo_wrongbasin`: under a MATCHED single
+`optimize()` call (exactly what the Ipopt backend always runs), PSIOPT with
+merit acceptance + nested-ℓ1 restoration converges to Ipopt's point —
+objective agreement 2.4e-15 relative (1.7009270229362865 @40 vs
+1.7009270229362905 @28), repeat-stable, both solvers passing through their
+restoration phases. The campaign's DIVERGING row traces to the module's
+`solve_optimize` call shape, whose feasibility-only first stage stalls with
+the globalization stack structurally unreachable (see §6a). Prior editions of
+this note attributed `hard_brach_illscaled` to Ipopt's native NLP scaling;
+that attribution was WRONG and is retracted — Ipopt applied no scaling there,
+and the difference is basin selection on an unbounded formulation (§1).
+**With both anomalies explained, no corpus problem remains that stock Ipopt
+solves and the PSIOPT stack cannot; the composite-step checkpoint stays
+closed, now without residue.** The restoration head-to-head is the strongest
+correctness evidence the program has produced: two independent
+Wächter–Biegler-lineage implementations agreeing to machine precision on a
+wrong-basin recovery.
+
+### 6a. New finding: the feasibility-only stage has no globalization
+
+The zermelo investigation exposed that `solve()` (and the feasibility stage of
+`solve_optimize`) forces the objective scale to zero, under which every trial
+step is accepted — line-search backtracks, the recovery chain, and restoration
+are all structurally unreachable (0 backtracks / 0 restoration entries / empty
+filter over a 500-iteration stall in which the equality residual grew 1.9×).
+The globalization program scoped the optimize path; the feasibility path
+predates it and never gained any of it. Recorded as a refinement area with
+mechanism and candidate fixes in the refinement note — arguably the largest
+remaining robustness gap in the solver, and invisible to any optimize-path
+comparison.
 
 ## 6. Campaign mechanics record
 
@@ -162,3 +186,8 @@ the aggregate. Classification caveat: all corpus statuses are exit-flag-level;
 no objective-agreement check is applied anywhere in the sweep machinery — the
 brach_illscaled observation in §1 came from manual JSON inspection, and any
 future campaign wanting objective-aware scoring needs a driver extension.
+Cross-backend caveat: the corpus driver runs the psiopt backend through each
+module's `SOLVE_MODE` but the ipopt backend always through a single solve, so
+rows for non-`optimize` modules (zermelo, mountaincar, hypersens) compare
+different call shapes — the zermelo deep-dive shows this can flip a status.
+A matched-call option is recorded as a harness follow-up.
