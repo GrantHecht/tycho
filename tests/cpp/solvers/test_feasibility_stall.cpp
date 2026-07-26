@@ -80,42 +80,44 @@ TEST(FeasStallDetector, ImprovementUnderTheNoiseFloorDoesNotRestartWindow) {
     EXPECT_EQ(d.best_theta_, 1.0); // best-seen never moved
 }
 
-TEST(FeasStallDetector, ResetReArmsCompletely) {
+// A productive crawl, however slow, clears the rounding-noise floor on every
+// observation, so the window never accumulates and the detector never fires.
+TEST(FeasStallDetector, SustainedProductiveCrawlNeverFires) {
     ts::FeasibilityStallDetector d;
-    EXPECT_FALSE(d.observe(1.0));
-    for (int i = 0; i < ts::kFeasStallWindow; ++i)
-        d.observe(1.0);
-    d.note_dispatch(0.25);
-    d.reset();
-    EXPECT_EQ(d.iters_without_improvement_, 0);
-    EXPECT_EQ(d.theta_at_first_dispatch_, std::numeric_limits<double>::infinity());
-    EXPECT_FALSE(d.observe(5.0)); // any value is a fresh baseline after reset
-    EXPECT_EQ(d.best_theta_, 5.0);
+    double theta = 1.0;
+    for (int i = 0; i < 200; ++i) {
+        theta *= 1.0 - 1.0e-6;
+        EXPECT_FALSE(d.observe(theta)) << "fired on a productive crawl at " << i;
+    }
 }
 
-// Re-arming after a dispatched episode must not forget where recovery began:
-// that value is the reference the caller compares against to decide whether the
-// stage has gained any ground at all.
-TEST(FeasStallDetector, ResetWindowPreservesFirstDispatchViolation) {
+// Re-arming after a dispatched episode must not forget where recovery last
+// handed the stage back: that value is the reference the caller compares
+// against to decide whether the stage has gained any ground since.
+TEST(FeasStallDetector, ResetWindowPreservesLastDispatchViolation) {
     ts::FeasibilityStallDetector d;
     EXPECT_FALSE(d.observe(1.0));
     d.note_dispatch(1.0);
     for (int i = 0; i < ts::kFeasStallWindow; ++i)
         d.observe(1.0);
+    d.note_dispatch(0.4);
     d.reset_window();
     EXPECT_EQ(d.iters_without_improvement_, 0);
     EXPECT_EQ(d.best_theta_, std::numeric_limits<double>::infinity());
-    EXPECT_EQ(d.theta_at_first_dispatch_, 1.0);
+    EXPECT_EQ(d.theta_at_last_dispatch_, 0.4);
 }
 
-TEST(FeasStallDetector, NoteDispatchRecordsOnlyTheFirstEntry) {
+// The reference tracks the MOST RECENT dispatch: the caller's question is
+// whether the stage has gained anything since recovery last handed it back.
+TEST(FeasStallDetector, NoteDispatchRecordsTheLatestEntry) {
     ts::FeasibilityStallDetector d;
-    EXPECT_EQ(d.theta_at_first_dispatch_, std::numeric_limits<double>::infinity());
+    EXPECT_EQ(d.theta_at_last_dispatch_, std::numeric_limits<double>::infinity());
     d.note_dispatch(2.0);
-    EXPECT_EQ(d.theta_at_first_dispatch_, 2.0);
-    d.note_dispatch(0.5); // a later episode does not move the reference
+    EXPECT_EQ(d.theta_at_last_dispatch_, 2.0);
+    d.note_dispatch(0.5); // every later episode moves the reference
+    EXPECT_EQ(d.theta_at_last_dispatch_, 0.5);
     d.note_dispatch(9.0);
-    EXPECT_EQ(d.theta_at_first_dispatch_, 2.0);
+    EXPECT_EQ(d.theta_at_last_dispatch_, 9.0);
 }
 
 // -----------------------------------------------------------------------------
@@ -185,12 +187,15 @@ TEST_F(SolverTest, FeasStallDispatchUnderFilterAcceptanceHandshakes) {
 }
 
 // Once the per-phase restoration entry budget is spent, a still-stalled
-// feasibility stage that has gained no ground since its first restoration entry
+// feasibility stage that has gained no ground since its LAST restoration entry
 // has nothing left to consult, so it must stop rather than burn the remaining
 // iteration budget. This fixture plateaus at the least-squares point — the
-// violation is flat, so there is no net progress to protect — and the stage
+// violation is flat across both episodes, so the violation at the last dispatch
+// equals the plateau and there is no net progress to protect — and the stage
 // ends early with the honest verdict; in a multi-phase sequence the next phase
-// resumes from this point.
+// resumes from this point. This also pins the last-dispatch yardstick itself:
+// the post-episode plateau is exactly the case the first-dispatch yardstick
+// would have kept alive had either episode moved the violation down.
 //
 // Uses the nested l1 mode because its episodes run to completion and hand the
 // stage back, which is what lets the stage spend both entries and then stall a

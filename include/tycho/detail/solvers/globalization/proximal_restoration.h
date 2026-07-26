@@ -123,10 +123,10 @@ namespace tycho::solvers {
 // (1) ζ weight; Ipopt option "resto_proximity_weight" shipped default 1.0.
 inline constexpr double kRestoProximityWeight = 1.0;
 
-// (3) Near-feasible entry guard factor, adapted from Ipopt's unscaled
-// 1e-1 * constr_viol_tol member of its scaled/unscaled entry-guard pair —
-// see the file docstring's disclosed single-measure adaptation.
-inline constexpr double kNearFeasibleGuardFactor = 0.1;
+// (3)'s guard factor kNearFeasibleGuardFactor, and the near_feasible() test
+// built on it, live in restoration.h — shared by both concrete strategies and
+// by the feasibility-stage stall seam. The provenance disclosure for the
+// factor stays in this file's docstring, item (3) above.
 
 // Failure-classification threshold for a restoration STALL (distinct from the
 // ENTRY guard above, and three orders of magnitude looser). When the proximal

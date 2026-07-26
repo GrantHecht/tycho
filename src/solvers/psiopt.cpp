@@ -2290,33 +2290,43 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         //      residual-only history entry, and re-enter the loop so the next
         //      evaluation runs the restoration subproblem; the window re-arms
         //      so the resumed stage restarts it from the post-restoration
-        //      point, while the violation at the phase's FIRST dispatch is
-        //      recorded as the yardstick for outcomes 3b/3c below.
+        //      point, while the violation at THIS dispatch is recorded as the
+        //      yardstick for outcomes 3b/3c below.
         //   3. Stalled and entry refused. What that means depends on where the
         //      stage is:
         //      a. Already near-feasible: the constraints are at their floor and
         //         the barrier residual is still grinding down with mu, so the
         //         violation cannot improve and the detector will keep firing.
         //         This is an endgame, not a stall — do nothing and let the
-        //         stage finish. The repeated no-op is deliberate and costs a
-        //         norm plus a compare per iteration.
-        //      b. Below the violation at which recovery began: the stage has
-        //         net ground since its first restoration episode, so it is
-        //         still winning slowly even though the per-phase entry budget
-        //         is spent. Do nothing and let it run.
+        //         stage finish. The repeated no-op is deliberate; per iteration
+        //         it costs the L1 norm, the detector's observe(), the virtual
+        //         entry_permitted() and the near_feasible() test, and a couple
+        //         of compares — negligible beside the factorization.
+        //      b. Still below the violation at its LAST restoration dispatch:
+        //         the stage has gained ground since recovery last handed it
+        //         back and is still consuming those gains, so it is winning
+        //         slowly even though the per-phase entry budget is spent. Do
+        //         nothing and let it run.
         //      c. Otherwise: the budget is spent AND the stage is no better off
-        //         than where recovery began, so there is no mechanism left to
-        //         consult and no progress to protect. End the phase instead
-        //         of burning the rest of the iteration budget. The iteration
-        //         finishes its normal bookkeeping and the loop exits through
-        //         the standard teardown, so converge_check reports the honest
-        //         verdict and (with return_best_ on) the exit hands back the
-        //         best-seen iterate, exactly like every other non-CONVERGED
-        //         exit. In a multi-phase sequence the next phase resumes from
-        //         there. The detector is deliberately NOT re-armed: the phase
-        //         is ending.
+        //         than where recovery last left it, so recovery has proven it
+        //         cannot help — no mechanism left to consult and no progress to
+        //         protect. End the phase instead of burning the rest of the
+        //         iteration budget. The iteration finishes its normal
+        //         bookkeeping and the loop exits through the standard teardown,
+        //         so converge_check reports the honest verdict and (with
+        //         return_best_ on) the exit hands back the best-seen iterate,
+        //         exactly like every other non-CONVERGED exit. In a multi-phase
+        //         sequence the next phase resumes from there. The detector is
+        //         deliberately NOT re-armed: the phase is ending.
+        //      Measuring against the LAST dispatch rather than the first is
+        //      what makes 3b/3c ask the right question: has the stage gained
+        //      anything since recovery last handed it back? A stage whose
+        //      episode helped and which has been flat ever since, with its
+        //      budget spent, now ends instead of burning the rest of the
+        //      budget on the strength of a gain it has already banked; a stage
+        //      still crawling down since its last episode keeps running.
         //      A phase whose entry was refused from the very start never
-        //      recorded a first dispatch, so 3b's comparison against infinity
+        //      recorded a dispatch at all, so 3b's comparison against infinity
         //      holds and the phase never ends here. For a near-feasible stage
         //      that is 3a anyway; for max_feas_rest_ == 0 it means a user who
         //      turned restoration episodes off keeps the pre-existing
@@ -2342,23 +2352,23 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                     QPtimer.stop();
                     continue;
                 }
-                const bool near_feasible =
-                    theta_fs <= kNearFeasibleGuardFactor * settings_.econ_tol_;
                 // Measured against the same rounding-noise floor the detector
                 // itself uses, so an ulp of drift at a plateau does not read as
                 // ground gained. Vacuously true (infinity reference) when the
                 // phase never dispatched.
                 const bool net_progress = theta_fs < (1.0 - kFeasStallMinRelImprovement) *
-                                                         feas_stall.theta_at_first_dispatch_;
-                if (!near_feasible && !net_progress) {
+                                                         feas_stall.theta_at_last_dispatch_;
+                if (!this->restoration_->near_feasible(theta_fs, ctx) && !net_progress) {
                     exit_stage_stalled = true;
                     if (settings_.print_level_ < 3)
                         fmt::print(fmt::fg(fmt::color::yellow),
                                    "Feasibility phase stalled with its restoration budget "
-                                   "exhausted and no net progress since recovery began "
-                                   "(infeasibility {:.3e} >= {:.3e} at the first restoration "
-                                   "entry); ending the phase.\n",
-                                   theta_fs, feas_stall.theta_at_first_dispatch_);
+                                   "exhausted and no relative improvement over the violation "
+                                   "at its last restoration entry (infeasibility {:.3e}, "
+                                   "{:.3e} at that entry); ending the phase — the convergence "
+                                   "check still reports the final verdict, which may be "
+                                   "acceptable.\n",
+                                   theta_fs, feas_stall.theta_at_last_dispatch_);
                 }
             }
         }

@@ -55,15 +55,15 @@ inline constexpr int kFeasStallWindow = 50;
 inline constexpr double kFeasStallMinRelImprovement = 1.0e-12;
 
 // Per-phase value type: alg_impl owns one instance per phase and calls
-// observe() once per feasibility-stage iteration.
+// observe() once per feasibility-stage iteration. Per-phase freshness needs no
+// explicit clear — the detector is an alg_impl local, so every phase begins
+// with a default-constructed one.
 //
-// Two levels of re-arming, because the two pieces of state have different
-// lifetimes. reset_window() re-arms the no-progress window after a dispatched
-// restoration episode, so the resumed stage restarts its window from the
-// post-restoration point; it deliberately preserves the first-dispatch
-// violation, which is the reference the caller compares against to decide
-// whether recovery has bought the stage any ground at all. reset() clears
-// everything, for a fresh phase.
+// reset_window() re-arms the no-progress window after a dispatched restoration
+// episode, so the resumed stage restarts its window from the post-restoration
+// point; it deliberately preserves the last-dispatch violation, which is the
+// reference the caller compares against to decide whether the stage has gained
+// anything since recovery last handed it back.
 struct FeasibilityStallDetector {
     // Smallest L1 constraint violation observed since the window was armed.
     double best_theta_ = std::numeric_limits<double>::infinity();
@@ -71,10 +71,11 @@ struct FeasibilityStallDetector {
     // Consecutive observations since best_theta_ last improved.
     int iters_without_improvement_ = 0;
 
-    // L1 constraint violation at the first restoration dispatch of this phase,
-    // or infinity if the phase has never dispatched. Recorded once, by
-    // note_dispatch(), and preserved across reset_window().
-    double theta_at_first_dispatch_ = std::numeric_limits<double>::infinity();
+    // L1 constraint violation at this phase's MOST RECENT restoration dispatch,
+    // or infinity if the phase has never dispatched. Rewritten by every
+    // note_dispatch() and preserved across reset_window(), so it always marks
+    // the point at which recovery last handed the stage back.
+    double theta_at_last_dispatch_ = std::numeric_limits<double>::infinity();
 
     // Returns true when the stage has gone kFeasStallWindow consecutive
     // observations without improving best_theta_ by at least
@@ -90,24 +91,16 @@ struct FeasibilityStallDetector {
         return iters_without_improvement_ >= kFeasStallWindow;
     }
 
-    // Records the violation at which this phase first entered restoration.
-    // Later dispatches are ignored, so the recorded value always marks where
-    // recovery began.
-    void note_dispatch(double theta) {
-        if (theta_at_first_dispatch_ == std::numeric_limits<double>::infinity())
-            theta_at_first_dispatch_ = theta;
-    }
+    // Records the violation at which this phase entered restoration. Every
+    // dispatch overwrites the reference: the question it answers is whether the
+    // stage has gained anything since recovery LAST handed it back, not since
+    // the first episode of the phase.
+    void note_dispatch(double theta) { theta_at_last_dispatch_ = theta; }
 
-    // Re-arms the no-progress window only; theta_at_first_dispatch_ survives.
+    // Re-arms the no-progress window only; theta_at_last_dispatch_ survives.
     void reset_window() {
         best_theta_ = std::numeric_limits<double>::infinity();
         iters_without_improvement_ = 0;
-    }
-
-    // Full per-phase re-arm, including the first-dispatch reference.
-    void reset() {
-        reset_window();
-        theta_at_first_dispatch_ = std::numeric_limits<double>::infinity();
     }
 };
 

@@ -2320,7 +2320,7 @@ void ProximalSwitchRestoration::add_proximal_gradient(
 bool ProximalSwitchRestoration::entry_permitted(double constraint_violation,
                                                 const SolverContext &ctx) const {
     // (3): near-feasible guard (Ipopt-adapted, single measure).
-    if (constraint_violation <= kNearFeasibleGuardFactor * ctx.settings_.econ_tol_) {
+    if (near_feasible(constraint_violation, ctx)) {
         return false;
     }
     // (4): per-phase entry budget. entries_ >= max_feas_rest_ refuses (so
@@ -2410,8 +2410,8 @@ const Eigen::VectorXd &NestedL1Restoration::proximal_diagonal() const {
 bool NestedL1Restoration::entry_permitted(double constraint_violation,
                                           const SolverContext &ctx) const {
     // Same near-feasible guard + per-phase entry budget as the proximal switch
-    // (shared constants; single-measure adaptation disclosure (d)).
-    if (constraint_violation <= kNearFeasibleGuardFactor * ctx.settings_.econ_tol_) {
+    // (shared base-class test; single-measure adaptation disclosure (d)).
+    if (near_feasible(constraint_violation, ctx)) {
         return false;
     }
     if (entries_ >= ctx.settings_.max_feas_rest_) {

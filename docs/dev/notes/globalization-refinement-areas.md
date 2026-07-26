@@ -131,34 +131,54 @@ wrong-basin guess, @40, 3/3 repeat-stable) — direct ℓ1-restoration value the
 column before the presets stage finalizes the `robust` contents.
 
 **RESOLVED (2026-07-26): implemented.** A windowed stall detector
-(`globalization/feasibility_stall.h`: no improvement of the best-seen L1
-violation, beyond a 1e-12 relative rounding floor, over 50 consecutive
-iterations — a genuine plateau or growth, never a productive crawl) now runs
-during feasibility-only phases whenever a restoration strategy is configured
-and inactive. On a stalled window it enters restoration through the same
-orchestration, budget (`max_feas_rest_`, per phase), and diagnostics as the
-optimize-path switch. Once the detector fires with entry refused, the phase
-ends gracefully through the standard teardown — instead of burning the
-remaining iteration budget — but only when the refusal means the stage is out
-of options AND has gained nothing since its first restoration entry: a
-near-feasible refusal (constraints at their floor while the barrier residual
-still grinds down with μ) and a budget refusal at a violation below the
-first-entry value are both left alone to finish. With restoration off (the
-default) the stage is byte-identical to before. Measured on the zermelo trace
-that motivated this: the feasibility stage under merit + ℓ1-nested now runs
-275 iterations (two bounded restoration episodes, then a graceful end)
+(`globalization/feasibility_stall.h`) now runs during feasibility-only phases
+whenever a restoration strategy is configured and inactive. It watches the L1
+constraint violation once per iteration and reports a stall when the best-seen
+value has not improved by even a relative 1e-12 — a rounding-noise floor, not a
+progress standard — over 50 consecutive iterations, so it fires on a genuine
+plateau or on growth and never on a productive crawl, however slow. On a
+stalled window it enters restoration through the same orchestration, budget
+(`max_feas_rest_`, per phase), and diagnostics as the optimize-path switch.
+Once the detector fires with entry refused, the phase ends gracefully through
+the standard teardown — instead of burning the remaining iteration budget — but
+only when the refusal means the stage is out of options AND has gained nothing
+since its MOST RECENT restoration entry. Two refusals are left alone to finish:
+a near-feasible one (violation at or under 0.1·`econ_tol_`, i.e. the
+constraints are at their floor while the barrier residual still grinds down
+with μ — an endgame, not a stall), and a budget one taken at a violation still
+below the value recorded at the last restoration entry. Measuring against the
+last entry rather than the first is what makes that test ask the right
+question — has the stage gained anything since recovery last handed it back?
+A stage whose episode helped and which has been flat ever since, with its
+budget spent, ends rather than coasting on a gain it already banked; a stage
+still crawling down since its last episode keeps running. With restoration off
+(the default) the stage is byte-identical to before. Measured on the zermelo
+trace that motivated this: the feasibility stage under merit + ℓ1-nested now
+runs 275 iterations (two bounded restoration episodes, then a graceful end)
 instead of 496; the combined `solve_optimize` call drops from ~895 to ~700
 iterations. Corpus scorecard under merit + ℓ1-nested, against the same corpus
-run with this whole mechanism absent: `hard_hypersens_stiff` is ACCEPTABLE
-@128 either way (the stricter 1%/25 constants had cut its slow but productive
-crawl and cost it that exit; the shipped constants leave it alone),
+run with this whole mechanism absent (every `@N` below is the corpus-reported
+iteration TOTAL for the whole call — the sum over that call's PSIOPT phases —
+never a single phase's count): `hard_hypersens_stiff` is ACCEPTABLE @128 either
+way (the stricter 1%/25 constants had cut its slow but productive crawl and
+cost it that exit; the shipped constants leave it alone),
 `hard_zermelo_wrongbasin` still diverges but at 633 iterations instead of 919,
 and `hard_mountaincar_badguess` regresses from ACCEPTABLE @688 to NOTCONVERGED
-@889. That last one is the open cost of the feature: the guards do keep its
-still-improving stage alive (no early exit fires), so what costs it the
+@889. That last one is the open cost of the feature: what costs it the
 acceptable exit is the two dispatched restoration episodes themselves, which
 steer the stage somewhere worse than the uncontested stall did. Recorded as
-the next question for this area. The downstream optimize phase still diverges from
+the next question for this area. That scorecard was recorded while the exit
+measured progress against the phase's FIRST restoration entry; re-measured
+against the LAST entry (the shipped rule), single-problem probes give the same
+three verdicts, with one behaviour change worth recording: mountaincar's
+feasibility stage now ends early as well, because after its second episode the
+violation grows back ABOVE the value it had at that entry (5.40e-02 against
+3.15e-02) — precisely the "recovery cannot help" case the exit exists for. Its
+feasibility phase stops after 889 iterations instead of the 994 it burned under
+the first-entry rule, and the NOTCONVERGED verdict is unchanged (both counts
+here are that one phase's iterations, not corpus totals). The hypersensitive
+problem is still spared (no exit fires) and zermelo's exit still fires at an
+unchanged violation. The downstream optimize phase still diverges from
 any stage-touched point on that problem — the wrong-basin steering is a
 property of the stage itself — which is exactly what the matched-call
 harness column (area 5) now measures: the same configuration under
