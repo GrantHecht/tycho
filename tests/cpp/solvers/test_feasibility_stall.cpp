@@ -151,6 +151,11 @@ std::unique_ptr<ts::OptimizationProblem> feas_stall_build_nlp(bool inconsistent)
         prob->add_equal_con(GenericFunction<-1, -1>(x - 2.0), (Eigen::VectorXi(1) << 0).finished());
     }
     prob->optimizer_->set_print_level(3); // fully silent
+    // Single-threaded factorization: the detector's rounding-noise threshold
+    // makes the dispatch/exit schedule sensitive to run-to-run FP jitter from
+    // threaded Pardiso, so the iteration-count assertions below need bitwise
+    // reproducibility.
+    prob->optimizer_->set_qp_threads(1);
     return prob;
 }
 
