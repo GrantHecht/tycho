@@ -178,7 +178,11 @@ feasibility phase stops after 889 iterations instead of the 994 it burned under
 the first-entry rule, and the NOTCONVERGED verdict is unchanged (both counts
 here are that one phase's iterations, not corpus totals). The hypersensitive
 problem is still spared (no exit fires) and zermelo's exit still fires at an
-unchanged violation. The downstream optimize phase still diverges from
+unchanged violation. Full-corpus comparison at the shipped rule against the
+campaign store's matching main-era cells: `proximal_switch` statuses are
+identical on all 17 problems; `l1_nested` differs on exactly one
+(mountaincar, above), with converged counts unchanged at 7/17 for both
+configurations. The downstream optimize phase still diverges from
 any stage-touched point on that problem — the wrong-basin steering is a
 property of the stage itself — which is exactly what the matched-call
 harness column (area 5) now measures: the same configuration under
