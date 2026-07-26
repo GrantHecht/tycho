@@ -20,6 +20,7 @@
 
 #include <Eigen/Core>
 
+#include <limits>
 #include <memory>
 
 using namespace TychoTest;
@@ -59,20 +60,24 @@ TEST(FeasStallDetector, SufficientImprovementRestartsWindow) {
     EXPECT_FALSE(d.observe(1.0));
     for (int i = 1; i < ts::kFeasStallWindow; ++i)
         EXPECT_FALSE(d.observe(1.0));
-    // One >1% improvement of the best resets the counter entirely.
+    // Any genuine improvement of the best resets the counter entirely.
     EXPECT_FALSE(d.observe(0.9));
     for (int i = 1; i < ts::kFeasStallWindow; ++i)
         EXPECT_FALSE(d.observe(0.9)) << "window did not restart at " << i;
     EXPECT_TRUE(d.observe(0.9));
 }
 
-TEST(FeasStallDetector, SubThresholdImprovementDoesNotRestartWindow) {
+// The threshold is a rounding-noise floor: a "better" value that does not clear
+// it is not progress and must not restart the window. A crawl that clears it —
+// however slowly — is covered by the test above.
+TEST(FeasStallDetector, ImprovementUnderTheNoiseFloorDoesNotRestartWindow) {
     ts::FeasibilityStallDetector d;
     EXPECT_FALSE(d.observe(1.0));
     bool fired = false;
     for (int i = 0; i < ts::kFeasStallWindow; ++i)
-        fired = d.observe(0.995); // 0.5% better: below the 1% threshold
+        fired = d.observe(1.0 - 1.0e-13); // smaller, but inside the noise floor
     EXPECT_TRUE(fired);
+    EXPECT_EQ(d.best_theta_, 1.0); // best-seen never moved
 }
 
 TEST(FeasStallDetector, ResetReArmsCompletely) {
@@ -80,10 +85,37 @@ TEST(FeasStallDetector, ResetReArmsCompletely) {
     EXPECT_FALSE(d.observe(1.0));
     for (int i = 0; i < ts::kFeasStallWindow; ++i)
         d.observe(1.0);
+    d.note_dispatch(0.25);
     d.reset();
     EXPECT_EQ(d.iters_without_improvement_, 0);
+    EXPECT_EQ(d.theta_at_first_dispatch_, std::numeric_limits<double>::infinity());
     EXPECT_FALSE(d.observe(5.0)); // any value is a fresh baseline after reset
     EXPECT_EQ(d.best_theta_, 5.0);
+}
+
+// Re-arming after a dispatched episode must not forget where recovery began:
+// that value is the reference the caller compares against to decide whether the
+// stage has gained any ground at all.
+TEST(FeasStallDetector, ResetWindowPreservesFirstDispatchViolation) {
+    ts::FeasibilityStallDetector d;
+    EXPECT_FALSE(d.observe(1.0));
+    d.note_dispatch(1.0);
+    for (int i = 0; i < ts::kFeasStallWindow; ++i)
+        d.observe(1.0);
+    d.reset_window();
+    EXPECT_EQ(d.iters_without_improvement_, 0);
+    EXPECT_EQ(d.best_theta_, std::numeric_limits<double>::infinity());
+    EXPECT_EQ(d.theta_at_first_dispatch_, 1.0);
+}
+
+TEST(FeasStallDetector, NoteDispatchRecordsOnlyTheFirstEntry) {
+    ts::FeasibilityStallDetector d;
+    EXPECT_EQ(d.theta_at_first_dispatch_, std::numeric_limits<double>::infinity());
+    d.note_dispatch(2.0);
+    EXPECT_EQ(d.theta_at_first_dispatch_, 2.0);
+    d.note_dispatch(0.5); // a later episode does not move the reference
+    d.note_dispatch(9.0);
+    EXPECT_EQ(d.theta_at_first_dispatch_, 2.0);
 }
 
 // -----------------------------------------------------------------------------
@@ -153,9 +185,12 @@ TEST_F(SolverTest, FeasStallDispatchUnderFilterAcceptanceHandshakes) {
 }
 
 // Once the per-phase restoration entry budget is spent, a still-stalled
-// feasibility stage has nothing left to consult, so it must stop rather than
-// burn the remaining iteration budget. The stage ends early with the honest
-// verdict; in a multi-phase sequence the next phase resumes from this point.
+// feasibility stage that has gained no ground since its first restoration entry
+// has nothing left to consult, so it must stop rather than burn the remaining
+// iteration budget. This fixture plateaus at the least-squares point — the
+// violation is flat, so there is no net progress to protect — and the stage
+// ends early with the honest verdict; in a multi-phase sequence the next phase
+// resumes from this point.
 //
 // Uses the nested l1 mode because its episodes run to completion and hand the
 // stage back, which is what lets the stage spend both entries and then stall a
@@ -170,9 +205,9 @@ TEST_F(SolverTest, FeasStallStageStopsBurningAfterBudgetExhaustion) {
     const auto &r = prob->optimizer_->result();
     EXPECT_EQ(r.last_feas_rest_entries_, 2); // default max_feas_rest_ fully used
     EXPECT_NE(r.converge_flag_, ts::PSIOPT::ConvergenceFlags::CONVERGED);
-    // Two stall windows plus two short restoration episodes plus slack is well
-    // under this bound; the pre-change behaviour ran out the full 400.
-    EXPECT_LT(r.iter_num_, 200);
+    // Three stall windows plus two short restoration episodes plus slack is
+    // well under this bound; the pre-change behaviour ran out the full 400.
+    EXPECT_LT(r.iter_num_, 300);
 }
 
 TEST_F(SolverTest, FeasStallStageDispatchesNestedRestoration) {

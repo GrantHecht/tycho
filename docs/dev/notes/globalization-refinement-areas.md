@@ -130,6 +130,44 @@ wrong-basin guess, @40, 3/3 repeat-stable) — direct ℓ1-restoration value the
 `solve_optimize`-based sweep structurally could not see. Worth a matched-call
 column before the presets stage finalizes the `robust` contents.
 
+**RESOLVED (2026-07-26): implemented.** A windowed stall detector
+(`globalization/feasibility_stall.h`: no improvement of the best-seen L1
+violation, beyond a 1e-12 relative rounding floor, over 50 consecutive
+iterations — a genuine plateau or growth, never a productive crawl) now runs
+during feasibility-only phases whenever a restoration strategy is configured
+and inactive. On a stalled window it enters restoration through the same
+orchestration, budget (`max_feas_rest_`, per phase), and diagnostics as the
+optimize-path switch. Once the detector fires with entry refused, the phase
+ends gracefully through the standard teardown — instead of burning the
+remaining iteration budget — but only when the refusal means the stage is out
+of options AND has gained nothing since its first restoration entry: a
+near-feasible refusal (constraints at their floor while the barrier residual
+still grinds down with μ) and a budget refusal at a violation below the
+first-entry value are both left alone to finish. With restoration off (the
+default) the stage is byte-identical to before. Measured on the zermelo trace
+that motivated this: the feasibility stage under merit + ℓ1-nested now runs
+275 iterations (two bounded restoration episodes, then a graceful end)
+instead of 496; the combined `solve_optimize` call drops from ~895 to ~700
+iterations. Corpus scorecard under merit + ℓ1-nested, against the same corpus
+run with this whole mechanism absent: `hard_hypersens_stiff` is ACCEPTABLE
+@128 either way (the stricter 1%/25 constants had cut its slow but productive
+crawl and cost it that exit; the shipped constants leave it alone),
+`hard_zermelo_wrongbasin` still diverges but at 633 iterations instead of 919,
+and `hard_mountaincar_badguess` regresses from ACCEPTABLE @688 to NOTCONVERGED
+@889. That last one is the open cost of the feature: the guards do keep its
+still-improving stage alive (no early exit fires), so what costs it the
+acceptable exit is the two dispatched restoration episodes themselves, which
+steer the stage somewhere worse than the uncontested stall did. Recorded as
+the next question for this area. The downstream optimize phase still diverges from
+any stage-touched point on that problem — the wrong-basin steering is a
+property of the stage itself — which is exactly what the matched-call
+harness column (area 5) now measures: the same configuration under
+`--call-shape optimize` converges @40 to 1.7009270229362865. Known
+limitation: a restoration episode that never exits (observed for the
+proximal switch on a structurally infeasible feasibility system) keeps the
+stage inside the episode, where neither the detector nor the graceful end
+applies; an in-episode progress test is the recorded follow-up.
+
 ## 5. Harness follow-ups (deep-dive finding)
 
 The corpus driver compares mismatched call shapes across backends (psiopt runs
@@ -137,6 +175,15 @@ each module's `SOLVE_MODE`; the ipopt backend always runs a single solve) —
 add a matched-call option before quoting cross-backend rows for
 non-`optimize` modules. (`run_corpus.py --config`'s repeated-flag handling was
 fixed on the campaign branch after the deep-dive hit it.)
+
+**RESOLVED (2026-07-26): implemented.** `run_corpus.py --call-shape
+{module,optimize}` (default `module`, today's behavior) threads through the
+child protocol into the corpus driver, is recorded as a `call_shape`
+scorecard column, and is accepted by the campaign driver's sweep with a CSV
+aggregation column (legacy scorecards without the key aggregate as
+`module`). First matched-call measurement through the shipped flag: zermelo
+under merit + ℓ1-nested converges @40 to 1.7009270229362865 with
+`--call-shape optimize`, versus DIVERGING under its module shape.
 
 ## 6. Smaller deferred items (consolidated from review notes and PR records)
 
