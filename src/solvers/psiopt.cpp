@@ -78,6 +78,20 @@ const char *acceptance_strategy_name(tycho::solvers::AcceptanceStrategies strate
     return "unknown";
 }
 
+// Per-iterate acceptable tier: all four monitored residuals strictly inside
+// their acceptable tolerances. This is the single definition of "this iterate
+// is acceptable" -- converge_check() applies it over a trailing window of
+// max_acc_iters_ iterates to declare ConvergenceFlags::ACCEPTABLE, and
+// alg_impl's un-evaluable-step bypass applies it to the current iterate to
+// decide whether a failed line search can exit at the acceptable level instead
+// of aborting. Both call sites must agree, so neither open-codes the four
+// comparisons.
+bool psiopt_iterate_acceptable(const tycho::solvers::IterateInfo &it,
+                               const tycho::solvers::PSIOPT::Settings &settings) {
+    return (it.kkt_inf_ < settings.acc_kkt_tol_) && (it.econ_inf_ < settings.acc_econ_tol_) &&
+           (it.icon_inf_ < settings.acc_icon_tol_) && (it.barr_inf_ < settings.acc_bar_tol_);
+}
+
 } // namespace
 
 // =============================================================================
@@ -1625,12 +1639,7 @@ tycho::ConvergenceFlags tycho::solvers::PSIOPT::converge_check(std::vector<Itera
     } else if (int(iters.size()) > settings_.max_acc_iters_) {
         int nfeas = 0;
         for (int i = 0; i < settings_.max_acc_iters_; i++) {
-            last = iters[int(iters.size()) - i - 1];
-            KKTFeas = (last.kkt_inf_ < settings_.acc_kkt_tol_);
-            EConFeas = (last.econ_inf_ < settings_.acc_econ_tol_);
-            IConFeas = (last.icon_inf_ < settings_.acc_icon_tol_);
-            BarFeas = (last.barr_inf_ < settings_.acc_bar_tol_);
-            if (KKTFeas && EConFeas && IConFeas && BarFeas)
+            if (psiopt_iterate_acceptable(iters[int(iters.size()) - i - 1], settings_))
                 nfeas++;
             else
                 break;
@@ -2460,6 +2469,13 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // below.
         const int eval_errs_before = this->eval_error_log_.count_;
 
+        // Set only by the un-evaluable-step bypass below, when the committed
+        // iterate already satisfies the acceptable tier: it forces this
+        // iteration to be the last one, so the solve reports the acceptable
+        // level instead of aborting. Read once, next to the !GoodStep
+        // divergence override at the bottom of the loop.
+        bool exit_at_acceptable = false;
+
         Funtimer.start();
         if (GoodStep) {
             // compute_step fuses the fraction-to-boundary scaling (former
@@ -2548,17 +2564,41 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                     // committing the never-evaluated fallback step risks
                     // turning the next iteration's committed-point evaluation
                     // into a fatal error. Never accept it (this deliberately
-                    // overrides a watchdog-relaxed acceptance too). Mirror the
-                    // reference interior-point behavior for a failed line
-                    // search: enter feasibility restoration when a strategy is
-                    // configured, inactive, and entry-permitted — skipping the
-                    // soft pre-stage, whose trial is the very step that could
-                    // not be evaluated — and abort with the latched evaluation
-                    // error wrapped in solver context otherwise.
+                    // overrides a watchdog-relaxed acceptance too).
+                    //
+                    // What happens instead mirrors the reference interior-point
+                    // method's handling of a failed line search, in its order:
+                    //
+                    //   1. If the CURRENT (committed) iterate already satisfies
+                    //      the acceptable convergence tier, stop here and report
+                    //      the acceptable level rather than aborting. A single
+                    //      transient evaluation excursion must not throw away a
+                    //      solve that is already at a usable point — the common
+                    //      case being a near-feasible warm start, where the
+                    //      restoration guard below would refuse entry anyway.
+                    //      The failed step is discarded (alpha = 0), the iterate
+                    //      stays un-accepted, and the loop finishes this
+                    //      iteration's bookkeeping before exiting normally.
+                    //   2. Otherwise enter feasibility restoration, when a
+                    //      strategy is configured, inactive, and entry-permitted
+                    //      — skipping the soft pre-stage, whose trial is the very
+                    //      step that could not be evaluated.
+                    //   3. Otherwise abort with the latched evaluation error
+                    //      wrapped in solver context.
+                    //
+                    // Citer carries this iterate's residuals here:
+                    // fill_residual_info() wrote them from the committed XSL
+                    // before the factorization above, and nothing since has
+                    // touched XSL (the `XSL += alpha*DXSL` commit is below the
+                    // loop's exit check).
                     const int ncons_ue = this->equal_cons_ + this->inequal_cons_;
                     const double violation_ue = RHS.tail(ncons_ue).template lpNorm<1>();
-                    if (this->restoration_ && !this->restoration_->is_active() &&
-                        this->restoration_->entry_permitted(violation_ue, ctx)) {
+                    if (psiopt_iterate_acceptable(Citer, settings_)) {
+                        alpha = 0.0;
+                        Citer.accepted_ = false;
+                        exit_at_acceptable = true;
+                    } else if (this->restoration_ && !this->restoration_->is_active() &&
+                               this->restoration_->entry_permitted(violation_ue, ctx)) {
                         this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
                         alpha = 0.0;
                         Citer.accepted_ = false;
@@ -2708,6 +2748,17 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         ExitCode = this->converge_check(iters);
         if (!GoodStep)
             ExitCode = ConvergenceFlags::DIVERGING;
+        // Un-evaluable exhaustion at an already-acceptable iterate (see the
+        // bypass above): report the acceptable level so the exit block below
+        // terminates the loop. converge_check() only reaches ACCEPTABLE after a
+        // sustained run of acceptable iterates; this iterate is acceptable but
+        // the solve cannot continue, which is exactly the reference method's
+        // "current point is acceptable, stop here" verdict. A stronger verdict
+        // already reached (CONVERGED) is left alone; DIVERGING is unreachable
+        // here because an acceptable iterate is finite and inside the
+        // divergence thresholds (validate() enforces acc <= div).
+        if (exit_at_acceptable && ExitCode == ConvergenceFlags::NOTCONVERGED)
+            ExitCode = ConvergenceFlags::ACCEPTABLE;
 
         if (settings_.print_level_ == 0) {
             Printtimer.start();

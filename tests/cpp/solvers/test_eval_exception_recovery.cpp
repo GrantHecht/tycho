@@ -198,6 +198,29 @@ TEST(EvalExceptionRecovery, ExhaustionWithoutRestorationRethrowsWithContext) {
     }
 }
 
+// Same exhaustion scenario, but the committed iterate already satisfies the
+// acceptable convergence tier (the tolerances are loosened so the start point
+// qualifies). The un-evaluable exhaustion must then exit at the acceptable
+// level rather than abort: no throw, ACCEPTABLE, and the never-evaluated
+// fallback step discarded (the returned primal is still the start point).
+TEST(EvalExceptionRecovery, ExhaustionAtAcceptableIterateExitsGracefully) {
+    auto prob = build_eval_except_nlp(1 << 20); // effectively unlimited throws
+    auto &acc_settings = prob->optimizer_->settings();
+    acc_settings.acc_kkt_tol_ = 1e10;
+    acc_settings.acc_econ_tol_ = 1e10;
+    acc_settings.acc_icon_tol_ = 1e10;
+    acc_settings.acc_bar_tol_ = 1e10;
+
+    tycho::ConvergenceFlags flag = tycho::ConvergenceFlags::NOTCONVERGED;
+    ASSERT_NO_THROW(flag = prob->optimize());
+    EXPECT_EQ(flag, tycho::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_GE(prob->optimizer_->eval_error_log().count_, 1);
+    // The failed step was discarded, not committed: x is still the start point.
+    const auto &r = prob->optimizer_->result();
+    ASSERT_EQ(r.primals_.size(), 1);
+    EXPECT_NEAR(r.primals_[0], 0.0, 1e-12);
+}
+
 // Same NLP, restoration configured, throw budget sized to exactly one ladder
 // exhaustion: the un-evaluable exhaustion dispatches feasibility restoration
 // instead of aborting, the domain heals, and the solve completes.
