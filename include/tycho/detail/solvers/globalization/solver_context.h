@@ -142,6 +142,13 @@ struct SolverContext {
     // member) still compile and default it to nullptr — so those sites, and the
     // whole default solve path, remain restoration-free and bit-identical.
     const RestorationStrategy *restoration_ = nullptr;
+
+    // --- Trial-evaluation exception log (optional; null in isolation) ---
+    // Non-owning pointer to the live PSIOPT's EvalErrorLog. The wrapped
+    // trial-evaluation sites record through it; a defaulted nullptr keeps
+    // existing braced-init call sites (unit tests constructing a bare
+    // SolverContext) compiling, and every recording site null-guards.
+    EvalErrorLog *eval_errors_ = nullptr;
 };
 
 } // namespace tycho::solvers

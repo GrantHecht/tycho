@@ -1534,7 +1534,18 @@ bool tycho::solvers::PSIOPT::try_soft_feasibility_step(AlgorithmModes algmode, d
     // primal stationarity block, then slack-complete the inequality residual.
     // The throwaway KKT matrix is re-zeroed and re-filled at the next iteration's
     // eval, so reusing the assembly buffer here is safe.
-    this->eval_nlp(algmode, obj_scale, XSL2, trial_obj, GX, RHS2, this->kkt_sol_.get_matrix(), mu);
+    // An un-evaluable trial is not a reduced one: report no reduction so the
+    // caller escalates to the full restoration entry.
+    try {
+        this->eval_nlp(algmode, obj_scale, XSL2, trial_obj, GX, RHS2, this->kkt_sol_.get_matrix(),
+                       mu);
+    } catch (const std::exception &e) {
+        this->eval_error_log_.record(e.what());
+        return false;
+    } catch (...) {
+        this->eval_error_log_.record_unknown();
+        return false;
+    }
     v_rhs2.prim_grad() += GX;
     if (this->inequal_cons_ > 0)
         this->apply_reset_slacks(v_xsl2.slacks(), v_rhs2.iq_cons());
@@ -1796,11 +1807,11 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     // step-length mechanism (mechanism_) at its call sites below. Built once
     // here (dims/settings/scratch are stable for the solve); it must not
     // outlive this alg_impl frame or the PSIOPT members it references.
-    SolverContext ctx{this->nlp_.get(),     this->kkt_sol_,           this->settings_,
-                      this->primal_vars_,   this->slack_vars_,        this->equal_cons_,
-                      this->inequal_cons_,  this->kkt_dim_,           this->stli_scratch_,
-                      this->hp_scratch_,    this->best_xsl_scratch_,  this->best_rhs_scratch_,
-                      this->restoration_.get()};
+    SolverContext ctx{this->nlp_.get(),         this->kkt_sol_,          this->settings_,
+                      this->primal_vars_,       this->slack_vars_,       this->equal_cons_,
+                      this->inequal_cons_,      this->kkt_dim_,          this->stli_scratch_,
+                      this->hp_scratch_,        this->best_xsl_scratch_, this->best_rhs_scratch_,
+                      this->restoration_.get(), &this->eval_error_log_};
 
     tycho::utils::Timer Runtimer;
     tycho::utils::Timer Funtimer;
@@ -2918,6 +2929,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
     }
 
     this->result_.reset_accumulators();
+    this->eval_error_log_.reset();
     settings_.validate();
 
     // Rebuild acceptance_/mechanism_/governor_/recovery_ from the
