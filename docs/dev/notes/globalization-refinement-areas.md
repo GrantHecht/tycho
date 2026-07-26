@@ -30,6 +30,34 @@ default path required (the classic path should be unaffected unless an
 exception occurs, which today is fatal anyway — byte-identity expected by
 construction).
 
+**RESOLVED (2026-07-26): implemented.** All seven trial-evaluation sites
+(the three classic line-search variants, the generic acceptance ladder, the
+two SOC constraint evaluations, and the soft-feasibility trial) now convert
+an evaluation exception into a rejected-rung signal recorded in an
+`EvalErrorLog`. Ladder exhaustion with un-evaluable rungs never commits the
+fallback step; in order, it (1) exits the phase gracefully at the
+`ACCEPTABLE` level when the current committed iterate already satisfies the
+acceptable convergence tier, (2) otherwise dispatches feasibility
+restoration when configured, inactive, and entry-permitted, and (3)
+otherwise aborts with the latched message wrapped in solver context.
+Committed-point evaluation failures remain fatal and unwrapped. Semantics
+were source-verified against Ipopt 3.14.19
+(`IpBacktrackingLineSearch.cpp:776-784` rejected-rung handling, `:568-571`
+acceptable-point-before-restoration, `:516-634` exhaustion-to-restoration;
+eval-error rungs never seed SOC, mirrored via the
+`theta_at_first_rejection_` sentinel). Diagnostics:
+`SolveResult::last_eval_exception_` (Python `last_eval_exception`, empty
+sentinel) and per-iteration `IterateInfo::eval_exceptions_`. Known residue:
+the exhaustion bypass's direct restoration dispatch (reachable only through a
+watchdog-resolved acceptance) ships without a direct test — a
+`WatchdogState`-preloading harness is the recorded follow-up — and the three
+behavior trades (an exhaustion after any throwing rung, or a
+watchdog-relaxed acceptance in a throwing iteration, aborts rather than
+accept-as-is when restoration is off; an un-evaluable exhaustion at an
+already-acceptable iterate exits `ACCEPTABLE` instead of entering
+restoration) were deliberate, Ipopt-mirrored
+choices recorded in the implementing PR.
+
 ## 2. Regularization-mode shift double-memory (post-episode over-shift)
 
 **Evidence:** the review of the regularization mode flagged that after a ladder

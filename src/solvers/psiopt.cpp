@@ -78,6 +78,20 @@ const char *acceptance_strategy_name(tycho::solvers::AcceptanceStrategies strate
     return "unknown";
 }
 
+// Per-iterate acceptable tier: all four monitored residuals strictly inside
+// their acceptable tolerances. This is the single definition of "this iterate
+// is acceptable" -- converge_check() applies it over a trailing window of
+// max_acc_iters_ iterates to declare ConvergenceFlags::ACCEPTABLE, and
+// alg_impl's un-evaluable-step bypass applies it to the current iterate to
+// decide whether a failed line search can exit at the acceptable level instead
+// of aborting. Both call sites must agree, so neither open-codes the four
+// comparisons.
+bool psiopt_iterate_acceptable(const tycho::solvers::IterateInfo &it,
+                               const tycho::solvers::PSIOPT::Settings &settings) {
+    return (it.kkt_inf_ < settings.acc_kkt_tol_) && (it.econ_inf_ < settings.acc_econ_tol_) &&
+           (it.icon_inf_ < settings.acc_icon_tol_) && (it.barr_inf_ < settings.acc_bar_tol_);
+}
+
 } // namespace
 
 // =============================================================================
@@ -1069,7 +1083,8 @@ void tycho::solvers::PSIOPT::rebuild_globalization_components() {
             SolverContext{this->nlp_.get(), this->kkt_sol_, this->settings_, this->primal_vars_,
                           this->slack_vars_, this->equal_cons_, this->inequal_cons_, this->kkt_dim_,
                           this->stli_scratch_, this->hp_scratch_, this->best_xsl_scratch_,
-                          this->best_rhs_scratch_, this->restoration_.get()});
+                          this->best_rhs_scratch_, this->restoration_.get(),
+                          &this->eval_error_log_});
     }
 
     // The step-length globalization mechanism. Stateless (holds
@@ -1534,7 +1549,18 @@ bool tycho::solvers::PSIOPT::try_soft_feasibility_step(AlgorithmModes algmode, d
     // primal stationarity block, then slack-complete the inequality residual.
     // The throwaway KKT matrix is re-zeroed and re-filled at the next iteration's
     // eval, so reusing the assembly buffer here is safe.
-    this->eval_nlp(algmode, obj_scale, XSL2, trial_obj, GX, RHS2, this->kkt_sol_.get_matrix(), mu);
+    // An un-evaluable trial is not a reduced one: report no reduction so the
+    // caller escalates to the full restoration entry.
+    try {
+        this->eval_nlp(algmode, obj_scale, XSL2, trial_obj, GX, RHS2, this->kkt_sol_.get_matrix(),
+                       mu);
+    } catch (const std::exception &e) {
+        this->eval_error_log_.record(e.what());
+        return false;
+    } catch (...) {
+        this->eval_error_log_.record_unknown();
+        return false;
+    }
     v_rhs2.prim_grad() += GX;
     if (this->inequal_cons_ > 0)
         this->apply_reset_slacks(v_xsl2.slacks(), v_rhs2.iq_cons());
@@ -1613,12 +1639,7 @@ tycho::ConvergenceFlags tycho::solvers::PSIOPT::converge_check(std::vector<Itera
     } else if (int(iters.size()) > settings_.max_acc_iters_) {
         int nfeas = 0;
         for (int i = 0; i < settings_.max_acc_iters_; i++) {
-            last = iters[int(iters.size()) - i - 1];
-            KKTFeas = (last.kkt_inf_ < settings_.acc_kkt_tol_);
-            EConFeas = (last.econ_inf_ < settings_.acc_econ_tol_);
-            IConFeas = (last.icon_inf_ < settings_.acc_icon_tol_);
-            BarFeas = (last.barr_inf_ < settings_.acc_bar_tol_);
-            if (KKTFeas && EConFeas && IConFeas && BarFeas)
+            if (psiopt_iterate_acceptable(iters[int(iters.size()) - i - 1], settings_))
                 nfeas++;
             else
                 break;
@@ -1796,11 +1817,11 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     // step-length mechanism (mechanism_) at its call sites below. Built once
     // here (dims/settings/scratch are stable for the solve); it must not
     // outlive this alg_impl frame or the PSIOPT members it references.
-    SolverContext ctx{this->nlp_.get(),     this->kkt_sol_,           this->settings_,
-                      this->primal_vars_,   this->slack_vars_,        this->equal_cons_,
-                      this->inequal_cons_,  this->kkt_dim_,           this->stli_scratch_,
-                      this->hp_scratch_,    this->best_xsl_scratch_,  this->best_rhs_scratch_,
-                      this->restoration_.get()};
+    SolverContext ctx{this->nlp_.get(),         this->kkt_sol_,          this->settings_,
+                      this->primal_vars_,       this->slack_vars_,       this->equal_cons_,
+                      this->inequal_cons_,      this->kkt_dim_,          this->stli_scratch_,
+                      this->hp_scratch_,        this->best_xsl_scratch_, this->best_rhs_scratch_,
+                      this->restoration_.get(), &this->eval_error_log_};
 
     tycho::utils::Timer Runtimer;
     tycho::utils::Timer Funtimer;
@@ -2441,6 +2462,20 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                              (this->restoration_ && this->restoration_->is_active()))
                                 ? 0.0
                                 : 1.0;
+
+        // Trial evaluations from here to the end of the recovery hook may
+        // absorb NLP evaluation exceptions; the delta against this snapshot
+        // is this iteration's count and drives the un-evaluable-step bypass
+        // below.
+        const int eval_errs_before = this->eval_error_log_.count_;
+
+        // Set only by the un-evaluable-step bypass below, when the committed
+        // iterate already satisfies the acceptable tier: it forces this
+        // iteration to be the last one, so the solve reports the acceptable
+        // level instead of aborting. Read once, next to the !GoodStep
+        // divergence override at the bottom of the loop.
+        bool exit_at_acceptable = false;
+
         Funtimer.start();
         if (GoodStep) {
             // compute_step fuses the fraction-to-boundary scaling (former
@@ -2523,6 +2558,68 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                     this->try_recenter_elastics(step_mu)) {
                     alpha = 0.0;
                     resolved_depth = kRecoveryDepthRestoration;
+                } else if (this->eval_error_log_.count_ > eval_errs_before) {
+                    // Un-evaluable fallback step: at least one trial evaluation
+                    // threw during this iteration's acceptance attempts, so
+                    // committing the never-evaluated fallback step risks
+                    // turning the next iteration's committed-point evaluation
+                    // into a fatal error. Never accept it (this deliberately
+                    // overrides a watchdog-relaxed acceptance too).
+                    //
+                    // What happens instead mirrors the reference interior-point
+                    // method's handling of a failed line search, in its order:
+                    //
+                    //   1. If the CURRENT (committed) iterate already satisfies
+                    //      the acceptable convergence tier, stop here and report
+                    //      the acceptable level rather than aborting. A single
+                    //      transient evaluation excursion must not throw away a
+                    //      solve that is already at a usable point — the common
+                    //      case being a near-feasible warm start, where the
+                    //      restoration guard below would refuse entry anyway.
+                    //      The failed step is discarded (alpha = 0), the iterate
+                    //      stays un-accepted, and the loop finishes this
+                    //      iteration's bookkeeping before exiting normally.
+                    //   2. Otherwise enter feasibility restoration, when a
+                    //      strategy is configured, inactive, and entry-permitted
+                    //      — skipping the soft pre-stage, whose trial is the very
+                    //      step that could not be evaluated.
+                    //   3. Otherwise abort with the latched evaluation error
+                    //      wrapped in solver context.
+                    //
+                    // Citer carries this iterate's residuals here:
+                    // fill_residual_info() wrote them from the committed XSL
+                    // before the factorization above, and nothing since has
+                    // touched XSL (the `XSL += alpha*DXSL` commit is below the
+                    // loop's exit check).
+                    const int ncons_ue = this->equal_cons_ + this->inequal_cons_;
+                    const double violation_ue = RHS.tail(ncons_ue).template lpNorm<1>();
+                    if (psiopt_iterate_acceptable(Citer, settings_)) {
+                        alpha = 0.0;
+                        Citer.accepted_ = false;
+                        exit_at_acceptable = true;
+                    } else if (this->restoration_ && !this->restoration_->is_active() &&
+                               this->restoration_->entry_permitted(violation_ue, ctx)) {
+                        this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
+                        alpha = 0.0;
+                        Citer.accepted_ = false;
+                        // Deliberately overwrites resolved_depth on a watchdog-resolved
+                        // path too (kRecoveryDepthWatchdog -> kRecoveryDepthRestoration),
+                        // so the recovery-depth histogram attributes this iteration to
+                        // restoration, not to the watchdog relaxation it superseded.
+                        resolved_depth = kRecoveryDepthRestoration;
+                    } else {
+                        // alpha was reduced once more after the last rejected rung, so
+                        // the smallest fraction actually evaluated is alpha * alpha_red_.
+                        throw std::runtime_error(fmt::format(
+                            "PSIOPT: line search failed at iteration {} because the NLP could "
+                            "not be evaluated at the trial steps ({} evaluation failure(s) this "
+                            "iteration; smallest trial step fraction attempted {:.3e}). "
+                            "Feasibility restoration (restoration_mode) was unavailable to "
+                            "recover: not configured, entry refused, or already active. Last "
+                            "evaluation error: {}",
+                            Citer.iter, this->eval_error_log_.count_ - eval_errs_before,
+                            alpha * settings_.alpha_red_, this->eval_error_log_.last_message_));
+                    }
                 }
                 break;
             case RecoveryChain::Action::kRetry:
@@ -2609,6 +2706,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         Citer.alpha_p_ = alphap;
         Citer.alpha_d_ = alphad;
         Citer.alpha_t_ = alpha;
+        Citer.eval_exceptions_ = this->eval_error_log_.count_ - eval_errs_before;
 
         this->fill_iter_info(v_xsl, v_rhs, prim_obj, barr_obj, mu, Citer);
         iters.push_back(Citer);
@@ -2653,6 +2751,19 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         ExitCode = this->converge_check(iters);
         if (!GoodStep)
             ExitCode = ConvergenceFlags::DIVERGING;
+        // Un-evaluable exhaustion at an already-acceptable iterate (see the
+        // bypass above): report the acceptable level so the exit block below
+        // terminates the loop. converge_check() only reaches ACCEPTABLE after a
+        // sustained run of acceptable iterates; this iterate is acceptable but
+        // the solve cannot continue, which is exactly the reference method's
+        // "current point is acceptable, stop here" verdict. A stronger verdict
+        // already reached (CONVERGED) is left alone; DIVERGING is unreachable
+        // here both because the bypass only runs on a usable step direction
+        // (the !GoodStep override above is mutually exclusive with it) and
+        // because an acceptable iterate is finite and inside the divergence
+        // thresholds (validate() enforces acc <= div).
+        if (exit_at_acceptable && ExitCode == ConvergenceFlags::NOTCONVERGED)
+            ExitCode = ConvergenceFlags::ACCEPTABLE;
 
         if (settings_.print_level_ == 0) {
             Printtimer.start();
@@ -2786,6 +2897,15 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         this->result_.last_prox_reg_dual_ = last_prox_dual;
     }
 
+    // Trial-evaluation exception diagnostic: the message of the most recent
+    // evaluation failure the acceptance machinery absorbed. Unlike the shifts
+    // above there is no mode gate — the log is per-SOLVE (reset alongside
+    // result_.reset_accumulators()), not per-phase, so a phase that absorbed
+    // nothing after an earlier phase did leaves the earlier message standing,
+    // and an entirely clean solve leaves the empty sentinel untouched.
+    if (this->eval_error_log_.count_ > 0)
+        this->result_.last_eval_exception_ = this->eval_error_log_.last_message_;
+
     if (this->equal_cons_ > 0) {
         this->result_.eq_cons_ = v_rhs.eq_cons();
         this->result_.eq_lmults_ = v_xsl.eq_lmults();
@@ -2918,6 +3038,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
     }
 
     this->result_.reset_accumulators();
+    this->eval_error_log_.reset();
     settings_.validate();
 
     // Rebuild acceptance_/mechanism_/governor_/recovery_ from the

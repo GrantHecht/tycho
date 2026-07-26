@@ -112,6 +112,31 @@ using tycho::EigenRef;
 // optimum without it.
 inline constexpr int kDivergencePersistIters = 3;
 
+// =============================================================================
+// EvalErrorLog — latched trial-evaluation exception state for one solve call.
+//
+// The line-search / recovery trial evaluations convert an NLP evaluation
+// exception into a rejected-trial signal instead of letting it unwind the
+// solve; this log records how often that happened and keeps the most recent
+// message so the solver can fold it into diagnostics (or into the abort
+// message when no recovery path exists). Reset once per solve call, alongside
+// SolveResult::reset_accumulators().
+// =============================================================================
+struct EvalErrorLog {
+    int count_ = 0;
+    std::string last_message_;
+
+    void record(const char *what) {
+        ++count_;
+        last_message_ = what;
+    }
+    void record_unknown() { record("unknown exception type (not derived from std::exception)"); }
+    void reset() {
+        count_ = 0;
+        last_message_.clear();
+    }
+};
+
 // Part of the globalization component extraction: PSIOPT owns its
 // step-acceptance strategy through a std::unique_ptr<AcceptanceStrategy>.
 // Only the forward declaration is needed here (the complete type lives in
@@ -556,6 +581,16 @@ class PSIOPT {
         double last_prox_reg_primal_ = -1.0;
         double last_prox_reg_dual_ = -1.0;
 
+        // Message of the most recent trial-evaluation exception absorbed by
+        // the acceptance machinery during the most recent solve call (all
+        // phases). Empty when every evaluation succeeded. A populated value
+        // means the solver rejected un-evaluable trial steps and continued —
+        // to full recovery, to a graceful ACCEPTABLE-level exit at an
+        // already-acceptable iterate, or into feasibility restoration. When
+        // none of those paths existed, the solve threw the latched message
+        // wrapped in solver context instead.
+        std::string last_eval_exception_;
+
         // T6 (dead-status fix): the last non-Success status observed from
         // kkt_sol_.info() by factor_impl() within the CURRENT phase (alg_impl
         // resets it on entry, so print_exit_stats reports per-phase status).
@@ -593,6 +628,7 @@ class PSIOPT {
             last_feas_rest_iters_ = -1;
             last_prox_reg_primal_ = -1.0;
             last_prox_reg_dual_ = -1.0;
+            last_eval_exception_.clear();
         }
     };
 
@@ -621,6 +657,7 @@ class PSIOPT {
     Settings &settings() { return settings_; }
     const Settings &settings() const { return settings_; }
     const SolveResult &result() const { return result_; }
+    const EvalErrorLog &eval_error_log() const { return eval_error_log_; }
 
     // --- NLP management ---
     void set_nlp(std::shared_ptr<NonLinearProgram> np);
@@ -744,6 +781,7 @@ class PSIOPT {
 
     Settings settings_;
     SolveResult result_;
+    EvalErrorLog eval_error_log_;
     std::shared_ptr<NonLinearProgram> nlp_;
 
     // Classic merit line-search acceptance, extracted from the former

@@ -59,6 +59,21 @@
 
 namespace tycho::solvers {
 
+// File-local helpers shared by every wrapped trial-evaluation catch site
+// below (ls_lang/ls_l1/ls_auglang/generic_line_search): both null-guard on
+// `log` so a SolverContext built without an EvalErrorLog (e.g. a bare
+// unit-test context) stays a silent no-op, matching the inline record()/
+// record_unknown() calls they replace.
+static void note_eval_error(EvalErrorLog *log, const char *what) {
+    if (log)
+        log->record(what);
+}
+
+static void note_eval_error_unknown(EvalErrorLog *log) {
+    if (log)
+        log->record_unknown();
+}
+
 // ============================================================================
 // Generic interface — unused on the classic merit path (see header). T6:
 // these throw rather than return a fabricated answer; a future filter/funnel
@@ -219,7 +234,31 @@ double ClassicMeritAcceptance::ls_lang(double obj_scale, double mu, double prim_
         double btest = 0;
         xsl2.data() = xsl.data() + alpha * dxsl.data();
         rhs2.data().setZero();
-        this->eval_rhs(obj_scale, xsl2.data(), ptest, rhs2.data(), rhs2.data());
+        bool evaluable = true;
+        try {
+            this->eval_rhs(obj_scale, xsl2.data(), ptest, rhs2.data(), rhs2.data());
+        } catch (const std::exception &e) {
+            note_eval_error(ctx_.eval_errors_, e.what());
+            evaluable = false;
+        } catch (...) {
+            note_eval_error_unknown(ctx_.eval_errors_);
+            evaluable = false;
+        }
+        if (!evaluable) {
+            // Un-evaluable trial: treat exactly like a merit rejection (the merit
+            // value is unknowable), and continue down the alpha ladder. The
+            // infeasibility signal is deliberately left at its sentinel — there
+            // is no evaluated trial to measure it on, and the sentinel suppresses
+            // the second-order correction trigger for this rejection. merit_val_
+            // is likewise not written on a throwing rung, so it retains the
+            // previous evaluable rung's value (or the IterateInfo default when
+            // the first rung throws).
+            citer.ls_iters_ = j + 1;
+            alpha = alpha / ctx_.settings_.alpha_red_;
+            citer.first_rejection_iter_ =
+                citer.first_rejection_iter_ < 0 ? j : citer.first_rejection_iter_;
+            continue;
+        }
         // Feasibility-restoration trial seam (dead on the default path:
         // ctx_.restoration_ is null). While active, obj_scale is 0 (the user
         // objective contributes exactly 0.0 to ptest via lsobjscale) and the
@@ -283,7 +322,24 @@ double ClassicMeritAcceptance::ls_l1(double obj_scale, double mu, double prim_ob
     for (int j = 0; j < ctx_.settings_.max_ls_iters_; j++) {
         double ptest = 0;
         double btest = 0;
-        eval_trial_point_occ(obj_scale, mu, alpha, xsl, dxsl, xsl2, rhs2, ptest, btest);
+        bool evaluable = true;
+        try {
+            eval_trial_point_occ(obj_scale, mu, alpha, xsl, dxsl, xsl2, rhs2, ptest, btest);
+        } catch (const std::exception &e) {
+            note_eval_error(ctx_.eval_errors_, e.what());
+            evaluable = false;
+        } catch (...) {
+            note_eval_error_unknown(ctx_.eval_errors_);
+            evaluable = false;
+        }
+        if (!evaluable) {
+            // Un-evaluable trial — see ls_lang's rationale.
+            citer.ls_iters_ = j + 1;
+            alpha = alpha / ctx_.settings_.alpha_red_;
+            citer.first_rejection_iter_ =
+                citer.first_rejection_iter_ < 0 ? j : citer.first_rejection_iter_;
+            continue;
+        }
 
         double LangTest = ptest + btest;
         PenaltyTerms test = compute_penalties(xsl, rhs2);
@@ -330,7 +386,24 @@ double ClassicMeritAcceptance::ls_auglang(double obj_scale, double mu, double pr
     for (int j = 0; j < ctx_.settings_.max_ls_iters_; j++) {
         double ptest = 0;
         double btest = 0;
-        eval_trial_point_occ(obj_scale, mu, alpha, xsl, dxsl, xsl2, rhs2, ptest, btest);
+        bool evaluable = true;
+        try {
+            eval_trial_point_occ(obj_scale, mu, alpha, xsl, dxsl, xsl2, rhs2, ptest, btest);
+        } catch (const std::exception &e) {
+            note_eval_error(ctx_.eval_errors_, e.what());
+            evaluable = false;
+        } catch (...) {
+            note_eval_error_unknown(ctx_.eval_errors_);
+            evaluable = false;
+        }
+        if (!evaluable) {
+            // Un-evaluable trial — see ls_lang's rationale.
+            citer.ls_iters_ = j + 1;
+            alpha = alpha / ctx_.settings_.alpha_red_;
+            citer.first_rejection_iter_ =
+                citer.first_rejection_iter_ < 0 ? j : citer.first_rejection_iter_;
+            continue;
+        }
 
         double LangTest = ptest + btest;
 
@@ -858,8 +931,25 @@ double BacktrackingLineSearch::generic_line_search(
         double ptest = 0.0;
         double btest = 0.0;
         double theta_t = 0.0;
-        modern_eval_trial_point(ctx, obj_scale, mu, alpha, XSL, DXSL, XSL2, RHS2, ptest, btest,
-                                theta_t, resto_eq_shift_scratch_, resto_iq_shift_scratch_);
+        bool evaluable = true;
+        try {
+            modern_eval_trial_point(ctx, obj_scale, mu, alpha, XSL, DXSL, XSL2, RHS2, ptest, btest,
+                                    theta_t, resto_eq_shift_scratch_, resto_iq_shift_scratch_);
+        } catch (const std::exception &e) {
+            note_eval_error(ctx.eval_errors_, e.what());
+            evaluable = false;
+        } catch (...) {
+            note_eval_error_unknown(ctx.eval_errors_);
+            evaluable = false;
+        }
+        if (!evaluable) {
+            // Un-evaluable trial — see ls_lang's rationale.
+            Citer.ls_iters_ = j + 1;
+            alpha = alpha / ctx.settings_.alpha_red_;
+            Citer.first_rejection_iter_ =
+                Citer.first_rejection_iter_ < 0 ? j : Citer.first_rejection_iter_;
+            continue;
+        }
         ProgressMeasures trial{theta_t, ptest, btest};
 
         // Predicted reductions (α-scaled; see modern_merit.h): m_f = −α·∇ϕ_μᵀd
@@ -1163,7 +1253,21 @@ RecoveryChain::Action SocRecovery::on_step_rejected(
     // trial (paper: c_soc = alpha_0*c_k + c(x_k + alpha_0*d_k); the classic first
     // trial used alpha_0 = 1 on the already fraction-to-boundary-scaled DXSL).
     Eigen::VectorXd c_soc(ncons);
-    eval_trial_constraints(ctx, obj_scale, XSL, DXSL, 1.0, XSL2, trial_cons);
+    try {
+        eval_trial_constraints(ctx, obj_scale, XSL, DXSL, 1.0, XSL2, trial_cons);
+    } catch (const std::exception &e) {
+        if (ctx.eval_errors_)
+            ctx.eval_errors_->record(e.what());
+        // The correction seed cannot be evaluated; there is no point starting
+        // the SOC procedure. Fall back to the ladder-exhaustion path. alphap /
+        // alphad are still at their snapshot values here (only do_correction
+        // mutates them), so this early return needs no restore.
+        return Action::kAcceptAsIs;
+    } catch (...) {
+        if (ctx.eval_errors_)
+            ctx.eval_errors_->record_unknown();
+        return Action::kAcceptAsIs;
+    }
     c_soc = RHS.tail(ncons) + trial_cons;
 
     auto do_correction = [&](int /*correction_index*/, double /*prev_violation*/) {
@@ -1220,7 +1324,20 @@ RecoveryChain::Action SocRecovery::on_step_rejected(
 
         // Accumulate for a possible next round:
         // c_soc <- alpha_soc*c_soc + c(x_k + alpha_soc*d_soc).
-        eval_trial_constraints(ctx, obj_scale, XSL, dxsl_soc, alpha_soc, XSL2, trial_cons);
+        // An un-evaluable accumulation point leaves no corrected constraint block
+        // to carry forward: end the correction loop with the same signal the
+        // non-finite direction guard above uses.
+        try {
+            eval_trial_constraints(ctx, obj_scale, XSL, dxsl_soc, alpha_soc, XSL2, trial_cons);
+        } catch (const std::exception &e) {
+            if (ctx.eval_errors_)
+                ctx.eval_errors_->record(e.what());
+            return SocCorrectionOutcome{false, std::numeric_limits<double>::infinity()};
+        } catch (...) {
+            if (ctx.eval_errors_)
+                ctx.eval_errors_->record_unknown();
+            return SocCorrectionOutcome{false, std::numeric_limits<double>::infinity()};
+        }
         c_soc = alpha_soc * c_soc + trial_cons;
         return SocCorrectionOutcome{false, trial_violation};
     };

@@ -189,6 +189,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     solvers/test_divergence_persistence.cpp
     solvers/test_inertia_regularization.cpp
     solvers/test_ipopt_backend_dispatch.cpp
+    solvers/test_eval_exception_recovery.cpp
 )
 
 #-------------------------------------------------------------------------------
