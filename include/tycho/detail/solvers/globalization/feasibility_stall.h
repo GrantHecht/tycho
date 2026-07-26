@@ -2,7 +2,7 @@
 // Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 // =============================================================================
 //
-// FeasibilityStallDetector — windowed no-progress detector for the
+// FeasibilityStallDetector — windowed sustained-worsening detector for the
 // feasibility-only stage.
 //
 // Under its default no-line-search configuration the feasibility stage
@@ -10,14 +10,14 @@
 // dispatches the recovery chain — and through it feasibility restoration —
 // is never consulted from that stage. (A user-configured stage line search
 // runs a zero-objective merit test that can reject growth steps, making the
-// gate reachable; the detector below is useful either way, since a stalled
-// stage under either configuration otherwise burns its budget.) A stage that stops making
-// feasibility progress therefore burns its whole iteration budget with no
-// mechanism ever consulted. This detector supplies the missing dispatch
+// gate reachable; the detector below is useful either way, since a stage whose
+// violation runs away under either configuration otherwise burns its budget.)
+// Such a stage therefore burns its whole iteration budget with no mechanism
+// ever consulted. This detector supplies the missing dispatch
 // signal: it watches the L1 constraint violation once per feasibility-stage
-// iteration and reports a stall when the best-seen violation has not improved
-// AT ALL — beyond relative rounding noise — for a full window of consecutive
-// iterations.
+// iteration and reports a worsening stage when that violation has sat a full
+// window of consecutive iterations at or above a fixed multiple of the best
+// value the stage has ever held.
 //
 // Provenance: Tycho-original. The reference interior-point method (Ipopt) has
 // no feasibility-only stage and therefore no analog of this detector; its
@@ -26,20 +26,32 @@
 //
 // Constant sizing, against the recorded corpus evidence:
 //
-//   * The threshold is a rounding-noise floor, not a progress standard. A
-//     stage only has to make the best-seen violation strictly smaller by a
-//     relative 1e-12 to keep its window open, so the detector fires on a
-//     genuine plateau or on growth and never on a productive crawl, however
-//     slow. An earlier 1% threshold did cut productive crawls: the stiff
-//     hypersensitive corpus problem, which grinds its violation down by a few
-//     parts in ten thousand per iteration, lost the acceptable exit it reaches
-//     under this threshold.
-//   * The window is sized so a real stall is caught promptly while a crawl is
-//     never mistaken for one. The motivating stalled trace GREW its residual
-//     for hundreds of uncontested iterations, so it fires within a single
-//     window; a stage crawling along its violation floor improves the
-//     best-seen value on essentially every iteration and never accumulates
-//     one.
+//   * The detector fires only on a stage whose violation has sat at least 25%
+//     above its own best for 50 consecutive iterations — genuine, sustained
+//     worsening. A stage flat at its best (a plateau) and a stage improving at
+//     any rate (a crawl, however slow) never fire, and both keep burning their
+//     iteration budget exactly as they did before this detector existed. That
+//     narrowing is deliberate: worsening is the only class in which a
+//     dispatched episode has demonstrated value. Dispatching into a plateaued
+//     stage only saved iterations on problems that were failing anyway, while
+//     an episode injected into a quietly succeeding stage steered one corpus
+//     problem off the acceptable exit it otherwise reaches.
+//   * The motivating stalled trace sets the price of that narrowing. Its worst
+//     single residual GREW from 1.106 to 2.602 with nothing to contest it, but
+//     the growth is one jump across the opening iterations followed by some 495
+//     flat ones, and in the L1 measure watched here that plateau stays inside
+//     the 25% margin — so that stage keeps its old burn-the-budget behaviour.
+//     Ceding it is the right trade: the episodes it used to draw only shortened
+//     a solve that diverges under every configuration, while the same episodes
+//     elsewhere in the corpus cost a verdict.
+//   * Jitter robustness is by construction. A 25% margin is some eleven orders
+//     of magnitude above the relative rounding noise of a threaded sparse
+//     factorization, so no amount of run-to-run FP drift can move an
+//     observation across the elevation mark and reshape the dispatch schedule.
+//   * The window is sized so a real worsening is caught promptly while nothing
+//     transient is mistaken for one: a stage has to hold an elevated violation
+//     for 50 straight iterations, and a single dip back to (or below) its best
+//     starts the count over.
 // =============================================================================
 
 #pragma once
@@ -48,13 +60,21 @@
 
 namespace tycho::solvers {
 
-// Consecutive feasibility-stage iterations without improvement of the
-// best-seen violation before the stage is declared stalled.
+// Consecutive feasibility-stage iterations at an elevated violation before the
+// stage is declared worsening.
 inline constexpr int kFeasStallWindow = 50;
 
-// Relative improvement of the best-seen L1 constraint violation that keeps the
-// window open. A rounding-noise floor, not a progress standard: any genuine
-// decrease clears it.
+// Multiple of the best-seen L1 constraint violation at or above which an
+// observation counts as elevated. The violation has to sit a full 25% above
+// the best ground the stage has held — far outside any floating-point noise —
+// for the window to accumulate.
+inline constexpr double kFeasStallGrowthFactor = 1.25;
+
+// Relative floor for the caller's net-progress test against the violation
+// recorded at the last restoration dispatch: a rounding-noise floor, not a
+// progress standard, so an ulp of drift at a flat stage does not read as
+// ground gained. The detector itself does not use it — best-seen tracking
+// takes any strict decrease.
 inline constexpr double kFeasStallMinRelImprovement = 1.0e-12;
 
 // Per-phase value type: alg_impl owns one instance per phase and calls
@@ -62,17 +82,17 @@ inline constexpr double kFeasStallMinRelImprovement = 1.0e-12;
 // explicit clear — the detector is an alg_impl local, so every phase begins
 // with a default-constructed one.
 //
-// reset_window() re-arms the no-progress window after a dispatched restoration
-// episode, so the resumed stage restarts its window from the post-restoration
-// point; it deliberately preserves the last-dispatch violation, which is the
-// reference the caller compares against to decide whether the stage has gained
-// anything since recovery last handed it back.
+// reset_window() re-arms the elevation window after a dispatched restoration
+// episode, so the resumed stage measures its worsening against the
+// post-restoration point; it deliberately preserves the last-dispatch
+// violation, which is the reference the caller compares against to decide
+// whether the stage has gained anything since recovery last handed it back.
 struct FeasibilityStallDetector {
     // Smallest L1 constraint violation observed since the window was armed.
     double best_theta_ = std::numeric_limits<double>::infinity();
 
-    // Consecutive observations since best_theta_ last improved.
-    int iters_without_improvement_ = 0;
+    // Consecutive observations at or above kFeasStallGrowthFactor * best_theta_.
+    int iters_elevated_ = 0;
 
     // L1 constraint violation at this phase's MOST RECENT restoration dispatch,
     // or infinity if the phase has never dispatched. Rewritten by every
@@ -80,18 +100,20 @@ struct FeasibilityStallDetector {
     // the point at which recovery last handed the stage back.
     double theta_at_last_dispatch_ = std::numeric_limits<double>::infinity();
 
-    // Returns true when the stage has gone kFeasStallWindow consecutive
-    // observations without improving best_theta_ by at least
-    // kFeasStallMinRelImprovement (relative). An improving observation
-    // records the new best and restarts the window.
+    // Returns true once the stage has spent kFeasStallWindow consecutive
+    // observations at or above kFeasStallGrowthFactor times its best-seen
+    // violation. Any observation below that mark breaks the run — and, when it
+    // is also a new low, records it. A stage sitting exactly at its best, or
+    // improving at any rate, therefore never accumulates a window.
     bool observe(double theta) {
-        if (theta < (1.0 - kFeasStallMinRelImprovement) * best_theta_) {
-            best_theta_ = theta;
-            iters_without_improvement_ = 0;
-            return false;
+        if (theta >= kFeasStallGrowthFactor * best_theta_) {
+            ++iters_elevated_;
+            return iters_elevated_ >= kFeasStallWindow;
         }
-        ++iters_without_improvement_;
-        return iters_without_improvement_ >= kFeasStallWindow;
+        if (theta < best_theta_)
+            best_theta_ = theta;
+        iters_elevated_ = 0;
+        return false;
     }
 
     // Records the violation at which this phase entered restoration. Every
@@ -100,10 +122,10 @@ struct FeasibilityStallDetector {
     // the first episode of the phase.
     void note_dispatch(double theta) { theta_at_last_dispatch_ = theta; }
 
-    // Re-arms the no-progress window only; theta_at_last_dispatch_ survives.
+    // Re-arms the elevation window only; theta_at_last_dispatch_ survives.
     void reset_window() {
         best_theta_ = std::numeric_limits<double>::infinity();
-        iters_without_improvement_ = 0;
+        iters_elevated_ = 0;
     }
 };
 

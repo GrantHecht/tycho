@@ -1824,7 +1824,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                       this->hp_scratch_,        this->best_xsl_scratch_, this->best_rhs_scratch_,
                       this->restoration_.get(), &this->eval_error_log_};
 
-    // Windowed no-progress detector for the feasibility-only stage (see
+    // Windowed sustained-worsening detector for the feasibility-only stage (see
     // feasibility_stall.h). Consulted only when a restoration strategy is
     // configured and inactive; the default path never observes it. Per-phase
     // lifetime, like every other alg_impl-local mode state.
@@ -2283,21 +2283,31 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // to run its own course — the detector neither observes nor exits
         // while an episode is running. The detector is consulted exactly once
         // per iteration, and a stall only ends the phase once recovery has
-        // been given its chance and has bought nothing. The outcomes:
+        // been given its chance and has bought nothing.
         //
-        //   1. Not stalled: nothing happens.
-        //   2. Stalled and entry permitted: enter restoration exactly as the
+        // What the detector certifies is SUSTAINED WORSENING: a violation
+        // sitting at least 25% above the stage's own best for a full window of
+        // consecutive iterations. Nothing below dispatches into a plateaued or
+        // an improving stage — those burn their iteration budget exactly as
+        // they did before this seam existed. That is deliberate: worsening is
+        // the only class in which a dispatched episode has measured value, and
+        // episodes injected into quietly succeeding stages measurably cost
+        // verdicts. The outcomes:
+        //
+        //   1. Not worsening: nothing happens.
+        //   2. Worsening and entry permitted: enter restoration exactly as the
         //      optimize path's switch does, discard this iteration's
         //      residual-only history entry, and re-enter the loop so the next
         //      evaluation runs the restoration subproblem; the window re-arms
         //      so the resumed stage restarts it from the post-restoration
         //      point, while the violation at THIS dispatch is recorded as the
         //      yardstick for outcomes 3b/3c below.
-        //   3. Stalled and entry refused. What that means depends on where the
+        //   3. Worsening and entry refused. What that means depends on where the
         //      stage is:
         //      a. Already near-feasible: the constraints are at their floor and
         //         the barrier residual is still grinding down with mu, so the
-        //         violation cannot improve and the detector will keep firing.
+        //         violation cannot improve and, once it has drifted up off that
+        //         floor, the detector will keep firing every iteration.
         //         This is an endgame, not a stall — do nothing and let the
         //         stage finish. The repeated no-op is deliberate; per iteration
         //         it costs the L1 norm, the detector's observe(), the virtual
@@ -2321,11 +2331,19 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         //         deliberately NOT re-armed: the phase is ending.
         //      Measuring against the LAST dispatch rather than the first is
         //      what makes 3b/3c ask the right question: has the stage gained
-        //      anything since recovery last handed it back? A stage whose
-        //      episode helped and which has been flat ever since, with its
-        //      budget spent, now ends instead of burning the rest of the
-        //      budget on the strength of a gain it has already banked; a stage
-        //      still crawling down since its last episode keeps running.
+        //      anything since recovery last handed it back? The rule composes
+        //      with the detector's worsening test. After an episode the window
+        //      re-arms against the post-restoration point, so the only stage
+        //      that can reach 3b/3c at all is one that went on worsening from
+        //      there: a stage that levelled off after its episode, or that is
+        //      crawling down from it, never fires again and runs on untouched.
+        //      Of the stages that do fire again, one still under the violation
+        //      recorded at that dispatch is consuming ground the episode bought
+        //      and keeps running (3b), while one that has climbed back to or
+        //      above where recovery found it has nothing left to show for the
+        //      episode and ends (3c). The graceful end therefore reaches
+        //      exactly the class the dispatch does — a stage that keeps getting
+        //      worse — and no other.
         //      A phase whose entry was refused from the very start never
         //      recorded a dispatch at all, so 3b's comparison against infinity
         //      holds and the phase never ends here. For a near-feasible stage
