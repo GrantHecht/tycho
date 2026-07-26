@@ -2282,6 +2282,12 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             const double theta_fs = RHS.tail(ncons_fs).template lpNorm<1>();
             if (feas_stall.observe(theta_fs) &&
                 this->restoration_->entry_permitted(theta_fs, ctx)) {
+                // Entry measures are (theta, 0, 0) here: prim_obj and barr_obj are
+                // still their pre-factorization 0.0 initializers (eval_soe/eval_kkt_no
+                // never write the objective, and the barrier objective is computed
+                // further down), matching the other pre-factorization restoration
+                // seams below and unlike the post-line-search seams, which pass a
+                // live barrier objective.
                 this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
                 feas_stall.reset();
                 iters.pop_back();

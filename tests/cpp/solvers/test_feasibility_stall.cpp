@@ -134,6 +134,24 @@ TEST_F(SolverTest, FeasStallStageDispatchesProximalRestoration) {
     EXPECT_NE(r.converge_flag_, ts::PSIOPT::ConvergenceFlags::CONVERGED); // genuinely infeasible
 }
 
+// Same dispatch, but under the filter acceptance strategy: the entry call
+// now runs a live notify_switch_to_feasibility handshake (a no-op under the
+// default classic_merit) instead of the trivial base-class stub. Pins that
+// the stall-dispatch seam feeds FilterAcceptance a consistent phase state
+// (a throw here would mean the new entry path double-enters the feasibility
+// phase or otherwise desyncs from the filter's own bookkeeping).
+TEST_F(SolverTest, FeasStallDispatchUnderFilterAcceptanceHandshakes) {
+    auto prob = feas_stall_build_nlp(/*inconsistent=*/true);
+    prob->optimizer_->settings().restoration_mode_ = ts::RestorationModes::proximal_switch;
+    prob->optimizer_->settings().acceptance_strategy_ = ts::AcceptanceStrategies::filter;
+    prob->optimizer_->settings().barrier_governor_ = ts::BarrierGovernors::monitored;
+    prob->optimizer_->set_max_iters(200);
+    ASSERT_NO_THROW(prob->solve());
+    const auto &r = prob->optimizer_->result();
+    EXPECT_GE(r.last_feas_rest_entries_, 1);
+    EXPECT_NE(r.converge_flag_, ts::PSIOPT::ConvergenceFlags::CONVERGED); // genuinely infeasible
+}
+
 TEST_F(SolverTest, FeasStallStageDispatchesNestedRestoration) {
     auto prob = feas_stall_build_nlp(/*inconsistent=*/true);
     prob->optimizer_->settings().restoration_mode_ = ts::RestorationModes::l1_nested;
