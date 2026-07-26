@@ -130,6 +130,71 @@ wrong-basin guess, @40, 3/3 repeat-stable) — direct ℓ1-restoration value the
 `solve_optimize`-based sweep structurally could not see. Worth a matched-call
 column before the presets stage finalizes the `robust` contents.
 
+**RESOLVED (2026-07-26): implemented.** A windowed sustained-worsening detector
+(`globalization/feasibility_stall.h`) now runs during feasibility-only phases
+whenever a restoration strategy is configured and inactive. It watches the L1
+constraint violation once per iteration and reports a worsening stage only when
+that violation has sat at least 25% above the best value the stage has ever held
+for 50 consecutive iterations; a single observation back under that mark starts
+the count over. A stage flat at its best (a plateau) and a stage improving at
+any rate (a crawl, however slow) therefore never dispatch — they burn their
+iteration budget exactly as they did before this work. That narrowing is
+deliberate, and the corpus is what forced it: an episode injected into a quietly
+succeeding stage cost `hard_mountaincar_badguess` the acceptable exit it
+otherwise reaches, while dispatching into a plateaued stage only ever saved
+iterations on problems that were failing anyway. The margin also makes the
+schedule jitter-robust by construction — 25% is some eleven orders of magnitude
+above the rounding noise of a threaded factorization, where the earlier
+no-improvement predicate sat right on top of it.
+
+On a worsening window the detector enters restoration through the same
+orchestration, budget (`max_feas_rest_`, per phase), and diagnostics as the
+optimize-path switch. Once it fires with entry refused, the phase ends
+gracefully through the standard teardown — instead of burning the remaining
+iteration budget — but only when the refusal means the stage is out of options
+AND has gained nothing since its MOST RECENT restoration entry. Two refusals are
+left alone to finish: a near-feasible one (violation at or under 0.1·`econ_tol_`,
+i.e. the constraints are at their floor while the barrier residual still grinds
+down with μ — an endgame, not a stall), and a budget one taken at a violation
+still below the value recorded at the last restoration entry. Measuring against
+the last entry rather than the first is what makes that test ask the right
+question — has the stage gained anything since recovery last handed it back?
+The graceful end therefore reaches exactly the class the dispatch does and no
+other: after an episode the window re-arms against the post-restoration point,
+so a stage that levels off or crawls down from there never fires again, and only
+one that keeps worsening can reach the exit. With restoration off (the default)
+the stage is byte-identical to before.
+
+Corpus scorecard under merit + ℓ1-nested (every `@N` below is the
+corpus-reported iteration TOTAL for the whole call — the sum over that call's
+PSIOPT phases — never a single phase's count): `hard_hypersens_stiff` is
+ACCEPTABLE @128, unchanged, its slow but productive crawl untouched by either
+test; `hard_mountaincar_badguess` is ACCEPTABLE @688 — the regression to
+NOTCONVERGED @889 recorded here earlier was caused by the two episodes
+dispatched into its plateaued stage, and the narrowing eliminates it; and
+`hard_zermelo_wrongbasin` still diverges, now @919. That last figure is what the
+narrowing costs. Per-iteration, that stage's residual jumps once in its first
+few iterations and then sits flat for the remaining ~495, which is a plateau by
+the shipped L1 test even though its equality-residual infinity norm grew 1.9×
+(1.106 → 2.113) across the jump — the same basis as the original deep-dive
+figure — so the stage no longer dispatches (0 entries) or ends early, and runs the
+same 919 iterations it did with this whole mechanism absent, against 633 under
+the earlier no-improvement predicate. Its DIVERGING verdict is the same in all
+three cases. Full-corpus statuses now match the campaign store's main-era cells
+on all 17 problems in both configurations (`l1_nested`: acceptable=3,
+converged=7, diverged=3, failed=4; `proximal_switch`: acceptable=2, converged=7,
+diverged=3, failed=5); the only differences against the pre-narrowing branch are
+zermelo's iteration counts (633 → 919 under ℓ1-nested, 274 → 908 under the
+proximal switch), on a problem that diverges in every configuration. The
+downstream optimize phase still diverges from any stage-touched point on that
+problem — the wrong-basin steering is a property of the stage itself — which is
+exactly what the matched-call harness column (area 5) now measures: the same
+configuration under `--call-shape optimize` converges @40 to
+1.7009270229362865. Known limitation: a restoration episode that never exits
+(observed for the proximal switch on a structurally infeasible feasibility
+system) keeps the stage inside the episode, where neither the detector nor the
+graceful end applies; an in-episode progress test is the recorded follow-up.
+
 ## 5. Harness follow-ups (deep-dive finding)
 
 The corpus driver compares mismatched call shapes across backends (psiopt runs
@@ -137,6 +202,15 @@ each module's `SOLVE_MODE`; the ipopt backend always runs a single solve) —
 add a matched-call option before quoting cross-backend rows for
 non-`optimize` modules. (`run_corpus.py --config`'s repeated-flag handling was
 fixed on the campaign branch after the deep-dive hit it.)
+
+**RESOLVED (2026-07-26): implemented.** `run_corpus.py --call-shape
+{module,optimize}` (default `module`, today's behavior) threads through the
+child protocol into the corpus driver, is recorded as a `call_shape`
+scorecard column, and is accepted by the campaign driver's sweep with a CSV
+aggregation column (legacy scorecards without the key aggregate as
+`module`). First matched-call measurement through the shipped flag: zermelo
+under merit + ℓ1-nested converges @40 to 1.7009270229362865 with
+`--call-shape optimize`, versus DIVERGING under its module shape.
 
 ## 6. Smaller deferred items (consolidated from review notes and PR records)
 

@@ -42,6 +42,15 @@
 
 namespace tycho::solvers {
 
+// Near-feasible entry guard factor, adapted from Ipopt's unscaled
+// 1e-1 * constr_viol_tol member of its scaled/unscaled entry-guard pair — see
+// proximal_restoration.h's file docstring, item (3), for the full
+// single-measure adaptation disclosure. Defined here rather than beside that
+// one strategy because the guard is shared: both concrete strategies test
+// against it in entry_permitted(), and so does the feasibility-stage stall
+// seam, through near_feasible() below.
+inline constexpr double kNearFeasibleGuardFactor = 0.1;
+
 // =============================================================================
 // RestorationStrategy — feasibility-restoration mode-switch interface.
 // =============================================================================
@@ -90,13 +99,22 @@ class RestorationStrategy {
     // The proximal term's (diagonal) contribution to the primal Hessian block.
     virtual const Eigen::VectorXd &proximal_diagonal() const = 0;
 
+    // Is this violation already at the near-feasible floor, where a real
+    // restoration episode is not warranted? The single shared guard rule (see
+    // kNearFeasibleGuardFactor above); non-virtual because the rule does not
+    // vary by strategy. Both concrete entry_permitted() implementations use it
+    // for the guard half of their entry test, and the feasibility-stage stall
+    // seam uses it to tell an endgame — constraints at their floor while the
+    // barrier residual still grinds down — from a genuine stall.
+    bool near_feasible(double constraint_violation, const SolverContext &ctx) const {
+        return constraint_violation <= kNearFeasibleGuardFactor * ctx.settings_.econ_tol_;
+    }
+
     // Entry-permission test: may the solver enter restoration right now, given
     // the current constraint violation? False refuses entry — either because
-    // the point is already near-feasible (a real restoration episode is not
-    // warranted) or because this phase's restoration budget
-    // (ctx.settings_.max_feas_rest_) is exhausted. See
-    // proximal_restoration.h's kNearFeasibleGuardFactor citation for the exact
-    // guard rule.
+    // the point is already near-feasible (near_feasible() above) or because
+    // this phase's restoration budget (ctx.settings_.max_feas_rest_) is
+    // exhausted.
     virtual bool entry_permitted(double constraint_violation, const SolverContext &ctx) const = 0;
 
     // The (θ,f) pair restoration was entered from — see `reference` above.

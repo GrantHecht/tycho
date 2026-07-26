@@ -23,10 +23,13 @@ independently guarded by ``try/except AttributeError: ... = None``.
 
 Backend semantics:
 
-- ``psiopt``: ``configure(prob.optimizer)`` then the module's
-  ``SOLVE_MODE`` entry point (``getattr(prob, module.SOLVE_MODE)()``),
-  exactly as the pre-split contract did. The returned ``"flag"`` is the
-  raw ``ConvergenceFlags`` member name (e.g. ``"CONVERGED"``) -- this
+- ``psiopt``: ``configure(prob.optimizer)`` then the entry point selected by
+  ``call_shape`` -- ``"module"`` (default) runs the module's declared
+  ``SOLVE_MODE`` (``getattr(prob, module.SOLVE_MODE)()``), exactly as the
+  pre-split contract did; ``"optimize"`` always runs ``prob.optimize()``
+  instead, regardless of ``SOLVE_MODE``, for cross-backend comparability with
+  the ipopt backend's single-solve mapping below. The returned ``"flag"`` is
+  the raw ``ConvergenceFlags`` member name (e.g. ``"CONVERGED"``) -- this
   driver does not map it to a status string; ``scripts/run_corpus.py``'s
   parent process already owns that mapping (``_FLAG_TO_STATUS``) and
   continues to perform it unchanged, so duplicating it here would risk a
@@ -34,13 +37,13 @@ Backend semantics:
 - ``ipopt``: sets ``prob.nlp_solver = NLPSolvers.ipopt`` and forwards
   ``backend_options`` (verbatim strings) into ``prob.ipopt_options``, then
   always calls ``prob.optimize()`` -- the ipopt backend performs a single
-  NLP solve regardless of a module's ``SOLVE_MODE`` (the staging modes
-  have no Ipopt analog, per ``OptimizationProblemBase.nlp_solver``'s own
-  docstring), so ``SOLVE_MODE`` is recorded in ``notes`` instead of being
-  honored. ``prob.optimize()`` still returns a ``ConvergenceFlags`` member
-  under this backend (verified in
-  ``tychopy/test/test_Solvers/test_nlp_solver_backend.py``), so
-  ``"flag"`` stays uniform across both backends. Objective/iterations come
+  NLP solve regardless of a module's ``SOLVE_MODE`` or ``call_shape`` (the
+  staging modes have no Ipopt analog, per
+  ``OptimizationProblemBase.nlp_solver``'s own docstring), so ``SOLVE_MODE``
+  and ``call_shape`` are recorded in ``notes`` instead of being honored.
+  ``prob.optimize()`` still returns a ``ConvergenceFlags`` member under this
+  backend (verified in ``tychopy/test/test_Solvers/test_nlp_solver_backend.py``),
+  so ``"flag"`` stays uniform across both backends. Objective/iterations come
   from ``prob.last_ipopt_result`` (``optimizer.last_obj_val`` /
   ``last_iter_num`` reflect only the most recent PSIOPT run and are left
   untouched by an ipopt-backend solve, per the same docstring) --
@@ -50,17 +53,25 @@ Backend semantics:
 import tychopy.solvers as solvs
 
 
-def run(module, configure, backend="psiopt", backend_options=None):
+def run(module, configure, backend="psiopt", backend_options=None, call_shape="module"):
     """Build, configure, solve, and normalize the result for one problem module.
 
+    ``call_shape`` selects which entry point the psiopt backend invokes:
+    ``"module"`` (default) runs the module's declared ``SOLVE_MODE``, today's
+    behavior; ``"optimize"`` always runs a single ``optimize()`` call instead,
+    for cross-backend comparability with the ipopt backend's single-solve
+    mapping (see the ``ipopt`` branch below, which always runs a single solve
+    regardless of ``call_shape``).
+
     Returns the harness result-dict schema: ``{"flag", "objective",
-    "iterations", "notes"}``, plus ``"backend"``.
+    "iterations", "notes"}``, plus ``"backend"`` and ``"call_shape"``.
     """
     prob = module.build()
 
     if backend == "psiopt":
         configure(prob.optimizer)
-        flag = getattr(prob, module.SOLVE_MODE)()
+        solve_attr = "optimize" if call_shape == "optimize" else module.SOLVE_MODE
+        flag = getattr(prob, solve_attr)()
 
         optimizer = prob.optimizer
         try:
@@ -96,7 +107,8 @@ def run(module, configure, backend="psiopt", backend_options=None):
         module_notes = getattr(module, "NOTES", "")
         ipopt_notes = (
             f"ipopt backend: single-solve mapping of SOLVE_MODE="
-            f"{module.SOLVE_MODE!r}; ipopt status={info.status!r}"
+            f"{module.SOLVE_MODE!r} (call_shape={call_shape!r} — always a "
+            f"single solve on this backend); ipopt status={info.status!r}"
         )
         result = {
             "flag": flag.name,
@@ -107,5 +119,6 @@ def run(module, configure, backend="psiopt", backend_options=None):
     else:
         raise ValueError(f"unknown backend: {backend!r}")
 
+    result["call_shape"] = call_shape
     result["backend"] = backend
     return result

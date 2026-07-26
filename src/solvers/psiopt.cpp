@@ -52,6 +52,7 @@
 #include "tycho/detail/solvers/globalization/restoration.h"
 #include "tycho/detail/solvers/globalization/proximal_restoration.h"
 #include "tycho/detail/solvers/globalization/l1_restoration.h"
+#include "tycho/detail/solvers/globalization/feasibility_stall.h"
 #include "tycho/detail/solvers/globalization/feasibility_switch_recovery.h"
 
 #ifndef USE_ACCELERATE_SPARSE
@@ -1823,6 +1824,12 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                       this->hp_scratch_,        this->best_xsl_scratch_, this->best_rhs_scratch_,
                       this->restoration_.get(), &this->eval_error_log_};
 
+    // Windowed sustained-worsening detector for the feasibility-only stage (see
+    // feasibility_stall.h). Consulted only when a restoration strategy is
+    // configured and inactive; the default path never observes it. Per-phase
+    // lifetime, like every other alg_impl-local mode state.
+    FeasibilityStallDetector feas_stall;
+
     tycho::utils::Timer Runtimer;
     tycho::utils::Timer Funtimer;
     tycho::utils::Timer QPtimer;
@@ -2257,6 +2264,134 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             this->result_.converge_flag_ = ExitCode;
             break;
         }
+
+        // Set only by the feasibility-stage stall dispatch below, when the stage
+        // is stalled, its restoration budget is spent, and recovery bought it
+        // nothing: it forces this iteration to be the last one of the phase,
+        // without touching the convergence verdict. Read once, next to the
+        // exit_at_acceptable upgrade at the bottom of the loop. Provably false
+        // whenever restoration is off — the only write is inside the guarded
+        // block.
+        bool exit_stage_stalled = false;
+
+        // Feasibility-stage stall detection. The zero-objective stage accepts
+        // every step under the default no-line-search stage configuration,
+        // so the rejected-trial recovery gate does not dispatch
+        // restoration from here; this is the missing signal (see
+        // feasibility_stall.h). Guarded so the default path (restoration off)
+        // performs no work at all, and an active restoration episode is left
+        // to run its own course — the detector neither observes nor exits
+        // while an episode is running. The detector is consulted exactly once
+        // per iteration, and a stall only ends the phase once recovery has
+        // been given its chance and has bought nothing.
+        //
+        // What the detector certifies is SUSTAINED WORSENING: a violation
+        // sitting at least 25% above the stage's own best for a full window of
+        // consecutive iterations. Nothing below dispatches into a plateaued or
+        // an improving stage — those burn their iteration budget exactly as
+        // they did before this seam existed. That is deliberate: worsening is
+        // the only class in which a dispatched episode has measured value, and
+        // episodes injected into quietly succeeding stages measurably cost
+        // verdicts. The outcomes:
+        //
+        //   1. Not worsening: nothing happens.
+        //   2. Worsening and entry permitted: enter restoration exactly as the
+        //      optimize path's switch does, discard this iteration's
+        //      residual-only history entry, and re-enter the loop so the next
+        //      evaluation runs the restoration subproblem; the window re-arms
+        //      so the resumed stage restarts it from the post-restoration
+        //      point, while the violation at THIS dispatch is recorded as the
+        //      yardstick for outcomes 3b/3c below.
+        //   3. Worsening and entry refused. What that means depends on where the
+        //      stage is:
+        //      a. Already near-feasible: the constraints are at their floor and
+        //         the barrier residual is still grinding down with mu, so the
+        //         violation cannot improve and, once it has drifted up off that
+        //         floor, the detector will keep firing every iteration.
+        //         This is an endgame, not a stall — do nothing and let the
+        //         stage finish. The repeated no-op is deliberate; per iteration
+        //         it costs the L1 norm, the detector's observe(), the virtual
+        //         entry_permitted() and the near_feasible() test, and a couple
+        //         of compares — negligible beside the factorization.
+        //      b. Still below the violation at its LAST restoration dispatch:
+        //         the stage has gained ground since recovery last handed it
+        //         back and is still consuming those gains, so it is winning
+        //         slowly even though the per-phase entry budget is spent. Do
+        //         nothing and let it run.
+        //      c. Otherwise: the budget is spent AND the stage is no better off
+        //         than where recovery last left it, so recovery has proven it
+        //         cannot help — no mechanism left to consult and no progress to
+        //         protect. End the phase instead of burning the rest of the
+        //         iteration budget. The iteration finishes its normal
+        //         bookkeeping and the loop exits through the standard teardown,
+        //         so converge_check reports the honest verdict and (with
+        //         return_best_ on) the exit hands back the best-seen iterate,
+        //         exactly like every other non-CONVERGED exit. In a multi-phase
+        //         sequence the next phase resumes from there. The detector is
+        //         deliberately NOT re-armed: the phase is ending.
+        //      Measuring against the LAST dispatch rather than the first is
+        //      what makes 3b/3c ask the right question: has the stage gained
+        //      anything since recovery last handed it back? The rule composes
+        //      with the detector's worsening test. After an episode the window
+        //      re-arms against the post-restoration point, so the only stage
+        //      that can reach 3b/3c at all is one that went on worsening from
+        //      there: a stage that levelled off after its episode, or that is
+        //      crawling down from it, never fires again and runs on untouched.
+        //      Of the stages that do fire again, one still under the violation
+        //      recorded at that dispatch is consuming ground the episode bought
+        //      and keeps running (3b), while one that has climbed back to or
+        //      above where recovery found it has nothing left to show for the
+        //      episode and ends (3c). The graceful end therefore reaches
+        //      exactly the class the dispatch does — a stage that keeps getting
+        //      worse — and no other.
+        //      A phase whose entry was refused from the very start never
+        //      recorded a dispatch at all, so 3b's comparison against infinity
+        //      holds and the phase never ends here. For a near-feasible stage
+        //      that is 3a anyway; for max_feas_rest_ == 0 it means a user who
+        //      turned restoration episodes off keeps the pre-existing
+        //      burn-the-budget behaviour, which is the right default — this
+        //      exit exists to stop a stage that recovery could not save, and
+        //      recovery was never allowed to try.
+        if ((algmode == AlgorithmModes::SOE || algmode == AlgorithmModes::OPTNO) &&
+            this->restoration_ && !this->restoration_->is_active()) {
+            const int ncons_fs = this->equal_cons_ + this->inequal_cons_;
+            const double theta_fs = RHS.tail(ncons_fs).template lpNorm<1>();
+            if (feas_stall.observe(theta_fs)) {
+                if (this->restoration_->entry_permitted(theta_fs, ctx)) {
+                    // Entry measures are (theta, 0, 0) here: prim_obj and barr_obj are
+                    // still their pre-factorization 0.0 initializers (eval_soe/eval_kkt_no
+                    // never write the objective, and the barrier objective is computed
+                    // further down), matching the other pre-factorization restoration
+                    // seams above and unlike the post-line-search seams, which pass a
+                    // live barrier objective.
+                    feas_stall.note_dispatch(theta_fs);
+                    this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
+                    feas_stall.reset_window();
+                    iters.pop_back();
+                    QPtimer.stop();
+                    continue;
+                }
+                // Measured against the same rounding-noise floor the detector
+                // itself uses, so an ulp of drift at a plateau does not read as
+                // ground gained. Vacuously true (infinity reference) when the
+                // phase never dispatched.
+                const bool net_progress = theta_fs < (1.0 - kFeasStallMinRelImprovement) *
+                                                         feas_stall.theta_at_last_dispatch_;
+                if (!this->restoration_->near_feasible(theta_fs, ctx) && !net_progress) {
+                    exit_stage_stalled = true;
+                    if (settings_.print_level_ < 3)
+                        fmt::print(fmt::fg(fmt::color::yellow),
+                                   "Feasibility phase stalled with its restoration budget "
+                                   "exhausted and no relative improvement over the violation "
+                                   "at its last restoration entry (infeasibility {:.3e}, "
+                                   "{:.3e} at that entry); ending the phase — the convergence "
+                                   "check still reports the final verdict, which may be "
+                                   "acceptable.\n",
+                                   theta_fs, feas_stall.theta_at_last_dispatch_);
+                }
+            }
+        }
+
         iters.pop_back();
 
         double nhpert = 0;
@@ -2600,6 +2735,11 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                     } else if (this->restoration_ && !this->restoration_->is_active() &&
                                this->restoration_->entry_permitted(violation_ue, ctx)) {
                         this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
+                        // A stage resumed after an episode restarts its stall window,
+                        // and this entry becomes the handback the stall exit measures
+                        // net progress against.
+                        feas_stall.note_dispatch(violation_ue);
+                        feas_stall.reset_window();
                         alpha = 0.0;
                         Citer.accepted_ = false;
                         // Deliberately overwrites resolved_depth on a watchdog-resolved
@@ -2644,6 +2784,12 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 // this Action, and only when restoration_ is non-null and inactive
                 // (so the calls below are safe).
                 this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
+                // A stage resumed after an episode restarts its stall window, and
+                // this entry becomes the handback the stall exit measures net
+                // progress against.
+                feas_stall.note_dispatch(
+                    RHS.tail(this->equal_cons_ + this->inequal_cons_).template lpNorm<1>());
+                feas_stall.reset_window();
                 alpha = 0.0;
                 break;
             }
@@ -2674,6 +2820,12 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                     Citer.accepted_ = true;
                 } else {
                     this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
+                    // A stage resumed after an episode restarts its stall window, and
+                    // this entry becomes the handback the stall exit measures net
+                    // progress against.
+                    feas_stall.note_dispatch(
+                        RHS.tail(this->equal_cons_ + this->inequal_cons_).template lpNorm<1>());
+                    feas_stall.reset_window();
                     alpha = 0.0;
                 }
                 break;
@@ -2771,8 +2923,13 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             Printtimer.stop();
         }
 
+        // exit_stage_stalled (see the stall dispatch above) forces the exit
+        // without touching ExitCode: unlike exit_at_acceptable it does not
+        // upgrade the verdict, so converge_check's own answer (NOTCONVERGED,
+        // or better if this iterate happens to qualify) is what gets reported.
         if (ExitCode == ConvergenceFlags::CONVERGED || ExitCode == ConvergenceFlags::ACCEPTABLE ||
-            ExitCode == ConvergenceFlags::DIVERGING || i == (settings_.max_iters_ - 1)) {
+            ExitCode == ConvergenceFlags::DIVERGING || exit_stage_stalled ||
+            i == (settings_.max_iters_ - 1)) {
 
             if (ExitCode != ConvergenceFlags::CONVERGED && settings_.return_best_) {
                 XSL = BestXSL;

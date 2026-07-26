@@ -182,8 +182,15 @@ def expand_config(cell: dict) -> dict:
     }
 
 
-def cell_file_path(store: Path, cell: dict, repeat: int) -> Path:
-    return Path(store) / f"cell-{cell_hash(cell)}-r{repeat}.jsonl"
+def cell_file_path(
+    store: Path, cell: dict, repeat: int, call_shape: str = "module"
+) -> Path:
+    """Cell/repeat scorecard path. The call shape is part of the cell identity:
+    module-shape files keep the legacy name (so existing stores stay valid) and
+    any other shape gets a filename suffix, so a sweep under a different call
+    shape can never mistake a store's module-shape cells for its own."""
+    suffix = "" if call_shape == "module" else f"-{call_shape}"
+    return Path(store) / f"cell-{cell_hash(cell)}-r{repeat}{suffix}.jsonl"
 
 
 def _format_cell(cell: dict) -> str:
@@ -208,10 +215,12 @@ def _parse_jsonl_rows(path: Path) -> list:
     return rows
 
 
-def is_cell_complete(store, cell: dict, repeat: int) -> bool:
+def is_cell_complete(
+    store, cell: dict, repeat: int, call_shape: str = "module"
+) -> bool:
     """True iff the cell/repeat file exists and holds >= EXPECTED_PROBLEM_COUNT
     parseable JSONL rows."""
-    path = cell_file_path(store, cell, repeat)
+    path = cell_file_path(store, cell, repeat, call_shape)
     if not path.exists():
         return False
     return len(_parse_jsonl_rows(path)) >= EXPECTED_PROBLEM_COUNT
@@ -367,7 +376,7 @@ def cmd_sweep(args) -> None:
         h = cell_hash(cell)
 
         if all(
-            is_cell_complete(store, cell, repeat)
+            is_cell_complete(store, cell, repeat, args.call_shape)
             for repeat in range(1, args.repeats + 1)
         ):
             for repeat in range(1, args.repeats + 1):
@@ -394,14 +403,16 @@ def cmd_sweep(args) -> None:
         config = expand_config(cell)
         for repeat in range(1, args.repeats + 1):
             n += 1
-            if is_cell_complete(store, cell, repeat):
+            if is_cell_complete(store, cell, repeat, args.call_shape):
                 print(f"[{n}/{total}] cell {h} r{repeat}: already complete, skipping")
                 continue
-            cellfile = cell_file_path(store, cell, repeat)
+            cellfile = cell_file_path(store, cell, repeat, args.call_shape)
             cmd = [
                 sys.executable,
                 str(RUN_CORPUS),
                 "--cbwr",
+                "--call-shape",
+                args.call_shape,
                 "--out",
                 str(cellfile),
                 "--config",
@@ -427,7 +438,9 @@ def _status_vector(rows: list) -> list:
     return [r["status"] for r in sorted(rows, key=lambda r: r["problem"])]
 
 
-def shortlist(store, cap: int = 8, expected_problems=None, cells=None) -> list:
+def shortlist(
+    store, cap: int = 8, expected_problems=None, cells=None, call_shape: str = "module"
+) -> list:
     """Shortlist rule: cells whose solve-or-acceptable count is within ONE
     problem of the best cell's, AND status-stable across both repeats
     (identical per-problem status vectors across r1/r2); capped at `cap`.
@@ -464,7 +477,7 @@ def shortlist(store, cap: int = 8, expected_problems=None, cells=None) -> list:
     for cell in cells:
         repeats = {}
         for repeat in (1, 2):
-            path = cell_file_path(store, cell, repeat)
+            path = cell_file_path(store, cell, repeat, call_shape)
             if not path.exists():
                 repeats = None
                 break
@@ -520,7 +533,7 @@ def shortlist(store, cap: int = 8, expected_problems=None, cells=None) -> list:
 
 
 def cmd_shortlist(args) -> None:
-    picks = shortlist(Path(args.store), cap=args.cap)
+    picks = shortlist(Path(args.store), cap=args.cap, call_shape=args.call_shape)
     for cell in picks:
         print(f"{cell_hash(cell)}  {_format_cell(cell)}")
     print(f"\n{len(picks)} cell(s) shortlisted (cap={args.cap}).")
@@ -545,6 +558,7 @@ _CSV_FIELDS = [
     "repeat_stable",
     "statuses",
     "statuses_r2",
+    "call_shape",
 ]
 
 
@@ -564,7 +578,18 @@ def _statuses_string(rows: list) -> str:
     )
 
 
-def _cell_summary(store: Path, cell: dict, expected_problems: int):
+def _row_call_shape(rows: list) -> str:
+    """Every row in a sweep carries the same call_shape; take it from the
+    first row, defaulting to "module" for pre-existing scorecards recorded
+    before the call_shape column existed."""
+    if not rows:
+        return "module"
+    return rows[0].get("call_shape", "module")
+
+
+def _cell_summary(
+    store: Path, cell: dict, expected_problems: int, call_shape: str = "module"
+):
     """Build one aggregate record for a cell from whichever repeat(s) are
     complete.
 
@@ -584,7 +609,7 @@ def _cell_summary(store: Path, cell: dict, expected_problems: int):
     """
     repeats = {}
     for repeat in (1, 2):
-        path = cell_file_path(store, cell, repeat)
+        path = cell_file_path(store, cell, repeat, call_shape)
         if not path.exists():
             continue
         rows = _parse_jsonl_rows(path)
@@ -607,6 +632,7 @@ def _cell_summary(store: Path, cell: dict, expected_problems: int):
         "repeat_stable": repeat_stable,
         "statuses": _statuses_string(primary_rows),
         "statuses_r2": _statuses_string(repeats[2]) if 2 in repeats else "",
+        "call_shape": _row_call_shape(primary_rows),
         "detail": {str(r): rows for r, rows in sorted(repeats.items())},
     }
 
@@ -630,6 +656,7 @@ def _context_summary(name: str, rows: list) -> dict:
         "repeat_stable": None,
         "statuses": _statuses_string(rows),
         "statuses_r2": "",
+        "call_shape": _row_call_shape(rows),
         "detail": rows,
     }
 
@@ -652,7 +679,7 @@ def cmd_aggregate(args) -> None:
 
     cell_records = []
     for cell in enumerate_cells():
-        summary = _cell_summary(store, cell, EXPECTED_PROBLEM_COUNT)
+        summary = _cell_summary(store, cell, EXPECTED_PROBLEM_COUNT, args.call_shape)
         if summary is not None:
             cell_records.append(summary)
 
@@ -729,6 +756,15 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Run exactly one cell (comma-separated axis=value pairs covering all six "
         "axes) instead of the full 192-cell product.",
     )
+    p_sweep.add_argument(
+        "--call-shape",
+        choices=("module", "optimize"),
+        default="module",
+        help="Passed through to run_corpus.py's --call-shape (default: "
+        "%(default)s). 'optimize' runs a single optimize() call per problem "
+        "regardless of its declared SOLVE_MODE, for cross-backend "
+        "comparability with the ipopt backend's single-solve mapping.",
+    )
     p_sweep.set_defaults(func=cmd_sweep)
 
     p_agg = sub.add_parser(
@@ -748,6 +784,14 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Append a fixed reference row read from an existing JSONL scorecard file "
         "(e.g. a PSIOPT-defaults or Ipopt baseline). Repeatable.",
     )
+    p_agg.add_argument(
+        "--call-shape",
+        choices=("module", "optimize"),
+        default="module",
+        help="Which call shape's cell files to read from the store (default: "
+        "%(default)s). Cell filenames carry a suffix for non-module shapes, "
+        "so a store can hold both shapes side by side without collision.",
+    )
     p_agg.set_defaults(func=cmd_aggregate)
 
     p_short = sub.add_parser("shortlist", help="Print the shortlisted cells.")
@@ -759,6 +803,13 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         type=int,
         default=8,
         help="Maximum cells to shortlist (default: %(default)s).",
+    )
+    p_short.add_argument(
+        "--call-shape",
+        choices=("module", "optimize"),
+        default="module",
+        help="Which call shape's cell files to read from the store (default: "
+        "%(default)s).",
     )
     p_short.set_defaults(func=cmd_shortlist)
 
