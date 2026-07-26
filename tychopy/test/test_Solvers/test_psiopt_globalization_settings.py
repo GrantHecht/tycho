@@ -774,6 +774,10 @@ class test_EvalExceptionDiagnostic(unittest.TestCase):
     def test_fresh_optimizer_reports_empty_sentinel(self):
         prob = _make_problem()
         self.assertEqual(prob.optimizer.last_eval_exception, "")
+        # A clean solve exercises the per-solve reset path and must leave the
+        # sentinel untouched.
+        prob.optimize()
+        self.assertEqual(prob.optimizer.last_eval_exception, "")
 
     def test_property_rejects_assignment(self):
         prob = _make_problem()
