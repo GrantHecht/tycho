@@ -41,12 +41,19 @@ mechanism: with the mode as default, MinimumTimeToClimb +137%, OptimalDocking
 +99%, MultiSpacecraftOptimization 1535 → 11969 iterations (+680%), while the
 median stays +0.00%.
 
-**Refinement:** a scoped A/B experiment — seed the ladder warm-start OR the
-persistent shift from the episode outcome, not both — measured on the three
-tail examples AND the corpus rescues (wb2000, near_infeasible must not
-regress). If the tails collapse with rescues intact, this is the most
-plausible path to a future default flip under the recorded tail-aware
-reversal condition.
+**A/B RESULT (2026-07-25): the double-memory hypothesis is mostly refuted and
+the shipped behavior stands.** Variant B (ladder warm-start neutralized once
+the persistent shift absorbs an episode) leaves the dominant tails unchanged
+(MinimumTimeToClimb +138%, OrbitContinuation +34% — their cost comes from the
+persistent-shift path itself), improves only OptimalDocking (+99% → −58%,
+faster than stock) and MultiSpacecraft partially (+680% → +548%), worsens
+BettsLowThrust (+23% → +45%) — and **destroys the flagship wb2000 rescue**
+(converged @95 → failed @500): the warm-start memory is load-bearing for
+re-entering the ladder high. Conclusion: no implementation-vs-intention
+deviation; the shipped trade is correct as designed. Any future tuning is a
+genuine algorithm study (e.g. per-problem adaptive warm-start decay), for
+which this A/B (captures `critb-proxonly-varB.csv` / `corpus-prox-varB.csv`,
+session records summarized here) is the first data point.
 
 ## 3. Acceptable-tier semantics on structurally meaningless points
 
