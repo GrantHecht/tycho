@@ -112,6 +112,12 @@ struct IterateInfo {
     bool accepted_ = false;
     int first_rejection_iter_ = -1;
     double theta_at_first_rejection_ = -1.0;
+
+    // Number of trial-point evaluations that threw during this iteration's
+    // acceptance attempts (line-search rungs, SOC/extended-backtrack trials,
+    // soft-feasibility trial). 0 on the overwhelmingly common no-exception
+    // path. Not printed in the iteration table.
+    int eval_exceptions_ = 0;
 };
 
 } // namespace tycho::solvers

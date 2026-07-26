@@ -581,6 +581,14 @@ class PSIOPT {
         double last_prox_reg_primal_ = -1.0;
         double last_prox_reg_dual_ = -1.0;
 
+        // Message of the most recent trial-evaluation exception absorbed by
+        // the acceptance machinery during the most recent solve call (all
+        // phases). Empty when every evaluation succeeded. A populated value
+        // with a successful flag means the solver rejected un-evaluable trial
+        // steps and recovered; when no recovery path existed, the solve threw
+        // instead and this field is unreachable.
+        std::string last_eval_exception_;
+
         // T6 (dead-status fix): the last non-Success status observed from
         // kkt_sol_.info() by factor_impl() within the CURRENT phase (alg_impl
         // resets it on entry, so print_exit_stats reports per-phase status).
@@ -618,6 +626,7 @@ class PSIOPT {
             last_feas_rest_iters_ = -1;
             last_prox_reg_primal_ = -1.0;
             last_prox_reg_dual_ = -1.0;
+            last_eval_exception_.clear();
         }
     };
 

@@ -2453,6 +2453,13 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                              (this->restoration_ && this->restoration_->is_active()))
                                 ? 0.0
                                 : 1.0;
+
+        // Trial evaluations from here to the end of the recovery hook may
+        // absorb NLP evaluation exceptions; the delta against this snapshot
+        // is this iteration's count and drives the un-evaluable-step bypass
+        // below.
+        const int eval_errs_before = this->eval_error_log_.count_;
+
         Funtimer.start();
         if (GoodStep) {
             // compute_step fuses the fraction-to-boundary scaling (former
@@ -2535,6 +2542,37 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                     this->try_recenter_elastics(step_mu)) {
                     alpha = 0.0;
                     resolved_depth = kRecoveryDepthRestoration;
+                } else if (this->eval_error_log_.count_ > eval_errs_before) {
+                    // Un-evaluable fallback step: at least one trial evaluation
+                    // threw during this iteration's acceptance attempts, so
+                    // committing the never-evaluated fallback step risks
+                    // turning the next iteration's committed-point evaluation
+                    // into a fatal error. Never accept it (this deliberately
+                    // overrides a watchdog-relaxed acceptance too). Mirror the
+                    // reference interior-point behavior for a failed line
+                    // search: enter feasibility restoration when a strategy is
+                    // configured, inactive, and entry-permitted — skipping the
+                    // soft pre-stage, whose trial is the very step that could
+                    // not be evaluated — and abort with the latched evaluation
+                    // error wrapped in solver context otherwise.
+                    const int ncons_ue = this->equal_cons_ + this->inequal_cons_;
+                    const double violation_ue = RHS.tail(ncons_ue).template lpNorm<1>();
+                    if (this->restoration_ && !this->restoration_->is_active() &&
+                        this->restoration_->entry_permitted(violation_ue, ctx)) {
+                        this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
+                        alpha = 0.0;
+                        Citer.accepted_ = false;
+                        resolved_depth = kRecoveryDepthRestoration;
+                    } else {
+                        throw std::runtime_error(fmt::format(
+                            "PSIOPT: line search failed at iteration {} because the NLP could "
+                            "not be evaluated at the trial steps ({} evaluation failure(s) this "
+                            "iteration; final trial step fraction {:.3e}). Enable feasibility "
+                            "restoration (restoration_mode) to recover from evaluation "
+                            "failures. Last evaluation error: {}",
+                            Citer.iter, this->eval_error_log_.count_ - eval_errs_before, alpha,
+                            this->eval_error_log_.last_message_));
+                    }
                 }
                 break;
             case RecoveryChain::Action::kRetry:
@@ -2621,6 +2659,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         Citer.alpha_p_ = alphap;
         Citer.alpha_d_ = alphad;
         Citer.alpha_t_ = alpha;
+        Citer.eval_exceptions_ = this->eval_error_log_.count_ - eval_errs_before;
 
         this->fill_iter_info(v_xsl, v_rhs, prim_obj, barr_obj, mu, Citer);
         iters.push_back(Citer);
@@ -2797,6 +2836,15 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         this->result_.last_prox_reg_primal_ = last_prox_primal;
         this->result_.last_prox_reg_dual_ = last_prox_dual;
     }
+
+    // Trial-evaluation exception diagnostic: the message of the most recent
+    // evaluation failure the acceptance machinery absorbed. Unlike the shifts
+    // above there is no mode gate — the log is per-SOLVE (reset alongside
+    // result_.reset_accumulators()), not per-phase, so a phase that absorbed
+    // nothing after an earlier phase did leaves the earlier message standing,
+    // and an entirely clean solve leaves the empty sentinel untouched.
+    if (this->eval_error_log_.count_ > 0)
+        this->result_.last_eval_exception_ = this->eval_error_log_.last_message_;
 
     if (this->equal_cons_ > 0) {
         this->result_.eq_cons_ = v_rhs.eq_cons();

@@ -96,17 +96,27 @@ TEST(EvalExceptionRecovery, ThrowingRungIsRejectedNotFatal) {
 // Same scenario, driven through ls_lang (LineSearchModes::LANG) instead of
 // the default AUGLANG variant — confirms the log is wired on the classic
 // LANG rung, not just AUGLANG's.
-TEST(EvalExceptionRecovery, ThrowingRungIsRejectedNotFatalLangMode) {
+//
+// LANG's acceptance test is a different Lagrangian ladder than AUGLANG's (see
+// ls_lang) and it accepts no rung on this problem: its very first iteration
+// exhausts the ladder. That makes this the un-evaluable-exhaustion case — the
+// throwing rung is still absorbed into the log rather than unwinding the
+// solve, but the exhaustion fallback step was never evaluated, so with no
+// restoration strategy configured the solve aborts with solver context instead
+// of committing it. The property under test is the log wiring on the LANG
+// rung; the abort is the exhaustion policy asserted in
+// ExhaustionWithoutRestorationRethrowsWithContext.
+TEST(EvalExceptionRecovery, ThrowingRungIsRecordedByLangMode) {
     auto prob = build_eval_except_nlp(1);
     prob->optimizer_->settings().opt_ls_mode_ = PSIOPT::LineSearchModes::LANG;
-    auto flag = prob->optimize();
-    EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
-    // LANG's acceptance test is a different Lagrangian ladder than AUGLANG's
-    // (see ls_lang), so it converges to a looser neighborhood of the optimum
-    // than the default-mode test above; the tolerance here is widened
-    // accordingly. The property under test is the log wiring, not per-mode
-    // convergence precision.
-    EXPECT_NEAR(prob->optimizer_->result().obj_val_, 1.0, 1e-4);
+    try {
+        prob->optimize();
+        FAIL() << "expected the un-evaluable exhaustion to abort";
+    } catch (const std::runtime_error &e) {
+        const std::string msg = e.what();
+        EXPECT_NE(msg.find("trial point outside evaluation domain"), std::string::npos) << msg;
+        EXPECT_NE(msg.find("iteration"), std::string::npos) << msg;
+    }
     EXPECT_GE(prob->optimizer_->eval_error_log().count_, 1);
 }
 
@@ -161,4 +171,63 @@ TEST(EvalExceptionRecovery, CommittedPointFailureStaysFatal) {
                  std::string::npos)
             << "expected the raw fixture message to propagate unwrapped, got: " << e.what();
     }
+}
+
+// Every rung of the ladder throws and no restoration is configured: the solve
+// must abort with a context-wrapped exception naming the evaluation failure —
+// not accept an un-evaluable step, and not surface the raw exception without
+// solver context.
+TEST(EvalExceptionRecovery, ExhaustionWithoutRestorationRethrowsWithContext) {
+    auto prob = build_eval_except_nlp(1 << 20); // effectively unlimited throws
+    try {
+        prob->optimize();
+        FAIL() << "expected optimize() to throw";
+    } catch (const std::runtime_error &e) {
+        const std::string msg = e.what();
+        EXPECT_NE(msg.find("trial point outside evaluation domain"), std::string::npos) << msg;
+        EXPECT_NE(msg.find("iteration"), std::string::npos) << msg;
+    }
+}
+
+// Same NLP, restoration configured, throw budget sized to exactly one ladder
+// exhaustion: the un-evaluable exhaustion dispatches feasibility restoration
+// instead of aborting, the domain heals, and the solve completes.
+TEST(EvalExceptionRecovery, ExhaustionDispatchesRestorationWhenConfigured) {
+    // Budget sized to exactly one ladder exhaustion plus its escalation: the
+    // two default line-search rungs throw, the soft feasibility pre-stage
+    // trial throws (escalating to the real restoration entry), and the domain
+    // is healed from the next iteration on. A budget large enough to keep
+    // throwing after entry would hit the already-in-restoration exhaustion,
+    // which has no recovery path left and legitimately aborts.
+    auto prob = build_eval_except_nlp(4);
+    prob->optimizer_->settings().restoration_mode_ = ts::RestorationModes::l1_nested;
+    auto flag = prob->optimize();
+    (void)flag; // graceful completion is the bar; convergence is a bonus
+    EXPECT_GE(prob->optimizer_->result().last_feas_rest_entries_, 1);
+    EXPECT_FALSE(prob->optimizer_->result().last_eval_exception_.empty());
+    // The nested-restoration path records through PSIOPT::eval_error_log_
+    // directly (try_soft_feasibility_step), a wiring path distinct from either
+    // SolverContext copy — assert it is live.
+    EXPECT_GE(prob->optimizer_->eval_error_log().count_, 1);
+}
+
+// Diagnostics truth-table: a clean solve reports no evaluation exceptions,
+// and a subsequent clean solve on an instance that previously latched one
+// resets the diagnostic.
+TEST(EvalExceptionRecovery, DiagnosticsResetBetweenSolves) {
+    auto clean = build_eval_except_nlp(0);
+    auto flag = clean->optimize();
+    EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_TRUE(clean->optimizer_->result().last_eval_exception_.empty());
+
+    auto rescued = build_eval_except_nlp(1);
+    auto flag2 = rescued->optimize();
+    EXPECT_EQ(flag2, tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_FALSE(rescued->optimizer_->result().last_eval_exception_.empty());
+    // Re-run the same instance from the converged point: the throw budget is
+    // spent, the solve is clean, and the latched message from the previous
+    // call must not survive the per-solve reset.
+    auto flag3 = rescued->optimize();
+    EXPECT_EQ(flag3, tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_TRUE(rescued->optimizer_->result().last_eval_exception_.empty());
 }
