@@ -52,6 +52,7 @@
 #include "tycho/detail/solvers/globalization/restoration.h"
 #include "tycho/detail/solvers/globalization/proximal_restoration.h"
 #include "tycho/detail/solvers/globalization/l1_restoration.h"
+#include "tycho/detail/solvers/globalization/feasibility_stall.h"
 #include "tycho/detail/solvers/globalization/feasibility_switch_recovery.h"
 
 #ifndef USE_ACCELERATE_SPARSE
@@ -1823,6 +1824,12 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                       this->hp_scratch_,        this->best_xsl_scratch_, this->best_rhs_scratch_,
                       this->restoration_.get(), &this->eval_error_log_};
 
+    // Windowed no-progress detector for the feasibility-only stage (see
+    // feasibility_stall.h). Consulted only when a restoration strategy is
+    // configured and inactive; the default path never observes it. Per-phase
+    // lifetime, like every other alg_impl-local mode state.
+    FeasibilityStallDetector feas_stall;
+
     tycho::utils::Timer Runtimer;
     tycho::utils::Timer Funtimer;
     tycho::utils::Timer QPtimer;
@@ -2257,6 +2264,32 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             this->result_.converge_flag_ = ExitCode;
             break;
         }
+
+        // Feasibility-stage stall detection. The zero-objective stage accepts
+        // every step, so the rejected-trial recovery gate can never dispatch
+        // restoration from here; this is the missing signal (see
+        // feasibility_stall.h). Guarded so the default path (restoration off)
+        // performs no work at all, and an active restoration episode is left
+        // to run its own course. On a stalled window that passes the entry
+        // guard/budget, enter restoration exactly as the optimize path's
+        // switch does, discard this iteration's residual-only history entry,
+        // and re-enter the loop so the next evaluation runs the restoration
+        // subproblem; the detector re-arms so the resumed stage restarts its
+        // window from the post-restoration point.
+        if ((algmode == AlgorithmModes::SOE || algmode == AlgorithmModes::OPTNO) &&
+            this->restoration_ && !this->restoration_->is_active()) {
+            const int ncons_fs = this->equal_cons_ + this->inequal_cons_;
+            const double theta_fs = RHS.tail(ncons_fs).template lpNorm<1>();
+            if (feas_stall.observe(theta_fs) &&
+                this->restoration_->entry_permitted(theta_fs, ctx)) {
+                this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
+                feas_stall.reset();
+                iters.pop_back();
+                QPtimer.stop();
+                continue;
+            }
+        }
+
         iters.pop_back();
 
         double nhpert = 0;
