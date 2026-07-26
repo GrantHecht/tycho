@@ -4,11 +4,12 @@ Exercises the Python surface for the ten PSIOPT.Settings fields
 (``acceptance_strategy``, ``merit_penalty_rule``, ``max_soc``,
 ``ls_extended_iters``, ``watchdog``, ``barrier_governor``,
 ``never_monotone``, ``restoration_mode``, ``max_feas_rest``,
-``inertia_mode``) and the nine SolveResult diagnostics (``last_soc_steps``,
+``inertia_mode``) and the ten SolveResult diagnostics (``last_soc_steps``,
 ``last_watchdog_activations``, ``last_recovery_depth_histogram``,
 ``last_monotone_switches``, ``last_monotone_iters``,
 ``last_feas_rest_entries``, ``last_feas_rest_iters``,
-``last_prox_reg_primal``, ``last_prox_reg_dual``): property
+``last_prox_reg_primal``, ``last_prox_reg_dual``,
+``last_eval_exception``): property
 round-trips, per-field validation, invalid enum construction, the
 composition of the SOC and extended-backtracking recovery links with
 every acceptance strategy (``max_soc``/``ls_extended_iters`` now re-drive
@@ -760,6 +761,24 @@ class test_ProxRegDiagnostics(unittest.TestCase):
         self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
         self.assertEqual(prob.optimizer.last_prox_reg_primal, -1.0)
         self.assertEqual(prob.optimizer.last_prox_reg_dual, -1.0)
+
+
+class test_EvalExceptionDiagnostic(unittest.TestCase):
+    """SolveResult.last_eval_exception (the message of the most recent
+    trial-point evaluation exception absorbed by the acceptance machinery
+    during the most recent solve call -- see psiopt.h for the empty-string
+    sentinel semantics). Read-only, like every other SolveResult diagnostic
+    above.
+    """
+
+    def test_fresh_optimizer_reports_empty_sentinel(self):
+        prob = _make_problem()
+        self.assertEqual(prob.optimizer.last_eval_exception, "")
+
+    def test_property_rejects_assignment(self):
+        prob = _make_problem()
+        with self.assertRaises(AttributeError):
+            prob.optimizer.last_eval_exception = "boom"
 
 
 class test_BadEnumValues(unittest.TestCase):

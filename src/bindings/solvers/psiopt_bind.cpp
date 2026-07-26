@@ -167,10 +167,12 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     BIND_RESULT_RO(obj, "last_eval_exception", last_eval_exception_,
                    "Message of the most recent trial-point evaluation exception absorbed during "
                    "the most recent solve call, or the empty string when every evaluation "
-                   "succeeded. A populated value means the line search rejected one or more "
-                   "un-evaluable trial steps (for example an iterate that stepped outside an "
-                   "interpolation table's domain) and the solve recovered; a solve that could "
-                   "not recover raises RuntimeError instead.");
+                   "succeeded. A populated value means the acceptance machinery rejected one or "
+                   "more un-evaluable trial steps (for example an iterate that stepped outside "
+                   "an interpolation table's domain) and the solve recovered; a solve that could "
+                   "not recover raises RuntimeError instead. In a multi-phase solve, an earlier "
+                   "phase's message persists on this property even when a later phase aborts, "
+                   "since the diagnostic is written at each phase's close.");
 
     BIND_SETTINGS_VALIDATED(obj, "obj_scale", obj_scale_, set_obj_scale, "");
     BIND_SETTINGS_VALIDATED(obj, "print_level", print_level_, set_print_level, "");
