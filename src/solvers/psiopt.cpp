@@ -2716,7 +2716,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                     } else if (this->restoration_ && !this->restoration_->is_active() &&
                                this->restoration_->entry_permitted(violation_ue, ctx)) {
                         this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
-                        // A stage resumed after an episode restarts its stall window.
+                        // A stage resumed after an episode restarts its stall window,
+                        // and this entry becomes the handback the stall exit measures
+                        // net progress against.
+                        feas_stall.note_dispatch(violation_ue);
                         feas_stall.reset_window();
                         alpha = 0.0;
                         Citer.accepted_ = false;
@@ -2762,7 +2765,11 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 // this Action, and only when restoration_ is non-null and inactive
                 // (so the calls below are safe).
                 this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
-                // A stage resumed after an episode restarts its stall window.
+                // A stage resumed after an episode restarts its stall window, and
+                // this entry becomes the handback the stall exit measures net
+                // progress against.
+                feas_stall.note_dispatch(
+                    RHS.tail(this->equal_cons_ + this->inequal_cons_).template lpNorm<1>());
                 feas_stall.reset_window();
                 alpha = 0.0;
                 break;
@@ -2794,7 +2801,11 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                     Citer.accepted_ = true;
                 } else {
                     this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
-                    // A stage resumed after an episode restarts its stall window.
+                    // A stage resumed after an episode restarts its stall window, and
+                    // this entry becomes the handback the stall exit measures net
+                    // progress against.
+                    feas_stall.note_dispatch(
+                        RHS.tail(this->equal_cons_ + this->inequal_cons_).template lpNorm<1>());
                     feas_stall.reset_window();
                     alpha = 0.0;
                 }

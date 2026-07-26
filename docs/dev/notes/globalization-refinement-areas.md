@@ -173,10 +173,11 @@ against the LAST entry (the shipped rule), single-problem probes give the same
 three verdicts, with one behaviour change worth recording: mountaincar's
 feasibility stage now ends early as well, because after its second episode the
 violation grows back ABOVE the value it had at that entry (5.40e-02 against
-3.15e-02) — precisely the "recovery cannot help" case the exit exists for. Its
-feasibility phase stops after 889 iterations instead of the 994 it burned under
-the first-entry rule, and the NOTCONVERGED verdict is unchanged (both counts
-here are that one phase's iterations, not corpus totals). The hypersensitive
+3.15e-02) — precisely the "recovery cannot help" case the exit exists for.
+Measured as single-phase iteration counts (not corpus totals like the `@N`
+figures above), that phase stops after 889 iterations under the shipped rule
+instead of the 994 it burned under the first-entry rule, and the NOTCONVERGED
+verdict is unchanged. The hypersensitive
 problem is still spared (no exit fires) and zermelo's exit still fires at an
 unchanged violation. Full-corpus comparison at the shipped rule against the
 campaign store's matching main-era cells: `proximal_switch` statuses are
