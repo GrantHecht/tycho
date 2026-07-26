@@ -1069,7 +1069,8 @@ void tycho::solvers::PSIOPT::rebuild_globalization_components() {
             SolverContext{this->nlp_.get(), this->kkt_sol_, this->settings_, this->primal_vars_,
                           this->slack_vars_, this->equal_cons_, this->inequal_cons_, this->kkt_dim_,
                           this->stli_scratch_, this->hp_scratch_, this->best_xsl_scratch_,
-                          this->best_rhs_scratch_, this->restoration_.get()});
+                          this->best_rhs_scratch_, this->restoration_.get(),
+                          &this->eval_error_log_});
     }
 
     // The step-length globalization mechanism. Stateless (holds

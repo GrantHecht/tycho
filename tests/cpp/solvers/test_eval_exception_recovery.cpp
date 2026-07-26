@@ -13,6 +13,7 @@
 #include <atomic>
 #include <memory>
 #include <stdexcept>
+#include <string>
 
 #include <Eigen/Core>
 
@@ -89,6 +90,51 @@ TEST(EvalExceptionRecovery, ThrowingRungIsRejectedNotFatal) {
     auto flag = prob->optimize();
     EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_NEAR(prob->optimizer_->result().obj_val_, 1.0, 1e-6);
+    EXPECT_GE(prob->optimizer_->eval_error_log().count_, 1);
+}
+
+// Same scenario, driven through ls_lang (LineSearchModes::LANG) instead of
+// the default AUGLANG variant — confirms the log is wired on the classic
+// LANG rung, not just AUGLANG's.
+TEST(EvalExceptionRecovery, ThrowingRungIsRejectedNotFatalLangMode) {
+    auto prob = build_eval_except_nlp(1);
+    prob->optimizer_->settings().opt_ls_mode_ = PSIOPT::LineSearchModes::LANG;
+    auto flag = prob->optimize();
+    EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
+    // LANG's acceptance test is a different Lagrangian ladder than AUGLANG's
+    // (see ls_lang), so it converges to a looser neighborhood of the optimum
+    // than the default-mode test above; the tolerance here is widened
+    // accordingly. The property under test is the log wiring, not per-mode
+    // convergence precision.
+    EXPECT_NEAR(prob->optimizer_->result().obj_val_, 1.0, 1e-4);
+    EXPECT_GE(prob->optimizer_->eval_error_log().count_, 1);
+}
+
+// Same scenario, driven through ls_l1 (LineSearchModes::L1) — confirms the
+// log is wired on the classic L1 rung.
+TEST(EvalExceptionRecovery, ThrowingRungIsRejectedNotFatalL1Mode) {
+    auto prob = build_eval_except_nlp(1);
+    prob->optimizer_->settings().opt_ls_mode_ = PSIOPT::LineSearchModes::L1;
+    auto flag = prob->optimize();
+    EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_NEAR(prob->optimizer_->result().obj_val_, 1.0, 1e-6);
+    EXPECT_GE(prob->optimizer_->eval_error_log().count_, 1);
+}
+
+// Same scenario, driven through the GENERIC acceptance ladder
+// (generic_line_search / modern_eval_trial_point) via
+// acceptance_strategy_ == merit — confirms the log is wired on the
+// non-classic ClassicMeritAcceptance path too.
+TEST(EvalExceptionRecovery, ThrowingRungIsRejectedNotFatalGenericAcceptance) {
+    auto prob = build_eval_except_nlp(1);
+    prob->optimizer_->settings().acceptance_strategy_ = AcceptanceStrategies::merit;
+    auto flag = prob->optimize();
+    EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
+    // ModernMeritAcceptance's generic ladder converges to a looser
+    // neighborhood of the optimum than the classic AUGLANG default (see the
+    // LANG-mode test above for the same reasoning); widened accordingly.
+    EXPECT_NEAR(prob->optimizer_->result().obj_val_, 1.0, 1e-4);
+    EXPECT_GE(prob->optimizer_->eval_error_log().count_, 1);
 }
 
 // A committed-point evaluation failure stays fatal: the initial point itself
@@ -107,5 +153,12 @@ TEST(EvalExceptionRecovery, CommittedPointFailureStaysFatal) {
         prob->add_equal_con(GenericFunction<-1, -1>(x - 1.0), (Eigen::VectorXi(1) << 0).finished());
     }
     prob->optimizer_->set_print_level(0);
-    EXPECT_THROW(prob->optimize(), std::runtime_error);
+    try {
+        prob->optimize();
+        FAIL() << "expected the committed-point evaluation exception to propagate";
+    } catch (const std::runtime_error &e) {
+        EXPECT_NE(std::string(e.what()).find("trial point outside evaluation domain"),
+                 std::string::npos)
+            << "expected the raw fixture message to propagate unwrapped, got: " << e.what();
+    }
 }

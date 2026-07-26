@@ -59,6 +59,21 @@
 
 namespace tycho::solvers {
 
+// File-local helpers shared by every wrapped trial-evaluation catch site
+// below (ls_lang/ls_l1/ls_auglang/generic_line_search): both null-guard on
+// `log` so a SolverContext built without an EvalErrorLog (e.g. a bare
+// unit-test context) stays a silent no-op, matching the inline record()/
+// record_unknown() calls they replace.
+static void note_eval_error(EvalErrorLog *log, const char *what) {
+    if (log)
+        log->record(what);
+}
+
+static void note_eval_error_unknown(EvalErrorLog *log) {
+    if (log)
+        log->record_unknown();
+}
+
 // ============================================================================
 // Generic interface — unused on the classic merit path (see header). T6:
 // these throw rather than return a fabricated answer; a future filter/funnel
@@ -223,12 +238,10 @@ double ClassicMeritAcceptance::ls_lang(double obj_scale, double mu, double prim_
         try {
             this->eval_rhs(obj_scale, xsl2.data(), ptest, rhs2.data(), rhs2.data());
         } catch (const std::exception &e) {
-            if (ctx_.eval_errors_)
-                ctx_.eval_errors_->record(e.what());
+            note_eval_error(ctx_.eval_errors_, e.what());
             evaluable = false;
         } catch (...) {
-            if (ctx_.eval_errors_)
-                ctx_.eval_errors_->record_unknown();
+            note_eval_error_unknown(ctx_.eval_errors_);
             evaluable = false;
         }
         if (!evaluable) {
@@ -236,7 +249,10 @@ double ClassicMeritAcceptance::ls_lang(double obj_scale, double mu, double prim_
             // value is unknowable), and continue down the alpha ladder. The
             // infeasibility signal is deliberately left at its sentinel — there
             // is no evaluated trial to measure it on, and the sentinel suppresses
-            // the second-order correction trigger for this rejection.
+            // the second-order correction trigger for this rejection. merit_val_
+            // is likewise not written on a throwing rung, so it retains the
+            // previous evaluable rung's value (or the IterateInfo default when
+            // the first rung throws).
             citer.ls_iters_ = j + 1;
             alpha = alpha / ctx_.settings_.alpha_red_;
             citer.first_rejection_iter_ =
@@ -310,20 +326,14 @@ double ClassicMeritAcceptance::ls_l1(double obj_scale, double mu, double prim_ob
         try {
             eval_trial_point_occ(obj_scale, mu, alpha, xsl, dxsl, xsl2, rhs2, ptest, btest);
         } catch (const std::exception &e) {
-            if (ctx_.eval_errors_)
-                ctx_.eval_errors_->record(e.what());
+            note_eval_error(ctx_.eval_errors_, e.what());
             evaluable = false;
         } catch (...) {
-            if (ctx_.eval_errors_)
-                ctx_.eval_errors_->record_unknown();
+            note_eval_error_unknown(ctx_.eval_errors_);
             evaluable = false;
         }
         if (!evaluable) {
-            // Un-evaluable trial: treat exactly like a merit rejection (the merit
-            // value is unknowable), and continue down the alpha ladder. The
-            // infeasibility signal is deliberately left at its sentinel — there
-            // is no evaluated trial to measure it on, and the sentinel suppresses
-            // the second-order correction trigger for this rejection.
+            // Un-evaluable trial — see ls_lang's rationale.
             citer.ls_iters_ = j + 1;
             alpha = alpha / ctx_.settings_.alpha_red_;
             citer.first_rejection_iter_ =
@@ -380,20 +390,14 @@ double ClassicMeritAcceptance::ls_auglang(double obj_scale, double mu, double pr
         try {
             eval_trial_point_occ(obj_scale, mu, alpha, xsl, dxsl, xsl2, rhs2, ptest, btest);
         } catch (const std::exception &e) {
-            if (ctx_.eval_errors_)
-                ctx_.eval_errors_->record(e.what());
+            note_eval_error(ctx_.eval_errors_, e.what());
             evaluable = false;
         } catch (...) {
-            if (ctx_.eval_errors_)
-                ctx_.eval_errors_->record_unknown();
+            note_eval_error_unknown(ctx_.eval_errors_);
             evaluable = false;
         }
         if (!evaluable) {
-            // Un-evaluable trial: treat exactly like a merit rejection (the merit
-            // value is unknowable), and continue down the alpha ladder. The
-            // infeasibility signal is deliberately left at its sentinel — there
-            // is no evaluated trial to measure it on, and the sentinel suppresses
-            // the second-order correction trigger for this rejection.
+            // Un-evaluable trial — see ls_lang's rationale.
             citer.ls_iters_ = j + 1;
             alpha = alpha / ctx_.settings_.alpha_red_;
             citer.first_rejection_iter_ =
@@ -932,20 +936,14 @@ double BacktrackingLineSearch::generic_line_search(
             modern_eval_trial_point(ctx, obj_scale, mu, alpha, XSL, DXSL, XSL2, RHS2, ptest, btest,
                                     theta_t, resto_eq_shift_scratch_, resto_iq_shift_scratch_);
         } catch (const std::exception &e) {
-            if (ctx.eval_errors_)
-                ctx.eval_errors_->record(e.what());
+            note_eval_error(ctx.eval_errors_, e.what());
             evaluable = false;
         } catch (...) {
-            if (ctx.eval_errors_)
-                ctx.eval_errors_->record_unknown();
+            note_eval_error_unknown(ctx.eval_errors_);
             evaluable = false;
         }
         if (!evaluable) {
-            // Un-evaluable trial: treat exactly like an acceptance rejection (no
-            // measures exist to judge), and continue down the alpha ladder. The
-            // infeasibility signal is deliberately left at its sentinel — there
-            // is no evaluated trial to measure it on, and the sentinel suppresses
-            // the second-order correction trigger for this rejection.
+            // Un-evaluable trial — see ls_lang's rationale.
             Citer.ls_iters_ = j + 1;
             alpha = alpha / ctx.settings_.alpha_red_;
             Citer.first_rejection_iter_ =

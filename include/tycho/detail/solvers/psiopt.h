@@ -646,6 +646,7 @@ class PSIOPT {
     Settings &settings() { return settings_; }
     const Settings &settings() const { return settings_; }
     const SolveResult &result() const { return result_; }
+    const EvalErrorLog &eval_error_log() const { return eval_error_log_; }
 
     // --- NLP management ---
     void set_nlp(std::shared_ptr<NonLinearProgram> np);
