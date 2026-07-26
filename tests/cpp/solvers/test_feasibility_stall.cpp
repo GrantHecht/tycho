@@ -186,8 +186,11 @@ std::unique_ptr<ts::OptimizationProblem> feas_stall_build_nlp(bool inconsistent)
 
 // A feasibility system with no solution whose stage worsens monotonically. The
 // single equality is (x^2 + 1)^(1/4) = 0, whose left side never drops below 1,
-// so the stage can never be satisfied. With one variable and one equality the
-// stage's step is the exact Newton step for that residual,
+// so the stage can never be satisfied. With one variable and one equality —
+// under the default stage configuration this fixture relies on and pins below
+// (no stage line search, classic inertia, so the KKT (2,2) block is exactly
+// zero and the full step is taken) — the stage's step is the exact Newton
+// step for that residual,
 // x <- x - c/c' = -(x^2 + 2)/x, which raises x^2 by more than 4 every
 // iteration and the violation with it: a deterministic, monotonically growing
 // violation that stays comfortably inside double range for thousands of
@@ -212,6 +215,10 @@ std::unique_ptr<ts::OptimizationProblem> feas_stall_build_worsening_nlp() {
     }
     prob->optimizer_->set_print_level(3); // fully silent
     prob->optimizer_->set_qp_threads(1);  // as above
+    // Pin the two defaults the exact-Newton-map argument above depends on, so
+    // a future default flip cannot silently change this fixture's dynamics.
+    prob->optimizer_->settings().soe_ls_mode_ = ts::PSIOPT::LineSearchModes::NOLS;
+    prob->optimizer_->settings().inertia_mode_ = ts::InertiaModes::classic;
     return prob;
 }
 

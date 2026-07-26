@@ -36,11 +36,13 @@
 //     stage only saved iterations on problems that were failing anyway, while
 //     an episode injected into a quietly succeeding stage steered one corpus
 //     problem off the acceptable exit it otherwise reaches.
-//   * The motivating stalled trace sets the price of that narrowing. Its worst
-//     single residual GREW from 1.106 to 2.602 with nothing to contest it, but
-//     the growth is one jump across the opening iterations followed by some 495
-//     flat ones, and in the L1 measure watched here that plateau stays inside
-//     the 25% margin — so that stage keeps its old burn-the-budget behaviour.
+//   * The motivating stalled trace sets the price of that narrowing. Its
+//     equality-residual infinity norm grew 1.106 to 2.113 across a
+//     500-iteration uncontested burn (the L1 total this detector watches read
+//     2.602 at the point an earlier plateau-based predicate first dispatched),
+//     but the growth is one jump across the opening iterations followed by
+//     some 495 flat ones, and in the L1 measure the plateau stays inside the
+//     25% margin — so that stage keeps its old burn-the-budget behaviour.
 //     Ceding it is the right trade: the episodes it used to draw only shortened
 //     a solve that diverges under every configuration, while the same episodes
 //     elsewhere in the corpus cost a verdict.
@@ -104,9 +106,12 @@ struct FeasibilityStallDetector {
     // observations at or above kFeasStallGrowthFactor times its best-seen
     // violation. Any observation below that mark breaks the run — and, when it
     // is also a new low, records it. A stage sitting exactly at its best, or
-    // improving at any rate, therefore never accumulates a window.
+    // improving at any rate, therefore never accumulates a window. The
+    // best-positive guard keeps that claim true at an exactly feasible best
+    // (best_theta_ == 0 would make the mark 0 and every observation
+    // "elevated"; such a stage is finishing, not worsening).
     bool observe(double theta) {
-        if (theta >= kFeasStallGrowthFactor * best_theta_) {
+        if (best_theta_ > 0.0 && theta >= kFeasStallGrowthFactor * best_theta_) {
             ++iters_elevated_;
             return iters_elevated_ >= kFeasStallWindow;
         }

@@ -175,8 +175,9 @@ dispatched into its plateaued stage, and the narrowing eliminates it; and
 `hard_zermelo_wrongbasin` still diverges, now @919. That last figure is what the
 narrowing costs. Per-iteration, that stage's residual jumps once in its first
 few iterations and then sits flat for the remaining ~495, which is a plateau by
-the shipped L1 test even though its worst single residual grew 1.9× across the
-jump — so the stage no longer dispatches (0 entries) or ends early, and runs the
+the shipped L1 test even though its equality-residual infinity norm grew 1.9×
+(1.106 → 2.113) across the jump — the same basis as the original deep-dive
+figure — so the stage no longer dispatches (0 entries) or ends early, and runs the
 same 919 iterations it did with this whole mechanism absent, against 633 under
 the earlier no-improvement predicate. Its DIVERGING verdict is the same in all
 three cases. Full-corpus statuses now match the campaign store's main-era cells
