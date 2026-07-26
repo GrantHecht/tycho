@@ -155,7 +155,7 @@ still crawling down since its last episode keeps running. With restoration off
 (the default) the stage is byte-identical to before. Measured on the zermelo
 trace that motivated this: the feasibility stage under merit + ℓ1-nested now
 runs 275 iterations (two bounded restoration episodes, then a graceful end)
-instead of 496; the combined `solve_optimize` call drops from ~895 to ~700
+instead of 496; the combined `solve_optimize` call drops from ~895 to ~633 (measured at the shipped last-handback rule)
 iterations. Corpus scorecard under merit + ℓ1-nested, against the same corpus
 run with this whole mechanism absent (every `@N` below is the corpus-reported
 iteration TOTAL for the whole call — the sum over that call's PSIOPT phases —

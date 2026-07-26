@@ -2275,7 +2275,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         bool exit_stage_stalled = false;
 
         // Feasibility-stage stall detection. The zero-objective stage accepts
-        // every step, so the rejected-trial recovery gate can never dispatch
+        // every step under the default no-line-search stage configuration,
+        // so the rejected-trial recovery gate does not dispatch
         // restoration from here; this is the missing signal (see
         // feasibility_stall.h). Guarded so the default path (restoration off)
         // performs no work at all, and an active restoration episode is left

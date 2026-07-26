@@ -311,6 +311,7 @@ def test_cmd_sweep_skips_validity_probe_when_all_repeats_complete(
         repeats=2,
         dry_run=False,
         only_cell=",".join(f"{k}={v}" for k, v in cfg.items()),
+        call_shape="module",
     )
     rc.cmd_sweep(args)  # must not raise
 
@@ -321,6 +322,7 @@ def test_cmd_aggregate_missing_context_file_raises_clean_systemexit(tmp_path):
         out_csv=str(tmp_path / "out.csv"),
         out_json=str(tmp_path / "out.json"),
         context=[f"baseline={tmp_path / 'does-not-exist.jsonl'}"],
+        call_shape="module",
     )
     with pytest.raises(SystemExit, match="baseline.*does-not-exist"):
         rc.cmd_aggregate(args)
@@ -372,3 +374,12 @@ def test_is_cell_valid_returns_false_on_malformed_config():
         "recovery": 0,
     }
     assert rc.is_cell_valid(bad_cell) is False
+
+
+def test_cell_file_path_distinguishes_call_shapes(tmp_path):
+    cfg = dict(rc.enumerate_cells()[0])
+    module_path = rc.cell_file_path(tmp_path, cfg, 1)
+    optimize_path = rc.cell_file_path(tmp_path, cfg, 1, "optimize")
+    assert module_path != optimize_path
+    assert module_path.name == f"cell-{rc.cell_hash(cfg)}-r1.jsonl"
+    assert optimize_path.name.endswith("-optimize.jsonl")

@@ -5,10 +5,13 @@
 // FeasibilityStallDetector — windowed no-progress detector for the
 // feasibility-only stage.
 //
-// The feasibility stage accepts every fraction-to-boundary step (the line
-// search runs with the objective scaled to zero), so the rejected-trial gate
-// that dispatches the recovery chain — and through it feasibility restoration
-// — is structurally unreachable from that stage. A stage that stops making
+// Under its default no-line-search configuration the feasibility stage
+// accepts every fraction-to-boundary step, so the rejected-trial gate that
+// dispatches the recovery chain — and through it feasibility restoration —
+// is never consulted from that stage. (A user-configured stage line search
+// runs a zero-objective merit test that can reject growth steps, making the
+// gate reachable; the detector below is useful either way, since a stalled
+// stage under either configuration otherwise burns its budget.) A stage that stops making
 // feasibility progress therefore burns its whole iteration budget with no
 // mechanism ever consulted. This detector supplies the missing dispatch
 // signal: it watches the L1 constraint violation once per feasibility-stage
