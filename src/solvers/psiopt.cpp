@@ -2755,8 +2755,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // the solve cannot continue, which is exactly the reference method's
         // "current point is acceptable, stop here" verdict. A stronger verdict
         // already reached (CONVERGED) is left alone; DIVERGING is unreachable
-        // here because an acceptable iterate is finite and inside the
-        // divergence thresholds (validate() enforces acc <= div).
+        // here both because the bypass only runs on a usable step direction
+        // (the !GoodStep override above is mutually exclusive with it) and
+        // because an acceptable iterate is finite and inside the divergence
+        // thresholds (validate() enforces acc <= div).
         if (exit_at_acceptable && ExitCode == ConvergenceFlags::NOTCONVERGED)
             ExitCode = ConvergenceFlags::ACCEPTABLE;
 

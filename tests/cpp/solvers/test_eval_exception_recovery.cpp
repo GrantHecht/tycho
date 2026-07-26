@@ -215,8 +215,11 @@ TEST(EvalExceptionRecovery, ExhaustionAtAcceptableIterateExitsGracefully) {
     ASSERT_NO_THROW(flag = prob->optimize());
     EXPECT_EQ(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     EXPECT_GE(prob->optimizer_->eval_error_log().count_, 1);
-    // The failed step was discarded, not committed: x is still the start point.
+    // The graceful exit is the path where the diagnostic matters most: a user
+    // seeing ACCEPTABLE instead of CONVERGED needs the reason.
     const auto &r = prob->optimizer_->result();
+    EXPECT_FALSE(r.last_eval_exception_.empty());
+    // The failed step was discarded, not committed: x is still the start point.
     ASSERT_EQ(r.primals_.size(), 1);
     EXPECT_NEAR(r.primals_[0], 0.0, 1e-12);
 }
