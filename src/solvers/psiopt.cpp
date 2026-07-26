@@ -2286,7 +2286,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 // still their pre-factorization 0.0 initializers (eval_soe/eval_kkt_no
                 // never write the objective, and the barrier objective is computed
                 // further down), matching the other pre-factorization restoration
-                // seams below and unlike the post-line-search seams, which pass a
+                // seams above and unlike the post-line-search seams, which pass a
                 // live barrier objective.
                 this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
                 feas_stall.reset();
