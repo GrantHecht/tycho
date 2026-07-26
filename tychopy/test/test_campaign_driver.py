@@ -2,15 +2,25 @@
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 import pytest
 
-REPO = Path(__file__).resolve().parents[2]
+# The relative-depth default assumes the suite runs from its in-repo location;
+# harnesses that copy the suite elsewhere (e.g. the wheel-layout CI lane
+# running from a scratch directory) set TYCHO_REPO_ROOT to point back at the
+# checkout, the same contract test_corpus_smoke.py uses.
+REPO = Path(os.environ.get("TYCHO_REPO_ROOT", Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(REPO / "scripts"))
 
-import run_campaign as rc
+rc = pytest.importorskip(
+    "run_campaign",
+    reason="campaign driver tests need the repository checkout "
+    "(scripts/run_campaign.py is not shipped); set TYCHO_REPO_ROOT when "
+    "running the suite from a copied location",
+)
 
 
 def _write_cell_jsonl(tmp_path, cfg, repeat, statuses, iters=None):
