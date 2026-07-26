@@ -2265,34 +2265,58 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             break;
         }
 
+        // Set only by the feasibility-stage stall dispatch below, when the stage
+        // is stalled and restoration entry is unavailable: it forces this
+        // iteration to be the last one of the phase, without touching the
+        // convergence verdict. Read once, next to the exit_at_acceptable
+        // upgrade at the bottom of the loop. Provably false whenever
+        // restoration is off — the only write is inside the guarded block.
+        bool exit_stage_stalled = false;
+
         // Feasibility-stage stall detection. The zero-objective stage accepts
         // every step, so the rejected-trial recovery gate can never dispatch
         // restoration from here; this is the missing signal (see
         // feasibility_stall.h). Guarded so the default path (restoration off)
         // performs no work at all, and an active restoration episode is left
-        // to run its own course. On a stalled window that passes the entry
-        // guard/budget, enter restoration exactly as the optimize path's
-        // switch does, discard this iteration's residual-only history entry,
-        // and re-enter the loop so the next evaluation runs the restoration
-        // subproblem; the detector re-arms so the resumed stage restarts its
-        // window from the post-restoration point.
+        // to run its own course — the detector neither observes nor exits
+        // while an episode is running. The detector is consulted exactly once
+        // per iteration, with three outcomes:
+        //
+        //   1. Not stalled: nothing happens.
+        //   2. Stalled and entry permitted: enter restoration exactly as the
+        //      optimize path's switch does, discard this iteration's
+        //      residual-only history entry, and re-enter the loop so the next
+        //      evaluation runs the restoration subproblem; the detector
+        //      re-arms so the resumed stage restarts its window from the
+        //      post-restoration point.
+        //   3. Stalled and entry refused (per-phase budget spent, or already
+        //      near-feasible): there is no mechanism left to consult, so end
+        //      the phase instead of burning the rest of the iteration budget.
+        //      The current iterate is the phase's result — nothing is
+        //      discarded, the iteration finishes its normal bookkeeping, and
+        //      the loop exits through the standard teardown so converge_check
+        //      reports the honest verdict. In a multi-phase sequence the next
+        //      phase resumes from this point. The detector is deliberately NOT
+        //      re-armed here: the phase is ending.
         if ((algmode == AlgorithmModes::SOE || algmode == AlgorithmModes::OPTNO) &&
             this->restoration_ && !this->restoration_->is_active()) {
             const int ncons_fs = this->equal_cons_ + this->inequal_cons_;
             const double theta_fs = RHS.tail(ncons_fs).template lpNorm<1>();
-            if (feas_stall.observe(theta_fs) &&
-                this->restoration_->entry_permitted(theta_fs, ctx)) {
-                // Entry measures are (theta, 0, 0) here: prim_obj and barr_obj are
-                // still their pre-factorization 0.0 initializers (eval_soe/eval_kkt_no
-                // never write the objective, and the barrier objective is computed
-                // further down), matching the other pre-factorization restoration
-                // seams above and unlike the post-line-search seams, which pass a
-                // live barrier objective.
-                this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
-                feas_stall.reset();
-                iters.pop_back();
-                QPtimer.stop();
-                continue;
+            if (feas_stall.observe(theta_fs)) {
+                if (this->restoration_->entry_permitted(theta_fs, ctx)) {
+                    // Entry measures are (theta, 0, 0) here: prim_obj and barr_obj are
+                    // still their pre-factorization 0.0 initializers (eval_soe/eval_kkt_no
+                    // never write the objective, and the barrier objective is computed
+                    // further down), matching the other pre-factorization restoration
+                    // seams above and unlike the post-line-search seams, which pass a
+                    // live barrier objective.
+                    this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
+                    feas_stall.reset();
+                    iters.pop_back();
+                    QPtimer.stop();
+                    continue;
+                }
+                exit_stage_stalled = true;
             }
         }
 
@@ -2810,8 +2834,13 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             Printtimer.stop();
         }
 
+        // exit_stage_stalled (see the stall dispatch above) forces the exit
+        // without touching ExitCode: unlike exit_at_acceptable it does not
+        // upgrade the verdict, so converge_check's own answer (NOTCONVERGED,
+        // or better if this iterate happens to qualify) is what gets reported.
         if (ExitCode == ConvergenceFlags::CONVERGED || ExitCode == ConvergenceFlags::ACCEPTABLE ||
-            ExitCode == ConvergenceFlags::DIVERGING || i == (settings_.max_iters_ - 1)) {
+            ExitCode == ConvergenceFlags::DIVERGING || exit_stage_stalled ||
+            i == (settings_.max_iters_ - 1)) {
 
             if (ExitCode != ConvergenceFlags::CONVERGED && settings_.return_best_) {
                 XSL = BestXSL;

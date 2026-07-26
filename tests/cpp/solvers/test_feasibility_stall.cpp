@@ -152,6 +152,29 @@ TEST_F(SolverTest, FeasStallDispatchUnderFilterAcceptanceHandshakes) {
     EXPECT_NE(r.converge_flag_, ts::PSIOPT::ConvergenceFlags::CONVERGED); // genuinely infeasible
 }
 
+// Once the per-phase restoration entry budget is spent, a still-stalled
+// feasibility stage has nothing left to consult, so it must stop rather than
+// burn the remaining iteration budget. The stage ends early with the honest
+// verdict; in a multi-phase sequence the next phase resumes from this point.
+//
+// Uses the nested l1 mode because its episodes run to completion and hand the
+// stage back, which is what lets the stage spend both entries and then stall a
+// third time with the budget gone. (Under proximal_switch this same problem
+// never gets that far: the first episode is entered and, on a zero-objective
+// stage, never satisfies its own exit test, so the budget is never exhausted.)
+TEST_F(SolverTest, FeasStallStageStopsBurningAfterBudgetExhaustion) {
+    auto prob = feas_stall_build_nlp(/*inconsistent=*/true);
+    prob->optimizer_->settings().restoration_mode_ = ts::RestorationModes::l1_nested;
+    prob->optimizer_->set_max_iters(400);
+    prob->solve();
+    const auto &r = prob->optimizer_->result();
+    EXPECT_EQ(r.last_feas_rest_entries_, 2); // default max_feas_rest_ fully used
+    EXPECT_NE(r.converge_flag_, ts::PSIOPT::ConvergenceFlags::CONVERGED);
+    // Two stall windows plus two short restoration episodes plus slack is well
+    // under this bound; the pre-change behaviour ran out the full 400.
+    EXPECT_LT(r.iter_num_, 200);
+}
+
 TEST_F(SolverTest, FeasStallStageDispatchesNestedRestoration) {
     auto prob = feas_stall_build_nlp(/*inconsistent=*/true);
     prob->optimizer_->settings().restoration_mode_ = ts::RestorationModes::l1_nested;
