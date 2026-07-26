@@ -187,6 +187,12 @@ class PSIOPT:
         """
 
     @property
+    def last_eval_exception(self) -> str:
+        """
+        Message of the most recent trial-point evaluation exception absorbed during the most recent solve call, or the empty string when every evaluation succeeded. A populated value means the line search rejected one or more un-evaluable trial steps (for example an iterate that stepped outside an interpolation table's domain) and the solve recovered; a solve that could not recover raises RuntimeError instead.
+        """
+
+    @property
     def obj_scale(self) -> float: ...
 
     @obj_scale.setter
