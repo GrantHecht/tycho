@@ -189,7 +189,7 @@ class PSIOPT:
     @property
     def last_eval_exception(self) -> str:
         """
-        Message of the most recent trial-point evaluation exception absorbed during the most recent solve call, or the empty string when every evaluation succeeded. A populated value means the acceptance machinery rejected one or more un-evaluable trial steps (for example an iterate that stepped outside an interpolation table's domain) and the solve recovered; a solve that could not recover raises RuntimeError instead. In a multi-phase solve, an earlier phase's message persists on this property even when a later phase aborts, since the diagnostic is written at each phase's close.
+        Message of the most recent trial-point evaluation exception absorbed during the most recent solve call, or the empty string when every evaluation succeeded. A populated value means the acceptance machinery rejected one or more un-evaluable trial steps (for example an iterate that stepped outside an interpolation table's domain) and the solve continued -- to full recovery, to a graceful ACCEPTABLE-level exit at an already-acceptable iterate, or into feasibility restoration; a solve with none of those paths available raises RuntimeError instead. In a multi-phase solve, an earlier phase's message persists on this property even when a later phase aborts, since the diagnostic is written at each phase's close.
         """
 
     @property

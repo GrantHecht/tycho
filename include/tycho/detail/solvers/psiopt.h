@@ -584,9 +584,11 @@ class PSIOPT {
         // Message of the most recent trial-evaluation exception absorbed by
         // the acceptance machinery during the most recent solve call (all
         // phases). Empty when every evaluation succeeded. A populated value
-        // with a successful flag means the solver rejected un-evaluable trial
-        // steps and recovered; when no recovery path existed, the solve threw
-        // instead and this field is unreachable.
+        // means the solver rejected un-evaluable trial steps and continued —
+        // to full recovery, to a graceful ACCEPTABLE-level exit at an
+        // already-acceptable iterate, or into feasibility restoration. When
+        // none of those paths existed, the solve threw the latched message
+        // wrapped in solver context instead.
         std::string last_eval_exception_;
 
         // T6 (dead-status fix): the last non-Success status observed from

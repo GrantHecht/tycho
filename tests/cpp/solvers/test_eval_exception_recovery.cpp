@@ -83,8 +83,8 @@ std::unique_ptr<OptimizationProblem> build_eval_except_nlp(int throw_budget) {
 } // namespace
 
 // One rung throws; the backtracked rung evaluates cleanly (budget exhausted)
-// and the solve completes to the constrained optimum. Today this test dies
-// with the raw evaluation exception.
+// and the solve completes to the constrained optimum. Before the rejected-rung
+// handling, this died with the raw evaluation exception.
 TEST(EvalExceptionRecovery, ThrowingRungIsRejectedNotFatal) {
     auto prob = build_eval_except_nlp(1);
     auto flag = prob->optimize();

@@ -2608,14 +2608,17 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                         // restoration, not to the watchdog relaxation it superseded.
                         resolved_depth = kRecoveryDepthRestoration;
                     } else {
+                        // alpha was reduced once more after the last rejected rung, so
+                        // the smallest fraction actually evaluated is alpha * alpha_red_.
                         throw std::runtime_error(fmt::format(
                             "PSIOPT: line search failed at iteration {} because the NLP could "
                             "not be evaluated at the trial steps ({} evaluation failure(s) this "
-                            "iteration; final trial step fraction {:.3e}). Enable feasibility "
-                            "restoration (restoration_mode) to recover from evaluation "
-                            "failures. Last evaluation error: {}",
-                            Citer.iter, this->eval_error_log_.count_ - eval_errs_before, alpha,
-                            this->eval_error_log_.last_message_));
+                            "iteration; smallest trial step fraction attempted {:.3e}). "
+                            "Feasibility restoration (restoration_mode) was unavailable to "
+                            "recover: not configured, entry refused, or already active. Last "
+                            "evaluation error: {}",
+                            Citer.iter, this->eval_error_log_.count_ - eval_errs_before,
+                            alpha * settings_.alpha_red_, this->eval_error_log_.last_message_));
                     }
                 }
                 break;
