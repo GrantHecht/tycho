@@ -470,6 +470,7 @@ def _parse_args():
     parser.add_argument(
         "--config",
         nargs="*",
+        action="extend",
         default=[],
         metavar="KEY=VALUE",
         help="KEY=VALUE pairs: setattr onto the optimizer in the child "
