@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -236,6 +237,24 @@ def test_aggregate_cell_summary_exposes_both_repeats(tmp_path):
     assert [r["status"] for r in summary["detail"]["2"]] == ["converged", "failed"]
 
 
+def test_cell_summary_call_shape_defaults_to_module_for_legacy_rows(tmp_path):
+    # Pre-existing campaign scorecards (recorded before the call_shape column
+    # existed) have rows with no "call_shape" key at all -- _write_cell_jsonl
+    # reproduces that shape exactly (it never sets the key) -- so aggregation
+    # must default to "module" rather than raising or leaving it missing.
+    cfg = {"acceptance_strategy": 1}
+    _write_cell_jsonl(tmp_path, cfg, 1, ["converged", "converged"], iters=[3, 4])
+
+    summary = rc._cell_summary(tmp_path, cfg, expected_problems=2)
+    assert summary["call_shape"] == "module"
+
+
+def test_context_summary_call_shape_defaults_to_module_for_legacy_rows():
+    rows = [{"problem": "p0", "status": "converged", "iterations": 1}]
+    summary = rc._context_summary("baseline", rows)
+    assert summary["call_shape"] == "module"
+
+
 def test_aggregate_cell_summary_single_repeat_blank_statuses_r2(tmp_path):
     cfg = {"acceptance_strategy": 1}
     _write_cell_jsonl(tmp_path, cfg, 1, ["converged", "converged"], iters=[3, 4])
@@ -305,6 +324,39 @@ def test_cmd_aggregate_missing_context_file_raises_clean_systemexit(tmp_path):
     )
     with pytest.raises(SystemExit, match="baseline.*does-not-exist"):
         rc.cmd_aggregate(args)
+
+
+def test_cmd_sweep_includes_call_shape_flag(tmp_path, monkeypatch):
+    cfg = {
+        "acceptance_strategy": 1,
+        "barrier_governor": 0,
+        "restoration_mode": 0,
+        "inertia_mode": 0,
+        "max_soc": 0,
+        "recovery": 0,
+    }
+    monkeypatch.setattr(rc, "is_cell_valid", lambda _config: True)
+
+    captured = {}
+
+    def _fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return types.SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(rc.subprocess, "run", _fake_run)
+
+    args = argparse.Namespace(
+        store=str(tmp_path),
+        repeats=1,
+        dry_run=False,
+        only_cell=",".join(f"{k}={v}" for k, v in cfg.items()),
+        call_shape="optimize",
+    )
+    rc.cmd_sweep(args)
+
+    cmd = captured["cmd"]
+    assert "--call-shape" in cmd
+    assert cmd[cmd.index("--call-shape") + 1] == "optimize"
 
 
 def test_is_cell_valid_returns_false_on_malformed_config():

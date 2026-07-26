@@ -402,6 +402,8 @@ def cmd_sweep(args) -> None:
                 sys.executable,
                 str(RUN_CORPUS),
                 "--cbwr",
+                "--call-shape",
+                args.call_shape,
                 "--out",
                 str(cellfile),
                 "--config",
@@ -545,6 +547,7 @@ _CSV_FIELDS = [
     "repeat_stable",
     "statuses",
     "statuses_r2",
+    "call_shape",
 ]
 
 
@@ -562,6 +565,15 @@ def _statuses_string(rows: list) -> str:
         f"{r['problem']}:{r['status']}"
         for r in sorted(rows, key=lambda r: r["problem"])
     )
+
+
+def _row_call_shape(rows: list) -> str:
+    """Every row in a sweep carries the same call_shape; take it from the
+    first row, defaulting to "module" for pre-existing scorecards recorded
+    before the call_shape column existed."""
+    if not rows:
+        return "module"
+    return rows[0].get("call_shape", "module")
 
 
 def _cell_summary(store: Path, cell: dict, expected_problems: int):
@@ -607,6 +619,7 @@ def _cell_summary(store: Path, cell: dict, expected_problems: int):
         "repeat_stable": repeat_stable,
         "statuses": _statuses_string(primary_rows),
         "statuses_r2": _statuses_string(repeats[2]) if 2 in repeats else "",
+        "call_shape": _row_call_shape(primary_rows),
         "detail": {str(r): rows for r, rows in sorted(repeats.items())},
     }
 
@@ -630,6 +643,7 @@ def _context_summary(name: str, rows: list) -> dict:
         "repeat_stable": None,
         "statuses": _statuses_string(rows),
         "statuses_r2": "",
+        "call_shape": _row_call_shape(rows),
         "detail": rows,
     }
 
@@ -728,6 +742,15 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         metavar="k=v,k=v,...",
         help="Run exactly one cell (comma-separated axis=value pairs covering all six "
         "axes) instead of the full 192-cell product.",
+    )
+    p_sweep.add_argument(
+        "--call-shape",
+        choices=("module", "optimize"),
+        default="module",
+        help="Passed through to run_corpus.py's --call-shape (default: "
+        "%(default)s). 'optimize' runs a single optimize() call per problem "
+        "regardless of its declared SOLVE_MODE, for cross-backend "
+        "comparability with the ipopt backend's single-solve mapping.",
     )
     p_sweep.set_defaults(func=cmd_sweep)
 

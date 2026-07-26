@@ -23,6 +23,11 @@ Options:
                            a Tycho build configured with -DENABLE_IPOPT=ON
                            (checked up front via tychopy.solvers.ipopt_available()
                            before any child is spawned).
+    --call-shape {module,optimize}  How to invoke each problem (default:
+                           module, today's behavior). 'optimize' always runs
+                           a single optimize() call, for cross-backend
+                           comparability with the ipopt backend's
+                           single-solve mapping.
     --config KEY=VALUE...  Zero or more KEY=VALUE pairs. On the psiopt
                            backend these are applied to the PSIOPT optimizer
                            via setattr() inside the child subprocess,
@@ -162,7 +167,9 @@ def _parse_config_args(pairs, verbatim: bool = False) -> dict:
 # never needs a specific line to be intact).
 
 
-def _run_child(module_name: str, config: dict, result_file: str, backend: str) -> int:
+def _run_child(
+    module_name: str, config: dict, result_file: str, backend: str, call_shape: str
+) -> int:
     registry = _import_registry()
     if module_name not in registry.ALL_PROBLEMS:
         print(f"Unknown corpus problem module: {module_name!r}", file=sys.stderr)
@@ -191,7 +198,9 @@ def _run_child(module_name: str, config: dict, result_file: str, backend: str) -
     # _parse_config_args's verbatim mode, selected by the parent when
     # --backend ipopt); the psiopt-only `configure` closure above is simply
     # unused on that path (driver.run never calls it for backend="ipopt").
-    result = driver.run(mod, configure, backend=backend, backend_options=config)
+    result = driver.run(
+        mod, configure, backend=backend, backend_options=config, call_shape=call_shape
+    )
     with open(result_file, "w", encoding="utf-8") as f:
         json.dump(result, f)
     return 0
@@ -203,7 +212,13 @@ def _run_child(module_name: str, config: dict, result_file: str, backend: str) -
 
 
 def _score_one(
-    name: str, tier: str, timeout: int, config: dict, env: dict, backend: str
+    name: str,
+    tier: str,
+    timeout: int,
+    config: dict,
+    env: dict,
+    backend: str,
+    call_shape: str,
 ) -> dict:
     fd, result_path = tempfile.mkstemp(prefix="corpus_result_", suffix=".json")
     os.close(fd)
@@ -220,6 +235,8 @@ def _score_one(
             result_path,
             "--_backend",
             backend,
+            "--_call-shape",
+            call_shape,
         ]
         t0 = time.monotonic()
         try:
@@ -246,6 +263,7 @@ def _score_one(
                 "returncode": None,
                 "notes": f"killed after {timeout}s timeout",
                 "backend": backend,
+                "call_shape": call_shape,
             }
 
         wall_s = time.monotonic() - t0
@@ -280,6 +298,7 @@ def _score_one(
                 "returncode": proc.returncode,
                 "notes": note,
                 "backend": backend,
+                "call_shape": call_shape,
             }
 
         try:
@@ -296,6 +315,7 @@ def _score_one(
                 "returncode": proc.returncode,
                 "notes": f"malformed result file: {exc}",
                 "backend": backend,
+                "call_shape": call_shape,
             }
     finally:
         if os.path.exists(result_path):
@@ -332,6 +352,7 @@ def _score_one(
         "returncode": proc.returncode,
         "notes": notes,
         "backend": backend,
+        "call_shape": call_shape,
     }
 
 
@@ -468,6 +489,15 @@ def _parse_args():
         "-DENABLE_IPOPT=ON.",
     )
     parser.add_argument(
+        "--call-shape",
+        choices=("module", "optimize"),
+        default="module",
+        help="How to invoke each problem: 'module' runs the module's declared "
+        "SOLVE_MODE (default, today's behavior); 'optimize' runs a single "
+        "optimize() call regardless, for cross-backend comparability with "
+        "the ipopt backend's single-solve mapping.",
+    )
+    parser.add_argument(
         "--config",
         nargs="*",
         action="extend",
@@ -512,6 +542,7 @@ def _parse_args():
     parser.add_argument("--_config", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--_result-file", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--_backend", default="psiopt", help=argparse.SUPPRESS)
+    parser.add_argument("--_call-shape", default="module", help=argparse.SUPPRESS)
     return parser.parse_args()
 
 
@@ -532,7 +563,15 @@ def main() -> None:
 
     if args._child:
         config = json.loads(args._config) if args._config else {}
-        sys.exit(_run_child(args._child, config, args._result_file, args._backend))
+        sys.exit(
+            _run_child(
+                args._child,
+                config,
+                args._result_file,
+                args._backend,
+                args._call_shape,
+            )
+        )
 
     if args.diff is not None:
         _print_diff(args.diff[0], args.diff[1])
@@ -562,7 +601,11 @@ def main() -> None:
         tier = mod.TIER
         timeout = mod.TIMEOUT
         for _ in range(args.repeat):
-            records.append(_score_one(name, tier, timeout, config, env, args.backend))
+            records.append(
+                _score_one(
+                    name, tier, timeout, config, env, args.backend, args.call_shape
+                )
+            )
 
     out_path = Path(args.out)
     with out_path.open("w", encoding="utf-8") as f:
