@@ -2562,6 +2562,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                         this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
                         alpha = 0.0;
                         Citer.accepted_ = false;
+                        // Deliberately overwrites resolved_depth on a watchdog-resolved
+                        // path too (kRecoveryDepthWatchdog -> kRecoveryDepthRestoration),
+                        // so the recovery-depth histogram attributes this iteration to
+                        // restoration, not to the watchdog relaxation it superseded.
                         resolved_depth = kRecoveryDepthRestoration;
                     } else {
                         throw std::runtime_error(fmt::format(

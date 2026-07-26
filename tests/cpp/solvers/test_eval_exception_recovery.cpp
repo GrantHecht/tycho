@@ -105,7 +105,10 @@ TEST(EvalExceptionRecovery, ThrowingRungIsRejectedNotFatal) {
 // restoration strategy configured the solve aborts with solver context instead
 // of committing it. The property under test is the log wiring on the LANG
 // rung; the abort is the exhaustion policy asserted in
-// ExhaustionWithoutRestorationRethrowsWithContext.
+// ExhaustionWithoutRestorationRethrowsWithContext. This test's residual
+// distinct property, once the abort-message assertions below are set aside as
+// overlapping that other test by design, is the ls_lang catch-site wiring
+// itself (eval_error_log().count_ >= 1 on the LANG rung).
 TEST(EvalExceptionRecovery, ThrowingRungIsRecordedByLangMode) {
     auto prob = build_eval_except_nlp(1);
     prob->optimizer_->settings().opt_ls_mode_ = PSIOPT::LineSearchModes::LANG;
@@ -167,9 +170,15 @@ TEST(EvalExceptionRecovery, CommittedPointFailureStaysFatal) {
         prob->optimize();
         FAIL() << "expected the committed-point evaluation exception to propagate";
     } catch (const std::runtime_error &e) {
-        EXPECT_NE(std::string(e.what()).find("trial point outside evaluation domain"),
-                 std::string::npos)
+        const std::string msg = e.what();
+        EXPECT_NE(msg.find("trial point outside evaluation domain"), std::string::npos)
             << "expected the raw fixture message to propagate unwrapped, got: " << e.what();
+        // Negative discriminator: the line-search exhaustion abort (see
+        // ExhaustionWithoutRestorationRethrowsWithContext) also embeds the
+        // fixture substring inside solver context. Its absence here is what
+        // proves this exception propagated UNWRAPPED rather than being
+        // caught, counted, and rethrown with context.
+        EXPECT_EQ(msg.find("PSIOPT: line search failed"), std::string::npos) << msg;
     }
 }
 
@@ -192,7 +201,7 @@ TEST(EvalExceptionRecovery, ExhaustionWithoutRestorationRethrowsWithContext) {
 // Same NLP, restoration configured, throw budget sized to exactly one ladder
 // exhaustion: the un-evaluable exhaustion dispatches feasibility restoration
 // instead of aborting, the domain heals, and the solve completes.
-TEST(EvalExceptionRecovery, ExhaustionDispatchesRestorationWhenConfigured) {
+TEST(EvalExceptionRecovery, RestorationEscalatesOnUnEvaluableSoftStep) {
     // Budget sized to exactly one ladder exhaustion plus its escalation: the
     // two default line-search rungs throw, the soft feasibility pre-stage
     // trial throws (escalating to the real restoration entry), and the domain
