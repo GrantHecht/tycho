@@ -81,10 +81,26 @@ converges to Ipopt's exact point, 2.4e-15 relative agreement). The
 globalization program scoped the optimize path; the feasibility path never
 gained any of it.
 
-**Refinement:** extend acceptance/recovery dispatch to the feasibility stage
-(a feasibility-norm acceptance test is well-defined without an objective; the
-candidate designs are in the deep-dive report). Likely the highest-value
-remaining robustness item — it affects every `solve()`/`solve_optimize` user.
+**Mechanism:** recovery dispatch fires only on a rejected trial
+(`src/solvers/psiopt.cpp:2470-2496`), and the feasibility stage forces
+`lsobjscale = 0.0` (`:2440`) so every fraction-to-boundary step is accepted —
+nothing is ever rejected, so nothing ever dispatches.
+
+**Candidate refinements (from the investigation):** (a) a stall detector on
+the feasibility norm during the feasibility stage that can request restoration
+directly, independent of the rejection gate; and/or (b) a feasibility-stage
+iteration budget far below `max_iters`, so a stalled stage cannot burn the
+full budget and hand the optimize stage a point worse than the user's guess.
+A feasibility-norm acceptance test is well-defined without an objective, so
+the full acceptance/recovery stack could also be extended to this stage.
+Likely the highest-value remaining robustness item — it affects every
+`solve()`/`solve_optimize` user.
+
+**Re-scoring consideration:** merit + ℓ1-nested is the only configuration
+family that solves zermelo under a matched `optimize()` call (from the raw
+wrong-basin guess, @40, 3/3 repeat-stable) — direct ℓ1-restoration value the
+`solve_optimize`-based sweep structurally could not see. Worth a matched-call
+column before the presets stage finalizes the `robust` contents.
 
 ## 5. Harness follow-ups (deep-dive finding)
 
