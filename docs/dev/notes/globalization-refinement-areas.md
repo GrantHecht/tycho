@@ -94,6 +94,45 @@ add a matched-call option before quoting cross-backend rows for
 non-`optimize` modules. (`run_corpus.py --config`'s repeated-flag handling was
 fixed on the campaign branch after the deep-dive hit it.)
 
+## 6. Smaller deferred items (consolidated from review notes and PR records)
+
+Solver/adapter (from the Ipopt-backend branch's final review; apply when the
+respective files are next touched, or batch into a maintenance pass):
+- Jet × ipopt-backend concurrency is dispatchable but unconsidered (Ipopt is
+  not reliably re-entrant): add a guard or an explicit unsupported note in
+  `jet_run`.
+- `solve()` under the ipopt backend runs the objective-bearing NLP (no
+  feasibility-only analog): one sentence in the `nlp_solver` docstring at the
+  next stubs regeneration.
+- Adapter callbacks latch `std::exception` only; add `catch (...)` for
+  contract completeness.
+- `prob.ipopt_options` returns a copy (in-place item assignment silently
+  no-ops): docstring note at next binding touch.
+- `run_nlp_solver` branches `== ipopt` while the call-impls branch
+  `== psiopt`: unify on `!= psiopt` whenever a third backend enumerator
+  appears (hazard is zero until then).
+- RPATH ordering (conda toolchain's rpath precedes the Ipopt lib dir, so a
+  same-soname conda package shadows a custom Ipopt): needs a principled CMake
+  answer if the backend is ever promoted user-facing; the dev-grade answer
+  (no conda ipopt installed) is in effect.
+- `capture_example_iters.py` has no per-config surface — measuring a
+  non-default configuration "as default" requires the temporary-flip rebuild
+  procedure used by the campaign (recorded in the campaign note §6).
+
+Regularization-mode test follow-ups (from its review): direct tests asserting
+the nested-restoration dual-shift suppression and the singular-base ladder
+upgrade; the rank-deficient CONVERGED pin is untested on Apple Accelerate.
+Also recorded there: a persistently singular base spends 1 + max_refac
+factorizations per iteration with no constraint-side escalation.
+
+Corpus/docs hygiene: internal planning labels persist in files predating the
+no-labels rule (`tests/corpus/registry.py` section comments,
+`tests/corpus/README.md` header, `scripts/run_corpus.py` instrument comment,
+`test_corpus_smoke.py` docstring) — one dedicated cleanup commit; the
+brach_illscaled module needs its unboundedness docstring note (area 3); the
+docs-site linkcheck false positives (bot-blocked hosts) still want
+`linkcheck_ignore` patterns in `docs/source/conf.py`.
+
 ## Deep-dive resolution record
 
 The addendum's original two "Ipopt-only successes" both dissolved on
