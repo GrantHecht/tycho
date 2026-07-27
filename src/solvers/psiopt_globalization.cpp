@@ -377,7 +377,7 @@ double ClassicMeritAcceptance::ls_l1(double obj_scale, double mu, double prim_ob
 // convergence tolerance (econ_tol_/icon_tol_) -- a coarser filter than the
 // tolerance itself, so residuals within one order of magnitude of converged
 // are excluded from the L1 penalty term.
-inline constexpr double kLsAuglangTolFilterMultiplier = 10.0;
+constexpr double kLsAuglangTolFilterMultiplier = 10.0;
 
 double ClassicMeritAcceptance::ls_auglang(double obj_scale, double mu, double prim_obj,
                                           double barr_obj, KKTVector &xsl, KKTVector &dxsl,
@@ -569,7 +569,7 @@ bool ModernMeritAcceptance::is_infeasibility_sufficiently_reduced(
     // the first check — is the reference solver's own behavior, retained.
     (void)reference;
     const double tracker = in_feasibility_phase_ ? stashed_smallest_known_infeasibility_
-                                                  : smallest_known_infeasibility_;
+                                                 : smallest_known_infeasibility_;
     return trial.infeasibility <= kSufficientInfeasibilityDecreaseRatio * tracker;
 }
 
