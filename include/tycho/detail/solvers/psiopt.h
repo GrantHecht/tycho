@@ -1213,6 +1213,15 @@ class PSIOPT {
     void fill_iter_info(KKTVector &xsl, KKTVector &rhs, double pobj, double bobj, double mu,
                         IterateInfo &iter) const;
     ConvergenceFlags converge_check(std::vector<IterateInfo> &iters);
+
+    // Best-iterate bookkeeping for the return_best_ path (off by default). Scores
+    // `iter` under best_criteria_ and, when it ties or beats the incumbent (or is
+    // the phase's first iterate), snapshots XSL/RHS into best_xsl_scratch_/
+    // best_rhs_scratch_ and records the criterion value and iteration index. The
+    // return_best_ / restoration-active guard stays at the call sites, which
+    // differ in why they are reached; only the scoring and snapshot live here.
+    void track_best_iterate(const IterateInfo &iter, int i, const VectorXd &XSL,
+                            const VectorXd &RHS, double &BestCriteriaVal, int &BestIter);
     // max_primal_dual_step was extracted verbatim into BacktrackingLineSearch;
     // alg_impl now drives it through mechanism_ (fused into
     // compute_step on the main path, and via the public method at the PROBE

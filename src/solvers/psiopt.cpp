@@ -1762,6 +1762,37 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
     return settings_.max_refac_;
 }
 
+// Best-iterate scoring + snapshot for the return_best_ path. See the declaration
+// in psiopt.h; the return_best_ / restoration-active guard stays at each call
+// site.
+void tycho::solvers::PSIOPT::track_best_iterate(const IterateInfo &iter, int i,
+                                                const VectorXd &XSL, const VectorXd &RHS,
+                                                double &BestCriteriaVal, int &BestIter) {
+    double critval;
+    switch (settings_.best_criteria_) {
+    case BestCriteriaModes::ECONS:
+        critval = iter.econ_inf_;
+        break;
+    case BestCriteriaModes::ICONS:
+        critval = iter.icon_inf_;
+        break;
+    case BestCriteriaModes::KKT:
+        critval = iter.kkt_inf_;
+        break;
+    case BestCriteriaModes::OBJ:
+        critval = iter.prim_obj_;
+        break;
+    default:
+        throw std::invalid_argument("Unknown BestCriteriaModes");
+    }
+    if (critval <= BestCriteriaVal || i == 0) {
+        BestCriteriaVal = critval;
+        this->best_xsl_scratch_ = XSL;
+        this->best_rhs_scratch_ = RHS;
+        BestIter = i;
+    }
+}
+
 Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, BarrierModes barmode,
                                                  LineSearchModes lsmode, double obj_scale,
                                                  double MuI, Eigen::Ref<Eigen::VectorXd> xsl) {
@@ -1946,6 +1977,18 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // must never be reported as a solve. Intercept before the early-exit
         // block below.
         if (this->restoration_ && this->restoration_->is_active()) {
+            // Set by whichever arm below finds the restoration subproblem
+            // converged/stalled at a still-infeasible point. Both arms then share
+            // the single teardown-and-report block after the if/else: the arms
+            // differ only in how θ is measured (nested reads the seam's saved raw
+            // residuals; proximal reads the live KKT constraint block) and in
+            // whether the stashed outer μ has to be restored — which the shared
+            // block reads straight off is_nested(), since exit_restoration() has
+            // not run yet at that point.
+            bool locally_infeasible = false;
+            double locally_infeasible_theta = 0.0;
+            double locally_infeasible_threshold = 0.0;
+
             if (this->restoration_->is_nested()) {
                 // Nested l1 restoration exit tests (Ipopt RestoConvCheck structure):
                 // first-iteration guard, then the per-iteration κ_resto ratchet, then
@@ -1992,41 +2035,12 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                         QPtimer.stop();
                         continue;
                     }
-                    // Locally infeasible: tear down (restore μ, reset governor) and
+                    // Locally infeasible: hand off to the shared teardown below
+                    // (which restores μ and resets the governor for this arm) and
                     // stop NOT-converged. No multiplier re-entry — the phase failed.
-                    {
-                        ProgressMeasures exit_measures = this->build_restoration_exit_measures(
-                            obj_scale, theta_orig, v_xsl.primals(), barr_obj);
-                        restoration_was_active = true;
-                        this->restoration_->note_iteration();
-                        mu = this->stashed_mu_;
-                        this->governor_->reset();
-                        this->restoration_->exit_restoration();
-                        this->acceptance_->notify_switch_to_optimality(exit_measures);
-                        this->recovery_->reset();
-                    }
-                    iters.back().mu_ = mu;
-                    QPtimer.stop();
-                    ExitCode = ConvergenceFlags::NOTCONVERGED;
-                    if (settings_.return_best_) {
-                        XSL = BestXSL;
-                        RHS = BestRHS;
-                    }
-                    restoration_true_obj = 0.0;
-                    this->nlp_->eval_obj(obj_scale, v_xsl.primals(), restoration_true_obj);
-                    this->result_.converge_flag_ = ExitCode;
-                    if (settings_.print_level_ == 0) {
-                        Printtimer.start();
-                        this->print_last_iterate(iters);
-                        Printtimer.stop();
-                    }
-                    if (settings_.print_level_ < 3)
-                        fmt::print(fmt::fg(fmt::color::yellow),
-                                   "Feasibility restoration converged to a locally infeasible "
-                                   "point (infeasibility {:.3e} > {:.3e}); stopping "
-                                   "(not converged).\n",
-                                   theta_orig, resto_failure_threshold);
-                    break;
+                    locally_infeasible = true;
+                    locally_infeasible_theta = theta_orig;
+                    locally_infeasible_threshold = resto_failure_threshold;
                 } else if (PreExitCode == ConvergenceFlags::NOTCONVERGED) {
                     // κ_resto ratchet (per-iteration, vs the previous iteration's
                     // value) AND the acceptance-strategy exit test (vs the frozen
@@ -2093,52 +2107,13 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                     }
                     // Proximal subproblem converged/stalled at a still-infeasible
                     // point: the problem is locally infeasible (Ipopt's
-                    // restoration-convergence failure classification). Tear down
-                    // restoration BEFORE returning so the phase-boundary reset() sees
-                    // optimality mode, then stop with the NOT-converged verdict.
-                    {
-                        // The notify measures record the point restoration exited
-                        // (the live iterate) — the filter augment describes the
-                        // exit point itself, independent of the return_best_
-                        // reporting substitution below.
-                        ProgressMeasures exit_measures = this->build_restoration_exit_measures(
-                            obj_scale, cur.infeasibility, v_xsl.primals(), barr_obj);
-                        restoration_was_active = true;
-                        // Count this exit iteration in the in-mode total (see the
-                        // near-feasible exit above).
-                        this->restoration_->note_iteration();
-                        this->restoration_->exit_restoration();
-                        this->acceptance_->notify_switch_to_optimality(exit_measures);
-                        // Reset the recovery chain across the mode switch (see the
-                        // kSwitchToFeasibility entry rationale). Once per transition.
-                        this->recovery_->reset();
-                    }
-                    iters.back().mu_ = mu;
-                    QPtimer.stop();
-                    ExitCode = ConvergenceFlags::NOTCONVERGED;
-                    if (settings_.return_best_) {
-                        XSL = BestXSL;
-                        RHS = BestRHS;
-                    }
-                    // obj_val_ must describe the RETURNED primals: evaluate after
-                    // the return_best_ substitution above (which may have replaced
-                    // XSL), unlike the notify measures, which record the exit
-                    // point. With return_best_ off the two evaluations coincide.
-                    restoration_true_obj = 0.0;
-                    this->nlp_->eval_obj(obj_scale, v_xsl.primals(), restoration_true_obj);
-                    this->result_.converge_flag_ = ExitCode;
-                    if (settings_.print_level_ == 0) {
-                        Printtimer.start();
-                        this->print_last_iterate(iters);
-                        Printtimer.stop();
-                    }
-                    if (settings_.print_level_ < 3)
-                        fmt::print(fmt::fg(fmt::color::yellow),
-                                   "Feasibility restoration converged to a locally infeasible "
-                                   "point (infeasibility {:.3e} > {:.3e}); stopping "
-                                   "(not converged).\n",
-                                   cur.infeasibility, resto_failure_threshold);
-                    break;
+                    // restoration-convergence failure classification). Hand off to
+                    // the shared teardown below, which tears restoration down BEFORE
+                    // returning so the phase-boundary reset() sees optimality mode,
+                    // then stops with the NOT-converged verdict.
+                    locally_infeasible = true;
+                    locally_infeasible_theta = cur.infeasibility;
+                    locally_infeasible_threshold = resto_failure_threshold;
                 }
 
                 if (PreExitCode == ConvergenceFlags::NOTCONVERGED) {
@@ -2167,6 +2142,63 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 }
                 // DIVERGING while active falls through to the early-exit block below;
                 // the post-loop teardown clears restoration before alg_impl returns.
+            }
+
+            if (locally_infeasible) {
+                // The restoration subproblem converged/stalled at a still-infeasible
+                // point: the problem is locally infeasible (Ipopt's restoration-
+                // convergence failure classification). Tear restoration down BEFORE
+                // returning so the phase-boundary reset() sees optimality mode, then
+                // stop with the NOT-converged verdict. Shared by both modes; the
+                // nested arm additionally restores the stashed outer μ and resets
+                // the governor (the proximal arm never stashed one).
+                {
+                    // The notify measures record the point restoration exited (the
+                    // live iterate) — the filter augment describes the exit point
+                    // itself, independent of the return_best_ reporting substitution
+                    // below.
+                    ProgressMeasures exit_measures = this->build_restoration_exit_measures(
+                        obj_scale, locally_infeasible_theta, v_xsl.primals(), barr_obj);
+                    restoration_was_active = true;
+                    // Count this exit iteration in the in-mode total (see the
+                    // near-feasible exits above).
+                    this->restoration_->note_iteration();
+                    if (this->restoration_->is_nested()) {
+                        mu = this->stashed_mu_;
+                        this->governor_->reset();
+                    }
+                    this->restoration_->exit_restoration();
+                    this->acceptance_->notify_switch_to_optimality(exit_measures);
+                    // Reset the recovery chain across the mode switch (see the
+                    // kSwitchToFeasibility entry rationale). Once per transition.
+                    this->recovery_->reset();
+                }
+                iters.back().mu_ = mu;
+                QPtimer.stop();
+                ExitCode = ConvergenceFlags::NOTCONVERGED;
+                if (settings_.return_best_) {
+                    XSL = BestXSL;
+                    RHS = BestRHS;
+                }
+                // obj_val_ must describe the RETURNED primals: evaluate after the
+                // return_best_ substitution above (which may have replaced XSL),
+                // unlike the notify measures, which record the exit point. With
+                // return_best_ off the two evaluations coincide.
+                restoration_true_obj = 0.0;
+                this->nlp_->eval_obj(obj_scale, v_xsl.primals(), restoration_true_obj);
+                this->result_.converge_flag_ = ExitCode;
+                if (settings_.print_level_ == 0) {
+                    Printtimer.start();
+                    this->print_last_iterate(iters);
+                    Printtimer.stop();
+                }
+                if (settings_.print_level_ < 3)
+                    fmt::print(fmt::fg(fmt::color::yellow),
+                               "Feasibility restoration converged to a locally infeasible "
+                               "point (infeasibility {:.3e} > {:.3e}); stopping "
+                               "(not converged).\n",
+                               locally_infeasible_theta, locally_infeasible_threshold);
+                break;
             }
         }
 
@@ -2201,31 +2233,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             // report a mixed-scale winner. Only DIVERGING-while-active reaches
             // this early-exit block (CONVERGED/ACCEPTABLE are intercepted by the
             // restoration handling above).
-            if (settings_.return_best_ && !(this->restoration_ && this->restoration_->is_active())) {
-                double critval;
-                switch (settings_.best_criteria_) {
-                case BestCriteriaModes::ECONS:
-                    critval = iters.back().econ_inf_;
-                    break;
-                case BestCriteriaModes::ICONS:
-                    critval = iters.back().icon_inf_;
-                    break;
-                case BestCriteriaModes::KKT:
-                    critval = iters.back().kkt_inf_;
-                    break;
-                case BestCriteriaModes::OBJ:
-                    critval = iters.back().prim_obj_;
-                    break;
-                default:
-                    throw std::invalid_argument("Unknown BestCriteriaModes");
-                }
-                if (critval <= BestCriteriaVal || i == 0) {
-                    BestCriteriaVal = critval;
-                    BestXSL = XSL;
-                    BestRHS = RHS;
-                    BestIter = i;
-                }
-            }
+            if (settings_.return_best_ && !(this->restoration_ && this->restoration_->is_active()))
+                this->track_best_iterate(iters.back(), i, XSL, RHS, BestCriteriaVal, BestIter);
 
             if (this->late_callback_enabled_) {
                 CBtimer.start();
@@ -2852,31 +2861,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // prim_obj/kkt_inf are proximal-scale and must not compete with
         // true-objective iterates for "best" — otherwise return_best_ could
         // report a mixed-scale winner.
-        if (settings_.return_best_ && !(this->restoration_ && this->restoration_->is_active())) {
-            double critval;
-            switch (settings_.best_criteria_) {
-            case BestCriteriaModes::ECONS:
-                critval = iters.back().econ_inf_;
-                break;
-            case BestCriteriaModes::ICONS:
-                critval = iters.back().icon_inf_;
-                break;
-            case BestCriteriaModes::KKT:
-                critval = iters.back().kkt_inf_;
-                break;
-            case BestCriteriaModes::OBJ:
-                critval = iters.back().prim_obj_;
-                break;
-            default:
-                throw std::invalid_argument("Unknown BestCriteriaModes");
-            }
-            if (critval <= BestCriteriaVal || i == 0) {
-                BestCriteriaVal = critval;
-                BestXSL = XSL;
-                BestRHS = RHS;
-                BestIter = i;
-            }
-        }
+        if (settings_.return_best_ && !(this->restoration_ && this->restoration_->is_active()))
+            this->track_best_iterate(iters.back(), i, XSL, RHS, BestCriteriaVal, BestIter);
 
         if (this->late_callback_enabled_) {
             CBtimer.start();
