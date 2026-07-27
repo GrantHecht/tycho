@@ -2,82 +2,86 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Rev 2 (2026-07-27):** re-anchored to the merged tree (main through #114 `e2314a3e`);
+degeneracy latch added to Task 1; Task 2 redesigned to the loop-tail exit-flag idiom
+introduced by #109/#110. All line anchors below verified on that tree; premises
+(classic stalls flag=2/500, proximal diverges flag=3/4) probe-re-verified 2026-07-27.
+
 **Goal:** Make PSIOPT's classic inertia-correction ladder enforce the full IPOPT
 condition — inertia exactly `(kkt_dim − m, m, 0)` — engaging the existing #103 dual
-regularization on demand for singular factorizations, and abort the phase as
+regularization on demand (with an IPOPT-style degeneracy latch), and abort the phase as
 `SINGULAR_KKT` (after consulting the recovery chain) when correction exhausts.
 
 **Architecture:** All solver logic lives in `PSIOPT::factor_impl` and its one call site
-in `alg_impl` (src/solvers/psiopt.cpp). δ_c machinery (`perturb_kkt_c_diags`,
-`dual_regularization(mu)`) is reused verbatim from PR #103. Exhaustion is signaled by a
-new `bool &exhausted` out-param and routed by forcing the line-search verdict to
-rejected so the existing `recovery_->on_step_rejected` chain gets its say; an
-unresolved rejection aborts with a new `ConvergenceFlags::SINGULAR_KKT`.
+in `alg_impl` (src/solvers/psiopt.cpp). δ_c machinery is reused verbatim from #103.
+Exhaustion is signaled by a new `bool &exhausted` out-param, routed by forcing the
+line-search verdict to rejected (the recovery chain gets its say), with an unresolved
+rejection terminating via the loop-tail exit-flag idiom (`singular_abort`, mirroring
+`exit_at_acceptable`/`exit_stage_stalled`) as a new `ConvergenceFlags::SINGULAR_KKT`.
 
-**Tech Stack:** C++20, Eigen, gtest (leaf tests), nanobind (one enum value), the
-standalone-probe pipeline from the PR #88 investigation for fast red/green.
+**Tech Stack:** C++20, Eigen, gtest (incl. the existing PSIOPT friend-test pattern),
+nanobind (one enum value), the standalone-probe pipeline for fast red/green.
 
-**Spec:** `docs/dev/plans/2026-07-25-psiopt-inertia-correction-design.md` (rev 2).
+**Spec:** `docs/dev/plans/2026-07-25-psiopt-inertia-correction-design.md` (rev 3).
 
 ## Global Constraints
 
-- Branch: `fix/psiopt-inertia-correction` (already cut from `main` at `c9e8ddd`). All
-  work on this Mac (16 GB Apple Silicon) — the defect only reproduces on
-  macOS/Accelerate.
+- Branch: `fix/psiopt-inertia-correction` (main merged through `e2314a3e`). All work on
+  this Mac (16 GB Apple Silicon) — the defect only reproduces on macOS/Accelerate.
 - `conda activate tycho` before any build or Python step.
 - Builds: `cd /Users/granthec/Source/tycho/build && ninja -j4 all`. **ONE build at a
-  time, ever. Never start a second ninja while one runs** — two concurrent builds OOM
-  this machine. Launch long builds from the controller session (not from inside a
-  subagent that will end its turn), in the background, and wait for completion.
+  time, ever** — two concurrent builds OOM this machine. Launch long builds from the
+  controller session in the background and wait for completion.
 - `psiopt.h`, `psiopt_fwd.h`, and `jet.h` are in the PCH include chain: touching them
   costs a full rebuild (~20-40 min at `-j4`). Task 1 and Task 2 each contain exactly
   one such rebuild; do not add extra ones.
-- **Probe before building:** each code change is first verified through the standalone
-  probe pipeline (recompile the 7 solver TUs + relink a probe, ~40 s total; commands
-  given in the tasks). Only after the probe is green do you pay for the real build.
-- **Never trust a `ctest` run against binaries older than your change** — stale test
-  binaries reproduce stale behavior. Rebuild first, always.
-- clangd diagnostics in this repo are unusable (it cannot parse `-fopenmp=libomp` and
-  reports false missing-symbol errors). Ignore editor diagnostics; trust the compiler.
-- Do not modify: the δ_w escalation constants/flow, `finalpert`/`Hpert0` warm-start
-  accounting, `cumpert` display accounting, the proximal display/decay block
-  (psiopt.cpp:2305-2319), anything in `notices/`.
-- Format before each commit: `cd build && ninja clang-format`. Commit prefixes:
-  `fix:` / `test:` / `docs:`.
-- This PR touches PSIOPT optimizer internals and adds a Python-visible enum value —
-  both flagged for explicit human review; the PR body must say so. Nothing merges
-  without Grant's review plus the Linux CI corpus run.
-- The expected macOS end state: `DivergencePersistence.MaratosCorpusConvergesAtDefaults`
-  green, upgraded rank-deficient classic test green, new exhaustion test green,
-  `GenuineDivergenceStillAborts` and all `InertiaRegularizationSolve` tests green,
-  full ctest red ONLY on `cpp_example_optimal_docking_builder` (pre-existing,
-  out of scope, documented in the spec).
+- **Probe before building:** every code change is first verified through the probe
+  pipeline (§Task 1 Step 5; ~1 min). Only after the probe is green do you pay for the
+  real build.
+- **Never trust a `ctest` run against binaries older than your change.** Rebuild first.
+- clangd diagnostics in this repo are unusable (`-fopenmp=libomp` parse failure).
+  Ignore editor diagnostics; trust the compiler.
+- Do not modify: δ_w escalation constants/flow, `finalpert`/`Hpert0` warm-start,
+  `cumpert` accounting, the proximal display/decay block, anything in `notices/`.
+- Format before each commit: `cd build && ninja clang-format`. Prefixes: `fix:` /
+  `test:` / `docs:`.
+- PSIOPT internals + Python-visible enum ⇒ the PR requires Grant's explicit review and
+  the Linux CI corpus run. Nothing merges from this plan.
+- Expected macOS end state: Maratos test green, `ClassicConvergesOnRankDeficientKkt`
+  green, latch test green, exhaustion test green, `GenuineDivergenceStillAborts` and
+  all `InertiaRegularizationSolve` tests green; full ctest red ONLY on
+  `cpp_example_optimal_docking_builder` (pre-existing, out of scope).
 
 ---
 
-### Task 1: Full IC condition + on-demand δ_c in `factor_impl`
+### Task 1: Full IC condition + on-demand δ_c + degeneracy latch in `factor_impl`
 
 **Files:**
-- Modify: `include/tycho/detail/solvers/psiopt.h:1005-1018` (doc comment + declaration)
-- Modify: `src/solvers/psiopt.cpp:1639-1760` (`factor_impl` body)
-- Modify: `src/solvers/psiopt.cpp:2279-2293` (call site: hoist `dual_shift`, thread
+- Modify: `src/solvers/psiopt.cpp:1062-1183` (`factor_impl` body)
+- Modify: `src/solvers/psiopt.cpp:1823-1838` (call site: hoist `dual_shift`, thread
   `exhausted`)
-- Test: `tests/cpp/solvers/test_inertia_regularization.cpp:130-166` (upgrade test (b))
+- Modify: `src/solvers/psiopt.cpp:1227` region (per-phase latch reset)
+- Modify: `include/tycho/detail/solvers/psiopt.h:987-989` (declaration + doc comment),
+  member block (add `dc_latched_`), :54-61 + :763-770 (friend-test declarations)
+- Test: `tests/cpp/solvers/test_inertia_regularization.cpp` (upgrade test at :165, new
+  latch test)
 
 **Interfaces:**
 - Consumes: `NonLinearProgram::perturb_kkt_c_diags(double, Eigen::SparseMatrix<double,
-  Eigen::RowMajor>&)`, `tycho::solvers::dual_regularization(double mu)` (both from
-  #103, already in tree).
+  Eigen::RowMajor>&)`, `tycho::solvers::dual_regularization(double mu)`,
+  `build_inertia_duplicated_equality_nlp()` (renamed by #113) and
+  `build_inertia_wellcond_nlp()`-equivalent (verify the well-conditioned builder's
+  current name in the test file before use).
 - Produces: `int factor_impl(bool docompute, bool ZFac, double ipurt, double incpurt0,
   double incpurt, double &finalpert, double &cumpert, double base_prox,
-  double dual_shift, bool &exhausted)` — Task 2 consumes the `kkt_exhausted` local
-  threaded at the call site.
+  double dual_shift, bool &exhausted)`; PSIOPT member `bool dc_latched_`; the
+  `kkt_exhausted` local Task 2 consumes.
 
-- [ ] **Step 1: Upgrade the classic rank-deficient test to unconditional**
+- [ ] **Step 1: Upgrade the classic rank-deficient test**
 
 In `tests/cpp/solvers/test_inertia_regularization.cpp`, replace the whole test
-`ClassicOnRankDeficientKktDocumented` (the `// (b) ...` comment block through its
-closing brace, lines ~146-166) with:
+`ClassicOnRankDeficientKktDocumented` (comment block through closing brace, at :165)
+with:
 
 ```cpp
 // (b) The SAME rank-deficient problem under classic. The full Ipopt IC condition
@@ -86,7 +90,7 @@ closing brace, lines ~146-166) with:
 // perturbation may mask the deficiency instead; either road must reach the
 // unique optimum.)
 TEST(InertiaRegularizationSolve, ClassicConvergesOnRankDeficientKkt) {
-    auto prob = build_duplicated_equality_nlp();
+    auto prob = build_inertia_duplicated_equality_nlp();
     prob->optimizer_->settings().inertia_mode_ = InertiaModes::classic;
     prob->optimizer_->set_max_iters(100);
     auto flag = prob->optimize();
@@ -100,14 +104,54 @@ TEST(InertiaRegularizationSolve, ClassicConvergesOnRankDeficientKkt) {
 }
 ```
 
-Do not run it yet (the binary is stale until Step 6's rebuild); the probe in Step 4 is
-the fast red/green.
+- [ ] **Step 2: Write the failing latch test (friend-based)**
 
-- [ ] **Step 2: Rewrite `factor_impl`'s predicates and δ_c engagement**
+**(a)** In `include/tycho/detail/solvers/psiopt.h`, add to the forward-declaration
+block (:54-61):
 
-In `src/solvers/psiopt.cpp`, inside `factor_impl` (starts :1639):
+```cpp
+class InertiaRegularizationSolve_ClassicDegeneracyLatchTracksSingularity_Test;
+```
 
-**(a)** Immediately after the existing `Inertia` lambda (:1642-1644), add:
+and to the friend block (:763-770):
+
+```cpp
+    friend class ::InertiaRegularizationSolve_ClassicDegeneracyLatchTracksSingularity_Test;
+```
+
+**(b)** Append to `test_inertia_regularization.cpp` (after the upgraded test; use the
+well-conditioned builder under its current #113 name — verify with
+`grep -n "wellcond" tests/cpp/solvers/test_inertia_regularization.cpp`):
+
+```cpp
+// The degeneracy latch (Ipopt hess/jac-degenerate adaptation, sticky per phase):
+// set once delta_c is engaged for a singular factorization, so later iterations
+// pre-apply it at the base attempt instead of re-discovering the singularity;
+// never set on problems whose factorizations stay full-rank.
+TEST(InertiaRegularizationSolve, ClassicDegeneracyLatchTracksSingularity) {
+    auto degen = build_inertia_duplicated_equality_nlp();
+    degen->optimizer_->settings().inertia_mode_ = InertiaModes::classic;
+    degen->optimizer_->set_max_iters(100);
+    (void)degen->optimize();
+    EXPECT_TRUE(degen->optimizer_->dc_latched_)
+        << "delta_c engaged on a rank-deficient problem must set the latch";
+
+    auto healthy = build_inertia_wellcond_nlp();
+    healthy->optimizer_->settings().inertia_mode_ = InertiaModes::classic;
+    (void)healthy->optimize();
+    EXPECT_FALSE(healthy->optimizer_->dc_latched_)
+        << "a full-rank problem must never engage delta_c or the latch";
+}
+```
+
+(Adjust the two builder names to the file's actual #113-renamed helpers; the test name
+must match the friend declaration exactly.)
+
+- [ ] **Step 3: Rewrite `factor_impl`**
+
+In `src/solvers/psiopt.cpp` (function at :1062):
+
+**(a)** After the `Inertia` lambda (:1064-1066), add:
 
 ```cpp
     // Full Ipopt inertia-correction condition (Algorithm IC, Wächter & Biegler
@@ -119,34 +163,35 @@ In `src/solvers/psiopt.cpp`, inside `factor_impl` (starts :1639):
     };
 ```
 
-**(b)** After the `Compute` lambda (:1679), add the function-scope δ_c machinery (the
-`PerturbC` lambda MOVES here from inside the proximal branch — delete it there):
+**(b)** After the `Compute` lambda (:1102), add (the `PerturbC` lambda MOVES here from
+the proximal branch :1120-1122 — delete it there):
 
 ```cpp
     auto PerturbC = [&](double p) {
         this->nlp_->perturb_kkt_c_diags(p, this->kkt_sol_.get_matrix());
     };
-    // On-demand dual regularization (delta_c). dual_shift is the available
-    // magnitude for this call (0.0 while a nested l1 restoration phase owns the
-    // constraint-row diagonals -- the caller suppresses it, see
-    // inertia_regularization.h's nested-suppression rationale). The proximal
-    // branch applies it up-front as part of the base matrix; the classic branch
-    // applies it here, at most once per call, the first time a factorization
-    // reports rank deficiency. It lands in the matrix and takes effect at the
-    // next Refactor(), so a singular base costs one ladder rung -- a small
-    // delta_w rides along with delta_c, matching Ipopt, which raises both on
-    // singularity.
+    // On-demand dual regularization (delta_c). dual_shift is the magnitude
+    // available to this call (0.0 while a nested l1 restoration phase owns the
+    // constraint-row diagonals -- the caller suppresses it). The proximal branch
+    // applies it up-front as part of the base matrix; the classic branch applies
+    // it here, at most once per call, the first time a factorization reports
+    // rank deficiency -- it lands in the matrix and takes effect at the next
+    // Refactor(), so a singular base costs one ladder rung (a small delta_w
+    // rides along with delta_c, matching Ipopt, which raises both on
+    // singularity). dc_latched_ is the Ipopt hess/jac-degenerate adaptation:
+    // sticky per phase, it makes later calls pre-apply delta_c at the base
+    // attempt instead of re-paying the singular factorization every iteration.
     bool dc_applied = false;
     auto EngageDualReg = [&]() {
         if (!dc_applied && dual_shift != 0.0) {
             PerturbC(-dual_shift);
             dc_applied = true;
+            this->dc_latched_ = true;
         }
     };
 ```
 
-**(c)** In the proximal branch: where `PerturbC(-dual_shift);` is applied at the base
-(:1701-1702), set the flag:
+**(c)** Proximal branch: set the flag where the base δ_c is applied (:1123-1125):
 
 ```cpp
         Perturb(base_prox);
@@ -156,8 +201,7 @@ In `src/solvers/psiopt.cpp`, inside `factor_impl` (starts :1639):
         }
 ```
 
-and replace its exit test (:1711-1718, including the local `bool singular` line, which
-is deleted — `Singular()` replaces it):
+and replace its exit test (:1134-1141, deleting the local `bool singular` line):
 
 ```cpp
         // A singular or wrong-inertia base factorization enters the ladder.
@@ -165,17 +209,28 @@ is deleted — `Singular()` replaces it):
             return 0;
 ```
 
-**(d)** In the classic branch (:1719-1730), replace `if (IncEigs <= 0) return 0;` with:
+**(d)** Classic branch (:1142-1153) becomes:
 
 ```cpp
+    } else if (Zfac || docompute) {
+        if (this->dc_latched_)
+            EngageDualReg();
+        if (!docompute)
+            Refactor();
+        else
+            Compute();
+        CheckInfo();
+        RankDef();
+        IncEigs = Inertia();
+        finalpert = 0.0;
         if (Singular())
             EngageDualReg();
         if (IncEigs == 0 && !Singular())
             return 0;
+    }
 ```
 
-**(e)** In the shared ladder (:1733-1753), replace `if (IncEigs <= 0) return i + 1;`
-with:
+**(e)** Shared ladder (:1156-1176): replace `if (IncEigs <= 0) return i + 1;` with:
 
 ```cpp
         if (Singular())
@@ -184,8 +239,7 @@ with:
             return i + 1;
 ```
 
-**(f)** At the exhaustion tail (:1754-1760), extend the warning with the inertia
-triple and set the new out-param — replace the block with:
+**(f)** Exhaustion tail (:1177-1182) becomes:
 
 ```cpp
     if (settings_.print_level_ < 3)
@@ -200,9 +254,8 @@ triple and set the new out-param — replace the block with:
     return settings_.max_refac_;
 ```
 
-**(g)** Change the signature (definition :1639-1641) to append `bool &exhausted`
-after `dual_shift` and drop the two `= 0.0` defaults (single call site; a missed
-caller must be a compile error):
+**(g)** Signature (definition :1062-1064): append `bool &exhausted` after
+`dual_shift`, drop the parameter defaults:
 
 ```cpp
 int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt, double incpurt0,
@@ -210,41 +263,53 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
                                         double base_prox, double dual_shift, bool &exhausted) {
 ```
 
-- [ ] **Step 3: Update the declaration and the call site**
+- [ ] **Step 4: Declaration, member, per-phase reset, call site**
 
-**(a)** `include/tycho/detail/solvers/psiopt.h:1016-1018` — new declaration:
-
-```cpp
-    int factor_impl(bool docompute, bool ZFac, double ipurt, double incpurt0, double incpurt,
-                    double &finalpert, double &cumpert, double base_prox, double dual_shift,
-                    bool &exhausted);
-```
-
-and rewrite the last sentence of its doc comment (:1012-1015, the part describing
-`base_prox`/`dual_shift`) to:
+**(a)** `psiopt.h:987-989` — declaration matching (g) (no defaults); rewrite the
+`base_prox`/`dual_shift` sentence of the doc comment above it to:
 
 ```cpp
     // `base_prox` is the proximal-regularization base shift (ρ_k on the Hessian
     // diagonal), read only when inertia_mode_ == proximal_regularization.
     // `dual_shift` is the δ_c magnitude AVAILABLE to this call for both modes:
-    // the proximal branch applies it up-front as part of the base matrix; the
-    // classic branch applies it on demand, at most once, when a factorization
-    // reports rank deficiency (0.0 = suppressed, e.g. during nested l1
-    // restoration). `exhausted` is set (never cleared) when the ladder runs out
-    // of attempts with inertia still wrong -- the return value alone cannot
-    // distinguish that from success on the final attempt.
+    // the proximal branch applies it up-front; the classic branch applies it on
+    // demand when a factorization reports rank deficiency, or up-front once
+    // dc_latched_ is set (0.0 = suppressed, e.g. during nested l1 restoration).
+    // `exhausted` is set (never cleared) when the ladder runs out of attempts
+    // with inertia still wrong -- the return value alone cannot distinguish
+    // that from success on the final attempt.
 ```
 
-**(b)** `src/solvers/psiopt.cpp:2279-2293` — replace the block from
-`double base_prox = 0.0;` through the stale policy comment (ending `...could break
-existing convergence behavior.`) with:
+**(b)** `psiopt.h`, near the other per-solve mutable state members: add
 
 ```cpp
-        // δ_c availability is computed for BOTH inertia modes now: the classic
+    // Degeneracy latch (Ipopt hess_degenerate_/jac_degenerate_ adaptation,
+    // simplified to sticky-per-phase): set by factor_impl when the on-demand
+    // dual regularization first engages; later classic base attempts pre-apply
+    // δ_c instead of re-discovering the singularity. Reset at each alg_impl
+    // phase init. See inertia_regularization.h for the δ_c reference.
+    bool dc_latched_ = false;
+```
+
+**(c)** `psiopt.cpp:1227` — next to `this->result_.last_kkt_info_ = Eigen::Success;`
+(per-phase init), add:
+
+```cpp
+    // Fresh phase: re-probe rank rather than inheriting the previous phase's
+    // degeneracy diagnosis.
+    this->dc_latched_ = false;
+```
+
+**(d)** Call site :1823-1838 — replace from `double base_prox = 0.0;` through the
+stale proceed-anyway comment (`// Note: if factor_impl exhausted ... existing
+convergence behavior.`) with:
+
+```cpp
+        // δ_c availability is computed for BOTH inertia modes: the classic
         // ladder engages it on demand when a factorization reports rank
         // deficiency (see factor_impl). Suppressed while a nested l1
-        // restoration phase is active -- the elastic pivots own the
-        // constraint-row diagonals (inertia_regularization.h).
+        // restoration phase owns the constraint-row diagonals
+        // (inertia_regularization.h).
         const bool dc_suppressed = this->restoration_ && this->restoration_->is_active() &&
                                    this->restoration_->is_nested();
         double base_prox = 0.0;
@@ -260,24 +325,44 @@ existing convergence behavior.`) with:
         (void)kkt_exhausted;
 ```
 
-Leave the proximal display/decay block (:2305-2319) untouched — it stays gated on the
-proximal mode and correctly records `dual_shift` there.
+Check whether the surrounding code already computes an equivalent nested-active bool
+in scope (post-#110 the region changed); if so, reuse it instead of `dc_suppressed`
+and say so in the commit message. Leave the proximal display/decay block untouched.
 
-- [ ] **Step 4: Probe red/green (no full build yet)**
+- [ ] **Step 5: Probe red/green (no full build)**
 
-Write `/tmp/ic_probe.cpp` (location is free; keep it out of the repo):
+Write `/tmp/ic_probe.cpp` — the three-case probe (Maratos classic must converge;
+duplicated-constraint classic must converge; both `flag==0`, `iters<=60`; keep a
+proximal informational line if desired):
 
 ```cpp
-// IC probe: classic mode must now converge on (1) the Maratos corpus and
-// (2) the duplicated-equality rank-deficient NLP.
 #include <tycho/solvers.h>
 #include <tycho/vector_functions.h>
 #include <Eigen/Core>
+#include <cmath>
 #include <cstdio>
 
 using tycho::vf::Arguments;
 using tycho::vf::GenericFunction;
 using tycho::solvers::OptimizationProblem;
+
+static void add_maratos(OptimizationProblem &prob) {
+    prob.set_vars((Eigen::VectorXd(2) << 0.0, 1.0).finished());
+    {
+        auto args = Arguments<2>();
+        auto x0 = args.coeff<0>();
+        auto x1 = args.coeff<1>();
+        prob.add_objective(GenericFunction<-1, 1>(2.0 * (x0 * x0 + x1 * x1 - 1.0) - x0),
+                           (Eigen::VectorXi(2) << 0, 1).finished());
+    }
+    {
+        auto args = Arguments<2>();
+        auto x0 = args.coeff<0>();
+        auto x1 = args.coeff<1>();
+        prob.add_equal_con(GenericFunction<-1, -1>(x0 * x0 + x1 * x1 - 1.0),
+                           (Eigen::VectorXi(2) << 0, 1).finished());
+    }
+}
 
 static int report(const char *name, OptimizationProblem &prob, double expect_obj) {
     prob.optimizer_->set_print_level(3);
@@ -294,25 +379,10 @@ int main() {
     int rc = 0;
     {
         OptimizationProblem prob;
-        prob.set_vars((Eigen::VectorXd(2) << 0.0, 1.0).finished());
-        {
-            auto args = Arguments<2>();
-            auto x0 = args.coeff<0>();
-            auto x1 = args.coeff<1>();
-            prob.add_objective(GenericFunction<-1, 1>(2.0 * (x0 * x0 + x1 * x1 - 1.0) - x0),
-                               (Eigen::VectorXi(2) << 0, 1).finished());
-        }
-        {
-            auto args = Arguments<2>();
-            auto x0 = args.coeff<0>();
-            auto x1 = args.coeff<1>();
-            prob.add_equal_con(GenericFunction<-1, -1>(x0 * x0 + x1 * x1 - 1.0),
-                               (Eigen::VectorXi(2) << 0, 1).finished());
-        }
+        add_maratos(prob);
         rc |= report("maratos  ", prob, -1.0);
     }
     {
-        // min x0^2 + x1^2 s.t. x0 + x1 = 1 (twice) -> rank(J)=1 < m=2, optimum 0.5.
         OptimizationProblem prob;
         prob.set_vars((Eigen::VectorXd(2) << 0.0, 0.0).finished());
         {
@@ -335,38 +405,35 @@ int main() {
 }
 ```
 
-Build and run (from the repo root; this recompiles the 7 solver TUs against your edit
-and links them with the prebuilt archives — the probe TU carries no `AccelerateImpl`
-instantiations, so this is a faithful A/B of the solver logic):
+Build and run (repo root; compiles every solver TU — except the real-Ipopt adapter —
+against your edit, falling back to psiopt.cpp's flags for TUs missing from the stale
+compile_commands.json, then links against the prebuilt non-solver archives):
 
 ```bash
 mkdir -p /tmp/ic_objs
 python3 - <<'EOF'
-import json, shlex, subprocess, os
+import json, shlex, subprocess, os, glob
 cc = json.load(open('build/compile_commands.json'))
-tus = ['psiopt.cpp', 'psiopt_globalization.cpp', 'psiopt_print.cpp',
-       'non_linear_program.cpp', 'optimization_problem.cpp', 'solver_init.cpp',
-       'ipopt_backend_stub.cpp']
-for tu in tus:
-    e = [x for x in cc if x['file'].endswith('solvers/' + tu)][0]
+def flags_for(suffix, fallback):
+    hits = [x for x in cc if x['file'].endswith(suffix)]
+    e = hits[0] if hits else fallback
     args = shlex.split(e['command'])
     out, skip = [], False
     for a in args[1:]:
         if skip: skip = False; continue
         if a in ('-o', '-c'): skip = True; continue
         out.append(a)
-    subprocess.run([args[0]] + out + ['-c', e['file'],
-                    '-o', f'/tmp/ic_objs/{tu}.o'], check=True)
+    return args[0], out
+fallback = [x for x in cc if x['file'].endswith('solvers/psiopt.cpp')][0]
+for f in sorted(glob.glob('src/solvers/*.cpp')):
+    tu = os.path.basename(f)
+    if tu == 'ipopt_tnlp_adapter.cpp':
+        continue  # real-Ipopt TU; the stub provides ipopt_backend::solve here
+    cxx, out = flags_for('solvers/' + tu, fallback)
+    subprocess.run([cxx] + out + ['-c', f, '-o', f'/tmp/ic_objs/{tu}.o'], check=True)
     print(tu, 'ok', flush=True)
-e = [x for x in cc if x['file'].endswith('solvers/psiopt.cpp')][0]
-args = shlex.split(e['command'])
-out, skip = [], False
-for a in args[1:]:
-    if skip: skip = False; continue
-    if a in ('-o', '-c'): skip = True; continue
-    out.append(a)
-subprocess.run([args[0]] + out + ['-c', '/tmp/ic_probe.cpp',
-                '-o', '/tmp/ic_probe.o'], check=True)
+cxx, out = flags_for('solvers/psiopt.cpp', fallback)
+subprocess.run([cxx] + out + ['-c', '/tmp/ic_probe.cpp', '-o', '/tmp/ic_probe.o'], check=True)
 print('probe ok')
 EOF
 /opt/homebrew/opt/llvm/bin/clang++ /tmp/ic_probe.o /tmp/ic_objs/*.o \
@@ -377,29 +444,29 @@ EOF
 /tmp/ic_probe; echo "PROBE_EXIT=$?"
 ```
 
-Expected: both lines `OK`, `PROBE_EXIT=0`. (Pre-change reference, verified 2026-07-25:
-maratos flag=2/iters=500; so any FAIL means your edit is wrong — do not proceed.)
+Expected: both lines `OK`, `PROBE_EXIT=0`. (Pre-change reference, re-verified
+2026-07-27 on the merged tree: maratos flag=2/iters=500. Any FAIL means the edit is
+wrong — do not proceed to the build.)
 
-- [ ] **Step 5: Full build**
+- [ ] **Step 6: Full build**
 
 ```bash
 conda activate tycho && cd /Users/granthec/Source/tycho/build && ninja -j4 all
 ```
 
-Background it; wait for exit 0. `psiopt.h` changed, so this is the Task-1 full
-rebuild (~20-40 min). ONE build only.
+Background it; wait for exit 0. This is Task 1's one full rebuild (psiopt.h changed).
 
-- [ ] **Step 6: Run the targeted suites**
+- [ ] **Step 7: Targeted suites**
 
 ```bash
 cd /Users/granthec/Source/tycho/build && ctest -R "DivergencePersistence|InertiaRegularization" --output-on-failure
 ```
 
-Expected: ALL pass — including `MaratosCorpusConvergesAtDefaults` (the primary red
-test), the upgraded `ClassicConvergesOnRankDeficientKkt`, `GenuineDivergenceStillAborts`,
-and every proximal-mode test.
+Expected: ALL pass — `MaratosCorpusConvergesAtDefaults`,
+`ClassicConvergesOnRankDeficientKkt`, `ClassicDegeneracyLatchTracksSingularity`,
+`GenuineDivergenceStillAborts`, and every proximal-mode test.
 
-- [ ] **Step 7: Format and commit**
+- [ ] **Step 8: Format and commit**
 
 ```bash
 cd /Users/granthec/Source/tycho/build && ninja clang-format
@@ -412,36 +479,40 @@ neigs < m. On Accelerate, which reports inertia honestly (no Pardiso-style
 static pivot perturbation), an exactly singular KKT was accepted, solved to
 a zero step, and stalled to max_iters (DivergencePersistence Maratos corpus,
 500 iters). Accept only inertia exactly (kkt_dim - m, m, 0); on observed
-rank deficiency engage the #103 dual regularization (delta_c, Ipopt
-jacobian_regularization_value/_exponent) on demand, at most once per call,
-suppressed during nested l1 restoration. The shared ladder exit is
-strengthened for both inertia modes; delta_w escalation, warm-start, and
+rank deficiency engage the #103 dual regularization on demand, at most once
+per call, suppressed during nested l1 restoration, with an Ipopt
+hess/jac-degenerate-style latch (sticky per phase) so persistently
+rank-deficient problems pre-apply delta_c at the base attempt instead of
+re-paying the singular factorization every iteration. The shared ladder exit
+is strengthened for both inertia modes; delta_w escalation, warm-start, and
 display accounting are byte-identical. factor_impl gains a bool &exhausted
 out-param (routing lands in the next commit)."
 ```
 
-### Task 2: `SINGULAR_KKT` + exhaustion routing through the recovery chain
+### Task 2: `SINGULAR_KKT` + exhaustion routing (loop-tail exit-flag idiom)
 
 **Files:**
 - Modify: `include/tycho/detail/solvers/psiopt_fwd.h:26-36` (enum + severity comment)
-- Modify: `src/solvers/psiopt.cpp` (~:2455-2620 region: forced rejection, abort
-  terminal)
+- Modify: `src/solvers/psiopt.cpp` (declaration region ~:2000; forced rejection
+  before :2054; `kAcceptAsIs` case :2062; ExitCode override after :2269-2270; exit
+  disjunction :2281-2283)
 - Modify: `src/solvers/psiopt_print.cpp:204-216` (exit-code print)
 - Modify: `include/tycho/detail/solvers/jet.h:187-203` (flag-tracking switch)
-- Modify: `src/bindings/solvers/psiopt_bind.cpp:539-544` (enum binding)
+- Modify: `src/bindings/solvers/psiopt_bind.cpp:601-605` (enum binding)
 - Modify: `tychopy/_stubs/` (regenerated snapshot)
 - Test: `tests/cpp/solvers/test_divergence_persistence.cpp` (new exhaustion test)
 
 **Interfaces:**
-- Consumes: `bool kkt_exhausted` local (Task 1), `should_dispatch_recovery(GoodStep,
-  Citer)` (recovery_chain.h:176 — `good_step && !citer.accepted_`),
-  `RecoveryChain::Action`, `kRecoveryDepthUnresolved`.
+- Consumes: `kkt_exhausted` (Task 1), `should_dispatch_recovery` (recovery_chain.h:176,
+  `good_step && !citer.accepted_`), `RecoveryChain::Action`,
+  `kRecoveryDepthUnresolved`, the loop-tail idiom precedents `exit_at_acceptable`
+  (declared :2000) and `exit_stage_stalled` (:1665).
 - Produces: `tycho::ConvergenceFlags::SINGULAR_KKT = 4` (public, Python-visible).
 
 - [ ] **Step 1: Write the failing exhaustion test**
 
 Append to `tests/cpp/solvers/test_divergence_persistence.cpp` (after
-`MaratosCorpusConvergesAtDefaults`):
+`MaratosCorpusConvergesAtDefaults`; reuse the file's `using` declarations):
 
 ```cpp
 // Exhaustion is Ipopt-faithful: with the perturbation ladder disabled outright
@@ -479,11 +550,13 @@ TEST(DivergencePersistence, ExhaustedInertiaCorrectionAbortsAsSingularKkt) {
 }
 ```
 
-(It cannot compile until Step 2 adds the enum value — that is the expected "red".)
+(Red = does not compile until Step 2 adds the enum value. Note `max_refac_` is a plain
+public `int` member of Settings with no validating setter — direct assignment is the
+intended route.)
 
 - [ ] **Step 2: Add the enum value and its consumers**
 
-**(a)** `include/tycho/detail/solvers/psiopt_fwd.h:26-36`:
+**(a)** `psiopt_fwd.h:26-33`:
 
 ```cpp
 enum class ConvergenceFlags {
@@ -498,10 +571,9 @@ enum class ConvergenceFlags {
 // CONVERGED < ACCEPTABLE < NOTCONVERGED < DIVERGING < SINGULAR_KKT
 ```
 
-(The `operator<=>` below it is value-based and needs no change.)
+(The value-based `operator<=>` below needs no change.)
 
-**(b)** `src/solvers/psiopt_print.cpp` — in the exit-code chain (:206-215), add before
-the closing brace of the chain:
+**(b)** `psiopt_print.cpp` exit-code chain (:206-215) — add before the chain's close:
 
 ```cpp
         } else if (ExitCode == ConvergenceFlags::SINGULAR_KKT) {
@@ -509,8 +581,7 @@ the closing brace of the chain:
         }
 ```
 
-**(c)** `include/tycho/detail/solvers/jet.h` — in the `track` lambda's switch
-(:190-203), add after the `DIVERGING` case:
+**(c)** `jet.h` `track` switch (:190-203) — after the `DIVERGING` case:
 
 ```cpp
             case tycho::ConvergenceFlags::SINGULAR_KKT:
@@ -518,38 +589,48 @@ the closing brace of the chain:
                 break;
 ```
 
-**(d)** `src/bindings/solvers/psiopt_bind.cpp` — in the `nb::enum_<ConvergenceFlags>`
-chain (:539-544), add after the `DIVERGING` value line:
+**(d)** `psiopt_bind.cpp` enum chain (ends :605 `.value("DIVERGING", ...);`) — extend:
 
 ```cpp
-        .value("SINGULAR_KKT", ConvergenceFlags::SINGULAR_KKT)
+        .value("DIVERGING", ConvergenceFlags::DIVERGING)
+        .value("SINGULAR_KKT", ConvergenceFlags::SINGULAR_KKT);
 ```
 
-- [ ] **Step 3: Route exhaustion at the call site**
+- [ ] **Step 3: Route exhaustion (exit-flag idiom)**
 
 All in `src/solvers/psiopt.cpp`, `alg_impl`:
 
-**(a)** In Task 1's call-site block, delete the two placeholder lines
-(`// kkt_exhausted routing ... next commit.` and `(void)kkt_exhausted;`).
+**(a)** Delete Task 1's two placeholder lines at the call site
+(`// kkt_exhausted routing ...` and `(void)kkt_exhausted;`).
 
-**(b)** Immediately after the `GoodStep` line-search block (the
-`if (GoodStep) { alpha = mechanism_->compute_step(...); } else { Citer.h_facs_ = -1; }`
-construct ending ~:2458), insert:
+**(b)** Next to `bool exit_at_acceptable = false;` (:2000), declare:
+
+```cpp
+        // Set by the exhausted-inertia-correction dispatch below: the KKT
+        // factorization never reached correct inertia, the forced rejection
+        // went through the recovery chain, and nothing resolved it. Terminates
+        // the phase as SINGULAR_KKT at the loop tail (same idiom as
+        // exit_at_acceptable / exit_stage_stalled).
+        bool singular_abort = false;
+```
+
+**(c)** Immediately after the `if (GoodStep) { alpha = mechanism_->compute_step(...); }
+else { Citer.h_facs_ = -1; }` construct (ends ~:2013), insert:
 
 ```cpp
         // Inertia-correction exhaustion (Ipopt-faithful fail-the-step): a step
         // solved on a factorization that never reached correct inertia must not
         // be accepted on merit. Force the rejection so the recovery chain gets
         // its say (feasibility switch when configured); if nothing resolves it,
-        // the phase aborts as SINGULAR_KKT below. The non-finite-direction case
-        // (!GoodStep) skips the dispatch entirely, so it aborts directly.
+        // singular_abort terminates the phase below. The non-finite case
+        // (!GoodStep) already exits as DIVERGING at the loop tail -- the
+        // non-finite verdict dominates and needs no special-casing here.
         if (kkt_exhausted)
             Citer.accepted_ = false;
-        bool singular_abort = kkt_exhausted && !GoodStep;
 ```
 
-**(c)** In the `RecoveryChain::Action::kAcceptAsIs` case (:2503-2527), after the
-`try_recenter_elastics` block, add:
+**(d)** In `RecoveryChain::Action::kAcceptAsIs` (:2062), after the
+`try_recenter_elastics` block:
 
 ```cpp
                 if (kkt_exhausted && resolved_depth == kRecoveryDepthUnresolved) {
@@ -563,57 +644,41 @@ construct ending ~:2458), insert:
                 }
 ```
 
-(`kRetry`, `kSwitchToFeasibility`, and `kSoftFeasibilityStep` are resolutions — no
-change in those cases.)
+(`kRetry`, `kSwitchToFeasibility`, `kSoftFeasibilityStep` are resolutions — no change.)
 
-**(d)** Locate the `XSL += alpha * DXSL;` step commit that follows the recovery
-dispatch (it is after `iters.push_back(Citer);` and the `return_best_`/late-callback
-blocks — grep for it within `alg_impl`). Immediately AFTER that commit statement,
-insert:
+**(e)** After the `exit_at_acceptable` upgrade block (:2269-2270,
+`if (exit_at_acceptable && ExitCode == ConvergenceFlags::NOTCONVERGED) ...`), insert:
 
 ```cpp
-        if (singular_abort) {
-            // alpha was zeroed above, so the commit was a no-op; the iterate and
-            // its table row are already recorded. Mirror the divergence-abort
-            // exit shape: stamp the flag and leave the iteration loop.
+        // SINGULAR_KKT is decisive: an inertia-correction failure is a
+        // step-computation error (Ipopt Error_In_Step_Computation), reported as
+        // such even at an otherwise-acceptable iterate.
+        if (singular_abort)
             ExitCode = ConvergenceFlags::SINGULAR_KKT;
-            this->result_.converge_flag_ = ExitCode;
-            break;
-        }
 ```
 
-Before inserting, read the surrounding ~30 lines: if the loop tail between the commit
-and the loop's closing brace performs additional per-iteration state updates (console
-print of the row uses `iters.back()` and is fine either side), place the break AFTER
-the console-print call so the aborting iteration is visible in the table, and confirm
-`ExitCode` is the variable the existing convergence-break path assigns
-(`this->result_.converge_flag_ = ExitCode; break;` at ~:2185 is the pattern to match).
+**(f)** Extend the exit disjunction (:2281-2283) with the new flag:
+
+```cpp
+        if (ExitCode == ConvergenceFlags::CONVERGED || ExitCode == ConvergenceFlags::ACCEPTABLE ||
+            ExitCode == ConvergenceFlags::DIVERGING || ExitCode == ConvergenceFlags::SINGULAR_KKT ||
+            exit_stage_stalled || i == (settings_.max_iters_ - 1)) {
+```
+
+The terminating iteration never reaches the `XSL += alpha * DXSL;` commit (:2295), so
+`alpha = 0.0` in (d) is belt-and-suspenders, not load-bearing.
 
 - [ ] **Step 4: Probe the routing**
 
-Reuse Task 1's probe pipeline (recompile the 7 TUs + relink — same commands), but
-first append a third case to `/tmp/ic_probe.cpp` `main` (before `return rc;`):
+Append a third case to `/tmp/ic_probe.cpp` `main` (before `return rc;`), then rebuild
+and run with the same Step-5 pipeline from Task 1:
 
 ```cpp
     {
         // Exhaustion terminal: ladder disabled, Maratos KKT is wrong-inertia at
         // iterate 1 -> expect SINGULAR_KKT (flag 4) within a few iterations.
         OptimizationProblem prob;
-        prob.set_vars((Eigen::VectorXd(2) << 0.0, 1.0).finished());
-        {
-            auto args = Arguments<2>();
-            auto x0 = args.coeff<0>();
-            auto x1 = args.coeff<1>();
-            prob.add_objective(GenericFunction<-1, 1>(2.0 * (x0 * x0 + x1 * x1 - 1.0) - x0),
-                               (Eigen::VectorXi(2) << 0, 1).finished());
-        }
-        {
-            auto args = Arguments<2>();
-            auto x0 = args.coeff<0>();
-            auto x1 = args.coeff<1>();
-            prob.add_equal_con(GenericFunction<-1, -1>(x0 * x0 + x1 * x1 - 1.0),
-                               (Eigen::VectorXi(2) << 0, 1).finished());
-        }
+        add_maratos(prob);
         prob.optimizer_->set_print_level(3);
         prob.optimizer_->settings().max_refac_ = 0;
         auto flag = prob.optimize();
@@ -625,17 +690,15 @@ first append a third case to `/tmp/ic_probe.cpp` `main` (before `return rc;`):
     }
 ```
 
-Expected: all three lines `OK`, `PROBE_EXIT=0`. The first two cases also re-verify
-Task 1 wasn't disturbed.
+Expected: all three lines `OK`, `PROBE_EXIT=0` (first two re-verify Task 1).
 
-- [ ] **Step 5: Full build, regenerate stubs, run suites**
+- [ ] **Step 5: Full build, stubs, suites, Python smoke**
 
 ```bash
 conda activate tycho && cd /Users/granthec/Source/tycho/build && ninja -j4 all
 ```
 
-Background; wait for exit 0 (psiopt_fwd.h/jet.h changed — the Task-2 full rebuild).
-Then:
+Background; wait (Task 2's one full rebuild — psiopt_fwd.h/jet.h changed). Then:
 
 ```bash
 cmake --build /Users/granthec/Source/tycho/build --target tychopy_stubs_snapshot
@@ -643,8 +706,7 @@ cd /Users/granthec/Source/tycho/build && ctest -R "DivergencePersistence|Inertia
 conda run -n tycho python -c "import tychopy; print(tychopy.solvers.ConvergenceFlags.SINGULAR_KKT)"
 ```
 
-Expected: all tests pass (including the new exhaustion test), the stub diff shows the
-new enum value, and the Python import prints the value.
+Expected: all tests pass; the stub diff shows the enum value; Python prints it.
 
 - [ ] **Step 6: Format and commit**
 
@@ -657,17 +719,16 @@ An exhausted ladder previously proceeded with the bad factorization
 (documented warn-and-proceed), which on a persistently singular KKT crawls
 to max_iters on zero steps. Ipopt-faithful policy instead: force the
 line-search verdict to rejected so recovery_->on_step_rejected gets its say
-(feasibility switch when configured); an unresolved rejection discards the
-step and aborts the phase with the new ConvergenceFlags::SINGULAR_KKT
-(Python-visible; stubs regenerated). Non-finite directions on an exhausted
-factorization abort directly (the dispatch gate excludes them)."
+(feasibility switch when configured); an unresolved rejection terminates the
+phase via the loop-tail exit-flag idiom (singular_abort, alongside
+exit_at_acceptable / exit_stage_stalled) with the new
+ConvergenceFlags::SINGULAR_KKT (Python-visible; stubs regenerated).
+Non-finite directions keep their existing DIVERGING exit."
 ```
 
-### Task 3: Gates, delivery, and the follow-up issue
+### Task 3: Gates, delivery, and the follow-up issues
 
-**Files:**
-- No source changes. Runs the pre-merge verification sequence, pushes, opens the PR,
-  files the proximal-Maratos issue.
+**Files:** none (verification, push, PR, issues).
 
 - [ ] **Step 1: Full ctest**
 
@@ -676,8 +737,8 @@ cd /Users/granthec/Source/tycho/build && ctest --output-on-failure 2>&1 | tail -
 ```
 
 Expected: exactly ONE failure — `cpp_example_optimal_docking_builder` (pre-existing,
-out of scope, spec'd). Any other failure is a regression from this branch: STOP and
-fix before proceeding (the task-2 commit is the likely culprit; bisect with the probe).
+out of scope, spec'd). Anything else is a regression from this branch: STOP and fix
+(bisect with the probe) before proceeding.
 
 - [ ] **Step 2: Python examples + brachistochrone**
 
@@ -686,8 +747,8 @@ conda run -n tycho bash -c "MPLBACKEND=Agg python scripts/run_examples.py"
 cd /Users/granthec/Source/tycho/build && ./examples/cpp_examples/static/brachistochrone/brachistochrone_cpp | tail -5
 ```
 
-Expected: `34 passed, 0 failed, 0 skipped`; brachistochrone prints "Optimal Solution
-Found" with objective ≈ 1.8013.
+Expected: `34 passed, 0 failed, 0 skipped` (count may have grown with merged examples —
+all must pass, none skipped); "Optimal Solution Found", objective ≈ 1.8013.
 
 - [ ] **Step 3: Benchmarks**
 
@@ -695,36 +756,38 @@ Found" with objective ≈ 1.8013.
 cd /Users/granthec/Source/tycho && bench/bench_track.sh record && bench/bench_track.sh compare
 ```
 
-If `compare` reports no baseline for the parent, record the comparison as
-"no pre-existing baseline on this machine" in the PR body rather than skipping
-silently. The changed code paths only fire on wrong-inertia factorizations, so any
-benchmark delta beyond noise needs investigation.
+If no baseline exists for the parent, record that verbatim in the PR body rather than
+skipping silently. The changed paths only fire on wrong-inertia factorizations, so any
+delta beyond noise needs investigation.
 
 - [ ] **Step 4: Push and open the PR**
 
 ```bash
 git push -u origin fix/psiopt-inertia-correction
-gh pr create --title "fix(psiopt): full Ipopt IC inertia condition + SINGULAR_KKT exhaustion routing" --body-file <body written per below>
+gh pr create --title "fix(psiopt): full Ipopt IC inertia condition + SINGULAR_KKT exhaustion routing" --body-file <body>
 ```
 
-PR body must include: the Maratos root cause (link the spec and the #88 RESULTS doc);
-red→green evidence (Maratos 500-iter stall → converged; upgraded rank-deficient test;
+Body must include: root cause (link spec rev 3 + the #88 RESULTS doc); red→green
+evidence (Maratos 500-iter stall → converged; rank-deficient test; latch test;
 exhaustion test); the one MKL-reachable behavior change (`neigs < m` now corrected —
-Linux CI corpus is the gate); the Python-visible enum addition; and the explicit
+Linux CI corpus gates); the Python-visible enum addition; the parity statement (which
+IPOPT mechanisms are matched, which deviations remain and why); and the explicit
 **PSIOPT-internals human review required** flag. Do NOT merge.
 
-- [ ] **Step 5: File the proximal-Maratos issue**
+- [ ] **Step 5: File the two follow-up issues**
 
 ```bash
 gh issue create --title "proximal_regularization diverges on exactly-singular Hessians (Maratos corpus)" \
-  --body "On main c9e8ddd, InertiaModes::proximal_regularization DIVERGES on the DivergencePersistence Maratos problem (flag=3, obj ~7.8e17, 4 iterations) while classic (after fix/psiopt-inertia-correction) converges. With Lagrangian Hessian exactly zero, the rho=1e-10 base shift yields a correct-inertia but catastrophically ill-conditioned system; the ~g/rho step blows up before the divergence-persistence window trips. Correct inertia is not a sufficient step-quality gate for the proximal base attempt. Found during the 2026-07-25 inertia-correction design probes (docs/dev/plans/2026-07-25-psiopt-inertia-correction-design.md). Candidate directions: floor the base attempt's effective curvature (rho vs a gradient-scaled floor), or run the ladder when the base step norm exceeds a trust bound even with correct inertia."
+  --body "On main c9e8ddd (re-verified after the #108-#114 merge), InertiaModes::proximal_regularization DIVERGES on the DivergencePersistence Maratos problem (flag=3, obj ~7.8e17, 4 iterations) while classic (after fix/psiopt-inertia-correction) converges. With the Lagrangian Hessian exactly zero, the rho=1e-10 base shift yields a correct-inertia but catastrophically ill-conditioned system; the ~g/rho step blows up before the divergence-persistence window trips. Correct inertia is not a sufficient step-quality gate for the proximal base attempt. Found during the 2026-07-25 inertia-correction design probes (docs/dev/plans/2026-07-25-psiopt-inertia-correction-design.md). Candidate directions: floor the base attempt's effective curvature, or enter the ladder when the base step norm exceeds a trust bound even with correct inertia."
+
+gh issue create --title "campaign: measure Ipopt's delta_w escalation schedule as a sweep arm" \
+  --body "The inertia-correction fix (fix/psiopt-inertia-correction) adopts Ipopt Algorithm IC's condition and delta_c mechanism but deliberately keeps PSIOPT's native delta_w ladder constants (Hpert0/delta_h_/incr_h_/decr_h_), because the globalization campaign corpus was measured against them. If Ipopt's schedule (delta_w0=1e-4, x100 first-ever, x8 in-episode, /3 warm-start decay, cap 1e40) is to be adopted, it should be measured as a #108 sweep-driver arm against the corpus, not folded into a correctness fix. See docs/dev/plans/2026-07-25-psiopt-inertia-correction-design.md (design decision 5)."
 ```
 
-- [ ] **Step 6: Update the design doc status**
+- [ ] **Step 6: Mark the design implemented**
 
-Edit `docs/dev/plans/2026-07-25-psiopt-inertia-correction-design.md` line 4:
-`**Status:** implemented on fix/psiopt-inertia-correction, PR open, awaiting human review`,
-then:
+Edit the spec's `**Status:**` line to
+`implemented on fix/psiopt-inertia-correction, PR open, awaiting human review`, then:
 
 ```bash
 git add docs/dev/plans/2026-07-25-psiopt-inertia-correction-design.md

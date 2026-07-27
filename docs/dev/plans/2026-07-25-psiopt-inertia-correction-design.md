@@ -1,78 +1,89 @@
 # PSIOPT inertia correction: full IPOPT IC condition on the classic ladder — design
 
-**Date:** 2026-07-25 (rev 2 — re-grounded against `main` at `c9e8ddd`, which includes
-PR #103's proximal primal-dual regularization mode)
-**Branch:** `fix/psiopt-inertia-correction` (off `main` at `c9e8ddd`)
+**Date:** 2026-07-25 (rev 3, 2026-07-27 — re-anchored after merging main through #114
+`e2314a3e`; degeneracy latch added per the lean-toward-IPOPT decision)
+**Branch:** `fix/psiopt-inertia-correction` (main merged through `e2314a3e`)
 **Status:** approved design, pre-implementation
-**Review flag:** PSIOPT optimizer internals — requires explicit human review before merge
-(CLAUDE.md policy).
+**Review flag:** PSIOPT optimizer internals + a Python-visible enum addition — requires
+explicit human review before merge (CLAUDE.md policy).
 
 ## Problem
 
-`PSIOPT::factor_impl` (src/solvers/psiopt.cpp:1639) accepts a factorization whenever
+`PSIOPT::factor_impl` (src/solvers/psiopt.cpp:1062) accepts a factorization whenever
 there are no **excess negative eigenvalues** (`IncEigs <= 0`). A factorization that is
 **rank-deficient** (`peigs + neigs < kkt_dim`) or has **too few negatives** (`neigs < m`)
 is accepted: rank deficiency prints a warning and nothing else. The singular solve then
 returns a zero component in the null space, the iterate never moves, and the solver
-crawls to `max_iters`. This holds on the default `classic` inertia branch
-(psiopt.cpp:1719-1730) and on the shared perturbation ladder's exit (psiopt.cpp:1746).
+crawls to `max_iters`. This holds on the default `classic` branch (psiopt.cpp:1142-1153)
+and on the shared perturbation ladder's exit (psiopt.cpp:1169).
 
 Diagnosed end-to-end in the PR #88 investigation
 (`docs/dev/handoffs/2026-07-11-pr7-accelerate-macos-verification-RESULTS.md`):
 
-- **Failing case (red on macOS at defaults, verified on `c9e8ddd`):**
-  `DivergencePersistence.MaratosCorpusConvergesAtDefaults` — flag=2, 500 iterations.
-  At the start point the least-squares multiplier init makes ∇²L exactly zero; the KKT
-  matrix `[[0,0,0],[0,0,2],[0,2,0]]` has true inertia (1,1,1). Accelerate LDLT-TPP
-  reports it honestly (`status=OK`, `p/n/z = 1/1/1`); classic accepts (`IncEigs = 0`),
-  solves a zero step, and stalls.
+- **Failing case (red on macOS at defaults; probe re-verified on the merged tree,
+  2026-07-27):** `DivergencePersistence.MaratosCorpusConvergesAtDefaults` — flag=2,
+  500 iterations, bit-identical across `c9e8ddd` and the #108-#114 merge. At the start
+  point the least-squares multiplier init makes ∇²L exactly zero; the KKT matrix
+  `[[0,0,0],[0,0,2],[0,2,0]]` has true inertia (1,1,1). Accelerate LDLT-TPP reports it
+  honestly; classic accepts (`IncEigs = 0`), solves a zero step, and stalls.
 - **Why Linux never saw it:** MKL Pardiso automatically perturbs near-zero pivots, so
-  reported inertia always sums to n — exact rank deficiency never surfaces on MKL.
-  Verified: Apple's `SparseNumericFactorOptions` has **no perturbation option**
-  (`pivotTolerance` selects pivots; `zeroTolerance` classifies values as zero — SDK
-  `Sparse/Solve.h`). Accelerate's contract is honest inertia; the optimizer is the
-  correct consumer of it.
-- **Out of scope:** docking `Form2` fails for a different reason — instrumentation shows
-  `zeigs = 0` on all its factorizations (n=23077); a backend-numerics convergence
-  difference, not rank deficiency. Stays red after this fix; separate campaign item.
+  reported inertia always sums to n. Verified: Apple's `SparseNumericFactorOptions` has
+  **no perturbation option** (`pivotTolerance` selects pivots; `zeroTolerance`
+  classifies values as zero — SDK `Sparse/Solve.h`). Accelerate's contract is honest
+  inertia; the optimizer is the correct consumer of it.
+- **Confirmed unaddressed by #108-#114** (reviewed 2026-07-27): the classic predicate
+  is textually unchanged; the default stays `InertiaModes::classic` (psiopt.h:342
+  region); #114's presets are opt-in (`classic` = stock `Settings{}`); #110's stall
+  detector is feasibility-stage-only and restoration-gated (Maratos stalls in the
+  optimality stage with feasibility exactly satisfied); #109 handles trial-evaluation
+  *exceptions*, which this solve never throws. The campaign's own
+  `globalization-refinement-areas.md` records "no constraint-side escalation" in the
+  ladder and "rank-deficient CONVERGED pin untested on Apple Accelerate" as open
+  follow-ups — this design is that follow-up.
+- **Out of scope:** docking `Form2` (zeigs = 0 on all its factorizations — a
+  backend-numerics convergence difference, not rank deficiency).
 
 ## What PR #103 already provides (reused, not duplicated)
 
-The `proximal_regularization` inertia mode (opt-in; default remains `classic`,
-psiopt.h:342) landed the machinery this fix needs:
-
 - `NonLinearProgram::perturb_kkt_c_diags(double, mat&)` — writes onto the
-  constraint-row diagonals (the solver-owned `e_pivot`/`i_pivot` blocks).
+  constraint-row diagonals.
 - `tycho::solvers::dual_regularization(mu)` = `kDualRegScale · μ^kDualRegExponent`
   (1e-8, 0.25 — Ipopt `jacobian_regularization_value`/`_exponent`, pinned commit in
   `globalization/inertia_regularization.h`).
-- `factor_impl` already takes `base_prox`/`dual_shift`; the proximal branch applies
-  both up-front and treats a singular base as ladder-entry (psiopt.cpp:1711-1718),
-  explicitly disclosing that classic keeps the warn-and-proceed gap.
-- Nested-restoration suppression rationale (inertia_regularization.h:61-71): while a
-  nested l1 restoration phase is active, δ_c must NOT be applied — the elastic pivots
-  own the constraint-row diagonals (~1/μ) and the condensed elastic recovery assumes
-  the (y,y) diagonal equals the elastic pivot exactly. (This also means constraint-block
-  singularity cannot arise during nested restoration.)
+- `factor_impl` takes `base_prox`/`dual_shift`; the proximal branch applies both
+  up-front and treats a singular base as ladder-entry (psiopt.cpp:1134-1141),
+  disclosing that classic keeps the warn-and-proceed gap.
+- Nested-restoration suppression rationale (inertia_regularization.h:61-71): δ_c must
+  not be applied while a nested l1 phase owns the constraint-row diagonals.
 
-**Probe finding (recorded, out of scope):** the proximal mode does NOT fix the Maratos
-case — it **diverges** (flag=3, obj ≈ 7.8e17, 4 iterations, verified on `c9e8ddd`).
-With ∇²L ≡ 0 the ρ = 1e-10 floor yields a correct-inertia but catastrophically
-ill-conditioned system; the ~g/ρ step blows up before the divergence window trips. So
-"flip the default to proximal" is not an alternative to this fix, and the proximal
-mode's behavior on exactly-singular Hessians is its own campaign follow-up (file an
-issue; do not fix here).
+**Probe findings (recorded, out of scope):** the proximal mode does NOT fix Maratos —
+it **diverges** (flag=3, obj ≈ 7.8e17, 4 iterations; re-verified on the merged tree
+2026-07-27). With ∇²L ≡ 0 the ρ = 1e-10 floor yields a correct-inertia but
+catastrophically ill-conditioned system. "Flip the default to proximal" is not an
+alternative; file the finding as a GH issue (delivery section).
 
 ## Design decisions (settled with Grant)
 
-1. **Full IPOPT Algorithm IC condition** on the classic branch and the shared ladder —
-   not a minimal primal-only patch. δ_w provably cannot fix a rank-deficient constraint
-   Jacobian (the m − rank(J) zero eigenvalues survive any primal perturbation);
-   redundant equality constraints are a routine user modeling error that MKL masks
-   today. δ_c comes from the existing #103 machinery, engaged **on demand**.
-2. **On exhaustion, fail the step (IPOPT-faithful)** — route into the existing recovery
-   chain rather than today's warn-and-proceed.
+1. **Full IPOPT Algorithm IC condition** on the classic branch and the shared ladder.
+   δ_w provably cannot fix a rank-deficient constraint Jacobian; δ_c comes from the
+   existing #103 machinery, engaged **on demand**.
+2. **On exhaustion, fail the step (IPOPT-faithful)** — route through the existing
+   recovery chain; an unresolved rejection aborts the phase as `SINGULAR_KKT`.
 3. **Reuse #103's pieces verbatim** — no new NLP methods, no new constants.
+4. **Degeneracy latch (rev 3, lean-toward-IPOPT):** adapt IPOPT's
+   `hess_degenerate_`/`jac_degenerate_` memory. Once δ_c has been engaged, subsequent
+   `factor_impl` calls pre-apply it at the classic base attempt instead of
+   re-discovering the singularity, eliminating the wasted singular factorization per
+   iteration on persistently rank-deficient problems (the exact cost
+   `globalization-refinement-areas.md` records). Simplification vs IPOPT: the latch is
+   **sticky per phase** (reset at each `alg_impl` phase init; IPOPT can un-diagnose).
+   Residual cost of a stale latch is a μ-vanishing 1e-8·μ^0.25 shift.
+5. **Deliberate non-parity, justified elsewhere:** PSIOPT's δ_w escalation constants
+   stay native (corpus-validated; adopting IPOPT's schedule is a campaign measurement
+   item via the #108 sweep driver, not this PR). Restoration stays opt-in (campaign
+   no-flip recommendation); the `SINGULAR_KKT` abort is IPOPT's own
+   restoration-unavailable branch, and the routing automatically becomes full IPOPT
+   behavior whenever restoration is enabled.
 
 ## Algorithm
 
@@ -82,141 +93,134 @@ Let `m = equal_cons_ + inequal_cons_`, `n_kkt = kkt_dim_`. Expected inertia is
 ```
 factor_impl(docompute, Zfac, ipurt, incpurt0, incpurt, &finalpert, &cumpert,
             base_prox, dual_shift, &exhausted):        // signature: only &exhausted new
-    wrong()    := (neigs != m) || (peigs + neigs != n_kkt)   // full IC condition
-    singular() := (peigs + neigs != n_kkt)
+    Singular()  := (peigs + neigs != n_kkt)
+    wrong()     := (Inertia() != 0) || Singular()       // Inertia() = neigs - m, existing
     dc_applied = false
-    engage_dc():= if (!dc_applied && dual_shift != 0.0):
-                      PerturbC(-dual_shift); dc_applied = true
+    EngageDualReg() := if (!dc_applied && dual_shift != 0.0):
+                           PerturbC(-dual_shift); dc_applied = true
+                           this->dc_latched_ = true     // degeneracy latch (sticky/phase)
 
-    if proximal mode:                                   // branch structure as today
+    if proximal mode:                                   // branch as today
         Perturb(base_prox)
-        if dual_shift != 0.0: { PerturbC(-dual_shift); dc_applied = true }  // as today
-        factor; CheckInfo; RankDef; bookkeeping as today
-        if singular(): engage_dc()                      // no-op here (dc_applied)
+        if dual_shift != 0.0: { PerturbC(-dual_shift); dc_applied = true }
+        factor; bookkeeping as today
         if !wrong(): return 0
     else if Zfac || docompute:                          // classic branch
-        factor; CheckInfo; RankDef; bookkeeping as today
-        if singular(): engage_dc()                      // δ_c on demand — the fix
+        if this->dc_latched_: EngageDualReg()           // latch pre-application
+        factor; bookkeeping as today
+        if Singular(): EngageDualReg()                  // δ_c on demand — the fix
         if !wrong(): return 0                           // was: IncEigs <= 0
     p = ipurt
     for i in 0 .. max_refac_-1:                         // shared ladder
-        Perturb(p); cumpert += p; Refactor; CheckInfo; RankDef; finalpert = p
-        if singular(): engage_dc()                      // first observation mid-ladder
+        Perturb(p); cumpert += p; Refactor; bookkeeping as today
+        if Singular(): EngageDualReg()
         if !wrong(): return i + 1                       // was: IncEigs <= 0
-        p escalation exactly as today (incpurt0 / incpurt)
-    exhausted = true                                    // NEW distinct signal
+        p escalation exactly as today
+    exhausted = true
     warn (existing message, extended with the inertia triple)
     return max_refac_
 ```
 
-- **`dual_shift` semantics change:** it becomes "the δ_c magnitude available to this
-  call" for BOTH modes. `alg_impl` hoists the existing computation
+- **`dual_shift` semantics change:** "the δ_c magnitude available to this call" for
+  BOTH modes. `alg_impl` hoists the existing computation
   (`nested_active ? 0.0 : dual_regularization(mu)`, currently proximal-only at
-  psiopt.cpp:2280-2286) out of the mode conditional so classic passes it too. Proximal
-  applies it up-front exactly as today; classic applies it only on observed
-  singularity. The nested-restoration suppression is inherited from the hoisted
-  computation — under nested phases `dual_shift == 0.0` and `engage_dc()` is inert.
-- An `engage_dc()` mid-call takes effect at the next `Refactor()` (same matrix the δ_w
-  `Perturb` writes to), so handling a singular base costs one ladder rung — a small
-  δ_w rides along with δ_c, matching Ipopt (which raises δ_w alongside δ_c on
-  singularity).
-- The δ_w loop body, escalation constants, `finalpert`/`Hpert0` warm-start, `cumpert`
-  display accounting, and the return-value (`h_facs_`) semantics are byte-identical to
-  today. The changes are the two acceptance predicates, `engage_dc()`, and `exhausted`.
-- The strengthened ladder exit applies to the proximal branch too — coherent with its
-  own design (its base already treats singular as ladder-entry; today its ladder could
-  still exit singular).
+  psiopt.cpp:1823-1830) out of the mode conditional. Nested-restoration suppression is
+  inherited (`dual_shift == 0.0` ⇒ `EngageDualReg` inert, latch or not).
+- Latch pre-application happens BEFORE the base factorization (mirrors the proximal
+  base), so a latched problem factors correctly on the first attempt — 1 factorization
+  per iteration instead of 1 + ladder.
+- `dc_latched_` is a PSIOPT member, reset in `alg_impl`'s per-phase init (next to the
+  `result_.last_kkt_info_` reset, psiopt.cpp:1227).
+- The δ_w loop body, escalation, warm-start, `cumpert`, and return-value (`h_facs_`)
+  semantics are byte-identical to today.
+- The strengthened ladder exit applies to the proximal branch too (its base already
+  treats singular as ladder-entry; today its ladder can still exit singular).
 
-## Component changes
+## Exhaustion routing (re-anchored to the post-#109/#110 loop shape)
 
-### 1. `PSIOPT::factor_impl` (psiopt.h declaration ~:979-982; psiopt.cpp:1639)
+The loop tail now has an established idiom for exactly this terminal — two precedents:
+`exit_at_acceptable` (#109) and `exit_stage_stalled` (#110). The commit
+`XSL += alpha * DXSL;` (psiopt.cpp:2295) executes AFTER the exit decision, so a
+terminating iteration never commits; and `!GoodStep` already exits as `DIVERGING`
+(psiopt.cpp:2257-2258), which covers the exhausted-plus-non-finite corner (the
+non-finite verdict dominates; no special case needed).
 
-- Signature gains `bool &exhausted` (out; set only on exhaustion). Today's return value
-  `max_refac_` is ambiguous between success-on-last-attempt and exhaustion; `exhausted`
-  disambiguates without disturbing `Citer.h_facs_` consumers (HPert display, Zfac
-  cycling heuristic).
-- Body per the pseudocode above. The exhaustion warning gains the observed inertia
-  triple (`peigs/neigs/zeigs` equivalent via `peigs()`, `neigs()`, and
-  `kkt_dim_ − peigs − neigs`).
+1. Force the rejection before the dispatch gate (psiopt.cpp:2054
+   `should_dispatch_recovery(GoodStep, Citer)` = `good_step && !accepted_`):
+   `if (kkt_exhausted) Citer.accepted_ = false;`
+2. In `kAcceptAsIs` (psiopt.cpp:2062), when `kkt_exhausted` and `resolved_depth`
+   is still `kRecoveryDepthUnresolved`: `alpha = 0.0; singular_abort = true;`
+   (a nested re-center stamps `kRecoveryDepthRestoration` and is a resolution;
+   `kRetry`/`kSwitchToFeasibility`/`kSoftFeasibilityStep` are resolutions).
+3. `bool singular_abort = false;` declared beside `exit_at_acceptable`
+   (psiopt.cpp:2000). After the `exit_at_acceptable` upgrade (psiopt.cpp:2269-2270):
+   `if (singular_abort) ExitCode = ConvergenceFlags::SINGULAR_KKT;` — SINGULAR_KKT is
+   decisive over the acceptable-upgrade (an IC failure is a step-computation error,
+   Ipopt `Error_In_Step_Computation`; composing it with an acceptable-stop heuristic
+   is a possible future refinement, noted for review).
+4. Add `ExitCode == ConvergenceFlags::SINGULAR_KKT ||` to the exit disjunction
+   (psiopt.cpp:2281-2283).
 
-### 2. Call site (psiopt.cpp:2269-2293) — hoist + route
+New flag: `ConvergenceFlags::SINGULAR_KKT = 4` (psiopt_fwd.h:26-33; severity comment
+extends to `... < DIVERGING < SINGULAR_KKT`). Consumers: psiopt_print.cpp:211 chain
+(print "KKT System Persistently Singular"), jet.h:200 switch (count with NumDiv),
+psiopt_bind.cpp:605 (`.value("SINGULAR_KKT", ...)`; regenerate the stub snapshot).
 
-- Hoist `nested_active`/`dual_shift` computation out of the
-  `InertiaModes::proximal_regularization` conditional (classic now passes a nonzero
-  `dual_shift` too; `base_prox` stays 0.0 on classic — classic must NOT apply a base
-  primal shift). The proximal-only display/decay block (psiopt.cpp:2305-2319) is
-  unchanged.
-- `bool kkt_exhausted = false;` threaded into the call. The stale policy comment at
-  psiopt.cpp:2290-2293 is replaced by the new policy:
-- **Exhaustion routing:** the iteration proceeds through the solve and line search
-  unchanged, but when `kkt_exhausted` is set the line-search verdict is forced to
-  *rejected*, so control flows into the existing
-  `recovery_->on_step_rejected(...)` dispatch (psiopt.cpp:~2411 region) with every
-  precondition satisfied by construction: `kSwitchToFeasibility` → existing
-  `enter_feasibility_restoration()` (entry-permitted guards intact); `kGiveUp` →
-  existing abort flagging; other actions per the chain's normal semantics. Rejected
-  alternative: calling `on_step_rejected` directly while skipping the solve — it would
-  synthesize a post-line-search context the chain was not designed to receive. Cost of
-  the chosen route is one wasted solve on a near-unreachable path.
+## Component changes (anchors at the #114 merge)
 
-### 3. Backends — no interface changes
-
-The predicates use only `peigs()`/`neigs()`, present on both `AccelerateLDLTTPP` and
-`PardisoLDLT`. On MKL, `peigs + neigs == n` always (internal pivot perturbation), so
-`singular()` is near-unfireable there; on Accelerate it is the fix.
+1. `factor_impl` definition psiopt.cpp:1062-1183 (declaration psiopt.h:987-989, doc
+   comment above it rewritten for the new `dual_shift` semantics and `exhausted`).
+   `PerturbC` moves from the proximal branch (:1120-1122) to function scope.
+2. Call site psiopt.cpp:1823-1834: hoist `dual_shift`, thread `bool kkt_exhausted`.
+   The stale proceed-anyway comment below the call is replaced by the new policy.
+3. New PSIOPT member `bool dc_latched_ = false;` + friend-test access via the existing
+   gtest-friend pattern (psiopt.h:54-61 forward decls, :763-770 friend block).
+4. Recovery-dispatch edits per the routing section.
+5. No solver-interface (backend) changes: predicates use `peigs()`/`neigs()` only.
 
 ## Risk
 
-- **The one MKL-reachable behavior change:** today classic silently accepts
-  `neigs < m`; the full IC condition corrects it instead. `neigs < m` can occur
-  transiently on MKL (perturbed pivots), so some Linux problems may now take perturbed
-  refactorizations where they previously proceeded. Literature-correct; the full Linux
-  corpus run (CI on the PR) gates the merge. Otherwise the new predicate is a strict
-  superset of today's — every case corrected today is corrected identically.
-- **Shared-ladder exit affects the proximal mode** (strengthening: it can no longer
-  exit still-singular). #103's tests (a) `ProximalRegularizationConvergesOnRankDeficientKkt`,
-  (c) `WellConditionedParityAcrossModes`, (d) the nested-restoration composition test
-  must stay green (they should be inert to this change: (a) is nonsingular after its
-  base δ_c; (c) never triggers correction; (d) runs under nested suppression).
-- δ_c applied on demand changes no solve where `singular()` never fires — the exact
-  condition that is unreachable in ordinary operation on both backends.
+- **One MKL-reachable behavior change:** classic no longer silently accepts
+  `neigs < m` (transiently possible on MKL). Literature-correct; Linux corpus CI gates
+  the merge. Otherwise the new predicate is a strict superset of today's.
+- **Shared-ladder exit strengthens the proximal mode too.** #103's tests
+  (`ProximalRegularizationConvergesOnRankDeficientKkt`,
+  `WellConditionedParityAcrossModes`, the nested composition test) must stay green.
+- **Latch:** only activates on problems that already exhibited singularity; a stale
+  latch costs a μ-vanishing δ_c. Sticky-per-phase (documented deviation from IPOPT's
+  un-diagnose logic).
+- δ_c on demand changes no solve where `Singular()` never fires.
 
-## Tests (red → green on macOS/Accelerate at `c9e8ddd`; Linux corpus via CI)
+## Tests (red → green on macOS/Accelerate at the merged tree; Linux corpus via CI)
 
-1. **Primary (exists, red today):** `DivergencePersistence.MaratosCorpusConvergesAtDefaults`
-   (tests/cpp/solvers/test_divergence_persistence.cpp:209) — must converge to obj −1.0
-   in ≤ 60 iterations at defaults (classic).
+1. **Primary (exists, red):** `DivergencePersistence.MaratosCorpusConvergesAtDefaults`
+   — converge to obj −1.0 in ≤ 60 iterations at defaults.
 2. **Upgrade (exists as conditional):**
    `InertiaRegularizationSolve.ClassicOnRankDeficientKktDocumented`
-   (tests/cpp/solvers/test_inertia_regularization.cpp:151) currently documents classic
-   behavior with `if (flag == CONVERGED)` guards; upgrade to assert `CONVERGED`,
-   obj ≈ 0.5, primals ≈ (0.5, 0.5) unconditionally, using the existing
-   `build_duplicated_equality_nlp()` (rank(J) = 1 < m = 2 — the δ_c path). Red on
-   macOS today; Linux may already pass via Pardiso's rescue — portable either way.
-   Rename to drop "Documented".
-3. **New — exhaustion routing:** Maratos problem with `max_refac_` forced to 0 so every
-   wrong-inertia factorization exhausts immediately (write the settings member directly
-   with a comment if a validating setter forbids 0, as
-   `test_event_refinement_coverage.cpp` does for its unsatisfiable tolerance). Assert
-   the solve terminates promptly via the recovery path (restoration entry or a
-   non-CONVERGED flag within a small iteration budget) — **not** a 500-iteration stall.
-4. **Regressions:** `DivergencePersistence.GenuineDivergenceStillAborts`; all
-   `InertiaRegularizationSolve` tests; full `ctest` (docking Form2 stays red —
-   documented, out of scope); 34 Python examples; brachistochrone; benchmarks. The
-   in-process Ipopt reference backend (#107) is available as a behavioral cross-check
-   if attribution questions arise.
+   (test_inertia_regularization.cpp:165) → assert `CONVERGED`, obj ≈ 0.5, primals
+   ≈ (0.5, 0.5) unconditionally; rename to `ClassicConvergesOnRankDeficientKkt`. Uses
+   the existing builder, renamed by #113 to `build_inertia_duplicated_equality_nlp`.
+3. **New — degeneracy latch (friend test):** after solving the duplicated-equality
+   problem under classic, the optimizer's `dc_latched_` is true; after the
+   well-conditioned problem it is false.
+4. **New — exhaustion routing:** Maratos with `settings().max_refac_ = 0` (public
+   member, no validating setter) → `SINGULAR_KKT` within ~10 iterations.
+5. **Regressions:** `GenuineDivergenceStillAborts`; all `InertiaRegularizationSolve`
+   tests; full ctest (docking Form2 stays red — documented); 34 examples;
+   brachistochrone; benchmarks; Linux CI corpus. The #107 in-process Ipopt backend is
+   available as a behavioral cross-check.
 
-Verification tooling: the probe pipeline from the #88 investigation — recompile the 7
-solver TUs (now including `ipopt_backend_stub.cpp`) with flags from
-`compile_commands.json`, relink the standalone Maratos probe (~30 s total) — is the
-fast red/green check before paying for the real build. `psiopt.h` is in the PCH
-include chain, so the signature change costs one full rebuild; sequence all header
-changes into the first implementation task so that cost is paid once.
+Verification tooling: the probe pipeline — compile every `src/solvers/*.cpp` except
+`ipopt_tnlp_adapter.cpp` (real-Ipopt TU; the stub provides `ipopt_backend::solve`)
+with flags from `compile_commands.json` (fall back to psiopt.cpp's flags for TUs the
+stale JSON lacks, e.g. `psiopt_settings.cpp`), recompile the probe TU, link against
+the prebuilt non-solver archives (~1 min total). Verified working on the merged tree
+2026-07-27.
 
 ## Delivery
 
 Single PR from `fix/psiopt-inertia-correction`. Commits per component (factor_impl +
-call-site hoist; exhaustion routing; tests). File a GH issue for the proximal-Maratos
-divergence finding. Pre-merge gates per CLAUDE.md (ctest, examples, brachistochrone,
-benchmarks) on macOS, plus Linux CI corpus. Explicit human review required (PSIOPT
-internals).
+latch + call-site hoist; SINGULAR_KKT + routing; tests ride with their component).
+File the proximal-Maratos divergence GH issue and a campaign-measurement issue for
+adopting IPOPT's δ_w schedule via the #108 sweep driver. Pre-merge gates per CLAUDE.md
+on macOS plus Linux CI corpus. Explicit human review required.
