@@ -1581,21 +1581,34 @@ TEST(NestedRestorationLifecycle, ForcedEscalationRunsFullPhaseAndConverges) {
 TEST(NestedRestorationLifecycle, ProximalPathStillEntersExitsConverges) {
     NestedLifecycleHarness h((Eigen::VectorXd(2) << 0.0, 0.0).finished(), /*n_ineq=*/0,
                              /*inconsistent=*/false);
-    // Drive a real proximal-switch solve through the public API (no nested
-    // injection): rebuild + solve via optimize-equivalent path.
+    // Drive a real proximal-switch forced-entry run through the public API (no
+    // nested injection, no preloaded counters, no private-member pokes): set the
+    // mode, cap the classic ladder at zero so the first rejection is already
+    // ladder-exhausted, and call optimize().
+    //
+    // optimize(), NOT solve(). The solve-only phase runs soe_ls_mode_, which
+    // defaults to NOLS, and BacktrackingLineSearch::run_acceptance_backtrack
+    // short-circuits NOLS by stamping Citer.accepted_ = true and returning the
+    // full step. should_dispatch_recovery() is (GoodStep && !accepted_), so on
+    // that path the recovery chain -- and with it FeasibilitySwitchRecovery --
+    // is never invoked at all, and max_ls_iters_ is never even read. Restoration
+    // entry is therefore structurally unreachable through solve(); only a phase
+    // running a real line-search mode (opt_ls_mode_, AUGLANG by default) can
+    // produce the ladder-exhausted rejection this test is about.
     h.solver().settings().restoration_mode_ = RestorationModes::proximal_switch;
     h.solver().set_max_ls_iters(0);
     h.solver().set_max_iters(120);
     Eigen::VectorXd x = (Eigen::VectorXd(2) << 0.0, 0.0).finished();
-    Eigen::VectorXd sol = h.solver().solve(x);
+    Eigen::VectorXd sol = h.solver().optimize(x);
     const auto &r = h.solver().result();
     EXPECT_LE(r.converge_flag_, tycho::ConvergenceFlags::ACCEPTABLE);
     ASSERT_EQ(sol.size(), 2);
     EXPECT_NEAR(sol[0], 2.0, 1e-3);
     EXPECT_NEAR(sol[1], 2.0, 1e-3);
     // Restoration was actually entered -- the same bar the proximal forced-entry
-    // sibling on this problem shape holds (ForcedEntryOnFeasibleProblemEntersExits
-    // AndConverges). >= 0 would be satisfied by merely constructing a strategy.
+    // sibling holds (ForcedEntryOnFeasibleProblemEntersExitsAndConverges, same
+    // recipe on its own problem). >= 0 would be satisfied by merely constructing
+    // a strategy, which is what this test used to assert.
     EXPECT_GE(r.last_feas_rest_entries_, 1);
 }
 
