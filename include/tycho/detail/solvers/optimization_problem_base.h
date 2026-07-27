@@ -74,11 +74,11 @@ struct OptimizationProblemBase {
         this->init_partitions();
     }
 
-    virtual PSIOPT::ConvergenceFlags solve() = 0;
-    virtual PSIOPT::ConvergenceFlags optimize() = 0;
-    virtual PSIOPT::ConvergenceFlags solve_optimize() = 0;
-    virtual PSIOPT::ConvergenceFlags solve_optimize_solve() = 0;
-    virtual PSIOPT::ConvergenceFlags optimize_solve() = 0;
+    virtual tycho::ConvergenceFlags solve() = 0;
+    virtual tycho::ConvergenceFlags optimize() = 0;
+    virtual tycho::ConvergenceFlags solve_optimize() = 0;
+    virtual tycho::ConvergenceFlags solve_optimize_solve() = 0;
+    virtual tycho::ConvergenceFlags optimize_solve() = 0;
 
     /// Compute default partition count from the global thread budget.
     /// Over-partitions by 4x so the work-stealing pool can smooth out
@@ -119,7 +119,7 @@ struct OptimizationProblemBase {
     // would call parallel_sequence/parallel_task from a pool worker, triggering
     // the nested-dispatch guard (std::logic_error). jet_initialize() MUST set
     // num_partitions_=1 so NLP eval methods run inline.
-    virtual PSIOPT::ConvergenceFlags jet_run() {
+    virtual tycho::ConvergenceFlags jet_run() {
         // Concurrency guard, checked before jet_initialize() mutates this
         // problem and before any solve work begins. Jet::map builds each
         // problem inside its worker job, so this entry point is the first
@@ -137,7 +137,7 @@ struct OptimizationProblemBase {
 
         this->jet_initialize();
 
-        PSIOPT::ConvergenceFlags flag;
+        tycho::ConvergenceFlags flag;
 
         switch (this->jet_job_mode_) {
         case JetJobModes::Solve: {

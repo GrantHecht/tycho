@@ -492,7 +492,7 @@ TEST_F(SolverTest, ForcedEntryOnFeasibleProblemEntersExitsAndConverges) {
     auto flag = prob->optimize();
 
     const auto &r = prob->optimizer_->result();
-    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     EXPECT_GE(r.last_feas_rest_entries_, 1);           // restoration was entered
     EXPECT_LE(r.last_feas_rest_entries_, 2);           // and not beyond the budget
     ASSERT_EQ(r.primals_.size(), 1);
@@ -523,7 +523,7 @@ TEST_F(SolverTest, ForcedEntryUnderFilterAcceptanceStillConverges) {
     auto flag = prob->optimize();
 
     const auto &r = prob->optimizer_->result();
-    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     EXPECT_GE(r.last_feas_rest_entries_, 1);           // restoration was entered
     ASSERT_EQ(r.primals_.size(), 1);
     EXPECT_NEAR(r.primals_[0], 1.0, 1e-4);             // converged on the true objective
@@ -541,7 +541,7 @@ TEST_F(SolverTest, ForcedEntryOnInfeasibleProblemDoesNotFalselyConverge) {
 
     const auto &r = prob->optimizer_->result();
     // Hard assertion: never fatal-skipped, always runs.
-    EXPECT_NE(flag, PSIOPT::ConvergenceFlags::CONVERGED);
+    EXPECT_NE(flag, tycho::ConvergenceFlags::CONVERGED);
     // Soft check: entry depends on pivot perturbation producing a finite step
     // from this problem's rank-deficient KKT system, which is platform-
     // dependent factorization behavior, not the property under test.
@@ -564,7 +564,7 @@ TEST_F(SolverTest, BudgetZeroRefusesAllEntries) {
 
     const auto &r = prob->optimizer_->result();
     EXPECT_EQ(r.last_feas_rest_entries_, 0); // budget refused every entry
-    EXPECT_NE(flag, PSIOPT::ConvergenceFlags::CONVERGED);
+    EXPECT_NE(flag, tycho::ConvergenceFlags::CONVERGED);
 }
 
 } // namespace
@@ -806,7 +806,7 @@ class NestedSeamHarness {
         solver_->settings().print_level_ = 3;
         solver_->rebuild_globalization_components();
         solver_->ensure_solver_initialized();
-        bool docompute = solver_->analyze_kkt_matrix();
+        bool docompute = solver_->claim_kkt_analysis();
         Eigen::VectorXd x = (Eigen::VectorXd(2) << 0.0, 0.0).finished();
         Eigen::VectorXd XSL = solver_->init_impl(x, outer_mu, docompute);
 
@@ -1263,7 +1263,7 @@ class NestedLifecycleHarness {
     // alg_impl directly with the injected nested strategy. Records the final
     // iterate's μ so a caller can confirm it is the outer schedule value, not the
     // (large) restoration barrier parameter.
-    PSIOPT::ConvergenceFlags run_forced_entry(NestedL1Restoration *&comp_out,
+    tycho::ConvergenceFlags run_forced_entry(NestedL1Restoration *&comp_out,
                                               PSIOPT::LineSearchModes lsmode,
                                               PSIOPT::BarrierModes barmode, double &final_mu,
                                               double init_mu = 0.1, int preload_soft_counter = 0,
@@ -1288,7 +1288,7 @@ class NestedLifecycleHarness {
                 fsr->soft_counter_ = preload_soft_counter;
         }
         solver_->ensure_solver_initialized();
-        bool docompute = solver_->analyze_kkt_matrix();
+        bool docompute = solver_->claim_kkt_analysis();
         Eigen::VectorXd XSL = solver_->init_impl(start_, init_mu, docompute);
         final_mu = init_mu;
         double *fm = &final_mu;
@@ -1458,7 +1458,7 @@ TEST(NestedRestorationLifecycle, SoftPreStageResolvesWithoutFullEntry) {
     auto flag = h.run_forced_entry(comp, PSIOPT::LineSearchModes::L1, PSIOPT::BarrierModes::LOQO,
                                    final_mu, /*init_mu=*/0.1);
 
-    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     ASSERT_NE(comp, nullptr);
     EXPECT_EQ(comp->entries(), 0); // the pre-stage resolved it; no full l1 entry
     const auto &r = h.solver().result();
@@ -1482,7 +1482,7 @@ TEST(NestedRestorationLifecycle, EndToEndWithInequalityConvergesUnderSoftPreStag
     auto flag = h.run_forced_entry(comp, PSIOPT::LineSearchModes::L1, PSIOPT::BarrierModes::LOQO,
                                    final_mu, /*init_mu=*/0.1);
 
-    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     ASSERT_NE(comp, nullptr);
     const auto &r = h.solver().result();
     ASSERT_EQ(r.primals_.size(), 2);
@@ -1501,7 +1501,7 @@ TEST(NestedRestorationLifecycle, EndToEndLangLineSearchConvergesUnderSoftPreStag
     auto flag = h.run_forced_entry(comp, PSIOPT::LineSearchModes::LANG, PSIOPT::BarrierModes::LOQO,
                                    final_mu, /*init_mu=*/0.1);
 
-    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     ASSERT_NE(comp, nullptr);
     const auto &r = h.solver().result();
     ASSERT_EQ(r.primals_.size(), 2);
@@ -1528,7 +1528,7 @@ TEST(NestedRestorationLifecycle, SoftPreStageEscalatesIntoFullL1Phase) {
                                    final_mu, /*init_mu=*/0.1);
 
     ASSERT_NE(comp, nullptr);
-    EXPECT_NE(flag, PSIOPT::ConvergenceFlags::CONVERGED); // never falsely converges
+    EXPECT_NE(flag, tycho::ConvergenceFlags::CONVERGED); // never falsely converges
     if (comp->entries() < 1) {
         GTEST_SKIP() << "factorization returned non-finite step on this platform; "
                         "escalation not exercised";
@@ -1553,7 +1553,7 @@ TEST(NestedRestorationLifecycle, ForcedEscalationRunsFullPhaseAndConverges) {
                                    final_mu, /*init_mu=*/0.1,
                                    /*preload_soft_counter=*/kMaxSoftRestoIters);
 
-    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     ASSERT_NE(comp, nullptr);
     EXPECT_GE(comp->entries(), 1); // full phase entered
     const auto &r = h.solver().result();
@@ -1579,7 +1579,7 @@ TEST(NestedRestorationLifecycle, ProximalPathStillEntersExitsConverges) {
     Eigen::VectorXd x = (Eigen::VectorXd(2) << 0.0, 0.0).finished();
     Eigen::VectorXd sol = h.solver().solve(x);
     const auto &r = h.solver().result();
-    EXPECT_LE(r.converge_flag_, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(r.converge_flag_, tycho::ConvergenceFlags::ACCEPTABLE);
     ASSERT_EQ(sol.size(), 2);
     EXPECT_NEAR(sol[0], 2.0, 1e-3);
     EXPECT_NEAR(sol[1], 2.0, 1e-3);
@@ -1612,7 +1612,7 @@ TEST(NestedRestorationRecenter, FiresExactlyOncePerFailureRunEndToEnd) {
                                    final_mu, /*init_mu=*/0.1,
                                    /*preload_soft_counter=*/kMaxSoftRestoIters);
 
-    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     ASSERT_NE(comp, nullptr);
     EXPECT_GE(comp->entries(), 1);           // full phase entered
     EXPECT_EQ(comp->recenter_calls(), 1);    // exactly one re-center; rest fall through
@@ -1814,7 +1814,7 @@ TEST(NestedRestorationLifecycle, FreeOracleUnreachableDuringNestedPhase) {
                                    /*preload_soft_counter=*/kMaxSoftRestoIters,
                                    /*after_rebuild=*/[&] { h.set_governor(std::move(guard)); });
 
-    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     ASSERT_NE(comp, nullptr);
     EXPECT_GE(comp->entries(), 1);            // the full l1 phase was entered
     EXPECT_EQ(raw->calls_during_nested(), 0); // free oracle never consulted while active

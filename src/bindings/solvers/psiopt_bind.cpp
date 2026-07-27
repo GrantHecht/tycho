@@ -54,7 +54,7 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     using LineSearchModes = PSIOPT::LineSearchModes;
     using QPPivotModes = PSIOPT::QPPivotModes;
     using PDStepStrategies = PSIOPT::PDStepStrategies;
-    using ConvergenceFlags = PSIOPT::ConvergenceFlags;
+    using ConvergenceFlags = tycho::ConvergenceFlags;
     using AlgorithmModes = PSIOPT::AlgorithmModes;
     using QPOrderingModes = PSIOPT::QPOrderingModes;
     using BestCriteriaModes = PSIOPT::BestCriteriaModes;

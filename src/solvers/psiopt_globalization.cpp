@@ -59,20 +59,22 @@
 
 namespace tycho::solvers {
 
+namespace {
 // File-local helpers shared by every wrapped trial-evaluation catch site
 // below (ls_lang/ls_l1/ls_auglang/generic_line_search): both null-guard on
 // `log` so a SolverContext built without an EvalErrorLog (e.g. a bare
 // unit-test context) stays a silent no-op, matching the inline record()/
 // record_unknown() calls they replace.
-static void note_eval_error(EvalErrorLog *log, const char *what) {
+void note_eval_error(EvalErrorLog *log, const char *what) {
     if (log)
         log->record(what);
 }
 
-static void note_eval_error_unknown(EvalErrorLog *log) {
+void note_eval_error_unknown(EvalErrorLog *log) {
     if (log)
         log->record_unknown();
 }
+} // namespace
 
 // ============================================================================
 // Generic interface — is_iterate_acceptable is unused on the classic merit
@@ -95,7 +97,8 @@ bool ClassicMeritAcceptance::is_iterate_acceptable(const ProgressMeasures &curre
     (void)step_length;
     throw std::logic_error("ClassicMeritAcceptance::is_iterate_acceptable is unused on the classic "
                            "merit path (acceptance is fused inside classic_line_search); it is "
-                           "driven only by a future filter/funnel/WMNO acceptance strategy");
+                           "driven only by the shipped filter/funnel/modern-merit (WMNO) "
+                           "acceptance strategies, which give it a real body");
 }
 
 bool ClassicMeritAcceptance::is_infeasibility_sufficiently_reduced(
@@ -218,8 +221,7 @@ auto ClassicMeritAcceptance::compute_penalties(KKTVector &xsl, KKTVector &rhs) c
 bool ClassicMeritAcceptance::secondary_accept(double ptest, double prim_obj,
                                               const PenaltyTerms &test,
                                               const PenaltyTerms &init) const {
-    return (ptest < prim_obj && test.l2_ < init.l2_) ||
-           (ptest < prim_obj && test.linf_ < init.linf_);
+    return ptest < prim_obj && (test.l2_ < init.l2_ || test.linf_ < init.linf_);
 }
 
 // ============================================================================
@@ -370,6 +372,13 @@ double ClassicMeritAcceptance::ls_l1(double obj_scale, double mu, double prim_ob
     return alpha;
 }
 
+// ls_auglang's tolerance-filtered L1 penalty only accumulates a row's
+// contribution once its residual exceeds this multiple of the row's own
+// convergence tolerance (econ_tol_/icon_tol_) -- a coarser filter than the
+// tolerance itself, so residuals within one order of magnitude of converged
+// are excluded from the L1 penalty term.
+inline constexpr double kLsAuglangTolFilterMultiplier = 10.0;
+
 double ClassicMeritAcceptance::ls_auglang(double obj_scale, double mu, double prim_obj,
                                           double barr_obj, KKTVector &xsl, KKTVector &dxsl,
                                           KKTVector &xsl2, KKTVector &rhs, KKTVector &rhs2,
@@ -416,14 +425,14 @@ double ClassicMeritAcceptance::ls_auglang(double obj_scale, double mu, double pr
         for (int i = 0; i < ctx_.equal_cons_; i++) {
             double eqerr = std::abs(rhs2.eq_cons()[i]);
             double eqmul = std::abs(xsl.eq_lmults()[i]);
-            if (eqerr > ctx_.settings_.econ_tol_ * 10) {
+            if (eqerr > ctx_.settings_.econ_tol_ * kLsAuglangTolFilterMultiplier) {
                 TestL1Pen += eqerr * eqmul;
             }
         }
         for (int i = 0; i < ctx_.inequal_cons_; i++) {
             double iqerr = std::abs(rhs2.iq_cons()[i]);
             double iqmul = std::abs(xsl.iq_lmults()[i]);
-            if (iqerr > ctx_.settings_.icon_tol_ * 10) {
+            if (iqerr > ctx_.settings_.icon_tol_ * kLsAuglangTolFilterMultiplier) {
                 TestL1Pen += iqerr * iqmul;
             }
         }
@@ -432,9 +441,10 @@ double ClassicMeritAcceptance::ls_auglang(double obj_scale, double mu, double pr
         double TestLinfPenalty = rhs2.all_cons().template lpNorm<Eigen::Infinity>();
 
         // Zero L2 when within tolerance threshold
-        if (TestL2Pen <
+        const double zero_l2_threshold =
             ctx_.settings_.econ_tol_ * ctx_.settings_.econ_tol_ * ctx_.equal_cons_ +
-                ctx_.settings_.icon_tol_ * ctx_.settings_.icon_tol_ * ctx_.inequal_cons_) {
+            ctx_.settings_.icon_tol_ * ctx_.settings_.icon_tol_ * ctx_.inequal_cons_;
+        if (TestL2Pen < zero_l2_threshold) {
             TestL2Pen = 0;
         }
 
@@ -558,13 +568,12 @@ bool ModernMeritAcceptance::is_infeasibility_sufficiently_reduced(
     // optimality-phase accept leaves the stash at +∞, so ratio·(+∞) passes at
     // the first check — is the reference solver's own behavior, retained.
     (void)reference;
-    const double tracker =
-        in_feasibility_phase_ ? stashed_smallest_known_infeasibility_ : smallest_known_infeasibility_;
+    const double tracker = in_feasibility_phase_ ? stashed_smallest_known_infeasibility_
+                                                  : smallest_known_infeasibility_;
     return trial.infeasibility <= kSufficientInfeasibilityDecreaseRatio * tracker;
 }
 
-void ModernMeritAcceptance::notify_switch_to_feasibility(
-    const ProgressMeasures &current_progress) {
+void ModernMeritAcceptance::notify_switch_to_feasibility(const ProgressMeasures &current_progress) {
     // T6: a second entry without an intervening exit would stash the FEASIBILITY
     // working penalties/tracker over the preserved optimality stash, silently
     // clobbering the frozen state the exit test consults — a phase-transition
@@ -591,8 +600,7 @@ void ModernMeritAcceptance::notify_switch_to_feasibility(
     this->reset();
 }
 
-void ModernMeritAcceptance::notify_switch_to_optimality(
-    const ProgressMeasures &current_progress) {
+void ModernMeritAcceptance::notify_switch_to_optimality(const ProgressMeasures &current_progress) {
     // T6: an exit without a preceding entry has no stash to restore — running
     // this body would overwrite the live optimality penalties/tracker with the
     // fresh-construction stash (or a stale one from a prior phase), a
@@ -705,6 +713,7 @@ bool ModernMeritAcceptance::accept_flexible(const ProgressMeasures &current,
     return true;
 }
 
+namespace {
 // ============================================================================
 // modern_eval_trial_point — shared trial-point evaluation for the GENERIC
 // acceptance loop (BacktrackingLineSearch::generic_line_search). A PARALLEL
@@ -715,12 +724,12 @@ bool ModernMeritAcceptance::accept_flexible(const ProgressMeasures &current,
 // Returns ptest (σ-scaled primal objective at the trial), btest (barrier term
 // −μ·Σ log s), and theta (L1 constraint-norm merit infeasibility ‖c‖₁).
 // ============================================================================
-static void modern_eval_trial_point(SolverContext &ctx, double obj_scale, double mu, double alpha,
-                                    const Eigen::VectorXd &XSL, const Eigen::VectorXd &DXSL,
-                                    Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS2, double &ptest,
-                                    double &btest, double &theta,
-                                    Eigen::VectorXd &resto_eq_shift_scratch,
-                                    Eigen::VectorXd &resto_iq_shift_scratch) {
+void modern_eval_trial_point(SolverContext &ctx, double obj_scale, double mu, double alpha,
+                             const Eigen::VectorXd &XSL, const Eigen::VectorXd &DXSL,
+                             Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS2, double &ptest,
+                             double &btest, double &theta,
+                             Eigen::VectorXd &resto_eq_shift_scratch,
+                             Eigen::VectorXd &resto_iq_shift_scratch) {
     const int pv = ctx.primal_vars_;
     const int sv = ctx.slack_vars_;
     const int ec = ctx.equal_cons_;
@@ -775,6 +784,7 @@ static void modern_eval_trial_point(SolverContext &ctx, double obj_scale, double
 
     theta = RHS2.tail(ec + ic).template lpNorm<1>();
 }
+} // namespace
 
 // ============================================================================
 // BacktrackingLineSearch — step-length mechanism. max_step_to_
@@ -1260,16 +1270,14 @@ RecoveryChain::Action SocRecovery::on_step_rejected(
     try {
         eval_trial_constraints(ctx, obj_scale, XSL, DXSL, 1.0, XSL2, trial_cons);
     } catch (const std::exception &e) {
-        if (ctx.eval_errors_)
-            ctx.eval_errors_->record(e.what());
+        note_eval_error(ctx.eval_errors_, e.what());
         // The correction seed cannot be evaluated; there is no point starting
         // the SOC procedure. Fall back to the ladder-exhaustion path. alphap /
         // alphad are still at their snapshot values here (only do_correction
         // mutates them), so this early return needs no restore.
         return Action::kAcceptAsIs;
     } catch (...) {
-        if (ctx.eval_errors_)
-            ctx.eval_errors_->record_unknown();
+        note_eval_error_unknown(ctx.eval_errors_);
         return Action::kAcceptAsIs;
     }
     c_soc = RHS.tail(ncons) + trial_cons;
@@ -1334,12 +1342,10 @@ RecoveryChain::Action SocRecovery::on_step_rejected(
         try {
             eval_trial_constraints(ctx, obj_scale, XSL, dxsl_soc, alpha_soc, XSL2, trial_cons);
         } catch (const std::exception &e) {
-            if (ctx.eval_errors_)
-                ctx.eval_errors_->record(e.what());
+            note_eval_error(ctx.eval_errors_, e.what());
             return SocCorrectionOutcome{false, std::numeric_limits<double>::infinity()};
         } catch (...) {
-            if (ctx.eval_errors_)
-                ctx.eval_errors_->record_unknown();
+            note_eval_error_unknown(ctx.eval_errors_);
             return SocCorrectionOutcome{false, std::numeric_limits<double>::infinity()};
         }
         c_soc = alpha_soc * c_soc + trial_cons;
@@ -1614,8 +1620,9 @@ bool SwitchingAcceptance::is_infeasibility_sufficiently_reduced(
     (void)reference;
     (void)trial;
     throw std::logic_error(
-        "SwitchingAcceptance::is_infeasibility_sufficiently_reduced is unused until a "
-        "feasibility-restoration strategy drives it");
+        "SwitchingAcceptance::is_infeasibility_sufficiently_reduced has no shared "
+        "implementation here; FilterAcceptance and FunnelAcceptance override it with a real "
+        "body, so reaching this base throw means a subclass failed to override it");
 }
 
 bool SwitchingAcceptance::compute_switching_holds(const ProgressMeasures &current,

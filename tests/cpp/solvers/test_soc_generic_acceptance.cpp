@@ -318,7 +318,7 @@ TEST(SocGenericAcceptanceIntegration, FilterMonitoredWithSocSolves) {
     prob->optimizer_->settings().max_soc_ = 4;
     prob->optimizer_->set_max_iters(80);
     auto flag = prob->optimize();
-    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     const auto &r = prob->optimizer_->result();
     ASSERT_EQ(r.primals_.size(), 1);
     EXPECT_NEAR(r.primals_[0], 1.0, 1e-4);
@@ -331,7 +331,7 @@ TEST(SocGenericAcceptanceIntegration, MeritWithSocAndExtendedBacktrackSolves) {
     prob->optimizer_->settings().ls_extended_iters_ = 2;
     prob->optimizer_->set_max_iters(80);
     auto flag = prob->optimize();
-    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     const auto &r = prob->optimizer_->result();
     ASSERT_EQ(r.primals_.size(), 1);
     EXPECT_NEAR(r.primals_[0], 1.0, 1e-4);
@@ -358,7 +358,7 @@ TEST(SocGenericAcceptanceIntegration, SocRescuePreemptsRestorationOnFeasibleProb
     prob->optimizer_->set_max_ls_iters(0);
     prob->optimizer_->set_max_iters(80);
     auto flag = prob->optimize();
-    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     const auto &r = prob->optimizer_->result();
     EXPECT_EQ(r.last_feas_rest_entries_, 0); // corrections rescued every rejection
     ASSERT_EQ(r.primals_.size(), 1);
@@ -388,7 +388,7 @@ TEST(SocGenericAcceptanceIntegration, L1NestedRestorationWithSocComposesInPhase)
     auto flag = prob->optimize();
     const auto &r = prob->optimizer_->result();
     EXPECT_GE(r.last_feas_rest_entries_, 1); // restoration entered with SOC in the chain
-    EXPECT_NE(flag, PSIOPT::ConvergenceFlags::CONVERGED); // never falsely converges
+    EXPECT_NE(flag, tycho::ConvergenceFlags::CONVERGED); // never falsely converges
 }
 
 } // namespace

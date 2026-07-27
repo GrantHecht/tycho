@@ -1585,7 +1585,7 @@ tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::phase_call_impl(JetJobModes mod
 
     Runtimer.start();
 
-    PSIOPT::ConvergenceFlags flag = this->psipot_call_impl(mode);
+    tycho::ConvergenceFlags flag = this->psipot_call_impl(mode);
 
     JetJobModes nextmode = mode;
     if (this->solve_only_first_) {

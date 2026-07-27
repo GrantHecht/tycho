@@ -24,7 +24,7 @@ TEST_F(OptimalControlTest, BrachistochroneSolveOptimize) {
     phase->optimizer_->set_print_level(0);
 
     auto status = phase->solve_optimize();
-    EXPECT_EQ(status, PSIOPT::ConvergenceFlags::CONVERGED)
+    EXPECT_EQ(status, tycho::ConvergenceFlags::CONVERGED)
         << "Brachistochrone should converge to optimal";
 
     auto result = phase->return_traj();
@@ -38,7 +38,7 @@ TEST_F(OptimalControlTest, BrachistochroneFinalBoundary) {
     phase->optimizer_->set_print_level(0);
 
     auto status = phase->solve_optimize();
-    ASSERT_EQ(status, PSIOPT::ConvergenceFlags::CONVERGED);
+    ASSERT_EQ(status, tycho::ConvergenceFlags::CONVERGED);
 
     auto result = phase->return_traj();
     // Check final boundary conditions: x(tf)=10, y(tf)=5

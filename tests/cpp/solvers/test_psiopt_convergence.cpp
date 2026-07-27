@@ -12,7 +12,7 @@ using namespace TychoTest;
 TEST_F(SolverTest, BrachistochroneEndToEnd) {
     auto phase = make_brach_solver_phase(32);
     auto status = phase->solve_optimize();
-    EXPECT_EQ(status, PSIOPT::ConvergenceFlags::CONVERGED);
+    EXPECT_EQ(status, tycho::ConvergenceFlags::CONVERGED);
 
     auto result = phase->return_traj();
     double tf = result.back()[3];
@@ -26,21 +26,21 @@ TEST_F(SolverTest, BrachistochroneSolveOnly) {
     // Should converge (feasible) -- Brachistochrone is well-posed.
     // ConvergenceFlags enum is ordered by severity: CONVERGED < ACCEPTABLE < NOTCONVERGED <
     // DIVERGING, so <= ACCEPTABLE accepts either CONVERGED or ACCEPTABLE.
-    EXPECT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
 }
 
 TEST_F(SolverTest, ConvergenceFlagOrdering) {
     // Verify the severity ordering of convergence flags
-    EXPECT_LT(PSIOPT::ConvergenceFlags::CONVERGED, PSIOPT::ConvergenceFlags::ACCEPTABLE);
-    EXPECT_LT(PSIOPT::ConvergenceFlags::ACCEPTABLE, PSIOPT::ConvergenceFlags::NOTCONVERGED);
-    EXPECT_LT(PSIOPT::ConvergenceFlags::NOTCONVERGED, PSIOPT::ConvergenceFlags::DIVERGING);
+    EXPECT_LT(tycho::ConvergenceFlags::CONVERGED, tycho::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LT(tycho::ConvergenceFlags::ACCEPTABLE, tycho::ConvergenceFlags::NOTCONVERGED);
+    EXPECT_LT(tycho::ConvergenceFlags::NOTCONVERGED, tycho::ConvergenceFlags::DIVERGING);
 }
 
 TEST_F(SolverTest, PrintLevelZeroConverges) {
     auto phase = make_brach_solver_phase(16);
     phase->optimizer_->set_print_level(0);
     auto status = phase->solve_optimize();
-    EXPECT_EQ(status, PSIOPT::ConvergenceFlags::CONVERGED);
+    EXPECT_EQ(status, tycho::ConvergenceFlags::CONVERGED);
 }
 
 // =============================================================================
@@ -237,7 +237,7 @@ TEST_F(SolverTest, BrachistochroneOptimizeSolve) {
     auto phase = make_brach_solver_phase(32);
     phase->optimizer_->set_print_level(3);
     auto status = phase->optimize_solve();
-    EXPECT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
 }
 
 TEST_F(SolverTest, ConditionalStepSkippedOnConvergence) {
@@ -245,7 +245,7 @@ TEST_F(SolverTest, ConditionalStepSkippedOnConvergence) {
     auto phase_opt = make_brach_solver_phase(32);
     phase_opt->optimizer_->set_print_level(3);
     auto status_opt = phase_opt->optimize();
-    ASSERT_EQ(status_opt, PSIOPT::ConvergenceFlags::CONVERGED);
+    ASSERT_EQ(status_opt, tycho::ConvergenceFlags::CONVERGED);
     int opt_iters = phase_opt->optimizer_->result().iter_num_;
 
     // optimize_solve: the solve step is conditional, so if optimize converges,
@@ -253,7 +253,7 @@ TEST_F(SolverTest, ConditionalStepSkippedOnConvergence) {
     auto phase_os = make_brach_solver_phase(32);
     phase_os->optimizer_->set_print_level(3);
     auto status_os = phase_os->optimize_solve();
-    EXPECT_LE(status_os, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(status_os, tycho::ConvergenceFlags::ACCEPTABLE);
     int os_iters = phase_os->optimizer_->result().iter_num_;
 
     EXPECT_EQ(os_iters, opt_iters)
@@ -264,14 +264,14 @@ TEST_F(SolverTest, BrachistochroneSolveOptimizeSolve) {
     auto phase = make_brach_solver_phase(32);
     phase->optimizer_->set_print_level(3);
     auto status = phase->solve_optimize_solve();
-    EXPECT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
     EXPECT_EQ(phase->optimizer_->result().primals_.size(), phase->nlp_->primal_vars_);
 }
 
 TEST_F(SolverTest, ResultAccessorPopulatedAfterSolve) {
     auto phase = make_brach_solver_phase(32);
     auto status = phase->solve_optimize();
-    EXPECT_EQ(status, PSIOPT::ConvergenceFlags::CONVERGED);
+    EXPECT_EQ(status, tycho::ConvergenceFlags::CONVERGED);
 
     const auto &r = phase->optimizer_->result();
     EXPECT_GT(r.iter_num_, 0);
@@ -302,7 +302,7 @@ TEST_F(SolverTest, ResultResetBetweenCalls) {
 
     // Additional fields should be valid and non-stale
     EXPECT_GT(r.obj_val_, 0.0);
-    EXPECT_LE(r.converge_flag_, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(r.converge_flag_, tycho::ConvergenceFlags::ACCEPTABLE);
     EXPECT_GT(r.total_time_, 0.0);
     EXPECT_EQ(r.primals_.size(), phase->nlp_->primal_vars_);
 
@@ -324,7 +324,7 @@ TEST_F(SolverTest, ReturnBestPreservesNonFinalIterate) {
     phase->optimizer_->settings().best_criteria_ = PSIOPT::BestCriteriaModes::ECONS;
 
     auto status = phase->optimize();
-    EXPECT_EQ(status, PSIOPT::ConvergenceFlags::NOTCONVERGED);
+    EXPECT_EQ(status, tycho::ConvergenceFlags::NOTCONVERGED);
 
     const auto &r = phase->optimizer_->result();
     EXPECT_GT(r.primals_.size(), 0u);
@@ -351,7 +351,7 @@ TEST_F(SolverTest, DivergenceEarlyExitInMultiPhase) {
     phase->optimizer_->set_acc_tols(1e-21, 1e-21, 1e-21, 1e-21);
     phase->optimizer_->set_div_tols(1e-20, 1e-20, 1e-20, 1e-20);
     auto status = phase->solve_optimize();
-    EXPECT_EQ(status, PSIOPT::ConvergenceFlags::DIVERGING);
+    EXPECT_EQ(status, tycho::ConvergenceFlags::DIVERGING);
 }
 
 // =============================================================================
@@ -417,7 +417,7 @@ TEST_F(SolverTest, MultiplierAndConstraintResultPopulation) {
     auto phase = make_brach_solver_phase(32);
     phase->optimizer_->set_print_level(3);
     auto status = phase->solve_optimize();
-    ASSERT_EQ(status, PSIOPT::ConvergenceFlags::CONVERGED);
+    ASSERT_EQ(status, tycho::ConvergenceFlags::CONVERGED);
 
     const auto &r = phase->optimizer_->result();
 

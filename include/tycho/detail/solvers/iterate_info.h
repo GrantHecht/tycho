@@ -18,7 +18,7 @@ namespace tycho::solvers {
 
 struct IterateInfo {
 
-    int iter = 0;
+    int iter_ = 0;
 
     double mu_ = 0;
     double prim_obj_ = 0;

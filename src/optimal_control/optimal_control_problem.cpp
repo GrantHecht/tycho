@@ -471,7 +471,7 @@ tycho::ConvergenceFlags tycho::oc::OptimalControlProblemBase::ocp_call_impl(JetJ
     utils::Timer Runtimer;
     Runtimer.start();
 
-    PSIOPT::ConvergenceFlags flag = this->psipot_call_impl(mode);
+    tycho::ConvergenceFlags flag = this->psipot_call_impl(mode);
 
     JetJobModes nextmode = mode;
     if (this->solve_only_first_) {

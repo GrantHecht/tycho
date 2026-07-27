@@ -233,7 +233,7 @@ TEST_F(SolverTest, FeasStallStageDispatchesProximalRestoration) {
     prob->solve();
     const auto &r = prob->optimizer_->result();
     EXPECT_GE(r.last_feas_rest_entries_, 1);
-    EXPECT_NE(r.converge_flag_, ts::PSIOPT::ConvergenceFlags::CONVERGED); // genuinely infeasible
+    EXPECT_NE(r.converge_flag_, tycho::ConvergenceFlags::CONVERGED); // genuinely infeasible
 }
 
 // Same dispatch, but under the filter acceptance strategy: the entry call
@@ -251,7 +251,7 @@ TEST_F(SolverTest, FeasStallDispatchUnderFilterAcceptanceHandshakes) {
     ASSERT_NO_THROW(prob->solve());
     const auto &r = prob->optimizer_->result();
     EXPECT_GE(r.last_feas_rest_entries_, 1);
-    EXPECT_NE(r.converge_flag_, ts::PSIOPT::ConvergenceFlags::CONVERGED); // genuinely infeasible
+    EXPECT_NE(r.converge_flag_, tycho::ConvergenceFlags::CONVERGED); // genuinely infeasible
 }
 
 // Once the per-phase restoration entry budget is spent, a still-worsening
@@ -275,7 +275,7 @@ TEST_F(SolverTest, FeasStallStageStopsBurningAfterBudgetExhaustion) {
     prob->solve();
     const auto &r = prob->optimizer_->result();
     EXPECT_EQ(r.last_feas_rest_entries_, 2); // default max_feas_rest_ fully used
-    EXPECT_NE(r.converge_flag_, ts::PSIOPT::ConvergenceFlags::CONVERGED);
+    EXPECT_NE(r.converge_flag_, tycho::ConvergenceFlags::CONVERGED);
     // Three elevation windows plus two restoration episodes plus generous slack
     // is well under this bound; the stage ends around 165 iterations, where
     // without the exit it would run out the full 400.
@@ -289,7 +289,7 @@ TEST_F(SolverTest, FeasStallStageDispatchesNestedRestoration) {
     prob->solve();
     const auto &r = prob->optimizer_->result();
     EXPECT_GE(r.last_feas_rest_entries_, 1);
-    EXPECT_NE(r.converge_flag_, ts::PSIOPT::ConvergenceFlags::CONVERGED);
+    EXPECT_NE(r.converge_flag_, tycho::ConvergenceFlags::CONVERGED);
 }
 
 // The deliberate narrowing: a stage that plateaus at its own best is not
@@ -304,7 +304,7 @@ TEST_F(SolverTest, FeasStallPlateauedStageNeverDispatches) {
     prob->solve();
     const auto &r = prob->optimizer_->result();
     EXPECT_EQ(r.last_feas_rest_entries_, 0); // strategy built, never entered
-    EXPECT_NE(r.converge_flag_, ts::PSIOPT::ConvergenceFlags::CONVERGED);
+    EXPECT_NE(r.converge_flag_, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_GE(r.iter_num_, 190); // ran to its cap
 }
 
@@ -316,7 +316,7 @@ TEST_F(SolverTest, FeasStallStageOffModeKeepsSentinels) {
     prob->solve();
     const auto &r = prob->optimizer_->result();
     EXPECT_EQ(r.last_feas_rest_entries_, -1);
-    EXPECT_NE(r.converge_flag_, ts::PSIOPT::ConvergenceFlags::CONVERGED);
+    EXPECT_NE(r.converge_flag_, tycho::ConvergenceFlags::CONVERGED);
 }
 
 // A healthy feasibility stage must never trip the detector: a consistent
@@ -327,6 +327,6 @@ TEST_F(SolverTest, FeasStallHealthyStageNeverDispatches) {
     prob->optimizer_->set_max_iters(200);
     prob->solve();
     const auto &r = prob->optimizer_->result();
-    EXPECT_EQ(r.converge_flag_, ts::PSIOPT::ConvergenceFlags::CONVERGED);
+    EXPECT_EQ(r.converge_flag_, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_EQ(r.last_feas_rest_entries_, 0); // strategy built, never entered
 }

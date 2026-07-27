@@ -89,7 +89,7 @@ void tycho::solvers::PSIOPT::print_stats() {
 void tycho::solvers::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &iters) {
     const auto &last = iters.back();
 
-    if (last.iter % 10 == 0) {
+    if (last.iter_ % 10 == 0) {
         if (settings_.wide_console_) {
             fmt::print("{0:=^{1}}\n", "", 159);
             fmt::print(
@@ -137,7 +137,7 @@ void tycho::solvers::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &
     auto chash = [](fmt::text_style c) { fmt::print(c, "|"); };
 
     hash();
-    fmt::print("{:<4}", last.iter);
+    fmt::print("{:<4}", last.iter_);
     hash();
     fmt::print("{:.2e}", last.mu_);
     hash();

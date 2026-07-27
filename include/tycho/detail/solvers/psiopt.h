@@ -183,9 +183,6 @@ class PSIOPT {
     enum class LineSearchModes { AUGLANG, LANG, L1, NOLS };
     enum class AlgorithmModes { OPT, OPTNO, SOE, INIT };
 
-    /// Alias so existing callers using PSIOPT::ConvergenceFlags continue to work.
-    using ConvergenceFlags = tycho::ConvergenceFlags;
-
     enum class QPAlgModes {
         Classic = 0,
         TwoLevel = 1,
@@ -643,6 +640,18 @@ class PSIOPT {
     PSIOPT(std::shared_ptr<NonLinearProgram> np);
     ~PSIOPT();
 
+    // Neither copyable nor movable: the out-of-line destructor above (needed
+    // for the incomplete-type unique_ptr members) already silently suppresses
+    // the implicit move members, and PSIOPT's raw kkt_sol_ solver handle plus
+    // its unique_ptr<...> globalization components have no defined transfer
+    // semantics today. Explicit rather than relying on that suppression, so
+    // the constraint is visible at the declaration instead of discovered at a
+    // failed call site.
+    PSIOPT(const PSIOPT &) = delete;
+    PSIOPT &operator=(const PSIOPT &) = delete;
+    PSIOPT(PSIOPT &&) = delete;
+    PSIOPT &operator=(PSIOPT &&) = delete;
+
     // --- Accessors ---
     /// Returns a mutable reference to the settings struct. Direct writes bypass
     /// per-field validation in the set_*() methods. All settings are re-validated
@@ -1043,7 +1052,7 @@ class PSIOPT {
                     double &finalpert, double &cumpert, double base_prox = 0.0,
                     double dual_shift = 0.0);
 
-    bool analyze_kkt_matrix();
+    bool claim_kkt_analysis();
 
     void ensure_solver_initialized();
 

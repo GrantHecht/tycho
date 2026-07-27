@@ -715,7 +715,18 @@ void tycho::solvers::PSIOPT::set_qp_params() {
     this->kkt_sol_.set_pivot_tolerance(settings_.accel_pivot_tolerance_);
     this->kkt_sol_.set_zero_tolerance(settings_.accel_zero_tolerance_);
 #else
-    this->kkt_sol_.ord_ = static_cast<int>(settings_.qp_ord_);
+    // Same exhaustive-switch hardening as the Accelerate branch's qp_ord_
+    // switch above (T6): a value outside QPOrderingModes' three cases would
+    // otherwise land in Pardiso's iparm ordering slot as an unvalidated int.
+    switch (settings_.qp_ord_) {
+    case QPOrderingModes::MINDEG:
+    case QPOrderingModes::METIS:
+    case QPOrderingModes::PARMETIS:
+        this->kkt_sol_.ord_ = static_cast<int>(settings_.qp_ord_);
+        break;
+    default:
+        throw std::invalid_argument("Unknown QPOrderingMode");
+    }
     this->kkt_sol_.pivotstrat_ = static_cast<int>(settings_.qp_pivot_strategy_);
     this->kkt_sol_.pivotpert_ = settings_.qp_pivot_perturb_;
     this->kkt_sol_.matching_ = settings_.qp_matching_;
@@ -735,13 +746,12 @@ void tycho::solvers::PSIOPT::set_qp_params() {
 // KKT matrix analysis
 // =============================================================================
 
-bool tycho::solvers::PSIOPT::analyze_kkt_matrix() {
+bool tycho::solvers::PSIOPT::claim_kkt_analysis() {
     bool docompute = true;
     if (this->qp_analyzed_ && !(settings_.force_qp_analysis_)) {
         docompute = false;
     } else {
         this->qp_analyzed_ = true;
-        docompute = true;
     }
     return docompute;
 }
@@ -1670,7 +1680,7 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
     };
     auto Refactor = [&]() { this->kkt_sol_.refactorize_internal(); };
     auto Compute = [&]() { this->kkt_sol_.compute_internal(); };
-    int IncEigs;
+    int IncEigs = 0;
     cumpert = 0.0;
 
     if (settings_.inertia_mode_ == InertiaModes::proximal_regularization) {
@@ -1843,7 +1853,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     Runtimer.start();
     for (int i = 0; i < settings_.max_iters_; i++) {
         IterateInfo Citer;
-        Citer.iter = i;
+        Citer.iter_ = i;
 
         double avgcomp = 0;
         double mincomp = 0;
@@ -2731,7 +2741,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                             "Feasibility restoration (restoration_mode) was unavailable to "
                             "recover: not configured, entry refused, or already active. Last "
                             "evaluation error: {}",
-                            Citer.iter, this->eval_error_log_.count_ - eval_errs_before,
+                            Citer.iter_, this->eval_error_log_.count_ - eval_errs_before,
                             alpha * settings_.alpha_red_, this->eval_error_log_.last_message_));
                     }
                 }
@@ -3226,7 +3236,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
     tycho::utils::Timer t;
     t.start();
 
-    bool docompute = analyze_kkt_matrix();
+    bool docompute = claim_kkt_analysis();
     Eigen::VectorXd XSL = this->init_impl(x, settings_.init_mu_, docompute);
 
     auto it = steps.begin();
