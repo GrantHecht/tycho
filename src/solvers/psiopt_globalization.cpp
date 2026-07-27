@@ -857,9 +857,11 @@ void BacktrackingLineSearch::max_primal_dual_step(Eigen::VectorXd &XSL, Eigen::V
 
 // compute_step fuses the fraction-to-boundary scaling and the acceptance
 // backtrack (riskiest seam): max_primal_dual_step MUTATES DXSL in
-// place — guarded exactly as the original alg_impl main-path call
-// (`if (inequal_cons_ > 0)`) — and the acceptance strategy then backtracks a
-// scalar alpha on the already-scaled DXSL.
+// place — applied when inequality slacks exist OR an active nested
+// restoration's condensed elastic variables carry positivity caps — and the
+// acceptance strategy then backtracks a scalar alpha on the already-scaled
+// DXSL. SocRecovery::do_correction applies the same rule to corrected
+// directions.
 double BacktrackingLineSearch::compute_step(
     PSIOPT::LineSearchModes lsmode, double obj_scale, double mu, double prim_obj, double barr_obj,
     Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
