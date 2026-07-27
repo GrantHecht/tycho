@@ -21,6 +21,7 @@
 #include "tycho/detail/solvers/globalization/filter_acceptance.h"
 #include "tycho/detail/solvers/globalization/funnel_acceptance.h"
 #include "tycho/detail/solvers/globalization/globalization_mechanism.h"
+#include "tycho/detail/solvers/globalization/modern_merit.h"
 #include "tycho/detail/solvers/globalization/monitored_governor.h"
 #include "tycho/detail/solvers/globalization/recovery_chain.h"
 #include "tycho/detail/solvers/globalization/solver_context.h"
@@ -456,4 +457,59 @@ TEST(RecoveryDispatchGate, MonitoredSelectionConstructsMonitoredGovernor) {
     tycho::solvers::BarrierGovernor *governor = solver.governor_.get();
     ASSERT_NE(dynamic_cast<tycho::solvers::MonitoredBarrierGovernor *>(governor), nullptr);
     EXPECT_FALSE(governor->in_monotone_mode());
+}
+
+// Settings::merit_penalty_rule_ must reach the constructed ModernMeritAcceptance:
+// the rule is a constructor argument, so a selection bug here is invisible to
+// test_merit_rules.cpp (which constructs ModernMeritAcceptance directly) and to
+// the type-only checks above (both rules produce the same concrete type).
+//
+// The rule is discriminated behaviourally, by driving one acceptance test whose
+// hand-computed penalty trajectory differs between the two rules (both cases are
+// truth-tabled from the papers in test_merit_rules.cpp):
+//   - flexible, Curtis & Nocedal Region II — cur(θ=2,f=10), tri(θ=1,f=12),
+//     pred(m_θ=2,m_f=3): rejected at π_l, accepted at π_u, so π_l is raised to
+//     ≈ 0.2. The WMNO rule never touches π_l.
+//   - wmno, Waltz-Morales-Nocedal-Orban Eq. (3.6) — cur(θ=1,f=10),
+//     tri(θ=0.5,f=12), pred(m_θ=1,m_f=−9): τ = 10 > ν₀ = 1, so ν is bumped to
+//     11. The flexible rule never touches ν.
+//
+// Test access: same friend pattern as the selection tests above (private
+// rebuild_globalization_components() + private acceptance_), hence global scope.
+TEST(RecoveryDispatchGate, MeritPenaltyRuleSelectionReachesTheStrategy) {
+    using tycho::solvers::MeritPenaltyRules;
+    using tycho::solvers::ModernMeritAcceptance;
+    using tycho::solvers::ProgressMeasures;
+    const auto pm = [](double infeasibility, double objective) {
+        ProgressMeasures p;
+        p.infeasibility = infeasibility;
+        p.objective = objective;
+        return p;
+    };
+
+    {
+        tycho::solvers::PSIOPT solver;
+        solver.settings().acceptance_strategy_ = tycho::solvers::AcceptanceStrategies::merit;
+        solver.settings().merit_penalty_rule_ = MeritPenaltyRules::flexible;
+        solver.rebuild_globalization_components();
+        auto *merit = dynamic_cast<ModernMeritAcceptance *>(solver.acceptance_.get());
+        ASSERT_NE(merit, nullptr);
+        EXPECT_TRUE(merit->is_iterate_acceptable(pm(2.0, 10.0), pm(1.0, 12.0), pm(2.0, 3.0), 1.0,
+                                                 1.0));
+        EXPECT_NEAR(merit->flex_pi_l(), 0.2, 1e-6); // the flexible rule ran
+    }
+
+    {
+        tycho::solvers::PSIOPT solver;
+        solver.settings().acceptance_strategy_ = tycho::solvers::AcceptanceStrategies::merit;
+        // wmno is the default; set it explicitly so the contrast is stated.
+        solver.settings().merit_penalty_rule_ = MeritPenaltyRules::wmno;
+        solver.rebuild_globalization_components();
+        auto *merit = dynamic_cast<ModernMeritAcceptance *>(solver.acceptance_.get());
+        ASSERT_NE(merit, nullptr);
+        EXPECT_TRUE(merit->is_iterate_acceptable(pm(1.0, 10.0), pm(0.5, 12.0), pm(1.0, -9.0), 1.0,
+                                                 1.0));
+        EXPECT_DOUBLE_EQ(merit->wmno_penalty(), 11.0); // the WMNO rule ran
+        EXPECT_DOUBLE_EQ(merit->flex_pi_l(), tycho::solvers::kFlexInitPiL); // flexible did not
+    }
 }

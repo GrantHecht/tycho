@@ -149,6 +149,18 @@ TEST_F(SolverTest, QpParamSetterValidation) {
     EXPECT_THROW(opt.set_qp_par_solve(2), std::invalid_argument);
     EXPECT_NO_THROW(opt.set_qp_par_solve(0));
     EXPECT_NO_THROW(opt.set_qp_par_solve(1));
+    // Pardiso weighted matching (iparm[12]) and MPS scaling (iparm[10]): 0/1
+    // flags with the same range check. qp_scaling in particular is a live
+    // performance knob (see the note on Settings::qp_scaling_), so its setter
+    // must reject out-of-range values rather than pass them to Pardiso.
+    EXPECT_THROW(opt.set_qp_matching(-1), std::invalid_argument);
+    EXPECT_THROW(opt.set_qp_matching(2), std::invalid_argument);
+    EXPECT_NO_THROW(opt.set_qp_matching(0));
+    EXPECT_NO_THROW(opt.set_qp_matching(1));
+    EXPECT_THROW(opt.set_qp_scaling(-1), std::invalid_argument);
+    EXPECT_THROW(opt.set_qp_scaling(2), std::invalid_argument);
+    EXPECT_NO_THROW(opt.set_qp_scaling(0));
+    EXPECT_NO_THROW(opt.set_qp_scaling(1));
 }
 
 TEST_F(SolverTest, BoundPushNegSlackResetValidation) {
@@ -213,6 +225,22 @@ TEST_F(SolverTest, SettingsDefaultsRegression) {
     EXPECT_DOUBLE_EQ(s.obj_scale_, 1.0);
     EXPECT_DOUBLE_EQ(s.bound_fraction_, 0.99);
     EXPECT_EQ(s.print_level_, 0);
+
+    // The fields that decide which algorithm actually runs. Every one of these
+    // selects a shipped opt-in mechanism when flipped, so a changed default here
+    // changes shipped behaviour for every user who never touched the setting --
+    // exactly the change that must not land silently.
+    EXPECT_EQ(s.acceptance_strategy_, tycho::solvers::AcceptanceStrategies::classic_merit);
+    EXPECT_EQ(s.merit_penalty_rule_, tycho::solvers::MeritPenaltyRules::wmno);
+    EXPECT_EQ(s.barrier_governor_, tycho::solvers::BarrierGovernors::classic_adaptive);
+    EXPECT_FALSE(s.never_monotone_);
+    EXPECT_EQ(s.restoration_mode_, tycho::solvers::RestorationModes::off);
+    EXPECT_EQ(s.max_feas_rest_, 2);
+    EXPECT_EQ(s.inertia_mode_, tycho::solvers::InertiaModes::classic);
+    EXPECT_EQ(s.pd_step_strategy_, PSIOPT::PDStepStrategies::PrimSlackEq_Iq);
+    EXPECT_EQ(s.max_soc_, 0);           // SOC off
+    EXPECT_EQ(s.ls_extended_iters_, 0); // extended backtracking off
+    EXPECT_FALSE(s.watchdog_);          // watchdog off
 }
 
 // =============================================================================
