@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <stdexcept>
+#include <string>
 
 #include <Eigen/Core>
 
@@ -102,7 +103,13 @@ TEST(NlpSolverDispatch, JetRunWithIpoptBackendRejected) {
     auto prob = build_dispatch_test_nlp();
     prob->set_jet_job_mode(ts::OptimizationProblemBase::JetJobModes::Optimize);
     prob->nlp_solver_ = ts::NLPSolvers::ipopt;
-    EXPECT_THROW(prob->jet_run(), std::invalid_argument);
+    try {
+        prob->jet_run();
+        ADD_FAILURE() << "expected the Ipopt re-entrancy guard to throw";
+    } catch (const std::invalid_argument &e) {
+        const std::string msg = e.what();
+        EXPECT_NE(msg.find("Ipopt is not reliably re-entrant"), std::string::npos) << msg;
+    }
 }
 
 // The same batch element with the built-in backend runs to convergence, so the
