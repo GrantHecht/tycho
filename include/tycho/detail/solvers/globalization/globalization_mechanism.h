@@ -73,11 +73,12 @@ class GlobalizationMechanism {
     // Settings, not per-iteration transients.
     //
     // lsmode/obj_scale/mu/prim_obj/barr_obj are forwarded verbatim to
-    // `acceptance.classic_line_search(...)` (or an equivalent generic-path
-    // call, once future acceptance strategies exist) once the
-    // fraction-to-boundary scaling above has been applied. alphap/alphad are
-    // out-parameters (today's max_primal_dual_step out-params); the return
-    // value is the final backtracked alpha (today's ls_impl return value).
+    // `acceptance.classic_line_search(...)` (or the equivalent generic-path
+    // call, `generic_line_search`, for a non-classic acceptance strategy)
+    // once the fraction-to-boundary scaling above has been applied.
+    // alphap/alphad are out-parameters (today's max_primal_dual_step
+    // out-params); the return value is the final backtracked alpha (today's
+    // ls_impl return value).
     virtual double compute_step(PSIOPT::LineSearchModes lsmode, double obj_scale, double mu,
                                  double prim_obj, double barr_obj, Eigen::VectorXd &XSL,
                                  Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2,

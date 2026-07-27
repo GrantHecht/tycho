@@ -31,12 +31,15 @@
 // restoration_mode_ != off: it converts an inner chain's ladder-exhausted
 // kAcceptAsIs into kSwitchToFeasibility, so that Action is live, not future.
 //
-// Ownership rule: a RecoveryChain holds NO solver state (no persistent
-// watchdog counters, etc. until a live recovery dispatcher actually needs
-// them, and even then they live behind reset(), not as ambient global
-// state). reset() is the μ-event/phase-change hook (mirrors the other three
-// interfaces); WatchdogRecovery is explicitly reset on μ change (see
-// watchdog.h) in addition to the ordinary phase-boundary reset() call.
+// Ownership rule: the RecoveryChain interface itself defines no persistent
+// state — the base contract is stateless. Two concrete links are the
+// exception: WatchdogRecovery (WatchdogState plus an XSL snapshot vector)
+// and FeasibilitySwitchRecovery (its soft-pre-stage counter) hold real
+// per-solve state, each documented at its own declaration, and both cleared
+// behind reset(), not as ambient global state. reset() is the μ-event/
+// phase-change hook (mirrors the other three interfaces); WatchdogRecovery
+// is explicitly reset on μ change (see watchdog.h) in addition to the
+// ordinary phase-boundary reset() call.
 
 #pragma once
 
@@ -62,10 +65,14 @@ namespace tycho::solvers {
 // individual links (SocRecovery, ExtendedBacktrackRecovery) do not write it
 // themselves — only a composing/wrapping link knows which position in the
 // dispatch order actually won. PSIOPT::alg_impl() also overwrites it
-// directly, outside the chain call, in two feasibility-restoration branches
-// (the un-evaluable-fallback entry and the soft-feasibility-step escalation)
-// so the histogram attributes those iterations to restoration rather than to
-// whatever depth the chain itself resolved. Backs PSIOPT::SolveResult::
+// directly, outside the chain call, in two feasibility-restoration branches:
+// the nested elastic re-centering fallback (try_recenter_elastics, guarded
+// on resolved_depth still being the unresolved sentinel) and the
+// un-evaluable-fallback entry, the latter so the histogram attributes that
+// iteration to restoration rather than to whatever depth the chain itself
+// resolved (even a watchdog-resolved one). The soft-feasibility-step
+// escalation is not a third site — FeasibilitySwitchRecovery stamps the
+// depth itself before returning that action. Backs PSIOPT::SolveResult::
 // recovery_depth_histogram_[d] (psiopt.h).
 inline constexpr int kRecoveryDepthSoc = 0;
 inline constexpr int kRecoveryDepthExtended = 1;

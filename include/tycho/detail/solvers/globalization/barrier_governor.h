@@ -85,14 +85,16 @@ class BarrierGovernor {
     // raw Eigen::VectorXd blocks the current code operates on via KKTVector
     // views constructed from SolverContext's dims.
     //
-    // mu_in is unused on the classic (ClassicAdaptiveGovernor) path — its
-    // free-mode PROBE/LOQO oracles compute an entirely new mu from
-    // avgcomp/mincomp, then the common tail clamps it against
-    // ctx.settings_.min_mu_/max_mu_ — but it is load-bearing for
-    // MonitoredBarrierGovernor, which blends it with the previous mu under
-    // the monotone Fiacco-McCormick rule (MonitoredBarrierGovernor::decide,
-    // psiopt_globalization.cpp) whenever its state machine is in monotone
-    // mode.
+    // mu_in is unused by the free-mode oracles themselves — both
+    // ClassicAdaptiveGovernor's and MonitoredBarrierGovernor's PROBE/LOQO
+    // paths compute an entirely new mu from avgcomp/mincomp, then the common
+    // tail clamps it against ctx.settings_.min_mu_/max_mu_. The genuinely
+    // load-bearing consumer of mu_in is the separate, non-virtual
+    // update_barrier_monotone() below: it seeds mu from mu_in and both gates
+    // (sub_err <= kBarrierTolFactor * mu_in) and advances
+    // (fiacco_mccormick_mu(mu_in, ...)) off it directly, whenever a governor
+    // without its own restoration safeguard (ClassicAdaptiveGovernor) is
+    // driving a nested restoration phase (psiopt.cpp).
     //
     // Returns the new (already-clamped) mu; barr_obj is an out-parameter
     // (today's barr_obj local, set by the common tail's barrier_objective()

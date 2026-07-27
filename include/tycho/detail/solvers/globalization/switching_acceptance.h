@@ -194,12 +194,13 @@ class SwitchingAcceptance : public AcceptanceStrategy {
                                double objective_multiplier, double step_length) override;
 
     // Restoration-exit test — driven once a feasibility-restoration strategy
-    // is active: alg_impl calls it to decide whether a trial has reduced
-    // infeasibility enough to leave restoration and resume optimality (the
-    // near-feasible and κ_resto-ratchet exit branches, psiopt.cpp). Base
-    // SwitchingAcceptance still throws (T6) rather than fabricate an answer;
-    // FilterAcceptance/FunnelAcceptance override it with a real body. Same
-    // posture as ModernMeritAcceptance's.
+    // is active: alg_impl calls it from one of two mode-specific call sites
+    // to decide whether a trial has reduced infeasibility enough to leave
+    // restoration and resume optimality (the nested l1 phase's
+    // κ_resto-ratchet exit and the proximal phase's relative-θ-reduction
+    // exit, psiopt.cpp). Base SwitchingAcceptance still throws (T6) rather
+    // than fabricate an answer; FilterAcceptance/FunnelAcceptance override it
+    // with a real body.
     bool is_infeasibility_sufficiently_reduced(const ProgressMeasures &reference,
                                                const ProgressMeasures &trial) const override;
 

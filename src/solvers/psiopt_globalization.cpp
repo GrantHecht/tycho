@@ -1362,8 +1362,8 @@ RecoveryChain::Action SocRecovery::on_step_rejected(
 // ============================================================================
 // ExtendedBacktrackRecovery — see watchdog.h's file docstring, "Extended
 // backtracking" section, for the exact mechanics (why scaling DXSL by the
-// live alpha and re-driving classic_line_search reproduces the SAME ladder
-// with no redundant re-test and no new math).
+// live alpha and re-driving run_acceptance_backtrack reproduces the SAME
+// ladder with no redundant re-test and no new math).
 // ============================================================================
 RecoveryChain::Action ExtendedBacktrackRecovery::on_step_rejected(
     IterateInfo &Citer, const std::vector<IterateInfo> &iters, SolverContext &ctx,
@@ -1403,9 +1403,11 @@ RecoveryChain::Action ExtendedBacktrackRecovery::on_step_rejected(
             Citer.merit_val_ = trial_iter.merit_val_;
             return Action::kRetry;
         }
-        // Not accepted: classic_line_search's own internal loop already
-        // divided down to the next untested rung (relative to dxsl_ext);
-        // carry that forward as the next external trial's absolute scale.
+        // Not accepted: run_acceptance_backtrack's own internal loop
+        // (classic_line_search or generic_line_search, whichever the
+        // acceptance strategy drives) already divided down to the next
+        // untested rung (relative to dxsl_ext); carry that forward as the
+        // next external trial's absolute scale.
         scale = alpha_result * scale;
     }
     return Action::kAcceptAsIs; // extended budget exhausted: take the original rejected step.

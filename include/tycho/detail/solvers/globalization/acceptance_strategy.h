@@ -24,9 +24,12 @@
 // different matter and is explicitly permitted: ModernMeritAcceptance holds
 // per-solve penalty state (nu_/pi_l_/pi_u_/smallest_known_infeasibility_,
 // modern_merit.h), and FilterAcceptance holds its filter plus reset-heuristic
-// counters (filter_acceptance.h) — both cleared in reset(), never cached
-// beyond it. reset() is the μ-event/phase-change hook: called whenever
-// PSIOPT starts a new phase (run_phase_sequence) or the barrier parameter is
+// counters (filter_acceptance.h) — both cleared in reset(), with one
+// phase-aware exception: while in_feasibility_phase_ is true, reset() treats
+// the call as a μ-event and deliberately lets the stashed (frozen
+// optimality-phase) copy of that state survive, since the restoration-exit
+// test reduces against it. reset() is the μ-event/phase-change hook: called
+// whenever PSIOPT starts a new phase (run_phase_sequence) or the barrier parameter is
 // reset, so a stateful strategy (e.g. the filter clearing its (θ,f) pairs)
 // has a defined place to do it. The ClassicMeritAcceptance implementation of
 // reset() is a no-op (the classic merit test carries no persistent state
@@ -99,9 +102,11 @@ class AcceptanceStrategy {
 
     // Restoration-exit test: has infeasibility been reduced enough (relative
     // to `reference`, the point restoration was entered from) to leave
-    // restoration mode? Driven by alg_impl once a feasibility-restoration
-    // strategy is active (the near-feasible and κ_resto-ratchet exit
-    // branches, psiopt.cpp).
+    // restoration mode? Driven by alg_impl's two exit-test call sites, one
+    // per restoration mode: the nested l1 phase's κ_resto-ratchet exit and
+    // the proximal phase's relative-θ-reduction exit (psiopt.cpp). The
+    // near-feasible exits are plain threshold tests that never consult this
+    // strategy.
     virtual bool is_infeasibility_sufficiently_reduced(const ProgressMeasures &reference,
                                                         const ProgressMeasures &trial) const = 0;
 
@@ -180,10 +185,11 @@ class AcceptanceStrategy {
     // CBWR gate depends on. Returns the accepted step-length alpha.
     //
     // NOT pure: only the ClassicMeritAcceptance implementation (defined in
-    // merit_acceptance.h) overrides this. Generic future acceptance
-    // strategies are driven purely through is_iterate_acceptable() and never
-    // call this entry point, so the default body is a T6-style logic error,
-    // not a silent fallback.
+    // merit_acceptance.h) overrides this. The generic acceptance strategies
+    // (ModernMeritAcceptance, FunnelAcceptance, FilterAcceptance) are driven
+    // purely through is_iterate_acceptable() and never call this entry
+    // point, so the default body is a T6-style logic error, not a silent
+    // fallback.
     virtual double classic_line_search(PSIOPT::LineSearchModes lsmode, double obj_scale, double mu,
                                         double prim_obj, double barr_obj, Eigen::VectorXd &XSL,
                                         Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2,
