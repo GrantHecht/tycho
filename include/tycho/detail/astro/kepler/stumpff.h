@@ -1,5 +1,5 @@
 // =============================================================================
-// Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
+// Tycho (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 //
 // Stumpff aggregate: a 4-tuple (U0, U1, U2, U3) of universal-variable
 // Stumpff functions.  The LCD kernel produces these together as the

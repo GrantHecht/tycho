@@ -60,7 +60,7 @@ int main() {
 
     const auto flag = phase.solve_optimize();
 
-    if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+    if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "MountainCar (builder): FAILED (status "
                   << static_cast<int>(flag) << ")\n";
         return EXIT_FAILURE;

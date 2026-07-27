@@ -158,7 +158,7 @@ int main() {
 
     std::cout << "Reentry: solve (unconstrained)...\n" << std::flush;
     auto flag1 = phase.solve_optimize();
-    if (flag1 > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+    if (flag1 > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "Reentry (builder): initial solve_optimize FAILED\n";
         return EXIT_FAILURE;
     }
@@ -166,7 +166,7 @@ int main() {
     std::cout << "Reentry: refining to 300 segments...\n" << std::flush;
     phase.refine_traj_manual(300);
     auto flag2 = phase.optimize();
-    if (flag2 > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+    if (flag2 > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "Reentry (builder): refined optimize FAILED\n";
         return EXIT_FAILURE;
     }
@@ -190,7 +190,7 @@ int main() {
     std::cout << "Reentry (builder): cross-range (Q limited)  = " << crossrange2
               << " deg, tf = " << final_time2 << " s\n";
 
-    if (flag3 > PSIOPT::ConvergenceFlags::ACCEPTABLE || crossrange2 <= 0.0) {
+    if (flag3 > tycho::ConvergenceFlags::ACCEPTABLE || crossrange2 <= 0.0) {
         std::cerr << "Reentry (builder): FAILED\n";
         return EXIT_FAILURE;
     }

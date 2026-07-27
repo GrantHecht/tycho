@@ -44,6 +44,17 @@ objective. Verified byte-identical (except wall_s) across repeats.
 For reference, s=1e-8 through s=1e-12 were also probed and remain
 NOTCONVERGED/DIVERGING (never recovering), so s=1e-7 is the mildest scale
 in the failing regime, kept for minimal deviation from the brief's spirit.
+
+Note on boundedness: this formulation is unbounded below — it is invariant
+under time reversal with the transfer time (delta-time) itself unbounded,
+so the objective can be driven arbitrarily negative without violating any
+constraint. This means a solver's exit objective on this module is not a
+meaningful point of comparison against another solver's exit objective (or
+against the true finite-time optimum of the well-posed problem): a
+different, more-negative exit is not evidence of a better solve, only of
+landing somewhere else on an unbounded objective. Use this module to
+compare convergence/failure behavior, not objective values, across solvers
+or configurations.
 """
 
 import numpy as np

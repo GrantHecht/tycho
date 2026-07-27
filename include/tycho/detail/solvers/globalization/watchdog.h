@@ -1,5 +1,5 @@
 // =============================================================================
-// Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
+// Tycho (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 // =============================================================================
 //
 // Second batch of live RecoveryChain links: extended backtracking, the
@@ -20,20 +20,26 @@
 // same merit acceptance test — for up to Settings::ls_extended_iters_ further
 // external trials.
 //
-// No new math: each external trial is realized as a single call to the SAME
-// acceptance.classic_line_search() entry point the classic backtrack itself
-// uses, on a SCALED COPY of DXSL. This works out exactly because of how the
-// classic ls_lang/ls_l1/ls_auglang loop is structured (psiopt_globalization.
-// cpp): each starts its OWN internal alpha at 1.0 and, on exhaustion (every
-// one of ctx.settings_.max_ls_iters_ internal trials rejected), returns the
-// alpha value ONE MORE division past the last-tested point — i.e. the
-// returned alpha is always the next untested rung of the ladder, never a
-// value already tried. So:
+// No new math: each external trial is realized as a single call to
+// GlobalizationMechanism::run_acceptance_backtrack() — the same
+// classic-vs-generic dispatch compute_step itself uses — on a SCALED COPY of
+// DXSL. Calling AcceptanceStrategy::classic_line_search() directly, as the
+// classic-only shortcut, would throw under the generic path (funnel/filter/
+// modern merit — see acceptance_strategy.h's default body), so extended
+// backtracking always goes through the dispatcher and lets it route to
+// classic_line_search or generic_line_search as appropriate. This works out
+// exactly because of how BOTH the classic ls_lang/ls_l1/ls_auglang loop and
+// the generic loop are structured (psiopt_globalization.cpp): each starts its
+// OWN internal alpha at 1.0 and, on exhaustion (every one of
+// ctx.settings_.max_ls_iters_ internal trials rejected), returns the alpha
+// value ONE MORE division past the last-tested point — i.e. the returned
+// alpha is always the next untested rung of the ladder, never a value already
+// tried. So:
 //   - Seed `scale` with the alpha value live at hook time (compute_step's
 //     return value, forwarded here as the `alpha` parameter) — this is
 //     exactly that untested next rung. Do NOT restart at 1.0.
 //   - Scale a local copy: dxsl_ext = scale * DXSL. Calling
-//     classic_line_search on dxsl_ext makes ITS internal alpha=1.0 trial
+//     run_acceptance_backtrack on dxsl_ext makes ITS internal alpha=1.0 trial
 //     land exactly on `scale` (relative to the original DXSL), and every
 //     further internal division it performs lands on the next rung down —
 //     zero redundant re-testing, same alpha_red_ divisor, same test.
@@ -44,8 +50,8 @@
 // Each external trial therefore may itself run more than one internal ls
 // sub-trial when ctx.settings_.max_ls_iters_ > 1 (the SAME call-counts-as-
 // one-attempt convention SocRecovery already uses for its correction calls —
-// see soc.h's do_correction, which also re-runs classic_line_search's full
-// internal loop per correction). Settings::ls_extended_iters_ bounds the
+// see soc.h's do_correction, which also re-runs run_acceptance_backtrack's
+// full internal loop per correction). Settings::ls_extended_iters_ bounds the
 // number of EXTERNAL calls, not the raw count of alpha divisions tested.
 //
 // -----------------------------------------------------------------------------
@@ -124,9 +130,11 @@
 //     alpha*DXSL` commit is a no-op) and disarm.
 //
 // Ownership: WatchdogRecovery holds real per-solve state (WatchdogState plus
-// the XSL snapshot vector) — the one RecoveryChain link that isn't stateless
-// — behind reset(), per the ownership rule in recovery_chain.h. reset() also
-// propagates to the wrapped inner chain.
+// the XSL snapshot vector) — one of two RecoveryChain links that aren't
+// stateless (FeasibilitySwitchRecovery's soft-pre-stage counter,
+// feasibility_switch_recovery.h, is the other) — behind reset(), per the
+// ownership rule in recovery_chain.h. reset() also propagates to the wrapped
+// inner chain.
 
 #pragma once
 

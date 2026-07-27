@@ -95,6 +95,11 @@ intersphinx_mapping = {
     "spiceypy": ("https://spiceypy.readthedocs.io/en/main/", None),
 }
 
+# doi.org (cited in index.md's ASSET paper reference) 403s automated linkcheck
+# bots while resolving fine for a real browser — a known publisher-DOI-host
+# false positive, not a broken link. Ignored rather than chased.
+linkcheck_ignore = [r"^https://doi\.org/"]
+
 # Strict mode (enabled in CI; relaxed locally if desired)
 nitpicky = True
 # Breathe renders qualified C++ symbol names as chains of cpp:identifier

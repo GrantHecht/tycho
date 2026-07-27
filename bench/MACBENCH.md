@@ -107,4 +107,4 @@ bench/bench_track.sh compare
 | `solvers/bench_solvers.cpp` | 2 | End-to-end PSIOPT convergence |
 | `utils/bench_utils.cpp` | 7 | TypeStorage SBO, BumpAllocator, ThreadPool dispatch |
 
-Shared ODE definitions and the `make_brach_phase` helper live in `bench/cpp/bench_common.h`.
+Shared ODE definitions and the `make_brach_phase` helper live in `bench/cpp/bench_phases.h`.

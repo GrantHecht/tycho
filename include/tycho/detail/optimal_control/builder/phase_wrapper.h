@@ -1251,19 +1251,19 @@ class Phase {
 
     /// @brief Solve the phase for feasibility (no optimization).
     /// @return Convergence status from PSIOPT.
-    PSIOPT::ConvergenceFlags solve() { return phase_->solve(); }
+    tycho::ConvergenceFlags solve() { return phase_->solve(); }
     /// @brief Optimize the phase (minimize the objective subject to constraints).
     /// @return Convergence status from PSIOPT.
-    PSIOPT::ConvergenceFlags optimize() { return phase_->optimize(); }
+    tycho::ConvergenceFlags optimize() { return phase_->optimize(); }
     /// @brief Solve for feasibility, then optimize.
     /// @return Convergence status from the final PSIOPT call.
-    PSIOPT::ConvergenceFlags solve_optimize() { return phase_->solve_optimize(); }
+    tycho::ConvergenceFlags solve_optimize() { return phase_->solve_optimize(); }
     /// @brief Optimize, then solve to tighten feasibility.
     /// @return Convergence status from the final PSIOPT call.
-    PSIOPT::ConvergenceFlags optimize_solve() { return phase_->optimize_solve(); }
+    tycho::ConvergenceFlags optimize_solve() { return phase_->optimize_solve(); }
     /// @brief Solve, optimize, then solve again.
     /// @return Convergence status from the final PSIOPT call.
-    PSIOPT::ConvergenceFlags solve_optimize_solve() { return phase_->solve_optimize_solve(); }
+    tycho::ConvergenceFlags solve_optimize_solve() { return phase_->solve_optimize_solve(); }
 
     // ── Result accessors ──────────────────────────────────────────────────────
 

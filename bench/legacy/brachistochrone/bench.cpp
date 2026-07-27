@@ -102,7 +102,7 @@ int main() {
     auto duration = std::chrono::duration<double>(end - start).count();
     std::cout << duration << std::endl;
 
-    if (status != PSIOPT::ConvergenceFlags::CONVERGED) {
+    if (status != tycho::ConvergenceFlags::CONVERGED) {
         std::cerr << "FAIL" << std::endl;
         return 1;
     }

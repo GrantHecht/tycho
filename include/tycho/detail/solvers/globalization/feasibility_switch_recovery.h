@@ -1,5 +1,5 @@
 // =============================================================================
-// Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
+// Tycho (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 // =============================================================================
 //
 // FeasibilitySwitchRecovery — the outermost RecoveryChain link that converts a
@@ -12,13 +12,19 @@
 // pre-stage documented below before escalating to the full switch.
 //
 // Behavior: delegate the whole rejection to the inner chain first. If the inner
-// chain RESOLVES the rejection (returns kRetry / kSwitchToFeasibility / kGiveUp)
-// the outcome passes through untouched — the restoration switch is strictly a
-// last resort, tried only when nothing else salvaged the step. The inner
-// chain's kAcceptAsIs return is exactly today's ladder-exhaustion fallback (the
-// surviving alpha is taken as-is); FeasibilitySwitchRecovery intercepts ONLY
-// that case and, if a real restoration episode is warranted — the current point
-// is not already near-feasible AND the per-phase entry budget is not exhausted
+// chain RESOLVES the rejection (returns kRetry / kSwitchToFeasibility / kGiveUp,
+// or a kAcceptAsIs whose resolved_depth was already stamped by a link that
+// took the relaxed step on purpose — e.g. the watchdog's trial-acceptance
+// path) the outcome passes through untouched — the restoration switch is
+// strictly a last resort, tried only when nothing else salvaged the step. The
+// LOAD-BEARING discriminator is therefore the resolved_depth out-parameter,
+// not the Action alone: kAcceptAsIs is overloaded between "ladder exhausted,
+// nothing resolved it" (resolved_depth still the caller-seeded
+// kRecoveryDepthUnresolved) and "a link resolved this on purpose but its
+// resolution also happens to be kAcceptAsIs" (resolved_depth already set).
+// FeasibilitySwitchRecovery intercepts ONLY the unresolved case and, if a
+// real restoration episode is warranted — the current point is not already
+// near-feasible AND the per-phase entry budget is not exhausted
 // (RestorationStrategy::entry_permitted) AND restoration is not already active —
 // returns kSwitchToFeasibility so alg_impl enters restoration mode. Otherwise it
 // returns the inner kAcceptAsIs unchanged, and the step is taken as before.

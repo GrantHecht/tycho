@@ -81,7 +81,7 @@ std::unique_ptr<OptimizationProblem> build_ipopt_adapter_problem(double x0 = 0.5
         prob->add_inequal_con(GenericFunction<-1, -1>(a - b), idx);
     }
 
-    prob->optimizer_->set_print_level(0);
+    prob->optimizer_->set_print_level(3);
     return prob;
 }
 
@@ -457,7 +457,7 @@ TEST(IpoptBackend, EvalExceptionSurfacesAfterSolve) {
         auto x = args.coeff<0>();
         prob.add_equal_con(GenericFunction<-1, -1>(x - 1.0), (Eigen::VectorXi(1) << 0).finished());
     }
-    prob.optimizer_->set_print_level(0);
+    prob.optimizer_->set_print_level(3);
     prob.nlp_solver_ = ts::NLPSolvers::ipopt;
 
     try {

@@ -71,9 +71,9 @@ namespace {
 // must route to generic_line_search -> is_iterate_acceptable. classic_line_search
 // is intentionally NOT overridden — the base throws, so any misrouting to the
 // classic entry point surfaces as a thrown logic_error rather than a silent pass.
-class GenericSpyAcceptance : public AcceptanceStrategy {
+class SocGenericSpyAcceptance : public AcceptanceStrategy {
   public:
-    explicit GenericSpyAcceptance(bool verdict) : verdict_(verdict) {}
+    explicit SocGenericSpyAcceptance(bool verdict) : verdict_(verdict) {}
     bool drives_classic_path() const override { return false; }
     bool is_iterate_acceptable(const ProgressMeasures &, const ProgressMeasures &,
                                const ProgressMeasures &, double, double) override {
@@ -95,7 +95,7 @@ class GenericSpyAcceptance : public AcceptanceStrategy {
 // Classic-path spy: drives_classic_path() == true, so run_acceptance_backtrack
 // must forward to classic_line_search (which stamps the verdict, as the real
 // merit variants do). is_iterate_acceptable firing here would be a misroute.
-class ClassicSpyAcceptance : public AcceptanceStrategy {
+class SocGenericClassicSpyAcceptance : public AcceptanceStrategy {
   public:
     bool drives_classic_path() const override { return true; }
     bool is_iterate_acceptable(const ProgressMeasures &, const ProgressMeasures &,
@@ -123,7 +123,7 @@ class ClassicSpyAcceptance : public AcceptanceStrategy {
 
 // Build a direct equality NLP: minimize x^2 subject to x - a = 0 (one variable,
 // x0 = start). Converges to x = a under any acceptance strategy.
-std::unique_ptr<OptimizationProblem> build_soc_nlp(double start, double a) {
+std::unique_ptr<OptimizationProblem> build_soc_generic_nlp(double start, double a) {
     using tycho::vf::Arguments;
     using tycho::vf::GenericFunction;
     auto prob = std::make_unique<OptimizationProblem>();
@@ -186,10 +186,9 @@ class SocGenericHarness {
 
     tycho::solvers::SolverContext make_ctx() {
         return tycho::solvers::SolverContext{
-            solver_->nlp_.get(),        solver_->kkt_sol_,          solver_->settings_,
-            solver_->primal_vars_,      solver_->slack_vars_,       solver_->equal_cons_,
-            solver_->inequal_cons_,     solver_->kkt_dim_,          solver_->stli_scratch_,
-            solver_->hp_scratch_,       solver_->best_xsl_scratch_, solver_->best_rhs_scratch_,
+            solver_->nlp_.get(),    solver_->kkt_sol_,    solver_->settings_,
+            solver_->primal_vars_,  solver_->slack_vars_, solver_->equal_cons_,
+            solver_->inequal_cons_, solver_->kkt_dim_,    solver_->stli_scratch_,
             solver_->restoration_.get()};
     }
 
@@ -218,7 +217,7 @@ TEST(SocGenericAcceptanceRouting, GenericStrategyReTestGoesThroughStrategySurfac
     Eigen::VectorXd RHS = Eigen::VectorXd::Constant(h.dim(), 0.1);
     Eigen::VectorXd RHS2 = Eigen::VectorXd::Zero(h.dim());
 
-    GenericSpyAcceptance acceptance(/*verdict=*/true);
+    SocGenericSpyAcceptance acceptance(/*verdict=*/true);
     IterateInfo citer;
     const std::vector<IterateInfo> iters;
 
@@ -247,7 +246,7 @@ TEST(SocGenericAcceptanceRouting, GenericStrategyReTestGoesThroughStrategySurfac
     Eigen::VectorXd RHS = Eigen::VectorXd::Constant(h.dim(), 0.1);
     Eigen::VectorXd RHS2 = Eigen::VectorXd::Zero(h.dim());
 
-    GenericSpyAcceptance acceptance(/*verdict=*/false);
+    SocGenericSpyAcceptance acceptance(/*verdict=*/false);
     IterateInfo citer;
     const std::vector<IterateInfo> iters;
 
@@ -267,7 +266,7 @@ TEST(SocGenericAcceptanceRouting, ClassicStrategyReTestForwardsToClassicLineSear
     Eigen::VectorXd v = Eigen::VectorXd::Zero(h.dim());
     Eigen::VectorXd XSL = v, DXSL = v, XSL2 = v, RHS = v, RHS2 = v;
 
-    ClassicSpyAcceptance acceptance;
+    SocGenericClassicSpyAcceptance acceptance;
     IterateInfo citer;
     const std::vector<IterateInfo> iters;
 
@@ -312,26 +311,26 @@ TEST(SocGenericAcceptanceRouting, FilterPlusSocBuildsChainedRecoveryOverSocAndFi
 // ---------------------------------------------------------------------------
 
 TEST(SocGenericAcceptanceIntegration, FilterMonitoredWithSocSolves) {
-    auto prob = build_soc_nlp(/*start=*/0.0, /*a=*/1.0);
+    auto prob = build_soc_generic_nlp(/*start=*/0.0, /*a=*/1.0);
     prob->optimizer_->settings().acceptance_strategy_ = AcceptanceStrategies::filter;
     prob->optimizer_->settings().barrier_governor_ = BarrierGovernors::monitored;
     prob->optimizer_->settings().max_soc_ = 4;
     prob->optimizer_->set_max_iters(80);
     auto flag = prob->optimize();
-    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     const auto &r = prob->optimizer_->result();
     ASSERT_EQ(r.primals_.size(), 1);
     EXPECT_NEAR(r.primals_[0], 1.0, 1e-4);
 }
 
 TEST(SocGenericAcceptanceIntegration, MeritWithSocAndExtendedBacktrackSolves) {
-    auto prob = build_soc_nlp(/*start=*/0.0, /*a=*/1.0);
+    auto prob = build_soc_generic_nlp(/*start=*/0.0, /*a=*/1.0);
     prob->optimizer_->settings().acceptance_strategy_ = AcceptanceStrategies::merit;
     prob->optimizer_->settings().max_soc_ = 4;
     prob->optimizer_->settings().ls_extended_iters_ = 2;
     prob->optimizer_->set_max_iters(80);
     auto flag = prob->optimize();
-    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     const auto &r = prob->optimizer_->result();
     ASSERT_EQ(r.primals_.size(), 1);
     EXPECT_NEAR(r.primals_[0], 1.0, 1e-4);
@@ -351,14 +350,14 @@ TEST(SocGenericAcceptanceIntegration, MeritWithSocAndExtendedBacktrackSolves) {
 // correction pre-empting the (more expensive) feasibility phase is the desired
 // composition on feasible problems, pinned here.
 TEST(SocGenericAcceptanceIntegration, SocRescuePreemptsRestorationOnFeasibleProblem) {
-    auto prob = build_soc_nlp(/*start=*/0.0, /*a=*/1.0);
+    auto prob = build_soc_generic_nlp(/*start=*/0.0, /*a=*/1.0);
     prob->optimizer_->settings().acceptance_strategy_ = AcceptanceStrategies::merit;
     prob->optimizer_->settings().restoration_mode_ = RestorationModes::l1_nested;
     prob->optimizer_->settings().max_soc_ = 4;
     prob->optimizer_->set_max_ls_iters(0);
     prob->optimizer_->set_max_iters(80);
     auto flag = prob->optimize();
-    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     const auto &r = prob->optimizer_->result();
     EXPECT_EQ(r.last_feas_rest_entries_, 0); // corrections rescued every rejection
     ASSERT_EQ(r.primals_.size(), 1);
@@ -370,7 +369,7 @@ TEST(SocGenericAcceptanceIntegration, SocRescuePreemptsRestorationOnFeasibleProb
 // must still engage and run with the correction link active in-chain — the
 // in-phase composition this suite exists to cover.
 TEST(SocGenericAcceptanceIntegration, L1NestedRestorationWithSocComposesInPhase) {
-    auto prob = build_soc_nlp(/*start=*/0.0, /*a=*/1.0);
+    auto prob = build_soc_generic_nlp(/*start=*/0.0, /*a=*/1.0);
     {
         using tycho::vf::Arguments;
         using tycho::vf::GenericFunction;
@@ -388,7 +387,7 @@ TEST(SocGenericAcceptanceIntegration, L1NestedRestorationWithSocComposesInPhase)
     auto flag = prob->optimize();
     const auto &r = prob->optimizer_->result();
     EXPECT_GE(r.last_feas_rest_entries_, 1); // restoration entered with SOC in the chain
-    EXPECT_NE(flag, PSIOPT::ConvergenceFlags::CONVERGED); // never falsely converges
+    EXPECT_NE(flag, tycho::ConvergenceFlags::CONVERGED); // never falsely converges
 }
 
 } // namespace

@@ -1,0 +1,264 @@
+# Globalization refinement areas from the evaluation campaign
+
+Date: 2026-07-25. Source evidence: `docs/dev/analysis/2026-07-e2-g8-campaign.md`
+and the committed artifacts under `tests/corpus/campaign/`. Status: recorded
+work items — none scheduled until the campaign evidence PR and the presets/docs
+stage land.
+
+## 1. Trial-evaluation exceptions abort the solve instead of rejecting the step
+
+**Evidence:** both example-arm "new failures" are evaluation-domain exceptions,
+not solver regressions: `InterpTable2D: query x=1.80012 outside table x range
+[0, 1.8]` (MinimumTimeToClimb under prox+ℓ1 — the iterate grazes 0.007% past
+the aero-table edge) and `ParallelDriver: step size underflowed ... non-finite
+derivatives` (Betts central shooting under the filter/monitored/ℓ1
+configuration). The globalization mechanisms legitimately visit trial points
+the classic path never did; the evaluation layer converts an out-of-domain
+state into a process-killing exception that bypasses the step-rejection
+machinery entirely.
+
+**Reference behavior:** Ipopt treats a failed evaluation as a rejected trial
+point and backtracks — and Tycho's own Ipopt adapter already implements
+exactly that (evaluator exceptions latch and return false). The built-in
+solver has no equivalent.
+
+**Refinement:** catch evaluation exceptions at trial-point evaluation inside
+the acceptance backtrack, treat as a rejected trial (bounded retries), latch
+the message into diagnostics; a committed-point evaluation failure remains
+fatal. PSIOPT step-path change: own CA-gated PR, CBWR bit-identity on the
+default path required (the classic path should be unaffected unless an
+exception occurs, which today is fatal anyway — byte-identity expected by
+construction).
+
+**RESOLVED (2026-07-26): implemented.** All seven trial-evaluation sites
+(the three classic line-search variants, the generic acceptance ladder, the
+two SOC constraint evaluations, and the soft-feasibility trial) now convert
+an evaluation exception into a rejected-rung signal recorded in an
+`EvalErrorLog`. Ladder exhaustion with un-evaluable rungs never commits the
+fallback step; in order, it (1) exits the phase gracefully at the
+`ACCEPTABLE` level when the current committed iterate already satisfies the
+acceptable convergence tier, (2) otherwise dispatches feasibility
+restoration when configured, inactive, and entry-permitted, and (3)
+otherwise aborts with the latched message wrapped in solver context.
+Committed-point evaluation failures remain fatal and unwrapped. Semantics
+were source-verified against Ipopt 3.14.19
+(`IpBacktrackingLineSearch.cpp:776-784` rejected-rung handling, `:568-571`
+acceptable-point-before-restoration, `:516-634` exhaustion-to-restoration;
+eval-error rungs never seed SOC, mirrored via the
+`theta_at_first_rejection_` sentinel). Diagnostics:
+`SolveResult::last_eval_exception_` (Python `last_eval_exception`, empty
+sentinel) and per-iteration `IterateInfo::eval_exceptions_`. Known residue:
+the exhaustion bypass's direct restoration dispatch (reachable only through a
+watchdog-resolved acceptance) ships without a direct test — a
+`WatchdogState`-preloading harness is the recorded follow-up — and the three
+behavior trades (an exhaustion after any throwing rung, or a
+watchdog-relaxed acceptance in a throwing iteration, aborts rather than
+accept-as-is when restoration is off; an un-evaluable exhaustion at an
+already-acceptable iterate exits `ACCEPTABLE` instead of entering
+restoration) were deliberate, Ipopt-mirrored
+choices recorded in the implementing PR.
+
+## 2. Regularization-mode shift double-memory (post-episode over-shift)
+
+**Evidence:** the review of the regularization mode flagged that after a ladder
+episode the successful shift is remembered twice — the persistent shift carries
+its decayed value as the next base AND the ladder warm-start seeds from the
+same delta — so the first rung of a subsequent episode lands at roughly twice
+the intended shift. The campaign attached measured costs consistent with that
+mechanism: with the mode as default, MinimumTimeToClimb +137%, OptimalDocking
++99%, MultiSpacecraftOptimization 1535 → 11969 iterations (+680%), while the
+median stays +0.00%.
+
+**A/B RESULT (2026-07-25): the double-memory hypothesis is mostly refuted and
+the shipped behavior stands.** Variant B (ladder warm-start neutralized once
+the persistent shift absorbs an episode) leaves the dominant tails unchanged
+(MinimumTimeToClimb +138%, OrbitContinuation +34% — their cost comes from the
+persistent-shift path itself), improves only OptimalDocking (+99% → −58%,
+faster than stock) and MultiSpacecraft partially (+680% → +548%), worsens
+BettsLowThrust (+23% → +45%) — and **destroys the flagship wb2000 rescue**
+(converged @95 → failed @500): the warm-start memory is load-bearing for
+re-entering the ladder high. Conclusion: no implementation-vs-intention
+deviation; the shipped trade is correct as designed. Any future tuning is a
+genuine algorithm study (e.g. per-problem adaptive warm-start decay), for
+which this A/B (captures `critb-proxonly-varB.csv` / `corpus-prox-varB.csv`,
+session records summarized here) is the first data point.
+
+## 3. Acceptable-tier semantics on structurally meaningless points
+
+**Evidence:** the campaign winner's `hard_brach_illscaled` exit is an
+ACCEPTABLE at objective −2.410 — a negative transfer time — where Ipopt
+converges to 1.801 on the identical NLP.
+
+**RESOLVED (2026-07-25 deep-dive): formulation admits it; no solver change
+warranted.** The point is feasible to 3.1e-8 (inside even the strict equality
+tolerance); the NLP is unbounded below via time-reversal symmetry with
+delta-time unbounded; the acceptable tier applied its tolerances exactly as
+written; and Ipopt applied no scaling on this problem (its 1.801 exit is basin
+selection). Remaining action: an unboundedness note in the corpus module
+docstring only.
+
+## 4. Feasibility-only stage has no globalization (deep-dive finding)
+
+**Evidence:** `solve()` / the feasibility stage of `solve_optimize` force the
+objective scale to zero, under which every trial step is accepted — the
+backtracking line search, recovery chain, and restoration are structurally
+unreachable from that path (zermelo: 0 backtracks, 0 restoration entries,
+empty filter across a 500-iteration stall while the equality residual grew
+1.9×; the same problem run as a single `optimize()` with merit + nested-ℓ1
+converges to Ipopt's exact point, 2.4e-15 relative agreement). The
+globalization program scoped the optimize path; the feasibility path never
+gained any of it.
+
+**Mechanism:** recovery dispatch fires only on a rejected trial
+(`src/solvers/psiopt.cpp:2470-2496`), and the feasibility stage forces
+`lsobjscale = 0.0` (`:2440`) so every fraction-to-boundary step is accepted —
+nothing is ever rejected, so nothing ever dispatches.
+
+**Candidate refinements (from the investigation):** (a) a stall detector on
+the feasibility norm during the feasibility stage that can request restoration
+directly, independent of the rejection gate; and/or (b) a feasibility-stage
+iteration budget far below `max_iters`, so a stalled stage cannot burn the
+full budget and hand the optimize stage a point worse than the user's guess.
+A feasibility-norm acceptance test is well-defined without an objective, so
+the full acceptance/recovery stack could also be extended to this stage.
+Likely the highest-value remaining robustness item — it affects every
+`solve()`/`solve_optimize` user.
+
+**Re-scoring consideration:** merit + ℓ1-nested is the only configuration
+family that solves zermelo under a matched `optimize()` call (from the raw
+wrong-basin guess, @40, 3/3 repeat-stable) — direct ℓ1-restoration value the
+`solve_optimize`-based sweep structurally could not see. Worth a matched-call
+column before the presets stage finalizes the `robust` contents.
+
+**RESOLVED (2026-07-26): implemented.** A windowed sustained-worsening detector
+(`globalization/feasibility_stall.h`) now runs during feasibility-only phases
+whenever a restoration strategy is configured and inactive. It watches the L1
+constraint violation once per iteration and reports a worsening stage only when
+that violation has sat at least 25% above the best value the stage has ever held
+for 50 consecutive iterations; a single observation back under that mark starts
+the count over. A stage flat at its best (a plateau) and a stage improving at
+any rate (a crawl, however slow) therefore never dispatch — they burn their
+iteration budget exactly as they did before this work. That narrowing is
+deliberate, and the corpus is what forced it: an episode injected into a quietly
+succeeding stage cost `hard_mountaincar_badguess` the acceptable exit it
+otherwise reaches, while dispatching into a plateaued stage only ever saved
+iterations on problems that were failing anyway. The margin also makes the
+schedule jitter-robust by construction — 25% is some eleven orders of magnitude
+above the rounding noise of a threaded factorization, where the earlier
+no-improvement predicate sat right on top of it.
+
+On a worsening window the detector enters restoration through the same
+orchestration, budget (`max_feas_rest_`, per phase), and diagnostics as the
+optimize-path switch. Once it fires with entry refused, the phase ends
+gracefully through the standard teardown — instead of burning the remaining
+iteration budget — but only when the refusal means the stage is out of options
+AND has gained nothing since its MOST RECENT restoration entry. Two refusals are
+left alone to finish: a near-feasible one (violation at or under 0.1·`econ_tol_`,
+i.e. the constraints are at their floor while the barrier residual still grinds
+down with μ — an endgame, not a stall), and a budget one taken at a violation
+still below the value recorded at the last restoration entry. Measuring against
+the last entry rather than the first is what makes that test ask the right
+question — has the stage gained anything since recovery last handed it back?
+The graceful end therefore reaches exactly the class the dispatch does and no
+other: after an episode the window re-arms against the post-restoration point,
+so a stage that levels off or crawls down from there never fires again, and only
+one that keeps worsening can reach the exit. With restoration off (the default)
+the stage is byte-identical to before.
+
+Corpus scorecard under merit + ℓ1-nested (every `@N` below is the
+corpus-reported iteration TOTAL for the whole call — the sum over that call's
+PSIOPT phases — never a single phase's count): `hard_hypersens_stiff` is
+ACCEPTABLE @128, unchanged, its slow but productive crawl untouched by either
+test; `hard_mountaincar_badguess` is ACCEPTABLE @688 — the regression to
+NOTCONVERGED @889 recorded here earlier was caused by the two episodes
+dispatched into its plateaued stage, and the narrowing eliminates it; and
+`hard_zermelo_wrongbasin` still diverges, now @919. That last figure is what the
+narrowing costs. Per-iteration, that stage's residual jumps once in its first
+few iterations and then sits flat for the remaining ~495, which is a plateau by
+the shipped L1 test even though its equality-residual infinity norm grew 1.9×
+(1.106 → 2.113) across the jump — the same basis as the original deep-dive
+figure — so the stage no longer dispatches (0 entries) or ends early, and runs the
+same 919 iterations it did with this whole mechanism absent, against 633 under
+the earlier no-improvement predicate. Its DIVERGING verdict is the same in all
+three cases. Full-corpus statuses now match the campaign store's main-era cells
+on all 17 problems in both configurations (`l1_nested`: acceptable=3,
+converged=7, diverged=3, failed=4; `proximal_switch`: acceptable=2, converged=7,
+diverged=3, failed=5); the only differences against the pre-narrowing branch are
+zermelo's iteration counts (633 → 919 under ℓ1-nested, 274 → 908 under the
+proximal switch), on a problem that diverges in every configuration. The
+downstream optimize phase still diverges from any stage-touched point on that
+problem — the wrong-basin steering is a property of the stage itself — which is
+exactly what the matched-call harness column (area 5) now measures: the same
+configuration under `--call-shape optimize` converges @40 to
+1.7009270229362865. Known limitation: a restoration episode that never exits
+(observed for the proximal switch on a structurally infeasible feasibility
+system) keeps the stage inside the episode, where neither the detector nor the
+graceful end applies; an in-episode progress test is the recorded follow-up.
+
+## 5. Harness follow-ups (deep-dive finding)
+
+The corpus driver compares mismatched call shapes across backends (psiopt runs
+each module's `SOLVE_MODE`; the ipopt backend always runs a single solve) —
+add a matched-call option before quoting cross-backend rows for
+non-`optimize` modules. (`run_corpus.py --config`'s repeated-flag handling was
+fixed on the campaign branch after the deep-dive hit it.)
+
+**RESOLVED (2026-07-26): implemented.** `run_corpus.py --call-shape
+{module,optimize}` (default `module`, today's behavior) threads through the
+child protocol into the corpus driver, is recorded as a `call_shape`
+scorecard column, and is accepted by the campaign driver's sweep with a CSV
+aggregation column (legacy scorecards without the key aggregate as
+`module`). First matched-call measurement through the shipped flag: zermelo
+under merit + ℓ1-nested converges @40 to 1.7009270229362865 with
+`--call-shape optimize`, versus DIVERGING under its module shape.
+
+## 6. Smaller deferred items (consolidated from review notes and PR records)
+
+Solver/adapter (from the Ipopt-backend branch's final review; apply when the
+respective files are next touched, or batch into a maintenance pass):
+- Jet × ipopt-backend concurrency is dispatchable but unconsidered (Ipopt is
+  not reliably re-entrant): add a guard or an explicit unsupported note in
+  `jet_run`.
+- `solve()` under the ipopt backend runs the objective-bearing NLP (no
+  feasibility-only analog): one sentence in the `nlp_solver` docstring at the
+  next stubs regeneration.
+- Adapter callbacks latch `std::exception` only; add `catch (...)` for
+  contract completeness.
+- `prob.ipopt_options` returns a copy (in-place item assignment silently
+  no-ops): docstring note at next binding touch.
+- `run_nlp_solver` branches `== ipopt` while the call-impls branch
+  `== psiopt`: unify on `!= psiopt` whenever a third backend enumerator
+  appears (hazard is zero until then).
+- RPATH ordering (conda toolchain's rpath precedes the Ipopt lib dir, so a
+  same-soname conda package shadows a custom Ipopt): needs a principled CMake
+  answer if the backend is ever promoted user-facing; the dev-grade answer
+  (no conda ipopt installed) is in effect.
+- `capture_example_iters.py` has no per-config surface — measuring a
+  non-default configuration "as default" requires the temporary-flip rebuild
+  procedure used by the campaign (recorded in the campaign note §6).
+
+Regularization-mode test follow-ups (from its review): direct tests asserting
+the nested-restoration dual-shift suppression and the singular-base ladder
+upgrade; the rank-deficient CONVERGED pin is untested on Apple Accelerate.
+Also recorded there: a persistently singular base spends 1 + max_refac
+factorizations per iteration with no constraint-side escalation.
+
+Corpus/docs hygiene: internal planning labels persist in files predating the
+no-labels rule (`tests/corpus/registry.py` section comments,
+`tests/corpus/README.md` header, `scripts/run_corpus.py` instrument comment,
+`test_corpus_smoke.py` docstring) — one dedicated cleanup commit; the
+brach_illscaled module needs its unboundedness docstring note (area 3); the
+docs-site linkcheck false positives (bot-blocked hosts) still want
+`linkcheck_ignore` patterns in `docs/source/conf.py`.
+
+## Deep-dive resolution record
+
+The addendum's original two "Ipopt-only successes" both dissolved on
+investigation: zermelo is solved by the stack under a matched call
+(restoration head-to-head agreeing with Ipopt to machine precision — the
+strongest correctness evidence produced for the restoration implementation),
+and brach_illscaled is an unbounded formulation where Ipopt's advantage is
+basin selection, not scaling (the earlier native-scaling attribution is
+retracted). The implementations behaved as designed in both cases; the real
+findings were the un-globalized feasibility stage (area 4) and the harness
+call-shape confound (area 5).

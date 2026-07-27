@@ -185,7 +185,7 @@ static bool run_multi_spacecraft(const std::vector<std::vector<Eigen::VectorXd>>
     // For each angular spread, substitute new front states, re-transcribe
     // every 8 iterates to keep the problem well conditioned, then
     // solve+optimize (first iterate) or optimize-with-solve-optimize-fallback.
-    PSIOPT::ConvergenceFlags flag = PSIOPT::ConvergenceFlags::CONVERGED;
+    tycho::ConvergenceFlags flag = tycho::ConvergenceFlags::CONVERGED;
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(7, 0, 6);
     for (size_t j = 0; j < all_istates.size(); ++j) {
         const auto &istates = all_istates[j];
@@ -199,14 +199,14 @@ static bool run_multi_spacecraft(const std::vector<std::vector<Eigen::VectorXd>>
 
         if (j == 0) {
             auto solve_flag = ocp.solve();
-            if (solve_flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+            if (solve_flag > tycho::ConvergenceFlags::ACCEPTABLE) {
                 std::cerr << "  MultiSpacecraftOpt: initial solve FAILED at j=0\n";
                 return false;
             }
         }
 
         flag = ocp.optimize();
-        if (flag == PSIOPT::ConvergenceFlags::NOTCONVERGED) {
+        if (flag == tycho::ConvergenceFlags::NOTCONVERGED) {
             flag = ocp.solve_optimize();
         }
 
@@ -216,7 +216,7 @@ static bool run_multi_spacecraft(const std::vector<std::vector<Eigen::VectorXd>>
                   << rendezvous_time << " periods\n";
     }
 
-    if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+    if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "  MultiSpacecraftOpt: final optimize status " << static_cast<int>(flag)
                   << "\n";
         return false;

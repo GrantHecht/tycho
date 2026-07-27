@@ -48,7 +48,7 @@ TEST_F(OptimalControlTest, ShootingSparsityMatchesDenseSolve) {
         auto phase = make_brach_phase(100, 32, TranscriptionModes::CentralShooting);
         phase->enable_hessian_sparsity_ = sparsity;
         auto status = phase->solve_optimize();
-        EXPECT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+        EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
         return phase->return_traj().back()[3]; // tf
     };
 

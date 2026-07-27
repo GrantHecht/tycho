@@ -6,7 +6,7 @@
 // Source: https://github.com/AlabamaASRL/asset_asrl
 // Original Developer: James B. Pezent
 //
-// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+// Modifications in Tycho (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
 //   - Binding code extracted from ASSET source and reorganized (PR 2 — binding decoupling)
 //   - Migrated pybind11 -> nanobind (PR 3)
@@ -18,6 +18,8 @@
 #include "psiopt_bind.h"
 #include "tycho/detail/solvers/ipopt_backend.h"
 #include "tycho/detail/solvers/psiopt.h"
+
+#include <nanobind/stl/string_view.h>
 
 using namespace tycho;
 using namespace tycho::vf;
@@ -54,7 +56,7 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     using LineSearchModes = PSIOPT::LineSearchModes;
     using QPPivotModes = PSIOPT::QPPivotModes;
     using PDStepStrategies = PSIOPT::PDStepStrategies;
-    using ConvergenceFlags = PSIOPT::ConvergenceFlags;
+    using ConvergenceFlags = tycho::ConvergenceFlags;
     using AlgorithmModes = PSIOPT::AlgorithmModes;
     using QPOrderingModes = PSIOPT::QPOrderingModes;
     using BestCriteriaModes = PSIOPT::BestCriteriaModes;
@@ -164,13 +166,23 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
                    "converged before its first factorization); 0.0 if that iteration fell inside "
                    "a nested l1 restoration phase, where the shift is suppressed.");
 
+    BIND_RESULT_RO(obj, "last_eval_exception", last_eval_exception_,
+                   "Message of the most recent trial-point evaluation exception absorbed during "
+                   "the most recent solve call, or the empty string when every evaluation "
+                   "succeeded. A populated value means the acceptance machinery rejected one or "
+                   "more un-evaluable trial steps (for example an iterate that stepped outside "
+                   "an interpolation table's domain) and the solve continued -- to full "
+                   "recovery, to a graceful ACCEPTABLE-level exit at an already-acceptable "
+                   "iterate, or into feasibility restoration; a solve with none of those paths "
+                   "available raises RuntimeError instead. In a multi-phase solve, an earlier "
+                   "phase's message persists on this property even when a later phase aborts, "
+                   "since the diagnostic is written at each phase's close.");
+
     BIND_SETTINGS_VALIDATED(obj, "obj_scale", obj_scale_, set_obj_scale, "");
     BIND_SETTINGS_VALIDATED(obj, "print_level", print_level_, set_print_level, "");
     obj.def("set_print_level", &PSIOPT::set_print_level);
 
     BIND_RESULT_RO(obj, "converge_flag", converge_flag_);
-
-    obj.def("get_convergence_flag", &PSIOPT::get_convergence_flag);
 
     BIND_SETTINGS_VALIDATED(obj, "kkt_tol", kkt_tol_, set_kkt_tol, "");
     BIND_SETTINGS_VALIDATED(obj, "bar_tol", bar_tol_, set_bar_tol, "");
@@ -252,7 +264,6 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
 
     // --- Algorithm modes ---
     BIND_SETTINGS_RW(obj, "pd_step_strategy", pd_step_strategy_, "");
-    BIND_SETTINGS_RW(obj, "soe_bound_relax", soe_bound_relax_, "");
     BIND_SETTINGS_VALIDATED(obj, "qp_par_solve", qp_par_solve_, set_qp_par_solve, "");
 
     BIND_SETTINGS_RW(obj, "soe_mode", soe_mode_, "");
@@ -282,8 +293,10 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
         "penalty-based acceptance test selected by merit_penalty_rule; funnel switches to a "
         "single-scalar bound on constraint violation, tightened while accepted iterates stay "
         "within it; filter switches to a (violation, objective) Wachter-Biegler-style filter. "
-        "merit, funnel, and filter each require max_soc == 0 and ls_extended_iters == 0 "
-        "(ValueError raised otherwise); watchdog is compatible with all four strategies. These are "
+        "funnel and filter are designed to operate above a monotone barrier safeguard, so each "
+        "requires barrier_governor=monitored, or never_monotone=True to run without the "
+        "monotone-barrier safeguard (the two are mutually exclusive; ValueError at "
+        "validate() time otherwise); watchdog is compatible with all four strategies. These are "
         "heuristically-motivated acceptance alternatives, not one another's strict "
         "improvement -- compare against classic_merit on your own problem before adopting "
         "one.");
@@ -407,6 +420,52 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
 
     BIND_SETTINGS_RW(obj, "cnr_mode", cnr_mode_, "");
 
+    obj.def("apply_preset", &PSIOPT::apply_preset, nb::arg("name"),
+            R"doc(Apply a named globalization-mechanism configuration.
+
+Assigns exactly nine Settings fields -- acceptance_strategy,
+merit_penalty_rule, barrier_governor, never_monotone, restoration_mode,
+inertia_mode, max_soc, ls_extended_iters, and watchdog. No other
+Settings field (tolerances, iteration caps, QP/threading parameters,
+...) is read or written.
+
+Valid names
+-----------
+classic
+    Restores the stock configuration: classic_merit acceptance, the
+    classic_adaptive barrier governor, restoration off, classic inertia
+    mode, and SOC/extended-backtracking/watchdog all disabled -- the
+    bit-identical Settings{} default.
+filter_l1
+    Filter acceptance with a monitored barrier governor and nested-l1
+    restoration.
+soc_recovery_l1
+    Classic-merit acceptance with a monitored barrier governor,
+    proximal-regularization inertia, second-order correction
+    (max_soc=4), extended backtracking (ls_extended_iters=2), the
+    watchdog enabled, and nested-l1 restoration.
+soc_proximal
+    Classic-merit acceptance with a monitored barrier governor,
+    proximal-regularization inertia, second-order correction
+    (max_soc=4), and proximal-switch restoration.
+merit_l1
+    Merit acceptance with the classic_adaptive barrier governor and
+    nested-l1 restoration.
+
+See the solver configuration comparison in the reference documentation
+for the evidence behind each non-classic preset.
+
+Parameters
+----------
+name : str
+    One of the five names above.
+
+Raises
+------
+ValueError
+    If ``name`` is not one of the five presets above.
+)doc");
+
     nb::enum_<BarrierModes>(m, "BarrierModes")
         .value("PROBE", BarrierModes::PROBE)
         .value("LOQO", BarrierModes::LOQO);
@@ -425,14 +484,17 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
                "Single-scalar upper bound on constraint violation (the funnel width), "
                "tightened while accepted iterates remain within it (Kiessling, "
                "Leyffer & Vanaret funnel formulation, implemented after Uno's funnel). "
-               "Rejects combination with max_soc > 0 or ls_extended_iters > 0 (ValueError "
-               "at validate() time); composes with watchdog. Heuristically motivated -- no "
+               "Requires a monotone barrier safeguard, so it rejects combination with the "
+               "default barrier_governor=classic_adaptive unless never_monotone=True "
+               "(ValueError at validate() time); composes with watchdog. Heuristically motivated -- no "
                "convergence guarantee is implied; compare against classic_merit and filter "
                "on your own problem.")
         .value("filter", AcceptanceStrategies::filter,
                "(Constraint violation, objective) pair filter with margined dominance "
-               "(Wachter-Biegler filter line search, Ipopt lineage). Rejects combination "
-               "with max_soc > 0 or ls_extended_iters > 0 (ValueError at validate() time); "
+               "(Wachter-Biegler filter line search, Ipopt lineage). Requires a monotone "
+               "barrier safeguard, so it rejects combination with the default "
+               "barrier_governor=classic_adaptive unless never_monotone=True (ValueError at "
+               "validate() time); "
                "composes with watchdog. Heuristically motivated -- no convergence guarantee "
                "is implied; compare against classic_merit and funnel on your own problem.");
     nb::enum_<MeritPenaltyRules>(m, "MeritPenaltyRules")

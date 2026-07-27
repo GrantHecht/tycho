@@ -6,7 +6,7 @@
 // Source: https://github.com/AlabamaASRL/asset_asrl
 // Original Developer: James B. Pezent
 //
-// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+// Modifications in Tycho (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
 //   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
 //   - Python binding methods moved to src/bindings/ (nanobind)
@@ -18,7 +18,7 @@ namespace tycho::solvers {
 
 struct IterateInfo {
 
-    int iter = 0;
+    int iter_ = 0;
 
     double mu_ = 0;
     double prim_obj_ = 0;
@@ -59,12 +59,6 @@ struct IterateInfo {
     double prox_reg_primal_ = -1.0;
     double prox_reg_dual_ = -1.0;
 
-    double kkt_norm_err_ = 0;
-    double barr_norm_err_ = 0;
-    double econ_norm_err_ = 0;
-    double icon_norm_err_ = 0;
-    double all_con_norm_err_ = 0;
-
     int p_pivots_ = 0;
     double max_e_mult_ = 0;
     double max_i_mult_ = 0;
@@ -95,12 +89,19 @@ struct IterateInfo {
     //                             against another reading taken under the
     //                             SAME acceptance path. The one live consumer
     //                             today, soc_should_trigger() (globalization/
-    //                             soc.h), only ever compares like-with-like:
-    //                             SocRecovery is reachable only through
-    //                             ClassicMeritAcceptance::classic_line_search
-    //                             (ModernMeritAcceptance's override throws),
-    //                             so its trigger always compares two
-    //                             squared-L2 readings, never a mix. -1.0
+    //                             soc.h), still compares like-with-like even
+    //                             though SocRecovery composes with every
+    //                             acceptance strategy (the recovery hook in
+    //                             alg_impl dispatches to it regardless of
+    //                             which strategy is active): its caller
+    //                             (SocRecovery::on_step_rejected) selects the
+    //                             comparison norm via
+    //                             AcceptanceStrategy::drives_classic_path() —
+    //                             squared-L2 when true (ClassicMeritAcceptance),
+    //                             L1 when false (the generic path: modern
+    //                             merit, filter, funnel) — so the two
+    //                             readings it compares are always the same
+    //                             norm, just not always squared-L2. -1.0
     //                             means UNAVAILABLE: no rejection was
     //                             recorded, or the LANG variant ran (it
     //                             materializes no infeasibility scalar). A
@@ -112,6 +113,15 @@ struct IterateInfo {
     bool accepted_ = false;
     int first_rejection_iter_ = -1;
     double theta_at_first_rejection_ = -1.0;
+
+    // Number of trial-point evaluations that threw during this iteration's
+    // acceptance attempts (line-search rungs, SOC/extended-backtrack trials,
+    // soft-feasibility trial). 0 on the overwhelmingly common no-exception
+    // path. Not printed in the iteration table. The `iters` vector alg_impl
+    // accumulates is solve-local, but PSIOPT::LateCallBackType hands each
+    // completed IterateInfo (iters.back()) to a registered C++ callback once
+    // per iteration; no Python surface exposes it.
+    int eval_exceptions_ = 0;
 };
 
 } // namespace tycho::solvers

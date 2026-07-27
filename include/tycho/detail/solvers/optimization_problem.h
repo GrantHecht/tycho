@@ -6,7 +6,7 @@
 // Source: https://github.com/AlabamaASRL/asset_asrl
 // Original Developer: James B. Pezent
 //
-// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+// Modifications in Tycho (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
 //   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
 //   - Python binding methods moved to src/bindings/ (nanobind)
@@ -158,7 +158,7 @@ struct OptimizationProblem : OptimizationProblemBase {
         this->reset_transcription();
     }
 
-    PSIOPT::ConvergenceFlags solve() {
+    tycho::ConvergenceFlags solve() {
         if (this->do_transcription_)
             this->transcribe();
         auto out = this->run_nlp_solver(JetJobModes::Solve, this->active_variables_);
@@ -168,7 +168,7 @@ struct OptimizationProblem : OptimizationProblemBase {
         return out.flag_;
     }
 
-    PSIOPT::ConvergenceFlags optimize() {
+    tycho::ConvergenceFlags optimize() {
         if (this->do_transcription_)
             this->transcribe();
         auto out = this->run_nlp_solver(JetJobModes::Optimize, this->active_variables_);
@@ -178,7 +178,7 @@ struct OptimizationProblem : OptimizationProblemBase {
         return out.flag_;
     }
 
-    PSIOPT::ConvergenceFlags solve_optimize() {
+    tycho::ConvergenceFlags solve_optimize() {
         if (this->do_transcription_)
             this->transcribe();
         auto out = this->run_nlp_solver(JetJobModes::SolveOptimize, this->active_variables_);
@@ -188,7 +188,7 @@ struct OptimizationProblem : OptimizationProblemBase {
         return out.flag_;
     }
 
-    PSIOPT::ConvergenceFlags solve_optimize_solve() {
+    tycho::ConvergenceFlags solve_optimize_solve() {
         if (this->do_transcription_)
             this->transcribe();
         auto out = this->run_nlp_solver(JetJobModes::SolveOptimizeSolve, this->active_variables_);
@@ -198,7 +198,7 @@ struct OptimizationProblem : OptimizationProblemBase {
         return out.flag_;
     }
 
-    PSIOPT::ConvergenceFlags optimize_solve() {
+    tycho::ConvergenceFlags optimize_solve() {
         if (this->do_transcription_)
             this->transcribe();
         auto out = this->run_nlp_solver(JetJobModes::OptimizeSolve, this->active_variables_);

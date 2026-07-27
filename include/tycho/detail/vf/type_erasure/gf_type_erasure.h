@@ -1,5 +1,5 @@
 // =============================================================================
-// New file in Tycho fork (Copyright 2026-present Grant R. Hecht,
+// New file in Tycho (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt)
 //
 // Replaces the rubber_types::TypeErasure composition used for GenericFunction's

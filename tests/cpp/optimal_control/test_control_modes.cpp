@@ -66,7 +66,7 @@ Phase make_brach_phase_with_mode(ODE &ode, ControlModes mode) {
     phase.add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0);
     phase.add_delta_time_objective(1.0);
 
-    phase.optimizer().set_print_level(0);
+    phase.optimizer().set_print_level(3);
 
     return phase;
 }
@@ -78,7 +78,7 @@ TEST_F(ControlModeTest, HighestOrderSplineConverges) {
     auto phase = make_brach_phase_with_mode(ode, ControlModes::HighestOrderSpline);
 
     auto status = phase.solve_optimize();
-    EXPECT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
 
     auto result = phase.return_traj();
     double tf = result.back()[3];
@@ -90,7 +90,7 @@ TEST_F(ControlModeTest, FirstOrderSplineConverges) {
     auto phase = make_brach_phase_with_mode(ode, ControlModes::FirstOrderSpline);
 
     auto status = phase.solve_optimize();
-    EXPECT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
 
     auto result = phase.return_traj();
     double tf = result.back()[3];
@@ -102,7 +102,7 @@ TEST_F(ControlModeTest, NoSplineConverges) {
     auto phase = make_brach_phase_with_mode(ode, ControlModes::NoSpline);
 
     auto status = phase.solve_optimize();
-    EXPECT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
 
     auto result = phase.return_traj();
     double tf = result.back()[3];
@@ -114,7 +114,7 @@ TEST_F(ControlModeTest, BlockConstantConverges) {
     auto phase = make_brach_phase_with_mode(ode, ControlModes::BlockConstant);
 
     auto status = phase.solve_optimize();
-    EXPECT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
 
     auto result = phase.return_traj();
     double tf = result.back()[3];
@@ -126,10 +126,10 @@ TEST_F(ControlModeTest, BlockConstantStaticAPI) {
     // Also verify BlockConstant via the static (non-builder) API
     auto phase = make_brach_phase();
     phase->set_control_mode(ControlModes::BlockConstant);
-    phase->optimizer_->set_print_level(0);
+    phase->optimizer_->set_print_level(3);
 
     auto status = phase->solve_optimize();
-    EXPECT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
 
     auto result = phase->return_traj();
     double tf = result.back()[3];

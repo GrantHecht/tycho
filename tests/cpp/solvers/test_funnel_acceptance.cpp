@@ -27,9 +27,9 @@
 // tests/cpp/ (grep-confirmed no other "Funnel" symbol exists).
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "tycho/detail/solvers/globalization/funnel_acceptance.h"
+#include "progress_measures_test_utils.h"
 
-#include "tycho/detail/solvers/globalization/progress_measures.h"
+#include "tycho/detail/solvers/globalization/funnel_acceptance.h"
 
 #include <gtest/gtest.h>
 
@@ -43,16 +43,7 @@ using tycho::solvers::FunnelAcceptance;
 using tycho::solvers::kFunnelBeta;
 using tycho::solvers::kFunnelInitialUpperBound;
 using tycho::solvers::kFunnelKappa;
-using tycho::solvers::ProgressMeasures;
-
-// File-unique helper (see UNITY RULE above).
-ProgressMeasures FunnelMakePm(double infeasibility, double objective, double auxiliary) {
-    ProgressMeasures pm;
-    pm.infeasibility = infeasibility;
-    pm.objective = objective;
-    pm.auxiliary = auxiliary;
-    return pm;
-}
+using TychoTest::pm;
 
 // Priming: run the FIRST is_iterate_acceptable() so the width is derived from
 // θ₀ = current.infeasibility, WITHOUT the priming call mutating the width. The
@@ -63,17 +54,15 @@ ProgressMeasures FunnelMakePm(double infeasibility, double objective, double aux
 //   pred.objective = 0 ⇒ H-type were membership to pass; trial_outside must be
 //   > τ but ≤ θ_max.
 void FunnelPrimeRejecting(FunnelAcceptance &a, double theta0, double trial_outside) {
-    const bool ok = a.is_iterate_acceptable(FunnelMakePm(theta0, 0.0, 0.0),
-                                            FunnelMakePm(trial_outside, 0.0, 0.0),
-                                            FunnelMakePm(0.0, 0.0, 0.0), 1.0, 1.0);
+    const bool ok = a.is_iterate_acceptable(pm(theta0, 0.0, 0.0), pm(trial_outside, 0.0, 0.0),
+                                            pm(0.0, 0.0, 0.0), 1.0, 1.0);
     EXPECT_FALSE(ok); // trial outside the funnel ⇒ rejected, width untouched
 }
 
 // Convenience: an H-type call (m_f = 0) with the given current/trial θ.
 bool FunnelHType(FunnelAcceptance &a, double theta_current, double theta_trial) {
-    return a.is_iterate_acceptable(FunnelMakePm(theta_current, 0.0, 0.0),
-                                   FunnelMakePm(theta_trial, 0.0, 0.0), FunnelMakePm(0.0, 0.0, 0.0),
-                                   1.0, 1.0);
+    return a.is_iterate_acceptable(pm(theta_current, 0.0, 0.0), pm(theta_trial, 0.0, 0.0),
+                                   pm(0.0, 0.0, 0.0), 1.0, 1.0);
 }
 
 // ===========================================================================
@@ -233,9 +222,8 @@ TEST(FunnelAcceptance, WidthUpdateReWidensWhenCurrentIterateOutsideFunnel) {
 TEST(FunnelAcceptance, FTypeAcceptLeavesWidthUnchanged) {
     FunnelAcceptance a;
     FunnelPrimeRejecting(a, /*theta0=*/1.0, /*trial_outside=*/5.0); // τ = 1.5
-    const bool ok =
-        a.is_iterate_acceptable(FunnelMakePm(1.0e-5, 10.0, 0.0), FunnelMakePm(1.0e-6, 9.9999, 0.0),
-                                FunnelMakePm(0.01, 0.01, 0.0), 1.0, 1.0);
+    const bool ok = a.is_iterate_acceptable(pm(1.0e-5, 10.0, 0.0), pm(1.0e-6, 9.9999, 0.0),
+                                            pm(0.01, 0.01, 0.0), 1.0, 1.0);
     EXPECT_TRUE(ok);                         // F-type accept
     EXPECT_DOUBLE_EQ(a.funnel_width(), 1.5); // untouched by the F-type step
 }
@@ -257,9 +245,8 @@ TEST(FunnelAcceptance, FTypeAcceptLeavesWidthUnchanged) {
 TEST(FunnelAcceptance, MembershipRejectsFTypeTrialOutsideFunnel) {
     FunnelAcceptance a;
     FunnelPrimeRejecting(a, /*theta0=*/1.0, /*trial_outside=*/5.0); // τ = 1.5
-    const bool ok =
-        a.is_iterate_acceptable(FunnelMakePm(1.0e-5, 10.0, 0.0), FunnelMakePm(2.0, 9.9999, 0.0),
-                                FunnelMakePm(0.01, 0.01, 0.0), 1.0, 1.0);
+    const bool ok = a.is_iterate_acceptable(pm(1.0e-5, 10.0, 0.0), pm(2.0, 9.9999, 0.0),
+                                            pm(0.01, 0.01, 0.0), 1.0, 1.0);
     EXPECT_FALSE(ok);                        // rejected at membership (θ_trial > τ)
     EXPECT_DOUBLE_EQ(a.funnel_width(), 1.5); // untouched by the rejected trial
 }
@@ -321,8 +308,7 @@ TEST(FunnelAcceptance, WidthMonotoneNonIncreasingAcrossSequence) {
 TEST(FunnelAcceptance, ExitTestBothHalvesPass) {
     FunnelAcceptance a;
     FunnelPrimeRejecting(a, 4.0, 10.0); // τ = 6.0
-    EXPECT_TRUE(a.is_infeasibility_sufficiently_reduced(FunnelMakePm(10.0, 0.0, 0.0),
-                                                        FunnelMakePm(5.0, 0.0, 0.0)));
+    EXPECT_TRUE(a.is_infeasibility_sufficiently_reduced(pm(10.0, 0.0, 0.0), pm(5.0, 0.0, 0.0)));
 }
 
 // Membership half rejects independently: trial θ = 7.0 > τ = 6.0 (outside the
@@ -330,8 +316,7 @@ TEST(FunnelAcceptance, ExitTestBothHalvesPass) {
 TEST(FunnelAcceptance, ExitTestMembershipHalfRejects) {
     FunnelAcceptance a;
     FunnelPrimeRejecting(a, 4.0, 10.0); // τ = 6.0
-    EXPECT_FALSE(a.is_infeasibility_sufficiently_reduced(FunnelMakePm(10.0, 0.0, 0.0),
-                                                         FunnelMakePm(7.0, 0.0, 0.0)));
+    EXPECT_FALSE(a.is_infeasibility_sufficiently_reduced(pm(10.0, 0.0, 0.0), pm(7.0, 0.0, 0.0)));
 }
 
 // Relative half rejects independently: reference θ = 5.0 ⇒ threshold 4.9995;
@@ -339,8 +324,7 @@ TEST(FunnelAcceptance, ExitTestMembershipHalfRejects) {
 TEST(FunnelAcceptance, ExitTestRelativeHalfRejects) {
     FunnelAcceptance a;
     FunnelPrimeRejecting(a, 4.0, 10.0); // τ = 6.0
-    EXPECT_FALSE(a.is_infeasibility_sufficiently_reduced(FunnelMakePm(5.0, 0.0, 0.0),
-                                                         FunnelMakePm(5.5, 0.0, 0.0)));
+    EXPECT_FALSE(a.is_infeasibility_sufficiently_reduced(pm(5.0, 0.0, 0.0), pm(5.5, 0.0, 0.0)));
 }
 
 // Relative-half boundary is inclusive. τ = 150 (membership never binds here);
@@ -350,10 +334,10 @@ TEST(FunnelAcceptance, ExitTestRelativeBoundaryInclusive) {
     FunnelAcceptance a;
     FunnelPrimeRejecting(a, 100.0, 200.0); // τ = 150.0
     const double threshold = kFunnelBeta * 10.0;
-    EXPECT_TRUE(a.is_infeasibility_sufficiently_reduced(FunnelMakePm(10.0, 0.0, 0.0),
-                                                        FunnelMakePm(threshold, 0.0, 0.0)));
-    EXPECT_FALSE(a.is_infeasibility_sufficiently_reduced(FunnelMakePm(10.0, 0.0, 0.0),
-                                                         FunnelMakePm(threshold * 1.0001, 0.0, 0.0)));
+    EXPECT_TRUE(
+        a.is_infeasibility_sufficiently_reduced(pm(10.0, 0.0, 0.0), pm(threshold, 0.0, 0.0)));
+    EXPECT_FALSE(a.is_infeasibility_sufficiently_reduced(pm(10.0, 0.0, 0.0),
+                                                         pm(threshold * 1.0001, 0.0, 0.0)));
 }
 
 // ===========================================================================
@@ -371,7 +355,7 @@ TEST(FunnelAcceptance, ExitTestRelativeBoundaryInclusive) {
 TEST(FunnelAcceptance, NotifySwitchToFeasibilityStashesWidth) {
     FunnelAcceptance a;
     FunnelPrimeRejecting(a, 4.0, 10.0); // τ = 6.0
-    a.notify_switch_to_feasibility(FunnelMakePm(3.0, 1.0, 0.0));
+    a.notify_switch_to_feasibility(pm(3.0, 1.0, 0.0));
     EXPECT_TRUE(a.in_feasibility_phase());
     EXPECT_TRUE(std::isinf(a.funnel_width()));       // working reset to sentinel
     EXPECT_DOUBLE_EQ(a.stashed_funnel_width(), 6.0); // optimality width frozen
@@ -384,8 +368,8 @@ TEST(FunnelAcceptance, NotifySwitchToFeasibilityStashesWidth) {
 TEST(FunnelAcceptance, NotifySwitchToOptimalityReBasesRestoredWidth) {
     FunnelAcceptance a;
     FunnelPrimeRejecting(a, 4.0, 10.0);                         // τ = 6.0
-    a.notify_switch_to_feasibility(FunnelMakePm(5.0, 0.0, 0.0)); // stash 6.0, working → +∞
-    a.notify_switch_to_optimality(FunnelMakePm(2.0, 0.0, 0.0));
+    a.notify_switch_to_feasibility(pm(5.0, 0.0, 0.0));          // stash 6.0, working → +∞
+    a.notify_switch_to_optimality(pm(2.0, 0.0, 0.0));
     EXPECT_FALSE(a.in_feasibility_phase());
     EXPECT_DOUBLE_EQ(a.funnel_width(), kFunnelKappa * 6.0 + (1.0 - kFunnelKappa) * 2.0); // 4.0
 }
@@ -396,8 +380,8 @@ TEST(FunnelAcceptance, NotifySwitchToOptimalityReBasesRestoredWidth) {
 TEST(FunnelAcceptance, NotifySwitchToOptimalityAllowsReWidening) {
     FunnelAcceptance a;
     FunnelPrimeRejecting(a, 4.0, 10.0); // τ = 6.0
-    a.notify_switch_to_feasibility(FunnelMakePm(5.0, 0.0, 0.0));
-    a.notify_switch_to_optimality(FunnelMakePm(10.0, 0.0, 0.0));
+    a.notify_switch_to_feasibility(pm(5.0, 0.0, 0.0));
+    a.notify_switch_to_optimality(pm(10.0, 0.0, 0.0));
     EXPECT_DOUBLE_EQ(a.funnel_width(), kFunnelKappa * 6.0 + (1.0 - kFunnelKappa) * 10.0); // 8.0
     EXPECT_GT(a.funnel_width(), 6.0);
 }
@@ -409,7 +393,7 @@ TEST(FunnelAcceptance, NotifySwitchToOptimalityAllowsReWidening) {
 TEST(FunnelAcceptance, ExitTestReadsStashedWidthInPhase) {
     FunnelAcceptance a;
     FunnelPrimeRejecting(a, 4.0, 10.0);                         // τ = 6.0
-    a.notify_switch_to_feasibility(FunnelMakePm(4.0, 0.0, 0.0)); // stash 6.0, working → +∞
+    a.notify_switch_to_feasibility(pm(4.0, 0.0, 0.0));          // stash 6.0, working → +∞
     ASSERT_TRUE(a.in_feasibility_phase());
     FunnelPrimeRejecting(a, /*theta0=*/0.1, /*trial_outside=*/2.0); // working width → 1.0
     ASSERT_DOUBLE_EQ(a.funnel_width(), 1.0);
@@ -417,8 +401,7 @@ TEST(FunnelAcceptance, ExitTestReadsStashedWidthInPhase) {
 
     // trial θ=5.0: membership against the stashed 6.0 passes (5 ≤ 6); against the
     // live working width 1.0 it would fail. Relative half: 5 ≤ 0.9999·100.
-    EXPECT_TRUE(a.is_infeasibility_sufficiently_reduced(FunnelMakePm(100.0, 0.0, 0.0),
-                                                        FunnelMakePm(5.0, 0.0, 0.0)));
+    EXPECT_TRUE(a.is_infeasibility_sufficiently_reduced(pm(100.0, 0.0, 0.0), pm(5.0, 0.0, 0.0)));
 }
 
 // reset() mid-phase (μ-event) clears the WORKING width only; the stash + flag
@@ -426,7 +409,7 @@ TEST(FunnelAcceptance, ExitTestReadsStashedWidthInPhase) {
 TEST(FunnelAcceptance, ResetMidPhasePreservesStashedWidth) {
     FunnelAcceptance a;
     FunnelPrimeRejecting(a, 4.0, 10.0);                         // τ = 6.0
-    a.notify_switch_to_feasibility(FunnelMakePm(4.0, 0.0, 0.0)); // stash 6.0
+    a.notify_switch_to_feasibility(pm(4.0, 0.0, 0.0));          // stash 6.0
     FunnelPrimeRejecting(a, 0.1, 2.0);                          // working width → 1.0
     a.reset();                                                 // μ-event mid-restoration
     EXPECT_TRUE(a.in_feasibility_phase());            // flag survives
@@ -438,8 +421,8 @@ TEST(FunnelAcceptance, ResetMidPhasePreservesStashedWidth) {
 TEST(FunnelAcceptance, ResetOutsidePhaseDropsStashedWidth) {
     FunnelAcceptance a;
     FunnelPrimeRejecting(a, 4.0, 10.0);
-    a.notify_switch_to_feasibility(FunnelMakePm(4.0, 0.0, 0.0));
-    a.notify_switch_to_optimality(FunnelMakePm(2.0, 0.0, 0.0)); // flag now false
+    a.notify_switch_to_feasibility(pm(4.0, 0.0, 0.0));
+    a.notify_switch_to_optimality(pm(2.0, 0.0, 0.0)); // flag now false
     ASSERT_FALSE(a.in_feasibility_phase());
     a.reset();
     EXPECT_TRUE(std::isinf(a.stashed_funnel_width())); // dropped
@@ -451,9 +434,9 @@ TEST(FunnelAcceptance, ResetOutsidePhaseDropsStashedWidth) {
 TEST(FunnelAcceptance, EntryBeforeFirstCallStashesInfinityExitStaysWide) {
     FunnelAcceptance a;
     ASSERT_TRUE(std::isinf(a.funnel_width())); // sentinel, no call yet
-    a.notify_switch_to_feasibility(FunnelMakePm(4.0, 0.0, 0.0));
+    a.notify_switch_to_feasibility(pm(4.0, 0.0, 0.0));
     EXPECT_TRUE(std::isinf(a.stashed_funnel_width()));
-    a.notify_switch_to_optimality(FunnelMakePm(2.0, 0.0, 0.0));
+    a.notify_switch_to_optimality(pm(2.0, 0.0, 0.0));
     EXPECT_TRUE(std::isinf(a.funnel_width()));
 }
 
@@ -462,14 +445,14 @@ TEST(FunnelAcceptance, EntryBeforeFirstCallStashesInfinityExitStaysWide) {
 TEST(FunnelAcceptance, DoubleEntryThrows) {
     FunnelAcceptance a;
     FunnelPrimeRejecting(a, 4.0, 10.0);
-    a.notify_switch_to_feasibility(FunnelMakePm(4.0, 0.0, 0.0));
-    EXPECT_THROW(a.notify_switch_to_feasibility(FunnelMakePm(4.0, 0.0, 0.0)), std::logic_error);
+    a.notify_switch_to_feasibility(pm(4.0, 0.0, 0.0));
+    EXPECT_THROW(a.notify_switch_to_feasibility(pm(4.0, 0.0, 0.0)), std::logic_error);
 }
 
 TEST(FunnelAcceptance, ExitWithoutEntryThrows) {
     FunnelAcceptance a;
     FunnelPrimeRejecting(a, 4.0, 10.0);
-    EXPECT_THROW(a.notify_switch_to_optimality(FunnelMakePm(2.0, 0.0, 0.0)), std::logic_error);
+    EXPECT_THROW(a.notify_switch_to_optimality(pm(2.0, 0.0, 0.0)), std::logic_error);
 }
 
 } // namespace

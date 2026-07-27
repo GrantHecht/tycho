@@ -1,5 +1,5 @@
 // =============================================================================
-// Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
+// Tycho (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 // =============================================================================
 //
 // ProximalSwitchRestoration — a RestorationStrategy that keeps the SAME
@@ -123,10 +123,10 @@ namespace tycho::solvers {
 // (1) ζ weight; Ipopt option "resto_proximity_weight" shipped default 1.0.
 inline constexpr double kRestoProximityWeight = 1.0;
 
-// (3) Near-feasible entry guard factor, adapted from Ipopt's unscaled
-// 1e-1 * constr_viol_tol member of its scaled/unscaled entry-guard pair —
-// see the file docstring's disclosed single-measure adaptation.
-inline constexpr double kNearFeasibleGuardFactor = 0.1;
+// (3)'s guard factor kNearFeasibleGuardFactor, and the near_feasible() test
+// built on it, live in restoration.h — shared by both concrete strategies and
+// by the feasibility-stage stall seam. The provenance disclosure for the
+// factor stays in this file's docstring, item (3) above.
 
 // Failure-classification threshold for a restoration STALL (distinct from the
 // ENTRY guard above, and three orders of magnitude looser). When the proximal
@@ -166,18 +166,14 @@ class ProximalSwitchRestoration final : public RestorationStrategy {
 
     const Eigen::VectorXd &proximal_diagonal() const override { return diagonal_; }
 
-    bool entry_permitted(double constraint_violation, const SolverContext &ctx) const override;
+    // entry_permitted() (virtual, shared default body) and append_diagnostics()
+    // (non-virtual) are both inherited unoverridden from RestorationStrategy —
+    // both read/write only entries_/iterations_in_mode_, which this class
+    // shares with the base (see restoration.h).
 
     const ProgressMeasures &reference() const override { return reference_; }
 
     void note_iteration() override { ++iterations_in_mode_; }
-
-    // Reports entries_/iterations_in_mode_ into SolveResult::
-    // last_feas_rest_entries_/last_feas_rest_iters_ (psiopt.h) — see
-    // RestorationStrategy::append_diagnostics() for the call-site contract
-    // this overrides. Written unconditionally (0/0 is a correct report for a
-    // strategy that was constructed but never entered).
-    void append_diagnostics(PSIOPT::SolveResult &result) const override;
 
     // --- Test/diagnostic observers ---
     double zeta() const { return zeta_; }
@@ -198,10 +194,6 @@ class ProximalSwitchRestoration final : public RestorationStrategy {
     Eigen::VectorXd d_;
     Eigen::VectorXd diagonal_;
     double zeta_ = 0.0;
-
-    // Per-phase diagnostics (write-only, see append_diagnostics()).
-    int entries_ = 0;
-    int iterations_in_mode_ = 0;
 };
 
 } // namespace tycho::solvers

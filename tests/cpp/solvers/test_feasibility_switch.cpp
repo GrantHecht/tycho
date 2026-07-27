@@ -37,7 +37,8 @@
 #include <Eigen/Core>
 
 using namespace tycho;
-using namespace TychoTest;
+using TychoTest::InertSolverContext;
+using TychoTest::SolverTest;
 
 namespace {
 
@@ -48,7 +49,6 @@ using tycho::solvers::IterateInfo;
 using tycho::solvers::kRecoveryDepthRestoration;
 using tycho::solvers::kRecoveryDepthUnresolved;
 using tycho::solvers::kRecoveryDepthWatchdog;
-using tycho::solvers::KktSolverType;
 using tycho::solvers::OptimizationProblem;
 using tycho::solvers::ProgressMeasures;
 using tycho::solvers::PSIOPT;
@@ -135,10 +135,13 @@ class FeasSwitchUnusedMechanism : public GlobalizationMechanism {
                         Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &,
                         AcceptanceStrategy &, double &, double &, IterateInfo &,
                         const std::vector<IterateInfo> &, SolverContext &) override {
+        ADD_FAILURE() << "mechanism must not be reached by FeasibilitySwitchRecovery";
         return 1.0;
     }
     void max_primal_dual_step(Eigen::VectorXd &, Eigen::VectorXd &, double, double &, double &,
-                              const SolverContext &) override {}
+                              const SolverContext &) override {
+        ADD_FAILURE() << "mechanism must not be reached by FeasibilitySwitchRecovery";
+    }
     void reset() override {}
 };
 
@@ -147,25 +150,17 @@ class FeasSwitchUnusedAcceptance : public AcceptanceStrategy {
   public:
     bool is_iterate_acceptable(const ProgressMeasures &, const ProgressMeasures &,
                                const ProgressMeasures &, double, double) override {
+        ADD_FAILURE() << "acceptance must not be reached by FeasibilitySwitchRecovery";
         return false;
     }
     bool is_infeasibility_sufficiently_reduced(const ProgressMeasures &,
                                                const ProgressMeasures &) const override {
+        ADD_FAILURE() << "acceptance must not be reached by FeasibilitySwitchRecovery";
         return false;
     }
     void reset() override {}
     bool drives_classic_path() const override { return true; }
 };
-
-// Minimal SolverContext for the recovery signature (zero dims, so the RHS tail
-// is empty and the constraint violation is 0 — the stub ignores it anyway).
-SolverContext feas_switch_context(KktSolverType &solver, PSIOPT::Settings &settings, int &zero,
-                                  Eigen::VectorXd &scratch, const RestorationStrategy *restoration) {
-    SolverContext ctx{nullptr, solver,  settings, zero,    zero,    zero,
-                      zero,    zero,    scratch,  scratch, scratch, scratch};
-    ctx.restoration_ = restoration;
-    return ctx;
-}
 
 // Drive FeasibilitySwitchRecovery::on_step_rejected once and return its Action;
 // captures resolved_depth via the out-parameter.
@@ -193,12 +188,10 @@ RecoveryChain::Action drive_feas_switch(FeasibilitySwitchRecovery &fsr, SolverCo
 // -----------------------------------------------------------------------------
 
 TEST(FeasibilitySwitchTruthTable, InnerRetryPassesThrough) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
     FeasSwitchStubRestoration restoration; // active_=false, permit_=true
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+    InertSolverContext inert;
+    inert.restoration_ = &restoration;
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kRetry));
     int depth = 0;
@@ -206,12 +199,10 @@ TEST(FeasibilitySwitchTruthTable, InnerRetryPassesThrough) {
 }
 
 TEST(FeasibilitySwitchTruthTable, InnerGiveUpPassesThrough) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
     FeasSwitchStubRestoration restoration;
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+    InertSolverContext inert;
+    inert.restoration_ = &restoration;
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(
         std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kGiveUp));
@@ -220,11 +211,8 @@ TEST(FeasibilitySwitchTruthTable, InnerGiveUpPassesThrough) {
 }
 
 TEST(FeasibilitySwitchTruthTable, NullRestorationKeepsAcceptAsIs) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, /*restoration=*/nullptr);
+    InertSolverContext inert; // restoration_ stays nullptr
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(
         std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
@@ -234,14 +222,12 @@ TEST(FeasibilitySwitchTruthTable, NullRestorationKeepsAcceptAsIs) {
 }
 
 TEST(FeasibilitySwitchTruthTable, AlreadyActiveNeverReEnters) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
     FeasSwitchStubRestoration restoration;
     restoration.active_ = true; // already in restoration mode
     restoration.permit_ = true;
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+    InertSolverContext inert;
+    inert.restoration_ = &restoration;
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(
         std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
@@ -250,14 +236,12 @@ TEST(FeasibilitySwitchTruthTable, AlreadyActiveNeverReEnters) {
 }
 
 TEST(FeasibilitySwitchTruthTable, EntryRefusedKeepsAcceptAsIs) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
     FeasSwitchStubRestoration restoration;
     restoration.active_ = false;
     restoration.permit_ = false; // guard/budget refuses entry
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+    InertSolverContext inert;
+    inert.restoration_ = &restoration;
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(
         std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
@@ -266,14 +250,12 @@ TEST(FeasibilitySwitchTruthTable, EntryRefusedKeepsAcceptAsIs) {
 }
 
 TEST(FeasibilitySwitchTruthTable, EntryPermittedSwitchesAndStampsDepth) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
     FeasSwitchStubRestoration restoration;
     restoration.active_ = false;
     restoration.permit_ = true;
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+    InertSolverContext inert;
+    inert.restoration_ = &restoration;
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(
         std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
@@ -292,12 +274,10 @@ TEST(FeasibilitySwitchTruthTable, EntryPermittedSwitchesAndStampsDepth) {
 // unchanged and preserves the depth. Restoration is present, inactive, and would
 // otherwise permit entry — proving the depth check alone blocks the switch.
 TEST(FeasibilitySwitchTruthTable, WatchdogResolvedAcceptPassesThrough) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
     FeasSwitchStubRestoration restoration; // active_=false, permit_=true
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+    InertSolverContext inert;
+    inert.restoration_ = &restoration;
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(std::make_unique<FeasSwitchStubInner>(
         RecoveryChain::Action::kAcceptAsIs, kRecoveryDepthWatchdog, /*stamp_accepted=*/true));
@@ -320,13 +300,11 @@ TEST(FeasibilitySwitchTruthTable, NullInnerChainRejected) {
 // the wrapper returns kSoftFeasibilityStep (alg_impl takes the trial step) rather
 // than the full switch, and stamps the restoration recovery depth.
 TEST(FeasibilitySwitchSoftPreStage, NestedReturnsSoftStepBeforeSwitching) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
     FeasSwitchStubRestoration restoration;
     restoration.nested_ = true; // nested l1 mode
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+    InertSolverContext inert;
+    inert.restoration_ = &restoration;
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(
         std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
@@ -338,13 +316,11 @@ TEST(FeasibilitySwitchSoftPreStage, NestedReturnsSoftStepBeforeSwitching) {
 // A proximal (non-nested) strategy has NO pre-stage: it switches directly on the
 // first exhausted rejection, however many times it is driven.
 TEST(FeasibilitySwitchSoftPreStage, ProximalNeverEntersPreStage) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
     FeasSwitchStubRestoration restoration;
     restoration.nested_ = false; // proximal switch mode
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+    InertSolverContext inert;
+    inert.restoration_ = &restoration;
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(
         std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
@@ -357,13 +333,11 @@ TEST(FeasibilitySwitchSoftPreStage, ProximalNeverEntersPreStage) {
 // soft steps) for up to kMaxSoftRestoIters successive iterations; the 11th
 // successive soft iteration escalates to the full switch.
 TEST(FeasibilitySwitchSoftPreStage, EscalatesOnEleventhSuccessiveSoftIteration) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
     FeasSwitchStubRestoration restoration;
     restoration.nested_ = true;
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+    InertSolverContext inert;
+    inert.restoration_ = &restoration;
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(
         std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
@@ -380,13 +354,11 @@ TEST(FeasibilitySwitchSoftPreStage, EscalatesOnEleventhSuccessiveSoftIteration) 
 // accepted: notify_step_accepted resets the successive-soft-iteration counter, so
 // a fresh pre-stage can run its full budget again afterward.
 TEST(FeasibilitySwitchSoftPreStage, AcceptedStepResetsSoftCounter) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
     FeasSwitchStubRestoration restoration;
     restoration.nested_ = true;
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+    InertSolverContext inert;
+    inert.restoration_ = &restoration;
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(
         std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
@@ -404,13 +376,11 @@ TEST(FeasibilitySwitchSoftPreStage, AcceptedStepResetsSoftCounter) {
 // A mode-switch reset() also clears the pre-stage counter (a restoration entry or
 // exit resets the pre-stage).
 TEST(FeasibilitySwitchSoftPreStage, ResetClearsSoftCounter) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
     FeasSwitchStubRestoration restoration;
     restoration.nested_ = true;
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+    InertSolverContext inert;
+    inert.restoration_ = &restoration;
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(
         std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
@@ -458,24 +428,29 @@ std::unique_ptr<OptimizationProblem> feas_switch_build_nlp(double start, double 
     return prob;
 }
 
-TEST_F(SolverTest, RestorationOffLeavesDiagnosticsSentinel) {
-    auto prob = feas_switch_build_nlp(/*start=*/0.0, /*a=*/1.0, /*inconsistent=*/false, /*b=*/0.0);
+// The restoration diagnostics carry exactly one bit per mode: -1 means "no
+// RestorationStrategy was constructed, the counters do not apply", anything >= 0
+// is a real count. The two halves are one property and are asserted together --
+// the "on" half is only meaningful against the "off" half it contrasts with.
+TEST_F(SolverTest, RestorationDiagnosticsSentinelOnlyWhenOff) {
+    auto off = feas_switch_build_nlp(/*start=*/0.0, /*a=*/1.0, /*inconsistent=*/false, /*b=*/0.0);
     // restoration_mode_ defaults to off.
-    prob->optimize();
-    const auto &r = prob->optimizer_->result();
-    EXPECT_EQ(r.last_feas_rest_entries_, -1);
-    EXPECT_EQ(r.last_feas_rest_iters_, -1);
-}
+    off->optimize();
+    const auto &r_off = off->optimizer_->result();
+    EXPECT_EQ(r_off.last_feas_rest_entries_, -1);
+    EXPECT_EQ(r_off.last_feas_rest_iters_, -1);
 
-TEST_F(SolverTest, RestorationOnReportsDiagnostics) {
-    auto prob = feas_switch_build_nlp(0.0, 1.0, false, 0.0);
-    prob->optimizer_->settings().restoration_mode_ = RestorationModes::proximal_switch;
-    prob->optimize();
-    const auto &r = prob->optimizer_->result();
-    // With restoration constructed, the diagnostics are reported (not the -1
-    // sentinel) — entries/iters are >= 0 regardless of whether entry fired.
-    EXPECT_GE(r.last_feas_rest_entries_, 0);
-    EXPECT_GE(r.last_feas_rest_iters_, 0);
+    auto on = feas_switch_build_nlp(0.0, 1.0, false, 0.0);
+    on->optimizer_->settings().restoration_mode_ = RestorationModes::proximal_switch;
+    on->optimize();
+    const auto &r_on = on->optimizer_->result();
+    // With restoration constructed the counters are reported as real counts --
+    // NOT the sentinel — regardless of whether entry actually fired.
+    // EXPECT_GE(..., 0) below is the stronger check: it subsumes ruling out the
+    // -1 sentinel (any real count is already >= 0), so no separate EXPECT_NE is
+    // needed.
+    EXPECT_GE(r_on.last_feas_rest_entries_, 0);
+    EXPECT_GE(r_on.last_feas_rest_iters_, 0);
 }
 
 TEST_F(SolverTest, ForcedEntryOnFeasibleProblemEntersExitsAndConverges) {
@@ -492,7 +467,7 @@ TEST_F(SolverTest, ForcedEntryOnFeasibleProblemEntersExitsAndConverges) {
     auto flag = prob->optimize();
 
     const auto &r = prob->optimizer_->result();
-    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     EXPECT_GE(r.last_feas_rest_entries_, 1);           // restoration was entered
     EXPECT_LE(r.last_feas_rest_entries_, 2);           // and not beyond the budget
     ASSERT_EQ(r.primals_.size(), 1);
@@ -523,7 +498,7 @@ TEST_F(SolverTest, ForcedEntryUnderFilterAcceptanceStillConverges) {
     auto flag = prob->optimize();
 
     const auto &r = prob->optimizer_->result();
-    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     EXPECT_GE(r.last_feas_rest_entries_, 1);           // restoration was entered
     ASSERT_EQ(r.primals_.size(), 1);
     EXPECT_NEAR(r.primals_[0], 1.0, 1e-4);             // converged on the true objective
@@ -541,15 +516,15 @@ TEST_F(SolverTest, ForcedEntryOnInfeasibleProblemDoesNotFalselyConverge) {
 
     const auto &r = prob->optimizer_->result();
     // Hard assertion: never fatal-skipped, always runs.
-    EXPECT_NE(flag, PSIOPT::ConvergenceFlags::CONVERGED);
+    EXPECT_NE(flag, tycho::ConvergenceFlags::CONVERGED);
     // Soft check: entry depends on pivot perturbation producing a finite step
     // from this problem's rank-deficient KKT system, which is platform-
-    // dependent factorization behavior, not the property under test.
+    // dependent factorization behavior, not the property under test. The skip
+    // IS the entry assertion -- reaching past it means restoration was entered.
     if (r.last_feas_rest_entries_ < 1) {
         GTEST_SKIP() << "factorization returned non-finite step on this platform; "
                        "entry not exercised";
     }
-    EXPECT_GE(r.last_feas_rest_entries_, 1); // restoration was entered
 }
 
 TEST_F(SolverTest, BudgetZeroRefusesAllEntries) {
@@ -564,7 +539,7 @@ TEST_F(SolverTest, BudgetZeroRefusesAllEntries) {
 
     const auto &r = prob->optimizer_->result();
     EXPECT_EQ(r.last_feas_rest_entries_, 0); // budget refused every entry
-    EXPECT_NE(flag, PSIOPT::ConvergenceFlags::CONVERGED);
+    EXPECT_NE(flag, tycho::ConvergenceFlags::CONVERGED);
 }
 
 } // namespace
@@ -618,8 +593,17 @@ TEST(FeasibilitySwitch, FilterSeedsRestorationConstraintTol) {
 // is the only way to exercise the seam.
 // -----------------------------------------------------------------------------
 
+using tycho::solvers::BarrierGovernor;
+using tycho::solvers::ClassicAdaptiveGovernor;
+using tycho::solvers::FeasibilitySwitchRecovery;
+using tycho::solvers::GlobalizationMechanism;
+using tycho::solvers::IterateInfo;
+using tycho::solvers::kMaxSoftRestoIters;
 using tycho::solvers::NestedL1Restoration;
 using tycho::solvers::OptimizationProblem;
+using tycho::solvers::PSIOPT;
+using tycho::solvers::RestorationModes;
+using tycho::solvers::SolverContext;
 
 // A non-nested restoration double: is_nested() stays false, so a correctly split
 // seam must take the proximal branch and never touch the nested surface. The
@@ -806,7 +790,7 @@ class NestedSeamHarness {
         solver_->settings().print_level_ = 3;
         solver_->rebuild_globalization_components();
         solver_->ensure_solver_initialized();
-        bool docompute = solver_->analyze_kkt_matrix();
+        bool docompute = solver_->claim_kkt_analysis();
         Eigen::VectorXd x = (Eigen::VectorXd(2) << 0.0, 0.0).finished();
         Eigen::VectorXd XSL = solver_->init_impl(x, outer_mu, docompute);
 
@@ -1263,7 +1247,7 @@ class NestedLifecycleHarness {
     // alg_impl directly with the injected nested strategy. Records the final
     // iterate's μ so a caller can confirm it is the outer schedule value, not the
     // (large) restoration barrier parameter.
-    PSIOPT::ConvergenceFlags run_forced_entry(NestedL1Restoration *&comp_out,
+    tycho::ConvergenceFlags run_forced_entry(NestedL1Restoration *&comp_out,
                                               PSIOPT::LineSearchModes lsmode,
                                               PSIOPT::BarrierModes barmode, double &final_mu,
                                               double init_mu = 0.1, int preload_soft_counter = 0,
@@ -1288,7 +1272,7 @@ class NestedLifecycleHarness {
                 fsr->soft_counter_ = preload_soft_counter;
         }
         solver_->ensure_solver_initialized();
-        bool docompute = solver_->analyze_kkt_matrix();
+        bool docompute = solver_->claim_kkt_analysis();
         Eigen::VectorXd XSL = solver_->init_impl(start_, init_mu, docompute);
         final_mu = init_mu;
         double *fm = &final_mu;
@@ -1458,7 +1442,7 @@ TEST(NestedRestorationLifecycle, SoftPreStageResolvesWithoutFullEntry) {
     auto flag = h.run_forced_entry(comp, PSIOPT::LineSearchModes::L1, PSIOPT::BarrierModes::LOQO,
                                    final_mu, /*init_mu=*/0.1);
 
-    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     ASSERT_NE(comp, nullptr);
     EXPECT_EQ(comp->entries(), 0); // the pre-stage resolved it; no full l1 entry
     const auto &r = h.solver().result();
@@ -1482,7 +1466,7 @@ TEST(NestedRestorationLifecycle, EndToEndWithInequalityConvergesUnderSoftPreStag
     auto flag = h.run_forced_entry(comp, PSIOPT::LineSearchModes::L1, PSIOPT::BarrierModes::LOQO,
                                    final_mu, /*init_mu=*/0.1);
 
-    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     ASSERT_NE(comp, nullptr);
     const auto &r = h.solver().result();
     ASSERT_EQ(r.primals_.size(), 2);
@@ -1501,7 +1485,7 @@ TEST(NestedRestorationLifecycle, EndToEndLangLineSearchConvergesUnderSoftPreStag
     auto flag = h.run_forced_entry(comp, PSIOPT::LineSearchModes::LANG, PSIOPT::BarrierModes::LOQO,
                                    final_mu, /*init_mu=*/0.1);
 
-    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     ASSERT_NE(comp, nullptr);
     const auto &r = h.solver().result();
     ASSERT_EQ(r.primals_.size(), 2);
@@ -1528,12 +1512,13 @@ TEST(NestedRestorationLifecycle, SoftPreStageEscalatesIntoFullL1Phase) {
                                    final_mu, /*init_mu=*/0.1);
 
     ASSERT_NE(comp, nullptr);
-    EXPECT_NE(flag, PSIOPT::ConvergenceFlags::CONVERGED); // never falsely converges
+    EXPECT_NE(flag, tycho::ConvergenceFlags::CONVERGED); // never falsely converges
     if (comp->entries() < 1) {
         GTEST_SKIP() << "factorization returned non-finite step on this platform; "
                         "escalation not exercised";
     }
-    EXPECT_GE(comp->entries(), 1); // the pre-stage escalated into the full l1 phase
+    // The skip above is the escalation assertion -- reaching past it means
+    // comp->entries() >= 1, i.e. the pre-stage escalated into the full l1 phase.
 }
 
 // The nested full lifecycle on a FEASIBLE problem, unconditionally exercised:
@@ -1553,7 +1538,7 @@ TEST(NestedRestorationLifecycle, ForcedEscalationRunsFullPhaseAndConverges) {
                                    final_mu, /*init_mu=*/0.1,
                                    /*preload_soft_counter=*/kMaxSoftRestoIters);
 
-    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     ASSERT_NE(comp, nullptr);
     EXPECT_GE(comp->entries(), 1); // full phase entered
     const auto &r = h.solver().result();
@@ -1571,19 +1556,35 @@ TEST(NestedRestorationLifecycle, ForcedEscalationRunsFullPhaseAndConverges) {
 TEST(NestedRestorationLifecycle, ProximalPathStillEntersExitsConverges) {
     NestedLifecycleHarness h((Eigen::VectorXd(2) << 0.0, 0.0).finished(), /*n_ineq=*/0,
                              /*inconsistent=*/false);
-    // Drive a real proximal-switch solve through the public API (no nested
-    // injection): rebuild + solve via optimize-equivalent path.
+    // Drive a real proximal-switch forced-entry run through the public API (no
+    // nested injection, no preloaded counters, no private-member pokes): set the
+    // mode, cap the classic ladder at zero so the first rejection is already
+    // ladder-exhausted, and call optimize().
+    //
+    // optimize(), NOT solve(). The solve-only phase runs soe_ls_mode_, which
+    // defaults to NOLS, and BacktrackingLineSearch::run_acceptance_backtrack
+    // short-circuits NOLS by stamping Citer.accepted_ = true and returning the
+    // full step. should_dispatch_recovery() is (GoodStep && !accepted_), so on
+    // that path the recovery chain -- and with it FeasibilitySwitchRecovery --
+    // is never invoked at all, and max_ls_iters_ is never even read. Restoration
+    // entry is therefore structurally unreachable through solve(); only a phase
+    // running a real line-search mode (opt_ls_mode_, AUGLANG by default) can
+    // produce the ladder-exhausted rejection this test is about.
     h.solver().settings().restoration_mode_ = RestorationModes::proximal_switch;
     h.solver().set_max_ls_iters(0);
     h.solver().set_max_iters(120);
     Eigen::VectorXd x = (Eigen::VectorXd(2) << 0.0, 0.0).finished();
-    Eigen::VectorXd sol = h.solver().solve(x);
+    Eigen::VectorXd sol = h.solver().optimize(x);
     const auto &r = h.solver().result();
-    EXPECT_LE(r.converge_flag_, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(r.converge_flag_, tycho::ConvergenceFlags::ACCEPTABLE);
     ASSERT_EQ(sol.size(), 2);
     EXPECT_NEAR(sol[0], 2.0, 1e-3);
     EXPECT_NEAR(sol[1], 2.0, 1e-3);
-    EXPECT_GE(r.last_feas_rest_entries_, 0);
+    // Restoration was actually entered -- the same bar the proximal forced-entry
+    // sibling holds (ForcedEntryOnFeasibleProblemEntersExitsAndConverges, same
+    // recipe on its own problem). >= 0 would be satisfied by merely constructing
+    // a strategy, which is what this test used to assert.
+    EXPECT_GE(r.last_feas_rest_entries_, 1);
 }
 
 // -----------------------------------------------------------------------------
@@ -1612,7 +1613,7 @@ TEST(NestedRestorationRecenter, FiresExactlyOncePerFailureRunEndToEnd) {
                                    final_mu, /*init_mu=*/0.1,
                                    /*preload_soft_counter=*/kMaxSoftRestoIters);
 
-    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     ASSERT_NE(comp, nullptr);
     EXPECT_GE(comp->entries(), 1);           // full phase entered
     EXPECT_EQ(comp->recenter_calls(), 1);    // exactly one re-center; rest fall through
@@ -1742,12 +1743,14 @@ class FeasSwitchRecordingGovernor : public BarrierGovernor {
 TEST(NestedRestorationMonotoneSchedule, HoldsThenAdvancesOnBarrierProgressGate) {
     ClassicAdaptiveGovernor g; // the free-mode merit governor; monotone is on the base.
 
-    PSIOPT::Settings settings; // defaults: bar_tol_=kkt_tol_=1e-6, min_mu_=1e-12, max_mu_=100.
-    KktSolverType solver;
-    Eigen::VectorXd scratch;
-    int pv = 1, sv = 2, ec = 0, ic = 2, kkt = 5;
-    SolverContext ctx{nullptr, solver,  settings, pv,      sv,      ec,
-                      ic,      kkt,     scratch,  scratch, scratch, scratch};
+    // defaults: bar_tol_=kkt_tol_=1e-6, min_mu_=1e-12, max_mu_=100.
+    InertSolverContext inert;
+    inert.primal_vars_ = 1;
+    inert.slack_vars_ = 2;
+    inert.equal_cons_ = 0;
+    inert.inequal_cons_ = 2;
+    inert.kkt_dim_ = 5;
+    SolverContext ctx = inert.ctx();
 
     // Layout [primals(1) | slacks(2) | eq(0) | iq(2)]: slacks = {2,4}, iq_lmults = {0.5,0.25}.
     Eigen::VectorXd XSL(5);
@@ -1768,7 +1771,7 @@ TEST(NestedRestorationMonotoneSchedule, HoldsThenAdvancesOnBarrierProgressGate) 
                                                      mu_event);
         EXPECT_DOUBLE_EQ(mu, 4.0);          // held at the anchored resto μ.
         EXPECT_FALSE(mu_event);             // no new subproblem.
-        EXPECT_GT(mu, settings.min_mu_);    // never collapsed to the μ floor.
+        EXPECT_GT(mu, inert.settings_.min_mu_); // never collapsed to the μ floor.
         EXPECT_DOUBLE_EQ(barr_obj, -4.0 * log_sum);
         EXPECT_DOUBLE_EQ(RHS[1], 0.5 - 4.0 / 2.0);  // iq_lmult - μ/slack
         EXPECT_DOUBLE_EQ(RHS[2], 0.25 - 4.0 / 4.0);
@@ -1814,7 +1817,7 @@ TEST(NestedRestorationLifecycle, FreeOracleUnreachableDuringNestedPhase) {
                                    /*preload_soft_counter=*/kMaxSoftRestoIters,
                                    /*after_rebuild=*/[&] { h.set_governor(std::move(guard)); });
 
-    EXPECT_LE(flag, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     ASSERT_NE(comp, nullptr);
     EXPECT_GE(comp->entries(), 1);            // the full l1 phase was entered
     EXPECT_EQ(raw->calls_during_nested(), 0); // free oracle never consulted while active

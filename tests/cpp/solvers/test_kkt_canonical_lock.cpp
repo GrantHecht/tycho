@@ -23,8 +23,10 @@
 //      write a shared, mirror-ordered Hessian pair -- driven through the
 //      REAL template bodies (not a hand-rolled model), replicating
 //      analyze_sparsity + get_mat_space's canonical clash detection, and
-//      comparing every physical KKT slot bit-for-bit against an
-//      independently computed dense reference.
+//      comparing every physical KKT slot against an independently computed
+//      dense reference (to a tolerance far below any keying error but above
+//      the few-ULP summation-order drift on the contended slot -- see the
+//      comment at the comparison loop).
 //
 // IMPORTANT SCOPE NOTE: this is a deterministic, single-threaded run. The
 // value comparison catches keying/accounting corruption -- e.g. someone
@@ -81,7 +83,7 @@ TEST(KktCanonicalLockCol, SymmetricUnderArgumentSwap) {
 // "partitions", checked against an independent dense reference.
 ///////////////////////////////////////////////////////////////////////////////
 
-TEST(KktCanonicalLockMirrorPair, ScatterMatchesDenseReferenceBitForBit) {
+TEST(KktCanonicalLockMirrorPair, ScatterMatchesDenseReference) {
     // f: R^2 -> R, nonlinear (norm), so both Jacobian and (non-degenerate) Hessian
     // elements are exercised.
     auto f = tycho::vf::Arguments<2>().norm();
@@ -241,7 +243,16 @@ TEST(KktCanonicalLockMirrorPair, ScatterMatchesDenseReferenceBitForBit) {
                 accum(raw[e].first, raw[e].second, hx(j, i)), e++;
     }
 
-    // ---- compare: every physical slot's accumulated value, bit-for-bit (to tight tol) ----
+    // ---- compare: every physical slot's accumulated value ----
+    // NOT bit-for-bit, and deliberately so. Six of the eight slots do agree
+    // exactly, but the diagonal slot (1,1) -- the one both partitions write --
+    // drifts by ~4 ULP (measured 2.2e-16 on a value of 0.410) because the
+    // scatter path and this reference sum the two contributions in a different
+    // order, and the objective side additionally applies ObjScale at a
+    // different point in the expression under the project's -ffast-math build.
+    // 1e-13 is three decades above that measured drift and many decades below
+    // any keying/accounting error, which changes a slot's value by a whole
+    // contribution (order 1 here), not by a rounding step.
     for (int i = 0; i < nelems; i++) {
         double got = KKTmat.valuePtr()[locs[i]];
         double want = Mref(rows[i], cols[i]); // rows/cols are canonical (lower) now

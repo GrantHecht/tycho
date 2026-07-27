@@ -224,28 +224,28 @@ class OptimalControlProblem {
     /// @brief Solve the problem for feasibility (no optimization).
     /// @return The solver convergence flag.
     /// @throws std::invalid_argument if no phases have been added.
-    PSIOPT::ConvergenceFlags solve() {
+    tycho::ConvergenceFlags solve() {
         check_has_phases("solve");
         return ocp_.solve();
     }
     /// @brief Optimize the problem (minimize the objective subject to constraints).
     /// @return The solver convergence flag.
     /// @throws std::invalid_argument if no phases have been added.
-    PSIOPT::ConvergenceFlags optimize() {
+    tycho::ConvergenceFlags optimize() {
         check_has_phases("optimize");
         return ocp_.optimize();
     }
     /// @brief Solve for feasibility, then optimize.
     /// @return The solver convergence flag.
     /// @throws std::invalid_argument if no phases have been added.
-    PSIOPT::ConvergenceFlags solve_optimize() {
+    tycho::ConvergenceFlags solve_optimize() {
         check_has_phases("solve_optimize");
         return ocp_.solve_optimize();
     }
     /// @brief Optimize, then solve to tighten feasibility.
     /// @return The solver convergence flag.
     /// @throws std::invalid_argument if no phases have been added.
-    PSIOPT::ConvergenceFlags optimize_solve() {
+    tycho::ConvergenceFlags optimize_solve() {
         check_has_phases("optimize_solve");
         return ocp_.optimize_solve();
     }

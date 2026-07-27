@@ -1,4 +1,4 @@
-"""Smoke test for the E2 G0 PSIOPT robustness corpus (tests/corpus/).
+"""Smoke test for the PSIOPT robustness corpus (tests/corpus/).
 
 Verifies the problem-module contract documented in tests/corpus/README.md
 holds for every module registered in tests/corpus/registry.py, and that the
@@ -15,6 +15,7 @@ import json
 import os
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -32,6 +33,7 @@ RUN_CORPUS = REPO_ROOT / "scripts" / "run_corpus.py"
 if str(CORPUS_DIR) not in sys.path:
     sys.path.insert(0, str(CORPUS_DIR))
 
+import driver  # noqa: E402  (tests/corpus/ on sys.path, same as registry)
 import registry  # noqa: E402  (tests/corpus/ must be on sys.path first)
 
 VALID_TIERS = {"degenerate", "hard", "literature"}
@@ -67,8 +69,8 @@ def test_problem_contract(module_name):
 def test_harness_end_to_end_fast_problems(tmp_path):
     """The harness runs end-to-end and records the expected statuses.
 
-    Uses the two fastest real corpus problems instead of the Task 1
-    throwaway stubs (deleted in Task 5): ``deg_dup_equality`` (converges in
+    Uses the two fastest real corpus problems instead of the original
+    throwaway stub problems (since deleted): ``deg_dup_equality`` (converges in
     3 iterations, ~1 s) and ``hard_vanderpol`` (diverges in 1 iteration,
     ~1 s — the fastest genuine failure in the corpus; the other degenerate-
     tier failures grind through the full 500-iteration ``max_iters`` cap).
@@ -99,3 +101,46 @@ def test_harness_end_to_end_fast_problems(tmp_path):
 
     assert by_problem["deg_dup_equality"]["status"] == "converged"
     assert by_problem["hard_vanderpol"]["status"] == "diverged"
+
+
+class _CallShapeProbeProblem:
+    """Stub problem recording which solve entry point was invoked."""
+
+    def __init__(self):
+        self.called = None
+        self.optimizer = types.SimpleNamespace(last_obj_val=1.0, last_iter_num=3)
+
+    def _record(self, name):
+        self.called = name
+        return types.SimpleNamespace(name="CONVERGED")
+
+    def solve_optimize(self):
+        return self._record("solve_optimize")
+
+    def optimize(self):
+        return self._record("optimize")
+
+
+class _CallShapeProbeModule:
+    SOLVE_MODE = "solve_optimize"
+    NOTES = ""
+
+    @staticmethod
+    def build():
+        return _CallShapeProbeModule._prob
+
+
+def test_driver_default_call_shape_runs_module_solve_mode():
+    prob = _CallShapeProbeProblem()
+    _CallShapeProbeModule._prob = prob
+    result = driver.run(_CallShapeProbeModule, lambda opt: None)
+    assert prob.called == "solve_optimize"
+    assert result["call_shape"] == "module"
+
+
+def test_driver_optimize_call_shape_overrides_solve_mode():
+    prob = _CallShapeProbeProblem()
+    _CallShapeProbeModule._prob = prob
+    result = driver.run(_CallShapeProbeModule, lambda opt: None, call_shape="optimize")
+    assert prob.called == "optimize"
+    assert result["call_shape"] == "optimize"

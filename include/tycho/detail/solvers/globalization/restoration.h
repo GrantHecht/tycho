@@ -1,22 +1,22 @@
 // =============================================================================
-// Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
+// Tycho (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 // =============================================================================
 //
 // Part of the globalization component extraction: this header declares
 // RestorationStrategy, the interface a feasibility-restoration mode-switch
-// implements. Today's PSIOPT has no restoration machinery at all
-// (settings_.max_feas_rest_ is a Settings field that no algorithm code reads
-// yet); this interface therefore has no "today's behavior" section to
-// preserve, unlike the other component headers in this directory.
+// implements.
 //
-// This file: interface declaration only, finalized against the first
-// concrete implementation, ProximalSwitchRestoration (proximal_restoration.h).
-// The feasibility-restoration plan ships as a trio of strategies — a proximal
-// feasibility mode-switch (proximal_restoration.h), a nested l1 proximal
-// restoration (l1_restoration.h), and an elastic/penalty relaxation (not yet
-// implemented) — and this interface is shaped to host all three. The first two
-// are wired: rebuild_globalization_components constructs the strategy selected
-// by Settings::restoration_mode_, and RecoveryChain::Action::kSwitchToFeasibility
+// This file: interface declaration, finalized against two concrete
+// implementations — ProximalSwitchRestoration (proximal_restoration.h) and
+// NestedL1Restoration (l1_restoration.h). The feasibility-restoration plan
+// originally scoped a third trio member, a formulation-level elastic/penalty
+// relaxation (LOQO/Knitro `bar_relaxcons` lineage); that member was
+// deliberately cut from the program after the nested-l1 stage's evidence
+// showed no remaining robustness gap it would plausibly close — see
+// docs/dev/analysis/2026-07-e2-g6-implicit-tr-regularization.md §3 for the
+// decision and its reversal condition. Both shipped strategies are wired:
+// rebuild_globalization_components constructs the strategy selected by
+// Settings::restoration_mode_, and RecoveryChain::Action::kSwitchToFeasibility
 // (recovery_chain.h) dispatches into the entry orchestration in alg_impl.
 //
 // Ownership rule: like the other globalization interfaces, a
@@ -42,6 +42,15 @@
 
 namespace tycho::solvers {
 
+// Near-feasible entry guard factor, adapted from Ipopt's unscaled
+// 1e-1 * constr_viol_tol member of its scaled/unscaled entry-guard pair — see
+// proximal_restoration.h's file docstring, item (3), for the full
+// single-measure adaptation disclosure. Defined here rather than beside that
+// one strategy because the guard is shared: both concrete strategies test
+// against it in entry_permitted(), and so does the feasibility-stage stall
+// seam, through near_feasible() below.
+inline constexpr double kNearFeasibleGuardFactor = 0.1;
+
 // =============================================================================
 // RestorationStrategy — feasibility-restoration mode-switch interface.
 // =============================================================================
@@ -62,9 +71,13 @@ class RestorationStrategy {
                                     const Eigen::Ref<const Eigen::VectorXd> &primals,
                                     double mu) = 0;
 
-    // Leave restoration mode. No solver-side multiplier reset lives here (that
-    // is future solver-wiring work, out of scope for this component) — this
-    // call's own contract is limited to deactivating the mode.
+    // Leave restoration mode. This call's own contract is limited to
+    // deactivating the mode; the solver-side multiplier reset around a
+    // nested-restoration exit (the Newton complementarity step on the slack
+    // multipliers plus the equality-multiplier zeroing) already ships at the
+    // call site — see PSIOPT::exit_feasibility_restoration_nested —
+    // deliberately kept out of this interface because it is solver state,
+    // not restoration-strategy state.
     virtual void exit_restoration() = 0;
 
     // Whether restoration mode is currently active.
@@ -90,32 +103,62 @@ class RestorationStrategy {
     // The proximal term's (diagonal) contribution to the primal Hessian block.
     virtual const Eigen::VectorXd &proximal_diagonal() const = 0;
 
+    // Is this violation already at the near-feasible floor, where a real
+    // restoration episode is not warranted? The single shared guard rule (see
+    // kNearFeasibleGuardFactor above); non-virtual because the rule does not
+    // vary by strategy. Both concrete entry_permitted() implementations use it
+    // for the guard half of their entry test, and the feasibility-stage stall
+    // seam uses it to tell an endgame — constraints at their floor while the
+    // barrier residual still grinds down — from a genuine stall.
+    bool near_feasible(double constraint_violation, const SolverContext &ctx) const {
+        return constraint_violation <= kNearFeasibleGuardFactor * ctx.settings_.econ_tol_;
+    }
+
     // Entry-permission test: may the solver enter restoration right now, given
     // the current constraint violation? False refuses entry — either because
-    // the point is already near-feasible (a real restoration episode is not
-    // warranted) or because this phase's restoration budget
-    // (ctx.settings_.max_feas_rest_) is exhausted. See
-    // proximal_restoration.h's kNearFeasibleGuardFactor citation for the exact
-    // guard rule.
-    virtual bool entry_permitted(double constraint_violation, const SolverContext &ctx) const = 0;
+    // the point is already near-feasible (near_feasible() above) or because
+    // this phase's restoration budget (ctx.settings_.max_feas_rest_) is
+    // exhausted. Virtual with a shared default body: both shipped strategies
+    // (ProximalSwitchRestoration, NestedL1Restoration) share this exact guard +
+    // budget test against the entries_ counter below and do not override it;
+    // test doubles (e.g. FeasSwitchStubRestoration, NestedSeamProximalDouble)
+    // still override it directly for controllability.
+    virtual bool entry_permitted(double constraint_violation, const SolverContext &ctx) const {
+        if (near_feasible(constraint_violation, ctx)) {
+            return false;
+        }
+        if (entries_ >= ctx.settings_.max_feas_rest_) {
+            return false;
+        }
+        return true;
+    }
 
     // The (θ,f) pair restoration was entered from — see `reference` above.
     virtual const ProgressMeasures &reference() const = 0;
 
-    // Increments the per-phase iterations-in-mode counter. Called by the
-    // (not-yet-wired) solver seam once per iteration while restoration is
-    // active; unused until that wiring lands.
+    // Increments the per-phase iterations-in-mode counter. Called by
+    // alg_impl once per iteration while restoration is active — nine call
+    // sites across the nested and proximal branches, one per iteration
+    // outcome (stay-in-mode, each terminal exit, and each mode-switch
+    // handoff).
     virtual void note_iteration() = 0;
 
     // Solver-level observability hook: writes this strategy's diagnostic
     // state into `result`. Mirrors AcceptanceStrategy::append_diagnostics() /
     // BarrierGovernor::append_diagnostics() — same write-only contract, same
-    // last-phase-wins semantics once a multi-phase caller collects it. The
-    // default body is a no-op: with no RestorationStrategy constructed at all
-    // (today's only solve path), the corresponding SolveResult fields stay at
-    // their -1 sentinel (see PSIOPT::SolveResult::last_feas_rest_entries_ /
-    // last_feas_rest_iters_ in psiopt.h).
-    virtual void append_diagnostics(PSIOPT::SolveResult &result) const { (void)result; }
+    // last-phase-wins semantics once a multi-phase caller collects it.
+    // Non-virtual: both shipped strategies (ProximalSwitchRestoration,
+    // NestedL1Restoration) report the identical entries_/iterations_in_mode_
+    // pair, so there is nothing for a subclass to override. When
+    // restoration_mode_ == off no RestorationStrategy is constructed at all,
+    // so this is never reached on that path and the corresponding
+    // SolveResult fields stay at their -1 sentinel (see
+    // PSIOPT::SolveResult::last_feas_rest_entries_ / last_feas_rest_iters_ in
+    // psiopt.h).
+    void append_diagnostics(PSIOPT::SolveResult &result) const {
+        result.last_feas_rest_entries_ = entries_;
+        result.last_feas_rest_iters_ = iterations_in_mode_;
+    }
 
     // -------------------------------------------------------------------------
     // Nested restoration surface.
@@ -333,6 +376,14 @@ class RestorationStrategy {
             "RestorationStrategy::trial_residual_shift called on a strategy that does not "
             "implement the nested restoration surface");
     }
+
+  protected:
+    // Per-phase diagnostics (write-only, see append_diagnostics() above), and
+    // the entry-permission budget counter entry_permitted() reads. Shared base
+    // state: both concrete strategies increment entries_ in their
+    // enter_restoration()/enter_nested() and clear both counters in reset().
+    int entries_ = 0;
+    int iterations_in_mode_ = 0;
 };
 
 } // namespace tycho::solvers

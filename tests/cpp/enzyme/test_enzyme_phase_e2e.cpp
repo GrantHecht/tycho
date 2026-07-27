@@ -83,7 +83,7 @@ TEST(EnzymePhaseE2E, BrachistochroneEnzymeFwdFDiff) {
 
     const auto status = phase.solve_optimize();
     ASSERT_EQ(static_cast<int>(status),
-              static_cast<int>(PSIOPT::ConvergenceFlags::CONVERGED))
+              static_cast<int>(tycho::ConvergenceFlags::CONVERGED))
         << "PSIOPT did not reach CONVERGED; status=" << static_cast<int>(status);
     EXPECT_LT(phase.optimizer().result().iter_num_, 50)
         << "PSIOPT iter count regression (Enzyme Jacobian path)";
@@ -151,7 +151,7 @@ TEST(EnzymePhaseE2E, BrachistochroneFullEnzymePipeline) {
 
     const auto status = phase.solve_optimize();
     ASSERT_EQ(static_cast<int>(status),
-              static_cast<int>(PSIOPT::ConvergenceFlags::CONVERGED))
+              static_cast<int>(tycho::ConvergenceFlags::CONVERGED))
         << "PSIOPT did not reach CONVERGED under <EnzymeAD, EnzymeAD>; status="
         << static_cast<int>(status);
     EXPECT_LT(phase.optimizer().result().iter_num_, 50)

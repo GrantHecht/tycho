@@ -5,10 +5,10 @@ named after this script and cannot collide with the page's other figure). This
 is a build asset, not a documentation page.
 """
 
+import _brand  # sibling module; the plot directive puts _plots/ on sys.path
 import matplotlib.pyplot as plt
 import numpy as np
 
-import _brand  # sibling module; the plot directive puts _plots/ on sys.path
 from tychopy import optimal_control as oc
 from tychopy import vector_functions as vf
 

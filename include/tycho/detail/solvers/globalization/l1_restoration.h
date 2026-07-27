@@ -1,5 +1,5 @@
 // =============================================================================
-// Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
+// Tycho (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 // =============================================================================
 //
 // NestedL1Restoration — a RestorationStrategy that solves the l1 elastic
@@ -129,9 +129,10 @@
 //
 //   (e) No separate restoration iteration budget. Ipopt's max_resto_iter default
 //       is effectively unbounded; the outer iteration limit already bounds this
-//       in-place phase, so no new knob is introduced. The per-solve ENTRY budget
+//       in-place phase, so no new knob is introduced. The per-phase ENTRY budget
 //       remains the shared max_feas_rest_ (Settings), gated by entry_permitted()
-//       exactly as the proximal switch gates it.
+//       exactly as the proximal switch gates it, and reset (entries_ = 0) at
+//       every phase boundary along with the rest of this strategy's state.
 //
 //   (f) Second-level elastic re-centering fallback (recenter_elastics). Ipopt's
 //       RestoRestorationPhase (IpRestoRestoPhase.cpp) handles a restoration-phase
@@ -190,8 +191,9 @@ inline constexpr double kRestoPenaltyParameter = 1.0e3;
 
 // Threshold above which the re-entry bound-multiplier update resets all slack
 // multipliers to 1; Ipopt option "bound_mult_reset_threshold" default 1e3
-// (IpRestoMinC_1Nrm.cpp). Consumed by the re-entry sequence (later wiring); the
-// component exposes it here so both live at the same literature default.
+// (IpRestoMinC_1Nrm.cpp). Consumed by PSIOPT::exit_feasibility_restoration_nested's
+// step (3); the component exposes it here so both live at the same literature
+// default.
 inline constexpr double kBoundMultResetThreshold = 1.0e3;
 
 // kRestoProximityWeight, kNearFeasibleGuardFactor, and
@@ -246,13 +248,14 @@ class NestedL1Restoration final : public RestorationStrategy {
                                Eigen::Ref<Eigen::VectorXd> grad_out) const override;
     const Eigen::VectorXd &proximal_diagonal() const override;
 
-    bool entry_permitted(double constraint_violation, const SolverContext &ctx) const override;
+    // entry_permitted() (virtual, shared default body) and append_diagnostics()
+    // (non-virtual) are both inherited unoverridden from RestorationStrategy —
+    // both read/write only entries_/iterations_in_mode_, which this class
+    // shares with the base (see restoration.h).
 
     const ProgressMeasures &reference() const override { return reference_; }
 
     void note_iteration() override { ++iterations_in_mode_; }
-
-    void append_diagnostics(PSIOPT::SolveResult &result) const override;
 
     // --- Nested restoration surface (see restoration.h for the contract) ---
 
@@ -360,9 +363,6 @@ class NestedL1Restoration final : public RestorationStrategy {
     // Cached pivot vectors (recomputed at entry and after apply_elastic_step).
     Eigen::VectorXd e_pivots_, i_pivots_;
 
-    // Per-phase diagnostics (write-only, see append_diagnostics()).
-    int entries_ = 0;
-    int iterations_in_mode_ = 0;
     // Count of second-level re-center invocations (recenter_elastics), a test/
     // diagnostic observer of the fallback; not folded into SolveResult.
     int recenter_calls_ = 0;

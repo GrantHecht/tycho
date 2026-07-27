@@ -6,7 +6,15 @@
 #include <gtest/gtest.h>
 
 using namespace tycho;
-using namespace TychoTest;
+using TychoTest::BrachODE;
+using TychoTest::make_brach_solver_phase;
+using TychoTest::SolverTest;
+
+// Jet/OptimizationProblemBase live in tycho::solvers; this file previously
+// relied on the TychoTest -> tycho::solvers using-directive leak (fixed in
+// solver_test_utils.h) to see them unqualified.
+using tycho::solvers::Jet;
+using tycho::solvers::OptimizationProblemBase;
 
 TEST_F(SolverTest, JetMapPrebuiltProblems) {
     // Create 3 identical Brachistochrone phases, solve via Jet::map

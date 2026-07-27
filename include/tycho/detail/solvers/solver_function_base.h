@@ -13,7 +13,7 @@
 // function or index data structure. The two Derived classes ( Constraint/ObjectiveInterface) then
 // define the rest of the interface to the type-erased functions constraints and objective methods.
 //
-// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+// Modifications in Tycho (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
 //   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
 //   - Python binding methods moved to src/bindings/ (nanobind)

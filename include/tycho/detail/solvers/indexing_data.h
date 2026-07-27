@@ -10,7 +10,7 @@
 // necessary for an asset vector function to be used as a constraint or objective inside of psiopt.
 // It is coupled with a function by the interface classes ConstraintFunction and ObjectiveFunction.
 //
-// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+// Modifications in Tycho (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
 //   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
 //   - Python binding methods moved to src/bindings/ (nanobind)

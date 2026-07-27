@@ -6,7 +6,7 @@
 // Source: https://github.com/AlabamaASRL/asset_asrl
 // Original Developer: James B. Pezent
 //
-// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+// Modifications in Tycho (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
 //   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
 //   - Python binding methods moved to src/bindings/ (nanobind)
@@ -56,7 +56,7 @@ struct OptimizationProblemBase {
     /// is the built-in path, byte-identical to previous behavior. ipopt runs
     /// the identical transcribed NLP through a linked Ipopt installation
     /// (requires a build with Ipopt support; throws std::runtime_error
-    /// otherwise).
+    /// otherwise). Not usable in a Jet batch run — see the guard in jet_run().
     NLPSolvers nlp_solver_ = NLPSolvers::psiopt;
 
     /// String key/value options forwarded verbatim to Ipopt (e.g.
@@ -74,11 +74,11 @@ struct OptimizationProblemBase {
         this->init_partitions();
     }
 
-    virtual PSIOPT::ConvergenceFlags solve() = 0;
-    virtual PSIOPT::ConvergenceFlags optimize() = 0;
-    virtual PSIOPT::ConvergenceFlags solve_optimize() = 0;
-    virtual PSIOPT::ConvergenceFlags solve_optimize_solve() = 0;
-    virtual PSIOPT::ConvergenceFlags optimize_solve() = 0;
+    virtual tycho::ConvergenceFlags solve() = 0;
+    virtual tycho::ConvergenceFlags optimize() = 0;
+    virtual tycho::ConvergenceFlags solve_optimize() = 0;
+    virtual tycho::ConvergenceFlags solve_optimize_solve() = 0;
+    virtual tycho::ConvergenceFlags optimize_solve() = 0;
 
     /// Compute default partition count from the global thread budget.
     /// Over-partitions by 4x so the work-stealing pool can smooth out
@@ -119,10 +119,25 @@ struct OptimizationProblemBase {
     // would call parallel_sequence/parallel_task from a pool worker, triggering
     // the nested-dispatch guard (std::logic_error). jet_initialize() MUST set
     // num_partitions_=1 so NLP eval methods run inline.
-    virtual PSIOPT::ConvergenceFlags jet_run() {
+    virtual tycho::ConvergenceFlags jet_run() {
+        // Concurrency guard, checked before jet_initialize() mutates this
+        // problem and before any solve work begins. Jet::map builds each
+        // problem inside its worker job, so this entry point is the first
+        // place the selected backend is observable; rejecting here means no
+        // batch element ever reaches an Ipopt solve. Ipopt is not reliably
+        // re-entrant, so running several of its solves concurrently is
+        // unsupported rather than merely untested.
+        if (this->nlp_solver_ == NLPSolvers::ipopt) {
+            throw std::invalid_argument(
+                "nlp_solver=ipopt cannot be used in a Jet batch run: Ipopt is not reliably "
+                "re-entrant, so concurrent solves through it are unsupported. Run the ipopt "
+                "backend one solve at a time (solve/optimize on a single problem), or set "
+                "nlp_solver=psiopt for the batch.");
+        }
+
         this->jet_initialize();
 
-        PSIOPT::ConvergenceFlags flag;
+        tycho::ConvergenceFlags flag;
 
         switch (this->jet_job_mode_) {
         case JetJobModes::Solve: {
@@ -213,6 +228,14 @@ OptimizationProblemBase::NlpSolveOutput solve(OptimizationProblemBase &prob,
 
 inline OptimizationProblemBase::NlpSolveOutput
 OptimizationProblemBase::run_nlp_solver(JetJobModes mode, const Eigen::VectorXd &input) {
+    // This site branches on `== NLPSolvers::ipopt`, while the call-impl sites
+    // in ode_phase_base.cpp / optimal_control_problem.cpp branch on
+    // `== NLPSolvers::psiopt` (or its negation) to make the same backend
+    // choice. Both predicates are equivalent today (only two backends
+    // exist), but if a third backend enumerator is ever added, all of
+    // these sites should be unified on `!= NLPSolvers::psiopt` ("anything
+    // that isn't psiopt uses the generic NLP-solver path") rather than each
+    // needing its own added `== <new-backend>` branch.
     if (this->nlp_solver_ == NLPSolvers::ipopt) {
         return ipopt_backend::solve(*this, mode, input);
     }

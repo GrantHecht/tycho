@@ -159,7 +159,7 @@ std::vector<Eigen::VectorXd> make_orbit(const ODE &ode,
     phase.optimizer().set_econ_tol(1.0e-12);
     phase.optimizer().set_print_level(1);
     auto flag = phase.solve();
-    if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+    if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
         return {}; // caller checks for empty
     }
 
@@ -342,7 +342,7 @@ make_heteroclinic(const ODE &ode, const Trajectory &man1, const Trajectory &man2
     ocp.optimizer().set_econ_tol(1.0e-9);
     ocp.optimizer().set_opt_ls_mode("L1");
     auto flag = ocp.optimize();
-    if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+    if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
         return {}; // caller checks for empty
     }
 
