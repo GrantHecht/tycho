@@ -61,7 +61,7 @@ wheel.exclude = [
 
 [tool.ruff]
 line-length = 88
-exclude = ["dep/", "build/", "*.egg-info"]
+exclude = ["dep/", "build/", "*.egg-info", "tychopy/_stubs/"]
 
 [tool.ruff.lint]
 select = ["I"] # isort only; formatting is handled by ruff format
