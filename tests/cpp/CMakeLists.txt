@@ -202,6 +202,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     # prefix convention, e.g. ProxResto*, L1Resto*, MonGov*, Filter*, Funnel*
     # -- grep the prefix before reusing it), the same convention documented on
     # the SKIP_UNITY_BUILD_INCLUSION entries below.
+    solvers/test_psiopt_presets.cpp # file-local prefix: PresetGate*
 )
 
 #-------------------------------------------------------------------------------
