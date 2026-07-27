@@ -17,9 +17,12 @@ KKT assembly — including the unavoidable `std::fill_n` zeroing pass over
 `KKTmat.nonZeros()` at the top of `PSIOPT::eval_nlp` (`psiopt.cpp`) — are two
 to four orders of magnitude more expensive than anything in `alg_impl`'s
 surrounding bookkeeping. Second, `PSIOPT::SolveResult::misc_time()`
-(`psiopt.h`) is the direct empirical upper bound on nearly every item below;
-read it on the `PolarLT_256seg` benchmark before spending any effort here —
-it already tells you the ceiling on what bookkeeping-only fixes can recover.
+(`psiopt.h`) is the direct empirical upper bound on the bookkeeping-only
+items below (everything except the first two entries: the terminating-iterate
+cost lives in evaluation time, and the print path has its own `print_time_`
+metric); read it on the `PolarLT_256seg` benchmark before spending any
+effort here — it already tells you the ceiling bookkeeping-only fixes can
+recover.
 
 ## Terminating iterate evaluates the full KKT system it will not use
 
