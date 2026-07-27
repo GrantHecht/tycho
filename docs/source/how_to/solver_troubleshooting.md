@@ -433,6 +433,10 @@ set, or the initial guess — not another solver setting.
 
 ## See also
 
+- {doc}`Configuring the solver </tutorials/basics/solver_configuration>` — a
+  runnable walkthrough of this ladder on one problem: a failing solve, its
+  diagnostics, the preset that fixes it, and the hand-set fields that
+  reproduce the preset exactly.
 - {doc}`Solvers reference </reference/python/solvers>` — every setting,
   every `last_*` diagnostic and its sentinel convention, the exact fields
   each preset assigns, and the measured preset behaviour table.
