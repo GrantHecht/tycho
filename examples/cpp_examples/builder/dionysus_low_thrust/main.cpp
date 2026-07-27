@@ -136,7 +136,7 @@ int main() {
     // matching IG/mesh/tolerance. Update both sides if the Python example
     // changes.
     constexpr double kPythonFinalMassKg = 2716.62;
-    const bool converged = flag <= PSIOPT::ConvergenceFlags::ACCEPTABLE &&
+    const bool converged = flag <= tycho::ConvergenceFlags::ACCEPTABLE &&
                            std::abs(final_mass_kg - kPythonFinalMassKg) < 1.0;
 
     if (converged) {

@@ -57,7 +57,7 @@ int main() {
 
     const auto status = phase.solve_optimize();
 
-    if (status <= PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+    if (status <= tycho::ConvergenceFlags::ACCEPTABLE) {
         const auto result = phase.return_traj();
         std::cout << std::fixed << std::setprecision(6);
         std::cout << "\nBrachistochrone (builder): optimal solution found\n";

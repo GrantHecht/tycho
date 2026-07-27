@@ -118,7 +118,7 @@ int main() {
         std::cerr << "HyperSens: mesh did NOT converge\n";
     }
 
-    if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+    if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "HyperSens: solver FAILED (status " << static_cast<int>(flag) << ")\n";
         return 1;
     }

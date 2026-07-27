@@ -170,7 +170,7 @@ int main() {
 
     const auto status = ocp.optimize();
 
-    if (status > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+    if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "GoddardRocket (builder): FAILED (status " << static_cast<int>(status)
                   << ")\n";
         return 1;

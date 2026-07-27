@@ -243,7 +243,7 @@ int main() {
     std::cout << "ParallelParking: coarse solve (k=" << k1 << ", segs=" << n_segs1 << ")...\n"
               << std::flush;
     auto flag_coarse = phase.solve_optimize();
-    if (flag_coarse > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+    if (flag_coarse > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "ParallelParking (builder): coarse solve_optimize FAILED\n";
         return EXIT_FAILURE;
     }
@@ -254,7 +254,7 @@ int main() {
     phase.sub_variable(PhaseRegionFlags::StaticParams, "k", k2);
     phase.optimizer().set_kkt_tol(1.0e-8);
     auto flag_refine = phase.optimize();
-    if (flag_refine > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+    if (flag_refine > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "ParallelParking (builder): refined optimize FAILED\n";
         return EXIT_FAILURE;
     }

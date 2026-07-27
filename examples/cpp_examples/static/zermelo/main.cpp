@@ -81,7 +81,7 @@ navigate(tycho::vf::GenericFunction<-1, -1> erased_ode, const Eigen::VectorXd &A
     phase.optimizer().set_kkt_tol(tol);
 
     const auto status = phase.solve_optimize();
-    if (status > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+    if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "  FAILED: navigation did not converge (status "
                   << static_cast<int>(status) << ")\n";
         return {};

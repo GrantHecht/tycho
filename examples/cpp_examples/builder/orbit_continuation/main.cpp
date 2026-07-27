@@ -56,7 +56,7 @@ std::vector<Eigen::VectorXd> solve_periodic(const ODE &ode, const Eigen::VectorX
 
     phase.optimizer().set_econ_tol(1e-12);
     auto flag = phase.solve();
-    if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+    if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
         return {}; // caller checks for empty
     }
 
