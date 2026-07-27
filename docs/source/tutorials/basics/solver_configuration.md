@@ -85,7 +85,7 @@ written $-x_2 \le 0$.
 ```
 
 Wrapping the construction in a function is deliberate: we build the identical
-problem three times below, once per configuration, so that each solve starts
+problem six times below, once per configuration, so that each solve starts
 from the same guess with a fresh optimizer and its own diagnostic record.
 
 ```{doctest}
@@ -282,7 +282,7 @@ hand-written equivalent. The enumerations come from `tychopy.solvers`:
 
 The three assignments are the only ones that matter here, because `filter_l1`'s
 other six fields already hold their default values. And the two solves agree
-exactly — same iterate sequence, same answer:
+exactly — same iteration count, same answer:
 
 ```{doctest}
 >>> byhand.optimizer.last_iter_num == opt.last_iter_num

@@ -11,8 +11,8 @@ the code does.
 are not independent: filter acceptance requires a monotone barrier
 safeguard, restoration composes with the recovery chain, and the inertia
 mode changes what the factorization reports back to the ladder. A preset
-applies a combination that has been measured together on a 17-problem
-solver corpus and on the 34-example suite. Hand-tuning individual fields is
+applies a combination that has been measured on a 17-problem solver corpus,
+and for three of them on the 34-example suite. Hand-tuning individual fields is
 the *second* move, once a preset has told you which family of mechanism
 helps:
 
@@ -32,7 +32,7 @@ five names, and the exact fields each assigns, are in the
 | `filter_l1` | Steps are rejected that look like they should have been accepted; or you need a feasibility-restoration certificate. |
 | `soc_recovery_l1` | Repeated rejection *and* an ill-conditioned KKT system — this is the everything-on recovery arm. |
 | `soc_proximal` | Rank deficiency or heavy Hessian perturbation, without the l1 elastic machinery. |
-| `merit_l1` | A wrong-basin initial guess (see [Call shape](#call-shape-staged-solve-then-single-optimize)). |
+| `merit_l1` | You want the modernized penalty-based merit test rather than filter or funnel bookkeeping. For a wrong-basin guess the lever is [call shape](#call-shape-staged-solve-then-single-optimize), not this preset. |
 
 `funnel` acceptance appears in none of the five presets; select it by hand
 if you want it.
@@ -53,13 +53,14 @@ actually use when diagnosing:
 | `HF` | Factorization attempts this iteration | Repeatedly greater than one. |
 | `HPert` | Cumulative Hessian-diagonal perturbation | Grows and never returns to zero. |
 
-`wide_console = True` adds the largest multipliers and the merit value.
+`wide_console = True` adds the largest multipliers, the raw step length
+(`AlphaT`), and the merit value.
 The table is the per-iteration view; the *outcome* view — which mechanism
 fired how often, where the time went, whether an evaluation threw — is the
 read-only `optimizer.last_*` properties, which is what you want in a
 script. The full list, including the `-1` / `-1.0` not-applicable sentinel
 convention, is under
-{doc}`Diagnostics of the last solve </reference/python/solvers>`. Each
+{ref}`Diagnostics of the last solve <diagnostics-of-the-last-solve>`. Each
 rung below names the ones worth reading for that signature.
 
 ## The failure-signature ladder
@@ -91,9 +92,10 @@ to before the step is taken as-is.
 
 **Diagnostics.** `converge_flag`, `last_iter_num`, and the `AlphaP` /
 `AlphaD` columns. Step lengths that stay near `1.0` while residuals climb
-mean nothing is restraining the step — check that the feasibility stage is
-not running with `soe_ls_mode = NOLS`, which accepts the full
-fraction-to-the-boundary step with no backtrack at all.
+mean nothing is restraining the step — the feasibility stage runs
+`soe_ls_mode = NOLS` by default, which accepts the full
+fraction-to-the-boundary step with no backtrack at all — set it to
+`AUGLANG` or `L1` if the stage needs restraining.
 
 ### The solve stops at a locally infeasible point
 
@@ -410,7 +412,7 @@ that outcome regardless of which acceptance mechanism was selected.
 
 Presets are not silver bullets, and the measurements say so plainly.
 
-Across the 34-example suite, all three of the non-`classic` robust presets
+Across the 34-example suite, all three of the non-`classic` presets
 sit at **median iteration parity** with the stock defaults while raising
 the aggregate iteration count (`soc_proximal` +27%, `filter_l1` +31%,
 `soc_recovery_l1` +42%) and carrying severe single-example tails —

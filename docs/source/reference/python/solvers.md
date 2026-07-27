@@ -32,9 +32,15 @@ problem hands it a transcribed NLP — so in practice you always configure
 on a solver with no NLP raises `RuntimeError`.
 
 Settings are plain properties: assign at any point before a solve, and the new
-value takes effect on the next call. Every property also has a matching
-`set_<name>()` method with identical validation, plus three grouped setters —
-`set_tols()`, `set_acc_tols()`, and `set_hpert_params()`. Assignments are
+value takes effect on the next call. Many properties also have a matching
+`set_<name>()` method with identical validation — the twelve tolerances,
+`max_iters`, `max_acc_iters`, `max_ls_iters`, `alpha_red`, `bound_fraction`,
+`print_level`, the `delta_h`/`incr_h`/`decr_h` ladder, and the mode selectors
+`opt_bar_mode`, `soe_bar_mode`, `opt_ls_mode`, `soe_ls_mode`,
+`qp_ordering_mode`, and `best_criteria` — plus three grouped setters,
+`set_tols()`, `set_acc_tols()`, and `set_hpert_params()`. The rest are
+assignment-only, including all nine globalization fields a preset assigns and
+every `qp_*` parameter except `qp_ordering_mode`. Assignments are
 range-checked immediately (`ValueError` on a bad value); the full settings
 block, including its cross-field invariants, is re-validated on every solve
 entry, and the globalization components are rebuilt from it there, so a
@@ -198,16 +204,18 @@ optimizer is initialized to `min(8, core count)` instead. `qp_threads` is
 distinct from the NLP partition count and from the process-global thread pool
 — see {doc}`How to control parallelism and threading </how_to/threading_model>`.
 
-`qp_scaling` is off by default deliberately: enabling it measured a wall-clock
-win on collocation-heavy problems while deterministically degrading
-convergence elsewhere on the example suite
-(`docs/dev/analysis/2026-07-pr9-pardiso-options.md`).
+`qp_scaling` is off by default deliberately: enabling it measured a large
+wall-clock win on PolarLT-class problems with many perturbed pivots, but
+altering Pardiso's pivoting moved example-suite iteration counts in both
+directions — including `TopputtoLowThrust` 203 → 1102 — so it ships as a
+per-problem opt-in rather than a default
+(see `docs/dev/analysis/2026-07-pr9-pardiso-options.md`).
 
 ## Settings: output and best-iterate selection
 
 | Property | Meaning | Default |
 | --- | --- | --- |
-| `print_level` | `0` full output (stats, iteration table, exit, timing); `1` no iteration table; `2` exit status and warnings only; `3` and above fully silent. | `0` |
+| `print_level` | `0` full output (problem statistics, iteration table, exit, timing); `1` drops the problem-statistics banner and the iteration table; `2` exit status and warnings only; `3` and above fully silent. | `0` |
 | `wide_console` | Prints the wide iteration table, which adds per-iteration multiplier, step-length, and merit columns. | `False` |
 | `return_best` | Returns the best iterate seen rather than the final one. | `False` |
 | `best_criteria` | Residual that scores "best" under `return_best` (see `BestCriteriaModes`). | `ECONS` |
@@ -513,7 +521,7 @@ selection.
 | `set_num_partitions(n)` / `set_num_partitions(n, qp_threads)` | Sets the partition count, optionally also the linear solver's thread count. |
 | `jet_job_mode` | Which solve entry point `Jet.map` runs for this problem (see `JetJobModes`). |
 | `nlp_solver` | NLP backend for the solve entry points (see below). |
-| `ipopt_options` | String options forwarded verbatim to Ipopt. |
+| `ipopt_options` | String key/value options (a `dict[str, str]`) forwarded verbatim to Ipopt. |
 | `last_ipopt_result` | `IpoptRunInfo` for the most recent Ipopt-backend run. |
 
 `OptimizationProblem` adds the bare-NLP construction surface — `set_vars`,
