@@ -208,7 +208,7 @@ Action drive_soc(PSIOPT::Settings &settings, IterateInfo &citer, int &soc_steps)
     int zero = 0;
     Eigen::VectorXd scratch; // empty: dims are all zero
     SolverContext ctx{nullptr, solver,  settings, zero,    zero,    zero,
-                      zero,    zero,    scratch,  scratch, scratch, scratch};
+                      zero,    zero,    scratch};
     const std::vector<IterateInfo> iters;
     Eigen::VectorXd XSL, DXSL, XSL2, RHS, RHS2; // empty (ncons == 0)
     double alpha = 1.0, alphap = 1.0, alphad = 1.0;

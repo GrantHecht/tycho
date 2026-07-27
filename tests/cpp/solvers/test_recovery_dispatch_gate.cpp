@@ -145,7 +145,7 @@ void drive_gate(bool good_step, IterateInfo &citer, RecoveryChain &recovery,
 SolverContext make_dummy_context(KktSolverType &solver, PSIOPT::Settings &settings, int &zero,
                                  Eigen::VectorXd &scratch) {
     return SolverContext{nullptr, solver,  settings, zero,    zero,    zero,
-                         zero,    zero,    scratch,  scratch, scratch, scratch};
+                         zero,    zero,    scratch};
 }
 
 TEST(RecoveryDispatchGate, PredicateTruthTable) {

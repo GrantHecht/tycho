@@ -354,7 +354,7 @@ TEST(MonGovDelegation, FreeModeForwardsToDelegateVerbatim) {
     int zero = 0;
     Eigen::VectorXd scratch;
     SolverContext ctx{nullptr, solver,  settings, zero,    zero,    zero,
-                      zero,    zero,    scratch,  scratch, scratch, scratch};
+                      zero,    zero,    scratch};
     MonGovUnusedMechanism mechanism;
     Eigen::VectorXd XSL, RHS, DXSL, Temp; // empty (dims all zero).
 
@@ -399,7 +399,7 @@ TEST(MonGovSequence, SufficientProgressVerdictFlipsWithPassedCurrent) {
     int zero = 0;
     Eigen::VectorXd scratch;
     SolverContext ctx{nullptr, solver,  settings, zero,    zero,    zero,
-                      zero,    zero,    scratch,  scratch, scratch, scratch};
+                      zero,    zero,    scratch};
     MonGovUnusedMechanism mechanism;
     Eigen::VectorXd XSL, RHS, DXSL, Temp;
 
@@ -450,7 +450,7 @@ TEST(MonGovSequence, FiaccoMcCormickGateAdvancesOnSatisfyingCall) {
     int zero = 0;
     Eigen::VectorXd scratch;
     SolverContext ctx{nullptr, solver,  settings, zero,    zero,    zero,
-                      zero,    zero,    scratch,  scratch, scratch, scratch};
+                      zero,    zero,    scratch};
     MonGovUnusedMechanism mechanism;
     Eigen::VectorXd XSL, RHS, DXSL, Temp;
 

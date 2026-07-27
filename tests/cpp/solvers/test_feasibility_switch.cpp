@@ -162,7 +162,7 @@ class FeasSwitchUnusedAcceptance : public AcceptanceStrategy {
 SolverContext feas_switch_context(KktSolverType &solver, PSIOPT::Settings &settings, int &zero,
                                   Eigen::VectorXd &scratch, const RestorationStrategy *restoration) {
     SolverContext ctx{nullptr, solver,  settings, zero,    zero,    zero,
-                      zero,    zero,    scratch,  scratch, scratch, scratch};
+                      zero,    zero,    scratch};
     ctx.restoration_ = restoration;
     return ctx;
 }
@@ -1747,7 +1747,7 @@ TEST(NestedRestorationMonotoneSchedule, HoldsThenAdvancesOnBarrierProgressGate) 
     Eigen::VectorXd scratch;
     int pv = 1, sv = 2, ec = 0, ic = 2, kkt = 5;
     SolverContext ctx{nullptr, solver,  settings, pv,      sv,      ec,
-                      ic,      kkt,     scratch,  scratch, scratch, scratch};
+                      ic,      kkt,     scratch};
 
     // Layout [primals(1) | slacks(2) | eq(0) | iq(2)]: slacks = {2,4}, iq_lmults = {0.5,0.25}.
     Eigen::VectorXd XSL(5);

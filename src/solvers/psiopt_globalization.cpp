@@ -1032,9 +1032,7 @@ void ClassicAdaptiveGovernor::barrier_gradient(Eigen::Ref<Eigen::VectorXd> LI,
     AGS = LI;
 }
 
-double ClassicAdaptiveGovernor::loqo_mu(Eigen::Ref<Eigen::VectorXd> S,
-                                        Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
-                                        double mincomp) const {
+double ClassicAdaptiveGovernor::loqo_mu(double avgcomp, double mincomp) const {
     double eta = mincomp / avgcomp;
     double sigmat = .1 * std::pow(0.05 * (1.0 - eta) / eta, 3);
     double sigma = std::min(0.8, std::abs(sigmat));
@@ -1101,7 +1099,7 @@ double ClassicAdaptiveGovernor::update_barrier(PSIOPT::BarrierModes barmode, dou
 
         break;
     case PSIOPT::BarrierModes::LOQO:
-        mu = this->loqo_mu(v_xsl.slacks(), v_xsl.iq_lmults(), avgcomp, mincomp);
+        mu = this->loqo_mu(avgcomp, mincomp);
         break;
     default:
         throw std::invalid_argument("Unknown BarrierMode");

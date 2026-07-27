@@ -124,19 +124,20 @@ struct SolverContext {
     const int &kkt_dim_;
 
     // --- Reusable scratch buffers ---
-    // stli_scratch_ / hp_scratch_: BarrierGovernor (complementarity() and
-    // barrier_hessian()'s internal buffers, both read+write by the function
-    // that owns them today; PSIOPT keeps the backing storage to avoid
-    // per-call heap allocation, see PSIOPT::stli_scratch_/PSIOPT::hp_scratch_).
+    // stli_scratch_: read+write by ClassicAdaptiveGovernor::complementarity(),
+    // which is a moved copy of PSIOPT::complementarity and uses the SAME
+    // PSIOPT-owned buffer to avoid per-call heap allocation (see
+    // PSIOPT::stli_scratch_).
+    //
+    // This is the only scratch buffer any component reaches through the context.
+    // hp_scratch_ (barrier_hessian's buffer) and best_xsl_scratch_/
+    // best_rhs_scratch_ (the return_best_ snapshots) used to be here too, on the
+    // expectation that a future BarrierGovernor/RecoveryChain would need them;
+    // no component ever read one, and both remained PSIOPT-internal (the
+    // best-iterate bookkeeping is PSIOPT::track_best_iterate). They were dropped
+    // rather than carried forward as three unused references passed at every
+    // construction site.
     Eigen::VectorXd &stli_scratch_;
-    Eigen::VectorXd &hp_scratch_;
-
-    // best_xsl_scratch_ / best_rhs_scratch_: RecoveryChain (the return_best_
-    // snapshot/restore machinery, see PSIOPT::best_xsl_scratch_/
-    // PSIOPT::best_rhs_scratch_). Read+write once the best-iterate blocks are
-    // extracted (not yet done).
-    Eigen::VectorXd &best_xsl_scratch_;
-    Eigen::VectorXd &best_rhs_scratch_;
 
     // --- Feasibility restoration (optional; null when off) ---
     // Non-owning pointer to the active RestorationStrategy, or nullptr when

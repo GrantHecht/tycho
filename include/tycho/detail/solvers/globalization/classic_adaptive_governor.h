@@ -146,8 +146,9 @@ class ClassicAdaptiveGovernor : public BarrierGovernor {
                           Eigen::Ref<Eigen::VectorXd> AGS) const;
     void barrier_gradient(Eigen::Ref<Eigen::VectorXd> LI, Eigen::Ref<Eigen::VectorXd> AGS) const;
 
-    double loqo_mu(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
-                   double mincomp) const;
+    // The LOQO oracle is a pure function of the complementarity aggregates; it
+    // took the slack/multiplier blocks too, but never read them.
+    double loqo_mu(double avgcomp, double mincomp) const;
     // mpc_mu re-runs complementarity on the predictor point (ctx for the shared
     // stli_scratch_); the reduction feeds mu, hence the ULP note above.
     double mpc_mu(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,

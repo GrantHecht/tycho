@@ -274,7 +274,7 @@ class ExtBtScriptedAcceptance : public AcceptanceStrategy {
 SolverContext extbt_dummy_context(KktSolverType &solver, PSIOPT::Settings &settings, int &zero,
                                   Eigen::VectorXd &scratch) {
     return SolverContext{nullptr, solver,  settings, zero,    zero,    zero,
-                         zero,    zero,    scratch,  scratch, scratch, scratch};
+                         zero,    zero,    scratch};
 }
 
 // ls_extended_iters_ == 0 (off): decline immediately, touching neither the
@@ -457,7 +457,7 @@ class WatchdogSpyRecovery : public RecoveryChain {
 SolverContext watchdog_dummy_context(KktSolverType &solver, PSIOPT::Settings &settings, int &zero,
                                      Eigen::VectorXd &scratch) {
     return SolverContext{nullptr, solver,  settings, zero,    zero,    zero,
-                         zero,    zero,    scratch,  scratch, scratch, scratch};
+                         zero,    zero,    scratch};
 }
 
 struct ChainDrive {

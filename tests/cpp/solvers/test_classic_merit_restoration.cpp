@@ -40,7 +40,7 @@ using tycho::solvers::SolverContext;
 SolverContext ClassicRestoContext(PSIOPT::Settings &settings, tycho::solvers::KktSolverType &solver,
                                   Eigen::VectorXd &scratch, int &zero) {
     return SolverContext{nullptr, solver,  settings, zero,    zero,    zero,
-                         zero,    zero,    scratch,  scratch, scratch, scratch};
+                         zero,    zero,    scratch};
 }
 
 ProgressMeasures ClassicRestoMakePm(double infeasibility) {
