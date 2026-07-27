@@ -53,9 +53,11 @@
 #include "tycho/detail/solvers/globalization/watchdog.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
 namespace tycho::solvers {
 
@@ -508,8 +510,10 @@ double ClassicMeritAcceptance::classic_line_search(PSIOPT::LineSearchModes lsmod
         return ls_auglang(obj_scale, mu, prim_obj, barr_obj, v_xsl, v_dxsl, v_xsl2, v_rhs, v_rhs2,
                           Citer);
     case PSIOPT::LineSearchModes::NOLS:
+        // Unreachable through the mechanism: run_acceptance_backtrack takes the
+        // NOLS early-out before dispatching here. Kept as an explicit case so a
+        // direct call still gets the NOLS convention rather than the default throw.
         Citer.ls_iters_ = 0;
-        // No line search runs: the full step is taken, i.e. accepted.
         Citer.accepted_ = true;
         return 1.0;
     default:
@@ -902,6 +906,15 @@ double BacktrackingLineSearch::run_acceptance_backtrack(
     Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
     Eigen::VectorXd &RHS2, AcceptanceStrategy &acceptance, IterateInfo &Citer,
     const std::vector<IterateInfo> &iters, SolverContext &ctx) {
+    // NOLS short-circuits both driving paths identically, so the early-out lives
+    // here rather than being repeated at the head of each. Both dispatch arms are
+    // reached only through this function.
+    if (lsmode == PSIOPT::LineSearchModes::NOLS) {
+        Citer.ls_iters_ = 0;
+        // No line search runs: the full step is taken, i.e. accepted.
+        Citer.accepted_ = true;
+        return 1.0;
+    }
     if (acceptance.drives_classic_path())
         return acceptance.classic_line_search(lsmode, obj_scale, mu, prim_obj, barr_obj, XSL, DXSL,
                                               XSL2, RHS, RHS2, Citer, iters);
@@ -918,12 +931,6 @@ double BacktrackingLineSearch::generic_line_search(
     PSIOPT::LineSearchModes lsmode, double obj_scale, double mu, double prim_obj, double barr_obj,
     Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
     Eigen::VectorXd &RHS2, AcceptanceStrategy &acceptance, IterateInfo &Citer, SolverContext &ctx) {
-    if (lsmode == PSIOPT::LineSearchModes::NOLS) {
-        Citer.ls_iters_ = 0;
-        Citer.accepted_ = true; // full step taken (same NOLS convention as classic).
-        return 1.0;
-    }
-
     KKTVector v_dxsl = kkt_view(DXSL, ctx);
     KKTVector v_rhs = kkt_view(RHS, ctx);
 
@@ -1177,6 +1184,23 @@ double BarrierGovernor::update_barrier_monotone(double mu_in, Eigen::VectorXd &X
     return mu;
 }
 
+namespace {
+// A recovery link that got a trial direction accepted commits it exactly this
+// way: the trial direction and its step length replace DXSL/alpha (alg_impl's
+// `XSL += alpha*DXSL` then applies them), and Citer is stamped so the recorded
+// iterate reflects the taken step rather than the rejected one. SocRecovery and
+// ExtendedBacktrackRecovery ran identical copies of this block.
+void commit_recovered_step(Eigen::VectorXd &DXSL, double &alpha, IterateInfo &Citer,
+                           const Eigen::VectorXd &dxsl_trial, double alpha_trial,
+                           const IterateInfo &trial_iter) {
+    DXSL = dxsl_trial;
+    alpha = alpha_trial;
+    Citer.accepted_ = true;
+    Citer.ls_iters_ = trial_iter.ls_iters_;
+    Citer.merit_val_ = trial_iter.merit_val_;
+}
+} // namespace
+
 // ============================================================================
 // SocRecovery — second-order correction (Wächter & Biegler 2006, §2.4). Only
 // reached when SOC is enabled (max_soc_ > 0, so rebuild_globalization_
@@ -1317,14 +1341,7 @@ RecoveryChain::Action SocRecovery::on_step_rejected(
             trial_iter, iters, ctx);
 
         if (trial_iter.accepted_) {
-            // Commit the corrected step in place: alg_impl's XSL += alpha*DXSL
-            // applies it. Stamp Citer so the recorded iterate reflects the taken
-            // (corrected) step rather than the rejected one.
-            DXSL = dxsl_soc;
-            alpha = alpha_soc;
-            Citer.accepted_ = true;
-            Citer.ls_iters_ = trial_iter.ls_iters_;
-            Citer.merit_val_ = trial_iter.merit_val_;
+            commit_recovered_step(DXSL, alpha, Citer, dxsl_soc, alpha_soc, trial_iter);
             return SocCorrectionOutcome{true, 0.0};
         }
 
@@ -1400,13 +1417,8 @@ RecoveryChain::Action ExtendedBacktrackRecovery::on_step_rejected(
             lsmode, obj_scale, mu, prim_obj, barr_obj, XSL, dxsl_ext, XSL2, RHS, RHS2, acceptance,
             trial_iter, iters, ctx);
         if (trial_iter.accepted_) {
-            // Commit the accepted (still-original-direction, further-scaled)
-            // step in place: alg_impl's XSL += alpha*DXSL applies it.
-            DXSL = dxsl_ext;
-            alpha = alpha_result;
-            Citer.accepted_ = true;
-            Citer.ls_iters_ = trial_iter.ls_iters_;
-            Citer.merit_val_ = trial_iter.merit_val_;
+            // The accepted step is still the original direction, further scaled.
+            commit_recovered_step(DXSL, alpha, Citer, dxsl_ext, alpha_result, trial_iter);
             return Action::kRetry;
         }
         // Not accepted: run_acceptance_backtrack's own internal loop
@@ -1503,23 +1515,20 @@ RecoveryChain::Action ChainedRecovery::on_step_rejected(
     Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL, Eigen::VectorXd &XSL2, Eigen::VectorXd &RHS,
     Eigen::VectorXd &RHS2, double &alpha, double &alphap, double &alphad, int &soc_steps,
     int &resolved_depth, int &watchdog_activations) {
-    if (soc_) {
-        const Action action =
-            soc_->on_step_rejected(Citer, iters, ctx, acceptance, mechanism, lsmode, obj_scale, mu,
-                                   prim_obj, barr_obj, XSL, DXSL, XSL2, RHS, RHS2, alpha, alphap,
-                                   alphad, soc_steps, resolved_depth, watchdog_activations);
-        if (action != Action::kAcceptAsIs) {
-            resolved_depth = kRecoveryDepthSoc;
-            return action;
-        }
-    }
-    if (extended_) {
-        const Action action = extended_->on_step_rejected(
+    // Links in trial order, each paired with the depth it stamps when it resolves.
+    // A null link is simply absent from the chain.
+    const std::array<std::pair<RecoveryChain *, int>, 2> links = {
+        std::pair<RecoveryChain *, int>{soc_.get(), kRecoveryDepthSoc},
+        std::pair<RecoveryChain *, int>{extended_.get(), kRecoveryDepthExtended}};
+    for (const auto &[link, depth] : links) {
+        if (!link)
+            continue;
+        const Action action = link->on_step_rejected(
             Citer, iters, ctx, acceptance, mechanism, lsmode, obj_scale, mu, prim_obj, barr_obj,
             XSL, DXSL, XSL2, RHS, RHS2, alpha, alphap, alphad, soc_steps, resolved_depth,
             watchdog_activations);
         if (action != Action::kAcceptAsIs) {
-            resolved_depth = kRecoveryDepthExtended;
+            resolved_depth = depth;
             return action;
         }
     }

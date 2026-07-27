@@ -867,44 +867,40 @@ void tycho::solvers::PSIOPT::barrier_hessian(Eigen::SparseMatrix<double, Eigen::
 // NLP eval dispatch methods
 // =============================================================================
 
-void tycho::solvers::PSIOPT::eval_kkt(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
-                                      EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
-                                      Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-    this->nlp_->eval_kkt(
+template <class Fn>
+void tycho::solvers::PSIOPT::eval_dispatch(Fn fn, double obj_scale, ConstEigenRef<VectorXd> XSL,
+                                           double &val, EigenRef<VectorXd> GX,
+                                           EigenRef<VectorXd> AGXS_FX,
+                                           Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+    ((*this->nlp_).*fn)(
         obj_scale, XSL.head(primal_vars_), XSL.segment(primal_vars_ + slack_vars_, equal_cons_),
         XSL.tail(inequal_cons_), val, GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
         AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_), AGXS_FX.tail(inequal_cons_),
         KKTmat);
+}
+
+void tycho::solvers::PSIOPT::eval_kkt(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
+                                      EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+                                      Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+    this->eval_dispatch(&NonLinearProgram::eval_kkt, obj_scale, XSL, val, GX, AGXS_FX, KKTmat);
 }
 
 void tycho::solvers::PSIOPT::eval_kkt_no(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
                                          EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
                                          Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-    this->nlp_->eval_kkt_no(
-        obj_scale, XSL.head(primal_vars_), XSL.segment(primal_vars_ + slack_vars_, equal_cons_),
-        XSL.tail(inequal_cons_), val, GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
-        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_), AGXS_FX.tail(inequal_cons_),
-        KKTmat);
+    this->eval_dispatch(&NonLinearProgram::eval_kkt_no, obj_scale, XSL, val, GX, AGXS_FX, KKTmat);
 }
 
 void tycho::solvers::PSIOPT::eval_aug(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
                                       EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
                                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-    this->nlp_->eval_aug(
-        obj_scale, XSL.head(primal_vars_), XSL.segment(primal_vars_ + slack_vars_, equal_cons_),
-        XSL.tail(inequal_cons_), val, GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
-        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_), AGXS_FX.tail(inequal_cons_),
-        KKTmat);
+    this->eval_dispatch(&NonLinearProgram::eval_aug, obj_scale, XSL, val, GX, AGXS_FX, KKTmat);
 }
 
 void tycho::solvers::PSIOPT::eval_soe(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
                                       EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
                                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
-    this->nlp_->eval_soe(
-        obj_scale, XSL.head(primal_vars_), XSL.segment(primal_vars_ + slack_vars_, equal_cons_),
-        XSL.tail(inequal_cons_), val, GX.head(primal_vars_), AGXS_FX.head(primal_vars_),
-        AGXS_FX.segment(primal_vars_ + slack_vars_, equal_cons_), AGXS_FX.tail(inequal_cons_),
-        KKTmat);
+    this->eval_dispatch(&NonLinearProgram::eval_soe, obj_scale, XSL, val, GX, AGXS_FX, KKTmat);
 }
 
 // =============================================================================
@@ -1335,7 +1331,7 @@ void tycho::solvers::PSIOPT::enter_feasibility_restoration(Eigen::VectorXd &XSL,
     // iteration. θ is the L1 norm of the current KKT constraint block, matching
     // what FeasibilitySwitchRecovery's entry_permitted guard consulted.
     ProgressMeasures entry;
-    entry.infeasibility = v_rhs.all_cons().template lpNorm<1>();
+    entry.infeasibility = this->constraint_violation_l1(v_rhs);
     entry.objective = prim_obj;
     entry.auxiliary = barr_obj;
 
@@ -1398,6 +1394,32 @@ void tycho::solvers::PSIOPT::enter_feasibility_restoration(Eigen::VectorXd &XSL,
     this->recovery_->reset();
 }
 
+// Restoration-entry dispatch: one owner of the note_dispatch / entry /
+// reset_window ordering. See the declaration in psiopt.h.
+void tycho::solvers::PSIOPT::dispatch_restoration_entry(Eigen::VectorXd &XSL, Eigen::VectorXd &RHS,
+                                                        double prim_obj, double barr_obj,
+                                                        double &mu, double theta,
+                                                        FeasibilityStallDetector &feas_stall) {
+    // A stage resumed after an episode restarts its stall window, and this entry
+    // becomes the handback the stall exit measures net progress against.
+    feas_stall.note_dispatch(theta);
+    this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
+    feas_stall.reset_window();
+}
+
+// Restoration-exit protocol. See the declaration in psiopt.h for why this order
+// is load-bearing.
+void tycho::solvers::PSIOPT::leave_restoration(const ProgressMeasures &measures,
+                                               bool restore_stashed_mu, double &mu) {
+    if (restore_stashed_mu) {
+        mu = this->stashed_mu_;
+        this->governor_->reset();
+    }
+    this->restoration_->exit_restoration();
+    this->acceptance_->notify_switch_to_optimality(measures);
+    this->recovery_->reset();
+}
+
 // The nested phase's multiplier re-entry sequence (Ipopt
 // MinC_1NrmRestorationPhase::PerformRestoration, strict order). Dead on the
 // default path. Shared byte-for-byte by the κ_resto ratchet exit and the
@@ -1445,18 +1467,15 @@ void tycho::solvers::PSIOPT::exit_feasibility_restoration_nested(Eigen::VectorXd
     if (this->equal_cons_ > 0)
         v_xsl.eq_lmults().setZero();
 
-    // (5) Restore the stashed outer μ, reset the governor, exit restoration, and
-    // notify the acceptance strategy of the switch back to optimality with
-    // true-objective exit measures (the loop's prim_obj is φ_l1 while active —
-    // never valid for the optimality filter/funnel; re-evaluated here). Reset the
-    // recovery chain across the transition. BestXSL tracking resumes implicitly
+    // (5) The shared exit protocol, with the stashed outer μ restored: exit
+    // restoration and notify the acceptance strategy of the switch back to
+    // optimality with true-objective exit measures (the loop's prim_obj is φ_l1
+    // while active — never valid for the optimality filter/funnel; re-evaluated
+    // here), then reset the recovery chain. BestXSL tracking resumes implicitly
     // once is_active() flips false.
-    mu = this->stashed_mu_;
-    this->governor_->reset();
-    this->restoration_->exit_restoration();
-    this->acceptance_->notify_switch_to_optimality(
-        this->build_restoration_exit_measures(obj_scale, theta_orig, v_xsl.primals(), barr_obj));
-    this->recovery_->reset();
+    this->leave_restoration(
+        this->build_restoration_exit_measures(obj_scale, theta_orig, v_xsl.primals(), barr_obj),
+        true, mu);
 }
 
 // Per-iteration κ_resto ratchet: the original-problem infeasibility must fall to
@@ -1464,6 +1483,25 @@ void tycho::solvers::PSIOPT::exit_feasibility_restoration_nested(Eigen::VectorXd
 // RestoConvCheck::CheckConvergence's orig_inf_pr_max, single-tolerance floor).
 bool tycho::solvers::PSIOPT::resto_ratchet_passes(double theta_orig) const {
     return theta_orig <= std::max(kKappaResto * this->resto_theta_orig_prev_, settings_.econ_tol_);
+}
+
+// ‖c‖₁ over a KKT vector's constraint block. See the declaration in psiopt.h.
+double tycho::solvers::PSIOPT::constraint_violation_l1(KKTVector &v) const {
+    return v.all_cons().template lpNorm<1>();
+}
+
+// Original-problem infeasibility (∞-norm) from the nested restoration eval
+// seam's saved raw residuals. Two separate reductions, deliberately not fused;
+// see the declaration in psiopt.h.
+double tycho::solvers::PSIOPT::original_infeasibility_inf() const {
+    double theta_orig = 0.0;
+    if (this->equal_cons_ > 0)
+        theta_orig =
+            std::max(theta_orig, this->resto_ec_scratch_.template lpNorm<Eigen::Infinity>());
+    if (this->inequal_cons_ > 0)
+        theta_orig =
+            std::max(theta_orig, this->resto_ic_scratch_.template lpNorm<Eigen::Infinity>());
+    return theta_orig;
 }
 
 // Second-level elastic re-centering fallback (nested l1 phase, disclosure (f) in
@@ -1998,13 +2036,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 // constraint rows with the condensed r̃, so the raw residuals come
                 // from the seam's saved copies (resto_ec_/ic_scratch_, populated this
                 // same iteration before the r̃ overwrite) — no extra NLP evaluation.
-                double theta_orig = 0.0;
-                if (this->equal_cons_ > 0)
-                    theta_orig = std::max(
-                        theta_orig, this->resto_ec_scratch_.template lpNorm<Eigen::Infinity>());
-                if (this->inequal_cons_ > 0)
-                    theta_orig = std::max(
-                        theta_orig, this->resto_ic_scratch_.template lpNorm<Eigen::Infinity>());
+                const double theta_orig = this->original_infeasibility_inf();
 
                 ProgressMeasures cur;
                 cur.infeasibility = theta_orig; // TRUE original-problem infeasibility.
@@ -2064,7 +2096,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 // the post-loop teardown clears restoration before alg_impl returns.
             } else {
                 ProgressMeasures cur;
-                cur.infeasibility = v_rhs.all_cons().template lpNorm<1>();
+                cur.infeasibility = this->constraint_violation_l1(v_rhs);
                 cur.objective = prim_obj; // = φ_prox while active (set by the eval seam).
                 cur.auxiliary = barr_obj;
                 // Stall classification uses the FAILURE threshold (1e2 · tol), not
@@ -2092,15 +2124,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                         // feasibility-mode iterate; the stay-in-mode note_iteration
                         // below only counts iterations that keep going).
                         this->restoration_->note_iteration();
-                        this->restoration_->exit_restoration();
-                        this->acceptance_->notify_switch_to_optimality(
+                        this->leave_restoration(
                             this->build_restoration_exit_measures(obj_scale, cur.infeasibility,
-                                                                  v_xsl.primals(), barr_obj));
-                        // Reset the recovery chain across the mode switch (see the
-                        // entry-side rationale at the kSwitchToFeasibility case): the
-                        // watchdog's objective-scale-bound snapshot/counters must not
-                        // survive back into the optimality phase. Once per transition.
-                        this->recovery_->reset();
+                                                                  v_xsl.primals(), barr_obj),
+                            false, mu);
                         iters.pop_back();
                         QPtimer.stop();
                         continue;
@@ -2126,13 +2153,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                         // Count this exit iteration in the in-mode total (the
                         // stay-in-mode note_iteration below is skipped on exit).
                         this->restoration_->note_iteration();
-                        this->restoration_->exit_restoration();
-                        this->acceptance_->notify_switch_to_optimality(
+                        this->leave_restoration(
                             this->build_restoration_exit_measures(obj_scale, cur.infeasibility,
-                                                                  v_xsl.primals(), barr_obj));
-                        // Reset the recovery chain across the mode switch (see the
-                        // kSwitchToFeasibility entry rationale). Once per transition.
-                        this->recovery_->reset();
+                                                                  v_xsl.primals(), barr_obj),
+                            false, mu);
                         iters.pop_back();
                         QPtimer.stop();
                         continue;
@@ -2163,15 +2187,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                     // Count this exit iteration in the in-mode total (see the
                     // near-feasible exits above).
                     this->restoration_->note_iteration();
-                    if (this->restoration_->is_nested()) {
-                        mu = this->stashed_mu_;
-                        this->governor_->reset();
-                    }
-                    this->restoration_->exit_restoration();
-                    this->acceptance_->notify_switch_to_optimality(exit_measures);
-                    // Reset the recovery chain across the mode switch (see the
-                    // kSwitchToFeasibility entry rationale). Once per transition.
-                    this->recovery_->reset();
+                    this->leave_restoration(exit_measures, this->restoration_->is_nested(), mu);
                 }
                 iters.back().mu_ = mu;
                 QPtimer.stop();
@@ -2346,8 +2362,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         //      recovery was never allowed to try.
         if ((algmode == AlgorithmModes::SOE || algmode == AlgorithmModes::OPTNO) &&
             this->restoration_ && !this->restoration_->is_active()) {
-            const int ncons_fs = this->equal_cons_ + this->inequal_cons_;
-            const double theta_fs = RHS.tail(ncons_fs).template lpNorm<1>();
+            const double theta_fs = this->constraint_violation_l1(v_rhs);
             if (feas_stall.observe(theta_fs)) {
                 if (this->restoration_->entry_permitted(theta_fs, ctx)) {
                     // Entry measures are (theta, 0, 0) here: prim_obj and barr_obj are
@@ -2356,9 +2371,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                     // further down), matching the other pre-factorization restoration
                     // seams above and unlike the post-line-search seams, which pass a
                     // live barrier objective.
-                    feas_stall.note_dispatch(theta_fs);
-                    this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
-                    feas_stall.reset_window();
+                    this->dispatch_restoration_entry(XSL, RHS, prim_obj, barr_obj, mu, theta_fs,
+                                                     feas_stall);
                     iters.pop_back();
                     QPtimer.stop();
                     continue;
@@ -2719,20 +2733,15 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                     // before the factorization above, and nothing since has
                     // touched XSL (the `XSL += alpha*DXSL` commit is below the
                     // loop's exit check).
-                    const int ncons_ue = this->equal_cons_ + this->inequal_cons_;
-                    const double violation_ue = RHS.tail(ncons_ue).template lpNorm<1>();
+                    const double violation_ue = this->constraint_violation_l1(v_rhs);
                     if (psiopt_iterate_acceptable(Citer, settings_)) {
                         alpha = 0.0;
                         Citer.accepted_ = false;
                         exit_at_acceptable = true;
                     } else if (this->restoration_ && !this->restoration_->is_active() &&
                                this->restoration_->entry_permitted(violation_ue, ctx)) {
-                        this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
-                        // A stage resumed after an episode restarts its stall window,
-                        // and this entry becomes the handback the stall exit measures
-                        // net progress against.
-                        feas_stall.note_dispatch(violation_ue);
-                        feas_stall.reset_window();
+                        this->dispatch_restoration_entry(XSL, RHS, prim_obj, barr_obj, mu,
+                                                         violation_ue, feas_stall);
                         alpha = 0.0;
                         Citer.accepted_ = false;
                         // Deliberately overwrites resolved_depth on a watchdog-resolved
@@ -2776,13 +2785,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 // reset). FeasibilitySwitchRecovery is the only link that produces
                 // this Action, and only when restoration_ is non-null and inactive
                 // (so the calls below are safe).
-                this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
-                // A stage resumed after an episode restarts its stall window, and
-                // this entry becomes the handback the stall exit measures net
-                // progress against.
-                feas_stall.note_dispatch(
-                    RHS.tail(this->equal_cons_ + this->inequal_cons_).template lpNorm<1>());
-                feas_stall.reset_window();
+                this->dispatch_restoration_entry(XSL, RHS, prim_obj, barr_obj, mu,
+                                                 this->constraint_violation_l1(v_rhs), feas_stall);
                 alpha = 0.0;
                 break;
             }
@@ -2812,13 +2816,9 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                     alpha = 1.0;
                     Citer.accepted_ = true;
                 } else {
-                    this->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
-                    // A stage resumed after an episode restarts its stall window, and
-                    // this entry becomes the handback the stall exit measures net
-                    // progress against.
-                    feas_stall.note_dispatch(
-                        RHS.tail(this->equal_cons_ + this->inequal_cons_).template lpNorm<1>());
-                    feas_stall.reset_window();
+                    this->dispatch_restoration_entry(XSL, RHS, prim_obj, barr_obj, mu,
+                                                     this->constraint_violation_l1(v_rhs),
+                                                     feas_stall);
                     alpha = 0.0;
                 }
                 break;
@@ -2954,21 +2954,14 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         if (this->restoration_->is_nested()) {
             // Nested: the RHS constraint rows carry the condensed r̃, so the raw
             // original-problem infeasibility comes from the seam's saved residuals
-            // (populated by the final active iteration's eval seam). Restore the
-            // stashed outer μ and reset the governor so this catch-all teardown
-            // leaves the solver in optimality mode with the outer barrier
-            // parameter before run_phase_sequence()'s phase-boundary reset.
-            teardown_theta = 0.0;
-            if (this->equal_cons_ > 0)
-                teardown_theta = std::max(
-                    teardown_theta, this->resto_ec_scratch_.template lpNorm<Eigen::Infinity>());
-            if (this->inequal_cons_ > 0)
-                teardown_theta = std::max(
-                    teardown_theta, this->resto_ic_scratch_.template lpNorm<Eigen::Infinity>());
-            mu = this->stashed_mu_;
-            this->governor_->reset();
+            // (populated by the final active iteration's eval seam). The stashed
+            // outer μ is restored (and the governor reset) by leave_restoration
+            // below, so this catch-all teardown leaves the solver in optimality
+            // mode with the outer barrier parameter before run_phase_sequence()'s
+            // phase-boundary reset.
+            teardown_theta = this->original_infeasibility_inf();
         } else {
-            teardown_theta = v_rhs.all_cons().template lpNorm<1>();
+            teardown_theta = this->constraint_violation_l1(v_rhs);
         }
         ProgressMeasures measures =
             this->build_restoration_exit_measures(obj_scale, teardown_theta, v_xsl.primals(), 0.0);
@@ -2979,11 +2972,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // counted by the in-loop stay-in-mode note_iteration() before the loop
         // broke (the decision-driven in-loop exits, which return before that
         // point, are the ones that count their exit iteration explicitly).
-        this->restoration_->exit_restoration();
-        this->acceptance_->notify_switch_to_optimality(measures);
-        // Reset the recovery chain across the mode switch (see the
-        // kSwitchToFeasibility entry rationale). Once per transition.
-        this->recovery_->reset();
+        this->leave_restoration(measures, this->restoration_->is_nested(), mu);
     }
 
     if (algmode == AlgorithmModes::OPT) {

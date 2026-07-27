@@ -176,6 +176,7 @@ class BarrierGovernor;
 class RecoveryChain;
 class RestorationStrategy;
 struct ProgressMeasures;
+struct FeasibilityStallDetector;
 
 class PSIOPT {
   public:
@@ -1085,6 +1086,16 @@ class PSIOPT {
     // evaluate stage (its maxcomp output feeds converge_check's barr_inf_).
 
     // --- NLP eval dispatch methods (defined in psiopt.cpp) ---
+    // The four wrappers below differ only in which NonLinearProgram entry point
+    // they call; the segment expressions that slice XSL/GX/AGXS_FX into the
+    // compound [primals | slacks | eq | iq] layout are written once, here. `fn` is
+    // a pointer to the NonLinearProgram member to invoke. Defined in psiopt.cpp,
+    // its only translation unit.
+    template <class Fn>
+    void eval_dispatch(Fn fn, double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
+                       EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
+
     void eval_kkt(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
                   EigenRef<VectorXd> AGXS_FX, Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
     void eval_kkt_no(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
@@ -1134,6 +1145,35 @@ class PSIOPT {
     void enter_feasibility_restoration(Eigen::VectorXd &XSL, Eigen::VectorXd &RHS, double prim_obj,
                                        double barr_obj, double &mu);
 
+    // The restoration-entry dispatch, in the ONE order every entry site uses:
+    // record `theta` as the stall detector's handback yardstick, enter
+    // restoration, then re-arm the stall window. Ordering matters because
+    // enter_feasibility_restoration takes XSL/RHS by non-const reference; it does
+    // not write RHS today, but nothing in its signature says so, and the four
+    // former open-coded sites did not agree on whether note_dispatch ran before
+    // or after it. `theta` stays a parameter: each site already has the
+    // constraint violation it needs in hand, and computing it here instead would
+    // add a reduction at two of them.
+    void dispatch_restoration_entry(Eigen::VectorXd &XSL, Eigen::VectorXd &RHS, double prim_obj,
+                                    double barr_obj, double &mu, double theta,
+                                    FeasibilityStallDetector &feas_stall);
+
+    // The restoration EXIT protocol, in the one order every exit site must use:
+    // (optionally restore the stashed outer μ and reset the governor, which only
+    // a nested phase ever needs), exit_restoration(), notify the acceptance
+    // strategy of the switch back to optimality, reset the recovery chain.
+    //
+    // The order is load-bearing. exit_restoration() flips is_active() false, so
+    // any μ/governor work that belongs to the phase must precede it.
+    // notify_switch_to_optimality augments `measures` into the restored OPTIMALITY
+    // filter/funnel, whose accumulated pairs are all true-objective-scale — so
+    // callers build `measures` through build_restoration_exit_measures() rather
+    // than passing the loop's own prim_obj (which is φ_prox/φ_l1 while active).
+    // The recovery-chain reset runs last and exactly once per transition: the
+    // watchdog's objective-scale-bound snapshot and counters must not survive back
+    // into the optimality phase.
+    void leave_restoration(const ProgressMeasures &measures, bool restore_stashed_mu, double &mu);
+
     // The nested phase's multiplier re-entry sequence — shared byte-for-byte by
     // the κ_resto ratchet exit and the near-feasible stall exit (Ipopt
     // MinC_1NrmRestorationPhase::PerformRestoration, strict order): (1) keep the
@@ -1157,6 +1197,21 @@ class PSIOPT {
     // the kKappaResto constant (globalization/acceptance_strategy.h) stays out of
     // this header's include set.
     bool resto_ratchet_passes(double theta_orig) const;
+
+    // ‖c‖₁ over a KKT vector's constraint block — the L1 constraint violation the
+    // restoration entry guards, the proximal exit test and the stall detector all
+    // measure. One home for the reduction, which was written at seven sites in two
+    // spellings of the same expression (v.all_cons() is exactly the
+    // tail(equal_cons_ + inequal_cons_) the other spelling wrote out).
+    double constraint_violation_l1(KKTVector &v) const;
+
+    // Original-problem infeasibility (∞-norm) for an active NESTED restoration
+    // phase, taken from the raw equality/inequality residuals the eval seam saves
+    // each active iteration (the RHS constraint rows carry the condensed r̃ by
+    // then, so they are not a valid source). Two separate Eigen reductions,
+    // deliberately not fused. Meaningless off the nested path — every caller is
+    // inside a nested-active branch.
+    double original_infeasibility_inf() const;
 
     // Second-level elastic re-centering fallback for the nested l1 phase
     // (disclosure (f) in l1_restoration.h). Invoked by alg_impl's kAcceptAsIs case
