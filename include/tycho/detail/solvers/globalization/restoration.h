@@ -118,8 +118,20 @@ class RestorationStrategy {
     // the current constraint violation? False refuses entry — either because
     // the point is already near-feasible (near_feasible() above) or because
     // this phase's restoration budget (ctx.settings_.max_feas_rest_) is
-    // exhausted.
-    virtual bool entry_permitted(double constraint_violation, const SolverContext &ctx) const = 0;
+    // exhausted. Virtual with a shared default body: both shipped strategies
+    // (ProximalSwitchRestoration, NestedL1Restoration) share this exact guard +
+    // budget test against the entries_ counter below and do not override it;
+    // test doubles (e.g. FeasSwitchStubRestoration, NestedSeamProximalDouble)
+    // still override it directly for controllability.
+    virtual bool entry_permitted(double constraint_violation, const SolverContext &ctx) const {
+        if (near_feasible(constraint_violation, ctx)) {
+            return false;
+        }
+        if (entries_ >= ctx.settings_.max_feas_rest_) {
+            return false;
+        }
+        return true;
+    }
 
     // The (θ,f) pair restoration was entered from — see `reference` above.
     virtual const ProgressMeasures &reference() const = 0;
@@ -135,14 +147,18 @@ class RestorationStrategy {
     // state into `result`. Mirrors AcceptanceStrategy::append_diagnostics() /
     // BarrierGovernor::append_diagnostics() — same write-only contract, same
     // last-phase-wins semantics once a multi-phase caller collects it.
-    // ProximalSwitchRestoration and NestedL1Restoration both override this
-    // with a real body; the default no-op here is inherited only when
-    // restoration_mode_ == off, since then no RestorationStrategy is
-    // constructed at all and there is nothing to call. On that default path
-    // the corresponding SolveResult fields stay at their -1 sentinel (see
+    // Non-virtual: both shipped strategies (ProximalSwitchRestoration,
+    // NestedL1Restoration) report the identical entries_/iterations_in_mode_
+    // pair, so there is nothing for a subclass to override. When
+    // restoration_mode_ == off no RestorationStrategy is constructed at all,
+    // so this is never reached on that path and the corresponding
+    // SolveResult fields stay at their -1 sentinel (see
     // PSIOPT::SolveResult::last_feas_rest_entries_ / last_feas_rest_iters_ in
     // psiopt.h).
-    virtual void append_diagnostics(PSIOPT::SolveResult &result) const { (void)result; }
+    void append_diagnostics(PSIOPT::SolveResult &result) const {
+        result.last_feas_rest_entries_ = entries_;
+        result.last_feas_rest_iters_ = iterations_in_mode_;
+    }
 
     // -------------------------------------------------------------------------
     // Nested restoration surface.
@@ -360,6 +376,14 @@ class RestorationStrategy {
             "RestorationStrategy::trial_residual_shift called on a strategy that does not "
             "implement the nested restoration surface");
     }
+
+  protected:
+    // Per-phase diagnostics (write-only, see append_diagnostics() above), and
+    // the entry-permission budget counter entry_permitted() reads. Shared base
+    // state: both concrete strategies increment entries_ in their
+    // enter_restoration()/enter_nested() and clear both counters in reset().
+    int entries_ = 0;
+    int iterations_in_mode_ = 0;
 };
 
 } // namespace tycho::solvers

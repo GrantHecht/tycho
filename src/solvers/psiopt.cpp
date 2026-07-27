@@ -93,6 +93,34 @@ bool psiopt_iterate_acceptable(const tycho::solvers::IterateInfo &it,
            (it.icon_inf_ < settings.acc_icon_tol_) && (it.barr_inf_ < settings.acc_bar_tol_);
 }
 
+// Shared validation helpers for both the individual set_*() methods and
+// Settings::validate(): every numeric-field invariant below is checked twice
+// (once at the point of assignment, once again over the whole struct at
+// run_phase_sequence() entry), and both checks must enforce the identical
+// condition and report the identical message -- these four helpers are the
+// single home for that pairing, so the two call sites cannot drift apart.
+void pos_finite(double v, const char *name) {
+    if (!std::isfinite(v) || v <= 0.0)
+        throw std::invalid_argument(
+            fmt::format("{} must be finite and positive, got {}", name, v));
+}
+
+void pos_int(int v, const char *name) {
+    if (v < 1)
+        throw std::invalid_argument(fmt::format("{} must be >= 1, got {}", name, v));
+}
+
+void in_open_unit(double v, const char *name) {
+    if (v <= 0.0 || v >= 1.0)
+        throw std::invalid_argument(fmt::format("{} must be in (0, 1), got {}", name, v));
+}
+
+void greater_than(double v, double bound, const char *name) {
+    if (v <= bound)
+        throw std::invalid_argument(
+            fmt::format("{} must be greater than {}, got {}", name, bound, v));
+}
+
 } // namespace
 
 // =============================================================================
@@ -165,16 +193,12 @@ auto tycho::solvers::PSIOPT::strto_BestCriteriaMode(const std::string &str) -> B
 // =============================================================================
 
 void tycho::solvers::PSIOPT::set_max_iters(int max_iters) {
-    if (max_iters < 1) {
-        throw std::invalid_argument("max_iters must be greater than 0.");
-    }
+    pos_int(max_iters, "max_iters");
     settings_.max_iters_ = max_iters;
 }
 
 void tycho::solvers::PSIOPT::set_max_acc_iters(int max_acc_iters) {
-    if (max_acc_iters < 1) {
-        throw std::invalid_argument("max_acc_iters must be greater than 0.");
-    }
+    pos_int(max_acc_iters, "max_acc_iters");
     settings_.max_acc_iters_ = max_acc_iters;
 }
 
@@ -319,44 +343,32 @@ void tycho::solvers::PSIOPT::set_div_tols(double div_kkt_tol, double div_econ_to
 }
 
 void tycho::solvers::PSIOPT::set_bound_fraction(double bound_fraction) {
-    if (bound_fraction >= 1.0 || bound_fraction <= 0.0) {
-        throw std::invalid_argument("bound_fraction must be between 0 and 1.");
-    }
+    in_open_unit(bound_fraction, "bound_fraction");
     settings_.bound_fraction_ = bound_fraction;
 }
 
 void tycho::solvers::PSIOPT::set_bound_push(double bound_push) {
-    if (bound_push <= 0.0) {
-        throw std::invalid_argument("bound_push must be greater than 0.");
-    }
+    greater_than(bound_push, 0.0, "bound_push");
     settings_.bound_push_ = bound_push;
 }
 
 void tycho::solvers::PSIOPT::set_alpha_red(double ared) {
-    if (ared <= 1.0) {
-        throw std::invalid_argument("alpha_red must be greater than 1.0");
-    }
+    greater_than(ared, 1.0, "alpha_red");
     settings_.alpha_red_ = ared;
 }
 
 void tycho::solvers::PSIOPT::set_delta_h(double delta_h) {
-    if (delta_h <= 0.0) {
-        throw std::invalid_argument("delta_h must be greater than 0.");
-    }
+    greater_than(delta_h, 0.0, "delta_h");
     settings_.delta_h_ = delta_h;
 }
 
 void tycho::solvers::PSIOPT::set_incr_h(double incr_h) {
-    if (incr_h <= 1.0) {
-        throw std::invalid_argument("incr_h must be greater than 1.0.");
-    }
+    greater_than(incr_h, 1.0, "incr_h");
     settings_.incr_h_ = incr_h;
 }
 
 void tycho::solvers::PSIOPT::set_decr_h(double decr_h) {
-    if (decr_h >= 1.0 || decr_h <= 0) {
-        throw std::invalid_argument("decr_h must be between 0 and 1.");
-    }
+    in_open_unit(decr_h, "decr_h");
     settings_.decr_h_ = decr_h;
 }
 
@@ -507,15 +519,9 @@ void tycho::solvers::PSIOPT::set_obj_scale(double scale) {
 // =============================================================================
 
 void tycho::solvers::PSIOPT::Settings::validate() const {
-    auto pos_finite = [](double v, const char *name) {
-        if (!std::isfinite(v) || v <= 0.0)
-            throw std::invalid_argument(
-                fmt::format("{} must be finite and positive, got {}", name, v));
-    };
-    auto pos_int = [](int v, const char *name) {
-        if (v < 1)
-            throw std::invalid_argument(fmt::format("{} must be >= 1, got {}", name, v));
-    };
+    // pos_finite/pos_int/in_open_unit/greater_than are the file-scope helpers
+    // defined above (shared with the individual set_*() methods, so a field's
+    // invariant and message can never drift between the two call sites).
 
     // --- Iteration limits ---
     pos_int(max_iters_, "max_iters");
@@ -631,21 +637,15 @@ void tycho::solvers::PSIOPT::Settings::validate() const {
             "init_mu ({}) must be within [min_mu ({}), max_mu ({})]", init_mu_, min_mu_, max_mu_));
 
     // --- Step parameters ---
-    if (bound_fraction_ <= 0.0 || bound_fraction_ >= 1.0)
-        throw std::invalid_argument("bound_fraction must be in (0, 1)");
-    if (bound_push_ <= 0.0)
-        throw std::invalid_argument("bound_push must be > 0");
+    in_open_unit(bound_fraction_, "bound_fraction");
+    greater_than(bound_push_, 0.0, "bound_push");
     pos_finite(neg_slack_reset_, "neg_slack_reset");
-    if (alpha_red_ <= 1.0)
-        throw std::invalid_argument("alpha_red must be > 1.0");
+    greater_than(alpha_red_, 1.0, "alpha_red");
 
     // --- Hessian perturbation ---
-    if (delta_h_ <= 0.0)
-        throw std::invalid_argument("delta_h must be > 0");
-    if (incr_h_ <= 1.0)
-        throw std::invalid_argument("incr_h must be > 1.0");
-    if (decr_h_ <= 0.0 || decr_h_ >= 1.0)
-        throw std::invalid_argument("decr_h must be in (0, 1)");
+    greater_than(delta_h_, 0.0, "delta_h");
+    greater_than(incr_h_, 1.0, "incr_h");
+    in_open_unit(decr_h_, "decr_h");
 
     // --- QP solver ---
     pos_int(qp_threads_, "qp_threads");

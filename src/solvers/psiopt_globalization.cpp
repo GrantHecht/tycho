@@ -110,7 +110,7 @@ bool ClassicMeritAcceptance::is_infeasibility_sufficiently_reduced(
     // Ipopt floors the relative target with Min(tol, constr_viol_tol) — its
     // separate optimality and constraint-violation tolerances. Tycho carries a
     // single constraint-violation tolerance (settings_.econ_tol_, the same field
-    // ProximalSwitchRestoration::entry_permitted reads), so the floor here is
+    // RestorationStrategy::entry_permitted reads via near_feasible()), so the floor here is
     // that one tolerance — a disclosed single-tolerance adaptation of Ipopt's
     // two-tolerance minimum. Classic merit has no Uno counterpart; the Ipopt
     // relative-reduction shape is the reference.
@@ -2326,24 +2326,10 @@ void ProximalSwitchRestoration::add_proximal_gradient(
     grad_out += diagonal_.cwiseProduct(primals - x_r_);
 }
 
-bool ProximalSwitchRestoration::entry_permitted(double constraint_violation,
-                                                const SolverContext &ctx) const {
-    // (3): near-feasible guard (Ipopt-adapted, single measure).
-    if (near_feasible(constraint_violation, ctx)) {
-        return false;
-    }
-    // (4): per-phase entry budget. entries_ >= max_feas_rest_ refuses (so
-    // max_feas_rest_ == 0 refuses unconditionally, before any entry).
-    if (entries_ >= ctx.settings_.max_feas_rest_) {
-        return false;
-    }
-    return true;
-}
-
-void ProximalSwitchRestoration::append_diagnostics(PSIOPT::SolveResult &result) const {
-    result.last_feas_rest_entries_ = entries_;
-    result.last_feas_rest_iters_ = iterations_in_mode_;
-}
+// entry_permitted() (virtual, shared default body) and append_diagnostics()
+// (non-virtual) are both inherited unoverridden from RestorationStrategy
+// (restoration.h) — both concrete strategies share the identical
+// entries_/iterations_in_mode_ pair.
 
 // ============================================================================
 // NestedL1Restoration — condensed l1 elastic feasibility restoration. See
@@ -2416,23 +2402,11 @@ const Eigen::VectorXd &NestedL1Restoration::proximal_diagonal() const {
                            "Hessian surface; the live-mu nested_primal_diagonal is used instead");
 }
 
-bool NestedL1Restoration::entry_permitted(double constraint_violation,
-                                          const SolverContext &ctx) const {
-    // Same near-feasible guard + per-phase entry budget as the proximal switch
-    // (shared base-class test; single-measure adaptation disclosure (d)).
-    if (near_feasible(constraint_violation, ctx)) {
-        return false;
-    }
-    if (entries_ >= ctx.settings_.max_feas_rest_) {
-        return false;
-    }
-    return true;
-}
-
-void NestedL1Restoration::append_diagnostics(PSIOPT::SolveResult &result) const {
-    result.last_feas_rest_entries_ = entries_;
-    result.last_feas_rest_iters_ = iterations_in_mode_;
-}
+// entry_permitted() (virtual, shared default body) and append_diagnostics()
+// (non-virtual) are both inherited unoverridden from RestorationStrategy
+// (restoration.h) — same near-feasible guard + per-phase entry budget as the
+// proximal switch (single-measure adaptation disclosure (d)); both concrete
+// strategies share the identical entries_/iterations_in_mode_ pair.
 
 void NestedL1Restoration::init_channel(const Eigen::Ref<const Eigen::VectorXd> &residuals,
                                        double mu, Eigen::VectorXd &n, Eigen::VectorXd &p,

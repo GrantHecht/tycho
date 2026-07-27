@@ -248,13 +248,14 @@ class NestedL1Restoration final : public RestorationStrategy {
                                Eigen::Ref<Eigen::VectorXd> grad_out) const override;
     const Eigen::VectorXd &proximal_diagonal() const override;
 
-    bool entry_permitted(double constraint_violation, const SolverContext &ctx) const override;
+    // entry_permitted() (virtual, shared default body) and append_diagnostics()
+    // (non-virtual) are both inherited unoverridden from RestorationStrategy —
+    // both read/write only entries_/iterations_in_mode_, which this class
+    // shares with the base (see restoration.h).
 
     const ProgressMeasures &reference() const override { return reference_; }
 
     void note_iteration() override { ++iterations_in_mode_; }
-
-    void append_diagnostics(PSIOPT::SolveResult &result) const override;
 
     // --- Nested restoration surface (see restoration.h for the contract) ---
 
@@ -362,9 +363,6 @@ class NestedL1Restoration final : public RestorationStrategy {
     // Cached pivot vectors (recomputed at entry and after apply_elastic_step).
     Eigen::VectorXd e_pivots_, i_pivots_;
 
-    // Per-phase diagnostics (write-only, see append_diagnostics()).
-    int entries_ = 0;
-    int iterations_in_mode_ = 0;
     // Count of second-level re-center invocations (recenter_elastics), a test/
     // diagnostic observer of the fallback; not folded into SolveResult.
     int recenter_calls_ = 0;
