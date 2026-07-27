@@ -493,7 +493,9 @@ handed to a single `optimize()` call, at iteration 40 to objective
 1.7009270229362865 — the value the Ipopt backend agrees on. Call shape rather
 than the acceptance mechanism decides that outcome, so a single `optimize()`
 is worth trying against a staged solve independently of which preset is
-selected; see the solver troubleshooting guide for the full treatment.
+selected; see
+{doc}`How to troubleshoot a failing solve </how_to/solver_troubleshooting>`
+for the full treatment.
 
 ## Problem containers
 
