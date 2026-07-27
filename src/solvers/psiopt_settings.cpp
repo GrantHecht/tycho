@@ -23,10 +23,12 @@
 // psiopt_globalization.cpp.
 
 #include "tycho/detail/solvers/psiopt.h"
+#include "tycho/detail/solvers/psiopt_presets.h"
 
 #include <cmath>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 namespace {
 // Name of a non-classic acceptance strategy, for the validate() error message
@@ -635,3 +637,37 @@ void tycho::solvers::PSIOPT::Settings::validate() const {
 #endif
 }
 
+// =============================================================================
+// Named configuration presets
+// =============================================================================
+
+void tycho::solvers::PSIOPT::apply_preset(std::string_view name) {
+    for (const auto &entry : kPSIOPTPresets) {
+        if (entry.name_ != name)
+            continue;
+        const PSIOPTPresetFields &f = entry.fields_;
+        settings_.acceptance_strategy_ = f.acceptance_strategy_;
+        settings_.merit_penalty_rule_ = f.merit_penalty_rule_;
+        settings_.barrier_governor_ = f.barrier_governor_;
+        settings_.never_monotone_ = f.never_monotone_;
+        settings_.restoration_mode_ = f.restoration_mode_;
+        settings_.inertia_mode_ = f.inertia_mode_;
+        settings_.max_soc_ = f.max_soc_;
+        settings_.ls_extended_iters_ = f.ls_extended_iters_;
+        settings_.watchdog_ = f.watchdog_;
+        return;
+    }
+
+    // Unrecognized name: fold the full valid-name list into the exception
+    // message (T6) rather than printing it separately -- kPSIOPTPresets drives
+    // this message directly; the Python binding's docstring repeats the names
+    // by hand, and a Python test pins it against this table.
+    std::string valid_names;
+    for (std::size_t i = 0; i < kPSIOPTPresets.size(); ++i) {
+        if (i != 0)
+            valid_names += ", ";
+        valid_names += kPSIOPTPresets[i].name_;
+    }
+    throw std::invalid_argument(
+        fmt::format("Unrecognized PSIOPT preset '{}'. Valid options are: {}", name, valid_names));
+}

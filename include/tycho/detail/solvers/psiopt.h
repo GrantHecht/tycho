@@ -727,6 +727,20 @@ class PSIOPT {
     void set_accel_zero_tolerance(double tol);
 #endif
 
+    // --- Named configuration presets ---
+    // Assigns exactly the nine globalization fields (acceptance_strategy_,
+    // merit_penalty_rule_, barrier_governor_, never_monotone_,
+    // restoration_mode_, inertia_mode_, max_soc_, ls_extended_iters_,
+    // watchdog_) per the named preset; every other Settings field (tolerances,
+    // iteration caps, QP parameters, ...) is left untouched. Throws
+    // std::invalid_argument (listing every valid name) for an unrecognized
+    // name. The preset table -- field values, evidence-of-record citations,
+    // and the name list this error message dispatches against -- lives in
+    // detail/solvers/psiopt_presets.h. The Python binding's docstring repeats
+    // the preset names by hand; a Python test pins it against this table.
+    // Defined in psiopt_settings.cpp alongside the other Settings-only logic.
+    void apply_preset(std::string_view name);
+
     // --- Callback methods ---
     void set_early_callback(const EarlyCallBackType &f) {
         this->early_callback_enabled_ = true;

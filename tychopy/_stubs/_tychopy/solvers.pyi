@@ -595,6 +595,53 @@ class PSIOPT:
     @cnr_mode.setter
     def cnr_mode(self, arg: bool, /) -> None: ...
 
+    def apply_preset(self, name: str) -> None:
+        """
+        Apply a named globalization-mechanism configuration.
+
+        Assigns exactly nine Settings fields -- acceptance_strategy,
+        merit_penalty_rule, barrier_governor, never_monotone, restoration_mode,
+        inertia_mode, max_soc, ls_extended_iters, and watchdog. No other
+        Settings field (tolerances, iteration caps, QP/threading parameters,
+        ...) is read or written.
+
+        Valid names
+        -----------
+        classic
+            Restores the stock configuration: classic_merit acceptance, the
+            classic_adaptive barrier governor, restoration off, classic inertia
+            mode, and SOC/extended-backtracking/watchdog all disabled -- the
+            bit-identical Settings{} default.
+        filter_l1
+            Filter acceptance with a monitored barrier governor and nested-l1
+            restoration.
+        soc_recovery_l1
+            Classic-merit acceptance with a monitored barrier governor,
+            proximal-regularization inertia, second-order correction
+            (max_soc=4), extended backtracking (ls_extended_iters=2), the
+            watchdog enabled, and nested-l1 restoration.
+        soc_proximal
+            Classic-merit acceptance with a monitored barrier governor,
+            proximal-regularization inertia, second-order correction
+            (max_soc=4), and proximal-switch restoration.
+        merit_l1
+            Merit acceptance with the classic_adaptive barrier governor and
+            nested-l1 restoration.
+
+        See the solver configuration comparison in the reference documentation
+        for the evidence behind each non-classic preset.
+
+        Parameters
+        ----------
+        name : str
+            One of the five names above.
+
+        Raises
+        ------
+        ValueError
+            If ``name`` is not one of the five presets above.
+        """
+
 class BarrierModes(enum.Enum):
     PROBE = 0
 

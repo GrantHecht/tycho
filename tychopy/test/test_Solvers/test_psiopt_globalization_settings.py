@@ -44,6 +44,14 @@ be (re)built only inside ``PSIOPT::set_nlp()`` (i.e. only on
 ``acceptance_strategy`` changed AFTER a first solve were silently ignored
 by a later re-solve that did not retranscribe. See
 ``test_ComponentRebuildTakesEffectWithoutRetranscription`` below.
+
+Finally, covers ``PSIOPT.apply_preset(name)`` (the five named
+configuration presets in ``kPSIOPTPresets``,
+include/tycho/detail/solvers/psiopt_presets.h): each preset name round-
+tripped through representative properties above, every preset validating
+and solving, the unrecognized-name ``ValueError`` naming all five presets,
+and the binding docstring naming all five presets. See
+``test_ApplyPreset`` below.
 """
 
 import math
@@ -1075,6 +1083,126 @@ class test_ComponentRebuildTakesEffectWithoutRetranscription(unittest.TestCase):
             "without retranscription -- construction-staleness regression "
             "(globalization components not rebuilt per solve invocation)",
         )
+
+
+class test_ApplyPreset(unittest.TestCase):
+    """PSIOPT.apply_preset(name) (src/solvers/psiopt_settings.cpp, table-driven
+    from kPSIOPTPresets in include/tycho/detail/solvers/psiopt_presets.h).
+    Round-trips each of the five named presets through the existing
+    property surface exercised throughout this file, checks that an
+    unrecognized name raises ValueError naming all five valid options, and
+    pins the docstring's five-name coverage (the binding's single
+    obligation beyond forwarding to the C++ method).
+    """
+
+    PRESET_NAMES = (
+        "classic",
+        "filter_l1",
+        "soc_recovery_l1",
+        "soc_proximal",
+        "merit_l1",
+    )
+
+    def test_classic_resets_a_dirtied_optimizer(self):
+        # Every field classic assigns also happens to be Settings{}'s
+        # default, so applying it to a fresh optimizer would trivially
+        # match without proving the preset actually writes anything.
+        # Dirty every field first, then confirm apply_preset("classic")
+        # overwrites all of them back to the stock configuration.
+        prob = _make_problem()
+        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.merit
+        prob.optimizer.barrier_governor = solvs.BarrierGovernors.monitored
+        prob.optimizer.restoration_mode = solvs.RestorationModes.l1_nested
+        prob.optimizer.inertia_mode = solvs.InertiaModes.proximal_regularization
+        prob.optimizer.max_soc = 4
+        prob.optimizer.ls_extended_iters = 2
+        prob.optimizer.watchdog = True
+
+        prob.optimizer.apply_preset("classic")
+
+        self.assertEqual(
+            prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.classic_merit
+        )
+        self.assertEqual(
+            prob.optimizer.barrier_governor, solvs.BarrierGovernors.classic_adaptive
+        )
+        self.assertEqual(prob.optimizer.restoration_mode, solvs.RestorationModes.off)
+        self.assertEqual(prob.optimizer.inertia_mode, solvs.InertiaModes.classic)
+        self.assertEqual(prob.optimizer.max_soc, 0)
+        self.assertEqual(prob.optimizer.ls_extended_iters, 0)
+        self.assertEqual(prob.optimizer.watchdog, False)
+
+    def test_filter_l1(self):
+        prob = _make_problem()
+        prob.optimizer.apply_preset("filter_l1")
+        self.assertEqual(
+            prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.filter
+        )
+        self.assertEqual(
+            prob.optimizer.barrier_governor, solvs.BarrierGovernors.monitored
+        )
+        self.assertEqual(
+            prob.optimizer.restoration_mode, solvs.RestorationModes.l1_nested
+        )
+
+    def test_soc_recovery_l1(self):
+        prob = _make_problem()
+        prob.optimizer.apply_preset("soc_recovery_l1")
+        self.assertEqual(prob.optimizer.max_soc, 4)
+        self.assertEqual(prob.optimizer.ls_extended_iters, 2)
+        self.assertEqual(prob.optimizer.watchdog, True)
+        self.assertEqual(
+            prob.optimizer.restoration_mode, solvs.RestorationModes.l1_nested
+        )
+
+    def test_soc_proximal(self):
+        prob = _make_problem()
+        prob.optimizer.apply_preset("soc_proximal")
+        self.assertEqual(
+            prob.optimizer.restoration_mode, solvs.RestorationModes.proximal_switch
+        )
+        self.assertEqual(prob.optimizer.max_soc, 4)
+        # Distinguishes this preset from soc_recovery_l1, which shares the
+        # same acceptance/governor/inertia/max_soc fields but enables
+        # watchdog and ls_extended_iters.
+        self.assertEqual(prob.optimizer.watchdog, False)
+
+    def test_merit_l1(self):
+        prob = _make_problem()
+        prob.optimizer.apply_preset("merit_l1")
+        self.assertEqual(
+            prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.merit
+        )
+        self.assertEqual(
+            prob.optimizer.barrier_governor, solvs.BarrierGovernors.classic_adaptive
+        )
+        self.assertEqual(
+            prob.optimizer.restoration_mode, solvs.RestorationModes.l1_nested
+        )
+
+    def test_every_preset_solves(self):
+        # Every preset must pass Settings::validate() -- smoke each one
+        # through a full optimize() call.
+        for name in self.PRESET_NAMES:
+            with self.subTest(preset=name):
+                prob = _make_problem()
+                prob.optimizer.apply_preset(name)
+                flag = prob.optimize()
+                self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+
+    def test_unrecognized_name_raises_value_error_naming_all_presets(self):
+        prob = _make_problem()
+        with self.assertRaises(ValueError) as ctx:
+            prob.optimizer.apply_preset("not_a_real_preset")
+        msg = str(ctx.exception)
+        for name in self.PRESET_NAMES:
+            self.assertIn(name, msg)
+
+    def test_docstring_names_all_five_presets(self):
+        doc = solvs.PSIOPT.apply_preset.__doc__
+        self.assertIsNotNone(doc)
+        for name in self.PRESET_NAMES:
+            self.assertIn(name, doc)
 
 
 if __name__ == "__main__":
