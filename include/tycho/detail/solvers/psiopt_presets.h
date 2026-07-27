@@ -20,11 +20,11 @@
 // field (tolerances, iteration caps, QP parameters, ...) is read or written by
 // a preset.
 //
-// kPSIOPTPresets is the single source of truth for the preset name set: both
-// PSIOPT::apply_preset()'s dispatch/error-message and any downstream consumer
-// that needs to enumerate or document the valid names (e.g. the Python
-// binding's docstring) should read this table rather than re-deriving the
-// list.
+// kPSIOPTPresets drives both PSIOPT::apply_preset()'s dispatch and the valid-
+// name list folded into its error message. The Python binding's docstring
+// repeats the preset names by hand rather than reading this table; a Python
+// test pins that docstring against this table so the two cannot drift apart
+// unnoticed.
 
 #pragma once
 

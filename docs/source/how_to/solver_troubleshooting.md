@@ -412,10 +412,10 @@ that outcome regardless of which acceptance mechanism was selected.
 
 Presets are not silver bullets, and the measurements say so plainly.
 
-Across the 34-example suite, all three of the non-`classic` presets
-sit at **median iteration parity** with the stock defaults while raising
-the aggregate iteration count (`soc_proximal` +27%, `filter_l1` +31%,
-`soc_recovery_l1` +42%) and carrying severe single-example tails —
+Across the 34-example suite, the three example-measured presets
+(`soc_proximal` +27%, `filter_l1` +31%, `soc_recovery_l1` +42%) sit at
+**median iteration parity** with the stock defaults while raising the
+aggregate iteration count and carrying severe single-example tails —
 `filter_l1` costs DionysusLowThrust +609% and MinimumTimeToClimb +395%.
 What a preset changes is the tail of the distribution, not its centre: it
 buys you problems that previously failed, at the price of iterations on

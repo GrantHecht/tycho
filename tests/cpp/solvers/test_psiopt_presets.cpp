@@ -66,9 +66,8 @@ TEST_F(SolverTest, PresetGateTableHasExpectedNames) {
 ///////////////////////////////////////////////////////////////////////////////
 // Per-preset field truth table -- exact enum values transcribed from
 // docs/dev/analysis/2026-07-e2-fixes-evidence-refresh.md's evidence tables
-// (see the presets-field-tables provenance and the header's per-entry
-// comments), independent of kPSIOPTPresets so a typo in the header's literal
-// table is caught here too.
+// (see the header's per-entry comments), independent of kPSIOPTPresets so a
+// typo in the header's literal table is caught here too.
 ///////////////////////////////////////////////////////////////////////////////
 
 TEST_F(SolverTest, PresetGateClassicFields) {

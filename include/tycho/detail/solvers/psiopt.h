@@ -735,9 +735,10 @@ class PSIOPT {
     // iteration caps, QP parameters, ...) is left untouched. Throws
     // std::invalid_argument (listing every valid name) for an unrecognized
     // name. The preset table -- field values, evidence-of-record citations,
-    // and the enumerable name list this error message and any future binding
-    // docstring share -- lives in detail/solvers/psiopt_presets.h. Defined in
-    // psiopt_settings.cpp alongside the other Settings-only logic.
+    // and the name list this error message dispatches against -- lives in
+    // detail/solvers/psiopt_presets.h. The Python binding's docstring repeats
+    // the preset names by hand; a Python test pins it against this table.
+    // Defined in psiopt_settings.cpp alongside the other Settings-only logic.
     void apply_preset(std::string_view name);
 
     // --- Callback methods ---

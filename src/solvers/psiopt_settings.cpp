@@ -659,8 +659,9 @@ void tycho::solvers::PSIOPT::apply_preset(std::string_view name) {
     }
 
     // Unrecognized name: fold the full valid-name list into the exception
-    // message (T6) rather than printing it separately -- kPSIOPTPresets is the
-    // single source for both this message and any future binding docstring.
+    // message (T6) rather than printing it separately -- kPSIOPTPresets drives
+    // this message directly; the Python binding's docstring repeats the names
+    // by hand, and a Python test pins it against this table.
     std::string valid_names;
     for (std::size_t i = 0; i < kPSIOPTPresets.size(); ++i) {
         if (i != 0)
