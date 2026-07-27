@@ -95,12 +95,19 @@ struct IterateInfo {
     //                             against another reading taken under the
     //                             SAME acceptance path. The one live consumer
     //                             today, soc_should_trigger() (globalization/
-    //                             soc.h), only ever compares like-with-like:
-    //                             SocRecovery is reachable only through
-    //                             ClassicMeritAcceptance::classic_line_search
-    //                             (ModernMeritAcceptance's override throws),
-    //                             so its trigger always compares two
-    //                             squared-L2 readings, never a mix. -1.0
+    //                             soc.h), still compares like-with-like even
+    //                             though SocRecovery composes with every
+    //                             acceptance strategy (the recovery hook in
+    //                             alg_impl dispatches to it regardless of
+    //                             which strategy is active): its caller
+    //                             (SocRecovery::on_step_rejected) selects the
+    //                             comparison norm via
+    //                             AcceptanceStrategy::drives_classic_path() —
+    //                             squared-L2 when true (ClassicMeritAcceptance),
+    //                             L1 when false (the generic path: modern
+    //                             merit, filter, funnel) — so the two
+    //                             readings it compares are always the same
+    //                             norm, just not always squared-L2. -1.0
     //                             means UNAVAILABLE: no rejection was
     //                             recorded, or the LANG variant ran (it
     //                             materializes no infeasibility scalar). A
@@ -116,11 +123,10 @@ struct IterateInfo {
     // Number of trial-point evaluations that threw during this iteration's
     // acceptance attempts (line-search rungs, SOC/extended-backtrack trials,
     // soft-feasibility trial). 0 on the overwhelmingly common no-exception
-    // path. Not printed in the iteration table. No C++ or Python surface
-    // exposes the per-iteration IterateInfo history to callers today (the
-    // `iters` vector alg_impl accumulates is solve-local); this field's
-    // intended consumer is future iteration-history diagnostics, not any
-    // current reader.
+    // path. Not printed in the iteration table. The `iters` vector alg_impl
+    // accumulates is solve-local, but PSIOPT::LateCallBackType hands each
+    // completed IterateInfo (iters.back()) to a registered C++ callback once
+    // per iteration; no Python surface exposes it.
     int eval_exceptions_ = 0;
 };
 

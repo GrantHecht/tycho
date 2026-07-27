@@ -20,9 +20,12 @@
 // branch downstream of the call is reachable, and the CBWR gate (bit-identical
 // iteration counts on the 31-problem corpus) is expected to hold trivially.
 //
-// A future change replaces this class (not this call site) with a real SOC ->
-// extended-backtrack -> watchdog -> feasibility-switch dispatcher. The
-// inertia/perturbation ladder (factor_impl's Zfac cycling + 8x/(1/3)
+// NoopRecovery is the all-default-path link, not the only one: the real SOC
+// -> extended-backtrack -> watchdog -> feasibility-switch dispatchers ship in
+// soc.h, watchdog.h, and feasibility_switch_recovery.h respectively, composed
+// by rebuild_globalization_components() whenever the corresponding Settings
+// field opts in (max_soc_, ls_extended_iters_, watchdog_, restoration_mode_).
+// The inertia/perturbation ladder (factor_impl's Zfac cycling + 8x/(1/3)
 // escalation) is a SEPARATE mechanism that stays inside PSIOPT::factor_impl
 // and is not part of this chain; a future inertia-dispatch stage may wire
 // it in.

@@ -14,8 +14,11 @@
 //
 // =============================================================================
 // FORMULATION — derived from the Ipopt sources (fetched + read, not from
-// memory). Line numbers reference the files as fetched from
-// github.com/coin-or/Ipopt (master):
+// memory). Line numbers are pinned to Ipopt releases/3.14.19
+// (2695946fa79d2e84f3034e065e788933a81466eb) — every AMU:/MMU:/QF: shorthand
+// citation below, and every corresponding citation in
+// MonitoredBarrierGovernor's implementation (psiopt_globalization.cpp), is
+// against that tagged commit, not a moving `master`:
 //   [AMU]  src/Algorithm/IpAdaptiveMuUpdate.cpp — the adaptive (free<->fixed)
 //          mu strategy with the "kkt-error" globalization. This governor
 //          reproduces its KKT_ERROR path.

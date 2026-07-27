@@ -5,28 +5,31 @@
 // Part of the globalization component extraction: RecoveryChain is the
 // ordered dispatch on step rejection: second-order correction (SOC) ->
 // extended backtracking -> watchdog revert -> feasibility switch. This
-// header ships an empty-chain implementation matching today's give-up
-// behavior.
+// header ships an empty-chain implementation matching pre-extraction
+// give-up behavior on the all-default path.
 //
-// This file: pure interface declaration, no implementation. IMPORTANT scope
-// note: the inertia/perturbation LADDER itself (factor_impl's Zfac cycling +
-// the 8x/(1/3) escalation) is NOT what this interface wraps — it stays
-// inside PSIOPT::factor_impl; a future inertia-dispatch stage may fold it
-// into this chain. This interface is the POST-REJECTION dispatcher: what to
-// do once a trial step has already been rejected by an AcceptanceStrategy.
-// The implementation shipped alongside it (NoopRecovery, noop_recovery.h) is
-// an empty chain that always returns kAcceptAsIs, i.e. today's behavior: the
-// capped backtrack's surviving alpha is simply taken forward (PSIOPT has no
-// post-rejection recovery by default; there is no give-up branch at this
-// point). SocRecovery (soc.h) is the first live implementor: an opt-in
-// (Settings::max_soc_ > 0) second-order correction that re-solves on the live
-// factorization and returns kRetry with a corrected step. ChainedRecovery,
-// ExtendedBacktrackRecovery, and WatchdogRecovery (globalization/watchdog.h)
-// are the second batch of live links: ChainedRecovery composes SOC and
-// extended backtracking in order (SOC first — see its class doc for why),
-// WatchdogRecovery wraps whatever chain is configured as an outer decorator.
-// The feasibility switch remains a future link (kSwitchToFeasibility below is
-// still unproduced by any link).
+// This file: the RecoveryChain interface itself (pure virtual except
+// notify_step_accepted's default no-op body), plus one free function with a
+// real body — should_dispatch_recovery() below, the shared gate condition
+// alg_impl uses to decide whether to invoke the chain at all. IMPORTANT
+// scope note: the inertia/perturbation LADDER itself (factor_impl's Zfac
+// cycling + the 8x/(1/3) escalation) is NOT what this interface wraps — it
+// stays inside PSIOPT::factor_impl; a future inertia-dispatch stage may fold
+// it into this chain. This interface is the POST-REJECTION dispatcher: what
+// to do once a trial step has already been rejected by an AcceptanceStrategy.
+// NoopRecovery (noop_recovery.h) is the all-default-path implementation: an
+// empty chain that always returns kAcceptAsIs, i.e. pre-extraction behavior —
+// the capped backtrack's surviving alpha is simply taken forward. SocRecovery
+// (soc.h) is the first live implementor: an opt-in (Settings::max_soc_ > 0)
+// second-order correction that re-solves on the live factorization and
+// returns kRetry with a corrected step. ChainedRecovery, ExtendedBacktrackRecovery,
+// and WatchdogRecovery (globalization/watchdog.h) are the second batch of
+// live links: ChainedRecovery composes SOC and extended backtracking in
+// order (SOC first — see its class doc for why), WatchdogRecovery wraps
+// whatever chain is configured as an outer decorator. FeasibilitySwitchRecovery
+// (feasibility_switch_recovery.h) is the outermost link whenever
+// restoration_mode_ != off: it converts an inner chain's ladder-exhausted
+// kAcceptAsIs into kSwitchToFeasibility, so that Action is live, not future.
 //
 // Ownership rule: a RecoveryChain holds NO solver state (no persistent
 // watchdog counters, etc. until a live recovery dispatcher actually needs
@@ -54,10 +57,15 @@ namespace tycho::solvers {
 
 // Recovery-dispatch depth: which link (if any) actually resolved a given
 // rejection. Written by ChainedRecovery/WatchdogRecovery (globalization/
-// watchdog.h) into the `resolved_depth` out-parameter of on_step_rejected
-// below; individual links (SocRecovery, ExtendedBacktrackRecovery) do not
-// write it themselves — only the composing wrapper knows which position in
-// the dispatch order actually won. Backs PSIOPT::SolveResult::
+// watchdog.h) and by FeasibilitySwitchRecovery (feasibility_switch_recovery.h)
+// into the `resolved_depth` out-parameter of on_step_rejected below;
+// individual links (SocRecovery, ExtendedBacktrackRecovery) do not write it
+// themselves — only a composing/wrapping link knows which position in the
+// dispatch order actually won. PSIOPT::alg_impl() also overwrites it
+// directly, outside the chain call, in two feasibility-restoration branches
+// (the un-evaluable-fallback entry and the soft-feasibility-step escalation)
+// so the histogram attributes those iterations to restoration rather than to
+// whatever depth the chain itself resolved. Backs PSIOPT::SolveResult::
 // recovery_depth_histogram_[d] (psiopt.h).
 inline constexpr int kRecoveryDepthSoc = 0;
 inline constexpr int kRecoveryDepthExtended = 1;
@@ -65,9 +73,10 @@ inline constexpr int kRecoveryDepthWatchdog = 2;
 inline constexpr int kRecoveryDepthUnresolved = 3; // classic give-up: no link resolved it.
 // Feasibility-restoration mode-switch: written by FeasibilitySwitchRecovery
 // (globalization/feasibility_switch_recovery.h) when it converts an inner
-// kAcceptAsIs into a kSwitchToFeasibility. Only reachable when restoration_mode_
-// == proximal_switch; PSIOPT::SolveResult::recovery_depth_histogram_ (psiopt.h)
-// is sized to 5 to hold this bucket.
+// kAcceptAsIs into a kSwitchToFeasibility, and by PSIOPT::alg_impl() directly
+// (see the note above). Reachable whenever restoration_mode_ != off
+// (proximal_switch or l1_nested); PSIOPT::SolveResult::
+// recovery_depth_histogram_ (psiopt.h) is sized to 5 to hold this bucket.
 inline constexpr int kRecoveryDepthRestoration = 4;
 
 // =============================================================================
@@ -82,8 +91,9 @@ class RecoveryChain {
     //   kAcceptAsIs        — override the rejection, take the step anyway.
     //   kRetry             — try again this iteration (e.g. after a SOC
     //                        correction or an extended-backtrack step).
-    //   kSwitchToFeasibility — hand off to a restoration strategy (inert
-    //                        until a RestorationStrategy exists).
+    //   kSwitchToFeasibility — hand off to a restoration strategy
+    //                        (ProximalSwitchRestoration or NestedL1Restoration,
+    //                        selected by restoration_mode_).
     //   kSoftFeasibilityStep — take the full fraction-to-boundary step on the
     //                        current search direction as a soft feasibility
     //                        pre-stage (evaluated by alg_impl under a
@@ -133,10 +143,11 @@ class RecoveryChain {
     //                                 correction back-substitution (diagnostic).
     //   resolved_depth               — out-parameter, caller-seeded to
     //                                 kRecoveryDepthUnresolved before the call.
-    //                                 Only ChainedRecovery/WatchdogRecovery
-    //                                 write it (see the constants above);
-    //                                 SocRecovery/ExtendedBacktrackRecovery
-    //                                 accept the parameter but leave it alone.
+    //                                 ChainedRecovery/WatchdogRecovery and
+    //                                 FeasibilitySwitchRecovery write it (see
+    //                                 the constants above); SocRecovery/
+    //                                 ExtendedBacktrackRecovery accept the
+    //                                 parameter but leave it alone.
     //   watchdog_activations         — accumulator WatchdogRecovery increments
     //                                 once per arm event (diagnostic; every
     //                                 other link ignores it).

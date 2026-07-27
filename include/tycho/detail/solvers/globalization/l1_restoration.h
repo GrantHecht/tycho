@@ -129,9 +129,10 @@
 //
 //   (e) No separate restoration iteration budget. Ipopt's max_resto_iter default
 //       is effectively unbounded; the outer iteration limit already bounds this
-//       in-place phase, so no new knob is introduced. The per-solve ENTRY budget
+//       in-place phase, so no new knob is introduced. The per-phase ENTRY budget
 //       remains the shared max_feas_rest_ (Settings), gated by entry_permitted()
-//       exactly as the proximal switch gates it.
+//       exactly as the proximal switch gates it, and reset (entries_ = 0) at
+//       every phase boundary along with the rest of this strategy's state.
 //
 //   (f) Second-level elastic re-centering fallback (recenter_elastics). Ipopt's
 //       RestoRestorationPhase (IpRestoRestoPhase.cpp) handles a restoration-phase
@@ -190,8 +191,9 @@ inline constexpr double kRestoPenaltyParameter = 1.0e3;
 
 // Threshold above which the re-entry bound-multiplier update resets all slack
 // multipliers to 1; Ipopt option "bound_mult_reset_threshold" default 1e3
-// (IpRestoMinC_1Nrm.cpp). Consumed by the re-entry sequence (later wiring); the
-// component exposes it here so both live at the same literature default.
+// (IpRestoMinC_1Nrm.cpp). Consumed by PSIOPT::exit_feasibility_restoration_nested's
+// step (3); the component exposes it here so both live at the same literature
+// default.
 inline constexpr double kBoundMultResetThreshold = 1.0e3;
 
 // kRestoProximityWeight, kNearFeasibleGuardFactor, and

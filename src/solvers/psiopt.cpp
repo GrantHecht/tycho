@@ -998,15 +998,17 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
     this->qp_analyzed_ = false;
 }
 
-// (Re)builds the four globalization components from the CURRENT Settings.
-// Called once at the top of every run_phase_sequence() — i.e. once per solve
-// invocation (optimize()/solve()/solve_optimize()/etc. all route through
-// run_phase_sequence()) — rather than only from set_nlp() (which runs only on
-// (re)transcription). This makes construction-time knobs (acceptance_strategy,
-// max_soc, ls_extended_iters, watchdog, merit_penalty_rule) live at the next
+// (Re)builds the five globalization components from the CURRENT Settings
+// (acceptance_/mechanism_/governor_/recovery_, always constructed, plus the
+// optional restoration_). Called once at the top of every run_phase_sequence()
+// — i.e. once per solve invocation (optimize()/solve()/solve_optimize()/etc.
+// all route through run_phase_sequence()) — rather than only from set_nlp()
+// (which runs only on (re)transcription). This makes construction-time knobs
+// (acceptance_strategy, max_soc, ls_extended_iters, watchdog,
+// merit_penalty_rule, barrier_governor, restoration_mode) live at the next
 // solve even when no set_nlp() call intervenes, matching every other Settings
 // field (which alg_impl/governor_/etc. already read live off settings_ each
-// iteration). Before this fix, these four knobs were snapshotted at whichever
+// iteration). Before this fix, these knobs were snapshotted at whichever
 // (re)transcription last ran set_nlp() and silently ignored by a later
 // solve() call that changed them without retranscribing — see
 // tychopy/test/test_Solvers/test_psiopt_globalization_settings.py's
@@ -1856,14 +1858,16 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     bool FirstPert = true;
 
     // Feasibility-restoration obj_val_ override. Dead on the default path
-    // (never set true unless restoration_ is non-null). Two terminal restoration
-    // exits leave the loop with the last-filled iters.back().prim_obj_ still at
-    // φ_prox (the proximal objective substituted while restoration was active):
-    // the in-loop "converged to a locally infeasible point" break, and the
-    // post-loop max-iters/DIVERGING-while-active catch-all. Both record the true
-    // objective (re-evaluated via build_restoration_exit_measures) here so the
-    // unconditional algmode==OPT obj_val_ assignment below the main loop can be
-    // corrected afterward, once, in a single place.
+    // (never set true unless restoration_ is non-null). Three terminal
+    // restoration exits leave the loop with the last-filled
+    // iters.back().prim_obj_ still at φ_prox (the proximal objective
+    // substituted while restoration was active): the nested mode's in-loop
+    // "converged to a locally infeasible point" break, the proximal mode's
+    // equivalent in-loop break, and the post-loop max-iters/DIVERGING-while-
+    // active catch-all. All three record the true objective (re-evaluated via
+    // build_restoration_exit_measures) here so the unconditional algmode==OPT
+    // obj_val_ assignment below the main loop can be corrected afterward,
+    // once, in a single place.
     bool restoration_was_active = false;
     double restoration_true_obj = 0.0;
 
@@ -1939,7 +1943,7 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // residual converge_check() consumes is now
         // fully determined -- kkt_inf_ reads prim_grad() (just updated above; the
         // barrier writes later this iteration target the *disjoint* dual_grad()
-        // block, see psiopt.h:472-473 for prim_grad()/dual_grad()'s segment
+        // block, see PSIOPT::prim_grad()/PSIOPT::dual_grad() for their segment
         // boundaries), econ_inf_/icon_inf_ read eq_cons()/iq_cons() (set by
         // eval_nlp + apply_reset_slacks above, before this point), and barr_inf_ is
         // the complementarity(slacks, iq_lmults) computed above from XSL, which
@@ -2631,8 +2635,9 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
 
         // Recovery-chain hook. This is where a rejected step's
         // recovery gets a say -- SOC -> extended-backtrack -> watchdog-revert
-        // dispatch from this point (see rebuild_globalization_components's
-        // wiring comment); the feasibility switch remains a future link. The
+        // -> feasibility-switch dispatch from this point (see
+        // rebuild_globalization_components's wiring comment for how the
+        // chain is assembled from settings_). The
         // inertia/perturbation ladder above (factor_impl's Zfac cycling +
         // escalation) is a SEPARATE mechanism and stays out of this chain
         // (a future inertia-dispatch stage may wire it in) -- it is NOT
@@ -3198,8 +3203,9 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
     this->eval_error_log_.reset();
     settings_.validate();
 
-    // Rebuild acceptance_/mechanism_/governor_/recovery_ from the
-    // just-validated Settings on every solve entry, not just on
+    // Rebuild acceptance_/mechanism_/governor_/recovery_ (and, when
+    // restoration_mode_ != off, restoration_) from the just-validated
+    // Settings on every solve entry, not just on
     // (re)transcription (set_nlp() no longer builds them) — see
     // rebuild_globalization_components()'s doc comment for why this must run
     // per solve rather than per transcription, and for the neutrality
@@ -3270,17 +3276,19 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
 
         // Phase-boundary reset: each globalization component's μ-event/
         // phase-change hook (see e.g. recovery_chain.h's ownership-rule
-        // note). reset() was never actually invoked anywhere before this —
-        // every implementation that could be live through recovery_ (or
-        // acceptance_/mechanism_/governor_) has an empty reset() body EXCEPT
-        // WatchdogRecovery (ClassicMeritAcceptance, BacktrackingLineSearch,
-        // ClassicAdaptiveGovernor, NoopRecovery, SocRecovery,
-        // ExtendedBacktrackRecovery, and ChainedRecovery are all no-ops), so
-        // adding these calls is behavior-neutral for every configuration
-        // except one: WatchdogRecovery, the one component with real
-        // per-solve state, needs its counters/arm-state/snapshot cleared at
-        // each new phase (OPT, then a conditional SOE, etc.) rather than
-        // carried over from the previous phase.
+        // note). reset() was never actually invoked anywhere before this. On
+        // the all-default path every live implementation (ClassicMeritAcceptance,
+        // BacktrackingLineSearch, ClassicAdaptiveGovernor, NoopRecovery) still
+        // has an empty reset() body, so adding these calls remains
+        // behavior-neutral there. Several opt-in implementations now carry
+        // real per-solve state this reset genuinely clears, though:
+        // WatchdogRecovery's counters/arm-state/snapshot, ModernMeritAcceptance's
+        // penalty state, SwitchingAcceptance's bounds_initialized_ flag plus
+        // FilterAcceptance/FunnelAcceptance's working filter/width (via the
+        // virtual reset_bounds() it dispatches to), and MonitoredBarrierGovernor's
+        // monotone-mode tracking — each cleared at every new phase (OPT, then a
+        // conditional SOE, etc.) rather than carried over from the previous
+        // phase.
         this->acceptance_->reset();
         this->mechanism_->reset();
         this->governor_->reset();

@@ -124,13 +124,18 @@
 //
 // Design note — the minimal-step / feasibility-restoration trigger (WB
 // Eq. (23), α_min as a fraction of a computed minimal step size, e.g.
-// alpha_min_frac = 0.05) is deliberately NOT implemented here: its only
-// purpose is to detect "the line search cannot make further progress" and
-// enter feasibility restoration, which does not exist yet. Until then, a
-// trial that keeps failing the tests above simply keeps backtracking through
-// the generic ladder's existing step-length floor and recovery-chain
-// accept-as-is behavior. The trigger lands alongside feasibility restoration,
-// when implemented.
+// alpha_min_frac = 0.05) is deliberately NOT implemented here: RecoveryChain
+// already owns "the line search cannot make further progress" dispatch
+// through a different route — FeasibilitySwitchRecovery converts the
+// ladder-exhausted kAcceptAsIs any inner chain link produces into
+// kSwitchToFeasibility (feasibility_switch_recovery.h), which is exactly the
+// entry alg_impl needs to switch into restoration. A second, α_min-based
+// trigger inside this class would be redundant with that dispatch, not a
+// missing prerequisite — so it stays unimplemented by design, not because
+// feasibility restoration is unavailable. Until such a trigger is added (if
+// ever), a trial that keeps failing the tests above simply keeps
+// backtracking through the generic ladder's existing step-length floor and
+// the RecoveryChain dispatch above.
 //
 // Ownership: like ModernMeritAcceptance, no SolverContext reference and no
 // NLP eval — pure function of its ProgressMeasures arguments plus its own
@@ -188,9 +193,13 @@ class SwitchingAcceptance : public AcceptanceStrategy {
                                const ProgressMeasures &predicted_reduction,
                                double objective_multiplier, double step_length) override;
 
-    // Restoration-exit test — unused until a feasibility-restoration strategy
-    // drives it; throws (T6) rather than fabricate an answer. Same posture as
-    // ModernMeritAcceptance's.
+    // Restoration-exit test — driven once a feasibility-restoration strategy
+    // is active: alg_impl calls it to decide whether a trial has reduced
+    // infeasibility enough to leave restoration and resume optimality (the
+    // near-feasible and κ_resto-ratchet exit branches, psiopt.cpp). Base
+    // SwitchingAcceptance still throws (T6) rather than fabricate an answer;
+    // FilterAcceptance/FunnelAcceptance override it with a real body. Same
+    // posture as ModernMeritAcceptance's.
     bool is_infeasibility_sufficiently_reduced(const ProgressMeasures &reference,
                                                const ProgressMeasures &trial) const override;
 

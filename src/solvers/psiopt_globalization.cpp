@@ -75,9 +75,13 @@ static void note_eval_error_unknown(EvalErrorLog *log) {
 }
 
 // ============================================================================
-// Generic interface — unused on the classic merit path (see header). T6:
-// these throw rather than return a fabricated answer; a future filter/funnel
-// strategy gives them real bodies when it actually drives them.
+// Generic interface — is_iterate_acceptable is unused on the classic merit
+// path (see header). T6: it throws rather than return a fabricated answer;
+// the shipped FilterAcceptance/FunnelAcceptance/ModernMeritAcceptance
+// strategies are the ones that give it a real body, since they are the ones
+// that actually drive it. is_infeasibility_sufficiently_reduced below is a
+// separate case: it has a real body right here, because it IS driven on the
+// classic path (see alg_impl, psiopt.cpp).
 // ============================================================================
 bool ClassicMeritAcceptance::is_iterate_acceptable(const ProgressMeasures &current,
                                                    const ProgressMeasures &trial,
@@ -2085,7 +2089,10 @@ void FilterAcceptance::notify_switch_to_optimality(const ProgressMeasures &curre
 // ============================================================================
 // MonitoredBarrierGovernor — free<->monotone monitored barrier governor. See
 // monitored_governor.h for the full formulation, the Ipopt source citations,
-// and the μ-event / re-entry / error-norm resolutions.
+// and the μ-event / re-entry / error-norm resolutions. Every bare
+// IpAdaptiveMuUpdate.cpp/IpMonotoneMuUpdate.cpp line-number citation below
+// (including the AMU:/MMU: shorthand) is pinned to Ipopt releases/3.14.19
+// (2695946fa79d2e84f3034e065e788933a81466eb), matching monitored_governor.h.
 // ============================================================================
 
 MonitoredBarrierGovernor::MonitoredBarrierGovernor()

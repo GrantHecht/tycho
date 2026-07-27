@@ -157,11 +157,13 @@ struct EvalErrorLog {
 // discipline.
 //
 // PSIOPT owns its post-rejection recovery chain through a
-// std::unique_ptr<RecoveryChain> (concrete type NoopRecovery, complete only in
-// psiopt.cpp). Same forward-declare + out-of-line ctor/dtor discipline. The
-// NoopRecovery implementation shipped today always returns kAcceptAsIs; the
-// alg_impl call site is provably inert (see noop_recovery.h and the call-site
-// comment in alg_impl) — no live recovery dispatcher exists yet.
+// std::unique_ptr<RecoveryChain> (concrete type depends on settings — see
+// the recovery_ field comment below; complete only in psiopt.cpp). Same
+// forward-declare + out-of-line ctor/dtor discipline. NoopRecovery is
+// installed only on the all-default path (max_soc_ == 0, ls_extended_iters_
+// == 0, watchdog_ == false, restoration_mode_ == off); live links exist for
+// every opt-in (SocRecovery, ExtendedBacktrackRecovery, WatchdogRecovery,
+// FeasibilitySwitchRecovery — see rebuild_globalization_components()).
 // PSIOPT also owns an optional feasibility-restoration mode-switch through a
 // std::unique_ptr<RestorationStrategy> (concrete type ProximalSwitchRestoration
 // or NestedL1Restoration depending on restoration_mode_, complete only in

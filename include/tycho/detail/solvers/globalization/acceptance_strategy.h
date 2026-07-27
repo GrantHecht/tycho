@@ -6,26 +6,31 @@
 // strategy component (line search & merit), whose interface shape is adapted
 // from Uno (source-verified).
 //
-// This file: pure interface declaration, no implementation anywhere in this
-// header. `classic_line_search` is the one exception with a body (see
-// below) — a throwing default, not real behavior. The generic
-// is_iterate_acceptable()/is_infeasibility_sufficiently_reduced() surface
-// exists for future filter/funnel/WMNO strategies; ClassicMeritAcceptance (a
-// separate merit_acceptance.h) stubs those two methods with "unused on
-// classic path" bodies and implements classic_line_search verbatim from
-// today's ls_impl/ls_lang/ls_l1/ls_auglang.
+// This file: the interface plus a handful of small defaulted hooks —
+// notify_switch_to_feasibility()/notify_switch_to_optimality()/
+// append_diagnostics() (no-op defaults) and classic_line_search() (a
+// throwing default, not real behavior). The generic
+// is_iterate_acceptable()/is_infeasibility_sufficiently_reduced() surface is
+// implemented for real by ModernMeritAcceptance, FunnelAcceptance, and
+// FilterAcceptance; ClassicMeritAcceptance (a separate merit_acceptance.h)
+// stubs those two methods with "unused on classic path" bodies and
+// implements classic_line_search verbatim from the former
+// ls_impl/ls_lang/ls_l1/ls_auglang.
 //
-// Ownership rule: an AcceptanceStrategy instance holds NO solver state of its
-// own (no XSL/DXSL/mu/iterate history members). Every quantity it needs is
-// either passed as an explicit per-call parameter (the per-iteration
-// transients: obj_scale, mu, prim_obj, barr_obj, the working vectors) or
-// reached through a SolverContext reference passed to the call (settings_,
-// dims, nlp_) — never cached across calls. reset() is the μ-event/phase-
-// change hook: called whenever PSIOPT starts a new phase (run_phase_sequence)
-// or the barrier parameter is reset, so a stateful future acceptance strategy
-// (e.g. a filter that must clear its (θ,f) pairs) has a defined place to do
-// it. The ClassicMeritAcceptance implementation of reset() is a no-op (the
-// classic merit test carries no persistent state across iterations today).
+// Ownership rule: an AcceptanceStrategy instance holds no SOLVER-owned state
+// (no XSL/DXSL/mu/iterate history members — those are always passed as
+// explicit per-call parameters, or reached through a SolverContext reference
+// passed to the call: settings_, dims, nlp_). Strategy-internal state is a
+// different matter and is explicitly permitted: ModernMeritAcceptance holds
+// per-solve penalty state (nu_/pi_l_/pi_u_/smallest_known_infeasibility_,
+// modern_merit.h), and FilterAcceptance holds its filter plus reset-heuristic
+// counters (filter_acceptance.h) — both cleared in reset(), never cached
+// beyond it. reset() is the μ-event/phase-change hook: called whenever
+// PSIOPT starts a new phase (run_phase_sequence) or the barrier parameter is
+// reset, so a stateful strategy (e.g. the filter clearing its (θ,f) pairs)
+// has a defined place to do it. The ClassicMeritAcceptance implementation of
+// reset() is a no-op (the classic merit test carries no persistent state
+// across iterations).
 
 #pragma once
 
@@ -94,8 +99,9 @@ class AcceptanceStrategy {
 
     // Restoration-exit test: has infeasibility been reduced enough (relative
     // to `reference`, the point restoration was entered from) to leave
-    // restoration mode? Unused until a feasibility-restoration strategy lands
-    // that calls it.
+    // restoration mode? Driven by alg_impl once a feasibility-restoration
+    // strategy is active (the near-feasible and κ_resto-ratchet exit
+    // branches, psiopt.cpp).
     virtual bool is_infeasibility_sufficiently_reduced(const ProgressMeasures &reference,
                                                         const ProgressMeasures &trial) const = 0;
 
@@ -150,10 +156,12 @@ class AcceptanceStrategy {
     virtual void append_diagnostics(PSIOPT::SolveResult &result) const { (void)result; }
 
     // --- Classic fused entry point ---
-    // Signature mirrors today's private PSIOPT::ls_impl dispatcher exactly
-    // (psiopt.h:530-533) — NOT the private per-variant
+    // Signature mirrors the former private PSIOPT::ls_impl dispatcher exactly
+    // (the symbol no longer exists — its body was extracted into
+    // ClassicMeritAcceptance; see the note beside PSIOPT::alg_impl in
+    // psiopt.h) — NOT the private per-variant
     // ls_lang/ls_l1/ls_auglang signatures, which take PSIOPT::KKTVector
-    // views. KKTVector is a private nested class of PSIOPT (psiopt.h:448)
+    // views. KKTVector is a private nested class of PSIOPT (psiopt.h)
     // and is not name-accessible from a non-member, non-friend type such as
     // this one; ls_impl's own public-facing signature already operates on
     // the raw Eigen::VectorXd blocks for exactly this reason, so mirroring

@@ -37,12 +37,16 @@
 //   KKTVector below is a VERBATIM copy of PSIOPT::KKTVector; a future change
 //   that consolidates the globalization helpers should share one copy.
 //
-// Ownership rule: BacktrackingLineSearch holds NO solver state (matches the
-// GlobalizationMechanism ownership rule). Every quantity it needs is either an
-// explicit per-call parameter (obj_scale/mu/prim_obj/barr_obj, the working
-// vectors) or reached through the SolverContext reference passed to the call
-// (settings_/dims) — never cached across calls. reset() is a no-op (classic
-// backtracking carries no persistent state across iterations).
+// Ownership rule: BacktrackingLineSearch holds no SOLVER-owned state (matches
+// the GlobalizationMechanism ownership rule). Every per-iteration transient
+// quantity (obj_scale/mu/prim_obj/barr_obj, the working vectors) is an
+// explicit per-call parameter, and settings_/dims are reached through the
+// SolverContext reference passed to the call — never cached across calls.
+// resto_eq_shift_scratch_/resto_iq_shift_scratch_ below are the one exception:
+// scratch backing storage (to avoid per-backtrack heap allocation), the same
+// discipline PSIOPT's own *_scratch_ members use — not solver state, and not
+// cleared by reset(). reset() is a no-op (classic backtracking carries no
+// persistent DECISION state across iterations).
 
 #pragma once
 
@@ -65,8 +69,9 @@ namespace tycho::solvers {
 // boundary primal/dual step-length scaling followed by an AcceptanceStrategy
 // backtrack on the scaled search direction.
 //
-// Stateless (holds NO solver state, per GlobalizationMechanism's ownership
-// rule). Constructed by PSIOPT::rebuild_globalization_components() at the
+// Holds no solver-owned state, per GlobalizationMechanism's ownership rule
+// (see the ownership-rule note above for the scratch-buffer exception).
+// Constructed by PSIOPT::rebuild_globalization_components() at the
 // start of every solve invocation; every call receives the live
 // SolverContext view of the solver as an explicit parameter.
 // =============================================================================

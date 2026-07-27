@@ -11,14 +11,20 @@
 // Fiacco-McCormick fallback, re-entry), selected via
 // Settings::barrier_governor_.
 //
-// This file: pure interface declaration, no implementation.
+// This file: the BarrierGovernor interface (pure virtual except
+// in_monotone_mode()/provides_restoration_barrier_safeguard()/
+// append_diagnostics()'s free-mode-correct defaults), plus one shared
+// non-virtual method with a real body — update_barrier_monotone() below, the
+// monotone in-phase restoration schedule every governor uses identically.
 //
-// Ownership rule: a BarrierGovernor holds NO solver state (no persistent mu_
-// member, etc.) — mu is always passed in (mu_in) and returned, never cached.
-// reset() is the μ-event/phase-change hook (mirrors AcceptanceStrategy /
-// GlobalizationMechanism); a future free<->monotone barrier governor's
-// monotone-mode bookkeeping (the KKT-error sufficient-decrease window) is
-// exactly the kind of state reset() exists to clear.
+// Ownership rule: the interface itself defines no persistent state — mu is
+// always passed in (mu_in) and returned, never cached by
+// ClassicAdaptiveGovernor. MonitoredBarrierGovernor is the exception: it
+// holds a real monotone_mu_ member (monitored_governor.h) across calls while
+// its state machine is in monotone mode. reset() is the μ-event/phase-change
+// hook (mirrors AcceptanceStrategy / GlobalizationMechanism);
+// MonitoredBarrierGovernor's reset() clears exactly that monotone-mode
+// bookkeeping (the KKT-error sufficient-decrease window plus monotone_mu_).
 
 #pragma once
 
@@ -50,7 +56,9 @@ class BarrierGovernor {
   public:
     virtual ~BarrierGovernor() = default;
 
-    // Mirrors today's psiopt.cpp:1310-1340 block. avgcomp/mincomp are the
+    // Mirrors ClassicAdaptiveGovernor::update_barrier's PROBE/LOQO body (the
+    // free-mode oracles extracted verbatim from the original inline
+    // pre-extraction block). avgcomp/mincomp are the
     // complementarity measures PSIOPT::complementarity() already computed
     // this iteration (computed once per iteration, before factorization —
     // NOT recomputed here). barmode selects PROBE (Mehrotra
@@ -77,13 +85,14 @@ class BarrierGovernor {
     // raw Eigen::VectorXd blocks the current code operates on via KKTVector
     // views constructed from SolverContext's dims.
     //
-    // mu_in is accepted for API symmetry with a future monotone-mode
-    // implementation that blends with the previous mu (Fiacco-McCormick
-    // rule); the free-mode PROBE/LOQO oracles implemented today do not read
-    // it (they compute an entirely new mu from avgcomp/mincomp, then the
-    // common tail clamps it against ctx.settings_.min_mu_/max_mu_) — unused
-    // on the classic path, analogous to AcceptanceStrategy's generic-interface
-    // stubs.
+    // mu_in is unused on the classic (ClassicAdaptiveGovernor) path — its
+    // free-mode PROBE/LOQO oracles compute an entirely new mu from
+    // avgcomp/mincomp, then the common tail clamps it against
+    // ctx.settings_.min_mu_/max_mu_ — but it is load-bearing for
+    // MonitoredBarrierGovernor, which blends it with the previous mu under
+    // the monotone Fiacco-McCormick rule (MonitoredBarrierGovernor::decide,
+    // psiopt_globalization.cpp) whenever its state machine is in monotone
+    // mode.
     //
     // Returns the new (already-clamped) mu; barr_obj is an out-parameter
     // (today's barr_obj local, set by the common tail's barrier_objective()

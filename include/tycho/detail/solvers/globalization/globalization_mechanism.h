@@ -3,20 +3,24 @@
 // =============================================================================
 //
 // Part of the globalization component extraction: this interface is the
-// backtracking line search (classic) with recovery-dispatch hooks; a
-// trust-region mechanism joins as an alternative implementation later.
+// backtracking line search (classic) with recovery-dispatch hooks. A
+// trust-region mechanism was investigated as an alternative implementation
+// and cut without being built — see
+// docs/dev/analysis/2026-07-e2-g7-tr-decision.md for the investigation, the
+// decision, and its reversal condition; this interface carries no
+// TR-specific accommodation as a result.
 //
-// This file: pure interface declaration, no implementation. The
+// This file: the GlobalizationMechanism interface (pure virtual except
+// run_acceptance_backtrack()'s throwing default — see below). The
 // implementation that ships alongside it (BacktrackingLineSearch, not part
 // of this file) is verbatim today's max_primal_dual_step() fraction-to-
 // boundary scaling followed by a classic_line_search() dispatch on the
-// AcceptanceStrategy it is given — see the riskiest-seam note below. A
-// future trust-region (TR) mechanism adds a TR step as an alternative
-// implementation of this same interface.
+// AcceptanceStrategy it is given — see the riskiest-seam note below.
 //
 // Ownership rule: a GlobalizationMechanism holds NO solver state. reset() is
-// the μ-event/phase-change hook (mirrors AcceptanceStrategy::reset(); a
-// future TR mechanism uses it to reset its radius).
+// the μ-event/phase-change hook (mirrors AcceptanceStrategy::reset()); the
+// shipped implementation's reset() is a no-op, since it carries no state to
+// clear.
 
 #pragma once
 
@@ -43,8 +47,9 @@ class GlobalizationMechanism {
     virtual ~GlobalizationMechanism() = default;
 
     // Riskiest seam in the whole extraction: today's max_primal_dual_step()
-    // SCALES DXSL's primal/slack/multiplier blocks IN PLACE (psiopt.cpp:
-    // 864-870), between the negate (DXSL = -kkt_sol_.solve(RHS)) and the
+    // SCALES DXSL's primal/slack/multiplier blocks IN PLACE (see
+    // BacktrackingLineSearch::max_primal_dual_step, psiopt_globalization.cpp),
+    // between the negate (DXSL = -kkt_sol_.solve(RHS)) and the
     // merit backtrack — and the backtrack's trial points (xsl + alpha*dxsl)
     // and the eventual commit (XSL += alpha*DXSL) both operate on that SAME,
     // already-scaled DXSL. This interface therefore fuses "compute the
@@ -86,20 +91,22 @@ class GlobalizationMechanism {
     // block can drive the SAME step-scaling through the mechanism_ base
     // pointer WITHOUT the acceptance backtrack (compute_step's second half).
     // PROBE's mpc_mu() consumes a predictor DXSL that has already been scaled
-    // to the boundary (psiopt.cpp:1323-1324); that scaling is barrier/IPM
-    // logic independent of the globalization strategy, so it belongs on this
-    // interface (a future trust-region mechanism must likewise provide it for
-    // PROBE). Reconstructs the KKTVector view over the
+    // to the boundary (see ClassicAdaptiveGovernor::update_barrier's PROBE
+    // case, psiopt_globalization.cpp); that scaling is barrier/IPM logic
+    // independent of the globalization strategy, so it belongs on this
+    // interface. Reconstructs the KKTVector view over the
     // raw XSL/DXSL blocks internally and MUTATES DXSL in place; bfrac, the
     // problem dims, and pd_step_strategy_ are read from `ctx`. alphap/alphad
     // are out-parameters (today's max_primal_dual_step out-params).
     //
     // NOTE: compute_step already applies this step (guarded by
     // inequal_cons_ > 0) as its first half; this standalone entry point exists
-    // ONLY for the PROBE predictor, which needs the scaling without a backtrack.
-    // A future free<->monotone barrier governor takes over the PROBE
-    // predictor block and becomes the second caller of this entry point
-    // (same operands, same position).
+    // for callers that need the scaling without a backtrack. Two live callers
+    // beyond compute_step itself: ClassicAdaptiveGovernor::update_barrier's
+    // PROBE predictor block (same operands, same position — and the path
+    // MonitoredBarrierGovernor's free-mode delegate also reaches through),
+    // and SocRecovery::do_correction, which re-scales a corrected direction
+    // the same way before re-testing acceptance.
     //
     // Divergence-path note: this call runs inside alg_impl's
     // GoodStep branch; pre-extraction it ran unconditionally. On a non-finite

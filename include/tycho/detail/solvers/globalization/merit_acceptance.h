@@ -30,9 +30,9 @@
 //   types. This is the "reconstructs KKTVector-equivalent segment views
 //   internally from SolverContext's dims" path acceptance_strategy.h
 //   anticipates. The duplication is deliberate and FP-safe (identical source
-//   under identical TU flags -> identical codegen); a future change that also
-//   extracts the barrier governor should consolidate these helpers into one
-//   shared home.
+//   under identical TU flags -> identical codegen); a future change should
+//   consolidate these VERBATIM copies (also duplicated by
+//   BacktrackingLineSearch and ClassicAdaptiveGovernor) into one shared home.
 
 #pragma once
 
@@ -80,8 +80,8 @@ class ClassicMeritAcceptance : public AcceptanceStrategy {
                                const ProgressMeasures &predicted_reduction,
                                double objective_multiplier, double step_length) override;
     // is_infeasibility_sufficiently_reduced: the restoration-exit test, driven
-    // by the (future) solver seam while the classic strategy runs in feasibility
-    // mode. There is no Uno counterpart — Uno pairs restoration with its own
+    // by alg_impl while the classic strategy runs in feasibility mode. There
+    // is no Uno counterpart — Uno pairs restoration with its own
     // filter/funnel strategies, not a monolithic merit line search — so the
     // Ipopt IpRestoConvCheck relative-reduction shape is the reference (see the
     // definition in psiopt_globalization.cpp for the term-for-term mapping and

@@ -65,8 +65,9 @@
 // BarrierGovernor ownership rule — mu is passed in and returned, never cached).
 // Every quantity it needs is either an explicit per-call parameter or reached
 // through the SolverContext reference passed to the call. reset() is a no-op
-// (this component has no monotone-mode bookkeeping to clear; a future
-// free<->monotone barrier governor gives it a real body).
+// (this component has no monotone-mode bookkeeping to clear; MonitoredBarrierGovernor,
+// the shipped free<->monotone governor, has a real reset() body for exactly
+// that state — see monitored_governor.h).
 
 #pragma once
 

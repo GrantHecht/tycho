@@ -158,9 +158,11 @@
 //          single constraint tolerance (restoration_constraint_tol_, defaulting
 //          to and matching PSIOPT::Settings::econ_tol_'s default). Because the
 //          strategy holds no SolverContext, that tolerance is injected via
-//          set_restoration_constraint_tol() (the future solver seam supplies the
-//          live econ_tol_ at restoration entry); the const exit test then reads
-//          the stored value — see the divergence note below.
+//          set_restoration_constraint_tol() — rebuild_globalization_components()
+//          calls it with the live econ_tol_ whenever a FilterAcceptance is
+//          built, independent of restoration_mode_ (see psiopt.cpp); the const
+//          exit test then reads the stored value — see the divergence note
+//          below.
 //
 //     (5c) notify_switch_to_optimality (exit). RESTORE the stashed optimality-
 //          phase working state and augment the restored filter with the EXIT
@@ -450,13 +452,11 @@ class FilterAcceptance final : public SwitchingAcceptance {
     // PSIOPT::Settings's own default (not a duplicated literal) so this member
     // and Settings::econ_tol_ can never silently drift apart. Configuration,
     // not working state — left untouched by reset(). See
-    // set_restoration_constraint_tol(). HARD CONTRACT: this default is only a
-    // placeholder until the solver seam exists — the future solver wiring
-    // MUST call set_restoration_constraint_tol() with the live
-    // Settings::econ_tol_ value when it activates restoration; failing to do
-    // so leaves the exit floor pinned to the default even if the user has
-    // configured a different econ_tol_, silently decoupling the restoration
-    // exit test from the user's actual constraint tolerance.
+    // set_restoration_constraint_tol(). Seeded by
+    // rebuild_globalization_components() from the live Settings::econ_tol_
+    // every solve, whenever a FilterAcceptance is built (psiopt.cpp) — the
+    // default above is only ever observed by standalone/unit-test
+    // construction that bypasses that seam.
     double restoration_constraint_tol_ = PSIOPT::Settings{}.econ_tol_;
 };
 
