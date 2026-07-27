@@ -124,9 +124,8 @@ TEST(AcceptanceDiagnostics, FakeStrategyOverrideIsInvoked) {
 // membership test rejects it before any width update runs.
 TEST(AcceptanceDiagnostics, FunnelReportsWidth) {
     FunnelAcceptance funnel;
-    const bool primed =
-        funnel.is_iterate_acceptable(pm(4.0, 0.0, 0.0), pm(100.0, 0.0, 0.0),
-                                     pm(0.0, 0.0, 0.0), 1.0, 1.0);
+    const bool primed = funnel.is_iterate_acceptable(pm(4.0, 0.0, 0.0), pm(100.0, 0.0, 0.0),
+                                                     pm(0.0, 0.0, 0.0), 1.0, 1.0);
     ASSERT_FALSE(primed);
     ASSERT_DOUBLE_EQ(funnel.funnel_width(), kFunnelInfeasibilityFactor * 4.0);
 

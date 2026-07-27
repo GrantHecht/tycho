@@ -37,7 +37,8 @@
 #include <Eigen/Core>
 
 using namespace tycho;
-using namespace TychoTest;
+using TychoTest::InertSolverContext;
+using TychoTest::SolverTest;
 
 namespace {
 
@@ -55,7 +56,6 @@ using tycho::solvers::RecoveryChain;
 using tycho::solvers::RestorationModes;
 using tycho::solvers::RestorationStrategy;
 using tycho::solvers::SolverContext;
-using TychoTest::InertSolverContext;
 
 // -----------------------------------------------------------------------------
 // Stubs (unity-unique names prefixed FeasSwitch).
@@ -593,8 +593,17 @@ TEST(FeasibilitySwitch, FilterSeedsRestorationConstraintTol) {
 // is the only way to exercise the seam.
 // -----------------------------------------------------------------------------
 
+using tycho::solvers::BarrierGovernor;
+using tycho::solvers::ClassicAdaptiveGovernor;
+using tycho::solvers::FeasibilitySwitchRecovery;
+using tycho::solvers::GlobalizationMechanism;
+using tycho::solvers::IterateInfo;
+using tycho::solvers::kMaxSoftRestoIters;
 using tycho::solvers::NestedL1Restoration;
 using tycho::solvers::OptimizationProblem;
+using tycho::solvers::PSIOPT;
+using tycho::solvers::RestorationModes;
+using tycho::solvers::SolverContext;
 
 // A non-nested restoration double: is_nested() stays false, so a correctly split
 // seam must take the proximal branch and never touch the nested surface. The

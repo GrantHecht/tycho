@@ -1,9 +1,11 @@
 ///////////////////////////////////////////////////////////////////////////////
 // Shared utilities for solver tests
 //
-// Provides the SolverTest fixture and a Brachistochrone phase builder
+// Provides the SolverTest fixture, a Brachistochrone phase builder
 // pre-configured for solver/Jet tests (silent output: print_level is inverted,
-// 0 is full output and 3+ is fully silent -- see PSIOPT::Settings::print_level_).
+// 0 is full output and 3+ is fully silent -- see PSIOPT::Settings::print_level_),
+// and InertSolverContext, an owning stand-in for globalization-component unit
+// tests that only need a SolverContext-satisfying signature, not a live solve.
 ///////////////////////////////////////////////////////////////////////////////
 
 #pragma once
@@ -68,8 +70,7 @@ inline std::shared_ptr<ODEPhase<BrachODE>> make_brach_solver_phase(int n_segs = 
 // NestedRestorationMonotoneSchedule in test_feasibility_switch.cpp).
 ///////////////////////////////////////////////////////////////////////////////
 
-class InertSolverContext {
-  public:
+struct InertSolverContext {
     PSIOPT::Settings settings_;
     KktSolverType kkt_solver_;
     Eigen::VectorXd scratch_;

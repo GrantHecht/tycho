@@ -64,8 +64,7 @@ using TychoTest::pm;
 // stays empty and the counters stay zero. Asserts the clean post-prime state.
 void FilterPrimeCeilingReject(FilterAcceptance &a, double theta0) {
     const double above_theta_max = 1.0e4 * std::max(1.0, theta0) * 2.0;
-    const bool ok = a.is_iterate_acceptable(pm(theta0, 0.0, 0.0),
-                                            pm(above_theta_max, 0.0, 0.0),
+    const bool ok = a.is_iterate_acceptable(pm(theta0, 0.0, 0.0), pm(above_theta_max, 0.0, 0.0),
                                             pm(0.0, 0.0, 0.0), 1.0, 1.0);
     EXPECT_FALSE(ok); // above θ_max ⇒ base rejects at the ceiling
     EXPECT_EQ(a.filter_size(), 0u);
@@ -78,8 +77,7 @@ void FilterPrimeCeilingReject(FilterAcceptance &a, double theta0) {
 bool FilterHType(FilterAcceptance &a, double theta_current, double phi_current, double theta_trial,
                  double phi_trial) {
     return a.is_iterate_acceptable(pm(theta_current, phi_current, 0.0),
-                                   pm(theta_trial, phi_trial, 0.0),
-                                   pm(0.0, 0.0, 0.0), 1.0, 1.0);
+                                   pm(theta_trial, phi_trial, 0.0), pm(0.0, 0.0, 0.0), 1.0, 1.0);
 }
 
 // --- Reset-heuristic helpers (all assume the seed entry E = augment(θ_c=4.0,
@@ -100,16 +98,14 @@ void FilterMembershipReject(FilterAcceptance &a) {
 // E). Runs the reset heuristic (advancing/zeroing the counter per the last
 // rejection) but does NOT augment — the filter is left unchanged.
 void FilterFTypeAccept(FilterAcceptance &a) {
-    EXPECT_TRUE(a.is_iterate_acceptable(pm(1.0e-5, 10.0, 0.0),
-                                        pm(1.0e-6, 9.9999, 0.0),
+    EXPECT_TRUE(a.is_iterate_acceptable(pm(1.0e-5, 10.0, 0.0), pm(1.0e-6, 9.9999, 0.0),
                                         pm(0.01, 0.01, 0.0), 1.0, 1.0));
 }
 
 // An F-type ARMIJO rejection (switching holds; membership passes; φ_t = 20 fails
 // Armijo) ⇒ non-filter rejection (kArmijo) ⇒ last rejection is NOT filter-caused.
 void FilterFTypeArmijoReject(FilterAcceptance &a) {
-    EXPECT_FALSE(a.is_iterate_acceptable(pm(1.0e-5, 10.0, 0.0),
-                                         pm(1.0e-6, 20.0, 0.0),
+    EXPECT_FALSE(a.is_iterate_acceptable(pm(1.0e-5, 10.0, 0.0), pm(1.0e-6, 20.0, 0.0),
                                          pm(0.01, 0.01, 0.0), 1.0, 1.0));
 }
 
@@ -324,9 +320,8 @@ TEST(FilterAcceptance, FTypeAcceptDoesNotAugment) {
     ASSERT_TRUE(FilterHType(a, /*θ_c=*/1.0, /*φ_c=*/10.0, /*θ_t=*/0.5, /*φ_t=*/10.0));
     ASSERT_EQ(a.filter_size(), 1u);
 
-    const bool ok =
-        a.is_iterate_acceptable(pm(1.0e-5, 10.0, 0.0), pm(1.0e-6, 9.9999, 0.0),
-                                pm(0.01, 0.01, 0.0), 1.0, 1.0);
+    const bool ok = a.is_iterate_acceptable(pm(1.0e-5, 10.0, 0.0), pm(1.0e-6, 9.9999, 0.0),
+                                            pm(0.01, 0.01, 0.0), 1.0, 1.0);
     EXPECT_TRUE(ok);                  // F-type accept
     EXPECT_EQ(a.filter_size(), 1u);   // untouched by the F-type step
 }
@@ -475,8 +470,7 @@ TEST(FilterAcceptance, AttributionFailsBothFTypeZeroesStreak) {
     FilterFTypeAccept(a);
     ASSERT_EQ(a.successive_filter_rejections(), 1);
 
-    EXPECT_FALSE(a.is_iterate_acceptable(pm(1.0e-5, 10.0, 0.0),
-                                         pm(50.0, 30.0, 0.0),
+    EXPECT_FALSE(a.is_iterate_acceptable(pm(1.0e-5, 10.0, 0.0), pm(50.0, 30.0, 0.0),
                                          pm(0.01, 0.01, 0.0), 1.0, 1.0));
     FilterFTypeAccept(a);
     EXPECT_EQ(a.successive_filter_rejections(), 0); // zeroed
@@ -499,8 +493,7 @@ TEST(FilterAcceptance, AttributionFailsMembershipOnlyFTypeIncrementsStreak) {
     ASSERT_TRUE(FilterHType(a, /*θ_c=*/1.0, /*φ_c=*/1.0, /*θ_t=*/0.5, /*φ_t=*/1.0)); // seed E'
     ASSERT_EQ(a.successive_filter_rejections(), 0);
 
-    EXPECT_FALSE(a.is_iterate_acceptable(pm(1.0e-5, 10.0, 0.0),
-                                         pm(2.0, 5.0, 0.0),
+    EXPECT_FALSE(a.is_iterate_acceptable(pm(1.0e-5, 10.0, 0.0), pm(2.0, 5.0, 0.0),
                                          pm(0.01, 0.01, 0.0), 1.0, 1.0));
     FilterFTypeAccept(a);
     EXPECT_EQ(a.successive_filter_rejections(), 1); // incremented
@@ -608,8 +601,7 @@ TEST(FilterAcceptance, ResetClearsEverythingAndReArms) {
 TEST(FilterRestoration, ExitAllClausesPassRelativeFloorDominates) {
     FilterAcceptance a;
     a.notify_switch_to_feasibility(pm(1.0, 10.0, 0.0));
-    EXPECT_TRUE(a.is_infeasibility_sufficiently_reduced(pm(1.0, 10.0, 0.0),
-                                                        pm(0.5, 9.0, 0.0)));
+    EXPECT_TRUE(a.is_infeasibility_sufficiently_reduced(pm(1.0, 10.0, 0.0), pm(0.5, 9.0, 0.0)));
 }
 
 // Relative floor rejects independently. Same setup; trial θ = kKappaResto +
@@ -618,8 +610,8 @@ TEST(FilterRestoration, ExitAllClausesPassRelativeFloorDominates) {
 TEST(FilterRestoration, ExitRelativeFloorRejects) {
     FilterAcceptance a;
     a.notify_switch_to_feasibility(pm(1.0, 10.0, 0.0));
-    EXPECT_FALSE(a.is_infeasibility_sufficiently_reduced(
-        pm(1.0, 10.0, 0.0), pm(kKappaResto + 0.05, 9.0, 0.0)));
+    EXPECT_FALSE(a.is_infeasibility_sufficiently_reduced(pm(1.0, 10.0, 0.0),
+                                                         pm(kKappaResto + 0.05, 9.0, 0.0)));
 }
 
 // Tolerance floor waives the relative test when θ_ref is tiny. entry/reference =
@@ -630,8 +622,8 @@ TEST(FilterRestoration, ExitRelativeFloorRejects) {
 TEST(FilterRestoration, ExitToleranceFloorWaivesRelativeWhenRefTiny) {
     FilterAcceptance a;
     a.notify_switch_to_feasibility(pm(1.0e-9, 10.0, 0.0));
-    EXPECT_TRUE(a.is_infeasibility_sufficiently_reduced(pm(1.0e-9, 10.0, 0.0),
-                                                        pm(5.0e-7, 9.0, 0.0)));
+    EXPECT_TRUE(
+        a.is_infeasibility_sufficiently_reduced(pm(1.0e-9, 10.0, 0.0), pm(5.0e-7, 9.0, 0.0)));
 }
 
 // With the injected tolerance driven below the relative target, the floor no
@@ -641,8 +633,8 @@ TEST(FilterRestoration, ExitTinyInjectedTolDoesNotWaive) {
     FilterAcceptance a;
     a.set_restoration_constraint_tol(1.0e-15);
     a.notify_switch_to_feasibility(pm(1.0e-9, 10.0, 0.0));
-    EXPECT_FALSE(a.is_infeasibility_sufficiently_reduced(pm(1.0e-9, 10.0, 0.0),
-                                                         pm(5.0e-7, 9.0, 0.0)));
+    EXPECT_FALSE(
+        a.is_infeasibility_sufficiently_reduced(pm(1.0e-9, 10.0, 0.0), pm(5.0e-7, 9.0, 0.0)));
 }
 
 // Three-way AND: the STASHED optimality filter rejects a trial that passes the
@@ -664,8 +656,7 @@ TEST(FilterRestoration, ExitStashedFilterRejectsOtherwisePassingTrial) {
     ASSERT_EQ(a.stashed_filter_size(), 2u); // E_seed + entry_pair
     ASSERT_EQ(a.filter_size(), 0u);         // working filter reinitialized fresh
 
-    EXPECT_FALSE(a.is_infeasibility_sufficiently_reduced(pm(1.0, 10.0, 0.0),
-                                                         pm(0.5, 5.0, 0.0)));
+    EXPECT_FALSE(a.is_infeasibility_sufficiently_reduced(pm(1.0, 10.0, 0.0), pm(0.5, 5.0, 0.0)));
 }
 
 // ===========================================================================

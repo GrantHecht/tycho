@@ -7,7 +7,8 @@
 #include <limits>
 
 using namespace tycho;
-using namespace TychoTest;
+using TychoTest::make_brach_solver_phase;
+using TychoTest::SolverTest;
 
 TEST_F(SolverTest, BrachistochroneEndToEnd) {
     auto phase = make_brach_solver_phase(32);
