@@ -47,6 +47,7 @@
 #include "tycho/detail/solvers/globalization/progress_measures.h"
 #include "tycho/detail/solvers/globalization/solver_context.h"
 #include "tycho/detail/solvers/iterate_info.h"
+#include "tycho/detail/solvers/kkt_vector.h"
 #include "tycho/detail/solvers/psiopt.h"
 
 namespace tycho::solvers {

@@ -60,6 +60,7 @@
 #include "tycho/detail/solvers/globalization/globalization_mechanism.h"
 #include "tycho/detail/solvers/globalization/solver_context.h"
 #include "tycho/detail/solvers/iterate_info.h"
+#include "tycho/detail/solvers/kkt_vector.h"
 #include "tycho/detail/solvers/psiopt.h"
 
 namespace tycho::solvers {
