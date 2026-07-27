@@ -16,6 +16,8 @@
 // search runs, so Citer keeps its fresh default and GoodStep is false).
 ///////////////////////////////////////////////////////////////////////////////
 
+#include "solver_test_utils.h"
+
 #include "tycho/detail/solvers/globalization/acceptance_strategy.h"
 #include "tycho/detail/solvers/globalization/classic_adaptive_governor.h"
 #include "tycho/detail/solvers/globalization/filter_acceptance.h"
@@ -24,7 +26,6 @@
 #include "tycho/detail/solvers/globalization/modern_merit.h"
 #include "tycho/detail/solvers/globalization/monitored_governor.h"
 #include "tycho/detail/solvers/globalization/recovery_chain.h"
-#include "tycho/detail/solvers/globalization/solver_context.h"
 #include "tycho/detail/solvers/iterate_info.h"
 #include "tycho/detail/solvers/psiopt_fwd.h"
 
@@ -45,13 +46,13 @@ using tycho::solvers::FunnelAcceptance;
 using tycho::solvers::GlobalizationMechanism;
 using tycho::solvers::IterateInfo;
 using tycho::solvers::kRecoveryDepthUnresolved;
-using tycho::solvers::KktSolverType;
 using tycho::solvers::MonitoredBarrierGovernor;
 using tycho::solvers::ProgressMeasures;
 using tycho::solvers::PSIOPT;
 using tycho::solvers::RecoveryChain;
 using tycho::solvers::should_dispatch_recovery;
 using tycho::solvers::SolverContext;
+using TychoTest::InertSolverContext;
 
 // Stub AcceptanceStrategy: classic_line_search stamps the configured
 // accept/reject verdict onto Citer.accepted_ (as the real merit variants do at
@@ -142,16 +143,6 @@ void drive_gate(bool good_step, IterateInfo &citer, RecoveryChain &recovery,
     }
 }
 
-// Minimal SolverContext for the recovery signature. GateRecordingRecovery never
-// dereferences it (the hook only bumps its counter), so every member binds to
-// an inert dummy: a null NLP, a default-constructed (never-factorized) KKT
-// solver, default Settings, a shared zero dimension, and a shared empty vector.
-SolverContext gate_dummy_context(KktSolverType &solver, PSIOPT::Settings &settings, int &zero,
-                                 Eigen::VectorXd &scratch) {
-    return SolverContext{nullptr, solver,  settings, zero,    zero,    zero,
-                         zero,    zero,    scratch};
-}
-
 TEST(RecoveryDispatchGate, PredicateTruthTable) {
     IterateInfo rejected;
     rejected.accepted_ = false;
@@ -165,11 +156,11 @@ TEST(RecoveryDispatchGate, PredicateTruthTable) {
 }
 
 TEST(RecoveryDispatchGate, StubAcceptanceDrivesHook) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
-    SolverContext ctx = gate_dummy_context(solver, settings, zero, scratch);
+    // Minimal SolverContext for the recovery signature. GateRecordingRecovery
+    // never dereferences it (the hook only bumps its counter), so an inert,
+    // all-zero-dimension context suffices.
+    InertSolverContext inert;
+    SolverContext ctx = inert.ctx();
     const std::vector<IterateInfo> iters;
     Eigen::VectorXd v; // inert working vectors for the stub line search
 

@@ -20,9 +20,10 @@
 // cpp for the alg_impl dispatch-gate test; this file does not repeat either.
 ///////////////////////////////////////////////////////////////////////////////
 
+#include "solver_test_utils.h"
+
 #include "tycho/detail/solvers/globalization/globalization_mechanism.h"
 #include "tycho/detail/solvers/globalization/recovery_chain.h"
-#include "tycho/detail/solvers/globalization/solver_context.h"
 #include "tycho/detail/solvers/globalization/watchdog.h"
 #include "tycho/detail/solvers/iterate_info.h"
 
@@ -44,7 +45,6 @@ using tycho::solvers::kRecoveryDepthExtended;
 using tycho::solvers::kRecoveryDepthSoc;
 using tycho::solvers::kRecoveryDepthUnresolved;
 using tycho::solvers::kRecoveryDepthWatchdog;
-using tycho::solvers::KktSolverType;
 using tycho::solvers::kWatchdogShortenedIterTrigger;
 using tycho::solvers::kWatchdogTrialIterMax;
 using tycho::solvers::ProgressMeasures;
@@ -53,6 +53,7 @@ using tycho::solvers::RecoveryChain;
 using tycho::solvers::SolverContext;
 using tycho::solvers::WatchdogRecovery;
 using tycho::solvers::WatchdogState;
+using TychoTest::InertSolverContext;
 
 using Action = RecoveryChain::Action;
 using Outcome = WatchdogState::Outcome;
@@ -271,21 +272,12 @@ class ExtBtScriptedAcceptance : public AcceptanceStrategy {
     std::vector<std::pair<bool, double>> outcomes_;
 };
 
-SolverContext extbt_dummy_context(KktSolverType &solver, PSIOPT::Settings &settings, int &zero,
-                                  Eigen::VectorXd &scratch) {
-    return SolverContext{nullptr, solver,  settings, zero,    zero,    zero,
-                         zero,    zero,    scratch};
-}
-
 // ls_extended_iters_ == 0 (off): decline immediately, touching neither the
 // acceptance nor the mechanism.
 TEST(ExtendedBacktrackGuards, DisabledDeclines) {
-    PSIOPT::Settings settings;
-    settings.ls_extended_iters_ = 0;
-    KktSolverType solver;
-    int zero = 0;
-    Eigen::VectorXd scratch;
-    SolverContext ctx = extbt_dummy_context(solver, settings, zero, scratch);
+    InertSolverContext inert;
+    inert.settings_.ls_extended_iters_ = 0;
+    SolverContext ctx = inert.ctx();
     ExtBtUnusedAcceptance acceptance;
     ExtBtPassThroughMechanism mechanism;
     IterateInfo citer;
@@ -309,12 +301,9 @@ TEST(ExtendedBacktrackGuards, DisabledDeclines) {
 // is the previous call's returned alpha times the previous scale. The cap
 // (ls_extended_iters_) bounds the number of external calls.
 TEST(ExtendedBacktrackLadder, ContinuesFromLiveAlphaAndHonorsCap) {
-    PSIOPT::Settings settings;
-    settings.ls_extended_iters_ = 3;
-    KktSolverType solver;
-    int zero = 0;
-    Eigen::VectorXd scratch;
-    SolverContext ctx = extbt_dummy_context(solver, settings, zero, scratch);
+    InertSolverContext inert;
+    inert.settings_.ls_extended_iters_ = 3;
+    SolverContext ctx = inert.ctx();
     ExtBtPassThroughMechanism mechanism;
     IterateInfo citer;
     const std::vector<IterateInfo> iters;
@@ -353,12 +342,9 @@ TEST(ExtendedBacktrackLadder, ContinuesFromLiveAlphaAndHonorsCap) {
 // Acceptance mid-ladder stops immediately (does not spend the remaining
 // budget) and commits the accepted scaled direction/alpha.
 TEST(ExtendedBacktrackLadder, AcceptsAndStopsEarly) {
-    PSIOPT::Settings settings;
-    settings.ls_extended_iters_ = 5; // budget bigger than needed
-    KktSolverType solver;
-    int zero = 0;
-    Eigen::VectorXd scratch;
-    SolverContext ctx = extbt_dummy_context(solver, settings, zero, scratch);
+    InertSolverContext inert;
+    inert.settings_.ls_extended_iters_ = 5; // budget bigger than needed
+    SolverContext ctx = inert.ctx();
     ExtBtPassThroughMechanism mechanism;
     IterateInfo citer;
     const std::vector<IterateInfo> iters;
@@ -454,12 +440,6 @@ class WatchdogSpyRecovery : public RecoveryChain {
     Action action_;
 };
 
-SolverContext watchdog_dummy_context(KktSolverType &solver, PSIOPT::Settings &settings, int &zero,
-                                     Eigen::VectorXd &scratch) {
-    return SolverContext{nullptr, solver,  settings, zero,    zero,    zero,
-                         zero,    zero,    scratch};
-}
-
 struct WatchdogChainDrive {
     IterateInfo citer;
     std::vector<IterateInfo> iters;
@@ -481,11 +461,8 @@ Action watchdog_drive_chain(RecoveryChain &chain, WatchdogChainDrive &d, SolverC
 // SOC tried first: if the SOC-position link resolves (returns non-kAcceptAsIs),
 // the extended-position link is never consulted, and resolved_depth == SOC.
 TEST(ChainedRecoveryOrdering, SocResolvesFirst) {
-    PSIOPT::Settings settings;
-    KktSolverType solver;
-    int zero = 0;
-    Eigen::VectorXd scratch;
-    SolverContext ctx = watchdog_dummy_context(solver, settings, zero, scratch);
+    InertSolverContext inert;
+    SolverContext ctx = inert.ctx();
     WatchdogUnusedAcceptance acceptance;
     WatchdogUnusedMechanism mechanism;
 
@@ -507,11 +484,8 @@ TEST(ChainedRecoveryOrdering, SocResolvesFirst) {
 // SOC declines (kAcceptAsIs): the extended-position link IS consulted, and if
 // it resolves, resolved_depth == extended.
 TEST(ChainedRecoveryOrdering, ExtendedResolvesWhenSocDeclines) {
-    PSIOPT::Settings settings;
-    KktSolverType solver;
-    int zero = 0;
-    Eigen::VectorXd scratch;
-    SolverContext ctx = watchdog_dummy_context(solver, settings, zero, scratch);
+    InertSolverContext inert;
+    SolverContext ctx = inert.ctx();
     WatchdogUnusedAcceptance acceptance;
     WatchdogUnusedMechanism mechanism;
 
@@ -532,11 +506,8 @@ TEST(ChainedRecoveryOrdering, ExtendedResolvesWhenSocDeclines) {
 
 // Both links decline: unresolved (today's classic give-up).
 TEST(ChainedRecoveryOrdering, BothDeclineIsUnresolved) {
-    PSIOPT::Settings settings;
-    KktSolverType solver;
-    int zero = 0;
-    Eigen::VectorXd scratch;
-    SolverContext ctx = watchdog_dummy_context(solver, settings, zero, scratch);
+    InertSolverContext inert;
+    SolverContext ctx = inert.ctx();
     WatchdogUnusedAcceptance acceptance;
     WatchdogUnusedMechanism mechanism;
 
@@ -588,11 +559,8 @@ Action drive_watchdog(WatchdogRecovery &watchdog, SolverContext &ctx,
 // WatchdogRecovery as an outer decorator: while not armed, delegates every
 // rejection through to the wrapped chain unchanged.
 TEST(WatchdogRecoveryDecorator, DelegatesWhileNotArmed) {
-    PSIOPT::Settings settings;
-    KktSolverType solver;
-    int zero = 0;
-    Eigen::VectorXd scratch;
-    SolverContext ctx = watchdog_dummy_context(solver, settings, zero, scratch);
+    InertSolverContext inert;
+    SolverContext ctx = inert.ctx();
     WatchdogUnusedAcceptance acceptance;
     WatchdogUnusedMechanism mechanism;
 
@@ -621,11 +589,8 @@ TEST(WatchdogRecoveryDecorator, DelegatesWhileNotArmed) {
 // snapshot in place and increments watchdog_activations exactly once (at the
 // arm event, not on every subsequent trial).
 TEST(WatchdogRecoveryDecorator, ArmsRelaxesThenReverts) {
-    PSIOPT::Settings settings;
-    KktSolverType solver;
-    int zero = 0;
-    Eigen::VectorXd scratch;
-    SolverContext ctx = watchdog_dummy_context(solver, settings, zero, scratch);
+    InertSolverContext inert;
+    SolverContext ctx = inert.ctx();
     WatchdogUnusedAcceptance acceptance;
     WatchdogUnusedMechanism mechanism;
 
@@ -699,11 +664,8 @@ TEST(WatchdogRecoveryDecorator, ArmsRelaxesThenReverts) {
 // A trial iterate whose merit beats the snapshot reference disarms and hands
 // the rejection back to the wrapped chain — the "emergency is over" path.
 TEST(WatchdogRecoveryDecorator, ProgressDisarmsAndDelegatesBack) {
-    PSIOPT::Settings settings;
-    KktSolverType solver;
-    int zero = 0;
-    Eigen::VectorXd scratch;
-    SolverContext ctx = watchdog_dummy_context(solver, settings, zero, scratch);
+    InertSolverContext inert;
+    SolverContext ctx = inert.ctx();
     WatchdogUnusedAcceptance acceptance;
     WatchdogUnusedMechanism mechanism;
 
@@ -746,11 +708,8 @@ TEST(WatchdogRecoveryDecorator, ProgressDisarmsAndDelegatesBack) {
 // the WatchdogStateArm-level pin, driven this time through the decorator so
 // the inner-delegation wiring is covered too).
 TEST(WatchdogRecoveryDecorator, NotifyStepAcceptedResetsArmingCounter) {
-    PSIOPT::Settings settings;
-    KktSolverType solver;
-    int zero = 0;
-    Eigen::VectorXd scratch;
-    SolverContext ctx = watchdog_dummy_context(solver, settings, zero, scratch);
+    InertSolverContext inert;
+    SolverContext ctx = inert.ctx();
     WatchdogUnusedAcceptance acceptance;
     WatchdogUnusedMechanism mechanism;
 

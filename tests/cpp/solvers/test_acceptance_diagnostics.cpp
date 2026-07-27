@@ -17,10 +17,11 @@
 // across tests/cpp/ (grep-confirmed no other "Diag"-prefixed symbol exists).
 ///////////////////////////////////////////////////////////////////////////////
 
+#include "progress_measures_test_utils.h"
+
 #include "tycho/detail/solvers/globalization/acceptance_strategy.h"
 #include "tycho/detail/solvers/globalization/filter_acceptance.h"
 #include "tycho/detail/solvers/globalization/funnel_acceptance.h"
-#include "tycho/detail/solvers/globalization/progress_measures.h"
 #include "tycho/detail/solvers/psiopt.h"
 
 #include <gtest/gtest.h>
@@ -33,15 +34,7 @@ using tycho::solvers::FunnelAcceptance;
 using tycho::solvers::kFunnelInfeasibilityFactor;
 using tycho::solvers::ProgressMeasures;
 using tycho::solvers::PSIOPT;
-
-// File-unique helper.
-ProgressMeasures DiagMakePm(double infeasibility, double objective, double auxiliary) {
-    ProgressMeasures pm;
-    pm.infeasibility = infeasibility;
-    pm.objective = objective;
-    pm.auxiliary = auxiliary;
-    return pm;
-}
+using TychoTest::pm;
 
 // Bare AcceptanceStrategy: implements only the pure-virtual surface and does
 // NOT override append_diagnostics(), so it exercises the base class's default
@@ -132,8 +125,8 @@ TEST(AcceptanceDiagnostics, FakeStrategyOverrideIsInvoked) {
 TEST(AcceptanceDiagnostics, FunnelReportsWidth) {
     FunnelAcceptance funnel;
     const bool primed =
-        funnel.is_iterate_acceptable(DiagMakePm(4.0, 0.0, 0.0), DiagMakePm(100.0, 0.0, 0.0),
-                                     DiagMakePm(0.0, 0.0, 0.0), 1.0, 1.0);
+        funnel.is_iterate_acceptable(pm(4.0, 0.0, 0.0), pm(100.0, 0.0, 0.0),
+                                     pm(0.0, 0.0, 0.0), 1.0, 1.0);
     ASSERT_FALSE(primed);
     ASSERT_DOUBLE_EQ(funnel.funnel_width(), kFunnelInfeasibilityFactor * 4.0);
 
@@ -174,9 +167,9 @@ TEST(AcceptanceDiagnostics, DiagFunnelUninitializedWidthSentinel) {
 // at 0 (nowhere near the kFilterResetTrigger streak).
 TEST(AcceptanceDiagnostics, FilterReportsSizeAndResets) {
     FilterAcceptance filter;
-    const bool accepted = filter.is_iterate_acceptable(DiagMakePm(/*theta=*/4.0, /*phi=*/20.0, 0.0),
-                                                       DiagMakePm(/*theta=*/1.0, /*phi=*/20.0, 0.0),
-                                                       DiagMakePm(0.0, 0.0, 0.0), 1.0, 1.0);
+    const bool accepted = filter.is_iterate_acceptable(pm(/*theta=*/4.0, /*phi=*/20.0, 0.0),
+                                                       pm(/*theta=*/1.0, /*phi=*/20.0, 0.0),
+                                                       pm(0.0, 0.0, 0.0), 1.0, 1.0);
     ASSERT_TRUE(accepted);
     ASSERT_EQ(filter.filter_size(), 1u);
     ASSERT_EQ(filter.filter_resets(), 0);

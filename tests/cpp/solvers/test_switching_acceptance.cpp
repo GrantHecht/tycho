@@ -26,9 +26,9 @@
 //   φ(pt) = pt.objective + pt.auxiliary
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "tycho/detail/solvers/globalization/switching_acceptance.h"
+#include "progress_measures_test_utils.h"
 
-#include "tycho/detail/solvers/globalization/progress_measures.h"
+#include "tycho/detail/solvers/globalization/switching_acceptance.h"
 
 #include <gtest/gtest.h>
 
@@ -41,16 +41,7 @@ using tycho::solvers::kThetaMinFact;
 using tycho::solvers::ProgressMeasures;
 using tycho::solvers::RejectionCause;
 using tycho::solvers::SwitchingAcceptance;
-
-// File-unique helper (UNITY RULE: anonymous namespace does not protect names;
-// prefixed Switching* to stay unique across tests/cpp/).
-ProgressMeasures SwitchingMakePm(double infeasibility, double objective, double auxiliary) {
-    ProgressMeasures pm;
-    pm.infeasibility = infeasibility;
-    pm.objective = objective;
-    pm.auxiliary = auxiliary;
-    return pm;
-}
+using TychoTest::pm;
 
 // Minimal concrete subclass: records every hook call so a test can assert which
 // branch of the template method ran, lets a test script the membership and
@@ -122,9 +113,9 @@ class SwitchingFakeAcceptance : public SwitchingAcceptance {
 // membership passes, H-type progress passes ⇒ accept, register(h_type = true).
 TEST(SwitchingAcceptance, LazyInitCapturesThetaZero) {
     SwitchingFakeAcceptance a;
-    const bool ok = a.is_iterate_acceptable(SwitchingMakePm(2.0, 10.0, 0.0),
-                                            SwitchingMakePm(0.1, 9.0, 0.0),
-                                            SwitchingMakePm(1.0, 1.0, 0.0), 1.0, 1.0);
+    const bool ok = a.is_iterate_acceptable(pm(2.0, 10.0, 0.0),
+                                            pm(0.1, 9.0, 0.0),
+                                            pm(1.0, 1.0, 0.0), 1.0, 1.0);
     EXPECT_TRUE(ok);
     EXPECT_EQ(a.initialize_bounds_calls, 1);
     EXPECT_DOUBLE_EQ(a.last_theta0, 2.0);
@@ -140,14 +131,14 @@ TEST(SwitchingAcceptance, LazyInitCapturesThetaZero) {
 // bounds stay pinned to the FIRST call's θ₀ until reset().
 TEST(SwitchingAcceptance, LazyInitOnlyOnceUntilReset) {
     SwitchingFakeAcceptance a;
-    a.is_iterate_acceptable(SwitchingMakePm(2.0, 10.0, 0.0), SwitchingMakePm(0.1, 9.0, 0.0),
-                            SwitchingMakePm(1.0, 1.0, 0.0), 1.0, 1.0);
+    a.is_iterate_acceptable(pm(2.0, 10.0, 0.0), pm(0.1, 9.0, 0.0),
+                            pm(1.0, 1.0, 0.0), 1.0, 1.0);
     ASSERT_EQ(a.initialize_bounds_calls, 1);
     const double theta_min_after_first = a.theta_min();
     const double theta_max_after_first = a.theta_max();
 
-    a.is_iterate_acceptable(SwitchingMakePm(5.0, 10.0, 0.0), SwitchingMakePm(0.1, 9.0, 0.0),
-                            SwitchingMakePm(1.0, 1.0, 0.0), 1.0, 1.0);
+    a.is_iterate_acceptable(pm(5.0, 10.0, 0.0), pm(0.1, 9.0, 0.0),
+                            pm(1.0, 1.0, 0.0), 1.0, 1.0);
     EXPECT_EQ(a.initialize_bounds_calls, 1); // still 1 — not re-armed
     EXPECT_DOUBLE_EQ(a.theta_min(), theta_min_after_first);
     EXPECT_DOUBLE_EQ(a.theta_max(), theta_max_after_first);
@@ -158,15 +149,15 @@ TEST(SwitchingAcceptance, LazyInitOnlyOnceUntilReset) {
 //   θ₀ (2nd arm) = 10.0 ⇒ θ_min = 1e-4·10 = 1e-3, θ_max = 1e4·10 = 1e5.
 TEST(SwitchingAcceptance, ResetRearmsLazyInit) {
     SwitchingFakeAcceptance a;
-    a.is_iterate_acceptable(SwitchingMakePm(2.0, 10.0, 0.0), SwitchingMakePm(0.1, 9.0, 0.0),
-                            SwitchingMakePm(1.0, 1.0, 0.0), 1.0, 1.0);
+    a.is_iterate_acceptable(pm(2.0, 10.0, 0.0), pm(0.1, 9.0, 0.0),
+                            pm(1.0, 1.0, 0.0), 1.0, 1.0);
     ASSERT_EQ(a.initialize_bounds_calls, 1);
 
     a.reset();
     EXPECT_EQ(a.reset_bounds_calls, 1);
 
-    a.is_iterate_acceptable(SwitchingMakePm(10.0, 10.0, 0.0), SwitchingMakePm(0.1, 9.0, 0.0),
-                            SwitchingMakePm(1.0, 1.0, 0.0), 1.0, 1.0);
+    a.is_iterate_acceptable(pm(10.0, 10.0, 0.0), pm(0.1, 9.0, 0.0),
+                            pm(1.0, 1.0, 0.0), 1.0, 1.0);
     EXPECT_EQ(a.initialize_bounds_calls, 2);
     EXPECT_DOUBLE_EQ(a.last_theta0, 10.0);
     EXPECT_DOUBLE_EQ(a.theta_min(), kThetaMinFact * 10.0);
@@ -184,9 +175,9 @@ TEST(SwitchingAcceptance, ThetaMaxCeilingRejectsRegardless) {
     SwitchingFakeAcceptance a;
     a.membership_verdict = true;
     a.h_progress_verdict = true;
-    const bool ok = a.is_iterate_acceptable(SwitchingMakePm(1.0, 10.0, 0.0),
-                                            SwitchingMakePm(10100.0, 9.0, 0.0),
-                                            SwitchingMakePm(1.0, 1.0, 0.0), 1.0, 1.0);
+    const bool ok = a.is_iterate_acceptable(pm(1.0, 10.0, 0.0),
+                                            pm(10100.0, 9.0, 0.0),
+                                            pm(1.0, 1.0, 0.0), 1.0, 1.0);
     EXPECT_FALSE(ok);
     EXPECT_DOUBLE_EQ(a.theta_max(), kThetaMaxFact * 1.0);
     EXPECT_EQ(a.membership_calls, 0);
@@ -224,9 +215,9 @@ TEST(SwitchingAcceptance, MembershipRejectsFTypeTrial) {
     SwitchingFakeAcceptance a;
     a.membership_verdict = false; // strategy blocks the trial
     a.h_progress_verdict = true;  // would accept if (wrongly) reached
-    const bool ok = a.is_iterate_acceptable(SwitchingMakePm(1.0e-5, 10.0, 0.0),
-                                            SwitchingMakePm(1.0e-6, 9.9999, 0.0),
-                                            SwitchingMakePm(0.01, 0.01, 0.0), 1.0, 1.0);
+    const bool ok = a.is_iterate_acceptable(pm(1.0e-5, 10.0, 0.0),
+                                            pm(1.0e-6, 9.9999, 0.0),
+                                            pm(0.01, 0.01, 0.0), 1.0, 1.0);
     EXPECT_FALSE(ok);
     EXPECT_EQ(a.membership_calls, 1);
     EXPECT_EQ(a.h_progress_calls, 0); // switching/Armijo/H-type never reached
@@ -244,9 +235,9 @@ TEST(SwitchingAcceptance, MembershipRejectsFTypeTrialArmijoWouldFail) {
     SwitchingFakeAcceptance a;
     a.membership_verdict = false;
     a.h_progress_verdict = true; // would accept if (wrongly) reached
-    const bool ok = a.is_iterate_acceptable(SwitchingMakePm(1.0e-5, 10.0, 0.0),
-                                            SwitchingMakePm(1.0e-6, 20.0, 0.0),
-                                            SwitchingMakePm(0.01, 0.01, 0.0), 1.0, 1.0);
+    const bool ok = a.is_iterate_acceptable(pm(1.0e-5, 10.0, 0.0),
+                                            pm(1.0e-6, 20.0, 0.0),
+                                            pm(0.01, 0.01, 0.0), 1.0, 1.0);
     EXPECT_FALSE(ok);
     EXPECT_EQ(a.membership_calls, 1);
     EXPECT_EQ(a.h_progress_calls, 0); // speculative T1 is Armijo, not H-type
@@ -264,9 +255,9 @@ TEST(SwitchingAcceptance, MembershipRejectsHTypeTrialProgressWouldPass) {
     SwitchingFakeAcceptance a;
     a.membership_verdict = false;
     a.h_progress_verdict = true;
-    const bool ok = a.is_iterate_acceptable(SwitchingMakePm(0.5, 10.0, 0.0),
-                                            SwitchingMakePm(0.4, 9.0, 0.0),
-                                            SwitchingMakePm(0.1, 1.0e6, 0.0), 1.0, 1.0);
+    const bool ok = a.is_iterate_acceptable(pm(0.5, 10.0, 0.0),
+                                            pm(0.4, 9.0, 0.0),
+                                            pm(0.1, 1.0e6, 0.0), 1.0, 1.0);
     EXPECT_FALSE(ok);
     EXPECT_EQ(a.membership_calls, 1);
     EXPECT_EQ(a.h_progress_calls, 1); // speculative T1 delegates to H-type here
@@ -282,9 +273,9 @@ TEST(SwitchingAcceptance, MembershipRejectsHTypeTrialProgressWouldFail) {
     SwitchingFakeAcceptance a;
     a.membership_verdict = false;
     a.h_progress_verdict = false;
-    const bool ok = a.is_iterate_acceptable(SwitchingMakePm(0.5, 10.0, 0.0),
-                                            SwitchingMakePm(0.4, 9.0, 0.0),
-                                            SwitchingMakePm(0.1, 1.0e6, 0.0), 1.0, 1.0);
+    const bool ok = a.is_iterate_acceptable(pm(0.5, 10.0, 0.0),
+                                            pm(0.4, 9.0, 0.0),
+                                            pm(0.1, 1.0e6, 0.0), 1.0, 1.0);
     EXPECT_FALSE(ok);
     EXPECT_EQ(a.membership_calls, 1);
     EXPECT_EQ(a.h_progress_calls, 1);
@@ -314,14 +305,14 @@ TEST(SwitchingAcceptance, SwitchingHoldsFTypeArmijoAccepts) {
     SwitchingFakeAcceptance a;
     a.membership_verdict = true;
     a.h_progress_verdict = false; // would reject if (wrongly) delegated to H-type
-    a.is_iterate_acceptable(SwitchingMakePm(1.0, 0.0, 0.0), SwitchingMakePm(0.5, 0.0, 0.0),
-                            SwitchingMakePm(0.5, 1.0, 0.0), 1.0, 1.0); // priming call, θ₀=1.0
+    a.is_iterate_acceptable(pm(1.0, 0.0, 0.0), pm(0.5, 0.0, 0.0),
+                            pm(0.5, 1.0, 0.0), 1.0, 1.0); // priming call, θ₀=1.0
     ASSERT_DOUBLE_EQ(a.theta_min(), 1.0e-4);
     a.clear_hook_counters(); // isolate the call under test
 
-    const bool ok = a.is_iterate_acceptable(SwitchingMakePm(1.0e-5, 10.0, 0.0),
-                                            SwitchingMakePm(1.0e-6, 9.9999, 0.0),
-                                            SwitchingMakePm(0.01, 0.01, 0.0), 1.0, 1.0);
+    const bool ok = a.is_iterate_acceptable(pm(1.0e-5, 10.0, 0.0),
+                                            pm(1.0e-6, 9.9999, 0.0),
+                                            pm(0.01, 0.01, 0.0), 1.0, 1.0);
     EXPECT_TRUE(ok);
     EXPECT_EQ(a.membership_calls, 1);
     EXPECT_EQ(a.h_progress_calls, 0);
@@ -337,13 +328,13 @@ TEST(SwitchingAcceptance, SwitchingHoldsFTypeArmijoRejects) {
     SwitchingFakeAcceptance a;
     a.membership_verdict = true;
     a.h_progress_verdict = true; // would accept if (wrongly) delegated to H-type
-    a.is_iterate_acceptable(SwitchingMakePm(1.0, 0.0, 0.0), SwitchingMakePm(0.5, 0.0, 0.0),
-                            SwitchingMakePm(0.5, 1.0, 0.0), 1.0, 1.0); // priming call, θ₀=1.0
+    a.is_iterate_acceptable(pm(1.0, 0.0, 0.0), pm(0.5, 0.0, 0.0),
+                            pm(0.5, 1.0, 0.0), 1.0, 1.0); // priming call, θ₀=1.0
     a.clear_hook_counters();
 
-    const bool ok = a.is_iterate_acceptable(SwitchingMakePm(1.0e-5, 10.0, 0.0),
-                                            SwitchingMakePm(1.0e-6, 20.0, 0.0),
-                                            SwitchingMakePm(0.01, 0.01, 0.0), 1.0, 1.0);
+    const bool ok = a.is_iterate_acceptable(pm(1.0e-5, 10.0, 0.0),
+                                            pm(1.0e-6, 20.0, 0.0),
+                                            pm(0.01, 0.01, 0.0), 1.0, 1.0);
     EXPECT_FALSE(ok);
     EXPECT_EQ(a.membership_calls, 1);
     EXPECT_EQ(a.h_progress_calls, 0);
@@ -360,13 +351,13 @@ TEST(SwitchingAcceptance, NonDescentForcesHType) {
     SwitchingFakeAcceptance a;
     a.membership_verdict = true;
     a.h_progress_verdict = true;
-    a.is_iterate_acceptable(SwitchingMakePm(1.0, 0.0, 0.0), SwitchingMakePm(0.5, 0.0, 0.0),
-                            SwitchingMakePm(0.5, 1.0, 0.0), 1.0, 1.0); // priming call, θ₀=1.0
+    a.is_iterate_acceptable(pm(1.0, 0.0, 0.0), pm(0.5, 0.0, 0.0),
+                            pm(0.5, 1.0, 0.0), 1.0, 1.0); // priming call, θ₀=1.0
     a.clear_hook_counters();
 
-    const bool ok = a.is_iterate_acceptable(SwitchingMakePm(1.0e-5, 10.0, 0.0),
-                                            SwitchingMakePm(1.0e-6, 9.0, 0.0),
-                                            SwitchingMakePm(0.5, 0.0, 0.0), // m_f = 0, not descent
+    const bool ok = a.is_iterate_acceptable(pm(1.0e-5, 10.0, 0.0),
+                                            pm(1.0e-6, 9.0, 0.0),
+                                            pm(0.5, 0.0, 0.0), // m_f = 0, not descent
                                             1.0, 1.0);
     EXPECT_TRUE(ok);
     EXPECT_EQ(a.membership_calls, 1);
@@ -384,13 +375,13 @@ TEST(SwitchingAcceptance, InequalityFailsForcesHType) {
     SwitchingFakeAcceptance a;
     a.membership_verdict = true;
     a.h_progress_verdict = false;
-    a.is_iterate_acceptable(SwitchingMakePm(1.0, 0.0, 0.0), SwitchingMakePm(0.5, 0.0, 0.0),
-                            SwitchingMakePm(0.5, 1.0, 0.0), 1.0, 1.0); // priming call, θ₀=1.0
+    a.is_iterate_acceptable(pm(1.0, 0.0, 0.0), pm(0.5, 0.0, 0.0),
+                            pm(0.5, 1.0, 0.0), 1.0, 1.0); // priming call, θ₀=1.0
     a.clear_hook_counters();
 
     const bool ok = a.is_iterate_acceptable(
-        SwitchingMakePm(1.0e-5, 10.0, 0.0), SwitchingMakePm(1.0e-6, 9.0, 0.0),
-        SwitchingMakePm(0.5, 1.0e-9, 0.0), 1.0, 1.0);
+        pm(1.0e-5, 10.0, 0.0), pm(1.0e-6, 9.0, 0.0),
+        pm(0.5, 1.0e-9, 0.0), 1.0, 1.0);
     EXPECT_FALSE(ok);
     EXPECT_EQ(a.membership_calls, 1);
     EXPECT_EQ(a.h_progress_calls, 1);
@@ -409,13 +400,13 @@ TEST(SwitchingAcceptance, ThetaAboveMinAlwaysHType) {
     SwitchingFakeAcceptance a;
     a.membership_verdict = true;
     a.h_progress_verdict = true;
-    a.is_iterate_acceptable(SwitchingMakePm(1.0, 0.0, 0.0), SwitchingMakePm(0.5, 0.0, 0.0),
-                            SwitchingMakePm(0.5, 1.0, 0.0), 1.0, 1.0); // priming call, θ₀=1.0
+    a.is_iterate_acceptable(pm(1.0, 0.0, 0.0), pm(0.5, 0.0, 0.0),
+                            pm(0.5, 1.0, 0.0), 1.0, 1.0); // priming call, θ₀=1.0
     a.clear_hook_counters();
 
-    const bool ok = a.is_iterate_acceptable(SwitchingMakePm(0.5, 10.0, 0.0),
-                                            SwitchingMakePm(0.4, 9.0, 0.0),
-                                            SwitchingMakePm(0.1, 1.0e6, 0.0), 1.0, 1.0);
+    const bool ok = a.is_iterate_acceptable(pm(0.5, 10.0, 0.0),
+                                            pm(0.4, 9.0, 0.0),
+                                            pm(0.1, 1.0e6, 0.0), 1.0, 1.0);
     EXPECT_TRUE(ok);
     EXPECT_EQ(a.membership_calls, 1);
     EXPECT_EQ(a.h_progress_calls, 1);
@@ -432,9 +423,9 @@ TEST(SwitchingAcceptance, HTypeAcceptedRegistersBookkeeping) {
     SwitchingFakeAcceptance a;
     a.membership_verdict = true;
     a.h_progress_verdict = true;
-    const bool ok = a.is_iterate_acceptable(SwitchingMakePm(1.0, 10.0, 0.0),
-                                            SwitchingMakePm(0.9, 9.0, 0.0),
-                                            SwitchingMakePm(0.1, 1.0, 0.0), 1.0, 1.0);
+    const bool ok = a.is_iterate_acceptable(pm(1.0, 10.0, 0.0),
+                                            pm(0.9, 9.0, 0.0),
+                                            pm(0.1, 1.0, 0.0), 1.0, 1.0);
     EXPECT_TRUE(ok);
     EXPECT_EQ(a.register_calls, 1);
     EXPECT_TRUE(a.last_register_h_type);
@@ -444,9 +435,9 @@ TEST(SwitchingAcceptance, HTypeRejectedSkipsBookkeeping) {
     SwitchingFakeAcceptance a;
     a.membership_verdict = true;
     a.h_progress_verdict = false;
-    const bool ok = a.is_iterate_acceptable(SwitchingMakePm(1.0, 10.0, 0.0),
-                                            SwitchingMakePm(0.9, 9.0, 0.0),
-                                            SwitchingMakePm(0.1, 1.0, 0.0), 1.0, 1.0);
+    const bool ok = a.is_iterate_acceptable(pm(1.0, 10.0, 0.0),
+                                            pm(0.9, 9.0, 0.0),
+                                            pm(0.1, 1.0, 0.0), 1.0, 1.0);
     EXPECT_FALSE(ok);
     EXPECT_EQ(a.register_calls, 0);
     EXPECT_EQ(a.rejected_calls, 1);
@@ -465,8 +456,8 @@ TEST(SwitchingAcceptance, DrivesGenericPath) {
 
 TEST(SwitchingAcceptance, RestorationHookThrows) {
     SwitchingFakeAcceptance a;
-    EXPECT_THROW(a.is_infeasibility_sufficiently_reduced(SwitchingMakePm(1.0, 0.0, 0.0),
-                                                         SwitchingMakePm(1.0, 0.0, 0.0)),
+    EXPECT_THROW(a.is_infeasibility_sufficiently_reduced(pm(1.0, 0.0, 0.0),
+                                                         pm(1.0, 0.0, 0.0)),
                  std::logic_error);
 }
 

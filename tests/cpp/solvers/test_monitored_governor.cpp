@@ -23,6 +23,8 @@
 // tests/cpp/ (grep-confirmed no other "MonGov" symbol exists).
 ///////////////////////////////////////////////////////////////////////////////
 
+#include "solver_test_utils.h"
+
 #include "tycho/detail/solvers/globalization/monitored_governor.h"
 
 #include "tycho/detail/solvers/globalization/globalization_mechanism.h"
@@ -44,6 +46,7 @@ using tycho::solvers::kBarrierTolFactor;
 using tycho::solvers::MonitoredBarrierGovernor;
 using tycho::solvers::PSIOPT;
 using tycho::solvers::SolverContext;
+using TychoTest::InertSolverContext;
 
 // Build an IterateInfo carrying only the residual scalars the monitor reads.
 IterateInfo MonGovIterate(double kkt_inf, double econ_inf, double icon_inf, double barr_inf) {
@@ -349,12 +352,8 @@ TEST(MonGovDelegation, FreeModeForwardsToDelegateVerbatim) {
     MonitoredBarrierGovernor g(std::move(fake_owned));
 
     // Minimal all-zero-dimension context: the fake delegate ignores it.
-    PSIOPT::Settings settings;
-    tycho::solvers::KktSolverType solver;
-    int zero = 0;
-    Eigen::VectorXd scratch;
-    SolverContext ctx{nullptr, solver,  settings, zero,    zero,    zero,
-                      zero,    zero,    scratch};
+    InertSolverContext inert;
+    SolverContext ctx = inert.ctx();
     MonGovUnusedMechanism mechanism;
     Eigen::VectorXd XSL, RHS, DXSL, Temp; // empty (dims all zero).
 
@@ -394,12 +393,8 @@ TEST(MonGovSequence, SufficientProgressVerdictFlipsWithPassedCurrent) {
     // delegate ignores it, and with inequal_cons_ == 0 the monotone-mode
     // barrier tail (unused here in the free-mode call, but exercised by the
     // next test) is also a no-op over empty XSL/RHS.
-    PSIOPT::Settings settings;
-    tycho::solvers::KktSolverType solver;
-    int zero = 0;
-    Eigen::VectorXd scratch;
-    SolverContext ctx{nullptr, solver,  settings, zero,    zero,    zero,
-                      zero,    zero,    scratch};
+    InertSolverContext inert;
+    SolverContext ctx = inert.ctx();
     MonGovUnusedMechanism mechanism;
     Eigen::VectorXd XSL, RHS, DXSL, Temp;
 
@@ -445,12 +440,8 @@ TEST(MonGovSequence, FiaccoMcCormickGateAdvancesOnSatisfyingCall) {
     // reached, since every call below forces/keeps monotone mode.
     MonitoredBarrierGovernor g;
 
-    PSIOPT::Settings settings;
-    tycho::solvers::KktSolverType solver;
-    int zero = 0;
-    Eigen::VectorXd scratch;
-    SolverContext ctx{nullptr, solver,  settings, zero,    zero,    zero,
-                      zero,    zero,    scratch};
+    InertSolverContext inert;
+    SolverContext ctx = inert.ctx();
     MonGovUnusedMechanism mechanism;
     Eigen::VectorXd XSL, RHS, DXSL, Temp;
 

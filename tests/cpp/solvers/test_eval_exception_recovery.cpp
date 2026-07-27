@@ -140,7 +140,7 @@ TEST(EvalExceptionRecovery, ThrowingRungIsRejectedNotFatalL1Mode) {
 // non-classic ClassicMeritAcceptance path too.
 TEST(EvalExceptionRecovery, ThrowingRungIsRejectedNotFatalGenericAcceptance) {
     auto prob = build_eval_except_nlp(1);
-    prob->optimizer_->settings().acceptance_strategy_ = AcceptanceStrategies::merit;
+    prob->optimizer_->settings().acceptance_strategy_ = ts::AcceptanceStrategies::merit;
     auto flag = prob->optimize();
     EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
     // ModernMeritAcceptance's generic ladder converges to a looser

@@ -18,10 +18,11 @@
 // a non-triggering rejection both decline without touching the solve pieces).
 ///////////////////////////////////////////////////////////////////////////////
 
+#include "solver_test_utils.h"
+
 #include "tycho/detail/solvers/globalization/globalization_mechanism.h"
 #include "tycho/detail/solvers/globalization/recovery_chain.h"
 #include "tycho/detail/solvers/globalization/soc.h"
-#include "tycho/detail/solvers/globalization/solver_context.h"
 #include "tycho/detail/solvers/iterate_info.h"
 
 #include <gtest/gtest.h>
@@ -36,7 +37,6 @@ using tycho::solvers::AcceptanceStrategy;
 using tycho::solvers::GlobalizationMechanism;
 using tycho::solvers::IterateInfo;
 using tycho::solvers::kRecoveryDepthUnresolved;
-using tycho::solvers::KktSolverType;
 using tycho::solvers::kSocRecommendedMaxCorrections;
 using tycho::solvers::kSocViolationDecrease;
 using tycho::solvers::ProgressMeasures;
@@ -48,6 +48,7 @@ using tycho::solvers::SocRecovery;
 using tycho::solvers::soc_should_continue;
 using tycho::solvers::soc_should_trigger;
 using tycho::solvers::SolverContext;
+using TychoTest::InertSolverContext;
 
 using Action = RecoveryChain::Action;
 
@@ -203,13 +204,11 @@ class SocUnusedMechanism : public GlobalizationMechanism {
 // and the given Settings/IterateInfo. Returns the Action and reports the SOC
 // counter through `soc_steps`.
 Action drive_soc(PSIOPT::Settings &settings, IterateInfo &citer, int &soc_steps) {
-    KktSolverType solver;
     SocUnusedAcceptance acceptance;
     SocUnusedMechanism mechanism;
-    int zero = 0;
-    Eigen::VectorXd scratch; // empty: dims are all zero
-    SolverContext ctx{nullptr, solver,  settings, zero,    zero,    zero,
-                      zero,    zero,    scratch};
+    InertSolverContext inert;
+    inert.settings_ = settings;
+    SolverContext ctx = inert.ctx();
     const std::vector<IterateInfo> iters;
     Eigen::VectorXd XSL, DXSL, XSL2, RHS, RHS2; // empty (ncons == 0)
     double alpha = 1.0, alphap = 1.0, alphad = 1.0;

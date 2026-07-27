@@ -22,6 +22,8 @@
 // tests/cpp/ (grep-confirmed no other "L1Resto" symbol exists).
 ///////////////////////////////////////////////////////////////////////////////
 
+#include "solver_test_utils.h"
+
 #include "tycho/detail/solvers/globalization/l1_restoration.h"
 
 #include <gtest/gtest.h>
@@ -42,16 +44,7 @@ using tycho::solvers::NestedL1Restoration;
 using tycho::solvers::ProgressMeasures;
 using tycho::solvers::PSIOPT;
 using tycho::solvers::SolverContext;
-
-// Builds a minimal all-zero-dimension SolverContext with the given settings --
-// entry_permitted only reads ctx.settings_.econ_tol_/max_feas_rest_, so the
-// rest of the aggregate is inert (same pattern as
-// test_proximal_restoration.cpp's ProxRestoContext fixture).
-SolverContext L1RestoContext(PSIOPT::Settings &settings, tycho::solvers::KktSolverType &solver,
-                             Eigen::VectorXd &scratch, int &zero) {
-    return SolverContext{nullptr, solver,  settings, zero,    zero,    zero,
-                         zero,    zero,    scratch};
-}
+using TychoTest::InertSolverContext;
 
 // =============================================================================
 // (a) Slack-init truth table.
@@ -625,16 +618,13 @@ TEST(L1RestoRecenter, ResetClearsRecenterCount) {
 // =============================================================================
 
 TEST(L1RestoEntryPermitted, NearFeasibleGuardBoundary) {
-    PSIOPT::Settings settings;
-    settings.econ_tol_ = 1e-6;
-    settings.max_feas_rest_ = 2;
-    tycho::solvers::KktSolverType solver;
-    Eigen::VectorXd scratch;
-    int zero = 0;
-    const SolverContext ctx = L1RestoContext(settings, solver, scratch, zero);
+    InertSolverContext inert;
+    inert.settings_.econ_tol_ = 1e-6;
+    inert.settings_.max_feas_rest_ = 2;
+    const SolverContext ctx = inert.ctx();
 
     NestedL1Restoration r;
-    const double threshold = kNearFeasibleGuardFactor * settings.econ_tol_; // 1e-7
+    const double threshold = kNearFeasibleGuardFactor * inert.settings_.econ_tol_; // 1e-7
     EXPECT_FALSE(r.entry_permitted(threshold, ctx));       // "<=" refuses at boundary
     EXPECT_FALSE(r.entry_permitted(threshold * 0.5, ctx)); // below -> refused
     EXPECT_TRUE(r.entry_permitted(threshold * 2.0, ctx));  // above -> permitted
@@ -642,13 +632,10 @@ TEST(L1RestoEntryPermitted, NearFeasibleGuardBoundary) {
 }
 
 TEST(L1RestoEntryPermitted, BudgetExhaustionCountsNestedEntries) {
-    PSIOPT::Settings settings;
-    settings.econ_tol_ = 1e-6;
-    settings.max_feas_rest_ = 2;
-    tycho::solvers::KktSolverType solver;
-    Eigen::VectorXd scratch;
-    int zero = 0;
-    const SolverContext ctx = L1RestoContext(settings, solver, scratch, zero);
+    InertSolverContext inert;
+    inert.settings_.econ_tol_ = 1e-6;
+    inert.settings_.max_feas_rest_ = 2;
+    const SolverContext ctx = inert.ctx();
 
     NestedL1Restoration r;
     Eigen::VectorXd xr(1);
@@ -669,13 +656,10 @@ TEST(L1RestoEntryPermitted, BudgetExhaustionCountsNestedEntries) {
 }
 
 TEST(L1RestoEntryPermitted, ZeroBudgetAlwaysRefuses) {
-    PSIOPT::Settings settings;
-    settings.econ_tol_ = 1e-6;
-    settings.max_feas_rest_ = 0;
-    tycho::solvers::KktSolverType solver;
-    Eigen::VectorXd scratch;
-    int zero = 0;
-    const SolverContext ctx = L1RestoContext(settings, solver, scratch, zero);
+    InertSolverContext inert;
+    inert.settings_.econ_tol_ = 1e-6;
+    inert.settings_.max_feas_rest_ = 0;
+    const SolverContext ctx = inert.ctx();
 
     NestedL1Restoration r;
     EXPECT_FALSE(r.entry_permitted(1e6, ctx));

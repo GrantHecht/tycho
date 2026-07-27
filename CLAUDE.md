@@ -705,7 +705,7 @@ Expected: "Optimal Solution Found", objective ≈ 1.8013 s.
 
 Run all four steps in order before opening or merging any PR into `main`:
 
-1. **C++ unit tests** — `ctest --output-on-failure` — all must pass
+1. **C++ unit tests** — `ctest --output-on-failure` — all must pass; also record the skipped count and investigate any change from the previous run (an environment-dependent `GTEST_SKIP()` can silently void a slice of the suite while ctest still prints green). `tests/cpp/solvers/ipopt/` is a separate, developer-opt-in test executable gated on `-DENABLE_IPOPT=ON` (see `ENABLE_IPOPT` above) — it is not built or run by the default `ctest` invocation and does not count toward the skipped total above.
 2. **Python examples** — `conda run -n tycho bash -c "MPLBACKEND=Agg python scripts/run_examples.py"` — all 32 must exit 0
 3. **C++ brachistochrone** — `cmake --preset <preset> -DBUILD_CPP_EXAMPLES=ON && cd build && ninja -j<N> brachistochrone_cpp && ./examples/cpp_examples/static/brachistochrone/brachistochrone_cpp` — must print "Optimal Solution Found", obj ≈ 1.8013 s
 4. **Benchmarks** — `bench/bench_track.sh compare` — justify any regressions in the PR description

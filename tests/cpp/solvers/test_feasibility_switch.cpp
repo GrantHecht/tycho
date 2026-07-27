@@ -48,7 +48,6 @@ using tycho::solvers::IterateInfo;
 using tycho::solvers::kRecoveryDepthRestoration;
 using tycho::solvers::kRecoveryDepthUnresolved;
 using tycho::solvers::kRecoveryDepthWatchdog;
-using tycho::solvers::KktSolverType;
 using tycho::solvers::OptimizationProblem;
 using tycho::solvers::ProgressMeasures;
 using tycho::solvers::PSIOPT;
@@ -56,6 +55,7 @@ using tycho::solvers::RecoveryChain;
 using tycho::solvers::RestorationModes;
 using tycho::solvers::RestorationStrategy;
 using tycho::solvers::SolverContext;
+using TychoTest::InertSolverContext;
 
 // -----------------------------------------------------------------------------
 // Stubs (unity-unique names prefixed FeasSwitch).
@@ -162,16 +162,6 @@ class FeasSwitchUnusedAcceptance : public AcceptanceStrategy {
     bool drives_classic_path() const override { return true; }
 };
 
-// Minimal SolverContext for the recovery signature (zero dims, so the RHS tail
-// is empty and the constraint violation is 0 — the stub ignores it anyway).
-SolverContext feas_switch_context(KktSolverType &solver, PSIOPT::Settings &settings, int &zero,
-                                  Eigen::VectorXd &scratch, const RestorationStrategy *restoration) {
-    SolverContext ctx{nullptr, solver,  settings, zero,    zero,    zero,
-                      zero,    zero,    scratch};
-    ctx.restoration_ = restoration;
-    return ctx;
-}
-
 // Drive FeasibilitySwitchRecovery::on_step_rejected once and return its Action;
 // captures resolved_depth via the out-parameter.
 RecoveryChain::Action drive_feas_switch(FeasibilitySwitchRecovery &fsr, SolverContext &ctx,
@@ -198,12 +188,10 @@ RecoveryChain::Action drive_feas_switch(FeasibilitySwitchRecovery &fsr, SolverCo
 // -----------------------------------------------------------------------------
 
 TEST(FeasibilitySwitchTruthTable, InnerRetryPassesThrough) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
     FeasSwitchStubRestoration restoration; // active_=false, permit_=true
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+    InertSolverContext inert;
+    inert.restoration_ = &restoration;
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kRetry));
     int depth = 0;
@@ -211,12 +199,10 @@ TEST(FeasibilitySwitchTruthTable, InnerRetryPassesThrough) {
 }
 
 TEST(FeasibilitySwitchTruthTable, InnerGiveUpPassesThrough) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
     FeasSwitchStubRestoration restoration;
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+    InertSolverContext inert;
+    inert.restoration_ = &restoration;
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(
         std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kGiveUp));
@@ -225,11 +211,8 @@ TEST(FeasibilitySwitchTruthTable, InnerGiveUpPassesThrough) {
 }
 
 TEST(FeasibilitySwitchTruthTable, NullRestorationKeepsAcceptAsIs) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, /*restoration=*/nullptr);
+    InertSolverContext inert; // restoration_ stays nullptr
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(
         std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
@@ -239,14 +222,12 @@ TEST(FeasibilitySwitchTruthTable, NullRestorationKeepsAcceptAsIs) {
 }
 
 TEST(FeasibilitySwitchTruthTable, AlreadyActiveNeverReEnters) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
     FeasSwitchStubRestoration restoration;
     restoration.active_ = true; // already in restoration mode
     restoration.permit_ = true;
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+    InertSolverContext inert;
+    inert.restoration_ = &restoration;
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(
         std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
@@ -255,14 +236,12 @@ TEST(FeasibilitySwitchTruthTable, AlreadyActiveNeverReEnters) {
 }
 
 TEST(FeasibilitySwitchTruthTable, EntryRefusedKeepsAcceptAsIs) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
     FeasSwitchStubRestoration restoration;
     restoration.active_ = false;
     restoration.permit_ = false; // guard/budget refuses entry
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+    InertSolverContext inert;
+    inert.restoration_ = &restoration;
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(
         std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
@@ -271,14 +250,12 @@ TEST(FeasibilitySwitchTruthTable, EntryRefusedKeepsAcceptAsIs) {
 }
 
 TEST(FeasibilitySwitchTruthTable, EntryPermittedSwitchesAndStampsDepth) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
     FeasSwitchStubRestoration restoration;
     restoration.active_ = false;
     restoration.permit_ = true;
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+    InertSolverContext inert;
+    inert.restoration_ = &restoration;
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(
         std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
@@ -297,12 +274,10 @@ TEST(FeasibilitySwitchTruthTable, EntryPermittedSwitchesAndStampsDepth) {
 // unchanged and preserves the depth. Restoration is present, inactive, and would
 // otherwise permit entry — proving the depth check alone blocks the switch.
 TEST(FeasibilitySwitchTruthTable, WatchdogResolvedAcceptPassesThrough) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
     FeasSwitchStubRestoration restoration; // active_=false, permit_=true
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+    InertSolverContext inert;
+    inert.restoration_ = &restoration;
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(std::make_unique<FeasSwitchStubInner>(
         RecoveryChain::Action::kAcceptAsIs, kRecoveryDepthWatchdog, /*stamp_accepted=*/true));
@@ -325,13 +300,11 @@ TEST(FeasibilitySwitchTruthTable, NullInnerChainRejected) {
 // the wrapper returns kSoftFeasibilityStep (alg_impl takes the trial step) rather
 // than the full switch, and stamps the restoration recovery depth.
 TEST(FeasibilitySwitchSoftPreStage, NestedReturnsSoftStepBeforeSwitching) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
     FeasSwitchStubRestoration restoration;
     restoration.nested_ = true; // nested l1 mode
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+    InertSolverContext inert;
+    inert.restoration_ = &restoration;
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(
         std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
@@ -343,13 +316,11 @@ TEST(FeasibilitySwitchSoftPreStage, NestedReturnsSoftStepBeforeSwitching) {
 // A proximal (non-nested) strategy has NO pre-stage: it switches directly on the
 // first exhausted rejection, however many times it is driven.
 TEST(FeasibilitySwitchSoftPreStage, ProximalNeverEntersPreStage) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
     FeasSwitchStubRestoration restoration;
     restoration.nested_ = false; // proximal switch mode
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+    InertSolverContext inert;
+    inert.restoration_ = &restoration;
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(
         std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
@@ -362,13 +333,11 @@ TEST(FeasibilitySwitchSoftPreStage, ProximalNeverEntersPreStage) {
 // soft steps) for up to kMaxSoftRestoIters successive iterations; the 11th
 // successive soft iteration escalates to the full switch.
 TEST(FeasibilitySwitchSoftPreStage, EscalatesOnEleventhSuccessiveSoftIteration) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
     FeasSwitchStubRestoration restoration;
     restoration.nested_ = true;
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+    InertSolverContext inert;
+    inert.restoration_ = &restoration;
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(
         std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
@@ -385,13 +354,11 @@ TEST(FeasibilitySwitchSoftPreStage, EscalatesOnEleventhSuccessiveSoftIteration) 
 // accepted: notify_step_accepted resets the successive-soft-iteration counter, so
 // a fresh pre-stage can run its full budget again afterward.
 TEST(FeasibilitySwitchSoftPreStage, AcceptedStepResetsSoftCounter) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
     FeasSwitchStubRestoration restoration;
     restoration.nested_ = true;
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+    InertSolverContext inert;
+    inert.restoration_ = &restoration;
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(
         std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
@@ -409,13 +376,11 @@ TEST(FeasibilitySwitchSoftPreStage, AcceptedStepResetsSoftCounter) {
 // A mode-switch reset() also clears the pre-stage counter (a restoration entry or
 // exit resets the pre-stage).
 TEST(FeasibilitySwitchSoftPreStage, ResetClearsSoftCounter) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
     FeasSwitchStubRestoration restoration;
     restoration.nested_ = true;
-    SolverContext ctx = feas_switch_context(solver, settings, zero, scratch, &restoration);
+    InertSolverContext inert;
+    inert.restoration_ = &restoration;
+    SolverContext ctx = inert.ctx();
 
     FeasibilitySwitchRecovery fsr(
         std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
@@ -1769,12 +1734,14 @@ class FeasSwitchRecordingGovernor : public BarrierGovernor {
 TEST(NestedRestorationMonotoneSchedule, HoldsThenAdvancesOnBarrierProgressGate) {
     ClassicAdaptiveGovernor g; // the free-mode merit governor; monotone is on the base.
 
-    PSIOPT::Settings settings; // defaults: bar_tol_=kkt_tol_=1e-6, min_mu_=1e-12, max_mu_=100.
-    KktSolverType solver;
-    Eigen::VectorXd scratch;
-    int pv = 1, sv = 2, ec = 0, ic = 2, kkt = 5;
-    SolverContext ctx{nullptr, solver,  settings, pv,      sv,      ec,
-                      ic,      kkt,     scratch};
+    // defaults: bar_tol_=kkt_tol_=1e-6, min_mu_=1e-12, max_mu_=100.
+    InertSolverContext inert;
+    inert.primal_vars_ = 1;
+    inert.slack_vars_ = 2;
+    inert.equal_cons_ = 0;
+    inert.inequal_cons_ = 2;
+    inert.kkt_dim_ = 5;
+    SolverContext ctx = inert.ctx();
 
     // Layout [primals(1) | slacks(2) | eq(0) | iq(2)]: slacks = {2,4}, iq_lmults = {0.5,0.25}.
     Eigen::VectorXd XSL(5);
@@ -1795,7 +1762,7 @@ TEST(NestedRestorationMonotoneSchedule, HoldsThenAdvancesOnBarrierProgressGate) 
                                                      mu_event);
         EXPECT_DOUBLE_EQ(mu, 4.0);          // held at the anchored resto μ.
         EXPECT_FALSE(mu_event);             // no new subproblem.
-        EXPECT_GT(mu, settings.min_mu_);    // never collapsed to the μ floor.
+        EXPECT_GT(mu, inert.settings_.min_mu_); // never collapsed to the μ floor.
         EXPECT_DOUBLE_EQ(barr_obj, -4.0 * log_sum);
         EXPECT_DOUBLE_EQ(RHS[1], 0.5 - 4.0 / 2.0);  // iq_lmult - μ/slack
         EXPECT_DOUBLE_EQ(RHS[2], 0.25 - 4.0 / 4.0);
