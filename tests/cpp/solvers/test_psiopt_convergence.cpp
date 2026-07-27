@@ -272,15 +272,20 @@ TEST_F(SolverTest, BrachistochroneOptimizeSolve) {
 }
 
 TEST_F(SolverTest, ConditionalStepSkippedOnConvergence) {
-    // Both solves are pinned to a single QP thread. This is the suite's only
-    // exact iteration-count equality across two independent solves, and a
-    // multi-threaded Pardiso factorization is not bit-reproducible run to run
-    // (see docs/dev/analysis/2026-07-pr9-pardiso-options.md); without the pin
-    // the comparison is a latent flake rather than a property.
+    // This is the suite's only exact iteration-count equality across two
+    // independent solves, and reproducing it needs BOTH pins: set_qp_threads(1)
+    // alone is not enough, because the KKT assembly itself is still partitioned
+    // across threads (num_partitions_ defaults to get_num_threads()*4), and
+    // concurrent partition accumulation into shared slots drifts by ULPs run to
+    // run (see the KKT-scatter test in test_kkt_canonical_lock.cpp, and
+    // docs/dev/analysis/2026-07-pr9-pardiso-options.md for the Pardiso side).
+    // set_num_partitions(1) forces single-partition assembly so the
+    // accumulation order -- not just the factorization -- is deterministic.
     // optimize alone
     auto phase_opt = make_brach_solver_phase(32);
     phase_opt->optimizer_->set_print_level(3);
     phase_opt->optimizer_->set_qp_threads(1);
+    phase_opt->set_num_partitions(1);
     auto status_opt = phase_opt->optimize();
     ASSERT_EQ(status_opt, tycho::ConvergenceFlags::CONVERGED);
     int opt_iters = phase_opt->optimizer_->result().iter_num_;
@@ -290,6 +295,7 @@ TEST_F(SolverTest, ConditionalStepSkippedOnConvergence) {
     auto phase_os = make_brach_solver_phase(32);
     phase_os->optimizer_->set_print_level(3);
     phase_os->optimizer_->set_qp_threads(1);
+    phase_os->set_num_partitions(1);
     auto status_os = phase_os->optimize_solve();
     EXPECT_LE(status_os, tycho::ConvergenceFlags::ACCEPTABLE);
     int os_iters = phase_os->optimizer_->result().iter_num_;

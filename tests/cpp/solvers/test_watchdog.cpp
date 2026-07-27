@@ -471,7 +471,7 @@ struct WatchdogChainDrive {
 };
 
 Action watchdog_drive_chain(RecoveryChain &chain, WatchdogChainDrive &d, SolverContext &ctx,
-                   AcceptanceStrategy &acceptance, GlobalizationMechanism &mechanism) {
+                            AcceptanceStrategy &acceptance, GlobalizationMechanism &mechanism) {
     return chain.on_step_rejected(d.citer, d.iters, ctx, acceptance, mechanism,
                                   PSIOPT::LineSearchModes::AUGLANG, 1.0, 1e-3, 0.0, 0.0, d.v, d.v,
                                   d.v, d.v, d.v, d.alpha, d.alphap, d.alphad, d.soc_steps,

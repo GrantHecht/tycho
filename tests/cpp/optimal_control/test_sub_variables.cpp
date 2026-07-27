@@ -89,7 +89,7 @@ TEST_F(SubVariablesPhaseTest, AddValueLockPinsInitialState) {
     phase.add_integral_objective(GenericFunction<-1, 1>(Arguments<2>().squared_norm()),
                                  {"u1", "u2"});
 
-    phase.optimizer().set_print_level(0);
+    phase.optimizer().set_print_level(3);
 
     auto status = phase.solve_optimize();
     ASSERT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE)
@@ -136,7 +136,7 @@ TEST_F(SubVariablesPhaseTest, NamedOverloadLocksFrontState) {
     phase.add_integral_objective(GenericFunction<-1, 1>(Arguments<2>().squared_norm()),
                                  {"u1", "u2"});
 
-    phase.optimizer().set_print_level(0);
+    phase.optimizer().set_print_level(3);
     auto status = phase.solve_optimize();
     ASSERT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
 

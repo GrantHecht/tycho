@@ -481,8 +481,9 @@ TEST_F(SolverTest, RestorationDiagnosticsSentinelOnlyWhenOff) {
     const auto &r_on = on->optimizer_->result();
     // With restoration constructed the counters are reported as real counts --
     // NOT the sentinel — regardless of whether entry actually fired.
-    EXPECT_NE(r_on.last_feas_rest_entries_, -1);
-    EXPECT_NE(r_on.last_feas_rest_iters_, -1);
+    // EXPECT_GE(..., 0) below is the stronger check: it subsumes ruling out the
+    // -1 sentinel (any real count is already >= 0), so no separate EXPECT_NE is
+    // needed.
     EXPECT_GE(r_on.last_feas_rest_entries_, 0);
     EXPECT_GE(r_on.last_feas_rest_iters_, 0);
 }
@@ -1538,12 +1539,12 @@ TEST(NestedRestorationLifecycle, SoftPreStageEscalatesIntoFullL1Phase) {
 
     ASSERT_NE(comp, nullptr);
     EXPECT_NE(flag, tycho::ConvergenceFlags::CONVERGED); // never falsely converges
-    // The skip above is the escalation assertion: reaching this line means
-    // comp->entries() >= 1, i.e. the pre-stage escalated into the full l1 phase.
     if (comp->entries() < 1) {
         GTEST_SKIP() << "factorization returned non-finite step on this platform; "
                         "escalation not exercised";
     }
+    // The skip above is the escalation assertion -- reaching past it means
+    // comp->entries() >= 1, i.e. the pre-stage escalated into the full l1 phase.
 }
 
 // The nested full lifecycle on a FEASIBLE problem, unconditionally exercised:

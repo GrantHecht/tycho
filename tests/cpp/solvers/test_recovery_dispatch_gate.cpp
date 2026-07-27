@@ -203,7 +203,7 @@ TEST(RecoveryDispatchGate, StubAcceptanceDrivesHook) {
     {
         GateRecordingRecovery recovery;
         GateStubAcceptance acceptance(/*accept=*/false); // never reached (gate stays silent)
-        IterateInfo citer;                           // no line search ran
+        IterateInfo citer;                               // no line search ran
         EXPECT_FALSE(citer.accepted_);
         drive_gate(/*good_step=*/false, citer, recovery, acceptance, iters, ctx);
         EXPECT_EQ(recovery.calls_, 0);
@@ -494,8 +494,8 @@ TEST(RecoveryDispatchGate, MeritPenaltyRuleSelectionReachesTheStrategy) {
         solver.rebuild_globalization_components();
         auto *merit = dynamic_cast<ModernMeritAcceptance *>(solver.acceptance_.get());
         ASSERT_NE(merit, nullptr);
-        EXPECT_TRUE(merit->is_iterate_acceptable(pm(2.0, 10.0), pm(1.0, 12.0), pm(2.0, 3.0), 1.0,
-                                                 1.0));
+        EXPECT_TRUE(
+            merit->is_iterate_acceptable(pm(2.0, 10.0), pm(1.0, 12.0), pm(2.0, 3.0), 1.0, 1.0));
         EXPECT_NEAR(merit->flex_pi_l(), 0.2, 1e-6); // the flexible rule ran
     }
 
@@ -507,9 +507,9 @@ TEST(RecoveryDispatchGate, MeritPenaltyRuleSelectionReachesTheStrategy) {
         solver.rebuild_globalization_components();
         auto *merit = dynamic_cast<ModernMeritAcceptance *>(solver.acceptance_.get());
         ASSERT_NE(merit, nullptr);
-        EXPECT_TRUE(merit->is_iterate_acceptable(pm(1.0, 10.0), pm(0.5, 12.0), pm(1.0, -9.0), 1.0,
-                                                 1.0));
-        EXPECT_DOUBLE_EQ(merit->wmno_penalty(), 11.0); // the WMNO rule ran
+        EXPECT_TRUE(
+            merit->is_iterate_acceptable(pm(1.0, 10.0), pm(0.5, 12.0), pm(1.0, -9.0), 1.0, 1.0));
+        EXPECT_DOUBLE_EQ(merit->wmno_penalty(), 11.0);                      // the WMNO rule ran
         EXPECT_DOUBLE_EQ(merit->flex_pi_l(), tycho::solvers::kFlexInitPiL); // flexible did not
     }
 }
