@@ -6,7 +6,7 @@
 // Source: https://github.com/AlabamaASRL/asset_asrl
 // Original Developer: James B. Pezent
 //
-// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+// Modifications in Tycho (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
 //   - Binding code extracted from ASSET source and reorganized (PR 2 — binding decoupling)
 //   - Migrated pybind11 -> nanobind (PR 3)
@@ -54,7 +54,7 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     using LineSearchModes = PSIOPT::LineSearchModes;
     using QPPivotModes = PSIOPT::QPPivotModes;
     using PDStepStrategies = PSIOPT::PDStepStrategies;
-    using ConvergenceFlags = PSIOPT::ConvergenceFlags;
+    using ConvergenceFlags = tycho::ConvergenceFlags;
     using AlgorithmModes = PSIOPT::AlgorithmModes;
     using QPOrderingModes = PSIOPT::QPOrderingModes;
     using BestCriteriaModes = PSIOPT::BestCriteriaModes;
@@ -182,8 +182,6 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
 
     BIND_RESULT_RO(obj, "converge_flag", converge_flag_);
 
-    obj.def("get_convergence_flag", &PSIOPT::get_convergence_flag);
-
     BIND_SETTINGS_VALIDATED(obj, "kkt_tol", kkt_tol_, set_kkt_tol, "");
     BIND_SETTINGS_VALIDATED(obj, "bar_tol", bar_tol_, set_bar_tol, "");
     BIND_SETTINGS_VALIDATED(obj, "eq_con_tol", econ_tol_, set_econ_tol, "");
@@ -264,7 +262,6 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
 
     // --- Algorithm modes ---
     BIND_SETTINGS_RW(obj, "pd_step_strategy", pd_step_strategy_, "");
-    BIND_SETTINGS_RW(obj, "soe_bound_relax", soe_bound_relax_, "");
     BIND_SETTINGS_VALIDATED(obj, "qp_par_solve", qp_par_solve_, set_qp_par_solve, "");
 
     BIND_SETTINGS_RW(obj, "soe_mode", soe_mode_, "");
@@ -294,8 +291,10 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
         "penalty-based acceptance test selected by merit_penalty_rule; funnel switches to a "
         "single-scalar bound on constraint violation, tightened while accepted iterates stay "
         "within it; filter switches to a (violation, objective) Wachter-Biegler-style filter. "
-        "merit, funnel, and filter each require max_soc == 0 and ls_extended_iters == 0 "
-        "(ValueError raised otherwise); watchdog is compatible with all four strategies. These are "
+        "funnel and filter are designed to operate above a monotone barrier safeguard, so each "
+        "requires barrier_governor=monitored, or never_monotone=True to run without the "
+        "monotone-barrier safeguard (the two are mutually exclusive; ValueError at "
+        "validate() time otherwise); watchdog is compatible with all four strategies. These are "
         "heuristically-motivated acceptance alternatives, not one another's strict "
         "improvement -- compare against classic_merit on your own problem before adopting "
         "one.");
@@ -437,14 +436,17 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
                "Single-scalar upper bound on constraint violation (the funnel width), "
                "tightened while accepted iterates remain within it (Kiessling, "
                "Leyffer & Vanaret funnel formulation, implemented after Uno's funnel). "
-               "Rejects combination with max_soc > 0 or ls_extended_iters > 0 (ValueError "
-               "at validate() time); composes with watchdog. Heuristically motivated -- no "
+               "Requires a monotone barrier safeguard, so it rejects combination with the "
+               "default barrier_governor=classic_adaptive unless never_monotone=True "
+               "(ValueError at validate() time); composes with watchdog. Heuristically motivated -- no "
                "convergence guarantee is implied; compare against classic_merit and filter "
                "on your own problem.")
         .value("filter", AcceptanceStrategies::filter,
                "(Constraint violation, objective) pair filter with margined dominance "
-               "(Wachter-Biegler filter line search, Ipopt lineage). Rejects combination "
-               "with max_soc > 0 or ls_extended_iters > 0 (ValueError at validate() time); "
+               "(Wachter-Biegler filter line search, Ipopt lineage). Requires a monotone "
+               "barrier safeguard, so it rejects combination with the default "
+               "barrier_governor=classic_adaptive unless never_monotone=True (ValueError at "
+               "validate() time); "
                "composes with watchdog. Heuristically motivated -- no convergence guarantee "
                "is implied; compare against classic_merit and funnel on your own problem.");
     nb::enum_<MeritPenaltyRules>(m, "MeritPenaltyRules")

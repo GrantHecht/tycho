@@ -1,3 +1,5 @@
+> Historical snapshot from April 2026; no longer maintained.
+
 # Tycho — Eigen 5 + Enzyme work — Current State and Future Work
 
 **Branch:** `eigen-upgrade` @ `553696f` (off `worktree-enzyme-ad-plan`,

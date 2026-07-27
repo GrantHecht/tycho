@@ -6,7 +6,7 @@
 // Source: https://github.com/AlabamaASRL/asset_asrl
 // Original Developer: James B. Pezent
 //
-// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+// Modifications in Tycho (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
 //   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
 //   - Python binding methods moved to src/bindings/ (nanobind)
@@ -1585,7 +1585,7 @@ tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::phase_call_impl(JetJobModes mod
 
     Runtimer.start();
 
-    PSIOPT::ConvergenceFlags flag = this->psipot_call_impl(mode);
+    tycho::ConvergenceFlags flag = this->psipot_call_impl(mode);
 
     JetJobModes nextmode = mode;
     if (this->solve_only_first_) {

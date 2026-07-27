@@ -6,16 +6,18 @@
 // Source: https://github.com/AlabamaASRL/asset_asrl
 // Original Developer: James B. Pezent
 //
-// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+// Modifications in Tycho (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
 //   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
 //   - Python binding methods moved to src/bindings/ (nanobind)
 //   - Configuration fields grouped into Settings struct
 //   - Converted from struct to class with public/private access sections
+//   - KKTVector extracted to detail/solvers/kkt_vector.h; EvalErrorLog extracted
+//     to detail/solvers/eval_error_log.h (both shared with the globalization
+//     components)
 // =============================================================================
 
 #pragma once
-#include <algorithm>
 #include <array>
 #include <cassert>
 #include <functional>
@@ -32,11 +34,12 @@
 #include <fmt/color.h>
 #include <fmt/core.h>
 
+#include "tycho/detail/solvers/eval_error_log.h"
 #include "tycho/detail/solvers/iterate_info.h"
+#include "tycho/detail/solvers/kkt_vector.h"
 #include "tycho/detail/solvers/non_linear_program.h"
 #include "tycho/detail/solvers/psiopt_fwd.h"
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/get_core_count.h"
 
 #ifdef USE_ACCELERATE_SPARSE
 #include "tycho/detail/solvers/linear/accelerate_interface.h"
@@ -51,6 +54,7 @@
 class RecoveryDispatchGate_FunnelSelectionConstructsFunnelAcceptance_Test;
 class RecoveryDispatchGate_FilterSelectionConstructsFilterAcceptance_Test;
 class RecoveryDispatchGate_MonitoredSelectionConstructsMonitoredGovernor_Test;
+class RecoveryDispatchGate_MeritPenaltyRuleSelectionReachesTheStrategy_Test;
 class FeasibilitySwitch_ProximalSwitchConstructsRestorationAndWrapsRecovery_Test;
 class FeasibilitySwitch_OffModeConstructsNoRestoration_Test;
 class FeasibilitySwitch_FilterSeedsRestorationConstraintTol_Test;
@@ -112,31 +116,6 @@ using tycho::EigenRef;
 // optimum without it.
 inline constexpr int kDivergencePersistIters = 3;
 
-// =============================================================================
-// EvalErrorLog — latched trial-evaluation exception state for one solve call.
-//
-// The line-search / recovery trial evaluations convert an NLP evaluation
-// exception into a rejected-trial signal instead of letting it unwind the
-// solve; this log records how often that happened and keeps the most recent
-// message so the solver can fold it into diagnostics (or into the abort
-// message when no recovery path exists). Reset once per solve call, alongside
-// SolveResult::reset_accumulators().
-// =============================================================================
-struct EvalErrorLog {
-    int count_ = 0;
-    std::string last_message_;
-
-    void record(const char *what) {
-        ++count_;
-        last_message_ = what;
-    }
-    void record_unknown() { record("unknown exception type (not derived from std::exception)"); }
-    void reset() {
-        count_ = 0;
-        last_message_.clear();
-    }
-};
-
 // Part of the globalization component extraction: PSIOPT owns its
 // step-acceptance strategy through a std::unique_ptr<AcceptanceStrategy>.
 // Only the forward declaration is needed here (the complete type lives in
@@ -157,11 +136,13 @@ struct EvalErrorLog {
 // discipline.
 //
 // PSIOPT owns its post-rejection recovery chain through a
-// std::unique_ptr<RecoveryChain> (concrete type NoopRecovery, complete only in
-// psiopt.cpp). Same forward-declare + out-of-line ctor/dtor discipline. The
-// NoopRecovery implementation shipped today always returns kAcceptAsIs; the
-// alg_impl call site is provably inert (see noop_recovery.h and the call-site
-// comment in alg_impl) — no live recovery dispatcher exists yet.
+// std::unique_ptr<RecoveryChain> (concrete type depends on settings — see
+// the recovery_ field comment below; complete only in psiopt.cpp). Same
+// forward-declare + out-of-line ctor/dtor discipline. NoopRecovery is
+// installed only on the all-default path (max_soc_ == 0, ls_extended_iters_
+// == 0, watchdog_ == false, restoration_mode_ == off); live links exist for
+// every opt-in (SocRecovery, ExtendedBacktrackRecovery, WatchdogRecovery,
+// FeasibilitySwitchRecovery — see rebuild_globalization_components()).
 // PSIOPT also owns an optional feasibility-restoration mode-switch through a
 // std::unique_ptr<RestorationStrategy> (concrete type ProximalSwitchRestoration
 // or NestedL1Restoration depending on restoration_mode_, complete only in
@@ -176,15 +157,13 @@ class BarrierGovernor;
 class RecoveryChain;
 class RestorationStrategy;
 struct ProgressMeasures;
+struct FeasibilityStallDetector;
 
 class PSIOPT {
   public:
     enum class BarrierModes { PROBE, LOQO };
     enum class LineSearchModes { AUGLANG, LANG, L1, NOLS };
     enum class AlgorithmModes { OPT, OPTNO, SOE, INIT };
-
-    /// Alias so existing callers using PSIOPT::ConvergenceFlags continue to work.
-    using ConvergenceFlags = tycho::ConvergenceFlags;
 
     enum class QPAlgModes {
         Classic = 0,
@@ -268,12 +247,6 @@ class PSIOPT {
         double acc_icon_tol_ = 1.0e-3;
         double acc_bar_tol_ = 1.0e-3;
 
-        // --- Unacceptable tolerances (reserved — not currently read by any algorithm code) ---
-        double unacc_kkt_tol_ = 10;
-        double unacc_econ_tol_ = 2;
-        double unacc_icon_tol_ = 2;
-        double unacc_bar_tol_ = 2;
-
         // --- Divergence tolerances ---
         double div_kkt_tol_ = 1.0e15;
         double div_econ_tol_ = 1.0e15;
@@ -345,7 +318,6 @@ class PSIOPT {
         double bound_fraction_ = 0.99;
         double bound_push_ = 1.0e-3;
         double neg_slack_reset_ = 1.0e-12;
-        double soe_bound_relax_ = 1.0e-8; // reserved — not currently read by algorithm code
         double alpha_red_ = 2.0;
 
         // --- Hessian perturbation ---
@@ -650,6 +622,18 @@ class PSIOPT {
     PSIOPT(std::shared_ptr<NonLinearProgram> np);
     ~PSIOPT();
 
+    // Neither copyable nor movable: the out-of-line destructor above (needed
+    // for the incomplete-type unique_ptr members) already silently suppresses
+    // the implicit move members, and PSIOPT's raw kkt_sol_ solver handle plus
+    // its unique_ptr<...> globalization components have no defined transfer
+    // semantics today. Explicit rather than relying on that suppression, so
+    // the constraint is visible at the declaration instead of discovered at a
+    // failed call site.
+    PSIOPT(const PSIOPT &) = delete;
+    PSIOPT &operator=(const PSIOPT &) = delete;
+    PSIOPT(PSIOPT &&) = delete;
+    PSIOPT &operator=(PSIOPT &&) = delete;
+
     // --- Accessors ---
     /// Returns a mutable reference to the settings struct. Direct writes bypass
     /// per-field validation in the set_*() methods. All settings are re-validated
@@ -691,8 +675,6 @@ class PSIOPT {
     void set_acc_icon_tol(double acc_icon_tol);
     void set_acc_tols(double acc_kkt_tol, double acc_econ_tol, double acc_icon_tol,
                       double acc_bar_tol);
-
-    void set_unacc_tols(double kktol, double etol, double itol, double bartol);
 
     void set_div_kkt_tol(double div_kkt_tol);
     void set_div_bar_tol(double div_bar_tol);
@@ -757,9 +739,6 @@ class PSIOPT {
     }
     void disable_late_callback() { this->late_callback_enabled_ = false; }
 
-    // --- Query methods ---
-    ConvergenceFlags get_convergence_flag() const { return result_.converge_flag_; }
-
     // --- Printing ---
     static void print_header() { fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65); }
 
@@ -770,6 +749,7 @@ class PSIOPT {
     friend class ::RecoveryDispatchGate_FunnelSelectionConstructsFunnelAcceptance_Test;
     friend class ::RecoveryDispatchGate_FilterSelectionConstructsFilterAcceptance_Test;
     friend class ::RecoveryDispatchGate_MonitoredSelectionConstructsMonitoredGovernor_Test;
+    friend class ::RecoveryDispatchGate_MeritPenaltyRuleSelectionReachesTheStrategy_Test;
     friend class ::FeasibilitySwitch_ProximalSwitchConstructsRestorationAndWrapsRecovery_Test;
     friend class ::FeasibilitySwitch_OffModeConstructsNoRestoration_Test;
     friend class ::FeasibilitySwitch_FilterSeedsRestorationConstraintTol_Test;
@@ -936,71 +916,10 @@ class PSIOPT {
     LateCallBackType late_callback_;
     bool late_callback_enabled_ = false;
 
-    // =========================================================================
-    // KKTVector — lightweight non-owning view over compound KKT layout
-    //   [primals | slacks | eq_lmults | iq_lmults]
-    // Used for both the iterate vector (x, s, lambda_e, lambda_i) and the
-    // RHS/gradient vector (grad_x, grad_s, c_eq, c_iq). The two accessor
-    // groups provide semantic names for each interpretation.
-    //
-    // const-correctness: const overloads use std::as_const(data_) to force
-    // Eigen's .head()/.segment()/.tail() to return immutable segment
-    // expressions. Without this, calling .head() on the non-const VectorXd&
-    // member would return a mutable expression even from a const method.
-    // Lifetime: must not outlive the referenced VectorXd.
-    // =========================================================================
-    class KKTVector {
-      public:
-        KKTVector(Eigen::VectorXd &data, int pv, int sv, int ec, int ic)
-            : data_(data), pv_(pv), sv_(sv), ec_(ec), ic_(ic) {
-            assert(pv >= 0 && sv >= 0 && ec >= 0 && ic >= 0);
-            assert(data.size() >= pv + sv + ec + ic);
-        }
-
-        // --- Primal/slack segments ---
-        auto primals() { return data_.head(pv_); }
-        auto primals() const { return std::as_const(data_).head(pv_); }
-        auto slacks() { return data_.segment(pv_, sv_); }
-        auto slacks() const { return std::as_const(data_).segment(pv_, sv_); }
-        auto primals_slacks() { return data_.head(pv_ + sv_); }
-        auto primals_slacks() const { return std::as_const(data_).head(pv_ + sv_); }
-
-        // --- Multiplier segments ---
-        auto eq_lmults() { return data_.segment(pv_ + sv_, ec_); }
-        auto eq_lmults() const { return std::as_const(data_).segment(pv_ + sv_, ec_); }
-        auto iq_lmults() { return data_.tail(ic_); }
-        auto iq_lmults() const { return std::as_const(data_).tail(ic_); }
-        auto lmults() { return data_.tail(ec_ + ic_); }
-        auto lmults() const { return std::as_const(data_).tail(ec_ + ic_); }
-
-        // --- Gradient/constraint segments (intentional aliases) ---
-        // Same memory layout as the primal/multiplier accessors above, but with
-        // names matching the RHS/gradient interpretation: the primal block holds
-        // the objective gradient, the slack block holds the dual gradient, and
-        // the multiplier blocks hold constraint values.
-        // These are intentional aliases: prim_grad() == primals(),
-        // dual_grad() == slacks(), eq_cons() == eq_lmults(), iq_cons() == iq_lmults().
-        auto prim_grad() { return data_.head(pv_); }
-        auto prim_grad() const { return std::as_const(data_).head(pv_); }
-        auto dual_grad() { return data_.segment(pv_, sv_); }
-        auto dual_grad() const { return std::as_const(data_).segment(pv_, sv_); }
-        auto prim_dual_grad() { return data_.head(pv_ + sv_); }
-        auto prim_dual_grad() const { return std::as_const(data_).head(pv_ + sv_); }
-        auto eq_cons() { return data_.segment(pv_ + sv_, ec_); }
-        auto eq_cons() const { return std::as_const(data_).segment(pv_ + sv_, ec_); }
-        auto iq_cons() { return data_.tail(ic_); }
-        auto iq_cons() const { return std::as_const(data_).tail(ic_); }
-        auto all_cons() { return data_.tail(ec_ + ic_); }
-        auto all_cons() const { return std::as_const(data_).tail(ec_ + ic_); }
-
-        // --- Full vector access ---
-        Eigen::VectorXd &data() { return data_; }
-        const Eigen::VectorXd &data() const { return data_; }
-
-      private:
-        Eigen::VectorXd &data_;
-        int pv_, sv_, ec_, ic_;
-    };
+    // KKTVector — the compound-KKT segment view — now lives in
+    // detail/solvers/kkt_vector.h as tycho::solvers::KKTVector, shared with the
+    // globalization components (each of which used to carry a verbatim copy,
+    // since the type was private here and they are non-member, non-friend).
 
     /// Create a KKTVector view over a VectorXd using this solver's dimensions.
     KKTVector kkt_view(Eigen::VectorXd &v) {
@@ -1055,7 +974,7 @@ class PSIOPT {
                     double &finalpert, double &cumpert, double base_prox = 0.0,
                     double dual_shift = 0.0);
 
-    bool analyze_kkt_matrix();
+    bool claim_kkt_analysis();
 
     void ensure_solver_initialized();
 
@@ -1088,6 +1007,16 @@ class PSIOPT {
     // evaluate stage (its maxcomp output feeds converge_check's barr_inf_).
 
     // --- NLP eval dispatch methods (defined in psiopt.cpp) ---
+    // The four wrappers below differ only in which NonLinearProgram entry point
+    // they call; the segment expressions that slice XSL/GX/AGXS_FX into the
+    // compound [primals | slacks | eq | iq] layout are written once, here. `fn` is
+    // a pointer to the NonLinearProgram member to invoke. Defined in psiopt.cpp,
+    // its only translation unit.
+    template <class Fn>
+    void eval_dispatch(Fn fn, double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
+                       EigenRef<VectorXd> GX, EigenRef<VectorXd> AGXS_FX,
+                       Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
+
     void eval_kkt(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val, EigenRef<VectorXd> GX,
                   EigenRef<VectorXd> AGXS_FX, Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
     void eval_kkt_no(double obj_scale, ConstEigenRef<VectorXd> XSL, double &val,
@@ -1137,6 +1066,35 @@ class PSIOPT {
     void enter_feasibility_restoration(Eigen::VectorXd &XSL, Eigen::VectorXd &RHS, double prim_obj,
                                        double barr_obj, double &mu);
 
+    // The restoration-entry dispatch, in the ONE order every entry site uses:
+    // record `theta` as the stall detector's handback yardstick, enter
+    // restoration, then re-arm the stall window. Ordering matters because
+    // enter_feasibility_restoration takes XSL/RHS by non-const reference; it does
+    // not write RHS today, but nothing in its signature says so, and the four
+    // former open-coded sites did not agree on whether note_dispatch ran before
+    // or after it. `theta` stays a parameter: each site already has the
+    // constraint violation it needs in hand, and computing it here instead would
+    // add a reduction at two of them.
+    void dispatch_restoration_entry(Eigen::VectorXd &XSL, Eigen::VectorXd &RHS, double prim_obj,
+                                    double barr_obj, double &mu, double theta,
+                                    FeasibilityStallDetector &feas_stall);
+
+    // The restoration EXIT protocol, in the one order every exit site must use:
+    // (optionally restore the stashed outer μ and reset the governor, which only
+    // a nested phase ever needs), exit_restoration(), notify the acceptance
+    // strategy of the switch back to optimality, reset the recovery chain.
+    //
+    // The order is load-bearing. exit_restoration() flips is_active() false, so
+    // any μ/governor work that belongs to the phase must precede it.
+    // notify_switch_to_optimality augments `measures` into the restored OPTIMALITY
+    // filter/funnel, whose accumulated pairs are all true-objective-scale — so
+    // callers build `measures` through build_restoration_exit_measures() rather
+    // than passing the loop's own prim_obj (which is φ_prox/φ_l1 while active).
+    // The recovery-chain reset runs last and exactly once per transition: the
+    // watchdog's objective-scale-bound snapshot and counters must not survive back
+    // into the optimality phase.
+    void leave_restoration(const ProgressMeasures &measures, bool restore_stashed_mu, double &mu);
+
     // The nested phase's multiplier re-entry sequence — shared byte-for-byte by
     // the κ_resto ratchet exit and the near-feasible stall exit (Ipopt
     // MinC_1NrmRestorationPhase::PerformRestoration, strict order): (1) keep the
@@ -1160,6 +1118,21 @@ class PSIOPT {
     // the kKappaResto constant (globalization/acceptance_strategy.h) stays out of
     // this header's include set.
     bool resto_ratchet_passes(double theta_orig) const;
+
+    // ‖c‖₁ over a KKT vector's constraint block — the L1 constraint violation the
+    // restoration entry guards, the proximal exit test and the stall detector all
+    // measure. One home for the reduction, which was written at seven sites in two
+    // spellings of the same expression (v.all_cons() is exactly the
+    // tail(equal_cons_ + inequal_cons_) the other spelling wrote out).
+    double constraint_violation_l1(KKTVector &v) const;
+
+    // Original-problem infeasibility (∞-norm) for an active NESTED restoration
+    // phase, taken from the raw equality/inequality residuals the eval seam saves
+    // each active iteration (the RHS constraint rows carry the condensed r̃ by
+    // then, so they are not a valid source). Two separate Eigen reductions,
+    // deliberately not fused. Meaningless off the nested path — every caller is
+    // inside a nested-active branch.
+    double original_infeasibility_inf() const;
 
     // Second-level elastic re-centering fallback for the nested l1 phase
     // (disclosure (f) in l1_restoration.h). Invoked by alg_impl's kAcceptAsIs case
@@ -1216,6 +1189,15 @@ class PSIOPT {
     void fill_iter_info(KKTVector &xsl, KKTVector &rhs, double pobj, double bobj, double mu,
                         IterateInfo &iter) const;
     ConvergenceFlags converge_check(std::vector<IterateInfo> &iters);
+
+    // Best-iterate bookkeeping for the return_best_ path (off by default). Scores
+    // `iter` under best_criteria_ and, when it ties or beats the incumbent (or is
+    // the phase's first iterate), snapshots XSL/RHS into best_xsl_scratch_/
+    // best_rhs_scratch_ and records the criterion value and iteration index. The
+    // return_best_ / restoration-active guard stays at the call sites, which
+    // differ in why they are reached; only the scoring and snapshot live here.
+    void track_best_iterate(const IterateInfo &iter, int i, const VectorXd &XSL,
+                            const VectorXd &RHS, double &BestCriteriaVal, int &BestIter);
     // max_primal_dual_step was extracted verbatim into BacktrackingLineSearch;
     // alg_impl now drives it through mechanism_ (fused into
     // compute_step on the main path, and via the public method at the PROBE

@@ -16,14 +16,16 @@
 // search runs, so Citer keeps its fresh default and GoodStep is false).
 ///////////////////////////////////////////////////////////////////////////////
 
+#include "solver_test_utils.h"
+
 #include "tycho/detail/solvers/globalization/acceptance_strategy.h"
 #include "tycho/detail/solvers/globalization/classic_adaptive_governor.h"
 #include "tycho/detail/solvers/globalization/filter_acceptance.h"
 #include "tycho/detail/solvers/globalization/funnel_acceptance.h"
 #include "tycho/detail/solvers/globalization/globalization_mechanism.h"
+#include "tycho/detail/solvers/globalization/modern_merit.h"
 #include "tycho/detail/solvers/globalization/monitored_governor.h"
 #include "tycho/detail/solvers/globalization/recovery_chain.h"
-#include "tycho/detail/solvers/globalization/solver_context.h"
 #include "tycho/detail/solvers/iterate_info.h"
 #include "tycho/detail/solvers/psiopt_fwd.h"
 
@@ -44,22 +46,22 @@ using tycho::solvers::FunnelAcceptance;
 using tycho::solvers::GlobalizationMechanism;
 using tycho::solvers::IterateInfo;
 using tycho::solvers::kRecoveryDepthUnresolved;
-using tycho::solvers::KktSolverType;
 using tycho::solvers::MonitoredBarrierGovernor;
 using tycho::solvers::ProgressMeasures;
 using tycho::solvers::PSIOPT;
 using tycho::solvers::RecoveryChain;
 using tycho::solvers::should_dispatch_recovery;
 using tycho::solvers::SolverContext;
+using TychoTest::InertSolverContext;
 
 // Stub AcceptanceStrategy: classic_line_search stamps the configured
 // accept/reject verdict onto Citer.accepted_ (as the real merit variants do at
 // the merit test) and returns a unit step. The generic filter/funnel hooks are
 // unused here.
-class StubAcceptance : public AcceptanceStrategy {
+class GateStubAcceptance : public AcceptanceStrategy {
   public:
     bool drives_classic_path() const override { return true; }
-    explicit StubAcceptance(bool accept) : accept_(accept) {}
+    explicit GateStubAcceptance(bool accept) : accept_(accept) {}
 
     bool is_iterate_acceptable(const ProgressMeasures &, const ProgressMeasures &,
                                const ProgressMeasures &, double, double) override {
@@ -87,7 +89,7 @@ class StubAcceptance : public AcceptanceStrategy {
 // gate fires it exactly when expected. Returns kAcceptAsIs and touches none of
 // its arguments (this test exercises the dispatch GATE, not the correction
 // itself — see test_soc.cpp for the SOC policy).
-class RecordingRecovery : public RecoveryChain {
+class GateRecordingRecovery : public RecoveryChain {
   public:
     Action on_step_rejected(IterateInfo &, const std::vector<IterateInfo> &, SolverContext &,
                             AcceptanceStrategy &, GlobalizationMechanism &,
@@ -103,29 +105,32 @@ class RecordingRecovery : public RecoveryChain {
     int calls_ = 0;
 };
 
-// Inert GlobalizationMechanism: RecordingRecovery ignores it, so its bodies are
+// Inert GlobalizationMechanism: GateRecordingRecovery ignores it, so its bodies are
 // never reached; present only to satisfy the on_step_rejected signature.
-class UnusedMechanism : public GlobalizationMechanism {
+class GateUnusedMechanism : public GlobalizationMechanism {
   public:
     double compute_step(PSIOPT::LineSearchModes, double, double, double, double, Eigen::VectorXd &,
                         Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &,
                         AcceptanceStrategy &, double &, double &, IterateInfo &,
                         const std::vector<IterateInfo> &, SolverContext &) override {
+        ADD_FAILURE() << "mechanism must not be reached: the recording recovery ignores it";
         return 1.0;
     }
     void max_primal_dual_step(Eigen::VectorXd &, Eigen::VectorXd &, double, double &, double &,
-                              const SolverContext &) override {}
+                              const SolverContext &) override {
+        ADD_FAILURE() << "mechanism must not be reached: the recording recovery ignores it";
+    }
     void reset() override {}
 };
 
 // Faithful replica of alg_impl's recovery-hook wiring: dispatch only when the
 // shared gate predicate says so. The extra working-set arguments are inert here
-// (RecordingRecovery ignores them) and bound to local dummies.
+// (GateRecordingRecovery ignores them) and bound to local dummies.
 void drive_gate(bool good_step, IterateInfo &citer, RecoveryChain &recovery,
                 AcceptanceStrategy &acceptance, const std::vector<IterateInfo> &iters,
                 SolverContext &ctx) {
     if (should_dispatch_recovery(good_step, citer)) {
-        UnusedMechanism mechanism;
+        GateUnusedMechanism mechanism;
         Eigen::VectorXd v;
         double alpha = 1.0, alphap = 1.0, alphad = 1.0;
         int soc_steps = 0;
@@ -136,16 +141,6 @@ void drive_gate(bool good_step, IterateInfo &citer, RecoveryChain &recovery,
                                   v, alpha, alphap, alphad, soc_steps, resolved_depth,
                                   watchdog_activations);
     }
-}
-
-// Minimal SolverContext for the recovery signature. RecordingRecovery never
-// dereferences it (the hook only bumps its counter), so every member binds to
-// an inert dummy: a null NLP, a default-constructed (never-factorized) KKT
-// solver, default Settings, a shared zero dimension, and a shared empty vector.
-SolverContext make_dummy_context(KktSolverType &solver, PSIOPT::Settings &settings, int &zero,
-                                 Eigen::VectorXd &scratch) {
-    return SolverContext{nullptr, solver,  settings, zero,    zero,    zero,
-                         zero,    zero,    scratch,  scratch, scratch, scratch};
 }
 
 TEST(RecoveryDispatchGate, PredicateTruthTable) {
@@ -161,18 +156,18 @@ TEST(RecoveryDispatchGate, PredicateTruthTable) {
 }
 
 TEST(RecoveryDispatchGate, StubAcceptanceDrivesHook) {
-    KktSolverType solver;
-    PSIOPT::Settings settings;
-    int zero = 0;
-    Eigen::VectorXd scratch;
-    SolverContext ctx = make_dummy_context(solver, settings, zero, scratch);
+    // Minimal SolverContext for the recovery signature. GateRecordingRecovery
+    // never dereferences it (the hook only bumps its counter), so an inert,
+    // all-zero-dimension context suffices.
+    InertSolverContext inert;
+    SolverContext ctx = inert.ctx();
     const std::vector<IterateInfo> iters;
     Eigen::VectorXd v; // inert working vectors for the stub line search
 
     // Rejected step (GoodStep): the stub stamps accepted_ = false; gate fires.
     {
-        RecordingRecovery recovery;
-        StubAcceptance acceptance(/*accept=*/false);
+        GateRecordingRecovery recovery;
+        GateStubAcceptance acceptance(/*accept=*/false);
         IterateInfo citer;
         acceptance.classic_line_search(PSIOPT::LineSearchModes::AUGLANG, 1.0, 1e-3, 0.0, 0.0, v, v,
                                        v, v, v, citer, iters);
@@ -183,8 +178,8 @@ TEST(RecoveryDispatchGate, StubAcceptanceDrivesHook) {
 
     // Accepted step (GoodStep): the stub stamps accepted_ = true; gate silent.
     {
-        RecordingRecovery recovery;
-        StubAcceptance acceptance(/*accept=*/true);
+        GateRecordingRecovery recovery;
+        GateStubAcceptance acceptance(/*accept=*/true);
         IterateInfo citer;
         acceptance.classic_line_search(PSIOPT::LineSearchModes::AUGLANG, 1.0, 1e-3, 0.0, 0.0, v, v,
                                        v, v, v, citer, iters);
@@ -197,9 +192,9 @@ TEST(RecoveryDispatchGate, StubAcceptanceDrivesHook) {
     // Citer keeps its fresh default (accepted_ == false); the gate stays silent
     // because GoodStep is false.
     {
-        RecordingRecovery recovery;
-        StubAcceptance acceptance(/*accept=*/false); // never reached (gate stays silent)
-        IterateInfo citer;                           // no line search ran
+        GateRecordingRecovery recovery;
+        GateStubAcceptance acceptance(/*accept=*/false); // never reached (gate stays silent)
+        IterateInfo citer;                               // no line search ran
         EXPECT_FALSE(citer.accepted_);
         drive_gate(/*good_step=*/false, citer, recovery, acceptance, iters, ctx);
         EXPECT_EQ(recovery.calls_, 0);
@@ -453,4 +448,59 @@ TEST(RecoveryDispatchGate, MonitoredSelectionConstructsMonitoredGovernor) {
     tycho::solvers::BarrierGovernor *governor = solver.governor_.get();
     ASSERT_NE(dynamic_cast<tycho::solvers::MonitoredBarrierGovernor *>(governor), nullptr);
     EXPECT_FALSE(governor->in_monotone_mode());
+}
+
+// Settings::merit_penalty_rule_ must reach the constructed ModernMeritAcceptance:
+// the rule is a constructor argument, so a selection bug here is invisible to
+// test_merit_rules.cpp (which constructs ModernMeritAcceptance directly) and to
+// the type-only checks above (both rules produce the same concrete type).
+//
+// The rule is discriminated behaviourally, by driving one acceptance test whose
+// hand-computed penalty trajectory differs between the two rules (both cases are
+// truth-tabled from the papers in test_merit_rules.cpp):
+//   - flexible, Curtis & Nocedal Region II — cur(θ=2,f=10), tri(θ=1,f=12),
+//     pred(m_θ=2,m_f=3): rejected at π_l, accepted at π_u, so π_l is raised to
+//     ≈ 0.2. The WMNO rule never touches π_l.
+//   - wmno, Waltz-Morales-Nocedal-Orban Eq. (3.6) — cur(θ=1,f=10),
+//     tri(θ=0.5,f=12), pred(m_θ=1,m_f=−9): τ = 10 > ν₀ = 1, so ν is bumped to
+//     11. The flexible rule never touches ν.
+//
+// Test access: same friend pattern as the selection tests above (private
+// rebuild_globalization_components() + private acceptance_), hence global scope.
+TEST(RecoveryDispatchGate, MeritPenaltyRuleSelectionReachesTheStrategy) {
+    using tycho::solvers::MeritPenaltyRules;
+    using tycho::solvers::ModernMeritAcceptance;
+    using tycho::solvers::ProgressMeasures;
+    const auto pm = [](double infeasibility, double objective) {
+        ProgressMeasures p;
+        p.infeasibility = infeasibility;
+        p.objective = objective;
+        return p;
+    };
+
+    {
+        tycho::solvers::PSIOPT solver;
+        solver.settings().acceptance_strategy_ = tycho::solvers::AcceptanceStrategies::merit;
+        solver.settings().merit_penalty_rule_ = MeritPenaltyRules::flexible;
+        solver.rebuild_globalization_components();
+        auto *merit = dynamic_cast<ModernMeritAcceptance *>(solver.acceptance_.get());
+        ASSERT_NE(merit, nullptr);
+        EXPECT_TRUE(
+            merit->is_iterate_acceptable(pm(2.0, 10.0), pm(1.0, 12.0), pm(2.0, 3.0), 1.0, 1.0));
+        EXPECT_NEAR(merit->flex_pi_l(), 0.2, 1e-6); // the flexible rule ran
+    }
+
+    {
+        tycho::solvers::PSIOPT solver;
+        solver.settings().acceptance_strategy_ = tycho::solvers::AcceptanceStrategies::merit;
+        // wmno is the default; set it explicitly so the contrast is stated.
+        solver.settings().merit_penalty_rule_ = MeritPenaltyRules::wmno;
+        solver.rebuild_globalization_components();
+        auto *merit = dynamic_cast<ModernMeritAcceptance *>(solver.acceptance_.get());
+        ASSERT_NE(merit, nullptr);
+        EXPECT_TRUE(
+            merit->is_iterate_acceptable(pm(1.0, 10.0), pm(0.5, 12.0), pm(1.0, -9.0), 1.0, 1.0));
+        EXPECT_DOUBLE_EQ(merit->wmno_penalty(), 11.0);                      // the WMNO rule ran
+        EXPECT_DOUBLE_EQ(merit->flex_pi_l(), tycho::solvers::kFlexInitPiL); // flexible did not
+    }
 }

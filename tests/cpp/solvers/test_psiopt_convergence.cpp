@@ -7,12 +7,13 @@
 #include <limits>
 
 using namespace tycho;
-using namespace TychoTest;
+using TychoTest::make_brach_solver_phase;
+using TychoTest::SolverTest;
 
 TEST_F(SolverTest, BrachistochroneEndToEnd) {
     auto phase = make_brach_solver_phase(32);
     auto status = phase->solve_optimize();
-    EXPECT_EQ(status, PSIOPT::ConvergenceFlags::CONVERGED);
+    EXPECT_EQ(status, tycho::ConvergenceFlags::CONVERGED);
 
     auto result = phase->return_traj();
     double tf = result.back()[3];
@@ -26,21 +27,24 @@ TEST_F(SolverTest, BrachistochroneSolveOnly) {
     // Should converge (feasible) -- Brachistochrone is well-posed.
     // ConvergenceFlags enum is ordered by severity: CONVERGED < ACCEPTABLE < NOTCONVERGED <
     // DIVERGING, so <= ACCEPTABLE accepts either CONVERGED or ACCEPTABLE.
-    EXPECT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
 }
 
-TEST_F(SolverTest, ConvergenceFlagOrdering) {
-    // Verify the severity ordering of convergence flags
-    EXPECT_LT(PSIOPT::ConvergenceFlags::CONVERGED, PSIOPT::ConvergenceFlags::ACCEPTABLE);
-    EXPECT_LT(PSIOPT::ConvergenceFlags::ACCEPTABLE, PSIOPT::ConvergenceFlags::NOTCONVERGED);
-    EXPECT_LT(PSIOPT::ConvergenceFlags::NOTCONVERGED, PSIOPT::ConvergenceFlags::DIVERGING);
-}
+// The severity ordering of the convergence flags is a compile-time contract --
+// every `status <= ACCEPTABLE` comparison in this suite and in the solver
+// depends on it. Asserted where it is decided, not at run time.
+static_assert(tycho::ConvergenceFlags::CONVERGED < tycho::ConvergenceFlags::ACCEPTABLE,
+              "ConvergenceFlags must be ordered by severity: CONVERGED < ACCEPTABLE");
+static_assert(tycho::ConvergenceFlags::ACCEPTABLE < tycho::ConvergenceFlags::NOTCONVERGED,
+              "ConvergenceFlags must be ordered by severity: ACCEPTABLE < NOTCONVERGED");
+static_assert(tycho::ConvergenceFlags::NOTCONVERGED < tycho::ConvergenceFlags::DIVERGING,
+              "ConvergenceFlags must be ordered by severity: NOTCONVERGED < DIVERGING");
 
 TEST_F(SolverTest, PrintLevelZeroConverges) {
     auto phase = make_brach_solver_phase(16);
     phase->optimizer_->set_print_level(0);
     auto status = phase->solve_optimize();
-    EXPECT_EQ(status, PSIOPT::ConvergenceFlags::CONVERGED);
+    EXPECT_EQ(status, tycho::ConvergenceFlags::CONVERGED);
 }
 
 // =============================================================================
@@ -146,6 +150,18 @@ TEST_F(SolverTest, QpParamSetterValidation) {
     EXPECT_THROW(opt.set_qp_par_solve(2), std::invalid_argument);
     EXPECT_NO_THROW(opt.set_qp_par_solve(0));
     EXPECT_NO_THROW(opt.set_qp_par_solve(1));
+    // Pardiso weighted matching (iparm[12]) and MPS scaling (iparm[10]): 0/1
+    // flags with the same range check. qp_scaling in particular is a live
+    // performance knob (see the note on Settings::qp_scaling_), so its setter
+    // must reject out-of-range values rather than pass them to Pardiso.
+    EXPECT_THROW(opt.set_qp_matching(-1), std::invalid_argument);
+    EXPECT_THROW(opt.set_qp_matching(2), std::invalid_argument);
+    EXPECT_NO_THROW(opt.set_qp_matching(0));
+    EXPECT_NO_THROW(opt.set_qp_matching(1));
+    EXPECT_THROW(opt.set_qp_scaling(-1), std::invalid_argument);
+    EXPECT_THROW(opt.set_qp_scaling(2), std::invalid_argument);
+    EXPECT_NO_THROW(opt.set_qp_scaling(0));
+    EXPECT_NO_THROW(opt.set_qp_scaling(1));
 }
 
 TEST_F(SolverTest, BoundPushNegSlackResetValidation) {
@@ -210,6 +226,22 @@ TEST_F(SolverTest, SettingsDefaultsRegression) {
     EXPECT_DOUBLE_EQ(s.obj_scale_, 1.0);
     EXPECT_DOUBLE_EQ(s.bound_fraction_, 0.99);
     EXPECT_EQ(s.print_level_, 0);
+
+    // The fields that decide which algorithm actually runs. Every one of these
+    // selects a shipped opt-in mechanism when flipped, so a changed default here
+    // changes shipped behaviour for every user who never touched the setting --
+    // exactly the change that must not land silently.
+    EXPECT_EQ(s.acceptance_strategy_, tycho::solvers::AcceptanceStrategies::classic_merit);
+    EXPECT_EQ(s.merit_penalty_rule_, tycho::solvers::MeritPenaltyRules::wmno);
+    EXPECT_EQ(s.barrier_governor_, tycho::solvers::BarrierGovernors::classic_adaptive);
+    EXPECT_FALSE(s.never_monotone_);
+    EXPECT_EQ(s.restoration_mode_, tycho::solvers::RestorationModes::off);
+    EXPECT_EQ(s.max_feas_rest_, 2);
+    EXPECT_EQ(s.inertia_mode_, tycho::solvers::InertiaModes::classic);
+    EXPECT_EQ(s.pd_step_strategy_, PSIOPT::PDStepStrategies::PrimSlackEq_Iq);
+    EXPECT_EQ(s.max_soc_, 0);           // SOC off
+    EXPECT_EQ(s.ls_extended_iters_, 0); // extended backtracking off
+    EXPECT_FALSE(s.watchdog_);          // watchdog off
 }
 
 // =============================================================================
@@ -237,23 +269,36 @@ TEST_F(SolverTest, BrachistochroneOptimizeSolve) {
     auto phase = make_brach_solver_phase(32);
     phase->optimizer_->set_print_level(3);
     auto status = phase->optimize_solve();
-    EXPECT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
 }
 
 TEST_F(SolverTest, ConditionalStepSkippedOnConvergence) {
+    // This is the suite's only exact iteration-count equality across two
+    // independent solves, and reproducing it needs BOTH pins: set_qp_threads(1)
+    // alone is not enough, because the KKT assembly itself is still partitioned
+    // across threads (num_partitions_ defaults to get_num_threads()*4), and
+    // concurrent partition accumulation into shared slots drifts by ULPs run to
+    // run (see the KKT-scatter test in test_kkt_canonical_lock.cpp, and
+    // docs/dev/analysis/2026-07-pr9-pardiso-options.md for the Pardiso side).
+    // set_num_partitions(1) forces single-partition assembly so the
+    // accumulation order -- not just the factorization -- is deterministic.
     // optimize alone
     auto phase_opt = make_brach_solver_phase(32);
     phase_opt->optimizer_->set_print_level(3);
+    phase_opt->optimizer_->set_qp_threads(1);
+    phase_opt->set_num_partitions(1);
     auto status_opt = phase_opt->optimize();
-    ASSERT_EQ(status_opt, PSIOPT::ConvergenceFlags::CONVERGED);
+    ASSERT_EQ(status_opt, tycho::ConvergenceFlags::CONVERGED);
     int opt_iters = phase_opt->optimizer_->result().iter_num_;
 
     // optimize_solve: the solve step is conditional, so if optimize converges,
     // the total iteration count should equal optimize-only.
     auto phase_os = make_brach_solver_phase(32);
     phase_os->optimizer_->set_print_level(3);
+    phase_os->optimizer_->set_qp_threads(1);
+    phase_os->set_num_partitions(1);
     auto status_os = phase_os->optimize_solve();
-    EXPECT_LE(status_os, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(status_os, tycho::ConvergenceFlags::ACCEPTABLE);
     int os_iters = phase_os->optimizer_->result().iter_num_;
 
     EXPECT_EQ(os_iters, opt_iters)
@@ -264,14 +309,14 @@ TEST_F(SolverTest, BrachistochroneSolveOptimizeSolve) {
     auto phase = make_brach_solver_phase(32);
     phase->optimizer_->set_print_level(3);
     auto status = phase->solve_optimize_solve();
-    EXPECT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
     EXPECT_EQ(phase->optimizer_->result().primals_.size(), phase->nlp_->primal_vars_);
 }
 
 TEST_F(SolverTest, ResultAccessorPopulatedAfterSolve) {
     auto phase = make_brach_solver_phase(32);
     auto status = phase->solve_optimize();
-    EXPECT_EQ(status, PSIOPT::ConvergenceFlags::CONVERGED);
+    EXPECT_EQ(status, tycho::ConvergenceFlags::CONVERGED);
 
     const auto &r = phase->optimizer_->result();
     EXPECT_GT(r.iter_num_, 0);
@@ -302,7 +347,7 @@ TEST_F(SolverTest, ResultResetBetweenCalls) {
 
     // Additional fields should be valid and non-stale
     EXPECT_GT(r.obj_val_, 0.0);
-    EXPECT_LE(r.converge_flag_, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(r.converge_flag_, tycho::ConvergenceFlags::ACCEPTABLE);
     EXPECT_GT(r.total_time_, 0.0);
     EXPECT_EQ(r.primals_.size(), phase->nlp_->primal_vars_);
 
@@ -324,7 +369,7 @@ TEST_F(SolverTest, ReturnBestPreservesNonFinalIterate) {
     phase->optimizer_->settings().best_criteria_ = PSIOPT::BestCriteriaModes::ECONS;
 
     auto status = phase->optimize();
-    EXPECT_EQ(status, PSIOPT::ConvergenceFlags::NOTCONVERGED);
+    EXPECT_EQ(status, tycho::ConvergenceFlags::NOTCONVERGED);
 
     const auto &r = phase->optimizer_->result();
     EXPECT_GT(r.primals_.size(), 0u);
@@ -341,7 +386,7 @@ TEST_F(SolverTest, ReturnBestPreservesNonFinalIterate) {
     EXPECT_EQ(phase2->optimizer_->result().primals_.size(), r.primals_.size());
 }
 
-TEST_F(SolverTest, DivergenceEarlyExitInMultiPhase) {
+TEST_F(SolverTest, DivergenceEarlyExitInPhaseSequence) {
     auto phase = make_brach_solver_phase(16);
     phase->optimizer_->set_print_level(3);
     // Set divergence tolerances extremely tight — solver triggers DIVERGING quickly.
@@ -351,7 +396,7 @@ TEST_F(SolverTest, DivergenceEarlyExitInMultiPhase) {
     phase->optimizer_->set_acc_tols(1e-21, 1e-21, 1e-21, 1e-21);
     phase->optimizer_->set_div_tols(1e-20, 1e-20, 1e-20, 1e-20);
     auto status = phase->solve_optimize();
-    EXPECT_EQ(status, PSIOPT::ConvergenceFlags::DIVERGING);
+    EXPECT_EQ(status, tycho::ConvergenceFlags::DIVERGING);
 }
 
 // =============================================================================
@@ -400,15 +445,6 @@ TEST_F(SolverTest, StringModeSetters) {
 // Composite setter delegation tests
 // =============================================================================
 
-TEST_F(SolverTest, UnaccTolsCompositeDelegation) {
-    PSIOPT opt;
-    opt.set_unacc_tols(1.0, 2.0, 3.0, 4.0);
-    EXPECT_DOUBLE_EQ(opt.settings().unacc_kkt_tol_, 1.0);
-    EXPECT_DOUBLE_EQ(opt.settings().unacc_econ_tol_, 2.0);
-    EXPECT_DOUBLE_EQ(opt.settings().unacc_icon_tol_, 3.0);
-    EXPECT_DOUBLE_EQ(opt.settings().unacc_bar_tol_, 4.0);
-}
-
 TEST_F(SolverTest, DivTolsCompositeDelegation) {
     PSIOPT opt;
     opt.set_div_tols(1e10, 2e10, 3e10, 4e10);
@@ -426,7 +462,7 @@ TEST_F(SolverTest, MultiplierAndConstraintResultPopulation) {
     auto phase = make_brach_solver_phase(32);
     phase->optimizer_->set_print_level(3);
     auto status = phase->solve_optimize();
-    ASSERT_EQ(status, PSIOPT::ConvergenceFlags::CONVERGED);
+    ASSERT_EQ(status, tycho::ConvergenceFlags::CONVERGED);
 
     const auto &r = phase->optimizer_->result();
 
@@ -521,11 +557,6 @@ TEST_F(SolverTest, SettingsValidateCatchesCrossFieldInvariants) {
     s.max_refac_ = 0;
     EXPECT_THROW(s.validate(), std::invalid_argument);
     s.max_refac_ = 15;
-
-    // soe_bound_relax must be positive and finite
-    s.soe_bound_relax_ = -1.0;
-    EXPECT_THROW(s.validate(), std::invalid_argument);
-    s.soe_bound_relax_ = 1e-8;
 
     // Invalid per-field value
     s.bound_fraction_ = 5.0;

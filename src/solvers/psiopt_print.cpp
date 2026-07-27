@@ -6,7 +6,7 @@
 // Source: https://github.com/AlabamaASRL/asset_asrl
 // Original Developer: James B. Pezent
 //
-// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+// Modifications in Tycho (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
 //   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
 //   - Printing methods extracted from psiopt.cpp for build-organization clarity
@@ -89,7 +89,7 @@ void tycho::solvers::PSIOPT::print_stats() {
 void tycho::solvers::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &iters) {
     const auto &last = iters.back();
 
-    if (last.iter % 10 == 0) {
+    if (last.iter_ % 10 == 0) {
         if (settings_.wide_console_) {
             fmt::print("{0:=^{1}}\n", "", 159);
             fmt::print(
@@ -137,7 +137,7 @@ void tycho::solvers::PSIOPT::print_last_iterate(const std::vector<IterateInfo> &
     auto chash = [](fmt::text_style c) { fmt::print(c, "|"); };
 
     hash();
-    fmt::print("{:<4}", last.iter);
+    fmt::print("{:<4}", last.iter_);
     hash();
     fmt::print("{:.2e}", last.mu_);
     hash();

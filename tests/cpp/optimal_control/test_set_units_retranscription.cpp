@@ -38,20 +38,20 @@ TEST_F(SetUnitsRetranscription, ResolveMatchesFreshPhase) {
 
     auto reused = make_brach_phase(20);
     reused->set_auto_scaling(true);
-    reused->optimizer_->set_print_level(0);
+    reused->optimizer_->set_print_level(3);
     auto reused_status1 = reused->solve_optimize();
-    EXPECT_LE(reused_status1, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(reused_status1, tycho::ConvergenceFlags::ACCEPTABLE);
 
     reused->set_units(units);
     auto reused_status2 = reused->solve_optimize();
-    EXPECT_LE(reused_status2, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(reused_status2, tycho::ConvergenceFlags::ACCEPTABLE);
 
     auto fresh = make_brach_phase(20);
     fresh->set_auto_scaling(true);
-    fresh->optimizer_->set_print_level(0);
+    fresh->optimizer_->set_print_level(3);
     fresh->set_units(units);
     auto fresh_status = fresh->solve_optimize();
-    EXPECT_LE(fresh_status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(fresh_status, tycho::ConvergenceFlags::ACCEPTABLE);
 
     double reused_tf = reused->return_traj().back()[reused->t_var()];
     double fresh_tf = fresh->return_traj().back()[fresh->t_var()];

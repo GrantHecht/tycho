@@ -294,7 +294,7 @@ table) through progressively terser `1` and `2` to fully silent (`3`); pass
 :::{tab-item} C++
 ```cpp
 phase.optimizer().set_print_level(3);
-auto flag = phase.optimize();   // -> PSIOPT::ConvergenceFlags::CONVERGED
+auto flag = phase.optimize();   // -> tycho::ConvergenceFlags::CONVERGED
 ```
 :::
 ::::

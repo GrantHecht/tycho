@@ -1,5 +1,5 @@
 // =============================================================================
-// Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
+// Tycho (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 //
 // IFT composition for the LCD Kepler propagator: takes the structural Jacobians
 // of the codegen primal VF (S: 11 → 6) and Kepler residual VF (F: 10 → 1) and

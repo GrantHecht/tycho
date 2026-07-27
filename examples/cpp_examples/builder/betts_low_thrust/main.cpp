@@ -223,7 +223,7 @@ int main() {
     std::cout << "=== Betts Low Thrust: LEO-to-MEO with J2/J3/J4 zonal gravity ===\n\n";
 
     const auto flag = phase.optimize_solve();
-    if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+    if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "BettsLowThrust: FAILED (status " << static_cast<int>(flag) << ")\n";
         return EXIT_FAILURE;
     }

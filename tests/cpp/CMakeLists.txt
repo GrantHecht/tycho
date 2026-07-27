@@ -191,6 +191,17 @@ set(TYCHO_TEST_HEAVY_SOURCES
     solvers/test_inertia_regularization.cpp
     solvers/test_ipopt_backend_dispatch.cpp
     solvers/test_eval_exception_recovery.cpp
+    # UNITY-BATCH RULE for new solver tests appended below this line: with
+    # UNITY_BUILD_BATCH_SIZE 8, the solvers block above ends mid-batch --
+    # unity_13 currently holds only test_eval_exception_recovery.cpp (see the
+    # file-local names eval_except_above / EvalExceptGuardedSquare /
+    # build_eval_except_nlp), so the NEXT file appended here merges into that
+    # same unity TU. Give every file-local (anonymous-namespace or free
+    # function/class) symbol in a new solver test a name that is unique across
+    # tests/cpp/ (the existing files in this block follow a per-test-file
+    # prefix convention, e.g. ProxResto*, L1Resto*, MonGov*, Filter*, Funnel*
+    # -- grep the prefix before reusing it), the same convention documented on
+    # the SKIP_UNITY_BUILD_INCLUSION entries below.
 )
 
 #-------------------------------------------------------------------------------

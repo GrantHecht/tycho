@@ -141,7 +141,7 @@ NavResult navigate(ODE &ode, const std::vector<Eigen::Vector2d> &points, double 
     const auto status = ocp.solve_optimize();
 
     NavResult result;
-    result.converged = (status <= PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    result.converged = (status <= tycho::ConvergenceFlags::ACCEPTABLE);
 
     if (result.converged) {
         for (auto &p : phases) {

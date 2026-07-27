@@ -26,7 +26,7 @@
 // Also defines implements the constraints function in terms of the compute function. The
 // constraints functions is part of a vector functions interface to the non-linear optimizer PSIOPT.
 //
-// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+// Modifications in Tycho (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
 //   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
 //   - Python binding methods moved to src/bindings/ (nanobind)

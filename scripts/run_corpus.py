@@ -88,8 +88,9 @@ DEFAULT_OUT = "corpus_results.jsonl"
 # ANSI SGR sequences wrap PSIOPT's colored console output; strip them before
 # hunting for the iteration count.
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
-# The proven PR 9 CBWR instrument: PSIOPT prints " Iterations : N" once per
-# solve when print_level < 2 (the library default).
+# The bitwise-reproducibility (CBWR) work's proven instrument: PSIOPT prints
+# " Iterations : N" once per solve when print_level < 2 (the library
+# default).
 _ITER_RE = re.compile(r"Iterations : *([0-9]+)")
 
 # Exhaustive PSIOPT ConvergenceFlags -> harness status mapping. Verified

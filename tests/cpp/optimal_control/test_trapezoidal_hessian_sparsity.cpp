@@ -43,7 +43,7 @@ TEST_F(OptimalControlTest, TrapezoidalSparsityMatchesDenseSolve) {
         auto phase = make_brach_phase(100, 32, TranscriptionModes::Trapezoidal);
         phase->enable_hessian_sparsity_ = sparsity;
         auto status = phase->solve_optimize();
-        EXPECT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+        EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
         return phase->return_traj().back()[3]; // tf
     };
 
@@ -62,7 +62,7 @@ TEST_F(OptimalControlTest, TrapezoidalSparsityMatchesDenseSolveBlockConstant) {
         phase->set_control_mode(ControlModes::BlockConstant);
         phase->enable_hessian_sparsity_ = sparsity;
         auto status = phase->solve_optimize();
-        EXPECT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+        EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
         return phase->return_traj().back()[3]; // tf
     };
 

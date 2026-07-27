@@ -6,7 +6,7 @@
 # Source: https://github.com/AlabamaASRL/asset_asrl
 # Original Developer: James B. Pezent
 #
-# Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+# Modifications in Tycho (Copyright 2026-present Grant R. Hecht,
 #   Apache 2.0 — see LICENSE.txt):
 #   - Package renamed: asset_asrl -> tycho
 #   - Module renamed: asset_asrl (pybind11) -> _tychopy (nanobind)

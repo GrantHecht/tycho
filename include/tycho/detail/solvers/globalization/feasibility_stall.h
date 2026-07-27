@@ -1,5 +1,5 @@
 // =============================================================================
-// Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
+// Tycho (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 // =============================================================================
 //
 // FeasibilityStallDetector — windowed sustained-worsening detector for the
@@ -46,10 +46,13 @@
 //     Ceding it is the right trade: the episodes it used to draw only shortened
 //     a solve that diverges under every configuration, while the same episodes
 //     elsewhere in the corpus cost a verdict.
-//   * Jitter robustness is by construction. A 25% margin is some eleven orders
-//     of magnitude above the relative rounding noise of a threaded sparse
-//     factorization, so no amount of run-to-run FP drift can move an
-//     observation across the elevation mark and reshape the dispatch schedule.
+//   * Jitter robustness is by construction. A 25% margin is many orders of
+//     magnitude above double-precision rounding noise (~1e-16 relative; even
+//     the far more conservative kFeasStallMinRelImprovement floor this file
+//     defines below for an unrelated purpose is only 1e-12), so no amount of
+//     run-to-run FP drift in a threaded sparse factorization can move an
+//     observation across the elevation mark and reshape the dispatch
+//     schedule.
 //   * The window is sized so a real worsening is caught promptly while nothing
 //     transient is mistaken for one: a stage has to hold an elevated violation
 //     for 50 straight iterations, and a single dip back to (or below) its best

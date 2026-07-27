@@ -1,9 +1,9 @@
 THIRD-PARTY NOTICE — ASSET (Apache License 2.0)
 ================================================
 
-Tycho is a derivative fork of ASSET (AlabamaASRL/asset_asrl). The original
+Tycho is a derivative work of ASSET (AlabamaASRL/asset_asrl). The original
 ASSET codebase forms the basis of this project; all modifications and
-additions made in the Tycho fork are copyright Grant R. Hecht (see
+additions made in Tycho are copyright Grant R. Hecht (see
 LICENSE.txt at the repository root). Per-file headers on ASSET-derived
 source files identify the original source and summarise the changes made.
   Package:   ASSET (AlabamaASRL/asset_asrl)

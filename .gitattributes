@@ -11,3 +11,4 @@ doc-legacy/** linguist-documentation
 # them in diffs.
 doc-legacy/tutorials/_static/*.html linguist-generated
 tests/corpus/campaign/*.json -diff
+tests/corpus/campaign/*.csv -diff

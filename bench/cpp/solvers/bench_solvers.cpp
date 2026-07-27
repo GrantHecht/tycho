@@ -18,7 +18,7 @@ static void BM_PSIOPT_Brach_16seg(benchmark::State &state) {
         auto status = phase->solve_optimize();
         benchmark::DoNotOptimize(status);
         if (first) {
-            if (status > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+            if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
                 state.SkipWithError("PSIOPT did not converge (16seg)");
             }
             first = false;
@@ -34,7 +34,7 @@ static void BM_PSIOPT_Brach_32seg(benchmark::State &state) {
         auto status = phase->solve_optimize();
         benchmark::DoNotOptimize(status);
         if (first) {
-            if (status > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+            if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
                 state.SkipWithError("PSIOPT did not converge (32seg)");
             }
             first = false;
@@ -56,7 +56,7 @@ static void BM_PSIOPT_PolarLT_128seg(benchmark::State &state) {
         auto status = phase->solve_optimize();
         benchmark::DoNotOptimize(status);
         if (first) {
-            if (status > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+            if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
                 state.SkipWithError("PSIOPT did not converge (PolarLT 128seg)");
             }
             first = false;
@@ -72,7 +72,7 @@ static void BM_PSIOPT_PolarLT_256seg(benchmark::State &state) {
         auto status = phase->solve_optimize();
         benchmark::DoNotOptimize(status);
         if (first) {
-            if (status > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+            if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
                 state.SkipWithError("PSIOPT did not converge (PolarLT 256seg)");
             }
             first = false;
@@ -95,7 +95,7 @@ static void BM_PSIOPT_Brach_32seg_MTMetis(benchmark::State &state) {
         auto status = phase->solve_optimize();
         benchmark::DoNotOptimize(status);
         if (first) {
-            if (status > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+            if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
                 state.SkipWithError("PSIOPT did not converge (32seg MTMetis)");
             }
             first = false;
@@ -112,7 +112,7 @@ static void BM_PSIOPT_PolarLT_128seg_MTMetis(benchmark::State &state) {
         auto status = phase->solve_optimize();
         benchmark::DoNotOptimize(status);
         if (first) {
-            if (status > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+            if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
                 state.SkipWithError("PSIOPT did not converge (PolarLT 128seg MTMetis)");
             }
             first = false;
@@ -135,7 +135,7 @@ static void BM_PSIOPT_BettsLT_32seg(benchmark::State &state) {
         auto status = phase->solve_optimize();
         benchmark::DoNotOptimize(status);
         if (first) {
-            if (status > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+            if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
                 state.SkipWithError("PSIOPT did not converge (BettsLT 32seg)");
             }
             first = false;
@@ -151,7 +151,7 @@ static void BM_PSIOPT_BettsLT_64seg(benchmark::State &state) {
         auto status = phase->solve_optimize();
         benchmark::DoNotOptimize(status);
         if (first) {
-            if (status > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+            if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
                 state.SkipWithError("PSIOPT did not converge (BettsLT 64seg)");
             }
             first = false;
@@ -167,7 +167,7 @@ static void BM_PSIOPT_BettsLT_MeshRefine(benchmark::State &state) {
         auto status = phase->solve_optimize();
         benchmark::DoNotOptimize(status);
         if (first) {
-            if (status > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+            if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
                 state.SkipWithError("PSIOPT did not converge (BettsLT MeshRefine)");
             }
             first = false;

@@ -210,7 +210,7 @@ int main() {
     std::cout << "MinTimeClimbTables: solving...\n" << std::flush;
     const auto flag = phase.solve_optimize();
 
-    if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+    if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "MinTimeClimbTables (builder): solver FAILED (status "
                   << static_cast<int>(flag) << ")\n";
         // Still report what we got

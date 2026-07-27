@@ -6,7 +6,14 @@
 #include <gtest/gtest.h>
 
 using namespace tycho;
-using namespace TychoTest;
+using TychoTest::make_brach_solver_phase;
+using TychoTest::SolverTest;
+
+// OptimizationProblemBase/OptimizationProblem live in tycho::solvers; this
+// file previously relied on the TychoTest -> tycho::solvers using-directive
+// leak (fixed in solver_test_utils.h) to see them unqualified.
+using tycho::solvers::OptimizationProblem;
+using tycho::solvers::OptimizationProblemBase;
 
 TEST_F(SolverTest, NLPDimensionsConsistency) {
     auto phase = make_brach_solver_phase(16);

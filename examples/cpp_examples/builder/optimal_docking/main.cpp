@@ -264,7 +264,7 @@ static bool run_form2() {
     std::cout << "  Final Time: " << std::fixed << std::setprecision(2) << tf_final
               << " s\n";
 
-    if (flag <= PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+    if (flag <= tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cout << "  Form2: PASSED\n\n";
         return true;
     } else {
@@ -340,7 +340,7 @@ static bool run_form1() {
     std::cout << "  Final Time: " << std::fixed << std::setprecision(2) << tf_final
               << " s\n";
 
-    if (flag <= PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+    if (flag <= tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cout << "  Form1: PASSED\n\n";
         return true;
     } else {

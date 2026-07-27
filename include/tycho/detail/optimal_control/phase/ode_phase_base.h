@@ -6,7 +6,7 @@
 // Source: https://github.com/AlabamaASRL/asset_asrl
 // Original Developer: James B. Pezent
 //
-// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+// Modifications in Tycho (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
 //   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
 //   - Python binding methods moved to src/bindings/ (nanobind)
@@ -196,8 +196,8 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
                                                                           ///< aggregation.
     MeshErrorAggregation mesh_error_distributor_ = MeshErrorAggregation::AVG; ///< Distribution
                                                                              ///< aggregation.
-    PSIOPT::ConvergenceFlags mesh_abort_flag_ =
-        PSIOPT::ConvergenceFlags::DIVERGING; ///< Solver flag that aborts the mesh loop.
+    tycho::ConvergenceFlags mesh_abort_flag_ =
+        tycho::ConvergenceFlags::DIVERGING; ///< Solver flag that aborts the mesh loop.
 
     bool mesh_converged_ = false; ///< Whether the mesh has met the tolerance.
 
@@ -1906,14 +1906,14 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     /// @param mode  The solve/optimize job mode.
     /// @return The solver convergence flag.
     /// @endinternal
-    PSIOPT::ConvergenceFlags psipot_call_impl(JetJobModes mode);
+    tycho::ConvergenceFlags psipot_call_impl(JetJobModes mode);
 
     /// @internal
     /// @brief Run the full phase solve, including the adaptive-mesh-refinement loop.
     /// @param mode  The solve/optimize job mode.
     /// @return The solver convergence flag.
     /// @endinternal
-    PSIOPT::ConvergenceFlags phase_call_impl(JetJobModes mode);
+    tycho::ConvergenceFlags phase_call_impl(JetJobModes mode);
 
   public:
     /// @brief Transcribe the phase into its NLP, optionally printing diagnostics.
@@ -1958,23 +1958,23 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
 
     /// @brief Solve the phase for feasibility (satisfy constraints, no optimization).
     /// @return The solver convergence flag.
-    PSIOPT::ConvergenceFlags solve() { return phase_call_impl(JetJobModes::Solve); }
+    tycho::ConvergenceFlags solve() { return phase_call_impl(JetJobModes::Solve); }
     /// @brief Optimize the phase (minimize the objective subject to the constraints).
     /// @return The solver convergence flag.
-    PSIOPT::ConvergenceFlags optimize() { return phase_call_impl(JetJobModes::Optimize); }
+    tycho::ConvergenceFlags optimize() { return phase_call_impl(JetJobModes::Optimize); }
     /// @brief Solve for feasibility, then optimize.
     /// @return The solver convergence flag.
-    PSIOPT::ConvergenceFlags solve_optimize() {
+    tycho::ConvergenceFlags solve_optimize() {
         return phase_call_impl(JetJobModes::SolveOptimize);
     }
     /// @brief Solve, optimize, then solve again to tighten feasibility.
     /// @return The solver convergence flag.
-    PSIOPT::ConvergenceFlags solve_optimize_solve() {
+    tycho::ConvergenceFlags solve_optimize_solve() {
         return phase_call_impl(JetJobModes::SolveOptimizeSolve);
     }
     /// @brief Optimize, then solve to tighten feasibility.
     /// @return The solver convergence flag.
-    PSIOPT::ConvergenceFlags optimize_solve() {
+    tycho::ConvergenceFlags optimize_solve() {
         return phase_call_impl(JetJobModes::OptimizeSolve);
     }
 

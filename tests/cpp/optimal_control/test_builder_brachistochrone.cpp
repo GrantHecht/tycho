@@ -64,7 +64,7 @@ TEST_F(BuilderAPITest, BrachistochroneConverges) {
 
     // Solve
     auto status = phase.solve_optimize();
-    EXPECT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
 
     // Check optimal time
     auto result = phase.return_traj();
@@ -159,7 +159,7 @@ TEST_F(BuilderAPITest, BrachistochroneMixedAPI) {
     phase.add_delta_time_objective(1.0);
 
     auto status = phase.solve_optimize();
-    EXPECT_LE(status, PSIOPT::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
 
     auto result = phase.return_traj();
     double tf = result.back()[3];

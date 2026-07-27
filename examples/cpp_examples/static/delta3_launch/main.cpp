@@ -226,7 +226,7 @@ int main() {
 
     const auto status = ocp.solve_optimize();
 
-    if (status > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+    if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "Delta3Launch: FAILED (status " << static_cast<int>(status) << ")\n";
         return 1;
     }

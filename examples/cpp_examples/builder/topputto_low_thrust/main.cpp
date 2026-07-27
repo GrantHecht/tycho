@@ -76,7 +76,7 @@ int main() {
     phase.add_delta_time_objective(1.0 / 100.0);
     {
         const auto flag = phase.solve_optimize_solve();
-        if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+        if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
             std::cerr << "TopputtoLowThrust: time-optimal solve_optimize_solve failed (status "
                       << static_cast<int>(flag) << ")\n";
             return EXIT_FAILURE;
@@ -102,7 +102,7 @@ int main() {
 
     {
         const auto flag = phase.optimize_solve();
-        if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+        if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
             std::cerr << "TopputtoLowThrust: fuel-optimal initial optimize_solve failed (status "
                       << static_cast<int>(flag) << ")\n";
             return EXIT_FAILURE;
@@ -111,7 +111,7 @@ int main() {
     phase.refine_traj_manual(800);
     {
         const auto flag = phase.optimize_solve();
-        if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+        if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
             std::cerr << "TopputtoLowThrust: fuel-optimal refined optimize_solve failed (status "
                       << static_cast<int>(flag) << ")\n";
             return EXIT_FAILURE;

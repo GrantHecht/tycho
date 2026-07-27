@@ -1,5 +1,5 @@
 // =============================================================================
-// Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
+// Tycho (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 // =============================================================================
 //
 // Part of the globalization component extraction: this header declares
@@ -7,25 +7,29 @@
 // PSIOPT state the globalization components need to read (and, for a few
 // scratch buffers, write).
 //
-// This file: declares SolverContext. NOT filled in with usage yet — no
-// component reads from a SolverContext instance until later wiring work
-// connects real call sites. The member list here is exactly the state
-// inventory rows whose prospective owner is one of the globalization
-// components (Acceptance / Globalization / BarrierGovernor / RecoveryChain)
-// or "shared". Members not needed by any of the seven component interfaces
-// shipped so far (e.g. result_.*, qp_analyzed_, callbacks) are intentionally
-// omitted; this list is expected to grow as later work wires real call
-// sites — do not treat this as the final member set.
+// This file: declares SolverContext. The member list here is exactly the
+// state inventory rows whose prospective owner is one of the globalization
+// components (Acceptance / Globalization / BarrierGovernor / RecoveryChain /
+// RestorationStrategy) or "shared". Members not needed by any of the five
+// component interfaces or their sixteen shipped concrete strategies (e.g.
+// result_.*, qp_analyzed_, callbacks) are intentionally omitted; this list is
+// expected to grow as later work wires real call sites — do not treat this
+// as the final member set.
 //
 // Ownership rule: SolverContext owns nothing. Every member is a reference or
 // a non-owning pointer into the live PSIOPT instance; a SolverContext must
 // not outlive the PSIOPT it was built from (same lifetime discipline as
-// PSIOPT::KKTVector, psiopt.h). It is constructed fresh (as a temporary) at
-// each call site that needs it — never stored across iterations by a
-// component. Components hold NO solver state themselves; SolverContext (plus
-// the explicit per-iteration transient parameters threaded through each
-// interface method, e.g. mu/prim_obj/barr_obj) is the only channel by which
-// they observe or mutate PSIOPT's persistent state.
+// tycho::solvers::KKTVector, include/tycho/detail/solvers/kkt_vector.h). Most
+// call sites construct one fresh (as a temporary) for the duration of a
+// single call. One exception:
+// ClassicMeritAcceptance holds a SolverContext by value as a private member
+// (merit_acceptance.h) instead of re-threading it through every call — that
+// copy is rebuilt by rebuild_globalization_components() on every solve entry
+// and must not outlive that rebuild, the same lifetime bound as any other
+// SolverContext. Components hold no OTHER solver state themselves;
+// SolverContext (plus the explicit per-iteration transient parameters
+// threaded through each interface method, e.g. mu/prim_obj/barr_obj) is the
+// only channel by which they observe or mutate PSIOPT's persistent state.
 
 #pragma once
 
@@ -44,6 +48,7 @@
 // build instead); that one-directional arrangement is what keeps every
 // header below self-sufficient/standalone-compilable without a fragile
 // circular-include trick.
+#include "tycho/detail/solvers/eval_error_log.h"
 #include "tycho/detail/solvers/psiopt.h"
 
 #ifdef USE_ACCELERATE_SPARSE
@@ -103,8 +108,11 @@ struct SolverContext {
     // delta_h_/incr_h_/decr_h_/max_refac_ -> RecoveryChain;
     // econ_tol_/icon_tol_ and the div_*/acc_*/kkt_tol_ family -> shared with
     // convergence checking). Bundled as one const reference rather than
-    // split per-component to match the "no wiring yet" scope of this stage —
-    // no component reads through it until later wiring work lands.
+    // split per-component: every live call site reads it as
+    // ctx_.settings_./ctx.settings_. (e.g. ClassicMeritAcceptance's exit-test
+    // helpers, BacktrackingLineSearch::compute_step,
+    // ClassicAdaptiveGovernor::update_barrier), so one reference covers every
+    // component's disjoint subset without per-field plumbing.
     const PSIOPT::Settings &settings_;
 
     // --- Problem dimensions (shared, immutable during solve) ---
@@ -118,18 +126,20 @@ struct SolverContext {
     const int &kkt_dim_;
 
     // --- Reusable scratch buffers ---
-    // stli_scratch_ / hp_scratch_: BarrierGovernor (complementarity() and
-    // barrier_hessian()'s internal buffers, both read+write by the function
-    // that owns them today; PSIOPT keeps the backing storage to avoid
-    // per-call heap allocation, see psiopt.h:404-411).
+    // stli_scratch_: read+write by ClassicAdaptiveGovernor::complementarity(),
+    // which is a moved copy of PSIOPT::complementarity and uses the SAME
+    // PSIOPT-owned buffer to avoid per-call heap allocation (see
+    // PSIOPT::stli_scratch_).
+    //
+    // This is the only scratch buffer any component reaches through the context.
+    // hp_scratch_ (barrier_hessian's buffer) and best_xsl_scratch_/
+    // best_rhs_scratch_ (the return_best_ snapshots) used to be here too, on the
+    // expectation that a future BarrierGovernor/RecoveryChain would need them;
+    // no component ever read one, and both remained PSIOPT-internal (the
+    // best-iterate bookkeeping is PSIOPT::track_best_iterate). They were dropped
+    // rather than carried forward as three unused references passed at every
+    // construction site.
     Eigen::VectorXd &stli_scratch_;
-    Eigen::VectorXd &hp_scratch_;
-
-    // best_xsl_scratch_ / best_rhs_scratch_: RecoveryChain (the return_best_
-    // snapshot/restore machinery, psiopt.h:413-419). Read+write once the
-    // best-iterate blocks are extracted (not yet done).
-    Eigen::VectorXd &best_xsl_scratch_;
-    Eigen::VectorXd &best_rhs_scratch_;
 
     // --- Feasibility restoration (optional; null when off) ---
     // Non-owning pointer to the active RestorationStrategy, or nullptr when

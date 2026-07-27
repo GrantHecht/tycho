@@ -85,7 +85,7 @@ int main() {
 
     const auto flag = phase.optimize();
 
-    if (flag > PSIOPT::ConvergenceFlags::ACCEPTABLE) {
+    if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "FreeFlyingRobot (builder): FAILED (status "
                   << static_cast<int>(flag) << ")\n";
         return EXIT_FAILURE;

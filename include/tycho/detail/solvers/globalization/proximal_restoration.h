@@ -1,5 +1,5 @@
 // =============================================================================
-// Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
+// Tycho (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 // =============================================================================
 //
 // ProximalSwitchRestoration — a RestorationStrategy that keeps the SAME
@@ -166,18 +166,14 @@ class ProximalSwitchRestoration final : public RestorationStrategy {
 
     const Eigen::VectorXd &proximal_diagonal() const override { return diagonal_; }
 
-    bool entry_permitted(double constraint_violation, const SolverContext &ctx) const override;
+    // entry_permitted() (virtual, shared default body) and append_diagnostics()
+    // (non-virtual) are both inherited unoverridden from RestorationStrategy —
+    // both read/write only entries_/iterations_in_mode_, which this class
+    // shares with the base (see restoration.h).
 
     const ProgressMeasures &reference() const override { return reference_; }
 
     void note_iteration() override { ++iterations_in_mode_; }
-
-    // Reports entries_/iterations_in_mode_ into SolveResult::
-    // last_feas_rest_entries_/last_feas_rest_iters_ (psiopt.h) — see
-    // RestorationStrategy::append_diagnostics() for the call-site contract
-    // this overrides. Written unconditionally (0/0 is a correct report for a
-    // strategy that was constructed but never entered).
-    void append_diagnostics(PSIOPT::SolveResult &result) const override;
 
     // --- Test/diagnostic observers ---
     double zeta() const { return zeta_; }
@@ -198,10 +194,6 @@ class ProximalSwitchRestoration final : public RestorationStrategy {
     Eigen::VectorXd d_;
     Eigen::VectorXd diagonal_;
     double zeta_ = 0.0;
-
-    // Per-phase diagnostics (write-only, see append_diagnostics()).
-    int entries_ = 0;
-    int iterations_in_mode_ = 0;
 };
 
 } // namespace tycho::solvers

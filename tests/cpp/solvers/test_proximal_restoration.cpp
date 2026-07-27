@@ -24,6 +24,8 @@
 // across tests/cpp/ (grep-confirmed no other "ProxResto" symbol exists).
 ///////////////////////////////////////////////////////////////////////////////
 
+#include "solver_test_utils.h"
+
 #include "tycho/detail/solvers/globalization/proximal_restoration.h"
 
 #include <gtest/gtest.h>
@@ -38,16 +40,7 @@ using tycho::solvers::ProgressMeasures;
 using tycho::solvers::ProximalSwitchRestoration;
 using tycho::solvers::PSIOPT;
 using tycho::solvers::SolverContext;
-
-// Builds a minimal all-zero-dimension SolverContext with the given settings --
-// entry_permitted only reads ctx.settings_.econ_tol_/max_feas_rest_, so the
-// rest of the aggregate is inert (same pattern as
-// test_monitored_governor.cpp's MonGovDelegation fixture).
-SolverContext ProxRestoContext(PSIOPT::Settings &settings, tycho::solvers::KktSolverType &solver,
-                               Eigen::VectorXd &scratch, int &zero) {
-    return SolverContext{nullptr, solver,  settings, zero,    zero,    zero,
-                         zero,    zero,    scratch,  scratch, scratch, scratch};
-}
+using TychoTest::InertSolverContext;
 
 // -----------------------------------------------------------------------------
 // zeta: frozen at entry mu, not re-derived from a later "live" mu.
@@ -210,16 +203,13 @@ TEST_F(ProxRestoThreeVectorFixture, ObjectiveIsZeroAtTheSnapshotItself) {
 // -----------------------------------------------------------------------------
 
 TEST(ProxRestoEntryPermitted, NearFeasibleGuardBoundary) {
-    PSIOPT::Settings settings;
-    settings.econ_tol_ = 1e-6;
-    settings.max_feas_rest_ = 2; // budget open throughout this test.
-    tycho::solvers::KktSolverType solver;
-    Eigen::VectorXd scratch;
-    int zero = 0;
-    const SolverContext ctx = ProxRestoContext(settings, solver, scratch, zero);
+    InertSolverContext inert;
+    inert.settings_.econ_tol_ = 1e-6;
+    inert.settings_.max_feas_rest_ = 2; // budget open throughout this test.
+    const SolverContext ctx = inert.ctx();
 
     ProximalSwitchRestoration r;
-    const double threshold = kNearFeasibleGuardFactor * settings.econ_tol_; // 1e-7
+    const double threshold = kNearFeasibleGuardFactor * inert.settings_.econ_tol_; // 1e-7
 
     // Exactly at the boundary: refused (guard is "<=").
     EXPECT_FALSE(r.entry_permitted(threshold, ctx));
@@ -232,13 +222,10 @@ TEST(ProxRestoEntryPermitted, NearFeasibleGuardBoundary) {
 }
 
 TEST(ProxRestoEntryPermitted, BudgetExhaustionAfterMaxEntries) {
-    PSIOPT::Settings settings;
-    settings.econ_tol_ = 1e-6;
-    settings.max_feas_rest_ = 2;
-    tycho::solvers::KktSolverType solver;
-    Eigen::VectorXd scratch;
-    int zero = 0;
-    const SolverContext ctx = ProxRestoContext(settings, solver, scratch, zero);
+    InertSolverContext inert;
+    inert.settings_.econ_tol_ = 1e-6;
+    inert.settings_.max_feas_rest_ = 2;
+    const SolverContext ctx = inert.ctx();
 
     ProximalSwitchRestoration r;
     Eigen::VectorXd x0(1);
@@ -257,13 +244,10 @@ TEST(ProxRestoEntryPermitted, BudgetExhaustionAfterMaxEntries) {
 }
 
 TEST(ProxRestoEntryPermitted, ZeroBudgetAlwaysRefuses) {
-    PSIOPT::Settings settings;
-    settings.econ_tol_ = 1e-6;
-    settings.max_feas_rest_ = 0;
-    tycho::solvers::KktSolverType solver;
-    Eigen::VectorXd scratch;
-    int zero = 0;
-    const SolverContext ctx = ProxRestoContext(settings, solver, scratch, zero);
+    InertSolverContext inert;
+    inert.settings_.econ_tol_ = 1e-6;
+    inert.settings_.max_feas_rest_ = 0;
+    const SolverContext ctx = inert.ctx();
 
     ProximalSwitchRestoration r;
     // Even a large, clearly-infeasible violation is refused: 0 entries so far

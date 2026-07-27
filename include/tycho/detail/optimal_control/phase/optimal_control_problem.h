@@ -6,7 +6,7 @@
 // Source: https://github.com/AlabamaASRL/asset_asrl
 // Original Developer: James B. Pezent
 //
-// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+// Modifications in Tycho (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
 //   - Namespace renamed: asset -> tycho (with sub-namespaces tycho::vf, tycho::oc, etc.)
 //   - Python binding methods moved to src/bindings/ (nanobind)
@@ -220,8 +220,8 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
     bool solve_only_first_ = true; ///< Only solve (not optimize) on the first mesh iteration.
 
     int max_mesh_iters_ = 10; ///< Maximum mesh-refinement iterations.
-    PSIOPT::ConvergenceFlags mesh_abort_flag_ =
-        PSIOPT::ConvergenceFlags::DIVERGING; ///< Solver flag that aborts the mesh loop.
+    tycho::ConvergenceFlags mesh_abort_flag_ =
+        tycho::ConvergenceFlags::DIVERGING; ///< Solver flag that aborts the mesh loop.
 
     bool mesh_converged_ = false; ///< Whether all adaptive phases have converged.
 
@@ -1742,14 +1742,14 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
     /// @param mode  The solve/optimize job mode.
     /// @return The solver convergence flag.
     /// @endinternal
-    PSIOPT::ConvergenceFlags psipot_call_impl(JetJobModes mode);
+    tycho::ConvergenceFlags psipot_call_impl(JetJobModes mode);
 
     /// @internal
     /// @brief Run the full problem solve, including the multi-phase mesh-refinement loop.
     /// @param mode  The solve/optimize job mode.
     /// @return The solver convergence flag.
     /// @endinternal
-    PSIOPT::ConvergenceFlags ocp_call_impl(JetJobModes mode);
+    tycho::ConvergenceFlags ocp_call_impl(JetJobModes mode);
 
     /// @internal
     /// @brief Assemble the full problem decision vector from all phases and link params.
@@ -1847,21 +1847,21 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
   public:
     /// @brief Solve the multi-phase problem for feasibility (no optimization).
     /// @return The solver convergence flag.
-    PSIOPT::ConvergenceFlags solve() { return ocp_call_impl(JetJobModes::Solve); }
+    tycho::ConvergenceFlags solve() { return ocp_call_impl(JetJobModes::Solve); }
     /// @brief Optimize the multi-phase problem (minimize the objective subject to constraints).
     /// @return The solver convergence flag.
-    PSIOPT::ConvergenceFlags optimize() { return ocp_call_impl(JetJobModes::Optimize); }
+    tycho::ConvergenceFlags optimize() { return ocp_call_impl(JetJobModes::Optimize); }
     /// @brief Solve for feasibility, then optimize.
     /// @return The solver convergence flag.
-    PSIOPT::ConvergenceFlags solve_optimize() { return ocp_call_impl(JetJobModes::SolveOptimize); }
+    tycho::ConvergenceFlags solve_optimize() { return ocp_call_impl(JetJobModes::SolveOptimize); }
     /// @brief Solve, optimize, then solve again to tighten feasibility.
     /// @return The solver convergence flag.
-    PSIOPT::ConvergenceFlags solve_optimize_solve() {
+    tycho::ConvergenceFlags solve_optimize_solve() {
         return ocp_call_impl(JetJobModes::SolveOptimizeSolve);
     }
     /// @brief Optimize, then solve to tighten feasibility.
     /// @return The solver convergence flag.
-    PSIOPT::ConvergenceFlags optimize_solve() { return ocp_call_impl(JetJobModes::OptimizeSolve); }
+    tycho::ConvergenceFlags optimize_solve() { return ocp_call_impl(JetJobModes::OptimizeSolve); }
 
     /// @brief Print the problem-size statistics.
     /// @param showfuns  Whether to also print per-function details.

@@ -1,5 +1,5 @@
 // =============================================================================
-// Tycho fork: Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt.
+// Tycho: Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt.
 //
 // VF wrapper over the LCD kernel + IFT composition.  See kepler_lcd_iterate.h
 // and kepler_propagator_ift.h for the implementation.

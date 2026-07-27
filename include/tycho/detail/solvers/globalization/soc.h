@@ -1,5 +1,5 @@
 // =============================================================================
-// Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
+// Tycho (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 // =============================================================================
 //
 // SocRecovery — the first live RecoveryChain link: an opt-in second-order
@@ -125,10 +125,14 @@ inline constexpr int kSocRecommendedMaxCorrections = 4;
 // be made and SOC conservatively does not trigger.
 //
 // `current_infeasibility` must be the SAME quantity theta_at_first_rejection_
-// records: the squared L2 norm of the full constraint block (all_cons) under
-// the merit line search's eval-plus-slack-reset convention. alg_impl derives it
-// from RHS.all_cons() at the hook, whose inequality block carries the identical
-// slack reset (see the RHS assembly in psiopt.cpp).
+// records, under whichever norm convention the driving acceptance strategy
+// uses: the squared L2 norm of the full constraint block (all_cons) on the
+// classic merit path, or its L1 norm on the generic path (modern merit,
+// filter, funnel) — see AcceptanceStrategy::drives_classic_path() and its
+// caller in SocRecovery::on_step_rejected (psiopt_globalization.cpp) for the
+// selection. Either way alg_impl derives it from RHS.all_cons() at the hook,
+// whose inequality block carries the identical slack reset (see the RHS
+// assembly in psiopt.cpp).
 //
 // Known asymmetry: the augmented-Lagrangian merit variant zeroes constraint
 // entries within tolerance when it records theta_at_first_rejection_, while
@@ -168,7 +172,9 @@ struct SocCorrectionOutcome {
     // The corrected step was accepted by the re-run acceptance test; the
     // corrected direction/length have been committed in place.
     bool accepted;
-    // The corrected first-trial constraint violation (squared L2). Only
+    // The corrected first-trial constraint violation, in whichever norm
+    // drives_classic_path() selected for this call (squared L2 classic, L1
+    // generic — see soc_should_trigger()'s doc comment above). Only
     // meaningful when !accepted; drives the next accumulation and the
     // termination test.
     double trial_violation;

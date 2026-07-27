@@ -6,10 +6,10 @@ asset, not a documentation page. It solves the same time-optimal orbit-raising
 problem shown in the landing-page snippet and the worked example.
 """
 
+import _brand  # sibling module; the plot directive puts _plots/ on sys.path
 import matplotlib.pyplot as plt
 import numpy as np
 
-import _brand  # sibling module; the plot directive puts _plots/ on sys.path
 import tychopy as typy
 
 _brand.apply()
