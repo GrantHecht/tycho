@@ -1,5 +1,5 @@
 // =============================================================================
-// Tycho fork (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
+// Tycho (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 // =============================================================================
 //
 // Part of the globalization component extraction: this is the acceptance-

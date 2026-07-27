@@ -292,7 +292,7 @@ def main():
 // Source: https://github.com/AlabamaASRL/asset_asrl
 // Original Developer: James B. Pezent
 //
-// Modifications in Tycho fork (Copyright 2026-present Grant R. Hecht,
+// Modifications in Tycho (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
 //   - Namespace renamed: asset -> Tycho
 //   - Python binding methods (Build(py::module)) moved to src/Bindings/ (PR 2)
