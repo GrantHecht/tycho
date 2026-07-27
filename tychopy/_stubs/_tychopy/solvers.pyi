@@ -209,8 +209,6 @@ class PSIOPT:
     @property
     def converge_flag(self) -> ConvergenceFlags: ...
 
-    def get_convergence_flag(self) -> ConvergenceFlags: ...
-
     @property
     def kkt_tol(self) -> float: ...
 
@@ -391,12 +389,6 @@ class PSIOPT:
     def pd_step_strategy(self, arg: PDStepStrategies, /) -> None: ...
 
     @property
-    def soe_bound_relax(self) -> float: ...
-
-    @soe_bound_relax.setter
-    def soe_bound_relax(self, arg: float, /) -> None: ...
-
-    @property
     def qp_par_solve(self) -> int: ...
 
     @qp_par_solve.setter
@@ -459,7 +451,7 @@ class PSIOPT:
     @property
     def acceptance_strategy(self) -> AcceptanceStrategies:
         """
-        Step-acceptance strategy: classic_merit (default) reproduces the original fused backtracking merit line search bit-for-bit; merit switches to the modernized penalty-based acceptance test selected by merit_penalty_rule; funnel switches to a single-scalar bound on constraint violation, tightened while accepted iterates stay within it; filter switches to a (violation, objective) Wachter-Biegler-style filter. merit, funnel, and filter each require max_soc == 0 and ls_extended_iters == 0 (ValueError raised otherwise); watchdog is compatible with all four strategies. These are heuristically-motivated acceptance alternatives, not one another's strict improvement -- compare against classic_merit on your own problem before adopting one.
+        Step-acceptance strategy: classic_merit (default) reproduces the original fused backtracking merit line search bit-for-bit; merit switches to the modernized penalty-based acceptance test selected by merit_penalty_rule; funnel switches to a single-scalar bound on constraint violation, tightened while accepted iterates stay within it; filter switches to a (violation, objective) Wachter-Biegler-style filter. funnel and filter are designed to operate above a monotone barrier safeguard, so each requires either barrier_governor=monitored or never_monotone=True (ValueError at validate() time otherwise); watchdog is compatible with all four strategies. These are heuristically-motivated acceptance alternatives, not one another's strict improvement -- compare against classic_merit on your own problem before adopting one.
         """
 
     @acceptance_strategy.setter
@@ -629,12 +621,12 @@ class AcceptanceStrategies(enum.Enum):
 
     funnel = 2
     """
-    Single-scalar upper bound on constraint violation (the funnel width), tightened while accepted iterates remain within it (Kiessling, Leyffer & Vanaret funnel formulation, implemented after Uno's funnel). Rejects combination with max_soc > 0 or ls_extended_iters > 0 (ValueError at validate() time); composes with watchdog. Heuristically motivated -- no convergence guarantee is implied; compare against classic_merit and filter on your own problem.
+    Single-scalar upper bound on constraint violation (the funnel width), tightened while accepted iterates remain within it (Kiessling, Leyffer & Vanaret funnel formulation, implemented after Uno's funnel). Requires a monotone barrier safeguard, so it rejects combination with the default barrier_governor=classic_adaptive unless never_monotone=True (ValueError at validate() time); composes with watchdog. Heuristically motivated -- no convergence guarantee is implied; compare against classic_merit and filter on your own problem.
     """
 
     filter = 3
     """
-    (Constraint violation, objective) pair filter with margined dominance (Wachter-Biegler filter line search, Ipopt lineage). Rejects combination with max_soc > 0 or ls_extended_iters > 0 (ValueError at validate() time); composes with watchdog. Heuristically motivated -- no convergence guarantee is implied; compare against classic_merit and funnel on your own problem.
+    (Constraint violation, objective) pair filter with margined dominance (Wachter-Biegler filter line search, Ipopt lineage). Requires a monotone barrier safeguard, so it rejects combination with the default barrier_governor=classic_adaptive unless never_monotone=True (ValueError at validate() time); composes with watchdog. Heuristically motivated -- no convergence guarantee is implied; compare against classic_merit and funnel on your own problem.
     """
 
 class MeritPenaltyRules(enum.Enum):
@@ -794,8 +786,15 @@ class OptimizationProblemBase:
         previous behavior. NLPSolvers.ipopt runs the identical transcribed NLP
         through a linked Ipopt installation; requires a build configured with
         ENABLE_IPOPT (raises RuntimeError otherwise). The ipopt backend always
-        performs a single NLP solve: the feasibility-then-optimize staging modes
-        have no Ipopt analog.
+        performs a single NLP solve of the full objective-bearing problem: the
+        feasibility-then-optimize staging modes have no Ipopt analog. In
+        particular ``solve()`` -- which under the built-in solver runs the
+        feasibility-only stage -- minimizes the objective like ``optimize()``
+        when this backend is selected; there is no feasibility-only analog.
+
+        Jet batch runs reject this backend: Ipopt is not reliably re-entrant, so
+        a Jet job whose problem selects it raises ValueError before that job's
+        solve begins. Run the ipopt backend one solve at a time.
 
         The built-in solver's own diagnostics (``optimizer.last_obj_val``,
         ``optimizer.last_iter_num``, and every other result()-backed property on
@@ -814,6 +813,12 @@ class OptimizationProblemBase:
         String key/value options forwarded verbatim to Ipopt (e.g.
         {"linear_solver": "pardisomkl"}). Applied after the matched-tolerance
         baseline, so entries here win. Ignored by the psiopt backend.
+
+        Reading this attribute returns a *copy* of the stored map, so in-place
+        mutation (``prob.ipopt_options["linear_solver"] = "ma57"``) silently has
+        no effect. Assign a whole dict instead, or read-modify-write:
+        ``opts = prob.ipopt_options; opts["linear_solver"] = "ma57";
+        prob.ipopt_options = opts``.
         """
 
     @ipopt_options.setter
