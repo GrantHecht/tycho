@@ -213,6 +213,14 @@ OptimizationProblemBase::NlpSolveOutput solve(OptimizationProblemBase &prob,
 
 inline OptimizationProblemBase::NlpSolveOutput
 OptimizationProblemBase::run_nlp_solver(JetJobModes mode, const Eigen::VectorXd &input) {
+    // This site branches on `== NLPSolvers::ipopt`, while the call-impl sites
+    // in ode_phase_base.cpp / optimal_control_problem.cpp branch on
+    // `== NLPSolvers::psiopt` (or its negation) to make the same backend
+    // choice. Both predicates are equivalent today (only two backends
+    // exist), but if a third backend enumerator is ever added, all of
+    // these sites should be unified on `!= NLPSolvers::psiopt` ("anything
+    // that isn't psiopt uses the generic NLP-solver path") rather than each
+    // needing its own added `== <new-backend>` branch.
     if (this->nlp_solver_ == NLPSolvers::ipopt) {
         return ipopt_backend::solve(*this, mode, input);
     }

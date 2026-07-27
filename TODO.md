@@ -29,7 +29,7 @@ For comparison:
 
 The cost grows super-linearly with expression tree depth because the Jacobian
 and VJP template expansions create deeply nested types. Placing a complex ODE
-in a shared header (`bench_common.h`) multiplies this cost across every TU
+in a shared header (`bench_phases.h`) multiplies this cost across every TU
 that includes it.
 
 ### Additional Issues Discovered
@@ -68,7 +68,7 @@ polluting other TUs with the template cost:
 bench/cpp/solvers/bench_betts_lt.cpp   — dedicated TU for BettsLT benchmarks
 ```
 
-This file would include `bench_common.h` for runtime init but define the
+This file would include `bench_phases.h` for runtime init but define the
 `MEELT_Impl` ODE locally. Only the solver benchmark TU pays the 11 GB cost.
 
 The CMake target should compile this file with reduced parallelism (`-j1`)
@@ -129,7 +129,7 @@ Potential approaches:
 ### Current State
 
 The MEE ODE definition and `make_betts_lt_phase()` builder are written and
-`#if 0`'d in `bench/cpp/bench_common.h` with comments explaining the issue.
+`#if 0`'d in `bench/cpp/bench_phases.h` with comments explaining the issue.
 The code is functional but disabled due to memory cost. The Python example
 (`examples/python_examples/BettsLowThrust.py`) serves as the reference
 implementation.
