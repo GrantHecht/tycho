@@ -1,4 +1,4 @@
-"""Smoke test for the E2 G0 PSIOPT robustness corpus (tests/corpus/).
+"""Smoke test for the PSIOPT robustness corpus (tests/corpus/).
 
 Verifies the problem-module contract documented in tests/corpus/README.md
 holds for every module registered in tests/corpus/registry.py, and that the
@@ -69,8 +69,8 @@ def test_problem_contract(module_name):
 def test_harness_end_to_end_fast_problems(tmp_path):
     """The harness runs end-to-end and records the expected statuses.
 
-    Uses the two fastest real corpus problems instead of the Task 1
-    throwaway stubs (deleted in Task 5): ``deg_dup_equality`` (converges in
+    Uses the two fastest real corpus problems instead of the original
+    throwaway stub problems (since deleted): ``deg_dup_equality`` (converges in
     3 iterations, ~1 s) and ``hard_vanderpol`` (diverges in 1 iteration,
     ~1 s — the fastest genuine failure in the corpus; the other degenerate-
     tier failures grind through the full 500-iteration ``max_iters`` cap).

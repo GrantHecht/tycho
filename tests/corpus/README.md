@@ -1,4 +1,4 @@
-# PSIOPT robustness corpus (E2 G0)
+# PSIOPT robustness corpus
 
 A corpus of optimal-control / NLP problems where today's PSIOPT is expected to
 struggle (poor scaling, redundant/conflicting constraints, cold-started or
@@ -9,8 +9,8 @@ defaults behave on it.
 
 **The corpus never gates anything.** Problems here are *expected* to fail,
 diverge, or time out on current defaults — that is the point. Every
-subsequent E2 PR (G1-G8) uses this corpus + harness as its evidence engine
-for whether a globalization/robustness change actually helps, by diffing two
+globalization/robustness change that follows uses this corpus + harness as
+its evidence engine for whether the change actually helps, by diffing two
 scorecards (`--diff`). The only thing that *does* gate is the smoke test
 (`tychopy/test/test_corpus_smoke.py`), which only checks that every problem
 module honors the contract below and that the harness runs end-to-end — it
@@ -151,8 +151,8 @@ the fact. `phase.optimizer` (a `_tychopy.solvers.PSIOPT` instance) also
 exposes `last_iter_num: int` and `last_obj_val: float` as read-only
 properties — this is deliberately the entire per-solve surface PSIOPT
 exposes to Python today (no feasibility/KKT-residual/factorization data);
-richer diagnostics arrive with the E2 diagnostics counters and this schema
-may grow then.
+richer diagnostics may arrive with future PSIOPT diagnostics counters, and
+this schema may grow then.
 
 The harness maps flag name to JSONL `status` exhaustively:
 
@@ -217,11 +217,12 @@ On the **psiopt backend**, `iterations` in the JSONL record is **not** taken
 from the child's returned dict — it is
 `sum(re.findall(r"Iterations : *([0-9]+)", ansi_stripped_stdout))` over the
 child's full captured stdout (ANSI SGR sequences stripped first with
-`\x1b\[[0-9;]*m`). This is the same instrument proven in the earlier CBWR
-work (PR 9): PSIOPT's console printer emits a line of the form
-`" Iterations : N"` once per solve, whenever `print_level < 2` (the
-library default, so problem modules should not raise their print level
-above that unless they want to lose this signal). Summing over all matches
+`\x1b\[[0-9;]*m`). This is the same instrument proven out in earlier
+bitwise-reproducibility (CBWR) work: PSIOPT's console printer emits a line
+of the form `" Iterations : N"` once per solve, whenever `print_level < 2`
+(the library default, so problem modules should not raise their print
+level above that unless they want to lose this signal). Summing over all
+matches
 means a problem that calls `optimize()` more than once (e.g. a two-stage
 solve) gets its iteration counts combined. `-1` means no match was found
 (e.g. the child crashed before ever calling into PSIOPT, or print_level was
@@ -308,7 +309,7 @@ bitwise-reproducible MKL reductions across repeats/machines.
 
 Runs every selected problem `N` times (default 1), appending one JSONL
 record per run — used to check repeat-to-repeat determinism before trusting
-a scorecard as a baseline (see Task 5).
+a scorecard as a baseline.
 
 ### `--diff A.jsonl B.jsonl`
 
@@ -391,26 +392,28 @@ Every `lit_*` module's docstring records: the full citation for its source,
 the exact verified formulation (quoted from the source where the source
 was directly readable, or from a secondary source that itself quotes the
 primary verbatim, when the primary was paywalled/unreachable), where it was
-verified (URL and/or edition), and any correction made to the Task 4
-brief's starting formula. `lit_cycling.py` (the Chamberlain, Powell,
-Lemarechal, Pedersen 1982 watchdog-paper cycling example) is **not**
-present: the paper (Mathematical Programming Study 16, 1982) is paywalled
-on SpringerLink with no accessible preprint, and no secondary source found
-reproduces its actual motivating example (as opposed to merely citing the
-paper's existence/topic) -- per the binding rule for this task, the
-problem was skipped rather than implemented from memory. The corpus's
-target range is 15-25 problems; 17 without it is within range.
+verified (URL and/or edition), and any correction made to the originally
+assumed starting formula once checked against the verified source.
+`lit_cycling.py` (the Chamberlain, Powell, Lemarechal, Pedersen 1982
+watchdog-paper cycling example) is **not** present: the paper (Mathematical
+Programming Study 16, 1982) is paywalled on SpringerLink with no accessible
+preprint, and no secondary source found reproduces its actual motivating
+example (as opposed to merely citing the paper's existence/topic) --
+literature-tier problems are verified against an accessible source rather
+than implemented from memory, so this one was skipped instead. The
+corpus's target range is 15-25 problems; 17 without it is within range.
 
-## Smoke-test end-to-end case (Task 5)
+## Smoke-test end-to-end case
 
 The smoke test's harness end-to-end check
 (`test_harness_end_to_end_fast_problems` in
-`tychopy/test/test_corpus_smoke.py`) originally ran against two Task 1
-throwaway stub problems (`stub_converges.py` / `stub_fails.py`) that existed
-solely to exercise the harness before any real corpus problem landed. Task 5
-deleted both stubs (removed from `registry.py` and from
-`tests/corpus/problems/`) now that the real degenerate/hard/literature tiers
-exist, and repointed the smoke test at the two fastest real problems instead:
+`tychopy/test/test_corpus_smoke.py`) originally ran against two throwaway
+stub problems (`stub_converges.py` / `stub_fails.py`) that existed solely
+to exercise the harness before any real corpus problem landed. Those stubs
+were later deleted (removed from `registry.py` and from
+`tests/corpus/problems/`) once the real degenerate/hard/literature tiers
+existed, and the smoke test was repointed at the two fastest real problems
+instead:
 `deg_dup_equality` (converges in 3 iterations, ~1 s) and `hard_vanderpol`
 (diverges in 1 iteration, ~1 s — the fastest genuine failure in the corpus;
 the other candidate failures in the degenerate tier grind through the full
