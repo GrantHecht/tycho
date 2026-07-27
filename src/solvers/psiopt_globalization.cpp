@@ -1302,9 +1302,15 @@ RecoveryChain::Action SocRecovery::on_step_rejected(
             return SocCorrectionOutcome{false, std::numeric_limits<double>::infinity()};
 
         // Fraction-to-boundary scale the corrected direction, exactly as the
-        // classic path scales DXSL before its backtrack (mechanism's shared
-        // entry point, guarded identically on inequal_cons_ > 0).
-        if (ctx.inequal_cons_ > 0)
+        // main step path scales DXSL before its backtrack (mechanism's shared
+        // entry point, under the same guard compute_step applies): there are
+        // inequality slacks to keep positive, OR a nested restoration strategy
+        // is active, whose eliminated elastic variables carry their own
+        // positivity caps even on an equality-only problem. A corrected
+        // direction is committed in place of the rejected one, so it has to be
+        // held to the same bounds the rejected one was.
+        if (ctx.inequal_cons_ > 0 ||
+            (ctx.restoration_ && ctx.restoration_->is_active() && ctx.restoration_->is_nested()))
             mechanism.max_primal_dual_step(XSL, dxsl_soc, ctx.settings_.bound_fraction_, alphap,
                                            alphad, ctx);
 
