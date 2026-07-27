@@ -43,6 +43,7 @@
 // =============================================================================
 
 #include "tycho/detail/solvers/barrier_math.h"
+#include "tycho/detail/solvers/eval_error_log.h"
 #include "tycho/detail/solvers/globalization/backtracking_line_search.h"
 #include "tycho/detail/solvers/globalization/classic_adaptive_governor.h"
 #include "tycho/detail/solvers/globalization/feasibility_switch_recovery.h"
@@ -129,8 +130,10 @@ bool ClassicMeritAcceptance::is_infeasibility_sufficiently_reduced(
 }
 
 // ============================================================================
-// Barrier/eval helpers — VERBATIM copies of the PSIOPT methods, reading
-// through ctx_ (nlp_/settings_/dims) instead of PSIOPT members.
+// Barrier/eval helpers. apply_reset_slacks/barrier_objective/barrier_gradient
+// are one-line forwarders into the shared kernels in barrier_math.h;
+// eval_rhs has no shared counterpart and stays a real body forwarding to
+// ctx_.nlp_->eval_rhs (see merit_acceptance.h's byte-identity design note).
 // ============================================================================
 
 void ClassicMeritAcceptance::eval_rhs(double obj_scale,
@@ -995,15 +998,20 @@ double BacktrackingLineSearch::generic_line_search(
 // ============================================================================
 // ClassicAdaptiveGovernor — barrier-parameter update. The
 // PROBE/LOQO barmode switch + common clamp/objective/gradient tail and the
-// loqo_mu / mpc_mu oracles are moved VERBATIM from src/solvers/psiopt.cpp
-// (statement order and operand order preserved exactly — the merge gate is a
-// bit-identical CBWR iteration-count comparison). The only edits are context-
-// plumbing renames: former PSIOPT member reads (kkt_sol_ -> ctx.kkt_solver_,
+// loqo_mu / mpc_mu oracles are moved from src/solvers/psiopt.cpp (statement
+// order and operand order preserved exactly — the merge gate is a
+// bit-identical CBWR iteration-count comparison). Besides context-plumbing
+// renames (former PSIOPT member reads (kkt_sol_ -> ctx.kkt_solver_,
 // settings_/dims -> ctx.*) and the mechanism_ base pointer -> the mechanism
-// reference parameter. The barrier_* / complementarity helpers below are
-// verbatim copies of the identically-named PSIOPT methods (the complementarity
-// copy is TOKEN-IDENTICAL including its ULP warning). See classic_adaptive_
-// governor.h's PROBE-impurity and byte-identity design notes.
+// reference parameter), loqo_mu dropped its unused S/LI parameters (the
+// former PSIOPT::loqo_mu took Eigen::Ref<Eigen::VectorXd> S, LI ahead of
+// avgcomp/mincomp; neither was read by the body). Of the barrier_* /
+// complementarity helpers below, barrier_objective/barrier_gradient are
+// one-line forwarders into the shared kernels in barrier_math.h;
+// complementarity remains a real, TOKEN-IDENTICAL copy of PSIOPT's own
+// (including its ULP-load-bearing .sum() warning), since its avgcomp/mincomp
+// feed mu and are not a candidate for the shared header. See
+// classic_adaptive_governor.h's PROBE-impurity and byte-identity design notes.
 // ============================================================================
 
 void ClassicAdaptiveGovernor::complementarity(Eigen::Ref<Eigen::VectorXd> S,

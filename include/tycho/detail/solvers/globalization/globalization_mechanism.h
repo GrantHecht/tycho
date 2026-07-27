@@ -64,9 +64,9 @@ class GlobalizationMechanism {
     // site, precisely because that in-place mutation is the load-bearing
     // behavior the whole seam depends on).
     //
-    // KKTVector is inaccessible outside PSIOPT (see acceptance_strategy.h's
-    // note); XSL/DXSL/XSL2/RHS/RHS2 are therefore the same raw
-    // Eigen::VectorXd blocks ls_impl/max_primal_dual_step operate on today.
+    // XSL/DXSL/XSL2/RHS/RHS2 are the same raw Eigen::VectorXd blocks
+    // ls_impl/max_primal_dual_step operate on today, viewed via
+    // tycho::solvers::KKTVector (include/tycho/detail/solvers/kkt_vector.h).
     // bfrac and pd_step_strategy_ (today's max_primal_dual_step inputs) are
     // NOT separate parameters here — they are read from `ctx.settings_`
     // (bound_fraction_ / pd_step_strategy_), since they are persistent
@@ -100,10 +100,13 @@ class GlobalizationMechanism {
     // problem dims, and pd_step_strategy_ are read from `ctx`. alphap/alphad
     // are out-parameters (today's max_primal_dual_step out-params).
     //
-    // NOTE: compute_step already applies this step (guarded by
-    // inequal_cons_ > 0) as its first half; this standalone entry point exists
-    // for callers that need the scaling without a backtrack. Two live callers
-    // beyond compute_step itself: ClassicAdaptiveGovernor::update_barrier's
+    // NOTE: compute_step already applies this step as its first half, guarded
+    // by the shared rule: inequality slacks present, or an active nested
+    // restoration whose condensed elastic variables carry positivity caps
+    // even for an equality-only problem (see BacktrackingLineSearch::
+    // compute_step, psiopt_globalization.cpp). This standalone entry point
+    // exists for callers that need the scaling without a backtrack. Two live
+    // callers beyond compute_step itself: ClassicAdaptiveGovernor::update_barrier's
     // PROBE predictor block (same operands, same position — and the path
     // MonitoredBarrierGovernor's free-mode delegate also reaches through),
     // and SocRecovery::do_correction, which re-scales a corrected direction

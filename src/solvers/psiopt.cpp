@@ -1372,7 +1372,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // residual converge_check() consumes is now
         // fully determined -- kkt_inf_ reads prim_grad() (just updated above; the
         // barrier writes later this iteration target the *disjoint* dual_grad()
-        // block, see PSIOPT::prim_grad()/PSIOPT::dual_grad() for their segment
+        // block, see tycho::solvers::KKTVector::prim_grad()/dual_grad()
+        // (include/tycho/detail/solvers/kkt_vector.h) for their segment
         // boundaries), econ_inf_/icon_inf_ read eq_cons()/iq_cons() (set by
         // eval_nlp + apply_reset_slacks above, before this point), and barr_inf_ is
         // the complementarity(slacks, iq_lmults) computed above from XSL, which

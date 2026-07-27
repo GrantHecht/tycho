@@ -80,10 +80,11 @@ class BarrierGovernor {
     // header). XSL is needed for LOQO's mu = loqo_mu(slacks, iq_lmults,
     // avgcomp, mincomp) and for the final barrier_objective(slacks, mu) /
     // barrier_gradient(slacks, iq_lmults, mu, dual_grad) common tail that
-    // runs after either branch. KKTVector is inaccessible outside PSIOPT
-    // (see acceptance_strategy.h's note), so XSL/RHS/DXSL/Temp are the same
-    // raw Eigen::VectorXd blocks the current code operates on via KKTVector
-    // views constructed from SolverContext's dims.
+    // runs after either branch. barrier_objective/barrier_gradient are
+    // one-line forwarders into the shared kernels in barrier_math.h. XSL/RHS/
+    // DXSL/Temp are the same raw Eigen::VectorXd blocks the current code
+    // operates on via tycho::solvers::KKTVector views (kkt_vector.h)
+    // constructed from SolverContext's dims.
     //
     // mu_in is unused by the free-mode oracles themselves — both
     // ClassicAdaptiveGovernor's and MonitoredBarrierGovernor's PROBE/LOQO

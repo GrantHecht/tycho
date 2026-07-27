@@ -94,7 +94,7 @@ bench/                  Benchmark suite and tracking
 extensions/             Optional extension module (Tycho_Extensions.cpp/.h)
 examples/               Example programs
   cpp_examples/         C++ example programs
-  python_examples/      Python example scripts (32 examples)
+  python_examples/      Python example scripts (34 examples)
 docs/                   Documentation source tree
   source/               Public Sphinx site source (Markdown + RST)
   dev/                  Internal engineering notes (raw markdown, not rendered)
@@ -671,7 +671,7 @@ red/green.
 
 ### Python examples (integration tests)
 
-The 32 Python example scripts under `examples/python_examples/` serve as the **integration
+The 34 Python example scripts under `examples/python_examples/` serve as the **integration
 test suite** and acceptance gate for all changes merged into `main`.
 
 ```bash
@@ -680,7 +680,7 @@ conda run -n tycho bash -c "MPLBACKEND=Agg python scripts/run_examples.py"
 
 Options: `--timeout SECONDS`, `--filter SUBSTRING`.
 
-Required packages for all 32 examples to run (none skipped):
+Required packages for all 34 examples to run (none skipped):
 ```bash
 conda run -n tycho pip install numpy scipy matplotlib seaborn spiceypy
 conda install -n tycho -c conda-forge basemap
@@ -706,13 +706,13 @@ Expected: "Optimal Solution Found", objective ≈ 1.8013 s.
 Run all four steps in order before opening or merging any PR into `main`:
 
 1. **C++ unit tests** — `ctest --output-on-failure` — all must pass; also record the skipped count and investigate any change from the previous run (an environment-dependent `GTEST_SKIP()` can silently void a slice of the suite while ctest still prints green). `tests/cpp/solvers/ipopt/` is a separate, developer-opt-in test executable gated on `-DENABLE_IPOPT=ON` (see `ENABLE_IPOPT` above) — it is not built or run by the default `ctest` invocation and does not count toward the skipped total above.
-2. **Python examples** — `conda run -n tycho bash -c "MPLBACKEND=Agg python scripts/run_examples.py"` — all 32 must exit 0
+2. **Python examples** — `conda run -n tycho bash -c "MPLBACKEND=Agg python scripts/run_examples.py"` — all 34 must exit 0
 3. **C++ brachistochrone** — `cmake --preset <preset> -DBUILD_CPP_EXAMPLES=ON && cd build && ninja -j<N> brachistochrone_cpp && ./examples/cpp_examples/static/brachistochrone/brachistochrone_cpp` — must print "Optimal Solution Found", obj ≈ 1.8013 s
 4. **Benchmarks** — `bench/bench_track.sh compare` — justify any regressions in the PR description
 
 ### Merge policy
 
-**All C++ unit tests must pass, all 32 Python examples must pass, the C++
+**All C++ unit tests must pass, all 34 Python examples must pass, the C++
 brachistochrone example must converge, and benchmarks must show no unexplained
 regressions before any pull request can be merged into `main`.** Fix broken examples
 or justify benchmark regressions in the same PR.

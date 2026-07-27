@@ -165,15 +165,13 @@ class AcceptanceStrategy {
     // (the symbol no longer exists — its body was extracted into
     // ClassicMeritAcceptance; see the note beside PSIOPT::alg_impl in
     // psiopt.h) — NOT the private per-variant
-    // ls_lang/ls_l1/ls_auglang signatures, which take PSIOPT::KKTVector
-    // views. KKTVector is a private nested class of PSIOPT (psiopt.h)
-    // and is not name-accessible from a non-member, non-friend type such as
-    // this one; ls_impl's own public-facing signature already operates on
-    // the raw Eigen::VectorXd blocks for exactly this reason, so mirroring
-    // IT (rather than the KKTVector-typed private helpers) is what lets this
-    // interface host the existing calls without adapting any FP-relevant
-    // argument. A future implementation reconstructs KKTVector-equivalent
-    // segment views internally from SolverContext's dims if/when it needs
+    // ls_lang/ls_l1/ls_auglang signatures, which take tycho::solvers::KKTVector
+    // views (include/tycho/detail/solvers/kkt_vector.h). ls_impl's own
+    // public-facing signature already operates on the raw Eigen::VectorXd
+    // blocks, so mirroring IT (rather than the KKTVector-typed private
+    // helpers) is what lets this interface host the existing calls without
+    // adapting any FP-relevant argument. A future implementation reconstructs
+    // KKTVector views internally from SolverContext's dims if/when it needs
     // the named-segment accessors ls_lang/ls_l1/ls_auglang use today.
     //
     // Loop + merit test fused together (not split into separate "step" and

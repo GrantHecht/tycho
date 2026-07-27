@@ -19,8 +19,9 @@
 // Ownership rule: SolverContext owns nothing. Every member is a reference or
 // a non-owning pointer into the live PSIOPT instance; a SolverContext must
 // not outlive the PSIOPT it was built from (same lifetime discipline as
-// PSIOPT::KKTVector, psiopt.h). Most call sites construct one fresh (as a
-// temporary) for the duration of a single call. One exception:
+// tycho::solvers::KKTVector, include/tycho/detail/solvers/kkt_vector.h). Most
+// call sites construct one fresh (as a temporary) for the duration of a
+// single call. One exception:
 // ClassicMeritAcceptance holds a SolverContext by value as a private member
 // (merit_acceptance.h) instead of re-threading it through every call — that
 // copy is rebuilt by rebuild_globalization_components() on every solve entry
@@ -47,6 +48,7 @@
 // build instead); that one-directional arrangement is what keeps every
 // header below self-sufficient/standalone-compilable without a fragile
 // circular-include trick.
+#include "tycho/detail/solvers/eval_error_log.h"
 #include "tycho/detail/solvers/psiopt.h"
 
 #ifdef USE_ACCELERATE_SPARSE
