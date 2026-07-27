@@ -139,10 +139,12 @@ class ClassicMeritAcceptance : public AcceptanceStrategy {
     bool secondary_accept(double ptest, double prim_obj, const PenaltyTerms &test,
                           const PenaltyTerms &init) const;
 
-    // --- Barrier/eval helpers: VERBATIM copies of the identically-named PSIOPT
-    //     methods (psiopt.cpp), reading through ctx_ instead of PSIOPT members.
-    //     They stay pure functions of nlp_/settings_/dims, so codegen is
-    //     identical to the originals (which remain in PSIOPT for its own use).
+    // --- Barrier/eval helpers ---
+    //     apply_reset_slacks/barrier_objective/barrier_gradient forward to the
+    //     shared inline kernels in barrier_math.h, as do PSIOPT's own members
+    //     of the same name. eval_rhs stays a real body here (it forwards to
+    //     ctx_.nlp_->eval_rhs with the segment plumbing this component needs);
+    //     it has no shared-header counterpart.
     void eval_rhs(double obj_scale, const Eigen::Ref<const Eigen::VectorXd> &XSL, double &val,
                   Eigen::Ref<Eigen::VectorXd> GX, Eigen::Ref<Eigen::VectorXd> AGXS_FX);
     void apply_reset_slacks(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> FXI) const;

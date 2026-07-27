@@ -10,10 +10,12 @@
 // order preserved exactly — the merge gate is a bit-identical CBWR
 // iteration-count comparison). The only edits are context-plumbing renames:
 // former PSIOPT member reads (settings_, equal_cons_, inequal_cons_, nlp_)
-// now go through the SolverContext reference ctx_. The four barrier/eval
-// helpers (eval_rhs, apply_reset_slacks, barrier_objective, barrier_gradient)
-// are verbatim copies of the identically-named PSIOPT methods, reading
-// through ctx_ (see merit_acceptance.h's byte-identity design note).
+// now go through the SolverContext reference ctx_. Of the four barrier/eval
+// helpers, apply_reset_slacks/barrier_objective/barrier_gradient forward to
+// the shared inline kernels in barrier_math.h (as do PSIOPT's own
+// identically-named methods); eval_rhs has no shared counterpart and stays a
+// real body forwarding to ctx_.nlp_->eval_rhs (see merit_acceptance.h's
+// byte-identity design note).
 //
 // This file also hosts BacktrackingLineSearch (the step-length
 // mechanism) — verbatim today's max_step_to_boundary / max_primal_dual_step,
@@ -22,10 +24,12 @@
 //
 // This file also hosts ClassicAdaptiveGovernor (the barrier-parameter
 // update) — verbatim today's PROBE/LOQO barmode switch + common clamp/objective/
-// gradient tail, plus the loqo_mu / mpc_mu oracles and verbatim copies of the
-// barrier_* / complementarity helpers it consumes (the complementarity copy is
-// TOKEN-IDENTICAL including its ULP-load-bearing .sum() warning). See
-// classic_adaptive_governor.h's PROBE-impurity design note.
+// gradient tail, plus the loqo_mu / mpc_mu oracles it consumes. Its barrier_*
+// helpers forward to the shared inline kernels in barrier_math.h; complementarity
+// stays a real, TOKEN-IDENTICAL copy of PSIOPT's own (including its
+// ULP-load-bearing .sum() warning), since its avgcomp/mincomp feed mu and are not
+// candidates for the shared header. See classic_adaptive_governor.h's
+// PROBE-impurity design note.
 //
 // This file also hosts the second batch of live RecoveryChain links:
 // ExtendedBacktrackRecovery, WatchdogRecovery, and the ChainedRecovery

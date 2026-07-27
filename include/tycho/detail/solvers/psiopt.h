@@ -12,6 +12,9 @@
 //   - Python binding methods moved to src/bindings/ (nanobind)
 //   - Configuration fields grouped into Settings struct
 //   - Converted from struct to class with public/private access sections
+//   - KKTVector extracted to detail/solvers/kkt_vector.h; EvalErrorLog extracted
+//     to detail/solvers/eval_error_log.h (both shared with the globalization
+//     components)
 // =============================================================================
 
 #pragma once

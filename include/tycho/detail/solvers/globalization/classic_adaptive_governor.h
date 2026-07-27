@@ -132,7 +132,8 @@ class ClassicAdaptiveGovernor : public BarrierGovernor {
 
     // --- Barrier oracles: moved VERBATIM from PSIOPT (psiopt.cpp). ---
     // loqo_mu / mpc_mu move here as the BarrierGovernor's own members; the
-    // barrier_* helpers are verbatim copies (PSIOPT keeps its own for now).
+    // barrier_* helpers forward to the shared inline kernels in barrier_math.h,
+    // as do PSIOPT's own members of the same name.
 
     // TOKEN-IDENTICAL copy of PSIOPT::complementarity INCLUDING the ULP warning:
     // the .sum() reduction order feeds mu (via mpc_mu) and must not be reordered.
