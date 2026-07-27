@@ -52,6 +52,10 @@ particular ``solve()`` -- which under the built-in solver runs the
 feasibility-only stage -- minimizes the objective like ``optimize()``
 when this backend is selected; there is no feasibility-only analog.
 
+Jet batch runs reject this backend: Ipopt is not reliably re-entrant, so
+a Jet job whose problem selects it raises ValueError before that job's
+solve begins. Run the ipopt backend one solve at a time.
+
 The built-in solver's own diagnostics (``optimizer.last_obj_val``,
 ``optimizer.last_iter_num``, and every other result()-backed property on
 ``optimizer``) reflect only the most recent PSIOPT run and are left

@@ -94,6 +94,26 @@ TEST(NlpSolverDispatch, AdaptiveMeshWithIpoptRejected) {
     EXPECT_THROW(phase->solve(), std::invalid_argument);
 }
 
+// Ipopt is not reliably re-entrant, so a Jet batch element that selects it is
+// rejected at the jet_run entry point -- before jet_initialize() touches the
+// problem and before any solve begins. The guard reads the backend enum, which
+// exists in every build, so this holds with or without Ipopt linked.
+TEST(NlpSolverDispatch, JetRunWithIpoptBackendRejected) {
+    auto prob = build_dispatch_test_nlp();
+    prob->set_jet_job_mode(ts::OptimizationProblemBase::JetJobModes::Optimize);
+    prob->nlp_solver_ = ts::NLPSolvers::ipopt;
+    EXPECT_THROW(prob->jet_run(), std::invalid_argument);
+}
+
+// The same batch element with the built-in backend runs to convergence, so the
+// rejection above is attributable to the backend selection and not to the Jet
+// entry point itself.
+TEST(NlpSolverDispatch, JetRunWithPsioptBackendRuns) {
+    auto prob = build_dispatch_test_nlp();
+    prob->set_jet_job_mode(ts::OptimizationProblemBase::JetJobModes::Optimize);
+    EXPECT_EQ(prob->jet_run(), tycho::ConvergenceFlags::CONVERGED);
+}
+
 TEST(NlpSolverDispatch, RunInfoDefaultsAreSentinels) {
     ts::IpoptRunInfo info;
     EXPECT_FALSE(info.ran_);

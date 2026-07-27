@@ -56,7 +56,7 @@ struct OptimizationProblemBase {
     /// is the built-in path, byte-identical to previous behavior. ipopt runs
     /// the identical transcribed NLP through a linked Ipopt installation
     /// (requires a build with Ipopt support; throws std::runtime_error
-    /// otherwise).
+    /// otherwise). Not usable in a Jet batch run — see the guard in jet_run().
     NLPSolvers nlp_solver_ = NLPSolvers::psiopt;
 
     /// String key/value options forwarded verbatim to Ipopt (e.g.
@@ -120,6 +120,21 @@ struct OptimizationProblemBase {
     // the nested-dispatch guard (std::logic_error). jet_initialize() MUST set
     // num_partitions_=1 so NLP eval methods run inline.
     virtual PSIOPT::ConvergenceFlags jet_run() {
+        // Concurrency guard, checked before jet_initialize() mutates this
+        // problem and before any solve work begins. Jet::map builds each
+        // problem inside its worker job, so this entry point is the first
+        // place the selected backend is observable; rejecting here means no
+        // batch element ever reaches an Ipopt solve. Ipopt is not reliably
+        // re-entrant, so running several of its solves concurrently is
+        // unsupported rather than merely untested.
+        if (this->nlp_solver_ == NLPSolvers::ipopt) {
+            throw std::invalid_argument(
+                "nlp_solver=ipopt cannot be used in a Jet batch run: Ipopt is not reliably "
+                "re-entrant, so concurrent solves through it are unsupported. Run the ipopt "
+                "backend one solve at a time (solve/optimize on a single problem), or set "
+                "nlp_solver=psiopt for the batch.");
+        }
+
         this->jet_initialize();
 
         PSIOPT::ConvergenceFlags flag;
