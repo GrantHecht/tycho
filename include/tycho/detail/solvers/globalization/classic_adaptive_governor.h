@@ -71,10 +71,7 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cassert>
-#include <cmath>
-#include <stdexcept>
 #include <utility>
 
 #include <Eigen/Core>

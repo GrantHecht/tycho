@@ -1168,7 +1168,6 @@ void tycho::solvers::PSIOPT::fill_residual_info(KKTVector &xsl, KKTVector &rhs, 
     double maxcomp = 0;
     if (inequal_cons_ > 0) {
         iter.icon_inf_ = rhs.iq_cons().lpNorm<Eigen::Infinity>();
-        iter.icon_norm_err_ = rhs.iq_cons().norm();
         iter.max_i_mult_ = xsl.iq_lmults().lpNorm<Eigen::Infinity>();
         this->complementarity(xsl.slacks(), xsl.iq_lmults(), avgcomp, mincomp, maxcomp);
         // While a nested restoration phase is active, the barrier error the
@@ -1178,18 +1177,11 @@ void tycho::solvers::PSIOPT::fill_residual_info(KKTVector &xsl, KKTVector &rhs, 
                                              static_cast<int>(xsl.slacks().size()));
 
         iter.barr_inf_ = maxcomp;
-        iter.barr_norm_err_ = avgcomp;
     }
     if (equal_cons_ > 0) {
         iter.econ_inf_ = rhs.eq_cons().lpNorm<Eigen::Infinity>();
-        iter.econ_norm_err_ = rhs.eq_cons().norm();
         iter.max_e_mult_ = xsl.eq_lmults().lpNorm<Eigen::Infinity>();
     }
-
-    iter.kkt_norm_err_ = rhs.prim_grad().norm();
-
-    if (equal_cons_ > 0 || inequal_cons_ > 0)
-        iter.all_con_norm_err_ = rhs.all_cons().norm();
 }
 
 void tycho::solvers::PSIOPT::fill_iter_info(KKTVector &xsl, KKTVector &rhs, double pobj,

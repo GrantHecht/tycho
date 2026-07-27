@@ -15,7 +15,6 @@
 // =============================================================================
 
 #pragma once
-#include <algorithm>
 #include <array>
 #include <cassert>
 #include <functional>
@@ -36,7 +35,6 @@
 #include "tycho/detail/solvers/non_linear_program.h"
 #include "tycho/detail/solvers/psiopt_fwd.h"
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/get_core_count.h"
 
 #ifdef USE_ACCELERATE_SPARSE
 #include "tycho/detail/solvers/linear/accelerate_interface.h"

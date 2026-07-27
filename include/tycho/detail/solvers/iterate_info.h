@@ -59,12 +59,6 @@ struct IterateInfo {
     double prox_reg_primal_ = -1.0;
     double prox_reg_dual_ = -1.0;
 
-    double kkt_norm_err_ = 0;
-    double barr_norm_err_ = 0;
-    double econ_norm_err_ = 0;
-    double icon_norm_err_ = 0;
-    double all_con_norm_err_ = 0;
-
     int p_pivots_ = 0;
     double max_e_mult_ = 0;
     double max_i_mult_ = 0;

@@ -166,7 +166,6 @@
 
 #pragma once
 
-#include <cstddef>
 #include <deque>
 #include <memory>
 
