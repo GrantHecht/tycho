@@ -35,6 +35,13 @@ namespace {
 /// nlp_lower_bound_inf / nlp_upper_bound_inf defaults).
 constexpr double kIpoptInfinity = 1.0e19;
 
+/// Latched when a TNLP callback is unwound by something that does not derive
+/// from std::exception. Every callback below is a C++ boundary Ipopt calls
+/// through its own stack, so nothing may escape it -- the catch-all keeps that
+/// contract complete and still reports the failure instead of swallowing it.
+constexpr const char *kUnknownCallbackError =
+    "unknown exception (not derived from std::exception) escaped an NLP evaluation callback";
+
 /// Spelling of an ApplicationReturnStatus, reported verbatim in the run info so
 /// an unmapped outcome is still identifiable.
 std::string application_status_name(Ipopt::ApplicationReturnStatus status) {
@@ -355,6 +362,11 @@ bool TychoTNLP::get_nlp_info(Index &n, Index &m, Index &nnz_jac_g, Index &nnz_h_
             latched_error_ = e.what();
         }
         return false;
+    } catch (...) {
+        if (latched_error_.empty()) {
+            latched_error_ = kUnknownCallbackError;
+        }
+        return false;
     }
 }
 
@@ -392,6 +404,11 @@ bool TychoTNLP::get_bounds_info(Index n, Number *x_l, Number *x_u, Index m, Numb
             latched_error_ = e.what();
         }
         return false;
+    } catch (...) {
+        if (latched_error_.empty()) {
+            latched_error_ = kUnknownCallbackError;
+        }
+        return false;
     }
 }
 
@@ -423,6 +440,11 @@ bool TychoTNLP::get_starting_point(Index n, bool init_x, Number *x, bool init_z,
             latched_error_ = e.what();
         }
         return false;
+    } catch (...) {
+        if (latched_error_.empty()) {
+            latched_error_ = kUnknownCallbackError;
+        }
+        return false;
     }
 }
 
@@ -440,6 +462,11 @@ bool TychoTNLP::eval_f(Index n, const Number *x, bool new_x, Number &obj_value) 
             latched_error_ = e.what();
         }
         return false;
+    } catch (...) {
+        if (latched_error_.empty()) {
+            latched_error_ = kUnknownCallbackError;
+        }
+        return false;
     }
 }
 
@@ -455,6 +482,11 @@ bool TychoTNLP::eval_grad_f(Index n, const Number *x, bool new_x, Number *grad_f
     } catch (const std::exception &e) {
         if (latched_error_.empty()) {
             latched_error_ = e.what();
+        }
+        return false;
+    } catch (...) {
+        if (latched_error_.empty()) {
+            latched_error_ = kUnknownCallbackError;
         }
         return false;
     }
@@ -479,6 +511,11 @@ bool TychoTNLP::eval_g(Index n, const Number *x, bool new_x, Index m, Number *g)
     } catch (const std::exception &e) {
         if (latched_error_.empty()) {
             latched_error_ = e.what();
+        }
+        return false;
+    } catch (...) {
+        if (latched_error_.empty()) {
+            latched_error_ = kUnknownCallbackError;
         }
         return false;
     }
@@ -517,6 +554,11 @@ bool TychoTNLP::eval_jac_g(Index n, const Number *x, bool new_x, Index m, Index 
     } catch (const std::exception &e) {
         if (latched_error_.empty()) {
             latched_error_ = e.what();
+        }
+        return false;
+    } catch (...) {
+        if (latched_error_.empty()) {
+            latched_error_ = kUnknownCallbackError;
         }
         return false;
     }
@@ -570,6 +612,11 @@ bool TychoTNLP::eval_h(Index n, const Number *x, bool new_x, Number obj_factor, 
             latched_error_ = e.what();
         }
         return false;
+    } catch (...) {
+        if (latched_error_.empty()) {
+            latched_error_ = kUnknownCallbackError;
+        }
+        return false;
     }
 }
 
@@ -613,6 +660,10 @@ void TychoTNLP::finalize_solution(Ipopt::SolverReturn status, Index n, const Num
     } catch (const std::exception &e) {
         if (latched_error_.empty()) {
             latched_error_ = e.what();
+        }
+    } catch (...) {
+        if (latched_error_.empty()) {
+            latched_error_ = kUnknownCallbackError;
         }
     }
 }
