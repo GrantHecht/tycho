@@ -76,7 +76,7 @@ std::unique_ptr<OptimizationProblem> build_eval_except_nlp(int throw_budget) {
         auto x = args.coeff<0>();
         prob->add_equal_con(GenericFunction<-1, -1>(x - 1.0), (Eigen::VectorXi(1) << 0).finished());
     }
-    prob->optimizer_->set_print_level(0);
+    prob->optimizer_->set_print_level(3);
     return prob;
 }
 
@@ -165,7 +165,7 @@ TEST(EvalExceptionRecovery, CommittedPointFailureStaysFatal) {
         auto x = args.coeff<0>();
         prob->add_equal_con(GenericFunction<-1, -1>(x - 1.0), (Eigen::VectorXi(1) << 0).finished());
     }
-    prob->optimizer_->set_print_level(0);
+    prob->optimizer_->set_print_level(3);
     try {
         prob->optimize();
         FAIL() << "expected the committed-point evaluation exception to propagate";
@@ -237,7 +237,9 @@ TEST(EvalExceptionRecovery, RestorationEscalatesOnUnEvaluableSoftStep) {
     auto prob = build_eval_except_nlp(4);
     prob->optimizer_->settings().restoration_mode_ = ts::RestorationModes::l1_nested;
     auto flag = prob->optimize();
-    (void)flag; // graceful completion is the bar; convergence is a bonus
+    // Graceful completion is the bar; convergence is a bonus. "Graceful" still
+    // excludes DIVERGING -- the escalation must not push the solve off a cliff.
+    EXPECT_NE(flag, tycho::ConvergenceFlags::DIVERGING);
     EXPECT_GE(prob->optimizer_->result().last_feas_rest_entries_, 1);
     EXPECT_FALSE(prob->optimizer_->result().last_eval_exception_.empty());
     // The nested-restoration path records through PSIOPT::eval_error_log_

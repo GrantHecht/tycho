@@ -66,24 +66,24 @@ namespace {
 // it classifies NOTCONVERGED rather than CONVERGED; a "converged" iterate is a
 // default IterateInfo (all residuals zero). A NaN iterate carries a non-finite
 // residual.
-constexpr double kBigResidual = 1.0e16; // > div tol (1e15): finite overshoot
-constexpr double kMidResidual = 1.0;    // < div tol, > conv tol: not converged
+constexpr double kDivPersBigResidual = 1.0e16; // > div tol (1e15): finite overshoot
+constexpr double kDivPersMidResidual = 1.0;    // < div tol, > conv tol: not converged
 
-IterateInfo divergent_iterate() {
+IterateInfo divpers_divergent_iterate() {
     IterateInfo it;
-    it.econ_inf_ = kBigResidual;
+    it.econ_inf_ = kDivPersBigResidual;
     return it;
 }
 
-IterateInfo recovered_iterate() {
+IterateInfo divpers_recovered_iterate() {
     IterateInfo it;
-    it.econ_inf_ = kMidResidual;
+    it.econ_inf_ = kDivPersMidResidual;
     return it;
 }
 
-IterateInfo converged_iterate() { return IterateInfo{}; }
+IterateInfo divpers_converged_iterate() { return IterateInfo{}; }
 
-IterateInfo nan_iterate() {
+IterateInfo divpers_nan_iterate() {
     IterateInfo it;
     it.kkt_inf_ = std::numeric_limits<double>::quiet_NaN();
     return it;
@@ -100,19 +100,22 @@ TEST(DivergencePersistence, ConstantIsThree) {
 
 TEST(DivergencePersistence, OneTrailingDivergentContinues) {
     DivergencePersistenceHarness h;
-    std::vector<IterateInfo> iters{recovered_iterate(), recovered_iterate(), divergent_iterate()};
+    std::vector<IterateInfo> iters{divpers_recovered_iterate(), divpers_recovered_iterate(),
+                                   divpers_divergent_iterate()};
     EXPECT_EQ(h.check(iters), tycho::ConvergenceFlags::NOTCONVERGED);
 }
 
 TEST(DivergencePersistence, TwoTrailingDivergentContinues) {
     DivergencePersistenceHarness h;
-    std::vector<IterateInfo> iters{recovered_iterate(), divergent_iterate(), divergent_iterate()};
+    std::vector<IterateInfo> iters{divpers_recovered_iterate(), divpers_divergent_iterate(),
+                                   divpers_divergent_iterate()};
     EXPECT_EQ(h.check(iters), tycho::ConvergenceFlags::NOTCONVERGED);
 }
 
 TEST(DivergencePersistence, ThreeTrailingDivergentDiverges) {
     DivergencePersistenceHarness h;
-    std::vector<IterateInfo> iters{divergent_iterate(), divergent_iterate(), divergent_iterate()};
+    std::vector<IterateInfo> iters{divpers_divergent_iterate(), divpers_divergent_iterate(),
+                                   divpers_divergent_iterate()};
     EXPECT_EQ(h.check(iters), tycho::ConvergenceFlags::DIVERGING);
 }
 
@@ -121,8 +124,8 @@ TEST(DivergencePersistence, WindowBrokenByRecoveryContinues) {
     // contains the recovered iterate, so the run of divergent iterates is broken
     // and DIVERGING is NOT declared.
     DivergencePersistenceHarness h;
-    std::vector<IterateInfo> iters{divergent_iterate(), recovered_iterate(), divergent_iterate(),
-                                   divergent_iterate()};
+    std::vector<IterateInfo> iters{divpers_divergent_iterate(), divpers_recovered_iterate(),
+                                   divpers_divergent_iterate(), divpers_divergent_iterate()};
     EXPECT_EQ(h.check(iters), tycho::ConvergenceFlags::NOTCONVERGED);
 }
 
@@ -130,8 +133,8 @@ TEST(DivergencePersistence, FourTrailingDivergentDiverges) {
     // Once a full window of divergent iterates accrues, DIVERGING fires even
     // though the history is longer than the window.
     DivergencePersistenceHarness h;
-    std::vector<IterateInfo> iters{recovered_iterate(), divergent_iterate(), divergent_iterate(),
-                                   divergent_iterate()};
+    std::vector<IterateInfo> iters{divpers_recovered_iterate(), divpers_divergent_iterate(),
+                                   divpers_divergent_iterate(), divpers_divergent_iterate()};
     EXPECT_EQ(h.check(iters), tycho::ConvergenceFlags::DIVERGING);
 }
 
@@ -139,7 +142,7 @@ TEST(DivergencePersistence, ShortHistoryAllDivergentContinues) {
     // Two divergent iterates -- fewer than the window -- cannot declare
     // DIVERGING on a finite overshoot.
     DivergencePersistenceHarness h;
-    std::vector<IterateInfo> iters{divergent_iterate(), divergent_iterate()};
+    std::vector<IterateInfo> iters{divpers_divergent_iterate(), divpers_divergent_iterate()};
     EXPECT_EQ(h.check(iters), tycho::ConvergenceFlags::NOTCONVERGED);
 }
 
@@ -147,20 +150,21 @@ TEST(DivergencePersistence, NonFiniteLatestDivergesImmediately) {
     // A NaN in the newest iterate aborts immediately, independent of how many
     // divergent iterates precede it (here: none -- the window is not full).
     DivergencePersistenceHarness h;
-    std::vector<IterateInfo> iters{recovered_iterate(), recovered_iterate(), nan_iterate()};
+    std::vector<IterateInfo> iters{divpers_recovered_iterate(), divpers_recovered_iterate(),
+                                   divpers_nan_iterate()};
     EXPECT_EQ(h.check(iters), tycho::ConvergenceFlags::DIVERGING);
 }
 
 TEST(DivergencePersistence, ShortHistoryNonFiniteDivergesImmediately) {
     // Non-finite exempts the window entirely: a single NaN iterate aborts.
     DivergencePersistenceHarness h;
-    std::vector<IterateInfo> iters{nan_iterate()};
+    std::vector<IterateInfo> iters{divpers_nan_iterate()};
     EXPECT_EQ(h.check(iters), tycho::ConvergenceFlags::DIVERGING);
 }
 
 TEST(DivergencePersistence, InfiniteLatestDivergesImmediately) {
     DivergencePersistenceHarness h;
-    std::vector<IterateInfo> iters{recovered_iterate()};
+    std::vector<IterateInfo> iters{divpers_recovered_iterate()};
     iters.back().barr_inf_ = std::numeric_limits<double>::infinity();
     EXPECT_EQ(h.check(iters), tycho::ConvergenceFlags::DIVERGING);
 }
@@ -170,13 +174,14 @@ TEST(DivergencePersistence, InfiniteLatestDivergesImmediately) {
 // finite-overshoot branch is skipped entirely.
 TEST(DivergencePersistence, NonDivergingNonConvergedIsNotConverged) {
     DivergencePersistenceHarness h;
-    std::vector<IterateInfo> iters{recovered_iterate(), recovered_iterate(), recovered_iterate()};
+    std::vector<IterateInfo> iters{divpers_recovered_iterate(), divpers_recovered_iterate(),
+                                   divpers_recovered_iterate()};
     EXPECT_EQ(h.check(iters), tycho::ConvergenceFlags::NOTCONVERGED);
 }
 
 TEST(DivergencePersistence, ConvergedHistoryConverges) {
     DivergencePersistenceHarness h;
-    std::vector<IterateInfo> iters{converged_iterate()};
+    std::vector<IterateInfo> iters{divpers_converged_iterate()};
     EXPECT_EQ(h.check(iters), tycho::ConvergenceFlags::CONVERGED);
 }
 
@@ -187,7 +192,7 @@ TEST(DivergencePersistence, ThresholdTripHonoredOnEachResidualFamily) {
         DivergencePersistenceHarness h;
         std::vector<IterateInfo> iters(kDivergencePersistIters);
         for (auto &it : iters)
-            it.*field = kBigResidual;
+            it.*field = kDivPersBigResidual;
         return h.check(iters);
     };
     EXPECT_EQ(window_on(&IterateInfo::kkt_inf_), tycho::ConvergenceFlags::DIVERGING);
@@ -228,7 +233,7 @@ TEST(DivergencePersistence, MaratosCorpusConvergesAtDefaults) {
                            (Eigen::VectorXi(2) << 0, 1).finished());
     }
 
-    prob.optimizer_->set_print_level(0);
+    prob.optimizer_->set_print_level(3);
     auto flag = prob.optimize();
 
     EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
@@ -261,7 +266,7 @@ TEST(DivergencePersistence, GenuineDivergenceStillAborts) {
         prob.add_equal_con(GenericFunction<-1, -1>(x1), (Eigen::VectorXi(2) << 0, 1).finished());
     }
 
-    prob.optimizer_->set_print_level(0);
+    prob.optimizer_->set_print_level(3);
     prob.optimizer_->set_max_iters(60); // fail fast if divergence is not detected
     auto flag = prob.optimize();
 

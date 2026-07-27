@@ -29,12 +29,15 @@ TEST_F(SolverTest, BrachistochroneSolveOnly) {
     EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
 }
 
-TEST_F(SolverTest, ConvergenceFlagOrdering) {
-    // Verify the severity ordering of convergence flags
-    EXPECT_LT(tycho::ConvergenceFlags::CONVERGED, tycho::ConvergenceFlags::ACCEPTABLE);
-    EXPECT_LT(tycho::ConvergenceFlags::ACCEPTABLE, tycho::ConvergenceFlags::NOTCONVERGED);
-    EXPECT_LT(tycho::ConvergenceFlags::NOTCONVERGED, tycho::ConvergenceFlags::DIVERGING);
-}
+// The severity ordering of the convergence flags is a compile-time contract --
+// every `status <= ACCEPTABLE` comparison in this suite and in the solver
+// depends on it. Asserted where it is decided, not at run time.
+static_assert(tycho::ConvergenceFlags::CONVERGED < tycho::ConvergenceFlags::ACCEPTABLE,
+              "ConvergenceFlags must be ordered by severity: CONVERGED < ACCEPTABLE");
+static_assert(tycho::ConvergenceFlags::ACCEPTABLE < tycho::ConvergenceFlags::NOTCONVERGED,
+              "ConvergenceFlags must be ordered by severity: ACCEPTABLE < NOTCONVERGED");
+static_assert(tycho::ConvergenceFlags::NOTCONVERGED < tycho::ConvergenceFlags::DIVERGING,
+              "ConvergenceFlags must be ordered by severity: NOTCONVERGED < DIVERGING");
 
 TEST_F(SolverTest, PrintLevelZeroConverges) {
     auto phase = make_brach_solver_phase(16);
@@ -241,9 +244,15 @@ TEST_F(SolverTest, BrachistochroneOptimizeSolve) {
 }
 
 TEST_F(SolverTest, ConditionalStepSkippedOnConvergence) {
+    // Both solves are pinned to a single QP thread. This is the suite's only
+    // exact iteration-count equality across two independent solves, and a
+    // multi-threaded Pardiso factorization is not bit-reproducible run to run
+    // (see docs/dev/analysis/2026-07-pr9-pardiso-options.md); without the pin
+    // the comparison is a latent flake rather than a property.
     // optimize alone
     auto phase_opt = make_brach_solver_phase(32);
     phase_opt->optimizer_->set_print_level(3);
+    phase_opt->optimizer_->set_qp_threads(1);
     auto status_opt = phase_opt->optimize();
     ASSERT_EQ(status_opt, tycho::ConvergenceFlags::CONVERGED);
     int opt_iters = phase_opt->optimizer_->result().iter_num_;
@@ -252,6 +261,7 @@ TEST_F(SolverTest, ConditionalStepSkippedOnConvergence) {
     // the total iteration count should equal optimize-only.
     auto phase_os = make_brach_solver_phase(32);
     phase_os->optimizer_->set_print_level(3);
+    phase_os->optimizer_->set_qp_threads(1);
     auto status_os = phase_os->optimize_solve();
     EXPECT_LE(status_os, tycho::ConvergenceFlags::ACCEPTABLE);
     int os_iters = phase_os->optimizer_->result().iter_num_;
@@ -341,7 +351,7 @@ TEST_F(SolverTest, ReturnBestPreservesNonFinalIterate) {
     EXPECT_EQ(phase2->optimizer_->result().primals_.size(), r.primals_.size());
 }
 
-TEST_F(SolverTest, DivergenceEarlyExitInMultiPhase) {
+TEST_F(SolverTest, DivergenceEarlyExitInPhaseSequence) {
     auto phase = make_brach_solver_phase(16);
     phase->optimizer_->set_print_level(3);
     // Set divergence tolerances extremely tight — solver triggers DIVERGING quickly.

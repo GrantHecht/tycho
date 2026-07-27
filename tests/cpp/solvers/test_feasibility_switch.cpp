@@ -135,10 +135,13 @@ class FeasSwitchUnusedMechanism : public GlobalizationMechanism {
                         Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &,
                         AcceptanceStrategy &, double &, double &, IterateInfo &,
                         const std::vector<IterateInfo> &, SolverContext &) override {
+        ADD_FAILURE() << "mechanism must not be reached by FeasibilitySwitchRecovery";
         return 1.0;
     }
     void max_primal_dual_step(Eigen::VectorXd &, Eigen::VectorXd &, double, double &, double &,
-                              const SolverContext &) override {}
+                              const SolverContext &) override {
+        ADD_FAILURE() << "mechanism must not be reached by FeasibilitySwitchRecovery";
+    }
     void reset() override {}
 };
 
@@ -147,10 +150,12 @@ class FeasSwitchUnusedAcceptance : public AcceptanceStrategy {
   public:
     bool is_iterate_acceptable(const ProgressMeasures &, const ProgressMeasures &,
                                const ProgressMeasures &, double, double) override {
+        ADD_FAILURE() << "acceptance must not be reached by FeasibilitySwitchRecovery";
         return false;
     }
     bool is_infeasibility_sufficiently_reduced(const ProgressMeasures &,
                                                const ProgressMeasures &) const override {
+        ADD_FAILURE() << "acceptance must not be reached by FeasibilitySwitchRecovery";
         return false;
     }
     void reset() override {}
@@ -458,24 +463,28 @@ std::unique_ptr<OptimizationProblem> feas_switch_build_nlp(double start, double 
     return prob;
 }
 
-TEST_F(SolverTest, RestorationOffLeavesDiagnosticsSentinel) {
-    auto prob = feas_switch_build_nlp(/*start=*/0.0, /*a=*/1.0, /*inconsistent=*/false, /*b=*/0.0);
+// The restoration diagnostics carry exactly one bit per mode: -1 means "no
+// RestorationStrategy was constructed, the counters do not apply", anything >= 0
+// is a real count. The two halves are one property and are asserted together --
+// the "on" half is only meaningful against the "off" half it contrasts with.
+TEST_F(SolverTest, RestorationDiagnosticsSentinelOnlyWhenOff) {
+    auto off = feas_switch_build_nlp(/*start=*/0.0, /*a=*/1.0, /*inconsistent=*/false, /*b=*/0.0);
     // restoration_mode_ defaults to off.
-    prob->optimize();
-    const auto &r = prob->optimizer_->result();
-    EXPECT_EQ(r.last_feas_rest_entries_, -1);
-    EXPECT_EQ(r.last_feas_rest_iters_, -1);
-}
+    off->optimize();
+    const auto &r_off = off->optimizer_->result();
+    EXPECT_EQ(r_off.last_feas_rest_entries_, -1);
+    EXPECT_EQ(r_off.last_feas_rest_iters_, -1);
 
-TEST_F(SolverTest, RestorationOnReportsDiagnostics) {
-    auto prob = feas_switch_build_nlp(0.0, 1.0, false, 0.0);
-    prob->optimizer_->settings().restoration_mode_ = RestorationModes::proximal_switch;
-    prob->optimize();
-    const auto &r = prob->optimizer_->result();
-    // With restoration constructed, the diagnostics are reported (not the -1
-    // sentinel) — entries/iters are >= 0 regardless of whether entry fired.
-    EXPECT_GE(r.last_feas_rest_entries_, 0);
-    EXPECT_GE(r.last_feas_rest_iters_, 0);
+    auto on = feas_switch_build_nlp(0.0, 1.0, false, 0.0);
+    on->optimizer_->settings().restoration_mode_ = RestorationModes::proximal_switch;
+    on->optimize();
+    const auto &r_on = on->optimizer_->result();
+    // With restoration constructed the counters are reported as real counts --
+    // NOT the sentinel — regardless of whether entry actually fired.
+    EXPECT_NE(r_on.last_feas_rest_entries_, -1);
+    EXPECT_NE(r_on.last_feas_rest_iters_, -1);
+    EXPECT_GE(r_on.last_feas_rest_entries_, 0);
+    EXPECT_GE(r_on.last_feas_rest_iters_, 0);
 }
 
 TEST_F(SolverTest, ForcedEntryOnFeasibleProblemEntersExitsAndConverges) {
@@ -544,12 +553,12 @@ TEST_F(SolverTest, ForcedEntryOnInfeasibleProblemDoesNotFalselyConverge) {
     EXPECT_NE(flag, tycho::ConvergenceFlags::CONVERGED);
     // Soft check: entry depends on pivot perturbation producing a finite step
     // from this problem's rank-deficient KKT system, which is platform-
-    // dependent factorization behavior, not the property under test.
+    // dependent factorization behavior, not the property under test. The skip
+    // IS the entry assertion -- reaching past it means restoration was entered.
     if (r.last_feas_rest_entries_ < 1) {
         GTEST_SKIP() << "factorization returned non-finite step on this platform; "
                        "entry not exercised";
     }
-    EXPECT_GE(r.last_feas_rest_entries_, 1); // restoration was entered
 }
 
 TEST_F(SolverTest, BudgetZeroRefusesAllEntries) {
@@ -1529,11 +1538,12 @@ TEST(NestedRestorationLifecycle, SoftPreStageEscalatesIntoFullL1Phase) {
 
     ASSERT_NE(comp, nullptr);
     EXPECT_NE(flag, tycho::ConvergenceFlags::CONVERGED); // never falsely converges
+    // The skip above is the escalation assertion: reaching this line means
+    // comp->entries() >= 1, i.e. the pre-stage escalated into the full l1 phase.
     if (comp->entries() < 1) {
         GTEST_SKIP() << "factorization returned non-finite step on this platform; "
                         "escalation not exercised";
     }
-    EXPECT_GE(comp->entries(), 1); // the pre-stage escalated into the full l1 phase
 }
 
 // The nested full lifecycle on a FEASIBLE problem, unconditionally exercised:
@@ -1583,7 +1593,10 @@ TEST(NestedRestorationLifecycle, ProximalPathStillEntersExitsConverges) {
     ASSERT_EQ(sol.size(), 2);
     EXPECT_NEAR(sol[0], 2.0, 1e-3);
     EXPECT_NEAR(sol[1], 2.0, 1e-3);
-    EXPECT_GE(r.last_feas_rest_entries_, 0);
+    // Restoration was actually entered -- the same bar the proximal forced-entry
+    // sibling on this problem shape holds (ForcedEntryOnFeasibleProblemEntersExits
+    // AndConverges). >= 0 would be satisfied by merely constructing a strategy.
+    EXPECT_GE(r.last_feas_rest_entries_, 1);
 }
 
 // -----------------------------------------------------------------------------

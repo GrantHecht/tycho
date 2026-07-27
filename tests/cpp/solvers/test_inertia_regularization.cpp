@@ -23,6 +23,8 @@
 #include <gtest/gtest.h>
 
 
+#include <cmath>
+
 #include <Eigen/Core>
 
 using namespace tycho;
@@ -54,8 +56,13 @@ TEST(InertiaRegularizationConstants, MatchReferenceDefaults) {
 
 TEST(InertiaRegularizationDualShift, ExactValuesAtNamedMu) {
     // δ_c(μ) = 1e-8 · μ^0.25.
-    EXPECT_DOUBLE_EQ(dual_regularization(1.0), 1.0e-8);        // 1e-8 · 1
-    EXPECT_NEAR(dual_regularization(1.0e-4), 1.0e-9, 1.0e-21); // 1e-8 · 1e-1
+    // μ = 1 is exact (pow(1, 0.25) == 1), so it is pinned with DOUBLE_EQ. The
+    // other two go through std::pow on a non-trivial exponent, which is not
+    // correctly rounded; each tolerance is ~1e-12 relative to its own expected
+    // value -- tight enough to catch a changed scale or exponent, loose enough
+    // to absorb libm's last-place error.
+    EXPECT_DOUBLE_EQ(dual_regularization(1.0), 1.0e-8);         // 1e-8 · 1
+    EXPECT_NEAR(dual_regularization(1.0e-4), 1.0e-9, 1.0e-21);  // 1e-8 · 1e-1
     EXPECT_NEAR(dual_regularization(1.0e-8), 1.0e-10, 1.0e-22); // 1e-8 · 1e-2
 }
 
@@ -67,7 +74,10 @@ TEST(InertiaRegularizationDualShift, ShrinksMonotonicallyWithMu) {
 }
 
 TEST(InertiaRegularizationPrimalDecay, DecaysAboveFloor) {
-    // Above the floor the decay is exactly applied_total · decr.
+    // Above the floor the decay is exactly applied_total · decr. Both bounds are
+    // ~1e-12 relative to their expected value, absorbing the one multiplication's
+    // rounding (and any FMA contraction under the project's -ffast-math build)
+    // without admitting a changed decay rule.
     EXPECT_NEAR(prox_reg_decay(3.0e-4, 0.5), 1.5e-4, 1.0e-16);
     EXPECT_NEAR(prox_reg_decay(1.0e-5, 0.333333), 1.0e-5 * 0.333333, 1.0e-18);
 }
@@ -104,7 +114,7 @@ TEST(InertiaRegularizationPrimalDecay, DecaysToFloorFromLargeStart) {
 // The two identical equality rows make the constraint Jacobian rank-deficient,
 // so the KKT matrix is singular. The unique primal optimum is x0 = x1 = 0.5,
 // objective 0.5.
-std::unique_ptr<OptimizationProblem> build_duplicated_equality_nlp() {
+std::unique_ptr<OptimizationProblem> build_inertia_duplicated_equality_nlp() {
     using tycho::vf::Arguments;
     using tycho::vf::GenericFunction;
     auto prob = std::make_unique<OptimizationProblem>();
@@ -123,20 +133,26 @@ std::unique_ptr<OptimizationProblem> build_duplicated_equality_nlp() {
         prob->add_equal_con(GenericFunction<-1, -1>(x0 + x1 - 1.0),
                             (Eigen::VectorXi(2) << 0, 1).finished());
     }
-    prob->optimizer_->set_print_level(0);
+    prob->optimizer_->set_print_level(3);
     return prob;
 }
 
 // (a) The dual shift makes the rank-deficient system factorizable, so the mode
 // drives the duplicated-equality problem to its unique optimum.
 TEST(InertiaRegularizationSolve, ProximalRegularizationConvergesOnRankDeficientKkt) {
-    auto prob = build_duplicated_equality_nlp();
+    auto prob = build_inertia_duplicated_equality_nlp();
     prob->optimizer_->settings().inertia_mode_ = InertiaModes::proximal_regularization;
     prob->optimizer_->set_max_iters(100);
     auto flag = prob->optimize();
 
     EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
     const auto &r = prob->optimizer_->result();
+    // Solve-output tolerances, not arithmetic ones: the solver stops at
+    // econ_tol_/kkt_tol_ = 1e-6 on a regularized (shifted) KKT system, so the
+    // primals land within a few multiples of that tolerance of the analytic
+    // optimum and the objective, being quadratic and stationary there, lands
+    // an order tighter. Loose enough not to re-litigate the barrier schedule,
+    // tight enough that converging to any other point fails.
     EXPECT_NEAR(r.obj_val_, 0.5, 1e-5);
     ASSERT_EQ(r.primals_.size(), 2);
     EXPECT_NEAR(r.primals_[0], 0.5, 1e-4);
@@ -148,26 +164,33 @@ TEST(InertiaRegularizationSolve, ProximalRegularizationConvergesOnRankDeficientK
 // factorization, so no failure is asserted; the point is that the mode above is
 // what carries a principled regularization for this case.
 TEST(InertiaRegularizationSolve, ClassicOnRankDeficientKktDocumented) {
-    auto prob = build_duplicated_equality_nlp();
+    auto prob = build_inertia_duplicated_equality_nlp();
     prob->optimizer_->settings().inertia_mode_ = InertiaModes::classic;
     prob->optimizer_->set_max_iters(100);
     auto flag = prob->optimize();
 
     const auto &r = prob->optimizer_->result();
     ASSERT_EQ(r.primals_.size(), 2);
-    // If the classic path does converge (e.g. rescued by static pivoting), it
-    // must reach the same unique primal optimum -- it must never converge to a
-    // wrong point.
-    if (flag == tycho::ConvergenceFlags::CONVERGED) {
-        EXPECT_NEAR(r.obj_val_, 0.5, 1e-4);
-        EXPECT_NEAR(r.primals_[0], 0.5, 1e-3);
-        EXPECT_NEAR(r.primals_[1], 0.5, 1e-3);
-    }
+    // "Classic never converges to a WRONG point on this problem" is the whole
+    // property, and it is asserted unconditionally: a converged flag obliges the
+    // value checks, a non-converged flag is a permitted outcome. Written as
+    // implications rather than an `if` block so no assertion can silently drop
+    // out of the run on a toolchain where classic does not converge. The
+    // tolerances are one decade looser than the proximal test's: this path
+    // reaches the optimum through static pivot perturbation on a singular KKT
+    // rather than a principled shift, so its terminal accuracy is weaker.
+    const bool converged = (flag == tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_TRUE(!converged || std::abs(r.obj_val_ - 0.5) < 1e-4)
+        << "classic converged to obj_val_ = " << r.obj_val_ << ", expected 0.5";
+    EXPECT_TRUE(!converged || std::abs(r.primals_[0] - 0.5) < 1e-3)
+        << "classic converged to x0 = " << r.primals_[0] << ", expected 0.5";
+    EXPECT_TRUE(!converged || std::abs(r.primals_[1] - 0.5) < 1e-3)
+        << "classic converged to x1 = " << r.primals_[1] << ", expected 0.5";
 }
 
 // A well-conditioned equality NLP: min x^2 s.t. x - 1 = 0, optimum x = 1,
 // objective 1.
-std::unique_ptr<OptimizationProblem> build_wellcond_nlp() {
+std::unique_ptr<OptimizationProblem> build_inertia_wellcond_nlp() {
     using tycho::vf::Arguments;
     using tycho::vf::GenericFunction;
     auto prob = std::make_unique<OptimizationProblem>();
@@ -182,7 +205,7 @@ std::unique_ptr<OptimizationProblem> build_wellcond_nlp() {
         auto x = args.coeff<0>();
         prob->add_equal_con(GenericFunction<-1, -1>(x - 1.0), (Eigen::VectorXi(1) << 0).finished());
     }
-    prob->optimizer_->set_print_level(0);
+    prob->optimizer_->set_print_level(3);
     return prob;
 }
 
@@ -190,13 +213,13 @@ std::unique_ptr<OptimizationProblem> build_wellcond_nlp() {
 // both modes within solver tolerance (on healthy problems ρ_k sits at the floor
 // and δ_c is negligible, so the mode is a near-no-op).
 TEST(InertiaRegularizationSolve, WellConditionedParityAcrossModes) {
-    auto prob_classic = build_wellcond_nlp();
+    auto prob_classic = build_inertia_wellcond_nlp();
     prob_classic->optimizer_->settings().inertia_mode_ = InertiaModes::classic;
     auto flag_classic = prob_classic->optimize();
     ASSERT_EQ(flag_classic, tycho::ConvergenceFlags::CONVERGED);
     const double obj_classic = prob_classic->optimizer_->result().obj_val_;
 
-    auto prob_prox = build_wellcond_nlp();
+    auto prob_prox = build_inertia_wellcond_nlp();
     prob_prox->optimizer_->settings().inertia_mode_ = InertiaModes::proximal_regularization;
     auto flag_prox = prob_prox->optimize();
     ASSERT_EQ(flag_prox, tycho::ConvergenceFlags::CONVERGED);
@@ -234,7 +257,7 @@ TEST(InertiaRegularizationSolve, ProximalRegularizationWithL1NestedRestoration) 
         auto x = args.coeff<0>();
         prob->add_equal_con(GenericFunction<-1, -1>(x + 1.0), (Eigen::VectorXi(1) << 0).finished());
     }
-    prob->optimizer_->set_print_level(0);
+    prob->optimizer_->set_print_level(3);
     prob->optimizer_->settings().inertia_mode_ = InertiaModes::proximal_regularization;
     prob->optimizer_->settings().acceptance_strategy_ = AcceptanceStrategies::merit;
     prob->optimizer_->settings().restoration_mode_ = RestorationModes::l1_nested;

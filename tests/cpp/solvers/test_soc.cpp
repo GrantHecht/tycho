@@ -52,7 +52,7 @@ using tycho::solvers::SolverContext;
 using Action = RecoveryChain::Action;
 
 // Builds an IterateInfo carrying just the two trigger signals SOC reads.
-IterateInfo make_iter(int first_rejection_iter, double theta_at_first_rejection) {
+IterateInfo soc_make_iter(int first_rejection_iter, double theta_at_first_rejection) {
     IterateInfo it;
     it.first_rejection_iter_ = first_rejection_iter;
     it.theta_at_first_rejection_ = theta_at_first_rejection;
@@ -67,23 +67,24 @@ TEST(SocTrigger, TruthTable) {
 
     // First trial rejected AND its violation did not improve on the current
     // iterate (theta >= current): fire.
-    EXPECT_TRUE(soc_should_trigger(make_iter(/*first=*/0, /*theta=*/2.0), current));
-    EXPECT_TRUE(soc_should_trigger(make_iter(/*first=*/0, /*theta=*/1.0), current)); // equal fires
+    EXPECT_TRUE(soc_should_trigger(soc_make_iter(/*first=*/0, /*theta=*/2.0), current));
+    // Equal fires.
+    EXPECT_TRUE(soc_should_trigger(soc_make_iter(/*first=*/0, /*theta=*/1.0), current));
 
     // First trial rejected but its violation improved (theta < current): the
     // ordinary backtrack is already making progress, so no correction.
-    EXPECT_FALSE(soc_should_trigger(make_iter(/*first=*/0, /*theta=*/0.5), current));
+    EXPECT_FALSE(soc_should_trigger(soc_make_iter(/*first=*/0, /*theta=*/0.5), current));
 
     // Theta unavailable (< 0: LANG variant, or no rejection recorded): the
     // reduction test cannot be made, so conservatively do not fire.
-    EXPECT_FALSE(soc_should_trigger(make_iter(/*first=*/0, /*theta=*/-1.0), current));
+    EXPECT_FALSE(soc_should_trigger(soc_make_iter(/*first=*/0, /*theta=*/-1.0), current));
 
     // The rejection was not the FIRST trial (a later backtrack): no correction.
-    EXPECT_FALSE(soc_should_trigger(make_iter(/*first=*/1, /*theta=*/2.0), current));
+    EXPECT_FALSE(soc_should_trigger(soc_make_iter(/*first=*/1, /*theta=*/2.0), current));
 
     // Step was accepted with no rejection (first_rejection_iter_ stays -1): the
     // recovery hook never even reaches SOC, and the predicate agrees.
-    EXPECT_FALSE(soc_should_trigger(make_iter(/*first=*/-1, /*theta=*/-1.0), current));
+    EXPECT_FALSE(soc_should_trigger(soc_make_iter(/*first=*/-1, /*theta=*/-1.0), current));
 }
 
 // ---------------------------------------------------------------------------
@@ -166,7 +167,7 @@ TEST(SocLoop, CapStops) {
 
 // Inert AcceptanceStrategy / GlobalizationMechanism: SocRecovery's early-exit
 // paths return before ever calling these, so their bodies must never run.
-class UnusedAcceptance : public AcceptanceStrategy {
+class SocUnusedAcceptance : public AcceptanceStrategy {
   public:
     bool drives_classic_path() const override { return true; }
     bool is_iterate_acceptable(const ProgressMeasures &, const ProgressMeasures &,
@@ -203,7 +204,7 @@ class SocUnusedMechanism : public GlobalizationMechanism {
 // counter through `soc_steps`.
 Action drive_soc(PSIOPT::Settings &settings, IterateInfo &citer, int &soc_steps) {
     KktSolverType solver;
-    UnusedAcceptance acceptance;
+    SocUnusedAcceptance acceptance;
     SocUnusedMechanism mechanism;
     int zero = 0;
     Eigen::VectorXd scratch; // empty: dims are all zero
@@ -224,7 +225,7 @@ Action drive_soc(PSIOPT::Settings &settings, IterateInfo &citer, int &soc_steps)
 TEST(SocRecoveryGuards, DisabledDeclines) {
     PSIOPT::Settings settings;
     settings.max_soc_ = 0;
-    IterateInfo citer = make_iter(/*first=*/0, /*theta=*/2.0); // would otherwise trigger
+    IterateInfo citer = soc_make_iter(/*first=*/0, /*theta=*/2.0); // would otherwise trigger
     int soc_steps = 0;
     EXPECT_EQ(drive_soc(settings, citer, soc_steps), Action::kAcceptAsIs);
     EXPECT_EQ(soc_steps, 0);
@@ -235,7 +236,7 @@ TEST(SocRecoveryGuards, DisabledDeclines) {
 TEST(SocRecoveryGuards, NonTriggeringRejectionDeclines) {
     PSIOPT::Settings settings;
     settings.max_soc_ = kSocRecommendedMaxCorrections;
-    IterateInfo citer = make_iter(/*first=*/1, /*theta=*/2.0); // not the first trial
+    IterateInfo citer = soc_make_iter(/*first=*/1, /*theta=*/2.0); // not the first trial
     int soc_steps = 0;
     EXPECT_EQ(drive_soc(settings, citer, soc_steps), Action::kAcceptAsIs);
     EXPECT_EQ(soc_steps, 0);

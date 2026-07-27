@@ -460,7 +460,7 @@ SolverContext watchdog_dummy_context(KktSolverType &solver, PSIOPT::Settings &se
                          zero,    zero,    scratch};
 }
 
-struct ChainDrive {
+struct WatchdogChainDrive {
     IterateInfo citer;
     std::vector<IterateInfo> iters;
     Eigen::VectorXd v = Eigen::VectorXd::Zero(1);
@@ -470,7 +470,7 @@ struct ChainDrive {
     int watchdog_activations = 0;
 };
 
-Action drive_chain(RecoveryChain &chain, ChainDrive &d, SolverContext &ctx,
+Action watchdog_drive_chain(RecoveryChain &chain, WatchdogChainDrive &d, SolverContext &ctx,
                    AcceptanceStrategy &acceptance, GlobalizationMechanism &mechanism) {
     return chain.on_step_rejected(d.citer, d.iters, ctx, acceptance, mechanism,
                                   PSIOPT::LineSearchModes::AUGLANG, 1.0, 1e-3, 0.0, 0.0, d.v, d.v,
@@ -495,8 +495,8 @@ TEST(ChainedRecoveryOrdering, SocResolvesFirst) {
     WatchdogSpyRecovery *ext_ptr = ext_spy.get();
     ChainedRecovery chain(std::move(soc_spy), std::move(ext_spy));
 
-    ChainDrive d;
-    const Action action = drive_chain(chain, d, ctx, acceptance, mechanism);
+    WatchdogChainDrive d;
+    const Action action = watchdog_drive_chain(chain, d, ctx, acceptance, mechanism);
 
     EXPECT_EQ(action, Action::kRetry);
     EXPECT_EQ(soc_ptr->calls_, 1);
@@ -521,8 +521,8 @@ TEST(ChainedRecoveryOrdering, ExtendedResolvesWhenSocDeclines) {
     WatchdogSpyRecovery *ext_ptr = ext_spy.get();
     ChainedRecovery chain(std::move(soc_spy), std::move(ext_spy));
 
-    ChainDrive d;
-    const Action action = drive_chain(chain, d, ctx, acceptance, mechanism);
+    WatchdogChainDrive d;
+    const Action action = watchdog_drive_chain(chain, d, ctx, acceptance, mechanism);
 
     EXPECT_EQ(action, Action::kRetry);
     EXPECT_EQ(soc_ptr->calls_, 1);
@@ -543,8 +543,8 @@ TEST(ChainedRecoveryOrdering, BothDeclineIsUnresolved) {
     ChainedRecovery chain(std::make_unique<WatchdogSpyRecovery>(Action::kAcceptAsIs),
                          std::make_unique<WatchdogSpyRecovery>(Action::kAcceptAsIs));
 
-    ChainDrive d;
-    const Action action = drive_chain(chain, d, ctx, acceptance, mechanism);
+    WatchdogChainDrive d;
+    const Action action = watchdog_drive_chain(chain, d, ctx, acceptance, mechanism);
 
     EXPECT_EQ(action, Action::kAcceptAsIs);
     EXPECT_EQ(d.resolved_depth, kRecoveryDepthUnresolved);

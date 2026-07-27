@@ -2,7 +2,8 @@
 // Shared utilities for solver tests
 //
 // Provides the SolverTest fixture and a Brachistochrone phase builder
-// pre-configured for solver/Jet tests (silent output).
+// pre-configured for solver/Jet tests (silent output: print_level is inverted,
+// 0 is full output and 3+ is fully silent -- see PSIOPT::Settings::print_level_).
 ///////////////////////////////////////////////////////////////////////////////
 
 #pragma once
@@ -34,7 +35,7 @@ class SolverTest : public VectorFunctionFixture {};
 
 inline std::shared_ptr<ODEPhase<BrachODE>> make_brach_solver_phase(int n_segs = 16) {
     auto phase = make_brach_phase(n_segs * 3 + 1, n_segs);
-    phase->optimizer_->set_print_level(0);
+    phase->optimizer_->set_print_level(3);
     return phase;
 }
 

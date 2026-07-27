@@ -360,9 +360,16 @@ TEST(L1RestoFractionToBoundary, PrimalAndDualCapsMatchTauRule) {
     r.enter_nested(ref, xr, eq, empty, /*outer_mu=*/0.1);
 
     const double mu_live = 0.1;
+    // Constraint multipliers y, a distinct quantity from the residuals c above:
+    // recover_elastic_steps reads them as the (rho +/- y) terms of the step
+    // formulas, so feeding the residual vector here would pin the seam with
+    // semantically wrong data. Mixed sign, order 1 (rho = 1e3 dominates either
+    // way), and different from both `eq` and `dy`.
+    Eigen::VectorXd lmults(2);
+    lmults << 0.3, -0.7;
     Eigen::VectorXd dy(2);
     dy << 0.5, -0.3;
-    r.recover_elastic_steps(mu_live, eq /*lmults stand-in*/, empty, dy, empty);
+    r.recover_elastic_steps(mu_live, lmults, empty, dy, empty);
 
     const double tau = 0.99;
 
@@ -380,23 +387,18 @@ TEST(L1RestoFractionToBoundary, PrimalAndDualCapsMatchTauRule) {
     EXPECT_NEAR(r.primal_boundary_alpha(tau), expected_primal, 1e-14);
     EXPECT_NEAR(r.dual_boundary_alpha(tau), expected_dual, 1e-14);
 
-    // Both caps are valid step fractions.
-    EXPECT_GT(r.primal_boundary_alpha(tau), 0.0);
-    EXPECT_LE(r.primal_boundary_alpha(tau), 1.0);
-    EXPECT_GT(r.dual_boundary_alpha(tau), 0.0);
-    EXPECT_LE(r.dual_boundary_alpha(tau), 1.0);
-
     // With rho = 1e3 the primal step Delta n is strongly negative, so the primal
-    // cap must actually bind below 1 (exercises the tau rule, not just the 1.0 default).
+    // cap must actually bind below 1 (exercises the tau rule, not just the 1.0
+    // default). The "cap is a valid fraction in (0, 1]" contract itself lives in
+    // CapNeverExceedsUnity below, where the cap does NOT bind.
     EXPECT_LT(r.primal_boundary_alpha(tau), 1.0);
 }
 
-TEST(L1RestoFractionToBoundary, AllNonnegativeStepsGiveUnitCap) {
-    // Construct a channel and step where no positive variable decreases: use
-    // apply_elastic_step with a trivial recovered step of zero (recover with
-    // dy chosen so ... ) -- simplest: verify the cap is 1 when recovered steps
-    // are all >= 0 by driving a case dominated by the +mu/z terms. We assert the
-    // general contract: the cap never exceeds 1.
+// The complement of the test above: a channel on which no positive variable's
+// step is large enough to bind, so both caps stay at their unit default. Pinned
+// exactly (not just <= 1) -- an implementation that started the cap anywhere but
+// 1.0, or that let a non-binding step scale it, would fail here.
+TEST(L1RestoFractionToBoundary, CapNeverExceedsUnity) {
     NestedL1Restoration r;
     Eigen::VectorXd xr(1);
     xr << 1.0;
@@ -406,16 +408,19 @@ TEST(L1RestoFractionToBoundary, AllNonnegativeStepsGiveUnitCap) {
     const ProgressMeasures ref{0.0, 0.0, 0.0};
     r.enter_nested(ref, xr, eq, empty, /*outer_mu=*/0.1);
 
+    // Multipliers y (NOT the residuals): at |y| of order 1 the (rho +/- y) terms
+    // cancel mu/z to within ~1e-7 * |y|, so |Delta n|, |Delta p| ~ 1e-11 against
+    // n = p = 1e-4 and |Delta z| ~ |y| against z = 1e3 -- three orders too small
+    // for the tau rule to bind on either channel.
+    Eigen::VectorXd lmults(1);
+    lmults << 0.4;
     // A zero multiplier-step recovery.
     Eigen::VectorXd dy(1);
     dy << 0.0;
-    r.recover_elastic_steps(0.1, eq, empty, dy, empty);
+    r.recover_elastic_steps(0.1, lmults, empty, dy, empty);
 
-    // The cap is at most 1 in all cases.
-    EXPECT_LE(r.primal_boundary_alpha(0.99), 1.0);
-    EXPECT_LE(r.dual_boundary_alpha(0.99), 1.0);
-    EXPECT_GT(r.primal_boundary_alpha(0.99), 0.0);
-    EXPECT_GT(r.dual_boundary_alpha(0.99), 0.0);
+    EXPECT_DOUBLE_EQ(r.primal_boundary_alpha(0.99), 1.0);
+    EXPECT_DOUBLE_EQ(r.dual_boundary_alpha(0.99), 1.0);
 }
 
 // =============================================================================
@@ -437,9 +442,13 @@ TEST(L1RestoStepApplication, ApplyMovesSlacksAndUpdatesPivots) {
     const Eigen::VectorXd zn0 = r.ec_zn();
     const Eigen::VectorXd zp0 = r.ec_zp();
 
+    // Constraint multipliers y, distinct from the residuals `eq` (see the note
+    // in PrimalAndDualCapsMatchTauRule).
+    Eigen::VectorXd lmults(2);
+    lmults << 0.3, -0.7;
     Eigen::VectorXd dy(2);
     dy << 0.2, -0.1;
-    r.recover_elastic_steps(0.1, eq, empty, dy, empty);
+    r.recover_elastic_steps(0.1, lmults, empty, dy, empty);
     const Eigen::VectorXd dn = r.ec_dn();
     const Eigen::VectorXd dp = r.ec_dp();
     const Eigen::VectorXd dzn = r.ec_dzn();
@@ -473,9 +482,12 @@ TEST(L1RestoStepApplication, TrialResidualShiftIsAlphaBlendedSlackDifference) {
     const ProgressMeasures ref{0.6, 0.0, 0.0};
     r.enter_nested(ref, xr, eq, empty, /*outer_mu=*/0.1);
 
+    // Constraint multipliers y, distinct from the residuals `eq`.
+    Eigen::VectorXd lmults(2);
+    lmults << 0.3, -0.7;
     Eigen::VectorXd dy(2);
     dy << 0.2, -0.1;
-    r.recover_elastic_steps(0.1, eq, empty, dy, empty);
+    r.recover_elastic_steps(0.1, lmults, empty, dy, empty);
 
     const double alpha = 0.35;
     Eigen::VectorXd eq_shift(2), iq_shift(0);
@@ -497,9 +509,12 @@ TEST(L1RestoStepApplication, TrialObjectiveBlendsSlacksAndProximalTerm) {
     const ProgressMeasures ref{0.6, 0.0, 0.0};
     r.enter_nested(ref, xr, eq, empty, /*outer_mu=*/0.1);
 
+    // Constraint multipliers y, distinct from the residuals `eq`.
+    Eigen::VectorXd lmults(2);
+    lmults << 0.3, -0.7;
     Eigen::VectorXd dy(2);
     dy << 0.2, -0.1;
-    r.recover_elastic_steps(0.1, eq, empty, dy, empty);
+    r.recover_elastic_steps(0.1, lmults, empty, dy, empty);
 
     const double mu_live = 0.09; // eta = 0.3
     const double alpha = 0.5;

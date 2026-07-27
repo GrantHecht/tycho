@@ -56,10 +56,10 @@ using tycho::solvers::SolverContext;
 // accept/reject verdict onto Citer.accepted_ (as the real merit variants do at
 // the merit test) and returns a unit step. The generic filter/funnel hooks are
 // unused here.
-class StubAcceptance : public AcceptanceStrategy {
+class GateStubAcceptance : public AcceptanceStrategy {
   public:
     bool drives_classic_path() const override { return true; }
-    explicit StubAcceptance(bool accept) : accept_(accept) {}
+    explicit GateStubAcceptance(bool accept) : accept_(accept) {}
 
     bool is_iterate_acceptable(const ProgressMeasures &, const ProgressMeasures &,
                                const ProgressMeasures &, double, double) override {
@@ -87,7 +87,7 @@ class StubAcceptance : public AcceptanceStrategy {
 // gate fires it exactly when expected. Returns kAcceptAsIs and touches none of
 // its arguments (this test exercises the dispatch GATE, not the correction
 // itself — see test_soc.cpp for the SOC policy).
-class RecordingRecovery : public RecoveryChain {
+class GateRecordingRecovery : public RecoveryChain {
   public:
     Action on_step_rejected(IterateInfo &, const std::vector<IterateInfo> &, SolverContext &,
                             AcceptanceStrategy &, GlobalizationMechanism &,
@@ -103,29 +103,32 @@ class RecordingRecovery : public RecoveryChain {
     int calls_ = 0;
 };
 
-// Inert GlobalizationMechanism: RecordingRecovery ignores it, so its bodies are
+// Inert GlobalizationMechanism: GateRecordingRecovery ignores it, so its bodies are
 // never reached; present only to satisfy the on_step_rejected signature.
-class UnusedMechanism : public GlobalizationMechanism {
+class GateUnusedMechanism : public GlobalizationMechanism {
   public:
     double compute_step(PSIOPT::LineSearchModes, double, double, double, double, Eigen::VectorXd &,
                         Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &,
                         AcceptanceStrategy &, double &, double &, IterateInfo &,
                         const std::vector<IterateInfo> &, SolverContext &) override {
+        ADD_FAILURE() << "mechanism must not be reached: the recording recovery ignores it";
         return 1.0;
     }
     void max_primal_dual_step(Eigen::VectorXd &, Eigen::VectorXd &, double, double &, double &,
-                              const SolverContext &) override {}
+                              const SolverContext &) override {
+        ADD_FAILURE() << "mechanism must not be reached: the recording recovery ignores it";
+    }
     void reset() override {}
 };
 
 // Faithful replica of alg_impl's recovery-hook wiring: dispatch only when the
 // shared gate predicate says so. The extra working-set arguments are inert here
-// (RecordingRecovery ignores them) and bound to local dummies.
+// (GateRecordingRecovery ignores them) and bound to local dummies.
 void drive_gate(bool good_step, IterateInfo &citer, RecoveryChain &recovery,
                 AcceptanceStrategy &acceptance, const std::vector<IterateInfo> &iters,
                 SolverContext &ctx) {
     if (should_dispatch_recovery(good_step, citer)) {
-        UnusedMechanism mechanism;
+        GateUnusedMechanism mechanism;
         Eigen::VectorXd v;
         double alpha = 1.0, alphap = 1.0, alphad = 1.0;
         int soc_steps = 0;
@@ -138,11 +141,11 @@ void drive_gate(bool good_step, IterateInfo &citer, RecoveryChain &recovery,
     }
 }
 
-// Minimal SolverContext for the recovery signature. RecordingRecovery never
+// Minimal SolverContext for the recovery signature. GateRecordingRecovery never
 // dereferences it (the hook only bumps its counter), so every member binds to
 // an inert dummy: a null NLP, a default-constructed (never-factorized) KKT
 // solver, default Settings, a shared zero dimension, and a shared empty vector.
-SolverContext make_dummy_context(KktSolverType &solver, PSIOPT::Settings &settings, int &zero,
+SolverContext gate_dummy_context(KktSolverType &solver, PSIOPT::Settings &settings, int &zero,
                                  Eigen::VectorXd &scratch) {
     return SolverContext{nullptr, solver,  settings, zero,    zero,    zero,
                          zero,    zero,    scratch};
@@ -165,14 +168,14 @@ TEST(RecoveryDispatchGate, StubAcceptanceDrivesHook) {
     PSIOPT::Settings settings;
     int zero = 0;
     Eigen::VectorXd scratch;
-    SolverContext ctx = make_dummy_context(solver, settings, zero, scratch);
+    SolverContext ctx = gate_dummy_context(solver, settings, zero, scratch);
     const std::vector<IterateInfo> iters;
     Eigen::VectorXd v; // inert working vectors for the stub line search
 
     // Rejected step (GoodStep): the stub stamps accepted_ = false; gate fires.
     {
-        RecordingRecovery recovery;
-        StubAcceptance acceptance(/*accept=*/false);
+        GateRecordingRecovery recovery;
+        GateStubAcceptance acceptance(/*accept=*/false);
         IterateInfo citer;
         acceptance.classic_line_search(PSIOPT::LineSearchModes::AUGLANG, 1.0, 1e-3, 0.0, 0.0, v, v,
                                        v, v, v, citer, iters);
@@ -183,8 +186,8 @@ TEST(RecoveryDispatchGate, StubAcceptanceDrivesHook) {
 
     // Accepted step (GoodStep): the stub stamps accepted_ = true; gate silent.
     {
-        RecordingRecovery recovery;
-        StubAcceptance acceptance(/*accept=*/true);
+        GateRecordingRecovery recovery;
+        GateStubAcceptance acceptance(/*accept=*/true);
         IterateInfo citer;
         acceptance.classic_line_search(PSIOPT::LineSearchModes::AUGLANG, 1.0, 1e-3, 0.0, 0.0, v, v,
                                        v, v, v, citer, iters);
@@ -197,8 +200,8 @@ TEST(RecoveryDispatchGate, StubAcceptanceDrivesHook) {
     // Citer keeps its fresh default (accepted_ == false); the gate stays silent
     // because GoodStep is false.
     {
-        RecordingRecovery recovery;
-        StubAcceptance acceptance(/*accept=*/false); // never reached (gate stays silent)
+        GateRecordingRecovery recovery;
+        GateStubAcceptance acceptance(/*accept=*/false); // never reached (gate stays silent)
         IterateInfo citer;                           // no line search ran
         EXPECT_FALSE(citer.accepted_);
         drive_gate(/*good_step=*/false, citer, recovery, acceptance, iters, ctx);
