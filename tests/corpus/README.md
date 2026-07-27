@@ -146,8 +146,7 @@ statically):
 `ConvergenceFlags` is an `enum.IntEnum` with **exactly these four members** —
 it is what `phase.optimize()` / `.solve()` / `.solve_optimize()` /
 `.optimize_solve()` / `.solve_optimize_solve()` return, and also what
-`optimizer.converge_flag` / `optimizer.get_convergence_flag()` report after
-the fact. `phase.optimizer` (a `_tychopy.solvers.PSIOPT` instance) also
+`optimizer.converge_flag` reports after the fact. `phase.optimizer` (a `_tychopy.solvers.PSIOPT` instance) also
 exposes `last_iter_num: int` and `last_obj_val: float` as read-only
 properties — this is deliberately the entire per-solve surface PSIOPT
 exposes to Python today (no feasibility/KKT-residual/factorization data);

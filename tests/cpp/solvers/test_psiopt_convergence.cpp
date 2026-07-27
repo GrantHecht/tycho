@@ -400,15 +400,6 @@ TEST_F(SolverTest, StringModeSetters) {
 // Composite setter delegation tests
 // =============================================================================
 
-TEST_F(SolverTest, UnaccTolsCompositeDelegation) {
-    PSIOPT opt;
-    opt.set_unacc_tols(1.0, 2.0, 3.0, 4.0);
-    EXPECT_DOUBLE_EQ(opt.settings().unacc_kkt_tol_, 1.0);
-    EXPECT_DOUBLE_EQ(opt.settings().unacc_econ_tol_, 2.0);
-    EXPECT_DOUBLE_EQ(opt.settings().unacc_icon_tol_, 3.0);
-    EXPECT_DOUBLE_EQ(opt.settings().unacc_bar_tol_, 4.0);
-}
-
 TEST_F(SolverTest, DivTolsCompositeDelegation) {
     PSIOPT opt;
     opt.set_div_tols(1e10, 2e10, 3e10, 4e10);
@@ -521,11 +512,6 @@ TEST_F(SolverTest, SettingsValidateCatchesCrossFieldInvariants) {
     s.max_refac_ = 0;
     EXPECT_THROW(s.validate(), std::invalid_argument);
     s.max_refac_ = 15;
-
-    // soe_bound_relax must be positive and finite
-    s.soe_bound_relax_ = -1.0;
-    EXPECT_THROW(s.validate(), std::invalid_argument);
-    s.soe_bound_relax_ = 1e-8;
 
     // Invalid per-field value
     s.bound_fraction_ = 5.0;

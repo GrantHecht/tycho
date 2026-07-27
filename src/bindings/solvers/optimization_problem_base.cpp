@@ -46,8 +46,11 @@ NLPSolvers.psiopt (default) is the built-in solver, byte-identical to
 previous behavior. NLPSolvers.ipopt runs the identical transcribed NLP
 through a linked Ipopt installation; requires a build configured with
 ENABLE_IPOPT (raises RuntimeError otherwise). The ipopt backend always
-performs a single NLP solve: the feasibility-then-optimize staging modes
-have no Ipopt analog.
+performs a single NLP solve of the full objective-bearing problem: the
+feasibility-then-optimize staging modes have no Ipopt analog. In
+particular ``solve()`` -- which under the built-in solver runs the
+feasibility-only stage -- minimizes the objective like ``optimize()``
+when this backend is selected; there is no feasibility-only analog.
 
 The built-in solver's own diagnostics (``optimizer.last_obj_val``,
 ``optimizer.last_iter_num``, and every other result()-backed property on
@@ -58,7 +61,13 @@ solve.)doc");
     obj.def_rw("ipopt_options", &OptimizationProblemBase::ipopt_options_,
                R"doc(String key/value options forwarded verbatim to Ipopt (e.g.
 {"linear_solver": "pardisomkl"}). Applied after the matched-tolerance
-baseline, so entries here win. Ignored by the psiopt backend.)doc");
+baseline, so entries here win. Ignored by the psiopt backend.
+
+Reading this attribute returns a *copy* of the stored map, so in-place
+mutation (``prob.ipopt_options["linear_solver"] = "ma57"``) silently has
+no effect. Assign a whole dict instead, or read-modify-write:
+``opts = prob.ipopt_options; opts["linear_solver"] = "ma57";
+prob.ipopt_options = opts``.)doc");
     obj.def_ro("last_ipopt_result", &OptimizationProblemBase::last_ipopt_result_,
                R"doc(Diagnostics of the most recent ipopt-backend run on this problem
 (sentinel values with ran == False before any such run).)doc");

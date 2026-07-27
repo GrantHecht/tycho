@@ -270,12 +270,6 @@ class PSIOPT {
         double acc_icon_tol_ = 1.0e-3;
         double acc_bar_tol_ = 1.0e-3;
 
-        // --- Unacceptable tolerances (reserved — not currently read by any algorithm code) ---
-        double unacc_kkt_tol_ = 10;
-        double unacc_econ_tol_ = 2;
-        double unacc_icon_tol_ = 2;
-        double unacc_bar_tol_ = 2;
-
         // --- Divergence tolerances ---
         double div_kkt_tol_ = 1.0e15;
         double div_econ_tol_ = 1.0e15;
@@ -347,7 +341,6 @@ class PSIOPT {
         double bound_fraction_ = 0.99;
         double bound_push_ = 1.0e-3;
         double neg_slack_reset_ = 1.0e-12;
-        double soe_bound_relax_ = 1.0e-8; // reserved — not currently read by algorithm code
         double alpha_red_ = 2.0;
 
         // --- Hessian perturbation ---
@@ -694,8 +687,6 @@ class PSIOPT {
     void set_acc_tols(double acc_kkt_tol, double acc_econ_tol, double acc_icon_tol,
                       double acc_bar_tol);
 
-    void set_unacc_tols(double kktol, double etol, double itol, double bartol);
-
     void set_div_kkt_tol(double div_kkt_tol);
     void set_div_bar_tol(double div_bar_tol);
     void set_div_econ_tol(double div_econ_tol);
@@ -758,9 +749,6 @@ class PSIOPT {
         this->late_callback_ = f;
     }
     void disable_late_callback() { this->late_callback_enabled_ = false; }
-
-    // --- Query methods ---
-    ConvergenceFlags get_convergence_flag() const { return result_.converge_flag_; }
 
     // --- Printing ---
     static void print_header() { fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65); }

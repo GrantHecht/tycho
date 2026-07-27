@@ -282,22 +282,6 @@ void tycho::solvers::PSIOPT::set_acc_tols(double acc_kkt_tol, double acc_econ_to
     this->set_acc_bar_tol(acc_bar_tol);
 }
 
-void tycho::solvers::PSIOPT::set_unacc_tols(double kktol, double etol, double itol, double bartol) {
-    auto validate = [](double v, const char *name) {
-        if (!std::isfinite(v) || v <= 0.0)
-            throw std::invalid_argument(
-                fmt::format("{} must be finite and positive, got {}", name, v));
-    };
-    validate(kktol, "unacc_kkt_tol");
-    validate(etol, "unacc_econ_tol");
-    validate(itol, "unacc_icon_tol");
-    validate(bartol, "unacc_bar_tol");
-    settings_.unacc_kkt_tol_ = kktol;
-    settings_.unacc_bar_tol_ = bartol;
-    settings_.unacc_econ_tol_ = etol;
-    settings_.unacc_icon_tol_ = itol;
-}
-
 void tycho::solvers::PSIOPT::set_div_kkt_tol(double div_kkt_tol) {
     if (!std::isfinite(div_kkt_tol) || div_kkt_tol <= 0.0)
         throw std::invalid_argument(
@@ -603,12 +587,6 @@ void tycho::solvers::PSIOPT::Settings::validate() const {
     pos_finite(acc_icon_tol_, "acc_icon_tol");
     pos_finite(acc_bar_tol_, "acc_bar_tol");
 
-    // --- Unacceptable tolerances ---
-    pos_finite(unacc_kkt_tol_, "unacc_kkt_tol");
-    pos_finite(unacc_econ_tol_, "unacc_econ_tol");
-    pos_finite(unacc_icon_tol_, "unacc_icon_tol");
-    pos_finite(unacc_bar_tol_, "unacc_bar_tol");
-
     // --- Divergence tolerances ---
     pos_finite(div_kkt_tol_, "div_kkt_tol");
     pos_finite(div_econ_tol_, "div_econ_tol");
@@ -658,7 +636,6 @@ void tycho::solvers::PSIOPT::Settings::validate() const {
     if (bound_push_ <= 0.0)
         throw std::invalid_argument("bound_push must be > 0");
     pos_finite(neg_slack_reset_, "neg_slack_reset");
-    pos_finite(soe_bound_relax_, "soe_bound_relax");
     if (alpha_red_ <= 1.0)
         throw std::invalid_argument("alpha_red must be > 1.0");
 
