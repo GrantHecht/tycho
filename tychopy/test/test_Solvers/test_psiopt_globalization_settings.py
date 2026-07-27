@@ -1123,8 +1123,14 @@ class test_ApplyPreset(unittest.TestCase):
         self.assertEqual(
             prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.classic_merit
         )
+        self.assertEqual(
+            prob.optimizer.barrier_governor, solvs.BarrierGovernors.classic_adaptive
+        )
         self.assertEqual(prob.optimizer.restoration_mode, solvs.RestorationModes.off)
+        self.assertEqual(prob.optimizer.inertia_mode, solvs.InertiaModes.classic)
         self.assertEqual(prob.optimizer.max_soc, 0)
+        self.assertEqual(prob.optimizer.ls_extended_iters, 0)
+        self.assertEqual(prob.optimizer.watchdog, False)
 
     def test_filter_l1(self):
         prob = _make_problem()
