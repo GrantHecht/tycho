@@ -23,6 +23,7 @@
 #include <cmath>
 #include <stdexcept>
 
+#include "tycho/detail/solvers/barrier_math.h"
 #include "tycho/detail/solvers/solver_init.h"
 #include "tycho/detail/utils/timer.h"
 
@@ -777,20 +778,7 @@ void tycho::solvers::PSIOPT::release() {
 
 void tycho::solvers::PSIOPT::apply_reset_slacks(Eigen::Ref<Eigen::VectorXd> S,
                                                 Eigen::Ref<Eigen::VectorXd> FXI) const {
-    for (int i = 0; i < this->slack_vars_; i++) {
-        double fxi = FXI[i];
-        double si = S[i];
-        if (si < settings_.neg_slack_reset_) {
-            si = settings_.neg_slack_reset_;
-        }
-
-        if (fxi < 0.0) {
-            FXI[i] = 0.0;
-            S[i] = std::max(std::abs(fxi), settings_.neg_slack_reset_);
-        } else {
-            FXI[i] += si;
-        }
-    }
+    detail::apply_reset_slacks(S, FXI, this->slack_vars_, settings_.neg_slack_reset_);
 }
 
 // max_step_to_boundary was extracted verbatim into BacktrackingLineSearch

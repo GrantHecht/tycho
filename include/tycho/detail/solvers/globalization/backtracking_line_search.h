@@ -31,11 +31,11 @@
 //
 // Byte-identity design note (references-only channel):
 //   Like ClassicMeritAcceptance (merit_acceptance.h), this component reaches
-//   PSIOPT state ONLY through SolverContext, and reconstructs a KKTVector view
-//   over the raw XSL/DXSL blocks internally (PSIOPT::KKTVector is private and
-//   not name-accessible from this non-member, non-friend type). The nested
-//   KKTVector below is a VERBATIM copy of PSIOPT::KKTVector; a future change
-//   that consolidates the globalization helpers should share one copy.
+//   PSIOPT state ONLY through SolverContext, and builds a KKTVector view over
+//   the raw XSL/DXSL blocks from the context's dimensions. The view type is the
+//   shared tycho::solvers::KKTVector (detail/solvers/kkt_vector.h) — this
+//   header used to carry a verbatim copy of it, because the type was private to
+//   PSIOPT and not name-accessible from a non-member, non-friend type.
 //
 // Ownership rule: BacktrackingLineSearch holds no SOLVER-owned state (matches
 // the GlobalizationMechanism ownership rule). Every per-iteration transient
@@ -118,56 +118,11 @@ class BacktrackingLineSearch : public GlobalizationMechanism {
                                     SolverContext &ctx) override;
 
   private:
-    // =========================================================================
-    // KKTVector — VERBATIM copy of PSIOPT::KKTVector (psiopt.h). Reproduced
-    // here (rather than reached through PSIOPT, which is private/non-friend) so
-    // the moved step body keeps its exact named-segment accessors
-    // (dxsl.primals()/dxsl.slacks()/…) unchanged. Non-owning view over the
-    // compound KKT layout [primals | slacks | eq_lmults | iq_lmults]; must not
-    // outlive the referenced VectorXd.
-    // =========================================================================
-    class KKTVector {
-      public:
-        KKTVector(Eigen::VectorXd &data, int pv, int sv, int ec, int ic)
-            : data_(data), pv_(pv), sv_(sv), ec_(ec), ic_(ic) {
-            assert(pv >= 0 && sv >= 0 && ec >= 0 && ic >= 0);
-            assert(data.size() >= pv + sv + ec + ic);
-        }
-
-        auto primals() { return data_.head(pv_); }
-        auto primals() const { return std::as_const(data_).head(pv_); }
-        auto slacks() { return data_.segment(pv_, sv_); }
-        auto slacks() const { return std::as_const(data_).segment(pv_, sv_); }
-        auto primals_slacks() { return data_.head(pv_ + sv_); }
-        auto primals_slacks() const { return std::as_const(data_).head(pv_ + sv_); }
-
-        auto eq_lmults() { return data_.segment(pv_ + sv_, ec_); }
-        auto eq_lmults() const { return std::as_const(data_).segment(pv_ + sv_, ec_); }
-        auto iq_lmults() { return data_.tail(ic_); }
-        auto iq_lmults() const { return std::as_const(data_).tail(ic_); }
-        auto lmults() { return data_.tail(ec_ + ic_); }
-        auto lmults() const { return std::as_const(data_).tail(ec_ + ic_); }
-
-        auto prim_grad() { return data_.head(pv_); }
-        auto prim_grad() const { return std::as_const(data_).head(pv_); }
-        auto dual_grad() { return data_.segment(pv_, sv_); }
-        auto dual_grad() const { return std::as_const(data_).segment(pv_, sv_); }
-        auto prim_dual_grad() { return data_.head(pv_ + sv_); }
-        auto prim_dual_grad() const { return std::as_const(data_).head(pv_ + sv_); }
-        auto eq_cons() { return data_.segment(pv_ + sv_, ec_); }
-        auto eq_cons() const { return std::as_const(data_).segment(pv_ + sv_, ec_); }
-        auto iq_cons() { return data_.tail(ic_); }
-        auto iq_cons() const { return std::as_const(data_).tail(ic_); }
-        auto all_cons() { return data_.tail(ec_ + ic_); }
-        auto all_cons() const { return std::as_const(data_).tail(ec_ + ic_); }
-
-        Eigen::VectorXd &data() { return data_; }
-        const Eigen::VectorXd &data() const { return data_; }
-
-      private:
-        Eigen::VectorXd &data_;
-        int pv_, sv_, ec_, ic_;
-    };
+    // The compound-KKT segment view (tycho::solvers::KKTVector,
+    // detail/solvers/kkt_vector.h) is shared with PSIOPT and the sibling
+    // components, so the moved step body keeps its named-segment accessors
+    // (dxsl.primals()/dxsl.slacks()/…) unchanged. Only the factory below is
+    // per-component: the dimensions come from the SolverContext.
 
     /// Create a KKTVector view over a VectorXd using the context's dimensions.
     static KKTVector kkt_view(Eigen::VectorXd &v, const SolverContext &ctx) {

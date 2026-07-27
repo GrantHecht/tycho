@@ -38,6 +38,7 @@
 // the wiring overview.
 // =============================================================================
 
+#include "tycho/detail/solvers/barrier_math.h"
 #include "tycho/detail/solvers/globalization/backtracking_line_search.h"
 #include "tycho/detail/solvers/globalization/classic_adaptive_governor.h"
 #include "tycho/detail/solvers/globalization/feasibility_switch_recovery.h"
@@ -142,34 +143,17 @@ void ClassicMeritAcceptance::eval_rhs(double obj_scale,
 
 void ClassicMeritAcceptance::apply_reset_slacks(Eigen::Ref<Eigen::VectorXd> S,
                                                 Eigen::Ref<Eigen::VectorXd> FXI) const {
-    for (int i = 0; i < ctx_.slack_vars_; i++) {
-        double fxi = FXI[i];
-        double si = S[i];
-        if (si < ctx_.settings_.neg_slack_reset_) {
-            si = ctx_.settings_.neg_slack_reset_;
-        }
-
-        if (fxi < 0.0) {
-            FXI[i] = 0.0;
-            S[i] = std::max(std::abs(fxi), ctx_.settings_.neg_slack_reset_);
-        } else {
-            FXI[i] += si;
-        }
-    }
+    detail::apply_reset_slacks(S, FXI, ctx_.slack_vars_, ctx_.settings_.neg_slack_reset_);
 }
 
 double ClassicMeritAcceptance::barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu) const {
-    double psi = 0;
-    for (int i = 0; i < ctx_.inequal_cons_; i++) {
-        psi += -mu * std::log(S[i]);
-    }
-    return psi;
+    return detail::barrier_objective(S, mu, ctx_.inequal_cons_);
 }
 
 void ClassicMeritAcceptance::barrier_gradient(Eigen::Ref<Eigen::VectorXd> S,
                                               Eigen::Ref<Eigen::VectorXd> LI, double mu,
                                               Eigen::Ref<Eigen::VectorXd> AGS) const {
-    AGS = LI - mu * (S.cwiseInverse());
+    detail::barrier_gradient(S, LI, mu, AGS);
 }
 
 // ============================================================================
@@ -1034,17 +1018,13 @@ void ClassicAdaptiveGovernor::complementarity(Eigen::Ref<Eigen::VectorXd> S,
 
 double ClassicAdaptiveGovernor::barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu,
                                                   const SolverContext &ctx) const {
-    double psi = 0;
-    for (int i = 0; i < ctx.inequal_cons_; i++) {
-        psi += -mu * std::log(S[i]);
-    }
-    return psi;
+    return detail::barrier_objective(S, mu, ctx.inequal_cons_);
 }
 
 void ClassicAdaptiveGovernor::barrier_gradient(Eigen::Ref<Eigen::VectorXd> S,
                                                Eigen::Ref<Eigen::VectorXd> LI, double mu,
                                                Eigen::Ref<Eigen::VectorXd> AGS) const {
-    AGS = LI - mu * (S.cwiseInverse());
+    detail::barrier_gradient(S, LI, mu, AGS);
 }
 
 void ClassicAdaptiveGovernor::barrier_gradient(Eigen::Ref<Eigen::VectorXd> LI,
@@ -2229,17 +2209,13 @@ MonitoredBarrierGovernor::decide(const IterateInfo &current, double mu_in, doubl
 
 double MonitoredBarrierGovernor::barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu,
                                                    const SolverContext &ctx) const {
-    double psi = 0;
-    for (int i = 0; i < ctx.inequal_cons_; i++) {
-        psi += -mu * std::log(S[i]);
-    }
-    return psi;
+    return detail::barrier_objective(S, mu, ctx.inequal_cons_);
 }
 
 void MonitoredBarrierGovernor::barrier_gradient(Eigen::Ref<Eigen::VectorXd> S,
                                                 Eigen::Ref<Eigen::VectorXd> LI, double mu,
                                                 Eigen::Ref<Eigen::VectorXd> AGS) const {
-    AGS = LI - mu * (S.cwiseInverse());
+    detail::barrier_gradient(S, LI, mu, AGS);
 }
 
 double MonitoredBarrierGovernor::update_barrier(

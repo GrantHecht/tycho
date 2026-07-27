@@ -18,21 +18,22 @@
 // Byte-identity design note (references-only channel):
 //   The moved merit bodies call four tiny PSIOPT barrier/eval helpers
 //   (eval_rhs, apply_reset_slacks, barrier_objective, barrier_gradient) and
-//   use PSIOPT's KKTVector segment views + PenaltyTerms value type. Those are
-//   private to PSIOPT and — per this component architecture
-//   (acceptance_strategy.h and solver_context.h) — a non-member, non-friend
-//   AcceptanceStrategy may reach PSIOPT state ONLY through SolverContext
-//   (nlp_/settings_/dims/scratch references). Every one of those four helpers
-//   is a pure function of exactly those SolverContext members, so each is
-//   reproduced here VERBATIM (same statement order, same operand order — see
-//   the definitions in the .cpp) as a private method reading through `ctx_`,
-//   and KKTVector/PenaltyTerms are reproduced verbatim as private nested
-//   types. This is the "reconstructs KKTVector-equivalent segment views
+//   use the compound-KKT segment view + a PenaltyTerms value type. Per this
+//   component architecture (acceptance_strategy.h and solver_context.h) a
+//   non-member, non-friend AcceptanceStrategy may reach PSIOPT state ONLY
+//   through SolverContext (nlp_/settings_/dims/scratch references), so each
+//   helper survives here as a private method reading through `ctx_`.
+//   apply_reset_slacks / barrier_objective / barrier_gradient are now one-line
+//   forwarders into detail/solvers/barrier_math.h, the single home for those
+//   three kernels; eval_rhs remains a local copy (it slices the KKT layout for
+//   an NLP call rather than doing barrier arithmetic). The segment view is
+//   tycho::solvers::KKTVector (detail/solvers/kkt_vector.h), shared with PSIOPT
+//   and the sibling components — this header's former verbatim copy of it, and
+//   the identical copies in BacktrackingLineSearch and ClassicAdaptiveGovernor,
+//   were consolidated there. PenaltyTerms stays a private nested type (it has
+//   one user). This is the "reconstructs KKTVector-equivalent segment views
 //   internally from SolverContext's dims" path acceptance_strategy.h
-//   anticipates. The duplication is deliberate and FP-safe (identical source
-//   under identical TU flags -> identical codegen); a future change should
-//   consolidate these VERBATIM copies (also duplicated by
-//   BacktrackingLineSearch and ClassicAdaptiveGovernor) into one shared home.
+//   anticipates.
 
 #pragma once
 
@@ -101,56 +102,11 @@ class ClassicMeritAcceptance : public AcceptanceStrategy {
   private:
     SolverContext ctx_;
 
-    // =========================================================================
-    // KKTVector — VERBATIM copy of PSIOPT::KKTVector (psiopt.h). Reproduced
-    // here (rather than reached through PSIOPT, which is private/non-friend)
-    // so the moved merit bodies keep their exact `xsl.primals()`/`rhs.all_cons()`
-    // named-segment accessors unchanged. Non-owning view over the compound KKT
-    // layout [primals | slacks | eq_lmults | iq_lmults]; must not outlive the
-    // referenced VectorXd.
-    // =========================================================================
-    class KKTVector {
-      public:
-        KKTVector(Eigen::VectorXd &data, int pv, int sv, int ec, int ic)
-            : data_(data), pv_(pv), sv_(sv), ec_(ec), ic_(ic) {
-            assert(pv >= 0 && sv >= 0 && ec >= 0 && ic >= 0);
-            assert(data.size() >= pv + sv + ec + ic);
-        }
-
-        auto primals() { return data_.head(pv_); }
-        auto primals() const { return std::as_const(data_).head(pv_); }
-        auto slacks() { return data_.segment(pv_, sv_); }
-        auto slacks() const { return std::as_const(data_).segment(pv_, sv_); }
-        auto primals_slacks() { return data_.head(pv_ + sv_); }
-        auto primals_slacks() const { return std::as_const(data_).head(pv_ + sv_); }
-
-        auto eq_lmults() { return data_.segment(pv_ + sv_, ec_); }
-        auto eq_lmults() const { return std::as_const(data_).segment(pv_ + sv_, ec_); }
-        auto iq_lmults() { return data_.tail(ic_); }
-        auto iq_lmults() const { return std::as_const(data_).tail(ic_); }
-        auto lmults() { return data_.tail(ec_ + ic_); }
-        auto lmults() const { return std::as_const(data_).tail(ec_ + ic_); }
-
-        auto prim_grad() { return data_.head(pv_); }
-        auto prim_grad() const { return std::as_const(data_).head(pv_); }
-        auto dual_grad() { return data_.segment(pv_, sv_); }
-        auto dual_grad() const { return std::as_const(data_).segment(pv_, sv_); }
-        auto prim_dual_grad() { return data_.head(pv_ + sv_); }
-        auto prim_dual_grad() const { return std::as_const(data_).head(pv_ + sv_); }
-        auto eq_cons() { return data_.segment(pv_ + sv_, ec_); }
-        auto eq_cons() const { return std::as_const(data_).segment(pv_ + sv_, ec_); }
-        auto iq_cons() { return data_.tail(ic_); }
-        auto iq_cons() const { return std::as_const(data_).tail(ic_); }
-        auto all_cons() { return data_.tail(ec_ + ic_); }
-        auto all_cons() const { return std::as_const(data_).tail(ec_ + ic_); }
-
-        Eigen::VectorXd &data() { return data_; }
-        const Eigen::VectorXd &data() const { return data_; }
-
-      private:
-        Eigen::VectorXd &data_;
-        int pv_, sv_, ec_, ic_;
-    };
+    // The compound-KKT segment view (tycho::solvers::KKTVector,
+    // detail/solvers/kkt_vector.h) is shared with PSIOPT and the sibling
+    // components, so the moved merit bodies keep their exact
+    // `xsl.primals()`/`rhs.all_cons()` named-segment accessors unchanged. Only
+    // the factory below is per-component: the dimensions come from ctx_.
 
     /// Create a KKTVector view over a VectorXd using the context's dimensions.
     KKTVector kkt_view(Eigen::VectorXd &v) {
@@ -158,7 +114,8 @@ class ClassicMeritAcceptance : public AcceptanceStrategy {
                          ctx_.inequal_cons_);
     }
 
-    // VERBATIM copy of PSIOPT::PenaltyTerms (psiopt.h).
+    // Moved verbatim from PSIOPT (psiopt.h), which no longer has one: the merit
+    // penalty triple is used only by the moved merit bodies below.
     struct PenaltyTerms {
         double l1_, l2_, linf_;
     };

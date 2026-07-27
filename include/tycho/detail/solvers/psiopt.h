@@ -31,7 +31,9 @@
 #include <fmt/color.h>
 #include <fmt/core.h>
 
+#include "tycho/detail/solvers/eval_error_log.h"
 #include "tycho/detail/solvers/iterate_info.h"
+#include "tycho/detail/solvers/kkt_vector.h"
 #include "tycho/detail/solvers/non_linear_program.h"
 #include "tycho/detail/solvers/psiopt_fwd.h"
 #include "tycho/detail/typedefs/eigen_types.h"
@@ -109,31 +111,6 @@ using tycho::EigenRef;
 // diverges at iteration two with the per-iterate abort and converges to the
 // optimum without it.
 inline constexpr int kDivergencePersistIters = 3;
-
-// =============================================================================
-// EvalErrorLog — latched trial-evaluation exception state for one solve call.
-//
-// The line-search / recovery trial evaluations convert an NLP evaluation
-// exception into a rejected-trial signal instead of letting it unwind the
-// solve; this log records how often that happened and keeps the most recent
-// message so the solver can fold it into diagnostics (or into the abort
-// message when no recovery path exists). Reset once per solve call, alongside
-// SolveResult::reset_accumulators().
-// =============================================================================
-struct EvalErrorLog {
-    int count_ = 0;
-    std::string last_message_;
-
-    void record(const char *what) {
-        ++count_;
-        last_message_ = what;
-    }
-    void record_unknown() { record("unknown exception type (not derived from std::exception)"); }
-    void reset() {
-        count_ = 0;
-        last_message_.clear();
-    }
-};
 
 // Part of the globalization component extraction: PSIOPT owns its
 // step-acceptance strategy through a std::unique_ptr<AcceptanceStrategy>.
@@ -934,71 +911,10 @@ class PSIOPT {
     LateCallBackType late_callback_;
     bool late_callback_enabled_ = false;
 
-    // =========================================================================
-    // KKTVector — lightweight non-owning view over compound KKT layout
-    //   [primals | slacks | eq_lmults | iq_lmults]
-    // Used for both the iterate vector (x, s, lambda_e, lambda_i) and the
-    // RHS/gradient vector (grad_x, grad_s, c_eq, c_iq). The two accessor
-    // groups provide semantic names for each interpretation.
-    //
-    // const-correctness: const overloads use std::as_const(data_) to force
-    // Eigen's .head()/.segment()/.tail() to return immutable segment
-    // expressions. Without this, calling .head() on the non-const VectorXd&
-    // member would return a mutable expression even from a const method.
-    // Lifetime: must not outlive the referenced VectorXd.
-    // =========================================================================
-    class KKTVector {
-      public:
-        KKTVector(Eigen::VectorXd &data, int pv, int sv, int ec, int ic)
-            : data_(data), pv_(pv), sv_(sv), ec_(ec), ic_(ic) {
-            assert(pv >= 0 && sv >= 0 && ec >= 0 && ic >= 0);
-            assert(data.size() >= pv + sv + ec + ic);
-        }
-
-        // --- Primal/slack segments ---
-        auto primals() { return data_.head(pv_); }
-        auto primals() const { return std::as_const(data_).head(pv_); }
-        auto slacks() { return data_.segment(pv_, sv_); }
-        auto slacks() const { return std::as_const(data_).segment(pv_, sv_); }
-        auto primals_slacks() { return data_.head(pv_ + sv_); }
-        auto primals_slacks() const { return std::as_const(data_).head(pv_ + sv_); }
-
-        // --- Multiplier segments ---
-        auto eq_lmults() { return data_.segment(pv_ + sv_, ec_); }
-        auto eq_lmults() const { return std::as_const(data_).segment(pv_ + sv_, ec_); }
-        auto iq_lmults() { return data_.tail(ic_); }
-        auto iq_lmults() const { return std::as_const(data_).tail(ic_); }
-        auto lmults() { return data_.tail(ec_ + ic_); }
-        auto lmults() const { return std::as_const(data_).tail(ec_ + ic_); }
-
-        // --- Gradient/constraint segments (intentional aliases) ---
-        // Same memory layout as the primal/multiplier accessors above, but with
-        // names matching the RHS/gradient interpretation: the primal block holds
-        // the objective gradient, the slack block holds the dual gradient, and
-        // the multiplier blocks hold constraint values.
-        // These are intentional aliases: prim_grad() == primals(),
-        // dual_grad() == slacks(), eq_cons() == eq_lmults(), iq_cons() == iq_lmults().
-        auto prim_grad() { return data_.head(pv_); }
-        auto prim_grad() const { return std::as_const(data_).head(pv_); }
-        auto dual_grad() { return data_.segment(pv_, sv_); }
-        auto dual_grad() const { return std::as_const(data_).segment(pv_, sv_); }
-        auto prim_dual_grad() { return data_.head(pv_ + sv_); }
-        auto prim_dual_grad() const { return std::as_const(data_).head(pv_ + sv_); }
-        auto eq_cons() { return data_.segment(pv_ + sv_, ec_); }
-        auto eq_cons() const { return std::as_const(data_).segment(pv_ + sv_, ec_); }
-        auto iq_cons() { return data_.tail(ic_); }
-        auto iq_cons() const { return std::as_const(data_).tail(ic_); }
-        auto all_cons() { return data_.tail(ec_ + ic_); }
-        auto all_cons() const { return std::as_const(data_).tail(ec_ + ic_); }
-
-        // --- Full vector access ---
-        Eigen::VectorXd &data() { return data_; }
-        const Eigen::VectorXd &data() const { return data_; }
-
-      private:
-        Eigen::VectorXd &data_;
-        int pv_, sv_, ec_, ic_;
-    };
+    // KKTVector — the compound-KKT segment view — now lives in
+    // detail/solvers/kkt_vector.h as tycho::solvers::KKTVector, shared with the
+    // globalization components (each of which used to carry a verbatim copy,
+    // since the type was private here and they are non-member, non-friend).
 
     /// Create a KKTVector view over a VectorXd using this solver's dimensions.
     KKTVector kkt_view(Eigen::VectorXd &v) {
