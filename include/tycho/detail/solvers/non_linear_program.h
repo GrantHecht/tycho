@@ -281,6 +281,16 @@ struct NonLinearProgram {
     // derivatives happen automatically: the functions still evaluate at the full
     // x with the pinned values in place, and never learn anything happened.
     //
+    // What this costs relative to compacting the primal index space: the
+    // factorization carries one trivial pivot per eliminated variable, and the
+    // eliminated columns stay in the sparsity pattern as explicit zeros. The
+    // second one is not merely a little extra fill -- a pinned variable still
+    // joins its structural neighbours into a clique in the elimination graph the
+    // ordering is computed from, which a compacted problem would not have.
+    // Negligible for a handful of pinned boundary values in a collocation NLP,
+    // each coupling one state-sized neighbourhood; not negligible for a problem
+    // that pins many widely-coupled variables.
+    //
     // Identity fast path. With no fixed variables, is_reduced() is false, every
     // site above short-circuits on that single cached bool, and NOTHING on the
     // evaluation path changes -- no extra arithmetic, no extra indirection, no
@@ -384,6 +394,13 @@ struct NonLinearProgram {
     /// norm. The multiplier itself is consequently NOT reported: the value that
     /// was cleared is the reduced-gradient residual at the solution, and
     /// recovering it belongs to the bound-multiplier work, not here.
+    ///
+    /// This clears the rows as they leave an evaluation; it does not, on its
+    /// own, guarantee they are still zero once the Newton right-hand side is
+    /// complete. Anything that adds to a primal stationarity row after the
+    /// evaluation -- a variable-bound barrier gradient, say -- must skip
+    /// eliminated variables of its own accord. Today variable_bound_set()
+    /// excludes them, so nothing can.
     ///
     /// No-op on the identity path. Throws std::invalid_argument on a size
     /// mismatch.

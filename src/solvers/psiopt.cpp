@@ -603,6 +603,17 @@ void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
     // below, which inject their own objective gradient after the NLP call and
     // would otherwise re-populate these rows. No-op, and not even branched into,
     // unless the NLP eliminated at least one variable.
+    //
+    // Scope of the guarantee, for whoever adds variable-bound barrier terms
+    // next: this seam clears the rows as they leave the NLP evaluation, but the
+    // Newton right-hand side is completed AFTER this function returns
+    // (`v_rhs.prim_grad() += PGX` in alg_impl). The slack barrier writes the
+    // DISJOINT dual_grad() block, so it cannot disturb these rows; a
+    // variable-bound barrier would write prim_grad() itself. That the rows are
+    // still zero at factorization time then holds because the NLP's BoundSet
+    // excludes eliminated variables -- no bound term is ever assembled for one --
+    // not because this clearing ran. Keep that exclusion, or move the clearing
+    // to the three completion sites.
     auto clear_fixed_variable_rows = [&] {
         if (this->nlp_->is_reduced()) {
             this->nlp_->clear_fixed_variable_rows(GX.head(primal_vars_));

@@ -187,20 +187,46 @@ double nlp_var_bounds_relax(double bound, double factor, bool upper) {
     return upper ? bound + delta : bound - delta;
 }
 
-// Objective ||x||^2 over every variable. Deliberately depends on the pinned
-// variable too: its own stationarity row is then 2*x_fixed != 0, so a solve
-// that failed to drop that row would stall its KKT residual there, and one that
-// failed to pin its KKT column would drag the variable toward zero. Both
-// failures are visible in the assertions below.
-template <int N>
-void nlp_var_bounds_add_squared_norm_objective(tycho::solvers::OptimizationProblem &prob) {
-    Eigen::VectorXi indices(N);
-    for (int i = 0; i < N; i++) {
-        indices[i] = i;
+// Adds the objective term (x[index] - center)^2.
+//
+// Every solve below is built from SHIFTED squares rather than a plain ||x||^2,
+// and started away from the minimizer, so that neither the objective value nor
+// its gradient is identically zero at the initial point. A problem whose
+// gradient vanishes at the start point is a degenerate input to the barrier /
+// merit machinery and does not exercise anything this suite is about.
+void nlp_var_bounds_add_shifted_square(tycho::solvers::OptimizationProblem &prob, int index,
+                                       double center) {
+    auto args = tycho::vf::Arguments<1>();
+    auto term = (args.coeff<0>() - center).squared_norm();
+    prob.add_objective(tycho::vf::GenericFunction<-1, 1>(term),
+                       (Eigen::VectorXi(1) << index).finished());
+}
+
+// Adds one shifted square per variable: sum_i (x_i - centers[i])^2.
+void nlp_var_bounds_add_separable_objective(tycho::solvers::OptimizationProblem &prob,
+                                            const std::vector<double> &centers) {
+    for (int i = 0; i < static_cast<int>(centers.size()); i++) {
+        nlp_var_bounds_add_shifted_square(prob, i, centers[i]);
     }
-    auto args = tycho::vf::Arguments<N>();
-    auto obj = args.squared_norm();
-    prob.add_objective(tycho::vf::GenericFunction<-1, 1>(obj), indices);
+}
+
+// Adds the objective term (x[i0] + x[i1])^2 -- a genuine Hessian cross-term
+// between two variables, which is what makes the elimination observable when
+// one of them is fixed.
+void nlp_var_bounds_add_pair_square(tycho::solvers::OptimizationProblem &prob, int i0, int i1) {
+    auto args = tycho::vf::Arguments<2>();
+    auto term = (args.coeff<0>() + args.coeff<1>()).squared_norm();
+    prob.add_objective(tycho::vf::GenericFunction<-1, 1>(term),
+                       (Eigen::VectorXi(2) << i0, i1).finished());
+}
+
+// Adds the equality constraint x[i0] == target.
+void nlp_var_bounds_add_single_sum_con(tycho::solvers::OptimizationProblem &prob, int i0,
+                                       double target) {
+    auto args = tycho::vf::Arguments<1>();
+    auto con = args.coeff<0>() - target;
+    prob.add_equal_con(tycho::vf::GenericFunction<-1, -1>(con),
+                       (Eigen::VectorXi(1) << i0).finished());
 }
 
 // Adds the equality constraint sum(x[indices]) == target over exactly two
@@ -237,6 +263,26 @@ nlp_var_bounds_transcribe(tycho::solvers::OptimizationProblem &prob, int num_var
 // is what recomputes the storage locations the reduction addresses).
 void nlp_var_bounds_rebuild(NonLinearProgram &nlp) {
     nlp.make_nlp(nlp.primal_vars_, nlp.equal_cons_, nlp.inequal_cons_);
+}
+
+struct NlpVarBoundsSolveOutcome {
+    Eigen::VectorXd solution_;
+    tycho::ConvergenceFlags flag_ = tycho::ConvergenceFlags::NOTCONVERGED;
+};
+
+// Drives a fresh silent PSIOPT against an NLP. Returns the flag alongside the
+// solution rather than asserting internally, so every caller can make the
+// convergence check a hard precondition (a reference problem that failed to
+// solve must never be able to masquerade as agreement).
+NlpVarBoundsSolveOutcome nlp_var_bounds_solve(const std::shared_ptr<NonLinearProgram> &nlp,
+                                              const Eigen::VectorXd &guess) {
+    tycho::solvers::PSIOPT opt;
+    opt.set_print_level(3);
+    opt.set_nlp(nlp);
+    NlpVarBoundsSolveOutcome outcome;
+    outcome.solution_ = opt.optimize(guess);
+    outcome.flag_ = opt.result().converge_flag_;
+    return outcome;
 }
 
 } // namespace
@@ -491,106 +537,198 @@ TEST(NlpVarBoundsReduction, InfiniteFixingValueThrows) {
 }
 
 // --- End-to-end solves ----------------------------------------------------
+//
+// Every problem here is a shifted-square QP started away from its minimizer, so
+// the objective and its gradient are both non-zero at the initial point, and
+// every problem carries at least one equality constraint. Each equivalence test
+// solves the hand-eliminated problem FIRST and asserts, as a hard precondition,
+// both that the reference converged and that it reached its own closed-form
+// optimum -- a reference that failed to solve can then never masquerade as
+// agreement with the eliminated problem.
 
-// Reference: min ||x||^2 over three variables s.t. x0 + x2 = 6, no bounds.
-// The optimum is (3, 0, 3). Pins the identity path end to end.
+// Identity path end to end: min sum (x_i - c_i)^2 over three variables with
+// c = (1, 2, 3), s.t. x0 + x2 = 6, no bounds. Stationarity gives
+// x0 = 1 - l/2, x2 = 3 - l/2 with 4 - l = 6, so l = -2 and the optimum is
+// (2, 2, 4).
 TEST(NlpVarBoundsReduction, UnboundedQpSolvesWithoutReduction) {
     tycho::solvers::OptimizationProblem prob;
-    nlp_var_bounds_add_squared_norm_objective<3>(prob);
+    nlp_var_bounds_add_separable_objective(prob, {1.0, 2.0, 3.0});
     nlp_var_bounds_add_pair_sum_con(prob, 0, 2, 6.0);
     auto nlp = nlp_var_bounds_transcribe(prob, 3);
 
-    tycho::solvers::PSIOPT opt;
-    opt.set_print_level(3);
-    opt.set_nlp(nlp);
-    Eigen::VectorXd solution = opt.optimize(Eigen::VectorXd::Zero(3));
+    auto outcome = nlp_var_bounds_solve(nlp, Eigen::VectorXd::Zero(3));
 
-    EXPECT_EQ(opt.result().converge_flag_, tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_EQ(outcome.flag_, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_FALSE(nlp->is_reduced());
     EXPECT_EQ(nlp->reduced_primal_vars(), nlp->primal_vars_);
-    EXPECT_NEAR(solution[0], 3.0, 1e-6);
-    EXPECT_NEAR(solution[1], 0.0, 1e-6);
-    EXPECT_NEAR(solution[2], 3.0, 1e-6);
+    EXPECT_NEAR(outcome.solution_[0], 2.0, 1e-6);
+    EXPECT_NEAR(outcome.solution_[1], 2.0, 1e-6);
+    EXPECT_NEAR(outcome.solution_[2], 4.0, 1e-6);
 }
 
 // Same problem with x1 pinned by equal bounds. The remaining variables must
 // reach the SAME optimum as the hand-eliminated two-variable problem
-// min ||y||^2 s.t. y0 + y1 = 6, and the pinned value must appear exactly in the
-// returned full-space solution even though the initial guess disagreed with it.
+// min (y0-1)^2 + (y1-3)^2 s.t. y0 + y1 = 6, and the pinned value must appear
+// exactly in the returned full-space solution even though the initial guess
+// disagreed with it.
 TEST(NlpVarBoundsReduction, FixedVariableQpMatchesHandEliminatedProblem) {
-    // Hand-eliminated reference.
+    // Hand-eliminated reference, solved and validated first.
     tycho::solvers::OptimizationProblem reference_prob;
-    nlp_var_bounds_add_squared_norm_objective<2>(reference_prob);
+    nlp_var_bounds_add_separable_objective(reference_prob, {1.0, 3.0});
     nlp_var_bounds_add_pair_sum_con(reference_prob, 0, 1, 6.0);
     auto reference_nlp = nlp_var_bounds_transcribe(reference_prob, 2);
 
-    tycho::solvers::PSIOPT reference_opt;
-    reference_opt.set_print_level(3);
-    reference_opt.set_nlp(reference_nlp);
-    Eigen::VectorXd reference = reference_opt.optimize(Eigen::VectorXd::Zero(2));
-    ASSERT_EQ(reference_opt.result().converge_flag_, tycho::ConvergenceFlags::CONVERGED);
+    auto reference = nlp_var_bounds_solve(reference_nlp, Eigen::VectorXd::Zero(2));
+    ASSERT_EQ(reference.flag_, tycho::ConvergenceFlags::CONVERGED)
+        << "the hand-eliminated reference problem must solve before it can be compared against";
+    ASSERT_NEAR(reference.solution_[0], 2.0, 1e-6);
+    ASSERT_NEAR(reference.solution_[1], 4.0, 1e-6);
 
     // Full problem with the middle variable fixed.
     tycho::solvers::OptimizationProblem prob;
-    nlp_var_bounds_add_squared_norm_objective<3>(prob);
+    nlp_var_bounds_add_separable_objective(prob, {1.0, 2.0, 3.0});
     nlp_var_bounds_add_pair_sum_con(prob, 0, 2, 6.0);
     auto nlp = nlp_var_bounds_transcribe(prob, 3);
     nlp->set_variable_bound(1, 7.0, 7.0);
     nlp_var_bounds_rebuild(*nlp);
 
-    tycho::solvers::PSIOPT opt;
-    opt.set_print_level(3);
-    opt.set_nlp(nlp);
     Eigen::VectorXd guess(3);
     guess << 0.0, -5.0, 0.0; // deliberately disagrees with the fixed value
-    Eigen::VectorXd solution = opt.optimize(guess);
+    auto outcome = nlp_var_bounds_solve(nlp, guess);
 
-    EXPECT_EQ(opt.result().converge_flag_, tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_EQ(outcome.flag_, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_TRUE(nlp->is_reduced());
     EXPECT_EQ(nlp->reduced_primal_vars(), 2);
 
     // The pinned value is exact, not merely converged to.
-    EXPECT_DOUBLE_EQ(solution[1], 7.0);
-    EXPECT_NEAR(solution[0], reference[0], 1e-6);
-    EXPECT_NEAR(solution[2], reference[1], 1e-6);
-    EXPECT_NEAR(solution[0], 3.0, 1e-6);
-    EXPECT_NEAR(solution[2], 3.0, 1e-6);
+    EXPECT_DOUBLE_EQ(outcome.solution_[1], 7.0);
+    EXPECT_NEAR(outcome.solution_[0], reference.solution_[0], 1e-6);
+    EXPECT_NEAR(outcome.solution_[2], reference.solution_[1], 1e-6);
+}
+
+// The eliminated variable is coupled to a free one through a genuine objective
+// HESSIAN cross-term, so the elimination is load-bearing rather than incidental:
+//
+//   min (x0 + x1)^2 + (x0 - 1)^2 + (x2 - 1)^2   s.t. x2 = 1,   x1 fixed at 7
+//
+// The full Hessian carries d2f/dx0dx1 = 2. Eliminating x1 leaves
+// min (y0 + 7)^2 + (y0 - 1)^2, whose optimum is y0 = -3. If the cross-term
+// survived into the solved system, the eliminated coordinate's Newton step
+// would be -dx0 rather than 0 -- x1 would drift off 7 AND x0 would land
+// somewhere else -- so both assertions below fail loudly on a broken
+// elimination. (Under a separable objective, by contrast, the cross-terms are
+// numerically zero and the elimination cannot be observed at all.)
+TEST(NlpVarBoundsReduction, FixedVariableCoupledThroughObjectiveHessian) {
+    // Hand-eliminated reference: min (y0+7)^2 + (y0-1)^2 + (y1-1)^2 s.t. y1 = 1.
+    tycho::solvers::OptimizationProblem reference_prob;
+    nlp_var_bounds_add_shifted_square(reference_prob, 0, -7.0);
+    nlp_var_bounds_add_shifted_square(reference_prob, 0, 1.0);
+    nlp_var_bounds_add_shifted_square(reference_prob, 1, 1.0);
+    nlp_var_bounds_add_single_sum_con(reference_prob, 1, 1.0);
+    auto reference_nlp = nlp_var_bounds_transcribe(reference_prob, 2);
+
+    auto reference = nlp_var_bounds_solve(reference_nlp, Eigen::VectorXd::Zero(2));
+    ASSERT_EQ(reference.flag_, tycho::ConvergenceFlags::CONVERGED)
+        << "the hand-eliminated reference problem must solve before it can be compared against";
+    ASSERT_NEAR(reference.solution_[0], -3.0, 1e-6);
+    ASSERT_NEAR(reference.solution_[1], 1.0, 1e-6);
+
+    tycho::solvers::OptimizationProblem prob;
+    nlp_var_bounds_add_pair_square(prob, 0, 1);
+    nlp_var_bounds_add_shifted_square(prob, 0, 1.0);
+    nlp_var_bounds_add_shifted_square(prob, 2, 1.0);
+    nlp_var_bounds_add_single_sum_con(prob, 2, 1.0);
+    auto nlp = nlp_var_bounds_transcribe(prob, 3);
+    nlp->set_variable_bound(1, 7.0, 7.0);
+    nlp_var_bounds_rebuild(*nlp);
+
+    auto outcome = nlp_var_bounds_solve(nlp, Eigen::VectorXd::Zero(3));
+
+    EXPECT_EQ(outcome.flag_, tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_TRUE(nlp->is_reduced());
+    EXPECT_EQ(nlp->reduced_primal_vars(), 2);
+
+    EXPECT_DOUBLE_EQ(outcome.solution_[1], 7.0);
+    EXPECT_NEAR(outcome.solution_[0], reference.solution_[0], 1e-6);
+    EXPECT_NEAR(outcome.solution_[2], reference.solution_[1], 1e-6);
+    EXPECT_NEAR(outcome.solution_[0], -3.0, 1e-6);
+}
+
+// The eliminated variable sits inside a constraint's JACOBIAN row:
+//
+//   min sum (x_i - c_i)^2, c = (1, 2, 3)   s.t. x0 + x1 = 3,   x1 fixed at 7
+//
+// Two independent things have to happen. The Jacobian entry in the eliminated
+// column must leave the solved system (otherwise the eliminated coordinate
+// picks up a step through the constraint row), and the pinned value must still
+// reach the constraint RESIDUAL through the full-space evaluation (otherwise x0
+// solves x0 = 3 instead of x0 = 3 - 7 = -4). The two failure modes are
+// distinguishable in the assertions: the first moves x1, the second moves x0 to
+// 3.
+TEST(NlpVarBoundsReduction, FixedVariableInsideConstraintJacobian) {
+    // Hand-eliminated reference: min (y0-1)^2 + (y1-3)^2 s.t. y0 = -4.
+    tycho::solvers::OptimizationProblem reference_prob;
+    nlp_var_bounds_add_separable_objective(reference_prob, {1.0, 3.0});
+    nlp_var_bounds_add_single_sum_con(reference_prob, 0, -4.0);
+    auto reference_nlp = nlp_var_bounds_transcribe(reference_prob, 2);
+
+    auto reference = nlp_var_bounds_solve(reference_nlp, Eigen::VectorXd::Zero(2));
+    ASSERT_EQ(reference.flag_, tycho::ConvergenceFlags::CONVERGED)
+        << "the hand-eliminated reference problem must solve before it can be compared against";
+    ASSERT_NEAR(reference.solution_[0], -4.0, 1e-6);
+    ASSERT_NEAR(reference.solution_[1], 3.0, 1e-6);
+
+    tycho::solvers::OptimizationProblem prob;
+    nlp_var_bounds_add_separable_objective(prob, {1.0, 2.0, 3.0});
+    nlp_var_bounds_add_pair_sum_con(prob, 0, 1, 3.0);
+    auto nlp = nlp_var_bounds_transcribe(prob, 3);
+    nlp->set_variable_bound(1, 7.0, 7.0);
+    nlp_var_bounds_rebuild(*nlp);
+
+    auto outcome = nlp_var_bounds_solve(nlp, Eigen::VectorXd::Zero(3));
+
+    EXPECT_EQ(outcome.flag_, tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_TRUE(nlp->is_reduced());
+    EXPECT_EQ(nlp->reduced_primal_vars(), 2);
+
+    EXPECT_DOUBLE_EQ(outcome.solution_[1], 7.0);
+    EXPECT_NEAR(outcome.solution_[0], reference.solution_[0], 1e-6);
+    EXPECT_NEAR(outcome.solution_[2], reference.solution_[1], 1e-6);
+    EXPECT_NEAR(outcome.solution_[0], -4.0, 1e-6);
 }
 
 // Two fixed variables interleaved with three free ones, with the constraint
-// spanning only the free ones: index bookkeeping under interleaving, end to
-// end. min ||x||^2 over five variables s.t. x0 + x2 + x4 = 6, x1 = -2, x3 = 10,
-// whose free-block optimum is (2, 2, 2).
+// spanning only the free ones: index bookkeeping end to end.
+// min sum (x_i - c_i)^2, c = (1..5), s.t. x0 + x2 + x4 = 6, x1 = -2, x3 = 10.
+// On the free block x_i = c_i - l/2 with 9 - 3l/2 = 6, so l = 2 and the free
+// optimum is (0, 2, 4).
 TEST(NlpVarBoundsReduction, TwoInterleavedFixedVariablesSolve) {
     tycho::solvers::OptimizationProblem prob;
-    nlp_var_bounds_add_squared_norm_objective<5>(prob);
+    nlp_var_bounds_add_separable_objective(prob, {1.0, 2.0, 3.0, 4.0, 5.0});
     nlp_var_bounds_add_triple_sum_con(prob, 0, 2, 4, 6.0);
     auto nlp = nlp_var_bounds_transcribe(prob, 5);
     nlp->set_variable_bound(1, -2.0, -2.0);
     nlp->set_variable_bound(3, 10.0, 10.0);
     nlp_var_bounds_rebuild(*nlp);
 
-    tycho::solvers::PSIOPT opt;
-    opt.set_print_level(3);
-    opt.set_nlp(nlp);
-    Eigen::VectorXd solution = opt.optimize(Eigen::VectorXd::Zero(5));
+    auto outcome = nlp_var_bounds_solve(nlp, Eigen::VectorXd::Zero(5));
 
-    EXPECT_EQ(opt.result().converge_flag_, tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_EQ(outcome.flag_, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_TRUE(nlp->is_reduced());
     EXPECT_EQ(nlp->reduced_primal_vars(), 3);
 
-    EXPECT_DOUBLE_EQ(solution[1], -2.0);
-    EXPECT_DOUBLE_EQ(solution[3], 10.0);
-    EXPECT_NEAR(solution[0], 2.0, 1e-6);
-    EXPECT_NEAR(solution[2], 2.0, 1e-6);
-    EXPECT_NEAR(solution[4], 2.0, 1e-6);
+    EXPECT_DOUBLE_EQ(outcome.solution_[1], -2.0);
+    EXPECT_DOUBLE_EQ(outcome.solution_[3], 10.0);
+    EXPECT_NEAR(outcome.solution_[0], 0.0, 1e-6);
+    EXPECT_NEAR(outcome.solution_[2], 2.0, 1e-6);
+    EXPECT_NEAR(outcome.solution_[4], 4.0, 1e-6);
 }
 
-// One solver instance, two solves, different bounds in between: the second
-// solve must re-classify rather than reuse the first solve's elimination.
+// One solver instance, three solves, different bounds in between: each solve
+// must re-classify rather than reuse the previous solve's elimination.
 TEST(NlpVarBoundsReduction, SecondSolveAfterBoundChangeUsesTheNewValue) {
     tycho::solvers::OptimizationProblem prob;
-    nlp_var_bounds_add_squared_norm_objective<3>(prob);
+    nlp_var_bounds_add_separable_objective(prob, {1.0, 2.0, 3.0});
     nlp_var_bounds_add_pair_sum_con(prob, 0, 2, 6.0);
     auto nlp = nlp_var_bounds_transcribe(prob, 3);
     nlp->set_variable_bound(1, 7.0, 7.0);
@@ -612,8 +750,8 @@ TEST(NlpVarBoundsReduction, SecondSolveAfterBoundChangeUsesTheNewValue) {
     EXPECT_EQ(opt.result().converge_flag_, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_TRUE(nlp->is_reduced());
     EXPECT_DOUBLE_EQ(second[1], 9.0);
-    EXPECT_NEAR(second[0], 3.0, 1e-6);
-    EXPECT_NEAR(second[2], 3.0, 1e-6);
+    EXPECT_NEAR(second[0], 2.0, 1e-6);
+    EXPECT_NEAR(second[2], 4.0, 1e-6);
 
     // And dropping the bound entirely returns the problem to the identity path.
     nlp->clear_variable_bounds();
@@ -622,5 +760,5 @@ TEST(NlpVarBoundsReduction, SecondSolveAfterBoundChangeUsesTheNewValue) {
     Eigen::VectorXd third = opt.optimize(Eigen::VectorXd::Zero(3));
     EXPECT_EQ(opt.result().converge_flag_, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_FALSE(nlp->is_reduced());
-    EXPECT_NEAR(third[1], 0.0, 1e-6);
+    EXPECT_NEAR(third[1], 2.0, 1e-6);
 }
