@@ -1192,7 +1192,9 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     /// @param lowerbound  Lower bound applied to each.
     /// @param upperbound  Upper bound applied to each.
     /// @param scale       Shared bound scale.
-    /// @return Vector of indices assigned to the bound constraints.
+    /// @return One entry per variable: the added inequality-constraint index, unless
+    ///         the temporary native variable-bounds dev switch is active, in which
+    ///         case bound-record handles instead (see @ref record_var_bounds).
     Eigen::VectorXi add_lu_var_bounds(PhaseRegionFlags reg, Eigen::VectorXi vars, double lowerbound,
                                       double upperbound, double scale) {
         Eigen::VectorXi cnums(vars.size());
@@ -1209,7 +1211,9 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     /// @param lowerbound  Lower bound applied to each.
     /// @param upperbound  Upper bound applied to each.
     /// @param scale       Shared bound scale.
-    /// @return Vector of indices assigned to the bound constraints.
+    /// @return One entry per variable: the added inequality-constraint index, unless
+    ///         the temporary native variable-bounds dev switch is active, in which
+    ///         case bound-record handles instead (see @ref record_var_bounds).
     Eigen::VectorXi add_lu_var_bounds(std::string reg, Eigen::VectorXi vars, double lowerbound,
                                       double upperbound, double scale) {
         return add_lu_var_bounds(strto_PhaseRegionFlag(reg), vars, lowerbound, upperbound, scale);
@@ -1380,7 +1384,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     ///         user_inequalities_ regardless of any recorded bounds).
     void remove_inequal_con(int index) {
         if (index != -1) {
-            this->check_var_bound_removal_supported();
+            this->check_inequality_index_unambiguous();
         }
         this->remove_func_impl(this->user_inequalities_, index, "Inequality Constraint");
     }
@@ -1664,7 +1668,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     ///         (their handles are not inequality-constraint indices, so @p index
     ///         cannot be resolved unambiguously).
     std::vector<Eigen::VectorXd> return_inequal_con_lmults(int index) const {
-        this->check_var_bound_removal_supported();
+        this->check_inequality_index_unambiguous();
         if (!this->post_opt_info_valid_) {
             throw std::invalid_argument(
                 "No multipliers to return, a solve or optimize call must be made "
@@ -1682,7 +1686,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     ///         (their handles are not inequality-constraint indices, so @p index
     ///         cannot be resolved unambiguously).
     std::vector<Eigen::VectorXd> return_inequal_con_vals(int index) const {
-        this->check_var_bound_removal_supported();
+        this->check_inequality_index_unambiguous();
         if (!this->post_opt_info_valid_) {
             throw std::invalid_argument(
                 "No constraints to return, a solve or optimize call must be made "
@@ -1698,7 +1702,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     ///         (their handles are not inequality-constraint indices, so @p index
     ///         cannot be resolved unambiguously).
     Eigen::VectorXd return_inequal_con_scales(int index) const {
-        this->check_var_bound_removal_supported();
+        this->check_inequality_index_unambiguous();
         return this->user_inequalities_.at(index).output_scales_;
     }
 
@@ -1902,10 +1906,11 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
                           double upperbound);
 
     /// @internal
-    /// @brief Reject removal requests that recorded variable bounds make ambiguous.
+    /// @brief Reject inequality-index operations (removal or accessor reads) that
+    ///        recorded variable bounds make ambiguous.
     /// @throws std::invalid_argument if this phase holds recorded variable bounds.
     /// @endinternal
-    void check_var_bound_removal_supported() const;
+    void check_inequality_index_unambiguous() const;
 
     /// @internal
     /// @brief Resolve recorded variable bounds to NLP variable indices and stage them.

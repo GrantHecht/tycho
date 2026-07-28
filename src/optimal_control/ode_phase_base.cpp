@@ -272,14 +272,15 @@ int tycho::oc::ODEPhaseBase::record_var_bounds(RegionType reg_t, VarIndexType va
     return handle;
 }
 
-void tycho::oc::ODEPhaseBase::check_var_bound_removal_supported() const {
+void tycho::oc::ODEPhaseBase::check_inequality_index_unambiguous() const {
     if (this->user_var_bounds_.empty()) {
         return;
     }
     throw std::invalid_argument(fmt::format(
         "This phase holds {0:} recorded variable bound(s), whose declaration handles are "
-        "bound-record indices rather than inequality-constraint indices. Removing an inequality "
-        "constraint while recorded variable bounds are present is not supported.",
+        "bound-record indices rather than inequality-constraint indices. Accessing or removing "
+        "an inequality constraint by index while recorded variable bounds are present is not "
+        "supported.",
         this->user_var_bounds_.size()));
 }
 
