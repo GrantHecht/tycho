@@ -849,7 +849,19 @@ class PSIOPT {
     // QP parameter setup — called automatically by set_nlp()
     void set_qp_params();
 
+    // Re-reads the problem dimensions from the NLP into the members below.
+    // Called by set_nlp, and again at solve entry whenever the fixed-variable
+    // configuration changed the size of the problem the solver factorizes.
+    void refresh_nlp_dimensions();
+
     // --- Problem dimensions ---
+    // primal_vars_ is the SOLVER's primal width: the NLP's variable count minus
+    // the variables the fixed-variable treatment eliminated. Every vector this
+    // solver sizes, every KKTVector segment and the KKT matrix are in that
+    // space. full_primal_vars_ is the problem's own count -- the width of an
+    // initial guess and of the returned solution, and the only one a caller
+    // ever sees. They are equal unless a variable is bound-fixed.
+    int full_primal_vars_ = 0;
     int primal_vars_ = 0;
     int slack_vars_ = 0;
     int equal_cons_ = 0;

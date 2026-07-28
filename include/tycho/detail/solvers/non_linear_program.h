@@ -251,201 +251,147 @@ struct NonLinearProgram {
     ////////////////////////////////////////////////////////////////////////////
     // Bound-fixed variable treatment
     //
-    // A variable declared with lower == upper carries no degree of freedom. Under
-    // the MakeParameter treatment it is ELIMINATED: pinned at its value for every
-    // evaluation, and removed from the Newton system the solver factorizes.
+    // A variable declared with lower == upper carries no degree of freedom.
+    // Under the MakeParameter treatment it is ELIMINATED: it does not appear in
+    // the solver's variable space at all, and the KKT system the solver
+    // factorizes is the system of the remaining variables -- narrower by exactly
+    // one row and column per eliminated variable.
     //
-    // How the elimination is realized. The transcription's objective and
-    // constraint functions address primal variables by their global index, both
-    // when they gather their inputs out of x and when they scatter their
-    // Jacobian/Hessian entries into the KKT matrix. Renumbering the primal space
-    // underneath them is therefore not a local change -- it would have to reach
-    // into every function's indexing data and into the KKT scatter itself. So the
-    // elimination is applied to the ASSEMBLED system instead, once per assembly
-    // and in O(nnz of the eliminated columns):
+    // How the elimination is realized. Each objective and constraint addresses
+    // primal variables by index, and does so for two different purposes: to
+    // GATHER its arguments out of the primal vector, and to say where its
+    // outputs (KKT columns, gradient rows) belong. Those two roles are split
+    // here. The input map is left alone -- a function still reads exactly the
+    // variables it was declared over -- and every evaluation hands it a
+    // full-space buffer built from the reduced iterate plus the pinned values,
+    // so the functions never learn anything happened and their contributions to
+    // constraint values and to the surviving variables' derivatives are correct
+    // for free. Only the OUTPUT map is rewritten, at configuration time, from
+    // the pristine input map:
     //
-    //   * the eliminated variable keeps its coordinate, but every KKT entry in
-    //     its row and column is zeroed after assembly and its diagonal is set to
-    //     one, leaving a decoupled unit row;
-    //   * its stationarity row in the Newton right-hand side is cleared (the
-    //     solver-side seam, PSIOPT::eval_nlp);
-    //   * its value is pinned into the iterate once, at solve entry.
+    //   * retained variables' outputs are renumbered into the reduced space;
+    //   * eliminated variables' outputs are marked -1;
+    //   * the KKT/RHS location tables, the sparsity pattern, the partition clash
+    //     marks and the solver-coefficient ranges are all rebuilt over that
+    //     rewritten map.
     //
-    // The factorized matrix is then exactly the reduced problem's KKT matrix
-    // bordered by an identity block, so the step is the reduced problem's step
-    // with a structural zero in the eliminated coordinate, the inertia count is
-    // unchanged (each pinned coordinate contributes exactly the one positive
-    // eigenvalue the primal count already expects), and the eliminated variable's
-    // residual never enters any convergence norm. Eliminated variables'
-    // contributions to constraint values and to the remaining variables'
-    // derivatives happen automatically: the functions still evaluate at the full
-    // x with the pinned values in place, and never learn anything happened.
+    // Element CLAIMS stay exactly as they were -- same count, same contiguous
+    // per-application ranges -- because the scatters walk their claims in
+    // lockstep with the function's own loop bounds. A -1 element keeps its claim
+    // and simply names no matrix entry: analyze_sparsity leaves it out of the
+    // pattern, so the eliminated row and column never exist, and the scatter
+    // steps over it instead of writing.
     //
-    // What this costs relative to compacting the primal index space: the
-    // factorization carries one trivial pivot per eliminated variable, and the
-    // eliminated columns stay in the sparsity pattern as explicit zeros. The
-    // second one is not merely a little extra fill -- a pinned variable still
-    // joins its structural neighbours into a clique in the elimination graph the
-    // ordering is computed from, which a compacted problem would not have.
-    // Negligible for a handful of pinned boundary values in a collocation NLP,
-    // each coupling one state-sized neighbourhood; not negligible for a problem
-    // that pins many widely-coupled variables.
-    //
-    // Identity fast path. With no fixed variables, is_reduced() is false, every
-    // site above short-circuits on that single cached bool, and NOTHING on the
-    // evaluation path changes -- no extra arithmetic, no extra indirection, no
-    // change to the assembled values.
+    // Identity fast path. With no fixed variables nothing is rewritten at all:
+    // no output map is installed, so every scatter takes its original loop,
+    // every table is the pristine one, no expansion buffer is built, and the
+    // assembled system is what it was before this feature existed.
     ////////////////////////////////////////////////////////////////////////////
 
     /// <summary>
     /// Classifies every primal variable against the materialized
     /// x_lower_/x_upper_ (free / lower-only / upper-only / two-sided / fixed),
     /// records the non-fixed finite bounds in variable_bound_set_, and -- under
-    /// MakeParameter, when at least one variable is fixed -- builds the
-    /// full<->reduced index maps and the KKT slot lists the per-assembly pin
-    /// walks.
+    /// MakeParameter, when at least one variable is fixed -- rewrites every
+    /// function's output map into the reduced space and rebuilds the KKT/RHS
+    /// structures over it.
     ///
     /// Called once at solve setup. Idempotent and re-entrant: a call that
     /// repeats the same treatment, the same relax factor, and the same bound
-    /// state returns immediately; a call after the bounds were re-materialized
-    /// (make_nlp / clear_variable_bounds) or after the sparsity pattern was
-    /// recomputed (analyze_sparsity) re-classifies from scratch, so one solver
-    /// instance solving twice against changed bounds picks the change up.
+    /// state returns immediately having changed nothing; a call after the bounds
+    /// were re-materialized (make_nlp / clear_variable_bounds) reclassifies from
+    /// scratch. Every rewritten output map is regenerated from the pristine
+    /// input map, which is never edited, so repeated configuration cannot
+    /// compound -- including the return to the identity path when the last fixed
+    /// bound is dropped.
     ///
-    /// Requires analyze_sparsity() to have run when any variable is fixed: the
-    /// per-assembly pin addresses KKT value slots by the offsets that routine
-    /// computes. Throws std::invalid_argument for a treatment that is not yet
-    /// available, for a negative or non-finite relax factor, for an infinite
-    /// fixing value, and when the sparsity pattern is missing.
+    /// Throws std::invalid_argument for a treatment that is not yet available,
+    /// for a negative or non-finite relax factor, and for an infinite fixing
+    /// value.
+    ///
+    /// @return true iff this call rebuilt the KKT/RHS structures, in which case
+    /// the caller must re-read the dimensions and recompute the sparsity pattern
+    /// (PSIOPT does both at its solve entry). false means nothing changed.
     /// </summary>
-    void configure_variable_treatment(FixedVariableTreatments treatment, double bound_relax_factor);
+    bool configure_variable_treatment(FixedVariableTreatments treatment, double bound_relax_factor);
 
-    /// Number of primal variables the solve actually optimizes over: primal_vars_
-    /// minus the eliminated ones. Equal to primal_vars_ on the identity path.
-    /// Note that the KKT system stays primal_vars_ wide either way (see the
-    /// reduction note above); this is the problem's degree-of-freedom count, and
-    /// the size gather_reduced_x/scatter_full_x compact to and expand from.
+    /// Width of the primal block of the KKT system the solver factorizes:
+    /// primal_vars_ minus the eliminated variables. This is the size of every
+    /// primal vector the solver works with, and the size gather_reduced_x
+    /// compacts to and scatter_full_x expands from. Equal to primal_vars_ on the
+    /// identity path.
     int reduced_primal_vars() const { return this->reduced_primal_vars_count_; }
 
     /// True iff at least one variable was eliminated by the configured
-    /// treatment. THE guard for every piece of reduction work on the evaluation
-    /// path: when it is false the solver runs exactly the code it ran before the
-    /// treatment existed.
+    /// treatment. The guard for every piece of reduction work outside the
+    /// scatters (which carry their own, per-function): when it is false the
+    /// solver runs exactly the code it ran before the treatment existed.
     bool is_reduced() const { return this->fixed_reduction_active_; }
 
     /// The finite bounds that survived classification (eliminated variables
-    /// excluded), relaxed by the configured factor. Empty before
+    /// excluded), in REDUCED indices -- the same space every primal vector the
+    /// solver holds is in -- and relaxed by the configured factor. Empty before
     /// configure_variable_treatment has run.
     const BoundSet &variable_bound_set() const { return this->variable_bound_set_; }
 
-    /// Indices of the eliminated variables, ascending. Empty on the identity path.
+    /// Indices of the eliminated variables in the FULL problem space, ascending.
+    /// Empty on the identity path.
     const VectorXi &fixed_variable_indices() const { return this->fixed_idx_; }
 
     /// Values the eliminated variables are pinned at, parallel to
     /// fixed_variable_indices().
     const VectorXd &fixed_variable_values() const { return this->fixed_vals_; }
 
-    /// Full-space index -> compacted index, -1 for an eliminated variable. Empty
+    /// Full-space index -> reduced index, -1 for an eliminated variable. Empty
     /// on the identity path (where the map is the identity).
     const VectorXi &full_to_reduced() const { return this->full_to_reduced_; }
 
-    /// Compacted index -> full-space index. Empty on the identity path.
+    /// Reduced index -> full-space index. Empty on the identity path.
     const VectorXi &reduced_to_full() const { return this->reduced_to_full_; }
 
     /// <summary>
     /// Compacts a full-space primal vector into reduced_primal_vars() entries,
-    /// dropping the eliminated coordinates. Pass-through copy on the identity
-    /// path. Throws std::invalid_argument on a size mismatch.
+    /// dropping the eliminated coordinates. Used at the solve entry to turn a
+    /// caller's initial guess into the solver's iterate. Pass-through copy on
+    /// the identity path. Throws std::invalid_argument on a size mismatch.
     /// </summary>
     void gather_reduced_x(ConstEigenRef<VectorXd> x_full, EigenRef<VectorXd> x_reduced) const;
 
     /// <summary>
-    /// Expands a reduced primal vector back to primal_vars_ entries, writing each
-    /// eliminated coordinate's pinned value. Pass-through copy on the identity
-    /// path. Throws std::invalid_argument on a size mismatch.
+    /// Expands a reduced primal vector back to primal_vars_ entries, writing
+    /// each eliminated coordinate's pinned value.
+    ///
+    /// Two callers, and they are the whole reinsertion story. Every evaluation
+    /// uses it to build the full-space buffer the functions read, which is why
+    /// they never learn a variable was eliminated. And the solver uses it once
+    /// at its return boundary to hand the solution back in the caller's own
+    /// variable space -- the single seam where the reduced space stops being an
+    /// internal detail.
+    ///
+    /// Pass-through copy on the identity path. Throws std::invalid_argument on a
+    /// size mismatch.
     /// </summary>
     void scatter_full_x(ConstEigenRef<VectorXd> x_reduced, EigenRef<VectorXd> x_full) const;
 
     /// <summary>
-    /// Writes the pinned value of every eliminated variable into a full-space
-    /// primal vector, leaving the remaining entries alone. This is the ONE
-    /// reinsertion seam: applied to the iterate at solve entry, it makes every
-    /// downstream primal exposure -- the returned solution, the late callback's
-    /// IterateInfo primals, every primal-exposing diagnostic -- read the
-    /// full-space form with the fixed values already in it, with no second
-    /// reinsertion anywhere.
+    /// The full-space primal vector the objective and constraint functions must
+    /// read, given the solver's reduced iterate: the reduced values put back in
+    /// their own coordinates, with the eliminated ones pinned at their declared
+    /// values.
     ///
-    /// A caller that starts from an arbitrary guess gets the guess's value for a
-    /// fixed variable silently replaced by the declared one; that is the point.
-    /// No-op on the identity path. Throws std::invalid_argument on a size
-    /// mismatch.
+    /// Returns a view of @p x itself on the identity path -- no buffer, no copy.
+    /// Otherwise returns a view of an internal buffer, valid until the next
+    /// call. Like vals_scratch_, that buffer is safe to share because a single
+    /// NLP is inside at most one evaluation at a time; the parallelism inside an
+    /// evaluation only reads it.
     /// </summary>
-    void pin_fixed_variables(EigenRef<VectorXd> x_full) const;
-
-    /// <summary>
-    /// Zeroes the eliminated variables' entries of a full-space primal-row
-    /// vector (an objective gradient or an adjoint gradient).
-    ///
-    /// An eliminated variable's stationarity row holds the bound multiplier that
-    /// holds it at its bound, which is not part of the reduced problem's
-    /// optimality residual. Clearing it makes the Newton right-hand side zero on
-    /// that row -- matching the pinned unit KKT row, so the step in that
-    /// coordinate is exactly zero -- and keeps it out of every primal residual
-    /// norm. The multiplier itself is consequently NOT reported: the value that
-    /// was cleared is the reduced-gradient residual at the solution, and
-    /// recovering it belongs to the bound-multiplier work, not here.
-    ///
-    /// This clears the rows as they leave an evaluation; it does not, on its
-    /// own, guarantee they are still zero once the Newton right-hand side is
-    /// complete. Anything that adds to a primal stationarity row after the
-    /// evaluation -- a variable-bound barrier gradient, say -- must skip
-    /// eliminated variables of its own accord. Today variable_bound_set()
-    /// excludes them, so nothing can.
-    ///
-    /// No-op on the identity path. Throws std::invalid_argument on a size
-    /// mismatch.
-    /// </summary>
-    void clear_fixed_variable_rows(EigenRef<VectorXd> primal_rows) const;
-
-    /// <summary>
-    /// Post-assembly pin: zeroes every KKT value slot in an eliminated variable's
-    /// row or column, then writes one onto each eliminated diagonal. Both slot
-    /// lists are built once by configure_variable_treatment, so this is a flat
-    /// walk of precomputed offsets with no per-element search.
-    ///
-    /// Runs at the END of every KKT assembly (see the eval_kkt family), after
-    /// fill_solver_coeffs has added the solver's own primal diagonals, so the
-    /// unit diagonal is the final value. A later `+=` onto the primal diagonals
-    /// (perturb_kkt_p_diags, the inertia ladder) only makes it more positive and
-    /// cannot couple the row back in.
-    ///
-    /// Only ever called under is_reduced(); the caller holds the guard.
-    /// </summary>
-    void pin_fixed_variable_kkt_rows(Eigen::SparseMatrix<double, Eigen::RowMajor> &mat) const {
-        double *vals = mat.valuePtr();
-        const int num_slots = static_cast<int>(this->fixed_kkt_slots_.size());
-        for (int i = 0; i < num_slots; i++) {
-            vals[this->fixed_kkt_slots_[i]] = 0.0;
+    Eigen::Ref<const VectorXd> primal_view(ConstEigenRef<VectorXd> x) {
+        if (!this->fixed_reduction_active_) {
+            return x;
         }
-        const int num_diags = static_cast<int>(this->fixed_diag_slots_.size());
-        for (int i = 0; i < num_diags; i++) {
-            vals[this->fixed_diag_slots_[i]] = 1.0;
-        }
-    }
-
-    /// <summary>
-    /// Drops every piece of classification state that addresses the current KKT
-    /// layout, and with it the is_reduced() guard, so no stale storage offset
-    /// can survive into an assembly. Called wherever the KKT arrays are
-    /// reallocated (set_mat_dimensions) or their offsets recomputed
-    /// (analyze_sparsity); the next configure_variable_treatment call rebuilds
-    /// from the live bounds and the live pattern.
-    /// </summary>
-    void invalidate_variable_treatment() {
-        this->fixed_treatment_valid_ = false;
-        this->fixed_reduction_active_ = false;
-        this->fixed_kkt_slots_.resize(0);
-        this->fixed_diag_slots_.resize(0);
+        this->full_x_scratch_.resize(this->primal_vars_);
+        this->scatter_full_x(x, this->full_x_scratch_);
+        return this->full_x_scratch_;
     }
 
     /// Selected treatment, as last configured.
@@ -459,17 +405,15 @@ struct NonLinearProgram {
     /// x_lower_/x_upper_ through make_nlp, which does.
     long bounds_revision_ = 0;
 
-    /// True once a classification pass has produced state consistent with the
-    /// current bounds AND the current sparsity pattern. analyze_sparsity clears
-    /// it (the KKT slot offsets it recomputes invalidate the pin lists).
+    /// True once a classification pass has produced structures consistent with
+    /// the current bounds. make_nlp clears it: it rebuilds the whole layout from
+    /// the pristine full space, so whatever the previous configuration derived
+    /// is gone.
     bool fixed_treatment_valid_ = false;
     long configured_bounds_revision_ = -1;
 
-    /// True once analyze_sparsity has computed kkt_locations_.
-    bool sparsity_analyzed_ = false;
-
-    /// Cached is_reduced() answer -- the single bool every evaluation-path guard
-    /// reads.
+    /// Cached is_reduced() answer -- the bool the evaluation-path guards outside
+    /// the scatters read.
     bool fixed_reduction_active_ = false;
     int reduced_primal_vars_count_ = 0;
 
@@ -478,11 +422,11 @@ struct NonLinearProgram {
     VectorXi fixed_idx_;       ///< Eliminated variable indices, ascending.
     VectorXd fixed_vals_;      ///< Their pinned values.
 
-    /// KKT value-array offsets of every entry in an eliminated variable's row or
-    /// column, sorted and deduplicated.
-    VectorXi fixed_kkt_slots_;
-    /// KKT value-array offsets of the eliminated variables' diagonals.
-    VectorXi fixed_diag_slots_;
+    /// Full-space buffer the objective and constraint functions read while the
+    /// solver iterates in the reduced space -- reduced values in their own
+    /// coordinates plus the pinned ones. Empty and untouched on the identity
+    /// path. See primal_view().
+    VectorXd full_x_scratch_;
 
     BoundSet variable_bound_set_;
 
@@ -524,6 +468,19 @@ struct NonLinearProgram {
 
     void finalize_data();
 
+    /// The set_mat_dimensions -> finalize_data chain: everything whose layout
+    /// depends on the width of the solver's primal block. Run once by make_nlp
+    /// over the full space, and again by configure_variable_treatment whenever
+    /// that width changes.
+    void rebuild_structures();
+
+    /// Rewrites every partitioned function's output map into the reduced space
+    /// from its pristine input map (-1 where the variable is eliminated).
+    void install_function_output_maps();
+
+    /// Puts every partitioned function back on its pristine input map.
+    void clear_function_output_maps();
+
     void analyze_sparsity(Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
     void make_compressed() {
         this->kkt_coeff_part_ids_.resize(0);
@@ -536,7 +493,8 @@ struct NonLinearProgram {
         return this->solver_coeffs_.segment(this->slack_jac_data_start_, this->slack_vars_);
     }
     EigenRef<VectorXd> primal_diag_coeffs() {
-        return this->solver_coeffs_.segment(this->primal_diags_data_start_, this->primal_vars_);
+        return this->solver_coeffs_.segment(this->primal_diags_data_start_,
+                                            this->reduced_primal_vars_count_);
     }
     EigenRef<VectorXd> slack_diag_coeffs() {
         return this->solver_coeffs_.segment(this->slack_diag_data_start_, this->slack_vars_);
@@ -553,8 +511,9 @@ struct NonLinearProgram {
             this->slack_jac_data_start_ + this->num_user_kkt_elems_, this->slack_vars_);
     }
     EigenRef<VectorXi> primal_diag_coeff_cols() {
-        return this->kkt_coeff_cols_.segment(
-            this->primal_diags_data_start_ + this->num_user_kkt_elems_, this->primal_vars_);
+        return this->kkt_coeff_cols_.segment(this->primal_diags_data_start_ +
+                                                 this->num_user_kkt_elems_,
+                                             this->reduced_primal_vars_count_);
     }
     EigenRef<VectorXi> slack_diag_coeff_cols() {
         return this->kkt_coeff_cols_.segment(
@@ -574,8 +533,9 @@ struct NonLinearProgram {
             this->slack_jac_data_start_ + this->num_user_kkt_elems_, this->slack_vars_);
     }
     EigenRef<VectorXi> primal_diag_coeff_rows() {
-        return this->kkt_coeff_rows_.segment(
-            this->primal_diags_data_start_ + this->num_user_kkt_elems_, this->primal_vars_);
+        return this->kkt_coeff_rows_.segment(this->primal_diags_data_start_ +
+                                                 this->num_user_kkt_elems_,
+                                             this->reduced_primal_vars_count_);
     }
     EigenRef<VectorXi> slack_diag_coeff_rows() {
         return this->kkt_coeff_rows_.segment(
@@ -620,7 +580,7 @@ struct NonLinearProgram {
     }
     void perturb_kkt_p_diags(double pert, Eigen::SparseMatrix<double, Eigen::RowMajor> &mat) {
         int ofs = this->primal_diags_data_start_ + this->num_user_kkt_elems_;
-        for (int i = 0; i < this->primal_vars_; i++) {
+        for (int i = 0; i < this->reduced_primal_vars_count_; i++) {
             mat.valuePtr()[this->kkt_locations_[ofs + i]] += pert;
         }
     }
@@ -670,7 +630,9 @@ struct NonLinearProgram {
     EigenRef<VectorXi> get_kkt_locations() {
         return this->kkt_locations_.head(this->num_user_kkt_elems_);
     }
-    EigenRef<VectorXi> get_kkt_clashes() { return this->kkt_clashes_.head(this->primal_vars_); }
+    EigenRef<VectorXi> get_kkt_clashes() {
+        return this->kkt_clashes_.head(this->reduced_primal_vars_count_);
+    }
 
     void set_con_coeffs_zero() {
         this->econ_coeffs().setZero();
@@ -684,11 +646,24 @@ struct NonLinearProgram {
         this->set_con_coeffs_zero();
     }
 
+    // Gradient rows for eliminated variables are marked -1 by get_gradient_space
+    // (the claim keeps its size -- the function still writes a gradient value
+    // per argument -- but that value has no row to be summed into). The skip is
+    // hoisted to the call, so the unreduced fill loop is the original one and
+    // the whole cost of the feature here is one branch per fill.
     void fill_pgx(EigenRef<VectorXd> PGX) {
-        this->rhs_fill_op(PGX, this->pgx_coeffs(), this->pgx_coeff_rows());
+        if (this->fixed_reduction_active_) {
+            rhs_fill_op_reduced(PGX, this->pgx_coeffs(), this->pgx_coeff_rows());
+        } else {
+            rhs_fill_op(PGX, this->pgx_coeffs(), this->pgx_coeff_rows());
+        }
     }
     void fill_agx(EigenRef<VectorXd> AGX) {
-        this->rhs_fill_op(AGX, this->agx_coeffs(), this->agx_coeff_rows());
+        if (this->fixed_reduction_active_) {
+            rhs_fill_op_reduced(AGX, this->agx_coeffs(), this->agx_coeff_rows());
+        } else {
+            rhs_fill_op(AGX, this->agx_coeffs(), this->agx_coeff_rows());
+        }
     }
     void fill_fxe(EigenRef<VectorXd> FXE) {
         this->rhs_fill_op(FXE, this->econ_coeffs(), this->econ_coeff_rows());
@@ -708,6 +683,21 @@ struct NonLinearProgram {
                             EigenRef<VectorXi> sourcelocs) {
         for (int i = 0; i < source.size(); i++) {
             target[sourcelocs[i]] += source[i];
+        }
+    }
+
+    /// rhs_fill_op over a location table that may carry -1 for the gradient rows
+    /// of eliminated variables. Those rows are dropped: an eliminated variable's
+    /// stationarity row is not part of the reduced problem's residual, and its
+    /// value at a solution is the bound multiplier that holds the variable at
+    /// its bound. Reached only under is_reduced().
+    static void rhs_fill_op_reduced(EigenRef<VectorXd> target, EigenRef<VectorXd> source,
+                                    EigenRef<VectorXi> sourcelocs) {
+        for (int i = 0; i < source.size(); i++) {
+            const int row = sourcelocs[i];
+            if (row >= 0) {
+                target[row] += source[i];
+            }
         }
     }
 

@@ -25,13 +25,12 @@ namespace tycho::solvers {
 /// pinned at l == u has no barrier term, its bound is enforced exactly. A
 /// two-sided variable appears in BOTH lists.
 ///
-/// Index space: entries are primal-variable indices in the space the solver
-/// iterates over. Under the MakeParameter treatment as implemented today, the
-/// solver's primal space is still the full primal space (eliminated variables
-/// remain as pinned, decoupled coordinates — see the reduction note on
-/// NonLinearProgram::is_reduced), so these are full-space indices and
-/// NonLinearProgram::full_to_reduced() maps them into the compacted numbering
-/// if a caller needs it.
+/// Index space: entries are primal-variable indices in the REDUCED space — the
+/// space the solver iterates in, which is the problem's own space minus the
+/// variables the fixed-variable treatment eliminated. They index the solver's
+/// primal vectors and the KKT primal block directly, with no translation.
+/// NonLinearProgram::reduced_to_full() maps them back to the problem's own
+/// numbering for a caller that needs to name the variable a bound came from.
 ///
 /// Values are the RELAXED bounds: configure_variable_treatment widens each
 /// finite bound by bound_relax_factor * max(1, |bound|) before recording it, so

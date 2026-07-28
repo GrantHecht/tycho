@@ -321,20 +321,33 @@ tycho::solvers::PSIOPT::PSIOPT(std::shared_ptr<NonLinearProgram> np) {
 
 tycho::solvers::PSIOPT::~PSIOPT() = default;
 
-void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
-    if (!np)
-        throw std::invalid_argument("PSIOPT::set_nlp: NonLinearProgram pointer must not be null");
-    this->nlp_ = np;
-    this->primal_vars_ = this->nlp_->primal_vars_;
+// Re-reads the problem dimensions from the NLP. The primal width is the SOLVER's
+// -- the NLP's variable count minus whatever the fixed-variable treatment
+// eliminated -- so every vector this solver sizes, every KKTVector segment and
+// the KKT matrix all agree on one space. full_primal_vars_ keeps the problem's
+// own count, which is the only width the outside world ever sees: it is what an
+// initial guess must have and what a returned solution is expanded back to.
+// Called by set_nlp and again at solve entry whenever a configuration changed
+// the reduction.
+void tycho::solvers::PSIOPT::refresh_nlp_dimensions() {
+    this->full_primal_vars_ = this->nlp_->primal_vars_;
+    this->primal_vars_ = this->nlp_->reduced_primal_vars();
     this->equal_cons_ = this->nlp_->equal_cons_;
     this->inequal_cons_ = this->nlp_->inequal_cons_;
     this->slack_vars_ = this->nlp_->slack_vars_;
     this->kkt_dim_ = this->nlp_->kkt_dim_;
     if (kkt_dim_ != primal_vars_ + slack_vars_ + equal_cons_ + inequal_cons_)
         throw std::logic_error(
-            fmt::format("PSIOPT::set_nlp: NLP kkt_dim ({}) != primal_vars ({}) + slack_vars ({}) "
+            fmt::format("PSIOPT: NLP kkt_dim ({}) != solver primal_vars ({}) + slack_vars ({}) "
                         "+ equal_cons ({}) + inequal_cons ({})",
                         kkt_dim_, primal_vars_, slack_vars_, equal_cons_, inequal_cons_));
+}
+
+void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
+    if (!np)
+        throw std::invalid_argument("PSIOPT::set_nlp: NonLinearProgram pointer must not be null");
+    this->nlp_ = np;
+    this->refresh_nlp_dimensions();
 
     // acceptance_/mechanism_/governor_/recovery_ are rebuilt from Settings by
     // rebuild_globalization_components(), NOT here: that construction runs
@@ -394,11 +407,15 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
 // consumers are alg_impl's dispatch and the per-phase reset() calls, both
 // inside run_phase_sequence()'s own call graph), and ClassicMeritAcceptance's
 // SolverContext captures (this->nlp_.get(), and primal_vars_/slack_vars_/
-// equal_cons_/inequal_cons_/kkt_dim_ by const reference) are already their
-// final values at run_phase_sequence() entry: set_nlp() always runs first
-// (run_phase_sequence() throws if nlp_ is unset) and is the only place those
-// members are written, so re-snapshotting them here at solve time reproduces
+// equal_cons_/inequal_cons_/kkt_dim_ by const reference) reproduce
 // bit-identical captures to the old per-transcription construction.
+//
+// Those dimension captures are BY REFERENCE, which is load-bearing now that the
+// fixed-variable treatment can narrow the problem after this call: the
+// configuration step later in run_phase_sequence() may rewrite primal_vars_ and
+// kkt_dim_, and every component reads the updated values through its reference.
+// A component that copied them here would be left describing a problem that no
+// longer exists.
 void tycho::solvers::PSIOPT::rebuild_globalization_components() {
     // (Re)build the optional feasibility-restoration mode-switch FIRST, so the
     // ClassicMeritAcceptance SolverContext below captures a valid (or null)
@@ -587,40 +604,6 @@ void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
                                       double mu) {
     std::fill_n(KKTmat.valuePtr(), KKTmat.nonZeros(), 0.0);
 
-    // Bound-fixed variables are pinned at their declared value and eliminated
-    // from the optimization (NonLinearProgram::configure_variable_treatment).
-    // Their stationarity row holds the bound multiplier that holds them there,
-    // which is not part of the reduced problem's optimality residual: clearing
-    // it makes the Newton right-hand side zero on that row -- matching the
-    // pinned unit KKT row the NLP assembles, so the step in that coordinate is
-    // exactly zero -- and keeps it out of every primal residual norm. That in
-    // turn means an eliminated variable's bound multiplier is NOT reported
-    // anywhere; the value cleared here is exactly the reduced-gradient residual
-    // at the solution.
-    //
-    // Applied at EVERY exit of this function, which is the single evaluation
-    // seam the whole solver passes through -- including the restoration branches
-    // below, which inject their own objective gradient after the NLP call and
-    // would otherwise re-populate these rows. No-op, and not even branched into,
-    // unless the NLP eliminated at least one variable.
-    //
-    // Scope of the guarantee, for whoever adds variable-bound barrier terms
-    // next: this seam clears the rows as they leave the NLP evaluation, but the
-    // Newton right-hand side is completed AFTER this function returns
-    // (`v_rhs.prim_grad() += PGX` in alg_impl). The slack barrier writes the
-    // DISJOINT dual_grad() block, so it cannot disturb these rows; a
-    // variable-bound barrier would write prim_grad() itself. That the rows are
-    // still zero at factorization time then holds because the NLP's BoundSet
-    // excludes eliminated variables -- no bound term is ever assembled for one --
-    // not because this clearing ran. Keep that exclusion, or move the clearing
-    // to the three completion sites.
-    auto clear_fixed_variable_rows = [&] {
-        if (this->nlp_->is_reduced()) {
-            this->nlp_->clear_fixed_variable_rows(GX.head(primal_vars_));
-            this->nlp_->clear_fixed_variable_rows(AGXS_FX.head(primal_vars_));
-        }
-    };
-
     // Feasibility-restoration evaluation seam. Dead on the default path
     // (restoration_ is null unless a restoration mode is selected). While
     // restoration is active the true objective is uniformly replaced by a
@@ -676,7 +659,6 @@ void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
                 mu, this->resto_ec_scratch_, this->resto_ic_scratch_,
                 XSL.segment(primal_vars_ + slack_vars_, ec), XSL.tail(ic),
                 AGXS_FX.segment(primal_vars_ + slack_vars_, ec), AGXS_FX.tail(ic));
-            clear_fixed_variable_rows();
             return;
         }
 
@@ -688,7 +670,6 @@ void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
         this->nlp_->set_primal_diags(0.0);
         val = this->restoration_->proximal_objective(XSL.head(primal_vars_));
         this->restoration_->add_proximal_gradient(XSL.head(primal_vars_), GX.head(primal_vars_));
-        clear_fixed_variable_rows();
         return;
     }
 
@@ -713,8 +694,6 @@ void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
     default:
         throw std::invalid_argument("Unknown AlgorithmMode");
     }
-
-    clear_fixed_variable_rows();
 }
 
 // Feasibility-restoration exit measures. Dead on the default path (only
@@ -2482,19 +2461,6 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     XSL.setZero();
     XSL.head(this->primal_vars_) = x;
 
-    // The one reinsertion seam for eliminated (bound-fixed) variables: overwrite
-    // the guess's value with the declared one here, and the iterate carries it
-    // from now on. The Newton step in those coordinates is structurally zero
-    // (pinned unit KKT row, cleared right-hand side row), so the value survives
-    // every step, and every downstream primal exposure -- the returned solution
-    // vector, the late callback's IterateInfo primals, every primal-exposing
-    // diagnostic -- reads the full-space form with the fixed values already in
-    // place. No second reinsertion exists or is needed. No-op, and not even
-    // branched into, on a problem with no fixed variables.
-    if (this->nlp_->is_reduced()) {
-        this->nlp_->pin_fixed_variables(XSL.head(this->primal_vars_));
-    }
-
     Eigen::VectorXd RHS(this->kkt_dim_);
     RHS.setZero();
     double val = 0;
@@ -2580,10 +2546,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
         throw std::runtime_error("PSIOPT::run_phase_sequence: no NLP has been set. "
                                  "Call set_nlp() before optimize/solve.");
     }
-    if (x.size() != primal_vars_) {
+    if (x.size() != full_primal_vars_) {
         throw std::invalid_argument(
             fmt::format("PSIOPT: initial guess has {} elements, expected {} primal variables",
-                        x.size(), primal_vars_));
+                        x.size(), full_primal_vars_));
     }
 
     this->result_.reset_accumulators();
@@ -2633,6 +2599,29 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
     mkl_set_num_threads_local(settings_.qp_threads_);
 #endif
 
+    // Classify the NLP's variable bounds for this solve, once, before any
+    // evaluation: free / lower-only / upper-only / two-sided / fixed, with every
+    // variable whose bounds are equal eliminated from the solver's variable
+    // space. The treatment and the bound relax factor are fixed here because the
+    // settings surface that selects between the treatments does not exist yet;
+    // when it does, these two arguments come from settings_.
+    //
+    // The call is idempotent and reports whether it rebuilt anything. When it
+    // did, the problem the solver is about to factorize is a different size than
+    // the one set_nlp analyzed, so the dimensions have to be re-read and the
+    // sparsity pattern recomputed -- and the symbolic analysis redone, since the
+    // matrix it was computed for no longer exists. A solver instance solving
+    // repeatedly against unchanged bounds takes none of this.
+    if (this->nlp_->configure_variable_treatment(FixedVariableTreatments::MakeParameter,
+                                                 kDefaultBoundRelaxFactor)) {
+        this->refresh_nlp_dimensions();
+        this->nlp_->analyze_sparsity(this->kkt_sol_.get_matrix());
+#ifdef USE_ACCELERATE_SPARSE
+        this->kkt_sol_.reinitialize_internal_matrix_representation();
+#endif
+        this->qp_analyzed_ = false;
+    }
+
     if (settings_.print_level_ == 0)
         print_stats();
     if (settings_.print_level_ < 2) {
@@ -2644,19 +2633,14 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
     tycho::utils::Timer t;
     t.start();
 
-    // Classify the NLP's variable bounds for this solve, once, before any
-    // evaluation: free / lower-only / upper-only / two-sided / fixed, with every
-    // variable whose bounds are equal eliminated from the optimization. The
-    // treatment and the bound relax factor are fixed here because the settings
-    // surface that selects between the treatments does not exist yet; when it
-    // does, these two arguments come from settings_. The call is idempotent, so
-    // a solver instance solving repeatedly pays for it only when the bounds or
-    // the sparsity pattern actually changed -- and re-classifies when they did.
-    this->nlp_->configure_variable_treatment(FixedVariableTreatments::MakeParameter,
-                                             kDefaultBoundRelaxFactor);
+    // Into the solver's space: the eliminated coordinates are dropped from the
+    // guess here, and their values live in the NLP until the solution is
+    // expanded again at the return below.
+    Eigen::VectorXd x_solver(this->primal_vars_);
+    this->nlp_->gather_reduced_x(x, x_solver);
 
     bool docompute = claim_kkt_analysis();
-    Eigen::VectorXd XSL = this->init_impl(x, settings_.init_mu_, docompute);
+    Eigen::VectorXd XSL = this->init_impl(x_solver, settings_.init_mu_, docompute);
 
     auto it = steps.begin();
     auto end = steps.end();
@@ -2749,7 +2733,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
             break;
         }
 
-        // Re-init for the next phase using stored primals
+        // Re-init for the next phase using stored primals. Still in the
+        // solver's space -- the expansion happens once, at the return below.
         if (!is_last) {
             XSL = this->init_impl(result_.primals_, settings_.init_mu_, false);
         }
@@ -2765,6 +2750,24 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
         fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.3f} ms\n", tottime);
         print_finished("PSIOPT ");
         print_header();
+    }
+
+    // THE reinsertion seam. Everything above ran in the solver's space; from
+    // here on the solution is in the caller's, with each eliminated variable
+    // back in its own coordinate at its declared value. Nothing else in this
+    // solver expands anything, and nothing needs to: result_.primals_ is the one
+    // primal vector that leaves.
+    //
+    // What is NOT expanded, deliberately: an eliminated variable's bound
+    // multiplier is not reported. Its value is the stationarity residual in the
+    // eliminated coordinate -- the gradient entry that the reduced problem
+    // simply has no row for -- and surfacing it belongs with the bound
+    // multipliers the barrier work introduces, which is where it will be
+    // computed alongside every other bound's.
+    if (this->nlp_->is_reduced()) {
+        Eigen::VectorXd primals_full(this->full_primal_vars_);
+        this->nlp_->scatter_full_x(result_.primals_, primals_full);
+        result_.primals_ = primals_full;
     }
 
     return result_.primals_;

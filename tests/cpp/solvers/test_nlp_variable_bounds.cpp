@@ -167,17 +167,12 @@ TEST(NlpVariableBounds, NanBoundThrowsImmediately) {
 namespace {
 
 // An NLP with no user functions at all: make_nlp still lays out the solver's
-// own KKT elements (one diagonal per primal variable), which is everything
-// configure_variable_treatment needs to address the eliminated rows. Keeps the
-// classification tests free of any function-evaluation machinery.
+// own KKT elements (one diagonal per primal variable), so the reduced layout is
+// observable through kkt_dim_ without any function-evaluation machinery.
 struct NlpVarBoundsBareNlp {
     NonLinearProgram nlp_{1};
-    Eigen::SparseMatrix<double, Eigen::RowMajor> kkt_;
 
-    void build(int num_vars) {
-        this->nlp_.make_nlp(num_vars, 0, 0);
-        this->nlp_.analyze_sparsity(this->kkt_);
-    }
+    void build(int num_vars) { this->nlp_.make_nlp(num_vars, 0, 0); }
 };
 
 // Relaxed form of a finite bound, mirroring the widening
@@ -299,6 +294,7 @@ TEST(NlpVarBoundsReduction, UnboundedProblemStaysUnreduced) {
 
     EXPECT_FALSE(problem.nlp_.is_reduced());
     EXPECT_EQ(problem.nlp_.reduced_primal_vars(), 4);
+    EXPECT_EQ(problem.nlp_.kkt_dim_, 4); // unchanged: nothing was eliminated
     EXPECT_FALSE(problem.nlp_.variable_bound_set().any());
     EXPECT_EQ(problem.nlp_.fixed_variable_indices().size(), 0);
     EXPECT_EQ(problem.nlp_.full_to_reduced().size(), 0);
@@ -352,6 +348,34 @@ TEST(NlpVarBoundsReduction, ClassificationSplitsBoundKinds) {
     EXPECT_DOUBLE_EQ(problem.nlp_.fixed_variable_values()[0], 4.0);
     EXPECT_TRUE(problem.nlp_.is_reduced());
     EXPECT_EQ(problem.nlp_.reduced_primal_vars(), 4);
+    EXPECT_EQ(problem.nlp_.kkt_dim_, 4); // one column and row fewer than the five declared
+}
+
+// The bound set is indexed in the space the solver iterates in, so a bound on a
+// variable that sits AFTER an eliminated one is renumbered. Index 0 is fixed and
+// indices 1 and 3 are bounded, which the reduced space calls 0 and 2.
+TEST(NlpVarBoundsReduction, BoundSetIndicesAreInTheReducedSpace) {
+    NlpVarBoundsBareNlp problem;
+    problem.nlp_.set_variable_bound(0, 1.0, 1.0);  // eliminated
+    problem.nlp_.set_variable_bound(1, -3.0, 3.0); // reduced index 0
+    problem.nlp_.set_variable_bound(3, 0.0, 8.0);  // reduced index 2
+    problem.build(4);
+    problem.nlp_.configure_variable_treatment(FixedVariableTreatments::MakeParameter, 0.0);
+
+    ASSERT_TRUE(problem.nlp_.is_reduced());
+    const auto &bounds = problem.nlp_.variable_bound_set();
+    ASSERT_EQ(bounds.lower_idx_.size(), 2);
+    EXPECT_EQ(bounds.lower_idx_[0], 0);
+    EXPECT_EQ(bounds.lower_idx_[1], 2);
+    EXPECT_DOUBLE_EQ(bounds.lower_val_[0], -3.0);
+    EXPECT_DOUBLE_EQ(bounds.lower_val_[1], 0.0);
+    ASSERT_EQ(bounds.upper_idx_.size(), 2);
+    EXPECT_EQ(bounds.upper_idx_[0], 0);
+    EXPECT_EQ(bounds.upper_idx_[1], 2);
+
+    // And they name the variables the caller declared them on.
+    EXPECT_EQ(problem.nlp_.reduced_to_full()[bounds.lower_idx_[0]], 1);
+    EXPECT_EQ(problem.nlp_.reduced_to_full()[bounds.lower_idx_[1]], 3);
 }
 
 // A zero relax factor records the declared bounds verbatim.
@@ -378,6 +402,7 @@ TEST(NlpVarBoundsReduction, InterleavedFixedVariablesMapCorrectly) {
 
     ASSERT_TRUE(problem.nlp_.is_reduced());
     EXPECT_EQ(problem.nlp_.reduced_primal_vars(), 3);
+    EXPECT_EQ(problem.nlp_.kkt_dim_, 3); // two of the five columns and rows are gone
 
     const auto &full_to_reduced = problem.nlp_.full_to_reduced();
     ASSERT_EQ(full_to_reduced.size(), 5);
@@ -417,24 +442,6 @@ TEST(NlpVarBoundsReduction, InterleavedFixedVariablesMapCorrectly) {
     EXPECT_DOUBLE_EQ(back[2], 2.0);
     EXPECT_DOUBLE_EQ(back[3], 10.0);
     EXPECT_DOUBLE_EQ(back[4], 3.0);
-
-    // pin_fixed_variables touches only the eliminated coordinates.
-    Eigen::VectorXd guess = Eigen::VectorXd::Constant(5, 0.5);
-    problem.nlp_.pin_fixed_variables(guess);
-    EXPECT_DOUBLE_EQ(guess[0], 0.5);
-    EXPECT_DOUBLE_EQ(guess[1], -2.0);
-    EXPECT_DOUBLE_EQ(guess[2], 0.5);
-    EXPECT_DOUBLE_EQ(guess[3], 10.0);
-    EXPECT_DOUBLE_EQ(guess[4], 0.5);
-
-    // clear_fixed_variable_rows does the same to a primal-row vector.
-    Eigen::VectorXd rows = Eigen::VectorXd::Constant(5, 3.0);
-    problem.nlp_.clear_fixed_variable_rows(rows);
-    EXPECT_DOUBLE_EQ(rows[0], 3.0);
-    EXPECT_DOUBLE_EQ(rows[1], 0.0);
-    EXPECT_DOUBLE_EQ(rows[2], 3.0);
-    EXPECT_DOUBLE_EQ(rows[3], 0.0);
-    EXPECT_DOUBLE_EQ(rows[4], 3.0);
 }
 
 // Re-entrancy: a repeat call with the same arguments and the same bound state
@@ -505,26 +512,30 @@ TEST(NlpVarBoundsReduction, InvalidRelaxFactorThrows) {
                  std::invalid_argument);
 }
 
-// Eliminating a variable addresses KKT storage locations, so it needs the
-// sparsity pattern. Without a fixed variable there is nothing to address and
-// the call succeeds.
-TEST(NlpVarBoundsReduction, FixedVariableWithoutSparsityAnalysisThrows) {
+// Configuration owns the whole layout rebuild, so it needs nothing to have been
+// prepared for it: a bare make_nlp is enough, and the KKT dimensions come back
+// narrowed on the spot.
+TEST(NlpVarBoundsReduction, ConfigurationRebuildsTheLayoutOnItsOwn) {
     NonLinearProgram nlp(1);
     nlp.set_variable_bound(1, 2.0, 2.0);
     nlp.make_nlp(3, 0, 0);
+    ASSERT_EQ(nlp.kkt_dim_, 3);
 
-    try {
-        nlp.configure_variable_treatment(FixedVariableTreatments::MakeParameter, 1.0e-8);
-        FAIL() << "expected std::invalid_argument without an analyzed sparsity pattern";
-    } catch (const std::invalid_argument &e) {
-        EXPECT_NE(std::string(e.what()).find("analyze_sparsity"), std::string::npos) << e.what();
-    }
+    EXPECT_TRUE(nlp.configure_variable_treatment(FixedVariableTreatments::MakeParameter, 1.0e-8));
+    EXPECT_TRUE(nlp.is_reduced());
+    EXPECT_EQ(nlp.reduced_primal_vars(), 2);
+    EXPECT_EQ(nlp.kkt_dim_, 2);
+
+    // A repeat call rebuilds nothing and says so.
+    EXPECT_FALSE(nlp.configure_variable_treatment(FixedVariableTreatments::MakeParameter, 1.0e-8));
 
     NonLinearProgram unbounded(1);
     unbounded.make_nlp(3, 0, 0);
-    EXPECT_NO_THROW(
+    // Nothing to eliminate: no rebuild, and the layout is untouched.
+    EXPECT_FALSE(
         unbounded.configure_variable_treatment(FixedVariableTreatments::MakeParameter, 1.0e-8));
     EXPECT_FALSE(unbounded.is_reduced());
+    EXPECT_EQ(unbounded.kkt_dim_, 3);
 }
 
 TEST(NlpVarBoundsReduction, InfiniteFixingValueThrows) {
@@ -561,6 +572,7 @@ TEST(NlpVarBoundsReduction, UnboundedQpSolvesWithoutReduction) {
     EXPECT_EQ(outcome.flag_, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_FALSE(nlp->is_reduced());
     EXPECT_EQ(nlp->reduced_primal_vars(), nlp->primal_vars_);
+    EXPECT_EQ(nlp->kkt_dim_, nlp->primal_vars_ + nlp->equal_cons_);
     EXPECT_NEAR(outcome.solution_[0], 2.0, 1e-6);
     EXPECT_NEAR(outcome.solution_[1], 2.0, 1e-6);
     EXPECT_NEAR(outcome.solution_[2], 4.0, 1e-6);
@@ -599,6 +611,11 @@ TEST(NlpVarBoundsReduction, FixedVariableQpMatchesHandEliminatedProblem) {
     EXPECT_EQ(outcome.flag_, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_TRUE(nlp->is_reduced());
     EXPECT_EQ(nlp->reduced_primal_vars(), 2);
+    // One variable eliminated: the factorized system is exactly one row and
+    // column narrower than the declared problem's.
+    EXPECT_EQ(nlp->kkt_dim_, (nlp->primal_vars_ - 1) + nlp->equal_cons_);
+    // ... and the solution still comes back in the caller's own space.
+    EXPECT_EQ(outcome.solution_.size(), nlp->primal_vars_);
 
     // The pinned value is exact, not merely converged to.
     EXPECT_DOUBLE_EQ(outcome.solution_[1], 7.0);
@@ -647,6 +664,8 @@ TEST(NlpVarBoundsReduction, FixedVariableCoupledThroughObjectiveHessian) {
     EXPECT_EQ(outcome.flag_, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_TRUE(nlp->is_reduced());
     EXPECT_EQ(nlp->reduced_primal_vars(), 2);
+    EXPECT_EQ(nlp->kkt_dim_, (nlp->primal_vars_ - 1) + nlp->equal_cons_);
+    EXPECT_EQ(outcome.solution_.size(), nlp->primal_vars_);
 
     EXPECT_DOUBLE_EQ(outcome.solution_[1], 7.0);
     EXPECT_NEAR(outcome.solution_[0], reference.solution_[0], 1e-6);
@@ -690,6 +709,8 @@ TEST(NlpVarBoundsReduction, FixedVariableInsideConstraintJacobian) {
     EXPECT_EQ(outcome.flag_, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_TRUE(nlp->is_reduced());
     EXPECT_EQ(nlp->reduced_primal_vars(), 2);
+    EXPECT_EQ(nlp->kkt_dim_, (nlp->primal_vars_ - 1) + nlp->equal_cons_);
+    EXPECT_EQ(outcome.solution_.size(), nlp->primal_vars_);
 
     EXPECT_DOUBLE_EQ(outcome.solution_[1], 7.0);
     EXPECT_NEAR(outcome.solution_[0], reference.solution_[0], 1e-6);
@@ -716,6 +737,9 @@ TEST(NlpVarBoundsReduction, TwoInterleavedFixedVariablesSolve) {
     EXPECT_EQ(outcome.flag_, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_TRUE(nlp->is_reduced());
     EXPECT_EQ(nlp->reduced_primal_vars(), 3);
+    // Two eliminated: two rows and columns fewer than the declared problem's.
+    EXPECT_EQ(nlp->kkt_dim_, (nlp->primal_vars_ - 2) + nlp->equal_cons_);
+    EXPECT_EQ(outcome.solution_.size(), nlp->primal_vars_);
 
     EXPECT_DOUBLE_EQ(outcome.solution_[1], -2.0);
     EXPECT_DOUBLE_EQ(outcome.solution_[3], 10.0);
@@ -749,6 +773,7 @@ TEST(NlpVarBoundsReduction, SecondSolveAfterBoundChangeUsesTheNewValue) {
 
     EXPECT_EQ(opt.result().converge_flag_, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_TRUE(nlp->is_reduced());
+    EXPECT_EQ(nlp->kkt_dim_, (nlp->primal_vars_ - 1) + nlp->equal_cons_);
     EXPECT_DOUBLE_EQ(second[1], 9.0);
     EXPECT_NEAR(second[0], 2.0, 1e-6);
     EXPECT_NEAR(second[2], 4.0, 1e-6);
@@ -760,5 +785,7 @@ TEST(NlpVarBoundsReduction, SecondSolveAfterBoundChangeUsesTheNewValue) {
     Eigen::VectorXd third = opt.optimize(Eigen::VectorXd::Zero(3));
     EXPECT_EQ(opt.result().converge_flag_, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_FALSE(nlp->is_reduced());
+    // Back to the full layout, and the solver re-analyzed for it.
+    EXPECT_EQ(nlp->kkt_dim_, nlp->primal_vars_ + nlp->equal_cons_);
     EXPECT_NEAR(third[1], 2.0, 1e-6);
 }

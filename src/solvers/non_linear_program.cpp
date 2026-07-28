@@ -24,6 +24,16 @@ void tycho::solvers::NonLinearProgram::make_nlp(int PV, int EQ, int IQ) {
     this->inequal_cons_ = IQ;
     this->slack_vars_ = IQ;
 
+    // Everything below is laid out over the full variable space. A previous
+    // configuration's reduction does not survive a re-transcription: its output
+    // maps are dropped and its structures are about to be rebuilt from scratch,
+    // so the next configure_variable_treatment call starts from the pristine
+    // state and re-derives whatever the new bounds call for.
+    this->reduced_primal_vars_count_ = PV;
+    this->fixed_reduction_active_ = false;
+    this->fixed_treatment_valid_ = false;
+    this->clear_function_output_maps();
+
     this->materialize_variable_bounds();
 
     this->count_elems();
@@ -41,12 +51,66 @@ void tycho::solvers::NonLinearProgram::make_nlp(int PV, int EQ, int IQ) {
     }
 
     this->analyze_partitioning();
+    this->rebuild_structures();
+}
+
+void tycho::solvers::NonLinearProgram::rebuild_structures() {
     this->set_mat_dimensions();
     this->set_rhs_dimensions();
 
     this->get_mat_space();
     this->get_rhs_space();
     this->finalize_data();
+}
+
+void tycho::solvers::NonLinearProgram::clear_function_output_maps() {
+    auto clear_all = [](auto &funcs) {
+        for (auto &func : funcs) {
+            func.index_data_.clear_output_v_index();
+        }
+    };
+    for (int i = 0; i < static_cast<int>(this->part_obj_.size()); i++) {
+        clear_all(this->part_obj_[i]);
+    }
+    for (int i = 0; i < static_cast<int>(this->part_eq_.size()); i++) {
+        clear_all(this->part_eq_[i]);
+    }
+    for (int i = 0; i < static_cast<int>(this->part_iq_.size()); i++) {
+        clear_all(this->part_iq_[i]);
+    }
+}
+
+void tycho::solvers::NonLinearProgram::install_function_output_maps() {
+    // Always regenerated from the pristine input map, never edited in place, so
+    // repeated configuration cannot compound a previous remapping.
+    auto install = [&](auto &funcs) {
+        for (auto &func : funcs) {
+            const Eigen::MatrixXi &v_in = func.index_data_.get_v_index();
+            Eigen::MatrixXi v_out(v_in.rows(), v_in.cols());
+            for (int col = 0; col < v_in.cols(); col++) {
+                for (int row = 0; row < v_in.rows(); row++) {
+                    const int global = v_in(row, col);
+                    if (global < 0 || global >= this->primal_vars_) {
+                        throw std::logic_error(fmt::format(
+                            "configure_variable_treatment: function variable index {0} is "
+                            "outside [0, {1})",
+                            global, this->primal_vars_));
+                    }
+                    v_out(row, col) = this->full_to_reduced_[global];
+                }
+            }
+            func.index_data_.set_output_v_index(v_out);
+        }
+    };
+    for (int i = 0; i < static_cast<int>(this->part_obj_.size()); i++) {
+        install(this->part_obj_[i]);
+    }
+    for (int i = 0; i < static_cast<int>(this->part_eq_.size()); i++) {
+        install(this->part_eq_[i]);
+    }
+    for (int i = 0; i < static_cast<int>(this->part_iq_.size()); i++) {
+        install(this->part_iq_[i]);
+    }
 }
 
 void tycho::solvers::NonLinearProgram::materialize_variable_bounds() {
@@ -182,8 +246,8 @@ void tycho::solvers::NonLinearProgram::get_mat_space() {
 
     int KKTfreeloc = 0;
 
-    int eqoffset = this->primal_vars_ + this->slack_vars_;
-    int iqoffset = this->primal_vars_ + this->slack_vars_ + this->equal_cons_;
+    int eqoffset = this->reduced_primal_vars_count_ + this->slack_vars_;
+    int iqoffset = this->reduced_primal_vars_count_ + this->slack_vars_ + this->equal_cons_;
     for (int i = 0; i < this->num_partitions_; i++) {
         int kkstart = KKTfreeloc;
 
@@ -215,6 +279,13 @@ void tycho::solvers::NonLinearProgram::get_mat_space() {
     Eigen::MatrixXi KKTclash(this->num_partitions_, this->kkt_dim_);
     KKTclash.setZero();
     for (int i = 0; i < this->num_user_kkt_elems_; i++) {
+        // An element belonging to an eliminated variable names no matrix entry
+        // (get_kkt_space recorded it as (-1, -1)) and is never written, so it
+        // must not mark a column contested either. Its own column does not exist
+        // in this space at all.
+        if (this->kkt_coeff_rows_[i] < 0 || this->kkt_coeff_cols_[i] < 0) {
+            continue;
+        }
         int lockcol = kkt_canonical_lock_col(this->kkt_coeff_rows_[i], this->kkt_coeff_cols_[i]);
         int thrid = this->kkt_coeff_part_ids_[i];
         KKTclash(thrid, lockcol) = 1;
@@ -258,22 +329,25 @@ void tycho::solvers::NonLinearProgram::get_rhs_space() {
 }
 
 void tycho::solvers::NonLinearProgram::set_mat_dimensions() {
-    this->kkt_dim_ =
-        this->primal_vars_ + this->slack_vars_ + this->equal_cons_ + this->inequal_cons_;
+    // Sized over the space the solver actually factorizes: the full variable
+    // space until a configuration eliminates bound-fixed variables from it.
+    this->kkt_dim_ = this->reduced_primal_vars_count_ + this->slack_vars_ + this->equal_cons_ +
+                     this->inequal_cons_;
 
     ////////////////// This is the storage order of Solver data/////////////////
     ////////////////////////////////////////////////////////////////////////////
-    this->num_solver_kkt_elems_ = this->slack_vars_      // solver ijac slack ones
-                                  + this->primal_vars_   // solver primal hessian diags
-                                  + this->slack_vars_    // solver slack hessian diags
-                                  + this->equal_cons_    // solver equal pivots
-                                  + this->inequal_cons_; // solver inequal pivots
+    this->num_solver_kkt_elems_ = this->slack_vars_                  // solver ijac slack ones
+                                  + this->reduced_primal_vars_count_ // solver primal hess diags
+                                  + this->slack_vars_                // solver slack hessian diags
+                                  + this->equal_cons_                // solver equal pivots
+                                  + this->inequal_cons_;             // solver inequal pivots
     /////////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////////////////////////
 
     this->slack_jac_data_start_ = 0;
     this->primal_diags_data_start_ = this->slack_jac_data_start_ + this->slack_vars_;
-    this->slack_diag_data_start_ = this->primal_diags_data_start_ + this->primal_vars_;
+    this->slack_diag_data_start_ =
+        this->primal_diags_data_start_ + this->reduced_primal_vars_count_;
     this->e_pivot_data_start_ = this->slack_diag_data_start_ + this->slack_vars_;
     this->i_pivot_data_start_ = this->e_pivot_data_start_ + this->equal_cons_;
 
@@ -287,11 +361,6 @@ void tycho::solvers::NonLinearProgram::set_mat_dimensions() {
     this->kkt_coeff_cols_ = Eigen::VectorXi::Constant(this->num_kkt_elems_, -1);
     this->kkt_coeff_part_ids_ = Eigen::VectorXi::Constant(this->num_kkt_elems_, 0);
     this->kkt_locations_ = Eigen::VectorXi::Constant(this->num_kkt_elems_, -1);
-
-    // kkt_locations_ has just been discarded, so there is no analyzed pattern
-    // any more and no fixed-variable pin list can still be addressing it.
-    this->sparsity_analyzed_ = false;
-    this->invalidate_variable_treatment();
 
     this->solver_coeffs_ = Eigen::VectorXd::Constant(this->num_solver_kkt_elems_, 0);
     ///////////////////////////////////////////////////////////////////////////////////
@@ -312,28 +381,29 @@ void tycho::solvers::NonLinearProgram::set_rhs_dimensions() {
 }
 
 void tycho::solvers::NonLinearProgram::finalize_data() {
-    for (int i = 0; i < this->primal_vars_; i++) {
+    // Solver-owned elements sit at fixed offsets in the space being factorized,
+    // so every offset here counts from the solver's primal width.
+    const int pv = this->reduced_primal_vars_count_;
+
+    for (int i = 0; i < pv; i++) {
         this->primal_diag_coeff_cols()[i] = i;
         this->primal_diag_coeff_rows()[i] = i;
     }
 
     for (int i = 0; i < this->equal_cons_; i++) {
-        this->e_pivot_coeff_cols()[i] = this->primal_vars_ + this->slack_vars_ + i;
-        this->e_pivot_coeff_rows()[i] = this->primal_vars_ + this->slack_vars_ + i;
+        this->e_pivot_coeff_cols()[i] = pv + this->slack_vars_ + i;
+        this->e_pivot_coeff_rows()[i] = pv + this->slack_vars_ + i;
     }
 
     for (int i = 0; i < this->inequal_cons_; i++) {
-        this->slack_coeff_cols()[i] = this->primal_vars_ + i;
-        this->slack_coeff_rows()[i] =
-            this->primal_vars_ + this->slack_vars_ + this->equal_cons_ + i;
+        this->slack_coeff_cols()[i] = pv + i;
+        this->slack_coeff_rows()[i] = pv + this->slack_vars_ + this->equal_cons_ + i;
 
-        this->slack_diag_coeff_cols()[i] = this->primal_vars_ + i;
-        this->slack_diag_coeff_rows()[i] = this->primal_vars_ + i;
+        this->slack_diag_coeff_cols()[i] = pv + i;
+        this->slack_diag_coeff_rows()[i] = pv + i;
 
-        this->i_pivot_coeff_cols()[i] =
-            this->primal_vars_ + this->slack_vars_ + this->equal_cons_ + i;
-        this->i_pivot_coeff_rows()[i] =
-            this->primal_vars_ + this->slack_vars_ + this->equal_cons_ + i;
+        this->i_pivot_coeff_cols()[i] = pv + this->slack_vars_ + this->equal_cons_ + i;
+        this->i_pivot_coeff_rows()[i] = pv + this->slack_vars_ + this->equal_cons_ + i;
     }
 }
 
@@ -358,6 +428,17 @@ void tycho::solvers::NonLinearProgram::analyze_sparsity(
         for (int i = start; i < stop; i++) {
             int row = this->kkt_coeff_rows_[i];
             int col = this->kkt_coeff_cols_[i];
+            if (row < 0 || col < 0) {
+                // Element of an eliminated variable. It keeps its claim so the
+                // scatter's cursor still walks the claims in lockstep, but it
+                // names no matrix entry: this placeholder adds 0.0 to a slot
+                // that always exists (index 0's own diagonal, which the solver
+                // elements always occupy) and its location is left at -1, which
+                // the scatter reads as "step over". This is why the eliminated
+                // variable's row and column are simply absent from the pattern.
+                kktvec[i] = Eigen::Triplet<double>(0, 0, 0.0);
+                continue;
+            }
             if (col <= row) { //// only accept lower triangular part
                 kktvec[i] = Eigen::Triplet<double>(col, row, 1.0);
             } else {
@@ -383,6 +464,9 @@ void tycho::solvers::NonLinearProgram::analyze_sparsity(
         for (int i = start; i < stop; i++) {
             int row = this->kkt_coeff_rows_(i);
             int col = this->kkt_coeff_cols_(i);
+            if (row < 0 || col < 0) {
+                continue; // eliminated element: its location stays -1
+            }
             if (col <= row) { //// only accept lower triangular part
                 for (int k = 0; k < innerKKTNNZ[col]; k++) {
                     int trow = KKTmat.innerIndexPtr()[KKTmat.outerIndexPtr()[col] + k];
@@ -397,15 +481,9 @@ void tycho::solvers::NonLinearProgram::analyze_sparsity(
 
     tycho::utils::parallel_blocks(this->num_kkt_elems_, FindOP, this->num_partitions_);
     /////////////////////////////////////////////////////////////
-
-    // kkt_locations_ has just been recomputed, so any fixed-variable pin lists
-    // built against the previous pattern now address the wrong slots. Force the
-    // next configure_variable_treatment call to rebuild them.
-    this->sparsity_analyzed_ = true;
-    this->invalidate_variable_treatment();
 }
 
-void tycho::solvers::NonLinearProgram::configure_variable_treatment(
+bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
     FixedVariableTreatments treatment, double bound_relax_factor) {
 
     if (treatment != FixedVariableTreatments::MakeParameter) {
@@ -423,18 +501,19 @@ void tycho::solvers::NonLinearProgram::configure_variable_treatment(
                         bound_relax_factor));
     }
 
-    // Idempotence: same treatment, same relax factor, same bound state, same
-    // sparsity pattern -> the state already on hand is the answer.
+    // Idempotence: same treatment, same relax factor, same bound state -> the
+    // structures already on hand are the answer, and nothing was rebuilt.
     if (this->fixed_treatment_valid_ && this->variable_treatment_ == treatment &&
         this->bound_relax_factor_ == bound_relax_factor &&
         this->configured_bounds_revision_ == this->bounds_revision_) {
-        return;
+        return false;
     }
 
     this->variable_treatment_ = treatment;
     this->bound_relax_factor_ = bound_relax_factor;
 
     const int num_vars = this->primal_vars_;
+    const bool was_reduced = this->fixed_reduction_active_;
     constexpr double kInf = std::numeric_limits<double>::infinity();
 
     this->variable_bound_set_.clear();
@@ -442,39 +521,28 @@ void tycho::solvers::NonLinearProgram::configure_variable_treatment(
     this->reduced_to_full_.resize(0);
     this->fixed_idx_.resize(0);
     this->fixed_vals_.resize(0);
-    this->fixed_kkt_slots_.resize(0);
-    this->fixed_diag_slots_.resize(0);
-    this->fixed_reduction_active_ = false;
-    this->reduced_primal_vars_count_ = num_vars;
 
     const bool bounds_materialized =
         (num_vars > 0 && this->x_lower_.size() == num_vars && this->x_upper_.size() == num_vars);
 
-    if (!bounds_materialized) {
-        this->fixed_treatment_valid_ = true;
-        this->configured_bounds_revision_ = this->bounds_revision_;
-        return;
-    }
-
     // --- Classification -------------------------------------------------
     int num_fixed = 0;
-    for (int i = 0; i < num_vars; i++) {
-        if (this->x_lower_[i] == this->x_upper_[i]) {
-            if (!std::isfinite(this->x_lower_[i])) {
-                throw std::invalid_argument(
-                    fmt::format("configure_variable_treatment: variable {0} has equal but "
-                                "non-finite bounds ({1}); a fixed variable needs a finite value",
-                                i, this->x_lower_[i]));
+    if (bounds_materialized) {
+        for (int i = 0; i < num_vars; i++) {
+            if (this->x_lower_[i] == this->x_upper_[i]) {
+                if (!std::isfinite(this->x_lower_[i])) {
+                    throw std::invalid_argument(fmt::format(
+                        "configure_variable_treatment: variable {0} has equal but non-finite "
+                        "bounds ({1}); a fixed variable needs a finite value",
+                        i, this->x_lower_[i]));
+                }
+                num_fixed++;
             }
-            num_fixed++;
         }
     }
 
-    std::vector<int> lower_idx;
-    std::vector<double> lower_val;
-    std::vector<int> upper_idx;
-    std::vector<double> upper_val;
-
+    // The maps exist whenever anything is eliminated; on the identity path they
+    // stay empty and every consumer treats the mapping as the identity.
     if (num_fixed > 0) {
         this->fixed_idx_.resize(num_fixed);
         this->fixed_vals_.resize(num_fixed);
@@ -482,9 +550,14 @@ void tycho::solvers::NonLinearProgram::configure_variable_treatment(
         this->reduced_to_full_.resize(num_vars - num_fixed);
     }
 
+    std::vector<int> lower_idx;
+    std::vector<double> lower_val;
+    std::vector<int> upper_idx;
+    std::vector<double> upper_val;
+
     int next_reduced = 0;
     int next_fixed = 0;
-    for (int i = 0; i < num_vars; i++) {
+    for (int i = 0; i < (bounds_materialized ? num_vars : 0); i++) {
         const double lower = this->x_lower_[i];
         const double upper = this->x_upper_[i];
 
@@ -499,21 +572,19 @@ void tycho::solvers::NonLinearProgram::configure_variable_treatment(
             this->full_to_reduced_[i] = next_reduced;
             this->reduced_to_full_[next_reduced] = i;
         }
-        next_reduced++;
 
-        // Record the surviving finite bounds, widened by the relax factor so
-        // consumers never have to re-apply it.
+        // Recorded in the space the solver iterates in, and widened by the relax
+        // factor so consumers never have to re-apply it.
         if (lower > -kInf) {
-            lower_idx.push_back(i);
+            lower_idx.push_back(next_reduced);
             lower_val.push_back(lower - bound_relax_factor * std::max(1.0, std::abs(lower)));
         }
         if (upper < kInf) {
-            upper_idx.push_back(i);
+            upper_idx.push_back(next_reduced);
             upper_val.push_back(upper + bound_relax_factor * std::max(1.0, std::abs(upper)));
         }
+        next_reduced++;
     }
-
-    this->reduced_primal_vars_count_ = next_reduced;
 
     auto fill_bound_list = [](const std::vector<int> &idx, const std::vector<double> &val,
                               Eigen::VectorXi &idx_out, Eigen::VectorXd &val_out) {
@@ -530,90 +601,53 @@ void tycho::solvers::NonLinearProgram::configure_variable_treatment(
     fill_bound_list(upper_idx, upper_val, this->variable_bound_set_.upper_idx_,
                     this->variable_bound_set_.upper_val_);
 
-    if (num_fixed == 0) {
-        // Identity path: no maps, no pin lists, no per-assembly work.
-        this->fixed_treatment_valid_ = true;
-        this->configured_bounds_revision_ = this->bounds_revision_;
-        return;
-    }
-
-    // --- Reduction: KKT slot lists for the eliminated rows/columns -------
-    if (!this->sparsity_analyzed_) {
-        throw std::invalid_argument(fmt::format(
-            "configure_variable_treatment: {0} variable(s) are fixed by their bounds, but the "
-            "KKT sparsity pattern has not been computed yet. Call analyze_sparsity() (PSIOPT "
-            "does this in set_nlp) before configuring the fixed-variable treatment.",
-            num_fixed));
-    }
-    if (this->kkt_dim_ !=
-        this->primal_vars_ + this->slack_vars_ + this->equal_cons_ + this->inequal_cons_) {
-        throw std::logic_error(fmt::format(
-            "configure_variable_treatment: kkt_dim ({0}) != primal_vars ({1}) + slack_vars "
-            "({2}) + equal_cons ({3}) + inequal_cons ({4})",
-            this->kkt_dim_, this->primal_vars_, this->slack_vars_, this->equal_cons_,
-            this->inequal_cons_));
-    }
-    if (this->num_kkt_elems_ != this->num_user_kkt_elems_ + this->num_solver_kkt_elems_ ||
-        this->kkt_locations_.size() != this->num_kkt_elems_) {
-        throw std::logic_error(
-            fmt::format("configure_variable_treatment: KKT element bookkeeping is inconsistent "
-                        "(num_kkt_elems {0}, user {1}, solver {2}, locations {3})",
-                        this->num_kkt_elems_, this->num_user_kkt_elems_,
-                        this->num_solver_kkt_elems_, this->kkt_locations_.size()));
-    }
-
-    std::vector<char> is_fixed(num_vars, 0);
-    for (int j = 0; j < num_fixed; j++) {
-        is_fixed[this->fixed_idx_[j]] = 1;
-    }
-
-    // Every user element whose row OR column is an eliminated variable. The
-    // stored pattern is one triangle of a symmetric matrix, so testing both
-    // endpoints covers the eliminated variable's row and its column.
-    std::vector<int> slots;
-    for (int e = 0; e < this->num_user_kkt_elems_; e++) {
-        const int row = this->kkt_coeff_rows_[e];
-        const int col = this->kkt_coeff_cols_[e];
-        const bool touches_fixed = (row >= 0 && row < num_vars && is_fixed[row]) ||
-                                   (col >= 0 && col < num_vars && is_fixed[col]);
-        if (!touches_fixed) {
-            continue;
-        }
-        const int loc = this->kkt_locations_[e];
-        if (loc < 0) {
-            throw std::logic_error(
-                fmt::format("configure_variable_treatment: KKT element {0} (row {1}, col {2}) "
-                            "has no assigned storage location",
-                            e, row, col));
-        }
-        slots.push_back(loc);
-    }
-    std::sort(slots.begin(), slots.end());
-    slots.erase(std::unique(slots.begin(), slots.end()), slots.end());
-
-    this->fixed_kkt_slots_.resize(static_cast<int>(slots.size()));
-    for (int i = 0; i < static_cast<int>(slots.size()); i++) {
-        this->fixed_kkt_slots_[i] = slots[i];
-    }
-
-    // The eliminated diagonals come from the solver-owned primal-diagonal block,
-    // which finalize_data laid out at (i, i) for every primal variable.
-    const int pdiag_base = this->primal_diags_data_start_ + this->num_user_kkt_elems_;
-    this->fixed_diag_slots_.resize(num_fixed);
-    for (int j = 0; j < num_fixed; j++) {
-        const int loc = this->kkt_locations_[pdiag_base + this->fixed_idx_[j]];
-        if (loc < 0) {
-            throw std::logic_error(
-                fmt::format("configure_variable_treatment: primal diagonal of variable {0} has "
-                            "no assigned storage location",
-                            this->fixed_idx_[j]));
-        }
-        this->fixed_diag_slots_[j] = loc;
-    }
-
-    this->fixed_reduction_active_ = true;
     this->fixed_treatment_valid_ = true;
     this->configured_bounds_revision_ = this->bounds_revision_;
+
+    // --- Reduction ------------------------------------------------------
+    if (num_fixed == 0) {
+        this->reduced_primal_vars_count_ = num_vars;
+        this->fixed_reduction_active_ = false;
+        if (!was_reduced) {
+            return false; // identity path, and it already was: nothing to rebuild
+        }
+        // The last fixed bound was dropped. Put every function back on its
+        // pristine input map and lay the structures out over the full space.
+        this->clear_function_output_maps();
+        this->rebuild_structures();
+        return true;
+    }
+
+    if (num_fixed == num_vars) {
+        // Nothing would be left to solve for, and a zero-width primal block is
+        // not a system this solver can lay out. Caught here rather than as a
+        // degenerate factorization later.
+        throw std::invalid_argument(
+            fmt::format("configure_variable_treatment: all {0} primal variables are fixed by "
+                        "their bounds, leaving no variable to solve for",
+                        num_vars));
+    }
+
+    this->reduced_primal_vars_count_ = num_vars - num_fixed;
+    this->fixed_reduction_active_ = true;
+    this->install_function_output_maps();
+    this->rebuild_structures();
+
+    if (this->kkt_dim_ != this->reduced_primal_vars_count_ + this->slack_vars_ + this->equal_cons_ +
+                              this->inequal_cons_) {
+        throw std::logic_error(fmt::format(
+            "configure_variable_treatment: kkt_dim ({0}) != reduced primal_vars ({1}) + "
+            "slack_vars ({2}) + equal_cons ({3}) + inequal_cons ({4})",
+            this->kkt_dim_, this->reduced_primal_vars_count_, this->slack_vars_, this->equal_cons_,
+            this->inequal_cons_));
+    }
+    if (this->num_kkt_elems_ != this->num_user_kkt_elems_ + this->num_solver_kkt_elems_) {
+        throw std::logic_error(fmt::format(
+            "configure_variable_treatment: KKT element bookkeeping is inconsistent "
+            "(num_kkt_elems {0}, user {1}, solver {2})",
+            this->num_kkt_elems_, this->num_user_kkt_elems_, this->num_solver_kkt_elems_));
+    }
+    return true;
 }
 
 void tycho::solvers::NonLinearProgram::gather_reduced_x(ConstEigenRef<VectorXd> x_full,
@@ -655,40 +689,19 @@ void tycho::solvers::NonLinearProgram::scatter_full_x(ConstEigenRef<VectorXd> x_
     }
 }
 
-void tycho::solvers::NonLinearProgram::pin_fixed_variables(EigenRef<VectorXd> x_full) const {
-    if (!this->fixed_reduction_active_) {
-        return;
-    }
-    if (x_full.size() != this->primal_vars_) {
-        throw std::invalid_argument(
-            fmt::format("pin_fixed_variables: expected a {0}-element primal vector (got {1})",
-                        this->primal_vars_, x_full.size()));
-    }
-    for (int j = 0; j < this->fixed_idx_.size(); j++) {
-        x_full[this->fixed_idx_[j]] = this->fixed_vals_[j];
-    }
-}
-
-void tycho::solvers::NonLinearProgram::clear_fixed_variable_rows(
-    EigenRef<VectorXd> primal_rows) const {
-    if (!this->fixed_reduction_active_) {
-        return;
-    }
-    if (primal_rows.size() != this->primal_vars_) {
-        throw std::invalid_argument(fmt::format(
-            "clear_fixed_variable_rows: expected a {0}-element primal-row vector (got {1})",
-            this->primal_vars_, primal_rows.size()));
-    }
-    for (int j = 0; j < this->fixed_idx_.size(); j++) {
-        primal_rows[this->fixed_idx_[j]] = 0.0;
-    }
-}
-
 void tycho::solvers::NonLinearProgram::eval_rhs(double ObjScale, ConstEigenRef<VectorXd> X,
                                                 ConstEigenRef<VectorXd> LE,
                                                 ConstEigenRef<VectorXd> LI, double &val,
                                                 EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
                                                 EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI) {
+    // The functions address the problem's own variable space. primal_view hands
+    // them a buffer in it: on the identity path a view of X itself, and once
+    // variables are eliminated the reduced iterate expanded back into its own
+    // coordinates with the pinned values in place. Nothing downstream of here
+    // can tell the difference, which is why eliminated variables' contributions
+    // to constraint values and to the surviving variables' derivatives need no
+    // handling of their own.
+    const Eigen::Ref<const VectorXd> Xf = this->primal_view(X);
 
     this->vals_scratch_.assign(this->num_partitions_, 0.0);
     this->set_rhs_coeffs_zero();
@@ -696,11 +709,11 @@ void tycho::solvers::NonLinearProgram::eval_rhs(double ObjScale, ConstEigenRef<V
     auto RHSevalOP = [&](int thrnum) {
         double localVal = 0.0;
         for (auto &Obj : this->part_obj_[thrnum])
-            Obj.objective_gradient(ObjScale, X, localVal, this->pgx_coeffs());
+            Obj.objective_gradient(ObjScale, Xf, localVal, this->pgx_coeffs());
         for (auto &Con : this->part_eq_[thrnum])
-            Con.constraints_adjointgradient(X, LE, this->econ_coeffs(), this->agx_coeffs());
+            Con.constraints_adjointgradient(Xf, LE, this->econ_coeffs(), this->agx_coeffs());
         for (auto &Con : this->part_iq_[thrnum])
-            Con.constraints_adjointgradient(X, LI, this->icon_coeffs(), this->agx_coeffs());
+            Con.constraints_adjointgradient(Xf, LI, this->icon_coeffs(), this->agx_coeffs());
         this->vals_scratch_[thrnum] = localVal;
     };
 
@@ -714,6 +727,14 @@ void tycho::solvers::NonLinearProgram::eval_rhs(double ObjScale, ConstEigenRef<V
 void tycho::solvers::NonLinearProgram::eval_ogc(double ObjScale, ConstEigenRef<VectorXd> X,
                                                 double &val, EigenRef<VectorXd> PGX,
                                                 EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI) {
+    // The functions address the problem's own variable space. primal_view hands
+    // them a buffer in it: on the identity path a view of X itself, and once
+    // variables are eliminated the reduced iterate expanded back into its own
+    // coordinates with the pinned values in place. Nothing downstream of here
+    // can tell the difference, which is why eliminated variables' contributions
+    // to constraint values and to the surviving variables' derivatives need no
+    // handling of their own.
+    const Eigen::Ref<const VectorXd> Xf = this->primal_view(X);
 
     this->vals_scratch_.assign(this->num_partitions_, 0.0);
     this->set_rhs_coeffs_zero();
@@ -721,11 +742,11 @@ void tycho::solvers::NonLinearProgram::eval_ogc(double ObjScale, ConstEigenRef<V
     auto OGCevalOP = [&](int thrnum) {
         double localVal = 0.0;
         for (auto &Obj : this->part_obj_[thrnum])
-            Obj.objective_gradient(ObjScale, X, localVal, this->pgx_coeffs());
+            Obj.objective_gradient(ObjScale, Xf, localVal, this->pgx_coeffs());
         for (auto &Con : this->part_eq_[thrnum])
-            Con.constraints(X, this->econ_coeffs());
+            Con.constraints(Xf, this->econ_coeffs());
         for (auto &Con : this->part_iq_[thrnum])
-            Con.constraints(X, this->icon_coeffs());
+            Con.constraints(Xf, this->icon_coeffs());
         this->vals_scratch_[thrnum] = localVal;
     };
 
@@ -741,17 +762,25 @@ void tycho::solvers::NonLinearProgram::eval_ogc(double ObjScale, ConstEigenRef<V
 void tycho::solvers::NonLinearProgram::eval_occ(double ObjScale, ConstEigenRef<VectorXd> X,
                                                 double &val, EigenRef<VectorXd> FXE,
                                                 EigenRef<VectorXd> FXI) {
+    // The functions address the problem's own variable space. primal_view hands
+    // them a buffer in it: on the identity path a view of X itself, and once
+    // variables are eliminated the reduced iterate expanded back into its own
+    // coordinates with the pinned values in place. Nothing downstream of here
+    // can tell the difference, which is why eliminated variables' contributions
+    // to constraint values and to the surviving variables' derivatives need no
+    // handling of their own.
+    const Eigen::Ref<const VectorXd> Xf = this->primal_view(X);
 
     this->vals_scratch_.assign(this->num_partitions_, 0.0);
     this->set_con_coeffs_zero();
     auto OGCevalOP = [&](int thrnum) {
         double localVal = 0.0;
         for (auto &Obj : this->part_obj_[thrnum])
-            Obj.objective(ObjScale, X, localVal);
+            Obj.objective(ObjScale, Xf, localVal);
         for (auto &Con : this->part_eq_[thrnum])
-            Con.constraints(X, this->econ_coeffs());
+            Con.constraints(Xf, this->econ_coeffs());
         for (auto &Con : this->part_iq_[thrnum])
-            Con.constraints(X, this->icon_coeffs());
+            Con.constraints(Xf, this->icon_coeffs());
         this->vals_scratch_[thrnum] = localVal;
     };
 
@@ -765,13 +794,21 @@ void tycho::solvers::NonLinearProgram::eval_occ(double ObjScale, ConstEigenRef<V
 
 void tycho::solvers::NonLinearProgram::eval_obj(double ObjScale, ConstEigenRef<VectorXd> X,
                                                 double &val) {
+    // The functions address the problem's own variable space. primal_view hands
+    // them a buffer in it: on the identity path a view of X itself, and once
+    // variables are eliminated the reduced iterate expanded back into its own
+    // coordinates with the pinned values in place. Nothing downstream of here
+    // can tell the difference, which is why eliminated variables' contributions
+    // to constraint values and to the surviving variables' derivatives need no
+    // handling of their own.
+    const Eigen::Ref<const VectorXd> Xf = this->primal_view(X);
 
     this->vals_scratch_.assign(this->num_partitions_, 0.0);
 
     auto OGCevalOP = [&](int thrnum) {
         double localVal = 0.0;
         for (auto &Obj : this->part_obj_[thrnum])
-            Obj.objective(ObjScale, X, localVal);
+            Obj.objective(ObjScale, Xf, localVal);
         this->vals_scratch_[thrnum] = localVal;
     };
 
@@ -785,6 +822,14 @@ void tycho::solvers::NonLinearProgram::eval_kkt(
     ConstEigenRef<VectorXd> LI, double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
     EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+    // The functions address the problem's own variable space. primal_view hands
+    // them a buffer in it: on the identity path a view of X itself, and once
+    // variables are eliminated the reduced iterate expanded back into its own
+    // coordinates with the pinned values in place. Nothing downstream of here
+    // can tell the difference, which is why eliminated variables' contributions
+    // to constraint values and to the surviving variables' derivatives need no
+    // handling of their own.
+    const Eigen::Ref<const VectorXd> Xf = this->primal_view(X);
 
     this->vals_scratch_.assign(this->num_partitions_, 0.0);
 
@@ -793,16 +838,16 @@ void tycho::solvers::NonLinearProgram::eval_kkt(
     auto KKTevalOP = [&](int thrnum) {
         double localVal = 0.0;
         for (auto &Obj : this->part_obj_[thrnum])
-            Obj.objective_gradient_hessian(ObjScale, X, localVal, this->pgx_coeffs(), KKTmat,
+            Obj.objective_gradient_hessian(ObjScale, Xf, localVal, this->pgx_coeffs(), KKTmat,
                                            this->kkt_locations_, this->kkt_clashes_,
                                            this->kkt_locks_);
         for (auto &Con : this->part_eq_[thrnum])
             Con.constraints_jacobian_adjointgradient_adjointhessian(
-                X, LE, this->econ_coeffs(), this->agx_coeffs(), KKTmat, this->kkt_locations_,
+                Xf, LE, this->econ_coeffs(), this->agx_coeffs(), KKTmat, this->kkt_locations_,
                 this->kkt_clashes_, this->kkt_locks_);
         for (auto &Con : this->part_iq_[thrnum])
             Con.constraints_jacobian_adjointgradient_adjointhessian(
-                X, LI, this->icon_coeffs(), this->agx_coeffs(), KKTmat, this->kkt_locations_,
+                Xf, LI, this->icon_coeffs(), this->agx_coeffs(), KKTmat, this->kkt_locations_,
                 this->kkt_clashes_, this->kkt_locks_);
         this->vals_scratch_[thrnum] = localVal;
     };
@@ -819,16 +864,6 @@ void tycho::solvers::NonLinearProgram::eval_kkt(
     tycho::utils::parallel_task(
         this->num_partitions_, [&] { this->fill_rhs(PGX, AGX, FXE, FXI); },
         [&] { this->fill_solver_coeffs(KKTmat); });
-
-    // Fixed-variable pin, the LAST write of the assembly: whatever the user
-    // functions and fill_solver_coeffs scattered into an eliminated variable's
-    // row/column, it ends up decoupled with a unit diagonal. Guarded on the one
-    // cached bool -- with no fixed variables this branch is not taken and the
-    // assembled matrix is bit-identical to what it was before the treatment
-    // existed.
-    if (this->fixed_reduction_active_) {
-        this->pin_fixed_variable_kkt_rows(KKTmat);
-    }
 }
 
 void tycho::solvers::NonLinearProgram::eval_kkt_no(
@@ -836,6 +871,15 @@ void tycho::solvers::NonLinearProgram::eval_kkt_no(
     ConstEigenRef<VectorXd> LI, double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
     EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+    // The functions address the problem's own variable space. primal_view hands
+    // them a buffer in it: on the identity path a view of X itself, and once
+    // variables are eliminated the reduced iterate expanded back into its own
+    // coordinates with the pinned values in place. Nothing downstream of here
+    // can tell the difference, which is why eliminated variables' contributions
+    // to constraint values and to the surviving variables' derivatives need no
+    // handling of their own.
+    const Eigen::Ref<const VectorXd> Xf = this->primal_view(X);
+
     // No-objective mode: ObjScale and val are unused but kept in the signature
     // for API consistency with eval_kkt/eval_aug (polymorphic dispatch via evalNLP).
     (void)ObjScale;
@@ -846,11 +890,11 @@ void tycho::solvers::NonLinearProgram::eval_kkt_no(
     auto KKTevalOP = [&](int thrnum) {
         for (auto &Con : this->part_eq_[thrnum])
             Con.constraints_jacobian_adjointgradient_adjointhessian(
-                X, LE, this->econ_coeffs(), this->agx_coeffs(), KKTmat, this->kkt_locations_,
+                Xf, LE, this->econ_coeffs(), this->agx_coeffs(), KKTmat, this->kkt_locations_,
                 this->kkt_clashes_, this->kkt_locks_);
         for (auto &Con : this->part_iq_[thrnum])
             Con.constraints_jacobian_adjointgradient_adjointhessian(
-                X, LI, this->icon_coeffs(), this->agx_coeffs(), KKTmat, this->kkt_locations_,
+                Xf, LI, this->icon_coeffs(), this->agx_coeffs(), KKTmat, this->kkt_locations_,
                 this->kkt_clashes_, this->kkt_locks_);
     };
 
@@ -860,17 +904,21 @@ void tycho::solvers::NonLinearProgram::eval_kkt_no(
     tycho::utils::parallel_task(
         this->num_partitions_, [&] { this->fill_rhs(PGX, AGX, FXE, FXI); },
         [&] { this->fill_solver_coeffs(KKTmat); });
-
-    // Fixed-variable pin — see the comment in eval_kkt.
-    if (this->fixed_reduction_active_) {
-        this->pin_fixed_variable_kkt_rows(KKTmat);
-    }
 }
 void tycho::solvers::NonLinearProgram::eval_soe(
     double ObjScale, ConstEigenRef<VectorXd> X, ConstEigenRef<VectorXd> LE,
     ConstEigenRef<VectorXd> LI, double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
     EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+    // The functions address the problem's own variable space. primal_view hands
+    // them a buffer in it: on the identity path a view of X itself, and once
+    // variables are eliminated the reduced iterate expanded back into its own
+    // coordinates with the pinned values in place. Nothing downstream of here
+    // can tell the difference, which is why eliminated variables' contributions
+    // to constraint values and to the surviving variables' derivatives need no
+    // handling of their own.
+    const Eigen::Ref<const VectorXd> Xf = this->primal_view(X);
+
     // Constraint-only mode: ObjScale and val are unused but kept in the signature
     // for API consistency with eval_kkt/eval_aug (polymorphic dispatch via evalNLP).
     (void)ObjScale;
@@ -880,10 +928,10 @@ void tycho::solvers::NonLinearProgram::eval_soe(
 
     auto SOEevalOP = [&](int thrnum) {
         for (auto &Con : this->part_eq_[thrnum])
-            Con.constraints_jacobian(X, this->econ_coeffs(), KKTmat, this->kkt_locations_,
+            Con.constraints_jacobian(Xf, this->econ_coeffs(), KKTmat, this->kkt_locations_,
                                      this->kkt_clashes_, this->kkt_locks_);
         for (auto &Con : this->part_iq_[thrnum])
-            Con.constraints_jacobian(X, this->icon_coeffs(), KKTmat, this->kkt_locations_,
+            Con.constraints_jacobian(Xf, this->icon_coeffs(), KKTmat, this->kkt_locations_,
                                      this->kkt_clashes_, this->kkt_locks_);
     };
 
@@ -893,17 +941,20 @@ void tycho::solvers::NonLinearProgram::eval_soe(
     tycho::utils::parallel_task(
         this->num_partitions_, [&] { this->fill_rhs(PGX, AGX, FXE, FXI); },
         [&] { this->fill_solver_coeffs(KKTmat); });
-
-    // Fixed-variable pin — see the comment in eval_kkt.
-    if (this->fixed_reduction_active_) {
-        this->pin_fixed_variable_kkt_rows(KKTmat);
-    }
 }
 void tycho::solvers::NonLinearProgram::eval_aug(
     double ObjScale, ConstEigenRef<VectorXd> X, ConstEigenRef<VectorXd> LE,
     ConstEigenRef<VectorXd> LI, double &val, EigenRef<VectorXd> PGX, EigenRef<VectorXd> AGX,
     EigenRef<VectorXd> FXE, EigenRef<VectorXd> FXI,
     Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat) {
+    // The functions address the problem's own variable space. primal_view hands
+    // them a buffer in it: on the identity path a view of X itself, and once
+    // variables are eliminated the reduced iterate expanded back into its own
+    // coordinates with the pinned values in place. Nothing downstream of here
+    // can tell the difference, which is why eliminated variables' contributions
+    // to constraint values and to the surviving variables' derivatives need no
+    // handling of their own.
+    const Eigen::Ref<const VectorXd> Xf = this->primal_view(X);
 
     this->vals_scratch_.assign(this->num_partitions_, 0.0);
     this->set_rhs_coeffs_zero();
@@ -911,15 +962,15 @@ void tycho::solvers::NonLinearProgram::eval_aug(
     auto SOEevalOP = [&](int thrnum) {
         double localVal = 0.0;
         for (auto &Obj : this->part_obj_[thrnum])
-            Obj.objective_gradient(ObjScale, X, localVal, this->pgx_coeffs());
+            Obj.objective_gradient(ObjScale, Xf, localVal, this->pgx_coeffs());
         for (auto &Con : this->part_eq_[thrnum])
-            Con.constraints_jacobian_adjointgradient(X, LE, this->econ_coeffs(), this->agx_coeffs(),
-                                                     KKTmat, this->kkt_locations_,
-                                                     this->kkt_clashes_, this->kkt_locks_);
+            Con.constraints_jacobian_adjointgradient(
+                Xf, LE, this->econ_coeffs(), this->agx_coeffs(), KKTmat, this->kkt_locations_,
+                this->kkt_clashes_, this->kkt_locks_);
         for (auto &Con : this->part_iq_[thrnum])
-            Con.constraints_jacobian_adjointgradient(X, LI, this->icon_coeffs(), this->agx_coeffs(),
-                                                     KKTmat, this->kkt_locations_,
-                                                     this->kkt_clashes_, this->kkt_locks_);
+            Con.constraints_jacobian_adjointgradient(
+                Xf, LI, this->icon_coeffs(), this->agx_coeffs(), KKTmat, this->kkt_locations_,
+                this->kkt_clashes_, this->kkt_locks_);
         this->vals_scratch_[thrnum] = localVal;
     };
 
@@ -931,11 +982,6 @@ void tycho::solvers::NonLinearProgram::eval_aug(
     tycho::utils::parallel_task(
         this->num_partitions_, [&] { this->fill_rhs(PGX, AGX, FXE, FXI); },
         [&] { this->fill_solver_coeffs(KKTmat); });
-
-    // Fixed-variable pin — see the comment in eval_kkt.
-    if (this->fixed_reduction_active_) {
-        this->pin_fixed_variable_kkt_rows(KKTmat);
-    }
 }
 
 void tycho::solvers::NonLinearProgram::nlp_test(const Eigen::VectorXd &x, int n,
