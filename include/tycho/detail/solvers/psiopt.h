@@ -606,6 +606,19 @@ class PSIOPT {
 
     using VectorXd = Eigen::VectorXd;
 
+    // CALLBACK VARIABLE SPACE. Both callbacks are handed the solver's own
+    // iterate, right-hand side and (for the early one) KKT matrix. On a problem
+    // with bound-fixed variables that space is the REDUCED one: variables whose
+    // bounds fix them are eliminated, so the primal block is narrower than the
+    // initial guess the caller passed to optimize()/solve(), and every segment
+    // offset inside these vectors follows the narrowed width. That is the only
+    // internally consistent choice -- the early callback receives the KKT matrix
+    // itself, so a full-space iterate beside it would have every block boundary
+    // in the wrong place. A callback that needs the caller's own numbering maps
+    // through NonLinearProgram::reduced_to_full(), and can rebuild a full-space
+    // primal vector with scatter_full_x(). The returned solution, by contrast,
+    // is always in the caller's space. print_stats() likewise reports the
+    // solver's primal count, i.e. the width of the system being factorized.
     using EarlyCallBackType =
         std::function<int(int, double, EigenRef<VectorXd>, double, EigenRef<VectorXd>,
                           EigenRef<VectorXd>, Eigen::SparseMatrix<double, Eigen::RowMajor> &)>;
@@ -742,11 +755,17 @@ class PSIOPT {
     void apply_preset(std::string_view name);
 
     // --- Callback methods ---
+    /// Installs the per-iteration early callback. The vectors and matrix it
+    /// receives are in the SOLVER's variable space, which is narrower than the
+    /// caller's on a problem with bound-fixed variables -- see the space note on
+    /// EarlyCallBackType above.
     void set_early_callback(const EarlyCallBackType &f) {
         this->early_callback_enabled_ = true;
         this->early_callback_ = f;
     }
     void disable_early_callback() { this->early_callback_enabled_ = false; }
+    /// Installs the per-iteration late callback. Same variable-space caveat as
+    /// set_early_callback -- see the note on LateCallBackType above.
     void set_late_callback(const LateCallBackType &f) {
         this->late_callback_enabled_ = true;
         this->late_callback_ = f;

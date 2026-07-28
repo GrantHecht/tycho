@@ -224,6 +224,55 @@ void nlp_var_bounds_add_single_sum_con(tycho::solvers::OptimizationProblem &prob
                        (Eigen::VectorXi(1) << i0).finished());
 }
 
+// Adds the inequality constraint x[i0] <= target. PSIOPT's inequalities are
+// g(x) <= 0, slack-completed as g(x) + s == 0 with s >= 0.
+void nlp_var_bounds_add_upper_iq_con(tycho::solvers::OptimizationProblem &prob, int i0,
+                                     double target) {
+    auto args = tycho::vf::Arguments<1>();
+    auto con = args.coeff<0>() - target;
+    prob.add_inequal_con(tycho::vf::GenericFunction<-1, -1>(con),
+                         (Eigen::VectorXi(1) << i0).finished());
+}
+
+// A quadratic whose Hessian is genuinely block sparse: the third argument does
+// not couple to the first two. It declares that structure through
+// hessian_elem_is_nonzero and honors it in add_hessian_elem -- the pairing every
+// sparsity-aware function in the tree has to keep, and the only case where the
+// fill cursor's advance predicate is not a compile-time tautology. Written the
+// way the transcription defects write it, so elimination meets the same shape
+// here that it meets in the motivating workload.
+//
+// f(u) = (u0 + u1)^2 + (u0 - 1)^2 + (u2 - 1)^2
+struct NlpVarBoundsSparseHessianQuad
+    : tycho::vf::VectorFunction<NlpVarBoundsSparseHessianQuad, 3, 1,
+                                tycho::vf::DenseDerivativeMode::FDiffFwd,
+                                tycho::vf::DenseDerivativeMode::FDiffFwd> {
+    using Base = tycho::vf::VectorFunction<NlpVarBoundsSparseHessianQuad, 3, 1,
+                                           tycho::vf::DenseDerivativeMode::FDiffFwd,
+                                           tycho::vf::DenseDerivativeMode::FDiffFwd>;
+    VF_TYPE_ALIASES(Base)
+
+    // The two blocks are {0, 1} and {2}: an element couples only within a block.
+    static bool couples(int row, int col) { return (row < 2) == (col < 2); }
+
+    template <class InType, class OutType>
+    inline void compute_impl(CVecRef<InType> x, CVecRef<OutType> fx_) const {
+        VecRef<OutType> fx = fx_.const_cast_derived();
+        fx[0] = (x[0] + x[1]) * (x[0] + x[1]) + (x[0] - 1.0) * (x[0] - 1.0) +
+                (x[2] - 1.0) * (x[2] - 1.0);
+    }
+
+    inline bool hessian_elem_is_nonzero(int row, int col) const { return couples(row, col); }
+
+    inline void add_hessian_elem(double v, int row, int col, double *mpt, const int *lpt,
+                                 int &freeloc) const {
+        if (couples(row, col)) {
+            mpt[lpt[freeloc]] += v;
+            freeloc++;
+        }
+    }
+};
+
 // Adds the equality constraint sum(x[indices]) == target over exactly two
 // variables.
 void nlp_var_bounds_add_pair_sum_con(tycho::solvers::OptimizationProblem &prob, int i0, int i1,
@@ -746,6 +795,148 @@ TEST(NlpVarBoundsReduction, TwoInterleavedFixedVariablesSolve) {
     EXPECT_NEAR(outcome.solution_[0], 0.0, 1e-6);
     EXPECT_NEAR(outcome.solution_[2], 2.0, 1e-6);
     EXPECT_NEAR(outcome.solution_[4], 4.0, 1e-6);
+}
+
+// Same coupled problem as above, but the objective comes from a function that
+// declares a SPARSE Hessian: it tells the fill machinery that its third argument
+// does not couple to the first two, and honors that in its own element scatter.
+// That is the only case in which the fill cursor's advance predicate is not a
+// compile-time tautology -- and it is the shape the motivating workload always
+// produces, since the transcription defects declare their Hessian sparsity the
+// same way. If the reduced fill arm's step-over disagreed with the claim-side
+// predicate by even one element, the cursor would drift and every element after
+// it would be written to the wrong slot (or, on an eliminated element, through a
+// -1 location). The solve either matches the hand-eliminated reference or it
+// does not.
+TEST(NlpVarBoundsReduction, SparseHessianFunctionUnderElimination) {
+    // Hand-eliminated reference: min (y0+7)^2 + (y0-1)^2 + (y1-1)^2 s.t. y1 = 1.
+    tycho::solvers::OptimizationProblem reference_prob;
+    nlp_var_bounds_add_shifted_square(reference_prob, 0, -7.0);
+    nlp_var_bounds_add_shifted_square(reference_prob, 0, 1.0);
+    nlp_var_bounds_add_shifted_square(reference_prob, 1, 1.0);
+    nlp_var_bounds_add_single_sum_con(reference_prob, 1, 1.0);
+    auto reference_nlp = nlp_var_bounds_transcribe(reference_prob, 2);
+
+    auto reference = nlp_var_bounds_solve(reference_nlp, Eigen::VectorXd::Zero(2));
+    ASSERT_EQ(reference.flag_, tycho::ConvergenceFlags::CONVERGED)
+        << "the hand-eliminated reference problem must solve before it can be compared against";
+    ASSERT_NEAR(reference.solution_[0], -3.0, 1e-6);
+    ASSERT_NEAR(reference.solution_[1], 1.0, 1e-6);
+
+    tycho::solvers::OptimizationProblem prob;
+    prob.add_objective(tycho::vf::GenericFunction<-1, 1>(NlpVarBoundsSparseHessianQuad()),
+                       (Eigen::VectorXi(3) << 0, 1, 2).finished());
+    nlp_var_bounds_add_single_sum_con(prob, 2, 1.0);
+    auto nlp = nlp_var_bounds_transcribe(prob, 3);
+    nlp->set_variable_bound(1, 7.0, 7.0);
+    nlp_var_bounds_rebuild(*nlp);
+
+    auto outcome = nlp_var_bounds_solve(nlp, Eigen::VectorXd::Zero(3));
+
+    EXPECT_EQ(outcome.flag_, tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_TRUE(nlp->is_reduced());
+    EXPECT_EQ(nlp->reduced_primal_vars(), 2);
+    EXPECT_EQ(nlp->kkt_dim_, (nlp->primal_vars_ - 1) + nlp->equal_cons_);
+
+    EXPECT_DOUBLE_EQ(outcome.solution_[1], 7.0);
+    // Derivatives here are finite-difference, so this is compared a little
+    // looser than the analytic problems above.
+    EXPECT_NEAR(outcome.solution_[0], reference.solution_[0], 1e-5);
+    EXPECT_NEAR(outcome.solution_[2], reference.solution_[1], 1e-5);
+}
+
+// Elimination alongside an ACTIVE inequality, which is what puts the slack and
+// barrier block behind the narrowed primal width: the slack Jacobian and slack
+// diagonal that finalize_data lays down, get_mat_space's inequality row offset,
+// and every segment(primal_vars_, slack_vars_) in the solver all have to agree
+// on the reduced width at once.
+//
+//   min sum (x_i - c_i)^2, c = (1, 2, 3)   s.t. x0 + x1 = 3, x2 <= 1,
+//                                               x1 fixed at 7
+//
+// The equality forces x0 = 3 - 7 = -4 (which needs the pinned value to reach the
+// residual), and x2's unconstrained optimum of 3 is cut off by the inequality,
+// so the inequality is active at the solution and its slack goes to zero.
+TEST(NlpVarBoundsReduction, FixedVariableWithActiveInequality) {
+    tycho::solvers::OptimizationProblem prob;
+    nlp_var_bounds_add_separable_objective(prob, {1.0, 2.0, 3.0});
+    nlp_var_bounds_add_pair_sum_con(prob, 0, 1, 3.0);
+    nlp_var_bounds_add_upper_iq_con(prob, 2, 1.0);
+    auto nlp = nlp_var_bounds_transcribe(prob, 3);
+    nlp->set_variable_bound(1, 7.0, 7.0);
+    nlp_var_bounds_rebuild(*nlp);
+
+    ASSERT_EQ(nlp->inequal_cons_, 1);
+    ASSERT_EQ(nlp->slack_vars_, 1);
+
+    auto outcome = nlp_var_bounds_solve(nlp, Eigen::VectorXd::Zero(3));
+
+    EXPECT_EQ(outcome.flag_, tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_TRUE(nlp->is_reduced());
+    EXPECT_EQ(nlp->reduced_primal_vars(), 2);
+    // The slack, equality and inequality blocks all sit above the narrowed
+    // primal block.
+    EXPECT_EQ(nlp->kkt_dim_,
+              (nlp->primal_vars_ - 1) + nlp->slack_vars_ + nlp->equal_cons_ + nlp->inequal_cons_);
+    EXPECT_EQ(outcome.solution_.size(), nlp->primal_vars_);
+
+    EXPECT_DOUBLE_EQ(outcome.solution_[1], 7.0);
+    EXPECT_NEAR(outcome.solution_[0], -4.0, 1e-6);
+    EXPECT_NEAR(outcome.solution_[2], 1.0, 1e-5); // approached from below through the barrier
+}
+
+// A configuration that throws must not be remembered as done. If it were, the
+// next call would take the idempotence shortcut, report that nothing changed,
+// and the solve would quietly proceed on the UNREDUCED problem with every
+// fixing bound ignored -- the worst possible failure for this feature, because
+// it produces a plausible answer to the wrong problem.
+TEST(NlpVarBoundsReduction, AThrownConfigurationIsNotCommitted) {
+    tycho::solvers::OptimizationProblem prob;
+    nlp_var_bounds_add_separable_objective(prob, {1.0, 2.0});
+    nlp_var_bounds_add_pair_sum_con(prob, 0, 1, 6.0);
+    auto nlp = nlp_var_bounds_transcribe(prob, 2);
+
+    // Both variables fixed: nothing would be left to solve for.
+    nlp->set_variable_bound(0, 4.0, 4.0);
+    nlp->set_variable_bound(1, 7.0, 7.0);
+    nlp_var_bounds_rebuild(*nlp);
+
+    EXPECT_THROW(nlp->configure_variable_treatment(FixedVariableTreatments::MakeParameter, 1.0e-8),
+                 std::invalid_argument);
+
+    // Nothing was committed, and the NLP is still coherent: it describes the
+    // full problem rather than a half-reduced one.
+    EXPECT_FALSE(nlp->is_reduced());
+    EXPECT_EQ(nlp->reduced_primal_vars(), 2);
+    EXPECT_EQ(nlp->kkt_dim_, 2 + nlp->equal_cons_);
+
+    // Above all it does not consider itself configured: repeating the call
+    // re-attempts and fails the same way instead of returning "no change".
+    EXPECT_THROW(nlp->configure_variable_treatment(FixedVariableTreatments::MakeParameter, 1.0e-8),
+                 std::invalid_argument);
+
+    // ... which is what stops a solve from silently running the unreduced
+    // problem: the solve re-attempts the configuration and fails loudly.
+    {
+        tycho::solvers::PSIOPT opt;
+        opt.set_print_level(3);
+        opt.set_nlp(nlp);
+        EXPECT_THROW(opt.optimize(Eigen::VectorXd::Zero(2)), std::invalid_argument);
+    }
+
+    // Correcting the bounds and configuring again reduces properly and solves:
+    // min (y-1)^2 + (7-2)^2 s.t. y + 7 = 6, so the free variable is -1.
+    nlp->clear_variable_bounds();
+    nlp->set_variable_bound(1, 7.0, 7.0);
+    nlp_var_bounds_rebuild(*nlp);
+
+    auto outcome = nlp_var_bounds_solve(nlp, Eigen::VectorXd::Zero(2));
+    EXPECT_EQ(outcome.flag_, tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_TRUE(nlp->is_reduced());
+    EXPECT_EQ(nlp->reduced_primal_vars(), 1);
+    EXPECT_EQ(nlp->kkt_dim_, 1 + nlp->equal_cons_);
+    EXPECT_DOUBLE_EQ(outcome.solution_[1], 7.0);
+    EXPECT_NEAR(outcome.solution_[0], -1.0, 1e-6);
 }
 
 // One solver instance, three solves, different bounds in between: each solve

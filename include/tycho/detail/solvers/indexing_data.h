@@ -290,21 +290,6 @@ struct SolverIndexingData {
         this->set_v_index(vt);
         this->set_c_index(ct);
     }
-    void push_v_index(int push) {
-        for (int i = 0; i < this->v_index_.size(); i++) {
-            this->v_index_(i) += push;
-        }
-    }
-    void push_c_index(int push) {
-        for (int i = 0; i < c_index_.size(); i++) {
-            this->c_index_(i) += push;
-        }
-    }
-    void push_v_index_c_index(int vpush, int cpush) {
-        this->push_v_index(vpush);
-        this->push_c_index(cpush);
-    }
-
     inline int num_appl() const { return this->num_funcappl_; }
     inline int c_loc(int loc, int col) const { return this->c_index_(loc, col); }
     inline int v_loc(int loc, int col) const { return this->v_index_(loc, col); }

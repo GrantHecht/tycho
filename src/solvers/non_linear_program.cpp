@@ -432,8 +432,11 @@ void tycho::solvers::NonLinearProgram::analyze_sparsity(
                 // Element of an eliminated variable. It keeps its claim so the
                 // scatter's cursor still walks the claims in lockstep, but it
                 // names no matrix entry: this placeholder adds 0.0 to a slot
-                // that always exists (index 0's own diagonal, which the solver
-                // elements always occupy) and its location is left at -1, which
+                // that always exists (index 0's own diagonal, which finalize_data
+                // lays down for every solver primal column -- and there is always
+                // at least one, since configure_variable_treatment refuses a
+                // configuration that would eliminate every variable) and its
+                // location is left at -1, which
                 // the scatter reads as "step over". This is why the eliminated
                 // variable's row and column are simply absent from the pattern.
                 kktvec[i] = Eigen::Triplet<double>(0, 0, 0.0);
@@ -601,52 +604,78 @@ bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
     fill_bound_list(upper_idx, upper_val, this->variable_bound_set_.upper_idx_,
                     this->variable_bound_set_.upper_val_);
 
-    this->fixed_treatment_valid_ = true;
-    this->configured_bounds_revision_ = this->bounds_revision_;
-
     // --- Reduction ------------------------------------------------------
+    //
+    // Commit-on-success: fixed_treatment_valid_ and configured_bounds_revision_
+    // are stamped ONLY at the two successful exits below. Everything from here
+    // on can throw, and a configuration that threw must not be remembered as
+    // done -- otherwise the next call would take the idempotence shortcut and
+    // the solve would proceed on the unreduced problem with every fixing bound
+    // silently ignored. Leaving the flag clear makes the next call re-attempt,
+    // and fail the same way, until the bounds are corrected.
     if (num_fixed == 0) {
         this->reduced_primal_vars_count_ = num_vars;
         this->fixed_reduction_active_ = false;
         if (!was_reduced) {
-            return false; // identity path, and it already was: nothing to rebuild
+            // Identity path, and it already was: nothing to rebuild.
+            this->fixed_treatment_valid_ = true;
+            this->configured_bounds_revision_ = this->bounds_revision_;
+            return false;
         }
         // The last fixed bound was dropped. Put every function back on its
         // pristine input map and lay the structures out over the full space.
         this->clear_function_output_maps();
         this->rebuild_structures();
+        this->fixed_treatment_valid_ = true;
+        this->configured_bounds_revision_ = this->bounds_revision_;
         return true;
     }
 
     if (num_fixed == num_vars) {
         // Nothing would be left to solve for, and a zero-width primal block is
         // not a system this solver can lay out. Caught here rather than as a
-        // degenerate factorization later.
+        // degenerate factorization later, and before anything has been mutated.
         throw std::invalid_argument(
             fmt::format("configure_variable_treatment: all {0} primal variables are fixed by "
                         "their bounds, leaving no variable to solve for",
                         num_vars));
     }
 
-    this->reduced_primal_vars_count_ = num_vars - num_fixed;
-    this->fixed_reduction_active_ = true;
-    this->install_function_output_maps();
-    this->rebuild_structures();
+    try {
+        this->reduced_primal_vars_count_ = num_vars - num_fixed;
+        this->fixed_reduction_active_ = true;
+        this->install_function_output_maps();
+        this->rebuild_structures();
 
-    if (this->kkt_dim_ != this->reduced_primal_vars_count_ + this->slack_vars_ + this->equal_cons_ +
-                              this->inequal_cons_) {
-        throw std::logic_error(fmt::format(
-            "configure_variable_treatment: kkt_dim ({0}) != reduced primal_vars ({1}) + "
-            "slack_vars ({2}) + equal_cons ({3}) + inequal_cons ({4})",
-            this->kkt_dim_, this->reduced_primal_vars_count_, this->slack_vars_, this->equal_cons_,
-            this->inequal_cons_));
+        if (this->kkt_dim_ != this->reduced_primal_vars_count_ + this->slack_vars_ +
+                                  this->equal_cons_ + this->inequal_cons_) {
+            throw std::logic_error(fmt::format(
+                "configure_variable_treatment: kkt_dim ({0}) != reduced primal_vars ({1}) + "
+                "slack_vars ({2}) + equal_cons ({3}) + inequal_cons ({4})",
+                this->kkt_dim_, this->reduced_primal_vars_count_, this->slack_vars_,
+                this->equal_cons_, this->inequal_cons_));
+        }
+        if (this->num_kkt_elems_ != this->num_user_kkt_elems_ + this->num_solver_kkt_elems_) {
+            throw std::logic_error(fmt::format(
+                "configure_variable_treatment: KKT element bookkeeping is inconsistent "
+                "(num_kkt_elems {0}, user {1}, solver {2})",
+                this->num_kkt_elems_, this->num_user_kkt_elems_, this->num_solver_kkt_elems_));
+        }
+    } catch (...) {
+        // A partial install would leave some functions on a reduced output map
+        // and others on the pristine one -- two index spaces in one problem,
+        // which nothing downstream is prepared for. Put the whole problem back
+        // on the full space before letting the exception out, so a caller that
+        // catches it holds a coherent (if unconfigured) NLP.
+        this->reduced_primal_vars_count_ = num_vars;
+        this->fixed_reduction_active_ = false;
+        this->clear_function_output_maps();
+        this->rebuild_structures();
+        throw;
     }
-    if (this->num_kkt_elems_ != this->num_user_kkt_elems_ + this->num_solver_kkt_elems_) {
-        throw std::logic_error(fmt::format(
-            "configure_variable_treatment: KKT element bookkeeping is inconsistent "
-            "(num_kkt_elems {0}, user {1}, solver {2})",
-            this->num_kkt_elems_, this->num_user_kkt_elems_, this->num_solver_kkt_elems_));
-    }
+
+    this->fixed_treatment_valid_ = true;
+    this->configured_bounds_revision_ = this->bounds_revision_;
     return true;
 }
 
