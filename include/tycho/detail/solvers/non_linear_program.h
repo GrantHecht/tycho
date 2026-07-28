@@ -35,12 +35,46 @@
 
 #include <fmt/format.h>
 
+#include "tycho/detail/solvers/bound_set.h"
 #include "tycho/detail/solvers/constraint_function.h"
 #include "tycho/detail/solvers/objective_function.h"
 #include "tycho/detail/typedefs/eigen_types.h"
 #include "tycho/detail/utils/thread_pool.h"
 
 namespace tycho::solvers {
+
+/// <summary>
+/// How a primal variable whose declared lower and upper bounds are equal is
+/// handed to the solver.
+///
+/// MakeParameter removes the variable from the optimization entirely: it is
+/// pinned at its bound value for every evaluation and the Newton system the
+/// solver factorizes is the system of the REMAINING variables. MakeConstraint
+/// would instead keep the variable free and add an equality constraint fixing
+/// it; RelaxBounds would keep it as an ordinary two-sided bounded variable with
+/// its bounds pushed apart. Only MakeParameter is implemented —
+/// NonLinearProgram::configure_variable_treatment rejects the other two with a
+/// clear message.
+/// </summary>
+enum class FixedVariableTreatments { MakeParameter, MakeConstraint, RelaxBounds };
+
+/// Human-readable name for a treatment, for diagnostics and error messages.
+inline const char *fixed_variable_treatment_name(FixedVariableTreatments treatment) {
+    switch (treatment) {
+    case FixedVariableTreatments::MakeParameter:
+        return "make_parameter";
+    case FixedVariableTreatments::MakeConstraint:
+        return "make_constraint";
+    case FixedVariableTreatments::RelaxBounds:
+        return "relax_bounds";
+    }
+    return "unknown";
+}
+
+/// Default widening applied to every finite, non-fixing variable bound before
+/// it is recorded in the BoundSet: b is moved outward by this factor times
+/// max(1, |b|). Matches Ipopt's bound_relax_factor default.
+inline constexpr double kDefaultBoundRelaxFactor = 1.0e-8;
 
 struct NonLinearProgram {
     using VectorXi = Eigen::VectorXi;
@@ -201,6 +235,7 @@ struct NonLinearProgram {
         this->staged_variable_bounds_.clear();
         this->x_lower_.resize(0);
         this->x_upper_.resize(0);
+        this->bounds_revision_++;
     }
 
     /// True iff any primal variable has a finite lower or upper bound after
@@ -212,6 +247,227 @@ struct NonLinearProgram {
         constexpr double kInf = std::numeric_limits<double>::infinity();
         return (this->x_lower_.array() > -kInf).any() || (this->x_upper_.array() < kInf).any();
     }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Bound-fixed variable treatment
+    //
+    // A variable declared with lower == upper carries no degree of freedom. Under
+    // the MakeParameter treatment it is ELIMINATED: pinned at its value for every
+    // evaluation, and removed from the Newton system the solver factorizes.
+    //
+    // How the elimination is realized. The transcription's objective and
+    // constraint functions address primal variables by their global index, both
+    // when they gather their inputs out of x and when they scatter their
+    // Jacobian/Hessian entries into the KKT matrix. Renumbering the primal space
+    // underneath them is therefore not a local change -- it would have to reach
+    // into every function's indexing data and into the KKT scatter itself. So the
+    // elimination is applied to the ASSEMBLED system instead, once per assembly
+    // and in O(nnz of the eliminated columns):
+    //
+    //   * the eliminated variable keeps its coordinate, but every KKT entry in
+    //     its row and column is zeroed after assembly and its diagonal is set to
+    //     one, leaving a decoupled unit row;
+    //   * its stationarity row in the Newton right-hand side is cleared (the
+    //     solver-side seam, PSIOPT::eval_nlp);
+    //   * its value is pinned into the iterate once, at solve entry.
+    //
+    // The factorized matrix is then exactly the reduced problem's KKT matrix
+    // bordered by an identity block, so the step is the reduced problem's step
+    // with a structural zero in the eliminated coordinate, the inertia count is
+    // unchanged (each pinned coordinate contributes exactly the one positive
+    // eigenvalue the primal count already expects), and the eliminated variable's
+    // residual never enters any convergence norm. Eliminated variables'
+    // contributions to constraint values and to the remaining variables'
+    // derivatives happen automatically: the functions still evaluate at the full
+    // x with the pinned values in place, and never learn anything happened.
+    //
+    // Identity fast path. With no fixed variables, is_reduced() is false, every
+    // site above short-circuits on that single cached bool, and NOTHING on the
+    // evaluation path changes -- no extra arithmetic, no extra indirection, no
+    // change to the assembled values.
+    ////////////////////////////////////////////////////////////////////////////
+
+    /// <summary>
+    /// Classifies every primal variable against the materialized
+    /// x_lower_/x_upper_ (free / lower-only / upper-only / two-sided / fixed),
+    /// records the non-fixed finite bounds in variable_bound_set_, and -- under
+    /// MakeParameter, when at least one variable is fixed -- builds the
+    /// full<->reduced index maps and the KKT slot lists the per-assembly pin
+    /// walks.
+    ///
+    /// Called once at solve setup. Idempotent and re-entrant: a call that
+    /// repeats the same treatment, the same relax factor, and the same bound
+    /// state returns immediately; a call after the bounds were re-materialized
+    /// (make_nlp / clear_variable_bounds) or after the sparsity pattern was
+    /// recomputed (analyze_sparsity) re-classifies from scratch, so one solver
+    /// instance solving twice against changed bounds picks the change up.
+    ///
+    /// Requires analyze_sparsity() to have run when any variable is fixed: the
+    /// per-assembly pin addresses KKT value slots by the offsets that routine
+    /// computes. Throws std::invalid_argument for a treatment that is not yet
+    /// available, for a negative or non-finite relax factor, for an infinite
+    /// fixing value, and when the sparsity pattern is missing.
+    /// </summary>
+    void configure_variable_treatment(FixedVariableTreatments treatment, double bound_relax_factor);
+
+    /// Number of primal variables the solve actually optimizes over: primal_vars_
+    /// minus the eliminated ones. Equal to primal_vars_ on the identity path.
+    /// Note that the KKT system stays primal_vars_ wide either way (see the
+    /// reduction note above); this is the problem's degree-of-freedom count, and
+    /// the size gather_reduced_x/scatter_full_x compact to and expand from.
+    int reduced_primal_vars() const { return this->reduced_primal_vars_count_; }
+
+    /// True iff at least one variable was eliminated by the configured
+    /// treatment. THE guard for every piece of reduction work on the evaluation
+    /// path: when it is false the solver runs exactly the code it ran before the
+    /// treatment existed.
+    bool is_reduced() const { return this->fixed_reduction_active_; }
+
+    /// The finite bounds that survived classification (eliminated variables
+    /// excluded), relaxed by the configured factor. Empty before
+    /// configure_variable_treatment has run.
+    const BoundSet &variable_bound_set() const { return this->variable_bound_set_; }
+
+    /// Indices of the eliminated variables, ascending. Empty on the identity path.
+    const VectorXi &fixed_variable_indices() const { return this->fixed_idx_; }
+
+    /// Values the eliminated variables are pinned at, parallel to
+    /// fixed_variable_indices().
+    const VectorXd &fixed_variable_values() const { return this->fixed_vals_; }
+
+    /// Full-space index -> compacted index, -1 for an eliminated variable. Empty
+    /// on the identity path (where the map is the identity).
+    const VectorXi &full_to_reduced() const { return this->full_to_reduced_; }
+
+    /// Compacted index -> full-space index. Empty on the identity path.
+    const VectorXi &reduced_to_full() const { return this->reduced_to_full_; }
+
+    /// <summary>
+    /// Compacts a full-space primal vector into reduced_primal_vars() entries,
+    /// dropping the eliminated coordinates. Pass-through copy on the identity
+    /// path. Throws std::invalid_argument on a size mismatch.
+    /// </summary>
+    void gather_reduced_x(ConstEigenRef<VectorXd> x_full, EigenRef<VectorXd> x_reduced) const;
+
+    /// <summary>
+    /// Expands a reduced primal vector back to primal_vars_ entries, writing each
+    /// eliminated coordinate's pinned value. Pass-through copy on the identity
+    /// path. Throws std::invalid_argument on a size mismatch.
+    /// </summary>
+    void scatter_full_x(ConstEigenRef<VectorXd> x_reduced, EigenRef<VectorXd> x_full) const;
+
+    /// <summary>
+    /// Writes the pinned value of every eliminated variable into a full-space
+    /// primal vector, leaving the remaining entries alone. This is the ONE
+    /// reinsertion seam: applied to the iterate at solve entry, it makes every
+    /// downstream primal exposure -- the returned solution, the late callback's
+    /// IterateInfo primals, every primal-exposing diagnostic -- read the
+    /// full-space form with the fixed values already in it, with no second
+    /// reinsertion anywhere.
+    ///
+    /// A caller that starts from an arbitrary guess gets the guess's value for a
+    /// fixed variable silently replaced by the declared one; that is the point.
+    /// No-op on the identity path. Throws std::invalid_argument on a size
+    /// mismatch.
+    /// </summary>
+    void pin_fixed_variables(EigenRef<VectorXd> x_full) const;
+
+    /// <summary>
+    /// Zeroes the eliminated variables' entries of a full-space primal-row
+    /// vector (an objective gradient or an adjoint gradient).
+    ///
+    /// An eliminated variable's stationarity row holds the bound multiplier that
+    /// holds it at its bound, which is not part of the reduced problem's
+    /// optimality residual. Clearing it makes the Newton right-hand side zero on
+    /// that row -- matching the pinned unit KKT row, so the step in that
+    /// coordinate is exactly zero -- and keeps it out of every primal residual
+    /// norm. The multiplier itself is consequently NOT reported: the value that
+    /// was cleared is the reduced-gradient residual at the solution, and
+    /// recovering it belongs to the bound-multiplier work, not here.
+    ///
+    /// No-op on the identity path. Throws std::invalid_argument on a size
+    /// mismatch.
+    /// </summary>
+    void clear_fixed_variable_rows(EigenRef<VectorXd> primal_rows) const;
+
+    /// <summary>
+    /// Post-assembly pin: zeroes every KKT value slot in an eliminated variable's
+    /// row or column, then writes one onto each eliminated diagonal. Both slot
+    /// lists are built once by configure_variable_treatment, so this is a flat
+    /// walk of precomputed offsets with no per-element search.
+    ///
+    /// Runs at the END of every KKT assembly (see the eval_kkt family), after
+    /// fill_solver_coeffs has added the solver's own primal diagonals, so the
+    /// unit diagonal is the final value. A later `+=` onto the primal diagonals
+    /// (perturb_kkt_p_diags, the inertia ladder) only makes it more positive and
+    /// cannot couple the row back in.
+    ///
+    /// Only ever called under is_reduced(); the caller holds the guard.
+    /// </summary>
+    void pin_fixed_variable_kkt_rows(Eigen::SparseMatrix<double, Eigen::RowMajor> &mat) const {
+        double *vals = mat.valuePtr();
+        const int num_slots = static_cast<int>(this->fixed_kkt_slots_.size());
+        for (int i = 0; i < num_slots; i++) {
+            vals[this->fixed_kkt_slots_[i]] = 0.0;
+        }
+        const int num_diags = static_cast<int>(this->fixed_diag_slots_.size());
+        for (int i = 0; i < num_diags; i++) {
+            vals[this->fixed_diag_slots_[i]] = 1.0;
+        }
+    }
+
+    /// <summary>
+    /// Drops every piece of classification state that addresses the current KKT
+    /// layout, and with it the is_reduced() guard, so no stale storage offset
+    /// can survive into an assembly. Called wherever the KKT arrays are
+    /// reallocated (set_mat_dimensions) or their offsets recomputed
+    /// (analyze_sparsity); the next configure_variable_treatment call rebuilds
+    /// from the live bounds and the live pattern.
+    /// </summary>
+    void invalidate_variable_treatment() {
+        this->fixed_treatment_valid_ = false;
+        this->fixed_reduction_active_ = false;
+        this->fixed_kkt_slots_.resize(0);
+        this->fixed_diag_slots_.resize(0);
+    }
+
+    /// Selected treatment, as last configured.
+    FixedVariableTreatments variable_treatment_ = FixedVariableTreatments::MakeParameter;
+    /// Relax factor, as last configured.
+    double bound_relax_factor_ = 0.0;
+
+    /// Bumped whenever x_lower_/x_upper_ are (re)materialized or dropped, so
+    /// configure_variable_treatment can tell a repeat call from a real change.
+    /// Staging a declaration does NOT bump it: staged declarations only reach
+    /// x_lower_/x_upper_ through make_nlp, which does.
+    long bounds_revision_ = 0;
+
+    /// True once a classification pass has produced state consistent with the
+    /// current bounds AND the current sparsity pattern. analyze_sparsity clears
+    /// it (the KKT slot offsets it recomputes invalidate the pin lists).
+    bool fixed_treatment_valid_ = false;
+    long configured_bounds_revision_ = -1;
+
+    /// True once analyze_sparsity has computed kkt_locations_.
+    bool sparsity_analyzed_ = false;
+
+    /// Cached is_reduced() answer -- the single bool every evaluation-path guard
+    /// reads.
+    bool fixed_reduction_active_ = false;
+    int reduced_primal_vars_count_ = 0;
+
+    VectorXi full_to_reduced_; ///< primal_vars_ entries, -1 where eliminated.
+    VectorXi reduced_to_full_; ///< reduced_primal_vars_count_ entries.
+    VectorXi fixed_idx_;       ///< Eliminated variable indices, ascending.
+    VectorXd fixed_vals_;      ///< Their pinned values.
+
+    /// KKT value-array offsets of every entry in an eliminated variable's row or
+    /// column, sorted and deduplicated.
+    VectorXi fixed_kkt_slots_;
+    /// KKT value-array offsets of the eliminated variables' diagonals.
+    VectorXi fixed_diag_slots_;
+
+    BoundSet variable_bound_set_;
 
     void print_data() {
         for (int i = 0; i < this->num_partitions_; i++) {

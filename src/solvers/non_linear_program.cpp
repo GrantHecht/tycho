@@ -52,6 +52,10 @@ void tycho::solvers::NonLinearProgram::make_nlp(int PV, int EQ, int IQ) {
 void tycho::solvers::NonLinearProgram::materialize_variable_bounds() {
     constexpr double kInf = std::numeric_limits<double>::infinity();
 
+    // Any re-materialization invalidates a previous classification, whether the
+    // declared bounds changed or only primal_vars_ did.
+    this->bounds_revision_++;
+
     this->x_lower_ = Eigen::VectorXd::Constant(this->primal_vars_, -kInf);
     this->x_upper_ = Eigen::VectorXd::Constant(this->primal_vars_, kInf);
 
@@ -283,6 +287,12 @@ void tycho::solvers::NonLinearProgram::set_mat_dimensions() {
     this->kkt_coeff_cols_ = Eigen::VectorXi::Constant(this->num_kkt_elems_, -1);
     this->kkt_coeff_part_ids_ = Eigen::VectorXi::Constant(this->num_kkt_elems_, 0);
     this->kkt_locations_ = Eigen::VectorXi::Constant(this->num_kkt_elems_, -1);
+
+    // kkt_locations_ has just been discarded, so there is no analyzed pattern
+    // any more and no fixed-variable pin list can still be addressing it.
+    this->sparsity_analyzed_ = false;
+    this->invalidate_variable_treatment();
+
     this->solver_coeffs_ = Eigen::VectorXd::Constant(this->num_solver_kkt_elems_, 0);
     ///////////////////////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////////////
@@ -387,6 +397,291 @@ void tycho::solvers::NonLinearProgram::analyze_sparsity(
 
     tycho::utils::parallel_blocks(this->num_kkt_elems_, FindOP, this->num_partitions_);
     /////////////////////////////////////////////////////////////
+
+    // kkt_locations_ has just been recomputed, so any fixed-variable pin lists
+    // built against the previous pattern now address the wrong slots. Force the
+    // next configure_variable_treatment call to rebuild them.
+    this->sparsity_analyzed_ = true;
+    this->invalidate_variable_treatment();
+}
+
+void tycho::solvers::NonLinearProgram::configure_variable_treatment(
+    FixedVariableTreatments treatment, double bound_relax_factor) {
+
+    if (treatment != FixedVariableTreatments::MakeParameter) {
+        throw std::invalid_argument(fmt::format(
+            "configure_variable_treatment: fixed-variable treatment '{0}' is not available "
+            "yet. Only '{1}' (eliminate every variable whose lower and upper bounds are "
+            "equal) is implemented.",
+            fixed_variable_treatment_name(treatment),
+            fixed_variable_treatment_name(FixedVariableTreatments::MakeParameter)));
+    }
+    if (!std::isfinite(bound_relax_factor) || bound_relax_factor < 0.0) {
+        throw std::invalid_argument(
+            fmt::format("configure_variable_treatment: bound_relax_factor must be finite and "
+                        ">= 0 (got {0})",
+                        bound_relax_factor));
+    }
+
+    // Idempotence: same treatment, same relax factor, same bound state, same
+    // sparsity pattern -> the state already on hand is the answer.
+    if (this->fixed_treatment_valid_ && this->variable_treatment_ == treatment &&
+        this->bound_relax_factor_ == bound_relax_factor &&
+        this->configured_bounds_revision_ == this->bounds_revision_) {
+        return;
+    }
+
+    this->variable_treatment_ = treatment;
+    this->bound_relax_factor_ = bound_relax_factor;
+
+    const int num_vars = this->primal_vars_;
+    constexpr double kInf = std::numeric_limits<double>::infinity();
+
+    this->variable_bound_set_.clear();
+    this->full_to_reduced_.resize(0);
+    this->reduced_to_full_.resize(0);
+    this->fixed_idx_.resize(0);
+    this->fixed_vals_.resize(0);
+    this->fixed_kkt_slots_.resize(0);
+    this->fixed_diag_slots_.resize(0);
+    this->fixed_reduction_active_ = false;
+    this->reduced_primal_vars_count_ = num_vars;
+
+    const bool bounds_materialized =
+        (num_vars > 0 && this->x_lower_.size() == num_vars && this->x_upper_.size() == num_vars);
+
+    if (!bounds_materialized) {
+        this->fixed_treatment_valid_ = true;
+        this->configured_bounds_revision_ = this->bounds_revision_;
+        return;
+    }
+
+    // --- Classification -------------------------------------------------
+    int num_fixed = 0;
+    for (int i = 0; i < num_vars; i++) {
+        if (this->x_lower_[i] == this->x_upper_[i]) {
+            if (!std::isfinite(this->x_lower_[i])) {
+                throw std::invalid_argument(
+                    fmt::format("configure_variable_treatment: variable {0} has equal but "
+                                "non-finite bounds ({1}); a fixed variable needs a finite value",
+                                i, this->x_lower_[i]));
+            }
+            num_fixed++;
+        }
+    }
+
+    std::vector<int> lower_idx;
+    std::vector<double> lower_val;
+    std::vector<int> upper_idx;
+    std::vector<double> upper_val;
+
+    if (num_fixed > 0) {
+        this->fixed_idx_.resize(num_fixed);
+        this->fixed_vals_.resize(num_fixed);
+        this->full_to_reduced_ = Eigen::VectorXi::Constant(num_vars, -1);
+        this->reduced_to_full_.resize(num_vars - num_fixed);
+    }
+
+    int next_reduced = 0;
+    int next_fixed = 0;
+    for (int i = 0; i < num_vars; i++) {
+        const double lower = this->x_lower_[i];
+        const double upper = this->x_upper_[i];
+
+        if (lower == upper) {
+            this->fixed_idx_[next_fixed] = i;
+            this->fixed_vals_[next_fixed] = lower;
+            next_fixed++;
+            continue;
+        }
+
+        if (num_fixed > 0) {
+            this->full_to_reduced_[i] = next_reduced;
+            this->reduced_to_full_[next_reduced] = i;
+        }
+        next_reduced++;
+
+        // Record the surviving finite bounds, widened by the relax factor so
+        // consumers never have to re-apply it.
+        if (lower > -kInf) {
+            lower_idx.push_back(i);
+            lower_val.push_back(lower - bound_relax_factor * std::max(1.0, std::abs(lower)));
+        }
+        if (upper < kInf) {
+            upper_idx.push_back(i);
+            upper_val.push_back(upper + bound_relax_factor * std::max(1.0, std::abs(upper)));
+        }
+    }
+
+    this->reduced_primal_vars_count_ = next_reduced;
+
+    auto fill_bound_list = [](const std::vector<int> &idx, const std::vector<double> &val,
+                              Eigen::VectorXi &idx_out, Eigen::VectorXd &val_out) {
+        const int count = static_cast<int>(idx.size());
+        idx_out.resize(count);
+        val_out.resize(count);
+        for (int i = 0; i < count; i++) {
+            idx_out[i] = idx[i];
+            val_out[i] = val[i];
+        }
+    };
+    fill_bound_list(lower_idx, lower_val, this->variable_bound_set_.lower_idx_,
+                    this->variable_bound_set_.lower_val_);
+    fill_bound_list(upper_idx, upper_val, this->variable_bound_set_.upper_idx_,
+                    this->variable_bound_set_.upper_val_);
+
+    if (num_fixed == 0) {
+        // Identity path: no maps, no pin lists, no per-assembly work.
+        this->fixed_treatment_valid_ = true;
+        this->configured_bounds_revision_ = this->bounds_revision_;
+        return;
+    }
+
+    // --- Reduction: KKT slot lists for the eliminated rows/columns -------
+    if (!this->sparsity_analyzed_) {
+        throw std::invalid_argument(fmt::format(
+            "configure_variable_treatment: {0} variable(s) are fixed by their bounds, but the "
+            "KKT sparsity pattern has not been computed yet. Call analyze_sparsity() (PSIOPT "
+            "does this in set_nlp) before configuring the fixed-variable treatment.",
+            num_fixed));
+    }
+    if (this->kkt_dim_ !=
+        this->primal_vars_ + this->slack_vars_ + this->equal_cons_ + this->inequal_cons_) {
+        throw std::logic_error(fmt::format(
+            "configure_variable_treatment: kkt_dim ({0}) != primal_vars ({1}) + slack_vars "
+            "({2}) + equal_cons ({3}) + inequal_cons ({4})",
+            this->kkt_dim_, this->primal_vars_, this->slack_vars_, this->equal_cons_,
+            this->inequal_cons_));
+    }
+    if (this->num_kkt_elems_ != this->num_user_kkt_elems_ + this->num_solver_kkt_elems_ ||
+        this->kkt_locations_.size() != this->num_kkt_elems_) {
+        throw std::logic_error(
+            fmt::format("configure_variable_treatment: KKT element bookkeeping is inconsistent "
+                        "(num_kkt_elems {0}, user {1}, solver {2}, locations {3})",
+                        this->num_kkt_elems_, this->num_user_kkt_elems_,
+                        this->num_solver_kkt_elems_, this->kkt_locations_.size()));
+    }
+
+    std::vector<char> is_fixed(num_vars, 0);
+    for (int j = 0; j < num_fixed; j++) {
+        is_fixed[this->fixed_idx_[j]] = 1;
+    }
+
+    // Every user element whose row OR column is an eliminated variable. The
+    // stored pattern is one triangle of a symmetric matrix, so testing both
+    // endpoints covers the eliminated variable's row and its column.
+    std::vector<int> slots;
+    for (int e = 0; e < this->num_user_kkt_elems_; e++) {
+        const int row = this->kkt_coeff_rows_[e];
+        const int col = this->kkt_coeff_cols_[e];
+        const bool touches_fixed = (row >= 0 && row < num_vars && is_fixed[row]) ||
+                                   (col >= 0 && col < num_vars && is_fixed[col]);
+        if (!touches_fixed) {
+            continue;
+        }
+        const int loc = this->kkt_locations_[e];
+        if (loc < 0) {
+            throw std::logic_error(
+                fmt::format("configure_variable_treatment: KKT element {0} (row {1}, col {2}) "
+                            "has no assigned storage location",
+                            e, row, col));
+        }
+        slots.push_back(loc);
+    }
+    std::sort(slots.begin(), slots.end());
+    slots.erase(std::unique(slots.begin(), slots.end()), slots.end());
+
+    this->fixed_kkt_slots_.resize(static_cast<int>(slots.size()));
+    for (int i = 0; i < static_cast<int>(slots.size()); i++) {
+        this->fixed_kkt_slots_[i] = slots[i];
+    }
+
+    // The eliminated diagonals come from the solver-owned primal-diagonal block,
+    // which finalize_data laid out at (i, i) for every primal variable.
+    const int pdiag_base = this->primal_diags_data_start_ + this->num_user_kkt_elems_;
+    this->fixed_diag_slots_.resize(num_fixed);
+    for (int j = 0; j < num_fixed; j++) {
+        const int loc = this->kkt_locations_[pdiag_base + this->fixed_idx_[j]];
+        if (loc < 0) {
+            throw std::logic_error(
+                fmt::format("configure_variable_treatment: primal diagonal of variable {0} has "
+                            "no assigned storage location",
+                            this->fixed_idx_[j]));
+        }
+        this->fixed_diag_slots_[j] = loc;
+    }
+
+    this->fixed_reduction_active_ = true;
+    this->fixed_treatment_valid_ = true;
+    this->configured_bounds_revision_ = this->bounds_revision_;
+}
+
+void tycho::solvers::NonLinearProgram::gather_reduced_x(ConstEigenRef<VectorXd> x_full,
+                                                        EigenRef<VectorXd> x_reduced) const {
+    if (x_full.size() != this->primal_vars_ ||
+        x_reduced.size() != this->reduced_primal_vars_count_) {
+        throw std::invalid_argument(fmt::format(
+            "gather_reduced_x: expected a {0}-element full vector and a "
+            "{1}-element reduced vector (got {2} and {3})",
+            this->primal_vars_, this->reduced_primal_vars_count_, x_full.size(), x_reduced.size()));
+    }
+    if (!this->fixed_reduction_active_) {
+        x_reduced = x_full;
+        return;
+    }
+    for (int i = 0; i < this->reduced_primal_vars_count_; i++) {
+        x_reduced[i] = x_full[this->reduced_to_full_[i]];
+    }
+}
+
+void tycho::solvers::NonLinearProgram::scatter_full_x(ConstEigenRef<VectorXd> x_reduced,
+                                                      EigenRef<VectorXd> x_full) const {
+    if (x_full.size() != this->primal_vars_ ||
+        x_reduced.size() != this->reduced_primal_vars_count_) {
+        throw std::invalid_argument(fmt::format(
+            "scatter_full_x: expected a {0}-element full vector and a "
+            "{1}-element reduced vector (got {2} and {3})",
+            this->primal_vars_, this->reduced_primal_vars_count_, x_full.size(), x_reduced.size()));
+    }
+    if (!this->fixed_reduction_active_) {
+        x_full = x_reduced;
+        return;
+    }
+    for (int i = 0; i < this->reduced_primal_vars_count_; i++) {
+        x_full[this->reduced_to_full_[i]] = x_reduced[i];
+    }
+    for (int j = 0; j < this->fixed_idx_.size(); j++) {
+        x_full[this->fixed_idx_[j]] = this->fixed_vals_[j];
+    }
+}
+
+void tycho::solvers::NonLinearProgram::pin_fixed_variables(EigenRef<VectorXd> x_full) const {
+    if (!this->fixed_reduction_active_) {
+        return;
+    }
+    if (x_full.size() != this->primal_vars_) {
+        throw std::invalid_argument(
+            fmt::format("pin_fixed_variables: expected a {0}-element primal vector (got {1})",
+                        this->primal_vars_, x_full.size()));
+    }
+    for (int j = 0; j < this->fixed_idx_.size(); j++) {
+        x_full[this->fixed_idx_[j]] = this->fixed_vals_[j];
+    }
+}
+
+void tycho::solvers::NonLinearProgram::clear_fixed_variable_rows(
+    EigenRef<VectorXd> primal_rows) const {
+    if (!this->fixed_reduction_active_) {
+        return;
+    }
+    if (primal_rows.size() != this->primal_vars_) {
+        throw std::invalid_argument(fmt::format(
+            "clear_fixed_variable_rows: expected a {0}-element primal-row vector (got {1})",
+            this->primal_vars_, primal_rows.size()));
+    }
+    for (int j = 0; j < this->fixed_idx_.size(); j++) {
+        primal_rows[this->fixed_idx_[j]] = 0.0;
+    }
 }
 
 void tycho::solvers::NonLinearProgram::eval_rhs(double ObjScale, ConstEigenRef<VectorXd> X,
@@ -524,6 +819,16 @@ void tycho::solvers::NonLinearProgram::eval_kkt(
     tycho::utils::parallel_task(
         this->num_partitions_, [&] { this->fill_rhs(PGX, AGX, FXE, FXI); },
         [&] { this->fill_solver_coeffs(KKTmat); });
+
+    // Fixed-variable pin, the LAST write of the assembly: whatever the user
+    // functions and fill_solver_coeffs scattered into an eliminated variable's
+    // row/column, it ends up decoupled with a unit diagonal. Guarded on the one
+    // cached bool -- with no fixed variables this branch is not taken and the
+    // assembled matrix is bit-identical to what it was before the treatment
+    // existed.
+    if (this->fixed_reduction_active_) {
+        this->pin_fixed_variable_kkt_rows(KKTmat);
+    }
 }
 
 void tycho::solvers::NonLinearProgram::eval_kkt_no(
@@ -555,6 +860,11 @@ void tycho::solvers::NonLinearProgram::eval_kkt_no(
     tycho::utils::parallel_task(
         this->num_partitions_, [&] { this->fill_rhs(PGX, AGX, FXE, FXI); },
         [&] { this->fill_solver_coeffs(KKTmat); });
+
+    // Fixed-variable pin — see the comment in eval_kkt.
+    if (this->fixed_reduction_active_) {
+        this->pin_fixed_variable_kkt_rows(KKTmat);
+    }
 }
 void tycho::solvers::NonLinearProgram::eval_soe(
     double ObjScale, ConstEigenRef<VectorXd> X, ConstEigenRef<VectorXd> LE,
@@ -583,6 +893,11 @@ void tycho::solvers::NonLinearProgram::eval_soe(
     tycho::utils::parallel_task(
         this->num_partitions_, [&] { this->fill_rhs(PGX, AGX, FXE, FXI); },
         [&] { this->fill_solver_coeffs(KKTmat); });
+
+    // Fixed-variable pin — see the comment in eval_kkt.
+    if (this->fixed_reduction_active_) {
+        this->pin_fixed_variable_kkt_rows(KKTmat);
+    }
 }
 void tycho::solvers::NonLinearProgram::eval_aug(
     double ObjScale, ConstEigenRef<VectorXd> X, ConstEigenRef<VectorXd> LE,
@@ -616,6 +931,11 @@ void tycho::solvers::NonLinearProgram::eval_aug(
     tycho::utils::parallel_task(
         this->num_partitions_, [&] { this->fill_rhs(PGX, AGX, FXE, FXI); },
         [&] { this->fill_solver_coeffs(KKTmat); });
+
+    // Fixed-variable pin — see the comment in eval_kkt.
+    if (this->fixed_reduction_active_) {
+        this->pin_fixed_variable_kkt_rows(KKTmat);
+    }
 }
 
 void tycho::solvers::NonLinearProgram::nlp_test(const Eigen::VectorXd &x, int n,
