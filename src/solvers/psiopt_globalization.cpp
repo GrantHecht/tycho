@@ -195,6 +195,12 @@ void ClassicMeritAcceptance::eval_trial_point_occ(double obj_scale, double mu, d
     // strictly-feasible rows.
     this->apply_reset_slacks(xsl2.slacks(), rhs2.iq_cons());
     btest = this->barrier_objective(xsl2.slacks(), mu);
+    // Variable-bound barrier at the TRIAL primals. The current-point barr_obj
+    // this is compared against carries the matching term (added once in
+    // alg_impl), so both sides of the merit test are in the same units. Null off
+    // the bound path, where btest is unchanged.
+    if (ctx_.bounds_)
+        btest += detail::bound_barrier_objective(xsl2.primals(), *ctx_.bounds_, mu);
     if (ctx_.restoration_ && ctx_.restoration_->is_active() && ctx_.restoration_->is_nested()) {
         resto_eq_shift_scratch_.resize(ctx_.equal_cons_);
         resto_iq_shift_scratch_.resize(ctx_.inequal_cons_);
@@ -273,6 +279,9 @@ double ClassicMeritAcceptance::ls_lang(double obj_scale, double mu, double prim_
         }
         this->apply_reset_slacks(xsl2.slacks(), rhs2.iq_cons());
         btest = this->barrier_objective(xsl2.slacks(), mu);
+        // Variable-bound barrier at the TRIAL primals — see eval_trial_point_occ.
+        if (ctx_.bounds_)
+            btest += detail::bound_barrier_objective(xsl2.primals(), *ctx_.bounds_, mu);
         this->barrier_gradient(xsl2.slacks(), xsl2.iq_lmults(), mu, rhs2.dual_grad());
         if (ctx_.restoration_ && ctx_.restoration_->is_active() && ctx_.restoration_->is_nested()) {
             resto_eq_shift_scratch_.resize(ctx_.equal_cons_);
@@ -767,6 +776,12 @@ void modern_eval_trial_point(SolverContext &ctx, double obj_scale, double mu, do
     btest = 0.0;
     for (int i = 0; i < ic; i++)
         btest += -mu * std::log(S[i]);
+    // Variable-bound barrier at the TRIAL primals, matching the term alg_impl
+    // adds to the current point's barr_obj so the generic acceptance loop's
+    // trial.auxiliary and current.auxiliary are in the same units. Null off the
+    // bound path, where btest is unchanged.
+    if (ctx.bounds_)
+        btest += detail::bound_barrier_objective(XSL2.head(pv), *ctx.bounds_, mu);
 
     if (ctx.restoration_ && ctx.restoration_->is_active() && ctx.restoration_->is_nested()) {
         resto_eq_shift_scratch.resize(ec);

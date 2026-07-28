@@ -19,8 +19,10 @@
 
 #include "tycho/detail/solvers/psiopt.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 
 #include "tycho/detail/solvers/barrier_math.h"
@@ -160,6 +162,9 @@ bool tycho::solvers::PSIOPT::claim_kkt_analysis() {
 void tycho::solvers::PSIOPT::release() {
     this->kkt_sol_.release();
     this->qp_analyzed_ = false;
+    // The bound set lives in the NLP being released; the multipliers indexed it.
+    this->bounds_ = nullptr;
+    this->bound_duals_ = BoundDualState{};
     this->nlp_.reset();
     result_.primals_.resize(0);
     result_.eq_lmults_.resize(0);
@@ -246,6 +251,158 @@ void tycho::solvers::PSIOPT::barrier_hessian(Eigen::SparseMatrix<double, Eigen::
 // loqo_mu / mpc_mu were extracted verbatim into ClassicAdaptiveGovernor
 // (src/solvers/psiopt_globalization.cpp); the barrier-parameter
 // update now runs through governor_->update_barrier().
+
+// =============================================================================
+// Native variable-bound helpers. Every one is a no-op when bounds_ is null,
+// which is the whole story on a problem that declares no variable bounds.
+// =============================================================================
+
+void tycho::solvers::PSIOPT::push_initial_point_interior(EigenRef<Eigen::VectorXd> x, double mu0) {
+    this->bound_duals_ = BoundDualState{};
+    if (!this->bounds_)
+        return;
+
+    if (x.size() != this->primal_vars_)
+        throw std::logic_error(
+            fmt::format("PSIOPT: interior push expected a {0}-element reduced primal vector "
+                        "(got {1})",
+                        this->primal_vars_, x.size()));
+
+    const BoundSet &b = *this->bounds_;
+    const int nl = static_cast<int>(b.lower_idx_.size());
+    const int nu = static_cast<int>(b.upper_idx_.size());
+
+    // Dense by-variable view of the recorded bounds. The two lists are built in
+    // one pass over the variables and so happen to be sorted, but nothing in
+    // BoundSet's contract says so, and the two-sided cap needs BOTH endpoints of
+    // the same variable -- so the pairing goes through an explicit lookup rather
+    // than an assumed merge. Allocated once per solve; the push runs once.
+    constexpr double kInf = std::numeric_limits<double>::infinity();
+    Eigen::VectorXd lower = Eigen::VectorXd::Constant(this->primal_vars_, -kInf);
+    Eigen::VectorXd upper = Eigen::VectorXd::Constant(this->primal_vars_, kInf);
+    for (int k = 0; k < nl; k++)
+        lower[b.lower_idx_[k]] = b.lower_val_[k];
+    for (int k = 0; k < nu; k++)
+        upper[b.upper_idx_[k]] = b.upper_val_[k];
+
+    const double kappa1 = settings_.bound_push_;
+    const double kappa2 = settings_.bound_interval_push_;
+
+    // Lower pushes first, then upper, matching the reference order. A two-sided
+    // variable takes p_L + p_U <= 2*kappa2*(u-l) of its own interval, so with
+    // kappa2 below one half the projections cannot cross each other.
+    for (int k = 0; k < nl; k++) {
+        const int i = b.lower_idx_[k];
+        const double l = b.lower_val_[k];
+        double p = kappa1 * std::max(1.0, std::abs(l));
+        if (upper[i] < kInf)
+            p = std::min(p, kappa2 * (upper[i] - l));
+        x[i] = std::max(x[i], l + p);
+    }
+    for (int k = 0; k < nu; k++) {
+        const int i = b.upper_idx_[k];
+        const double u = b.upper_val_[k];
+        double p = kappa1 * std::max(1.0, std::abs(u));
+        if (lower[i] > -kInf)
+            p = std::min(p, kappa2 * (u - lower[i]));
+        x[i] = std::min(x[i], u - p);
+    }
+
+    // Multipliers seeded from the barrier parameter and the (now interior)
+    // distances, capped so a point started very close to a bound cannot seed an
+    // enormous multiplier.
+    this->bound_duals_.z_lower_.resize(nl);
+    this->bound_duals_.dz_lower_ = Eigen::VectorXd::Zero(nl);
+    for (int k = 0; k < nl; k++) {
+        const int i = b.lower_idx_[k];
+        this->bound_duals_.z_lower_[k] =
+            std::min(kBoundMultInitCap, mu0 / (x[i] - b.lower_val_[k]));
+    }
+    this->bound_duals_.z_upper_.resize(nu);
+    this->bound_duals_.dz_upper_ = Eigen::VectorXd::Zero(nu);
+    for (int k = 0; k < nu; k++) {
+        const int i = b.upper_idx_[k];
+        this->bound_duals_.z_upper_[k] =
+            std::min(kBoundMultInitCap, mu0 / (b.upper_val_[k] - x[i]));
+    }
+}
+
+void tycho::solvers::PSIOPT::compute_bound_dual_direction(ConstEigenRef<Eigen::VectorXd> x,
+                                                          ConstEigenRef<Eigen::VectorXd> dx,
+                                                          double mu) {
+    if (!this->bounds_)
+        return;
+    const BoundSet &b = *this->bounds_;
+    const int nl = static_cast<int>(b.lower_idx_.size());
+    const int nu = static_cast<int>(b.upper_idx_.size());
+    for (int k = 0; k < nl; k++) {
+        const int i = b.lower_idx_[k];
+        const double d = x[i] - b.lower_val_[k];
+        const double z = this->bound_duals_.z_lower_[k];
+        this->bound_duals_.dz_lower_[k] = mu / d - z - (z / d) * dx[i];
+    }
+    // Upper-bound distance shrinks as x grows, so the curvature term enters with
+    // the opposite sign to the lower-bound one.
+    for (int k = 0; k < nu; k++) {
+        const int i = b.upper_idx_[k];
+        const double d = b.upper_val_[k] - x[i];
+        const double z = this->bound_duals_.z_upper_[k];
+        this->bound_duals_.dz_upper_[k] = mu / d - z + (z / d) * dx[i];
+    }
+}
+
+void tycho::solvers::PSIOPT::apply_bound_dual_step(double alphad,
+                                                   ConstEigenRef<Eigen::VectorXd> x_new,
+                                                   double mu) {
+    if (!this->bounds_)
+        return;
+    const BoundSet &b = *this->bounds_;
+    // The clamp is measured at the NEW x: it is a safeguard on how far the
+    // committed multipliers may sit off the primal-dual central path of the
+    // point they now belong to, not of the point they were computed at.
+    auto clamp = [mu](double z, double d) {
+        return std::max(std::min(z, kKappaSigma * mu / d), mu / (kKappaSigma * d));
+    };
+    const int nl = static_cast<int>(b.lower_idx_.size());
+    const int nu = static_cast<int>(b.upper_idx_.size());
+    for (int k = 0; k < nl; k++) {
+        const int i = b.lower_idx_[k];
+        const double z = this->bound_duals_.z_lower_[k] + alphad * this->bound_duals_.dz_lower_[k];
+        this->bound_duals_.z_lower_[k] = clamp(z, x_new[i] - b.lower_val_[k]);
+    }
+    for (int k = 0; k < nu; k++) {
+        const int i = b.upper_idx_[k];
+        const double z = this->bound_duals_.z_upper_[k] + alphad * this->bound_duals_.dz_upper_[k];
+        this->bound_duals_.z_upper_[k] = clamp(z, b.upper_val_[k] - x_new[i]);
+    }
+}
+
+void tycho::solvers::PSIOPT::add_bound_sigma(ConstEigenRef<Eigen::VectorXd> x,
+                                             EigenRef<Eigen::VectorXd> diag) const {
+    if (!this->bounds_)
+        return;
+    detail::accumulate_bound_sigma(x, *this->bounds_, this->bound_duals_, diag);
+}
+
+void tycho::solvers::PSIOPT::install_primal_diags_with_sigma(ConstEigenRef<Eigen::VectorXd> x,
+                                                             double base) {
+    if (!this->bounds_) {
+        this->nlp_->set_primal_diags(base);
+        return;
+    }
+    this->bound_sigma_scratch_ = Eigen::VectorXd::Constant(this->primal_vars_, base);
+    this->add_bound_sigma(x, this->bound_sigma_scratch_);
+    this->nlp_->set_primal_diags(this->bound_sigma_scratch_);
+}
+
+double tycho::solvers::PSIOPT::dual_infeasibility_inf(KKTVector &rhs) const {
+    if (!this->bounds_)
+        return rhs.prim_grad().lpNorm<Eigen::Infinity>();
+    this->bound_resid_scratch_ = rhs.prim_grad();
+    detail::accumulate_bound_dual_terms(*this->bounds_, this->bound_duals_,
+                                        this->bound_resid_scratch_);
+    return this->bound_resid_scratch_.lpNorm<Eigen::Infinity>();
+}
 
 // =============================================================================
 // NLP eval dispatch methods
@@ -347,6 +504,11 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
     if (!np)
         throw std::invalid_argument("PSIOPT::set_nlp: NonLinearProgram pointer must not be null");
     this->nlp_ = np;
+    // Any bound set this solver was pointing at belonged to the previous NLP,
+    // and the multipliers indexed it. The next solve's configuration step
+    // re-reads both.
+    this->bounds_ = nullptr;
+    this->bound_duals_ = BoundDualState{};
     this->refresh_nlp_dimensions();
 
     // acceptance_/mechanism_/governor_/recovery_ are rebuilt from Settings by
@@ -380,8 +542,9 @@ void tycho::solvers::PSIOPT::set_nlp(std::shared_ptr<NonLinearProgram> np) {
 
 // (Re)builds the five globalization components from the CURRENT Settings
 // (acceptance_/mechanism_/governor_/recovery_, always constructed, plus the
-// optional restoration_). Called once at the top of every run_phase_sequence()
-// — i.e. once per solve invocation (optimize()/solve()/solve_optimize()/etc.
+// optional restoration_). Called once per run_phase_sequence(), right after the
+// variable-treatment configuration and before the first phase — i.e. once per
+// solve invocation (optimize()/solve()/solve_optimize()/etc.
 // all route through run_phase_sequence()) — rather than only from set_nlp()
 // (which runs only on (re)transcription). This makes construction-time knobs
 // (acceptance_strategy, max_soc, ls_extended_iters, watchdog,
@@ -469,7 +632,8 @@ void tycho::solvers::PSIOPT::rebuild_globalization_components() {
         this->acceptance_ = std::make_unique<ClassicMeritAcceptance>(
             SolverContext{this->nlp_.get(), this->kkt_sol_, this->settings_, this->primal_vars_,
                           this->slack_vars_, this->equal_cons_, this->inequal_cons_, this->kkt_dim_,
-                          this->stli_scratch_, this->restoration_.get(), &this->eval_error_log_});
+                          this->stli_scratch_, this->restoration_.get(), &this->eval_error_log_,
+                          this->bounds_, &this->bound_duals_});
     }
 
     // The step-length globalization mechanism. Stateless (holds
@@ -566,7 +730,11 @@ void tycho::solvers::PSIOPT::fill_residual_info(KKTVector &xsl, KKTVector &rhs, 
                                                 IterateInfo &iter) const {
 
     iter.prim_obj_ = pobj;
-    iter.kkt_inf_ = rhs.prim_grad().lpNorm<Eigen::Infinity>();
+    // The z-FORM dual infeasibility. On a problem without variable bounds this
+    // is the prim_grad() norm it always was; with bounds it additionally carries
+    // -z_L + z_U, which the RHS block itself deliberately does not (that block
+    // has to serve as the condensed Newton right-hand side, in the mu-form).
+    iter.kkt_inf_ = this->dual_infeasibility_inf(rhs);
 
     double avgcomp = 0;
     double mincomp = 0;
@@ -632,6 +800,7 @@ void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
             const int ic = this->inequal_cons_;
             this->resto_pdiag_scratch_.resize(this->primal_vars_);
             this->restoration_->nested_primal_diagonal(mu, this->resto_pdiag_scratch_);
+            this->add_bound_sigma(XSL.head(primal_vars_), this->resto_pdiag_scratch_);
             this->nlp_->set_primal_diags(this->resto_pdiag_scratch_);
             this->resto_epiv_scratch_ = -this->restoration_->e_pivots();
             this->resto_ipiv_scratch_ = -this->restoration_->i_pivots();
@@ -665,7 +834,13 @@ void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
         // Proximal mode-switch: uniform proximal-objective substitution, no
         // constraint-row modification (the constraints are unchanged in this
         // mode). Byte-identical to the pre-nested seam.
-        this->nlp_->set_primal_diags(this->restoration_->proximal_diagonal());
+        if (this->bounds_) {
+            this->bound_sigma_scratch_ = this->restoration_->proximal_diagonal();
+            this->add_bound_sigma(XSL.head(primal_vars_), this->bound_sigma_scratch_);
+            this->nlp_->set_primal_diags(this->bound_sigma_scratch_);
+        } else {
+            this->nlp_->set_primal_diags(this->restoration_->proximal_diagonal());
+        }
         eval_kkt_no(0.0, XSL, val, GX, AGXS_FX, KKTmat);
         this->nlp_->set_primal_diags(0.0);
         val = this->restoration_->proximal_objective(XSL.head(primal_vars_));
@@ -673,19 +848,44 @@ void tycho::solvers::PSIOPT::eval_nlp(AlgorithmModes algmode, double obj_scale,
         return;
     }
 
+    // Condensed variable-bound curvature. Eliminating the bound-multiplier rows
+    // leaves Sigma on the Hessian (1,1) diagonal, which is exactly the
+    // primal-diagonal slot the modes below already write -- so it composes with
+    // whatever base each mode wants (0 for the optimality modes, 1 for SOE, the
+    // restoration bases above) instead of needing rows of its own, and the KKT
+    // dimension does not grow. The inertia ladder's own perturb_kkt_p_diags
+    // accumulates on top of it afterwards, unchanged.
+    //
+    // The OPT/OPTNO arms guard on bounds_ rather than routing through the shared
+    // helper: their base is 0.0, which is what the slots already hold, so without
+    // bounds they must issue no diagonal write at all.
+    //
+    // AlgorithmModes::INIT is deliberately absent. It is not an iteration -- it
+    // is init_impl's one-shot multiplier initializer, which sets the primal
+    // diagonal to 1.0 itself and solves a least-squares system for the equality
+    // multipliers; folding bound curvature into that system would change the
+    // multipliers a solve starts from, which is not what condensing the bound
+    // rows out of the ITERATION's KKT system is about.
     switch (algmode) {
     case AlgorithmModes::OPT:
+        if (this->bounds_)
+            this->install_primal_diags_with_sigma(XSL.head(primal_vars_), 0.0);
         eval_kkt(obj_scale, XSL, val, GX, AGXS_FX, KKTmat);
+        if (this->bounds_)
+            this->nlp_->set_primal_diags(0.0);
         break;
     case AlgorithmModes::OPTNO:
+        if (this->bounds_)
+            this->install_primal_diags_with_sigma(XSL.head(primal_vars_), 0.0);
         eval_kkt_no(obj_scale, XSL, val, GX, AGXS_FX, KKTmat);
-
+        if (this->bounds_)
+            this->nlp_->set_primal_diags(0.0);
         break;
     case AlgorithmModes::INIT:
         eval_aug(obj_scale, XSL, val, GX, AGXS_FX, KKTmat);
         break;
     case AlgorithmModes::SOE:
-        this->nlp_->set_primal_diags(1.0);
+        this->install_primal_diags_with_sigma(XSL.head(primal_vars_), 1.0);
         eval_soe(0.0, XSL, val, GX, AGXS_FX, KKTmat);
         this->nlp_->set_primal_diags(0.0);
         GX.head(primal_vars_).setZero();
@@ -1267,10 +1467,11 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     // step-length mechanism (mechanism_) at its call sites below. Built once
     // here (dims/settings/scratch are stable for the solve); it must not
     // outlive this alg_impl frame or the PSIOPT members it references.
-    SolverContext ctx{this->nlp_.get(),    this->kkt_sol_,           this->settings_,
-                      this->primal_vars_,  this->slack_vars_,        this->equal_cons_,
-                      this->inequal_cons_, this->kkt_dim_,           this->stli_scratch_,
-                      this->restoration_.get(), &this->eval_error_log_};
+    SolverContext ctx{this->nlp_.get(),         this->kkt_sol_,         this->settings_,
+                      this->primal_vars_,       this->slack_vars_,      this->equal_cons_,
+                      this->inequal_cons_,      this->kkt_dim_,         this->stli_scratch_,
+                      this->restoration_.get(), &this->eval_error_log_, this->bounds_,
+                      &this->bound_duals_};
 
     // Windowed sustained-worsening detector for the feasibility-only stage (see
     // feasibility_stall.h). Consulted only when a restoration strategy is
@@ -1384,6 +1585,30 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // Assemble KKT gradient and factorize with inertia correction
         QPtimer.start();
         v_rhs.prim_grad() += PGX;
+
+        // RHS PRIMAL-BLOCK STAGING (native variable bounds). From here the
+        // primal block holds grad f + J'lambda and NOTHING bound-related. That is
+        // deliberate, and it is the same vector in three different roles this
+        // iteration:
+        //
+        //   1. RESIDUAL. The convergence account wants the dual infeasibility
+        //      grad f + J'lambda - z_L + z_U. It is never accumulated here --
+        //      dual_infeasibility_inf() adds the z-form in scratch instead, at
+        //      both consuming sites (fill_residual_info now, fill_iter_info at
+        //      the bottom of the loop).
+        //   2. AFFINE NEWTON RIGHT-HAND SIDE. The PROBE predictor solve inside
+        //      update_barrier() below is the mu = 0 system, whose condensed
+        //      primal right-hand side is exactly grad f + J'lambda -- the bound
+        //      terms cancel out at mu = 0, precisely as the slack block's
+        //      predictor form (lambda, not lambda - mu/s) does. So the predictor
+        //      needs no bound work at all, and gets none.
+        //   3. CORRECTOR NEWTON RIGHT-HAND SIDE. The real step solve needs the
+        //      mu-form, grad f + J'lambda - mu/(x-l) + mu/(u-x). It is installed
+        //      just before that solve, at the barrier parameter the solve is
+        //      formed at, and copied back out after the step is settled.
+        //
+        // Roles 1 and 3 disagree away from the central path, which is why the
+        // mu-form lives in a bracket rather than being written once here.
 
         // Check convergence before factorizing the converged iterate: every
         // residual converge_check() consumes is now
@@ -1950,6 +2175,22 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                                                *mechanism_, ctx, barr_obj, Citer, mu_event);
             }
         }
+
+        // Variable-bound contribution to THIS iterate's barrier objective. Every
+        // consumer of barr_obj is a merit/acceptance account, and each of them
+        // compares it against a trial-point barrier objective that carries the
+        // matching bound term (added at the three trial evaluators in
+        // psiopt_globalization.cpp), so the two sides stay in the same units.
+        //
+        // Added here rather than inside the governors, which is where the SLACK
+        // barrier objective is produced, for one reason: that whole block is
+        // guarded on inequal_cons_ > 0, and a problem whose only barrier terms
+        // come from variable bounds has no slacks and never reaches a governor.
+        // This is the single site that produces the current iterate's barr_obj,
+        // so the bound term is added exactly once whichever governor ran.
+        if (this->bounds_)
+            barr_obj += detail::bound_barrier_objective(v_xsl.primals(), *this->bounds_, mu);
+
         const double step_mu = nested_active ? eval_mu : mu;
 
         // Per-barrier-subproblem acceptance reset: when the governor's monotone
@@ -1963,6 +2204,19 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             this->acceptance_->reset();
         }
 
+        // [NEWTON FORM IN] Install the mu-form variable-bound terms on the primal
+        // right-hand side for the corrector solve (see the staging comment above
+        // the convergence check). The block is snapshotted first so the restore
+        // after the step is an exact copy back rather than an add-then-subtract
+        // round trip, which would not return the same bits. Uses step_mu, the
+        // barrier parameter the rest of this iteration's step algebra is formed
+        // at; it differs from mu only inside a nested restoration phase.
+        if (this->bounds_) {
+            this->bound_grad_scratch_ = v_rhs.prim_grad();
+            detail::accumulate_bound_barrier_gradient(v_xsl.primals(), *this->bounds_, step_mu,
+                                                      v_rhs.prim_grad());
+        }
+
         // The REAL step solve (distinct from the PROBE predictor solve, which
         // moved into ClassicAdaptiveGovernor::update_barrier — see its solve-into
         // comment): direct assignment + in-place negate avoids the extra
@@ -1970,6 +2224,15 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         DXSL = this->kkt_sol_.solve(RHS);
         DXSL = -DXSL;
         bool GoodStep = std::isfinite(DXSL.squaredNorm());
+
+        // Bound-multiplier Newton step, recovered from the primal step the
+        // condensed system just produced. Taken here, on the RAW solution, before
+        // compute_step's fraction-to-boundary rule scales DXSL in place -- the
+        // elimination that produced Sigma was written against the unscaled dx.
+        if (this->bounds_ && GoodStep) {
+            KKTVector v_dxsl_bounds = kkt_view(DXSL);
+            this->compute_bound_dual_direction(v_xsl.primals(), v_dxsl_bounds.primals(), step_mu);
+        }
 
         // Nested-restoration elastic step recovery. Dead unless a nested
         // restoration strategy is active. The condensed KKT solved for the
@@ -2247,6 +2510,16 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         if (nested_active && Citer.accepted_)
             this->resto_recentered_ = false;
 
+        // [NEWTON FORM OUT] The step is settled -- every consumer of the mu-form
+        // primal block has run (the corrector solve, the line search's
+        // directional derivative, and any recovery link that re-solved on the
+        // live factorization). Put the block back to grad f + J'lambda so the
+        // residual account below reads what it is documented to read, and so the
+        // return_best_ snapshot stores a right-hand side in the same form the
+        // top of the next iteration would build.
+        if (this->bounds_)
+            v_rhs.prim_grad() = this->bound_grad_scratch_;
+
         Citer.alpha_p_ = alphap;
         Citer.alpha_d_ = alphad;
         Citer.alpha_t_ = alpha;
@@ -2311,6 +2584,19 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
 
         // Apply step
         XSL += alpha * DXSL;
+
+        // The ONE iterate-commit site, and therefore the one place the bound
+        // multipliers move. Every recovery outcome funnels through the line
+        // above: an accepted first trial, a second-order correction, an extended
+        // backtrack, a restoration dispatch or a re-center (both alpha = 0), and
+        // the watchdog revert (which restores its snapshot into XSL and leaves
+        // alpha = 0). The dual fraction is alpha*alphad, matching the damping the
+        // KKT dual blocks took inside compute_step and the elastic commit below;
+        // on the alpha = 0 paths the multipliers do not move, but the
+        // kappa_sigma clamp still re-projects them against whatever x now is,
+        // which is what a reverted iterate needs.
+        if (this->bounds_)
+            this->apply_bound_dual_step(alpha * alphad, v_xsl.primals(), step_mu);
 
         // Commit the recovered elastic step alongside the outer primal/dual step.
         // Dead unless a nested restoration strategy is active. The outer primal
@@ -2556,17 +2842,6 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
     this->eval_error_log_.reset();
     settings_.validate();
 
-    // Rebuild acceptance_/mechanism_/governor_/recovery_ (and, when
-    // restoration_mode_ != off, restoration_) from the just-validated
-    // Settings on every solve entry, not just on
-    // (re)transcription (set_nlp() no longer builds them) — see
-    // rebuild_globalization_components()'s doc comment for why this must run
-    // per solve rather than per transcription, and for the neutrality
-    // argument on the default (all-off) path. nlp_ is guaranteed non-null
-    // here (checked above), and set_nlp() has always already run (same
-    // guarantee), so the SolverContext captures this call takes are final.
-    this->rebuild_globalization_components();
-
     // Re-apply the QP threading setting on every solve entry, not just in
     // set_nlp() (which only runs on transcribe): a single-thread pin left on
     // this thread by another component (e.g. Jet's per-job pin — thread-local
@@ -2612,6 +2887,15 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
     // sparsity pattern recomputed -- and the symbolic analysis redone, since the
     // matrix it was computed for no longer exists. A solver instance solving
     // repeatedly against unchanged bounds takes none of this.
+    //
+    // The bound-set pointer is cleared FIRST and re-read only after the call
+    // returns. A configuration that throws leaves a rejected classification
+    // behind on the NLP, and a caller that catches it and solves again must not
+    // find this solver still pointing at it; clearing before and re-reading
+    // after makes the success path the only one that can produce a non-null
+    // bounds_. A set with nothing in it is left null, so "has variable-bound
+    // barrier terms" and "bounds_ != nullptr" are the same question everywhere.
+    this->bounds_ = nullptr;
     if (this->nlp_->configure_variable_treatment(FixedVariableTreatments::MakeParameter,
                                                  kDefaultBoundRelaxFactor)) {
         this->refresh_nlp_dimensions();
@@ -2621,6 +2905,27 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
 #endif
         this->qp_analyzed_ = false;
     }
+    if (this->nlp_->variable_bound_set().any())
+        this->bounds_ = &this->nlp_->variable_bound_set();
+
+    // Rebuild acceptance_/mechanism_/governor_/recovery_ (and, when
+    // restoration_mode_ != off, restoration_) from the just-validated Settings
+    // on every solve entry, not just on (re)transcription (set_nlp() no longer
+    // builds them) — see rebuild_globalization_components()'s doc comment for
+    // why this must run per solve rather than per transcription, and for the
+    // neutrality argument on the default (all-off) path. nlp_ is guaranteed
+    // non-null here (checked above), and set_nlp() has always already run (same
+    // guarantee), so the SolverContext captures this call takes are final.
+    //
+    // Placed AFTER the variable-treatment configuration above, not before it:
+    // ClassicMeritAcceptance is the one component that holds its SolverContext
+    // by value, and that context carries the bound-set pointer BY VALUE, so it
+    // has to be built once the classification that pointer refers to is settled.
+    // Nothing reads any of the five components in between (their only consumers
+    // are alg_impl's dispatch and the per-phase reset() calls, both below), and
+    // the dimension captures were already by reference precisely because this
+    // configuration step can narrow the problem.
+    this->rebuild_globalization_components();
 
     if (settings_.print_level_ == 0)
         print_stats();
@@ -2638,6 +2943,15 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
     // expanded again at the return below.
     Eigen::VectorXd x_solver(this->primal_vars_);
     this->nlp_->gather_reduced_x(x, x_solver);
+
+    // Into the interior of the declared variable bounds, and seed the bound
+    // multipliers there. Runs once per solve, after the gather (so it works in
+    // the same reduced space the bound set is recorded in) and before any
+    // evaluation -- every barrier term below divides by a distance to a bound,
+    // and this is what makes those distances strictly positive to begin with. A
+    // guess sitting on or outside a bound is projected, not rejected. Resets the
+    // multiplier state to empty on a problem with no bounds.
+    this->push_initial_point_interior(x_solver, settings_.init_mu_);
 
     bool docompute = claim_kkt_analysis();
     Eigen::VectorXd XSL = this->init_impl(x_solver, settings_.init_mu_, docompute);

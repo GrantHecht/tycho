@@ -34,6 +34,7 @@
 #include <fmt/color.h>
 #include <fmt/core.h>
 
+#include "tycho/detail/solvers/bound_set.h"
 #include "tycho/detail/solvers/eval_error_log.h"
 #include "tycho/detail/solvers/iterate_info.h"
 #include "tycho/detail/solvers/kkt_vector.h"
@@ -81,6 +82,11 @@ class DivergencePersistenceHarness;
 // live SolverContext and drive the mechanism's acceptance-backtrack seam with a
 // generic acceptance strategy (see test_soc_generic_acceptance.cpp).
 class SocGenericHarness;
+// Test harness for the native variable-bound machinery: reaches the private
+// interior push, the bound-multiplier direction/update helpers and the
+// bound_duals_/bounds_ state so each can be checked against a hand calculation
+// without a full bounded solve (there is no fraction-to-boundary leg yet).
+class NativeBoundsHarness;
 
 namespace tycho::solvers {
 
@@ -317,6 +323,17 @@ class PSIOPT {
         // --- Step parameters ---
         double bound_fraction_ = 0.99;
         double bound_push_ = 1.0e-3;
+        // Absolute component of the interior push applied to a bounded primal
+        // variable at solve entry: the push away from a bound is at least
+        // bound_push_ * max(1, |bound|) (Ipopt's bound_push). It also caps the
+        // initial slack the INIT multiplier pass hands an inequality row.
+        //
+        // Relative component of that same push, applied only to a TWO-SIDED
+        // variable: the push is additionally capped at
+        // bound_interval_push_ * (upper - lower), so a narrow interval is never
+        // pushed past its own midpoint (Ipopt's bound_frac, same default).
+        // Read only when the problem declares native variable bounds.
+        double bound_interval_push_ = 1.0e-2;
         double neg_slack_reset_ = 1.0e-12;
         double alpha_red_ = 2.0;
 
@@ -791,6 +808,7 @@ class PSIOPT {
     friend class ::NestedLifecycleHarness;
     friend class ::DivergencePersistenceHarness;
     friend class ::SocGenericHarness;
+    friend class ::NativeBoundsHarness;
 
     Settings settings_;
     SolveResult result_;
@@ -855,7 +873,8 @@ class PSIOPT {
     std::unique_ptr<RestorationStrategy> restoration_;
 
     // (Re)builds acceptance_/mechanism_/governor_/recovery_ from the current
-    // Settings. Called once at the top of every run_phase_sequence() (i.e.
+    // Settings. Called once per run_phase_sequence(), right after the
+    // variable-treatment configuration and before the first phase (i.e.
     // once per solve invocation — optimize()/solve()/etc. all route through
     // it), NOT from set_nlp(): construction-time knobs (acceptance_strategy,
     // max_soc, ls_extended_iters, watchdog, merit_penalty_rule) must take
@@ -937,6 +956,39 @@ class PSIOPT {
     bool resto_first_iter_ = false;
     double resto_theta_orig_prev_ = 0.0;
     Eigen::VectorXd resto_dz_scratch_;
+
+    // --- Native primal variable bounds (all inert on a problem without any) ---
+    //
+    // bounds_ points at the NonLinearProgram's classification of the finite
+    // variable bounds this solve must keep barrier terms for, in the solver's
+    // REDUCED index space. It is set ONLY on the configuration success path in
+    // run_phase_sequence() and ONLY when the set is non-empty: a configuration
+    // that threw leaves a rejected classification behind on the NLP, so the
+    // pointer is cleared before the configuration attempt and re-read after it,
+    // and set_nlp()/release() clear it too. Null therefore means "this solve has
+    // no variable-bound barrier terms", which every bound branch in this class
+    // and in the globalization components tests -- and which is what makes the
+    // KKT assembly on such a problem byte-identical to the pre-bounds solver.
+    const BoundSet *bounds_ = nullptr;
+    // The bound multipliers and their Newton step, index-aligned to bounds_'s
+    // two lists. Iterate state, so solver-owned rather than NLP-owned; sized by
+    // the interior push at solve entry and empty whenever bounds_ is null.
+    BoundDualState bound_duals_;
+
+    // Bound scratch, following the *_scratch_ no-per-call-allocation discipline
+    // (resize-on-assign is a no-op once dims are stable across a solve); all
+    // three stay empty on a problem without variable bounds.
+    //
+    // bound_sigma_scratch_ backs the primal-diagonal base vector that carries
+    // the condensed bound curvature into the KKT assembly.
+    // bound_resid_scratch_ backs the z-form dual-infeasibility block the
+    // convergence account reads (mutable: the residual accessor is const).
+    // bound_grad_scratch_ holds the primal RHS block as it stands BEFORE the
+    // mu-form Newton terms are installed, so the restore after the step is an
+    // exact copy back rather than an add-then-subtract round trip.
+    Eigen::VectorXd bound_sigma_scratch_;
+    mutable Eigen::VectorXd bound_resid_scratch_;
+    Eigen::VectorXd bound_grad_scratch_;
 
     // One-shot guard for the second-level elastic re-centering fallback (nested l1
     // restoration only, disclosure (f) in l1_restoration.h). Set true when an
@@ -1042,6 +1094,49 @@ class PSIOPT {
                                         int base_count) const;
     void barrier_hessian(Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
                          Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double mu);
+    // --- Native variable-bound helpers (defined in psiopt.cpp) ---
+    // Every one of these is a no-op when bounds_ is null.
+
+    // Projects `x` into the strict interior of the recorded bounds and seeds the
+    // bound multipliers there. Per bounded variable the push away from a bound is
+    // p = bound_push_ * max(1, |bound|), additionally capped at
+    // bound_interval_push_ * (upper - lower) when the variable is two-sided
+    // (Ipopt's kappa1/kappa2 rule); the lower push is applied before the upper,
+    // and with bound_interval_push_ below one half the two can never cross. A
+    // guess at or outside a bound is projected, never rejected. The multipliers
+    // are then seeded at min(kBoundMultInitCap, mu0 / distance) -- after the
+    // push, so the distance is safely interior. Runs once per solve, at entry,
+    // after the reduced gather and before any evaluation.
+    void push_initial_point_interior(EigenRef<Eigen::VectorXd> x, double mu0);
+
+    // Bound-multiplier Newton step from the UNSCALED primal step `dx`:
+    // dz_L = mu*(X-L)^-1 e - z_L - Sigma_L*dx and, with the sign the upper-bound
+    // row carries, dz_U = mu*(U-X)^-1 e - z_U + Sigma_U*dx. Must be called on the
+    // raw KKT solution, before the fraction-to-boundary rule scales it.
+    void compute_bound_dual_direction(ConstEigenRef<Eigen::VectorXd> x,
+                                      ConstEigenRef<Eigen::VectorXd> dx, double mu);
+
+    // Commits the bound multipliers for an accepted iterate: z += alphad*dz,
+    // then the kappa_sigma safeguard clamps each into
+    // [mu/(kKappaSigma*d), kKappaSigma*mu/d] for the distance d measured at the
+    // NEW x. Exactly one call per committed iterate.
+    void apply_bound_dual_step(double alphad, ConstEigenRef<Eigen::VectorXd> x_new, double mu);
+
+    // Accumulates the condensed bound curvature onto a primal-diagonal base
+    // vector. The two callers that already have a base vector in hand call this
+    // directly; install_primal_diags_with_sigma() is the scalar-base form, which
+    // collapses to a plain set_primal_diags(base) when there are no bounds.
+    void add_bound_sigma(ConstEigenRef<Eigen::VectorXd> x, EigenRef<Eigen::VectorXd> diag) const;
+    void install_primal_diags_with_sigma(ConstEigenRef<Eigen::VectorXd> x, double base);
+
+    // The dual infeasibility whose infinity norm is the solver's kkt_inf_. Off
+    // the bound path this is exactly rhs.prim_grad()'s norm, as it always was;
+    // with bounds it is that block plus the z-FORM terms (-z_L + z_U), built in
+    // scratch. It is deliberately NOT accumulated into the RHS itself: the same
+    // primal block is the condensed Newton right-hand side, which carries the
+    // mu-form instead -- see the staging comments in alg_impl().
+    double dual_infeasibility_inf(KKTVector &rhs) const;
+
     // loqo_mu / mpc_mu were extracted verbatim into ClassicAdaptiveGovernor
     // (src/solvers/psiopt_globalization.cpp); the barrier-
     // parameter update now runs through governor_->update_barrier(). The

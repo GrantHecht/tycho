@@ -12,6 +12,8 @@
 //   - Extracted the slack-reset and log-barrier objective/gradient kernels from
 //     PSIOPT (psiopt.cpp), where the globalization component extraction had left
 //     one verbatim copy per component
+//   - Added the primal variable-bound barrier kernels (objective, the two
+//     gradient forms, and the condensed sigma diagonal)
 // =============================================================================
 //
 // Three tiny pure kernels the barrier machinery evaluates everywhere: the slack
@@ -21,6 +23,13 @@
 // MonitoredBarrierGovernor) could carry its own verbatim copy reading through a
 // SolverContext instead of a PSIOPT member. This header is the single home; each
 // former member is now a one-line forwarder, so the arithmetic exists once.
+//
+// The four bound kernels at the bottom are the same idea for barrier terms on
+// PRIMAL VARIABLE BOUNDS rather than on inequality slacks. They walk a BoundSet
+// (index/value pairs, reduced-space indices), so a problem with no variable
+// bounds gives them no trip count at all and every caller guards on an empty
+// set anyway. Two of them are gradient accumulators that look interchangeable
+// and are NOT -- see the mu-form / z-form note on the pair below.
 //
 // The bodies below are token-identical to the copies they replace, with the
 // former member reads (slack_vars_ / inequal_cons_ / neg_slack_reset_) turned
@@ -39,6 +48,9 @@
 #include <cmath>
 
 #include <Eigen/Core>
+
+#include "tycho/detail/solvers/bound_set.h"
+#include "tycho/detail/typedefs/eigen_types.h"
 
 namespace tycho::solvers::detail {
 
@@ -79,6 +91,97 @@ inline double barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu, int in
 inline void barrier_gradient(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI,
                              double mu, Eigen::Ref<Eigen::VectorXd> AGS) {
     AGS = LI - mu * (S.cwiseInverse());
+}
+
+// =============================================================================
+// Primal variable-bound barrier kernels.
+//
+// For the bounds recorded in `b` (reduced-space indices; a two-sided variable
+// appears in both lists) the barrier objective is
+//
+//     phi_mu(x) = f(x) - mu * sum ln(x_i - l_i) - mu * sum ln(u_i - x_i)
+//
+// and its primal gradient contribution is -mu/(x_i - l_i) + mu/(u_i - x_i).
+// Every caller is responsible for keeping x strictly inside the recorded
+// bounds; the interior push at solve entry and the fraction-to-boundary rule
+// are what guarantee it, and none of these kernels re-checks.
+// =============================================================================
+
+// -mu * [ sum ln(x_i - l_i) + sum ln(u_i - x_i) ] over the bound set.
+inline double bound_barrier_objective(ConstEigenRef<Eigen::VectorXd> x, const BoundSet &b,
+                                      double mu) {
+    const int nl = static_cast<int>(b.lower_idx_.size());
+    const int nu = static_cast<int>(b.upper_idx_.size());
+    double psi = 0.0;
+    for (int k = 0; k < nl; k++) {
+        psi += -mu * std::log(x[b.lower_idx_[k]] - b.lower_val_[k]);
+    }
+    for (int k = 0; k < nu; k++) {
+        psi += -mu * std::log(b.upper_val_[k] - x[b.upper_idx_[k]]);
+    }
+    return psi;
+}
+
+// mu-FORM primal gradient terms: gx_i += -mu/(x_i - l_i) and += +mu/(u_i - x_i).
+//
+// This is the gradient of the barrier objective itself, and it is what the
+// CONDENSED NEWTON RIGHT-HAND SIDE carries. Eliminating the bound-multiplier
+// rows from the primal-dual system turns the primal row's right-hand side
+// (grad f + J'lambda - z_L + z_U) into exactly grad phi_mu + J'lambda: the
+// -z_L + z_U cancels against the multiplier steps that were substituted in.
+// Never use this form for a residual a convergence test consumes.
+inline void accumulate_bound_barrier_gradient(ConstEigenRef<Eigen::VectorXd> x, const BoundSet &b,
+                                              double mu, EigenRef<Eigen::VectorXd> gx) {
+    const int nl = static_cast<int>(b.lower_idx_.size());
+    const int nu = static_cast<int>(b.upper_idx_.size());
+    for (int k = 0; k < nl; k++) {
+        const int i = b.lower_idx_[k];
+        gx[i] += -mu / (x[i] - b.lower_val_[k]);
+    }
+    for (int k = 0; k < nu; k++) {
+        const int i = b.upper_idx_[k];
+        gx[i] += mu / (b.upper_val_[k] - x[i]);
+    }
+}
+
+// z-FORM primal gradient terms: gx_i += -zL_i and += +zU_i.
+//
+// This is the DUAL INFEASIBILITY contribution -- the residual whose norm the
+// convergence check consumes, grad f + J'lambda - z_L + z_U. It agrees with the
+// mu-form only at a point that satisfies the bound complementarity exactly
+// (z_L = mu/(x-l), z_U = mu/(u-x)); away from the central path the two differ,
+// which is the whole reason both exist. Never use this form for a Newton
+// right-hand side.
+inline void accumulate_bound_dual_terms(const BoundSet &b, const BoundDualState &z,
+                                        EigenRef<Eigen::VectorXd> gx) {
+    const int nl = static_cast<int>(b.lower_idx_.size());
+    const int nu = static_cast<int>(b.upper_idx_.size());
+    for (int k = 0; k < nl; k++) {
+        gx[b.lower_idx_[k]] += -z.z_lower_[k];
+    }
+    for (int k = 0; k < nu; k++) {
+        gx[b.upper_idx_[k]] += z.z_upper_[k];
+    }
+}
+
+// Condensed bound curvature: sigma_i += zL_i/(x_i - l_i) and += zU_i/(u_i - x_i).
+//
+// The Sigma that eliminating the bound-multiplier rows leaves on the Hessian
+// (1,1) diagonal. Accumulated onto whatever base the solver already writes to
+// the primal-diagonal slots, so it composes with the restoration and proximal
+// bases instead of replacing them, and it does not grow the KKT system.
+inline void accumulate_bound_sigma(ConstEigenRef<Eigen::VectorXd> x, const BoundSet &b,
+                                   const BoundDualState &z, EigenRef<Eigen::VectorXd> sigma) {
+    const int nl = static_cast<int>(b.lower_idx_.size());
+    const int nu = static_cast<int>(b.upper_idx_.size());
+    for (int k = 0; k < nl; k++) {
+        const int i = b.lower_idx_[k];
+        sigma[i] += z.z_lower_[k] / (x[i] - b.lower_val_[k]);
+    }
+    for (int k = 0; k < nu; k++) {
+        const int i = b.upper_idx_[k];
+        sigma[i] += z.z_upper_[k] / (b.upper_val_[k] - x[i]);
+    }
 }
 
 } // namespace tycho::solvers::detail
