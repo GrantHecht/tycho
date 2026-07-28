@@ -12,6 +12,8 @@
 //   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
+#include <fmt/format.h>
+
 #include "tycho/detail/solvers/indexing_data.h"
 #include "tycho/detail/solvers/non_linear_program.h"
 #include "tycho/detail/utils/timer.h"
@@ -21,6 +23,8 @@ void tycho::solvers::NonLinearProgram::make_nlp(int PV, int EQ, int IQ) {
     this->equal_cons_ = EQ;
     this->inequal_cons_ = IQ;
     this->slack_vars_ = IQ;
+
+    this->materialize_variable_bounds();
 
     this->count_elems();
 
@@ -43,6 +47,33 @@ void tycho::solvers::NonLinearProgram::make_nlp(int PV, int EQ, int IQ) {
     this->get_mat_space();
     this->get_rhs_space();
     this->finalize_data();
+}
+
+void tycho::solvers::NonLinearProgram::materialize_variable_bounds() {
+    constexpr double kInf = std::numeric_limits<double>::infinity();
+
+    this->x_lower_ = Eigen::VectorXd::Constant(this->primal_vars_, -kInf);
+    this->x_upper_ = Eigen::VectorXd::Constant(this->primal_vars_, kInf);
+
+    for (const auto &stage : this->staged_variable_bounds_) {
+        if (stage.index_ < 0 || stage.index_ >= this->primal_vars_) {
+            throw std::invalid_argument(
+                fmt::format("set_variable_bound: index {0} out of range [0, {1})", stage.index_,
+                            this->primal_vars_));
+        }
+
+        double &lower = this->x_lower_[stage.index_];
+        double &upper = this->x_upper_[stage.index_];
+        lower = std::max(lower, stage.lower_);
+        upper = std::min(upper, stage.upper_);
+
+        if (lower > upper) {
+            throw std::invalid_argument(
+                fmt::format("set_variable_bound: conflicting bounds for index {0}: "
+                            "lower={1}, upper={2}",
+                            stage.index_, lower, upper));
+        }
+    }
 }
 
 void tycho::solvers::NonLinearProgram::count_elems() {

@@ -21,7 +21,9 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -30,6 +32,8 @@
 
 #include <Eigen/Core>
 #include <Eigen/Sparse>
+
+#include <fmt/format.h>
 
 #include "tycho/detail/solvers/constraint_function.h"
 #include "tycho/detail/solvers/objective_function.h"
@@ -144,6 +148,71 @@ struct NonLinearProgram {
 
     void make_nlp(int PV, int EQ, int IQ);
 
+    /// <summary>
+    /// One staged variable-bound declaration, as handed to set_variable_bound.
+    /// Recorded verbatim (no merging at declaration time) so that repeated
+    /// make_nlp calls re-derive the same tightest-wins result from the same
+    /// history.
+    /// </summary>
+    struct VariableBoundStage {
+        int index_;
+        double lower_;
+        double upper_;
+    };
+
+    /// Staged variable-bound declarations, applied by make_nlp. Declaration
+    /// may precede sizing (primal_vars_ is only known once make_nlp runs), so
+    /// index-range validation and the tightest-wins merge both happen at
+    /// materialization time, not here. Cleared only by clear_variable_bounds().
+    std::vector<VariableBoundStage> staged_variable_bounds_;
+
+    /// Dense per-primal-variable bounds materialized from
+    /// staged_variable_bounds_ by make_nlp. Length primal_vars_ after
+    /// make_nlp; -inf/+inf where no staged bound narrows the variable. Empty
+    /// (size 0) before the first make_nlp call or after clear_variable_bounds().
+    VectorXd x_lower_;
+    VectorXd x_upper_;
+
+    /// <summary>
+    /// Stages a bound declaration for primal variable global_index. Repeated
+    /// declarations on the same index are intersected (tightest wins) when
+    /// make_nlp materializes x_lower_/x_upper_: l = max(l_prev, l_new),
+    /// u = min(u_prev, u_new). A declaration with both bounds infinite leaves
+    /// the variable unbounded and is a no-op. NaN bounds are rejected
+    /// immediately, since they cannot participate in the max/min merge.
+    /// </summary>
+    void set_variable_bound(int global_index, double lower, double upper) {
+        if (std::isnan(lower) || std::isnan(upper)) {
+            throw std::invalid_argument(
+                fmt::format("set_variable_bound: bound for index {0} is NaN (lower={1}, "
+                            "upper={2})",
+                            global_index, lower, upper));
+        }
+        constexpr double kInf = std::numeric_limits<double>::infinity();
+        if (lower == -kInf && upper == kInf) {
+            return;
+        }
+        this->staged_variable_bounds_.push_back({global_index, lower, upper});
+    }
+
+    /// Drops every staged declaration and the materialized x_lower_/x_upper_
+    /// vectors. The next make_nlp call starts from an unbounded problem.
+    void clear_variable_bounds() {
+        this->staged_variable_bounds_.clear();
+        this->x_lower_.resize(0);
+        this->x_upper_.resize(0);
+    }
+
+    /// True iff any primal variable has a finite lower or upper bound after
+    /// materialization. False before the first make_nlp call.
+    bool has_variable_bounds() const {
+        if (this->x_lower_.size() == 0) {
+            return false;
+        }
+        constexpr double kInf = std::numeric_limits<double>::infinity();
+        return (this->x_lower_.array() > -kInf).any() || (this->x_upper_.array() < kInf).any();
+    }
+
     void print_data() {
         for (int i = 0; i < this->num_partitions_; i++) {
             std::cout << "Partition: " << i << std::endl << std::endl;
@@ -167,6 +236,8 @@ struct NonLinearProgram {
     }
 
     void count_elems();
+
+    void materialize_variable_bounds();
 
     void analyze_partitioning();
 

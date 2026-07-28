@@ -203,6 +203,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     # -- grep the prefix before reusing it), the same convention documented on
     # the SKIP_UNITY_BUILD_INCLUSION entries below.
     solvers/test_psiopt_presets.cpp # file-local prefix: PresetGate*
+    solvers/test_nlp_variable_bounds.cpp # file-local prefix: NlpVarBounds*
 )
 
 #-------------------------------------------------------------------------------
