@@ -20,6 +20,7 @@
 #include "tycho/detail/vf/common/value_lock.h"
 #include "tycho/detail/vf/scaling/auto_scaling_utils.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <limits>
 #include <map>
@@ -33,16 +34,20 @@ using tycho::vf::SubstitutedVarPlaceholder;
 namespace {
 
 /// Temporary A/B switch for the native-bounds bring-up; removed before merge.
+/// Read fresh on every call: this is a setup-path check (bound declaration
+/// time, not a hot path), so there is nothing to gain by caching it, and a
+/// per-call read lets the same process observe both switch states. Do not
+/// toggle the environment variable between a bound declaration and that
+/// phase's transcription — declarations record into user_var_bounds_ under
+/// whichever state was active when they were made, and transcribe_var_bounds
+/// only ever sees those records, not the switch itself.
 bool dev_native_var_bounds() {
-    static const bool enabled = [] {
-        const char *value = std::getenv("TYCHO_DEV_NATIVE_BOUNDS");
-        if (value == nullptr) {
-            return false;
-        }
-        std::string_view text(value);
-        return !text.empty() && text != "0";
-    }();
-    return enabled;
+    const char *value = std::getenv("TYCHO_DEV_NATIVE_BOUNDS");
+    if (value == nullptr) {
+        return false;
+    }
+    std::string_view text(value);
+    return !text.empty() && text != "0";
 }
 
 /// Human-readable name of a phase region, for variable-bound diagnostics.

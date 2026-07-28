@@ -810,7 +810,10 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     /// @param lbscale     Lower-bound constraint scale.
     /// @param ubscale     Upper-bound constraint scale.
     /// @param scale_t     Output-scale selector.
-    /// @return The index assigned to the bound constraint(s).
+    /// @return The index of the added inequality constraint, unless the temporary
+    ///         native variable-bounds dev switch is active, in which case a
+    ///         bound-record handle instead (see @ref record_var_bounds) — not an
+    ///         inequality-constraint index.
     int add_lu_var_bound(RegionType reg, VarIndexType var, double lowerbound, double upperbound,
                          double lbscale, double ubscale, ScaleType scale_t);
 
@@ -821,7 +824,10 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     /// @param upperbound  Upper bound.
     /// @param scale       Shared bound scale.
     /// @param scale_t     Output-scale selector.
-    /// @return The index assigned to the bound constraint(s).
+    /// @return The index of the added inequality constraint, unless the temporary
+    ///         native variable-bounds dev switch is active, in which case a
+    ///         bound-record handle instead (see @ref record_var_bounds) — not an
+    ///         inequality-constraint index.
     int add_lu_var_bound(RegionType reg, VarIndexType var, double lowerbound, double upperbound,
                          double scale, ScaleType scale_t) {
         return this->add_lu_var_bound(reg, var, lowerbound, upperbound, scale, scale, scale_t);
@@ -832,7 +838,10 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     /// @param lowerbound  Lower bound.
     /// @param upperbound  Upper bound.
     /// @param scale_t     Output-scale selector.
-    /// @return The index assigned to the bound constraint(s).
+    /// @return The index of the added inequality constraint, unless the temporary
+    ///         native variable-bounds dev switch is active, in which case a
+    ///         bound-record handle instead (see @ref record_var_bounds) — not an
+    ///         inequality-constraint index.
     int add_lu_var_bound(RegionType reg, VarIndexType var, double lowerbound, double upperbound,
                          ScaleType scale_t) {
         return this->add_lu_var_bound(reg, var, lowerbound, upperbound, 1.0, 1.0, scale_t);
@@ -844,7 +853,10 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     /// @param lowerbound  Lower bound.
     /// @param lbscale     Lower-bound constraint scale.
     /// @param scale_t     Output-scale selector.
-    /// @return The index assigned to the bound constraint.
+    /// @return The index of the added inequality constraint, unless the temporary
+    ///         native variable-bounds dev switch is active, in which case a
+    ///         bound-record handle instead (see @ref record_var_bounds) — not an
+    ///         inequality-constraint index.
     int add_lower_var_bound(RegionType reg, VarIndexType var, double lowerbound, double lbscale,
                             ScaleType scale_t);
 
@@ -854,7 +866,10 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     /// @param upperbound  Upper bound.
     /// @param ubscale     Upper-bound constraint scale.
     /// @param scale_t     Output-scale selector.
-    /// @return The index assigned to the bound constraint.
+    /// @return The index of the added inequality constraint, unless the temporary
+    ///         native variable-bounds dev switch is active, in which case a
+    ///         bound-record handle instead (see @ref record_var_bounds) — not an
+    ///         inequality-constraint index.
     int add_upper_var_bound(RegionType reg, VarIndexType var, double upperbound, double ubscale,
                             ScaleType scale_t);
 
@@ -1149,7 +1164,10 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     /// @param upperbound  Upper bound.
     /// @param lbscale     Lower-bound constraint scale.
     /// @param ubscale     Upper-bound constraint scale.
-    /// @return The index assigned to the bound constraint(s).
+    /// @return The index of the added inequality constraint, unless the temporary
+    ///         native variable-bounds dev switch is active, in which case a
+    ///         bound-record handle instead (see @ref record_var_bounds) — not an
+    ///         inequality-constraint index.
     int add_lu_var_bound(PhaseRegionFlags reg, int var, double lowerbound, double upperbound,
                          double lbscale, double ubscale);
 
@@ -1159,7 +1177,10 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     /// @param lowerbound  Lower bound.
     /// @param upperbound  Upper bound.
     /// @param scale       Shared bound scale.
-    /// @return The index assigned to the bound constraint(s).
+    /// @return The index of the added inequality constraint, unless the temporary
+    ///         native variable-bounds dev switch is active, in which case a
+    ///         bound-record handle instead (see @ref record_var_bounds) — not an
+    ///         inequality-constraint index.
     int add_lu_var_bound(PhaseRegionFlags reg, int var, double lowerbound, double upperbound,
                          double scale) {
         return this->add_lu_var_bound(reg, var, lowerbound, upperbound, scale, scale);
@@ -1353,10 +1374,14 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     /// @brief Remove a previously added inequality constraint by index.
     /// @param index  Constraint index, or -1 for the most recently added.
     /// @throws std::invalid_argument if this phase holds recorded variable bounds
-    ///         (their handles are not inequality-constraint indices, so a removal
-    ///         request here cannot be resolved unambiguously).
+    ///         and @p index is not -1 (an explicit index is not an inequality-
+    ///         constraint index unambiguously; -1 always means "the most
+    ///         recently added inequality" and resolves within
+    ///         user_inequalities_ regardless of any recorded bounds).
     void remove_inequal_con(int index) {
-        this->check_var_bound_removal_supported();
+        if (index != -1) {
+            this->check_var_bound_removal_supported();
+        }
         this->remove_func_impl(this->user_inequalities_, index, "Inequality Constraint");
     }
     /// @brief Remove a previously added state objective by index.
@@ -1635,7 +1660,11 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     /// @param index  Inequality-constraint index.
     /// @return Per-application multiplier vectors for the constraint.
     /// @throws std::invalid_argument if no solve/optimize has been run.
+    /// @throws std::invalid_argument if this phase holds recorded variable bounds
+    ///         (their handles are not inequality-constraint indices, so @p index
+    ///         cannot be resolved unambiguously).
     std::vector<Eigen::VectorXd> return_inequal_con_lmults(int index) const {
+        this->check_var_bound_removal_supported();
         if (!this->post_opt_info_valid_) {
             throw std::invalid_argument(
                 "No multipliers to return, a solve or optimize call must be made "
@@ -1649,7 +1678,11 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     /// @param index  Inequality-constraint index.
     /// @return Per-application residual vectors for the constraint.
     /// @throws std::invalid_argument if no solve/optimize has been run.
+    /// @throws std::invalid_argument if this phase holds recorded variable bounds
+    ///         (their handles are not inequality-constraint indices, so @p index
+    ///         cannot be resolved unambiguously).
     std::vector<Eigen::VectorXd> return_inequal_con_vals(int index) const {
+        this->check_var_bound_removal_supported();
         if (!this->post_opt_info_valid_) {
             throw std::invalid_argument(
                 "No constraints to return, a solve or optimize call must be made "
@@ -1661,7 +1694,11 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     /// @brief Return the output scales of an inequality constraint.
     /// @param index  Inequality-constraint index.
     /// @return The constraint's per-output scale vector.
+    /// @throws std::invalid_argument if this phase holds recorded variable bounds
+    ///         (their handles are not inequality-constraint indices, so @p index
+    ///         cannot be resolved unambiguously).
     Eigen::VectorXd return_inequal_con_scales(int index) const {
+        this->check_var_bound_removal_supported();
         return this->user_inequalities_.at(index).output_scales_;
     }
 
