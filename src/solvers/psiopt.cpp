@@ -1061,9 +1061,16 @@ tycho::ConvergenceFlags tycho::solvers::PSIOPT::converge_check(std::vector<Itera
 // achieved or max_refac_ attempts are exhausted.
 int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt, double incpurt0,
                                         double incpurt, double &finalpert, double &cumpert,
-                                        double base_prox, double dual_shift) {
+                                        double base_prox, double dual_shift, bool &exhausted) {
     auto Inertia = [&]() {
         return this->kkt_sol_.neigs() - (this->equal_cons_ + this->inequal_cons_);
+    };
+    // Full Ipopt inertia-correction condition (Algorithm IC, Wächter & Biegler
+    // 2006): accept only inertia exactly (kkt_dim - m, m, 0). Singular() is the
+    // rank-deficiency part; Inertia() != 0 covers both excess (the only case the
+    // pre-2026-07 ladder corrected) and missing negative eigenvalues.
+    auto Singular = [&]() {
+        return (this->kkt_sol_.neigs() + this->kkt_sol_.peigs() - this->kkt_dim_) != 0;
     };
     auto RankDef = [&]() {
         if ((this->kkt_sol_.neigs() + this->kkt_sol_.peigs() - this->kkt_dim_) != 0) {
@@ -1100,8 +1107,52 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
     };
     auto Refactor = [&]() { this->kkt_sol_.refactorize_internal(); };
     auto Compute = [&]() { this->kkt_sol_.compute_internal(); };
+    auto PerturbC = [&](double p) {
+        this->nlp_->perturb_kkt_c_diags(p, this->kkt_sol_.get_matrix());
+    };
+    // On-demand dual regularization (delta_c). dual_shift is the magnitude
+    // available to this call (0.0 while a nested l1 restoration phase owns the
+    // constraint-row diagonals -- the caller suppresses it). The proximal branch
+    // applies it up-front as part of the base matrix; the classic branch applies
+    // it here, at most once per call, the first time a factorization reports
+    // rank deficiency -- it lands in the matrix and takes effect at the next
+    // Refactor(), so a singular base costs one ladder rung (a small delta_w
+    // rides along with delta_c, matching Ipopt, which raises both on
+    // singularity). dc_latched_ is the Ipopt hess/jac-degenerate adaptation:
+    // sticky per phase, it makes later calls pre-apply delta_c at the base
+    // attempt instead of re-paying the singular factorization every iteration.
+    bool dc_applied = false;
+    auto EngageDualReg = [&]() {
+        if (!dc_applied && dual_shift != 0.0) {
+            PerturbC(-dual_shift);
+            dc_applied = true;
+            this->dc_latched_ = true;
+        }
+    };
     int IncEigs = 0;
     cumpert = 0.0;
+    // Engagement signal for on-demand delta_c: fires on Singular() (rank
+    // deficiency, zeigs != 0) OR IncEigs < 0 (neigs < m). By Gould's inertia
+    // theorem, In(KKT) = In(Z^T H Z) + (m, m, 0) for a full-rank constraint
+    // Jacobian, so neigs < m with zeigs == 0 cannot occur for a full-rank J --
+    // it is a masked rank-deficiency report from a pivot-perturbing backend
+    // (e.g. MKL Pardiso's static pivot perturbation). delta_w cannot correct
+    // this case (Weyl's inequality: +p*I on the primal diagonal is PSD, so
+    // neigs is non-increasing in p, never able to grow to m), so treat it as
+    // the singularity signal it is and let delta_c (the one shift that raises
+    // neigs) engage.
+    auto SingularitySignal = [&]() { return Singular() || IncEigs < 0; };
+
+    // Latched pre-apply, classic mode only: once dc_latched_ is set (a prior
+    // call this phase observed SingularitySignal()), pre-apply delta_c before
+    // this rung's factorization even runs -- hoisted above the Zfac/docompute
+    // gate below (unlike the mode branches, this must fire on EVERY classic
+    // call regardless of the fast_factor_alg_ cycling heuristic, or the latch
+    // would be bypassed on ~3 of every 4 iterations, defeating its purpose).
+    // Proximal applies delta_c itself (see its branch below) and never
+    // consults the latch.
+    if (settings_.inertia_mode_ != InertiaModes::proximal_regularization && this->dc_latched_)
+        EngageDualReg();
 
     if (settings_.inertia_mode_ == InertiaModes::proximal_regularization) {
         // Proximal primal-dual base shift. The persistent primal shift base_prox
@@ -1117,12 +1168,11 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
         // factorization for it to skip). The ladder's finalpert/cumpert
         // accounting below is unchanged -- it counts only the ladder increments,
         // never the base shifts, which alg_impl tracks separately.
-        auto PerturbC = [&](double p) {
-            this->nlp_->perturb_kkt_c_diags(p, this->kkt_sol_.get_matrix());
-        };
         Perturb(base_prox);
-        if (dual_shift != 0.0)
+        if (dual_shift != 0.0) {
             PerturbC(-dual_shift);
+            dc_applied = true;
+        }
         if (!docompute)
             Refactor();
         else
@@ -1131,13 +1181,8 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
         RankDef();
         IncEigs = Inertia();
         finalpert = 0.0;
-        // A singular base factorization is treated as wrong inertia (enter the
-        // ladder) -- the reference fallback once the dual shift is already
-        // applied and the matrix is still singular. Classic treats the same
-        // condition as warn-and-proceed (RankDef only warns); that behavior is
-        // untouched on the classic branch below.
-        bool singular = (this->kkt_sol_.neigs() + this->kkt_sol_.peigs() - this->kkt_dim_) != 0;
-        if (IncEigs <= 0 && !singular)
+        // A singular or wrong-inertia base factorization enters the ladder.
+        if (IncEigs == 0 && !Singular())
             return 0;
     } else if (Zfac || docompute) {
         if (!docompute)
@@ -1148,7 +1193,9 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
         RankDef();
         IncEigs = Inertia();
         finalpert = 0.0;
-        if (IncEigs <= 0)
+        if (SingularitySignal())
+            EngageDualReg();
+        if (IncEigs == 0 && !Singular())
             return 0;
     }
     double p = ipurt;
@@ -1166,7 +1213,9 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
         IncEigs = Inertia();
         finalpert = p;
 
-        if (IncEigs <= 0)
+        if (SingularitySignal())
+            EngageDualReg();
+        if (IncEigs == 0 && !Singular())
             return i + 1;
         if (i == 0)
             p *= incpurt0;
@@ -1177,8 +1226,12 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
     if (settings_.print_level_ < 3)
         fmt::print(fmt::fg(fmt::color::yellow),
                    "Warning: Inertia correction exhausted ({} perturbation attempts, "
-                   "{} excess eigenvalue(s))\n",
-                   settings_.max_refac_, IncEigs);
+                   "inertia p/n/z = {}/{}/{}, expected {}/{}/0)\n",
+                   settings_.max_refac_, this->kkt_sol_.peigs(), this->kkt_sol_.neigs(),
+                   this->kkt_dim_ - this->kkt_sol_.peigs() - this->kkt_sol_.neigs(),
+                   this->kkt_dim_ - (this->equal_cons_ + this->inequal_cons_),
+                   this->equal_cons_ + this->inequal_cons_);
+    exhausted = true;
     return settings_.max_refac_;
 }
 
@@ -1225,6 +1278,9 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     // Per-phase: print_exit_stats reports this phase's factorization status, so
     // a status left over from an earlier phase in the sequence must not leak in.
     this->result_.last_kkt_info_ = Eigen::Success;
+    // Fresh phase: re-probe rank rather than inheriting the previous phase's
+    // degeneracy diagnosis.
+    this->dc_latched_ = false;
 
     Eigen::VectorXd Temp(this->kkt_dim_);
 
@@ -1810,31 +1866,24 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             Zfac = !cycling;
         }
 
-        // Proximal primal-dual regularization base shifts for this iteration
-        // (0.0 on the classic path, which leaves factor_impl byte-identical).
-        // base_prox = ρ_k, the persistent primal shift. dual_shift = δ_c, the
-        // barrier-scaled dual shift, computed against the same μ the KKT assembly
-        // used above -- SUPPRESSED to 0.0 while a nested l1 restoration phase is
-        // active, because the elastic pivots already own the constraint-row
-        // diagonals (~1/μ) and the condensed elastic step recovery assumes the
-        // (y,y) diagonal equals the elastic pivot exactly (see
-        // globalization/inertia_regularization.h). The proximal mode-switch
-        // restoration touches only the primal diagonal, so δ_c stays on under it.
+        // δ_c availability is computed for BOTH inertia modes: the classic
+        // ladder engages it on demand when a factorization reports rank
+        // deficiency (see factor_impl). Suppressed while a nested l1
+        // restoration phase owns the constraint-row diagonals
+        // (inertia_regularization.h).
+        const bool dc_suppressed = this->restoration_ && this->restoration_->is_active() &&
+                                   this->restoration_->is_nested();
         double base_prox = 0.0;
-        double dual_shift = 0.0;
-        if (settings_.inertia_mode_ == InertiaModes::proximal_regularization) {
+        double dual_shift = dc_suppressed ? 0.0 : tycho::solvers::dual_regularization(mu);
+        if (settings_.inertia_mode_ == InertiaModes::proximal_regularization)
             base_prox = rho_k;
-            bool nested_active = this->restoration_ && this->restoration_->is_active() &&
-                                 this->restoration_->is_nested();
-            dual_shift = nested_active ? 0.0 : tycho::solvers::dual_regularization(mu);
-        }
 
+        bool kkt_exhausted = false;
         Citer.h_facs_ = this->factor_impl(false, Zfac, Hpert0, Incr, Incr2, nhpert, nhpert_cum,
-                                          base_prox, dual_shift);
-        // Note: if factor_impl exhausted all perturbation attempts (h_facs_ == max_refac_),
-        // we proceed rather than aborting. The line search evaluates actual function values
-        // and will reject truly bad steps by reducing alpha. Forcing GoodStep=false here
-        // would be an algorithmic change that could break existing convergence behavior.
+                                          base_prox, dual_shift, kkt_exhausted);
+        // kkt_exhausted routing (forced step rejection -> recovery chain ->
+        // SINGULAR_KKT abort) lands in the next commit.
+        (void)kkt_exhausted;
 
         if (Citer.h_facs_ > 0) {
             // Hpert0 warm-start MUST keep consuming nhpert (the last perturbation

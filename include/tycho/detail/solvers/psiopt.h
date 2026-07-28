@@ -81,6 +81,7 @@ class DivergencePersistenceHarness;
 // live SolverContext and drive the mechanism's acceptance-backtrack seam with a
 // generic acceptance strategy (see test_soc_generic_acceptance.cpp).
 class SocGenericHarness;
+class InertiaRegularizationSolve_ClassicDegeneracyLatchTracksSingularity_Test;
 
 namespace tycho::solvers {
 
@@ -772,6 +773,7 @@ class PSIOPT {
     friend class ::NestedLifecycleHarness;
     friend class ::DivergencePersistenceHarness;
     friend class ::SocGenericHarness;
+    friend class ::InertiaRegularizationSolve_ClassicDegeneracyLatchTracksSingularity_Test;
 
     Settings settings_;
     SolveResult result_;
@@ -834,6 +836,13 @@ class PSIOPT {
     // boundary alongside the other components, and collects its diagnostics into
     // SolveResult::last_feas_rest_entries_/last_feas_rest_iters_.
     std::unique_ptr<RestorationStrategy> restoration_;
+
+    // Degeneracy latch (Ipopt hess_degenerate_/jac_degenerate_ adaptation,
+    // simplified to sticky-per-phase): set by factor_impl when the on-demand
+    // dual regularization first engages; later classic base attempts pre-apply
+    // δ_c instead of re-discovering the singularity. Reset at each alg_impl
+    // phase init. See inertia_regularization.h for the δ_c reference.
+    bool dc_latched_ = false;
 
     // (Re)builds acceptance_/mechanism_/governor_/recovery_ from the current
     // Settings. Called once at the top of every run_phase_sequence() (i.e.
@@ -980,13 +989,18 @@ class PSIOPT {
     // delta applied during this call (i.e. the actual total added to the KKT
     // diagonal), used only for the HPert iteration-table column. Neither
     // `finalpert` nor any control-flow decision in factor_impl reads `cumpert`.
-    // `base_prox` and `dual_shift` are the proximal-regularization base shifts
-    // (ρ_k on the Hessian diagonal, δ_c on the constraint-row diagonals); both
-    // are read only when inertia_mode_ == proximal_regularization and default to
-    // 0.0, so the classic path is byte-identical regardless of their values.
+    // `base_prox` is the proximal-regularization base shift (ρ_k on the Hessian
+    // diagonal), read only when inertia_mode_ == proximal_regularization.
+    // `dual_shift` is the δ_c magnitude AVAILABLE to this call for both modes:
+    // the proximal branch applies it up-front; the classic branch applies it on
+    // demand when a factorization reports rank deficiency, or up-front once
+    // dc_latched_ is set (0.0 = suppressed, e.g. during nested l1 restoration).
+    // `exhausted` is set (never cleared) when the ladder runs out of attempts
+    // with inertia still wrong -- the return value alone cannot distinguish
+    // that from success on the final attempt.
     int factor_impl(bool docompute, bool ZFac, double ipurt, double incpurt0, double incpurt,
-                    double &finalpert, double &cumpert, double base_prox = 0.0,
-                    double dual_shift = 0.0);
+                    double &finalpert, double &cumpert, double base_prox, double dual_shift,
+                    bool &exhausted);
 
     bool claim_kkt_analysis();
 
