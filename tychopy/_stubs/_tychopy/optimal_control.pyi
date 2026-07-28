@@ -3230,9 +3230,10 @@ class OptimalControlProblem(_tychopy.solvers.OptimizationProblemBase):
 
         The loop aborts as soon as the solver's convergence flag is at or above this
         severity (the check is ``flag >= mesh_abort_flag``). The flag ordering is
-        ``CONVERGED < ACCEPTABLE < NOTCONVERGED < DIVERGING``. Default is
-        ``DIVERGING`` (only divergence aborts); set it to ``NOTCONVERGED`` to also
-        abort when a mesh iteration fails to converge.
+        ``CONVERGED < ACCEPTABLE < NOTCONVERGED < DIVERGING < SINGULAR_KKT``. Default
+        is ``DIVERGING`` (divergence or a persistently singular KKT system aborts);
+        set it to ``NOTCONVERGED`` to also abort when a mesh iteration fails to
+        converge.
         """
 
     @mesh_abort_flag.setter

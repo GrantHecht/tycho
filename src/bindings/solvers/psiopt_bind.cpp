@@ -562,7 +562,10 @@ ValueError
                "the base matrix every iteration in place of the classic zero-perturbation first "
                "attempt -- the same escalation ladder still fires on top when the base attempt "
                "has wrong inertia or is singular (a singular base attempt is itself treated as "
-               "wrong inertia under this mode, unlike classic's warn-and-proceed). rho_k decays "
+               "wrong inertia under this mode, matching classic). Ladder exhaustion, under "
+               "either mode, force-rejects the step through the recovery chain and -- if the "
+               "rejection goes unresolved -- aborts the phase as ConvergenceFlags.SINGULAR_KKT "
+               "(see max_refac). rho_k decays "
                "toward its floor by decr_h each iteration the base attempt sufficed, or "
                "persists at the decayed total shift (rho_k plus the ladder's last delta) when "
                "the ladder fired. The dual shift is suppressed while a nested l1 restoration "
@@ -602,7 +605,8 @@ ValueError
         .value("CONVERGED", ConvergenceFlags::CONVERGED)
         .value("ACCEPTABLE", ConvergenceFlags::ACCEPTABLE)
         .value("NOTCONVERGED", ConvergenceFlags::NOTCONVERGED)
-        .value("DIVERGING", ConvergenceFlags::DIVERGING);
+        .value("DIVERGING", ConvergenceFlags::DIVERGING)
+        .value("SINGULAR_KKT", ConvergenceFlags::SINGULAR_KKT);
     nb::enum_<AlgorithmModes>(m, "AlgorithmModes")
         .value("OPT", AlgorithmModes::OPT)
         .value("OPTNO", AlgorithmModes::OPTNO)

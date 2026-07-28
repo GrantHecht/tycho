@@ -1881,9 +1881,6 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         bool kkt_exhausted = false;
         Citer.h_facs_ = this->factor_impl(false, Zfac, Hpert0, Incr, Incr2, nhpert, nhpert_cum,
                                           base_prox, dual_shift, kkt_exhausted);
-        // kkt_exhausted routing (forced step rejection -> recovery chain ->
-        // SINGULAR_KKT abort) lands in the next commit.
-        (void)kkt_exhausted;
 
         if (Citer.h_facs_ > 0) {
             // Hpert0 warm-start MUST keep consuming nhpert (the last perturbation
@@ -2047,6 +2044,12 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // level instead of aborting. Read once, next to the !GoodStep
         // divergence override at the bottom of the loop.
         bool exit_at_acceptable = false;
+        // Set by the exhausted-inertia-correction dispatch below: the KKT
+        // factorization never reached correct inertia, the forced rejection
+        // went through the recovery chain, and nothing resolved it. Terminates
+        // the phase as SINGULAR_KKT at the loop tail (same idiom as
+        // exit_at_acceptable / exit_stage_stalled).
+        bool singular_abort = false;
 
         Funtimer.start();
         if (GoodStep) {
@@ -2063,6 +2066,16 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         } else {
             Citer.h_facs_ = -1;
         }
+
+        // Inertia-correction exhaustion (Ipopt-faithful fail-the-step): a step
+        // solved on a factorization that never reached correct inertia must not
+        // be accepted on merit. Force the rejection so the recovery chain gets
+        // its say (feasibility switch when configured); if nothing resolves it,
+        // singular_abort terminates the phase below. The non-finite case
+        // (!GoodStep) already exits as DIVERGING at the loop tail -- the
+        // non-finite verdict dominates and needs no special-casing here.
+        if (kkt_exhausted)
+            Citer.accepted_ = false;
 
         Funtimer.stop();
 
@@ -2194,6 +2207,15 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                             alpha * settings_.alpha_red_, this->eval_error_log_.last_message_));
                     }
                 }
+                if (kkt_exhausted && resolved_depth == kRecoveryDepthUnresolved) {
+                    // Exhausted ladder and no recovery link resolved the forced
+                    // rejection: discard the step and abort the phase (the Ipopt
+                    // analogue is Error_In_Step_Computation). A nested re-center
+                    // above stamps kRecoveryDepthRestoration and is a
+                    // resolution, so it does not abort.
+                    alpha = 0.0;
+                    singular_abort = true;
+                }
                 break;
             case RecoveryChain::Action::kRetry:
                 // The recovery chain committed a corrected/reverted step into
@@ -2318,6 +2340,12 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         if (exit_at_acceptable && ExitCode == ConvergenceFlags::NOTCONVERGED)
             ExitCode = ConvergenceFlags::ACCEPTABLE;
 
+        // SINGULAR_KKT is decisive: an inertia-correction failure is a
+        // step-computation error (Ipopt Error_In_Step_Computation), reported as
+        // such even at an otherwise-acceptable iterate.
+        if (singular_abort)
+            ExitCode = ConvergenceFlags::SINGULAR_KKT;
+
         if (settings_.print_level_ == 0) {
             Printtimer.start();
             this->print_last_iterate(iters);
@@ -2329,8 +2357,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // upgrade the verdict, so converge_check's own answer (NOTCONVERGED,
         // or better if this iterate happens to qualify) is what gets reported.
         if (ExitCode == ConvergenceFlags::CONVERGED || ExitCode == ConvergenceFlags::ACCEPTABLE ||
-            ExitCode == ConvergenceFlags::DIVERGING || exit_stage_stalled ||
-            i == (settings_.max_iters_ - 1)) {
+            ExitCode == ConvergenceFlags::DIVERGING || ExitCode == ConvergenceFlags::SINGULAR_KKT ||
+            exit_stage_stalled || i == (settings_.max_iters_ - 1)) {
 
             if (ExitCode != ConvergenceFlags::CONVERGED && settings_.return_best_) {
                 XSL = BestXSL;
@@ -2727,9 +2755,16 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
         if (settings_.print_level_ < 2)
             print_finished(step.label_);
 
-        // If a phase diverged, skip subsequent phases — result_.primals_ may contain
-        // garbage and feeding it into init_impl for the next phase would be pointless.
-        if (result_.converge_flag_ == ConvergenceFlags::DIVERGING) {
+        // If a phase reached DIVERGING or anything at least as severe, skip
+        // subsequent phases. For DIVERGING itself, result_.primals_ may
+        // contain garbage and feeding it into init_impl for the next phase
+        // would be pointless. SINGULAR_KKT's primals are NOT garbage (the
+        // forced-rejected step was discarded, alpha = 0.0), but the
+        // most-severe verdict reached so far must not be silently
+        // overwritten by a later phase's own converge_flag_ (severity order
+        // via operator<=> in psiopt_fwd.h) -- DIVERGING and anything more
+        // severe ends the sequence.
+        if (result_.converge_flag_ >= ConvergenceFlags::DIVERGING) {
             if (settings_.print_level_ < 3)
                 fmt::print(fmt::fg(fmt::color::yellow),
                            "Phase diverged; skipping remaining phases.\n");

@@ -184,13 +184,18 @@ class RecoveryChain {
     virtual void reset() = 0;
 };
 
-// Recovery-dispatch gate. The RecoveryChain hook is driven only when the trial
-// step was actually rejected by the acceptance strategy (the line search's
-// out-signal reports not-accepted) AND the KKT step direction was usable
-// (good_step). An accepted step — full or backtracked — never reaches the hook,
-// and the non-finite-direction path (which runs no line search) is excluded
-// too. Factored out of alg_impl so the gate condition has a single definition,
-// callable in isolation by the unit test that guards it.
+// Recovery-dispatch gate. The RecoveryChain hook is driven only when
+// citer.accepted_ is false AND the KKT step direction was usable (good_step).
+// accepted_ reads false for two reasons: the acceptance strategy actually
+// rejected the trial (the line search's out-signal reports not-accepted), or
+// psiopt.cpp's alg_impl force-rejects a trial the acceptance strategy DID
+// accept when this iteration's factorization exhausted the inertia-correction
+// ladder (the `if (kkt_exhausted) Citer.accepted_ = false;` site, run before
+// this gate is checked) -- so a genuinely accepted step can still reach the
+// hook in that case. The non-finite-direction path (which runs no line
+// search) is excluded via good_step regardless. Factored out of alg_impl so
+// the gate condition has a single definition, callable in isolation by the
+// unit test that guards it.
 inline bool should_dispatch_recovery(bool good_step, const IterateInfo &citer) {
     return good_step && !citer.accepted_;
 }

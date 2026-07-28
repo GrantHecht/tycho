@@ -553,8 +553,13 @@ TEST_F(SolverTest, SettingsValidateCatchesCrossFieldInvariants) {
     s.acc_bar_tol_ = 1e-3;
     s.div_bar_tol_ = 1e15;
 
-    // max_refac must be >= 1
+    // max_refac_ = 0 disables the perturbation ladder outright (the base
+    // factorization exhausts immediately on wrong inertia, routed through the
+    // recovery chain as SINGULAR_KKT -- see psiopt.cpp's kkt_exhausted
+    // handling), so it is valid; negative remains invalid.
     s.max_refac_ = 0;
+    EXPECT_NO_THROW(s.validate());
+    s.max_refac_ = -1;
     EXPECT_THROW(s.validate(), std::invalid_argument);
     s.max_refac_ = 15;
 

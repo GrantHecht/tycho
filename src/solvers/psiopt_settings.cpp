@@ -482,7 +482,19 @@ void tycho::solvers::PSIOPT::Settings::validate() const {
     // --- Iteration limits ---
     pos_int(max_iters_, "max_iters");
     pos_int(max_acc_iters_, "max_acc_iters");
-    pos_int(max_refac_, "max_refac");
+    // Perturbation-ladder attempt budget (factor_impl's Zfac loop). 0 is valid
+    // and intentional -- it disables the ladder outright: an unperturbed
+    // factorization that fails to reach correct inertia exhausts immediately
+    // rather than attempting any correction, which forces the forced-rejection
+    // / recovery-chain / SINGULAR_KKT routing (see psiopt.cpp's kkt_exhausted
+    // handling) on the very first wrong-inertia factorization. Unlike
+    // max_iters_/max_acc_iters_ (which must run at least once), max_refac_'s
+    // loop is a `for (i = 0; i < max_refac_; i++)` correction attempt over an
+    // already-computed base factorization, so 0 attempts is well-defined;
+    // negative is not.
+    if (max_refac_ < 0)
+        throw std::invalid_argument(
+            fmt::format("max_refac must be non-negative, got {}", max_refac_));
     if (max_ls_iters_ < 0)
         throw std::invalid_argument(
             fmt::format("max_ls_iters must be non-negative, got {}", max_ls_iters_));

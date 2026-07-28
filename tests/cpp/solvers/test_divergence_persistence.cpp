@@ -273,4 +273,50 @@ TEST(DivergencePersistence, GenuineDivergenceStillAborts) {
     EXPECT_EQ(flag, tycho::ConvergenceFlags::DIVERGING);
 }
 
+// Exhaustion is Ipopt-faithful: with the perturbation ladder disabled outright
+// (max_refac_ = 0), every wrong-inertia factorization exhausts immediately. The
+// forced step rejection must consult the recovery chain and -- with none
+// configured at defaults -- abort the phase as SINGULAR_KKT promptly, instead
+// of crawling to max_iters on a singular system.
+//
+// Backend-dependent, like the sibling ClassicDegeneracyLatchTracksSingularity
+// test in test_inertia_regularization.cpp (see its comment for the same
+// caveat in more detail): the trigger here is a genuine zero eigenvalue
+// (rank deficiency), and Accelerate reports inertia honestly (no Pardiso-style
+// static pivot perturbation), so the premise -- an honest wrong-inertia/
+// singular report reaching Singular() -- holds. On a pivot-perturbing backend
+// (MKL Pardiso, Windows/Linux) the masked deficiency may report a spuriously
+// correct inertia and never trip Singular()/kkt_exhausted, so this test is
+// gated to the honest-inertia backend rather than asserted platform-wide.
+#ifdef USE_ACCELERATE_SPARSE
+TEST(DivergencePersistence, ExhaustedInertiaCorrectionAbortsAsSingularKkt) {
+    using tycho::vf::Arguments;
+    using tycho::vf::GenericFunction;
+
+    OptimizationProblem prob;
+    prob.set_vars((Eigen::VectorXd(2) << 0.0, 1.0).finished());
+    {
+        auto args = Arguments<2>();
+        auto x0 = args.coeff<0>();
+        auto x1 = args.coeff<1>();
+        prob.add_objective(GenericFunction<-1, 1>(2.0 * (x0 * x0 + x1 * x1 - 1.0) - x0),
+                           (Eigen::VectorXi(2) << 0, 1).finished());
+    }
+    {
+        auto args = Arguments<2>();
+        auto x0 = args.coeff<0>();
+        auto x1 = args.coeff<1>();
+        prob.add_equal_con(GenericFunction<-1, -1>(x0 * x0 + x1 * x1 - 1.0),
+                           (Eigen::VectorXi(2) << 0, 1).finished());
+    }
+    prob.optimizer_->set_print_level(0);
+    prob.optimizer_->settings().max_refac_ = 0;
+
+    auto flag = prob.optimize();
+
+    EXPECT_EQ(flag, tycho::ConvergenceFlags::SINGULAR_KKT);
+    EXPECT_LE(prob.optimizer_->result().iter_num_, 10);
+}
+#endif
+
 } // namespace

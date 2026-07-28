@@ -200,6 +200,9 @@ struct Jet {
             case tycho::ConvergenceFlags::DIVERGING:
                 NumDiv++;
                 break;
+            case tycho::ConvergenceFlags::SINGULAR_KKT:
+                NumDiv++; // counted with divergence in the jet progress line
+                break;
             }
             double tsec = double(t.count<std::chrono::microseconds>()) / 1000000.0;
             print_progress(i, tsec, NumJobs, NumConv, NumAcc, NumNoConv, NumDiv);
