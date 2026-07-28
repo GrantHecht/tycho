@@ -519,6 +519,16 @@ bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
     const bool was_reduced = this->fixed_reduction_active_;
     constexpr double kInf = std::numeric_limits<double>::infinity();
 
+    // Set immediately before either of the two statements below that re-lay the
+    // KKT structures, and read by the restore. rebuild_structures() leaves
+    // kkt_locations_ reset to -1 (only analyze_sparsity ever fills it), and the
+    // restore rethrows rather than reporting a rebuild -- so a restore that
+    // calls it unconditionally hands the caller an NLP whose scatter targets are
+    // all -1, with no signal that the pattern has to be re-analyzed. The
+    // classification-stage rejections never touch the layout, so for them the
+    // rest of the restore already suffices and the analyzed pattern stays valid.
+    bool layout_touched = false;
+
     // Everything from here to the successful exits is inside the restore. The
     // first statement below already rewrites derived state, so any throw past
     // this point -- classification rejecting a bound, the all-fixed rejection,
@@ -632,6 +642,7 @@ bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
             }
             // The last fixed bound was dropped. Put every function back on its
             // pristine input map and lay the structures out over the full space.
+            layout_touched = true;
             this->clear_function_output_maps();
             this->rebuild_structures();
             this->fixed_treatment_valid_ = true;
@@ -653,6 +664,7 @@ bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
 
         this->reduced_primal_vars_count_ = num_vars - num_fixed;
         this->fixed_reduction_active_ = true;
+        layout_touched = true;
         this->install_function_output_maps();
         this->rebuild_structures();
 
@@ -683,7 +695,10 @@ bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
         //
         // Sequenced deliberately: the allocation-free work first, the rebuild
         // last, so even if the rebuild itself fails only the KKT layout is left
-        // stale and no index space is left mixed.
+        // stale and no index space is left mixed. The rebuild runs only when the
+        // layout was actually touched (see layout_touched above): re-laying it
+        // for a classification-stage rejection would discard an analyzed
+        // sparsity pattern this path never invalidated.
         this->reduced_primal_vars_count_ = num_vars;
         this->fixed_reduction_active_ = false;
         this->full_to_reduced_.resize(0);
@@ -691,7 +706,8 @@ bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
         this->fixed_idx_.resize(0);
         this->fixed_vals_.resize(0);
         this->clear_function_output_maps();
-        this->rebuild_structures();
+        if (layout_touched)
+            this->rebuild_structures();
         throw;
     }
 
