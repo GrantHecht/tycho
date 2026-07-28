@@ -20,6 +20,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cassert>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -267,6 +268,12 @@ struct NlpVarBoundsSparseHessianQuad
     inline void add_hessian_elem(double v, int row, int col, double *mpt, const int *lpt,
                                  int &freeloc) const {
         if (couples(row, col)) {
+            // Same slot-validity tripwire the base and the transcription defects
+            // carry: this override is exactly where the cursor contract is a
+            // runtime predicate and can drift, which is what this test exists to
+            // catch. Debug-only; compiled out under NDEBUG.
+            assert(lpt[freeloc] >= 0 &&
+                   "KKT Hessian fill cursor landed on an eliminated element's slot");
             mpt[lpt[freeloc]] += v;
             freeloc++;
         }
@@ -937,6 +944,66 @@ TEST(NlpVarBoundsReduction, AThrownConfigurationIsNotCommitted) {
     EXPECT_EQ(nlp->kkt_dim_, 1 + nlp->equal_cons_);
     EXPECT_DOUBLE_EQ(outcome.solution_[1], 7.0);
     EXPECT_NEAR(outcome.solution_[0], -1.0, 1e-6);
+
+    // Second phase: the same rejection arriving at an NLP that is ALREADY
+    // reduced. This is the sharper case. A rejection that escaped the restore
+    // here would leave is_reduced() true and the old reduced width in place
+    // while the maps behind them had been rewritten for the rejected
+    // classification -- so the next expansion of a primal vector would index off
+    // the end of a shorter map, silently, since Eigen's bounds checks are
+    // compiled out in release builds.
+    ASSERT_TRUE(nlp->is_reduced());
+    ASSERT_EQ(nlp->reduced_primal_vars(), 1);
+
+    // No public route reaches this state: make_nlp is the only thing that
+    // re-materializes bounds, and it also resets the reduction. The failing
+    // input is therefore set up directly on the materialized vectors and the
+    // revision counter that drives re-classification. What is under test is the
+    // restore, not the route in.
+    nlp->x_lower_[0] = 4.0;
+    nlp->x_upper_[0] = 4.0;
+    nlp->bounds_revision_++;
+
+    EXPECT_THROW(nlp->configure_variable_treatment(FixedVariableTreatments::MakeParameter, 1.0e-8),
+                 std::invalid_argument);
+
+    // Restored to a coherent pass-through state, not left half-reduced.
+    EXPECT_FALSE(nlp->is_reduced());
+    EXPECT_EQ(nlp->reduced_primal_vars(), nlp->primal_vars_);
+    EXPECT_EQ(nlp->kkt_dim_, nlp->primal_vars_ + nlp->equal_cons_);
+    EXPECT_EQ(nlp->full_to_reduced().size(), 0);
+    EXPECT_EQ(nlp->reduced_to_full().size(), 0);
+
+    // Which is what makes the expansion helpers safe: they take their
+    // pass-through branch and read no map at all.
+    Eigen::VectorXd solver_space(nlp->primal_vars_);
+    solver_space << 1.0, 2.0;
+    Eigen::VectorXd caller_space(nlp->primal_vars_);
+    caller_space.setZero();
+    EXPECT_NO_THROW(nlp->scatter_full_x(solver_space, caller_space));
+    EXPECT_DOUBLE_EQ(caller_space[0], 1.0);
+    EXPECT_DOUBLE_EQ(caller_space[1], 2.0);
+
+    // Still not marked configured, so a solve fails loudly rather than running
+    // the unreduced problem.
+    {
+        tycho::solvers::PSIOPT opt;
+        opt.set_print_level(3);
+        opt.set_nlp(nlp);
+        EXPECT_THROW(opt.optimize(Eigen::VectorXd::Zero(2)), std::invalid_argument);
+    }
+
+    // And it is still recoverable: correcting the bounds reduces and solves again.
+    nlp->clear_variable_bounds();
+    nlp->set_variable_bound(1, 7.0, 7.0);
+    nlp_var_bounds_rebuild(*nlp);
+
+    auto recovered = nlp_var_bounds_solve(nlp, Eigen::VectorXd::Zero(2));
+    EXPECT_EQ(recovered.flag_, tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_TRUE(nlp->is_reduced());
+    EXPECT_EQ(nlp->reduced_primal_vars(), 1);
+    EXPECT_DOUBLE_EQ(recovered.solution_[1], 7.0);
+    EXPECT_NEAR(recovered.solution_[0], -1.0, 1e-6);
 }
 
 // One solver instance, three solves, different bounds in between: each solve

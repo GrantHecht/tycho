@@ -519,129 +519,138 @@ bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
     const bool was_reduced = this->fixed_reduction_active_;
     constexpr double kInf = std::numeric_limits<double>::infinity();
 
-    this->variable_bound_set_.clear();
-    this->full_to_reduced_.resize(0);
-    this->reduced_to_full_.resize(0);
-    this->fixed_idx_.resize(0);
-    this->fixed_vals_.resize(0);
+    // Everything from here to the successful exits is inside the restore. The
+    // first statement below already rewrites derived state, so any throw past
+    // this point -- classification rejecting a bound, the all-fixed rejection,
+    // a failed map install -- would otherwise leave the maps describing one
+    // problem while is_reduced() and the reduced width still describe another.
+    // On an NLP that was already reduced that combination reads off the end of
+    // the maps, silently, since Eigen's bounds checks are compiled out.
+    try {
+        this->variable_bound_set_.clear();
+        this->full_to_reduced_.resize(0);
+        this->reduced_to_full_.resize(0);
+        this->fixed_idx_.resize(0);
+        this->fixed_vals_.resize(0);
 
-    const bool bounds_materialized =
-        (num_vars > 0 && this->x_lower_.size() == num_vars && this->x_upper_.size() == num_vars);
+        const bool bounds_materialized = (num_vars > 0 && this->x_lower_.size() == num_vars &&
+                                          this->x_upper_.size() == num_vars);
 
-    // --- Classification -------------------------------------------------
-    int num_fixed = 0;
-    if (bounds_materialized) {
-        for (int i = 0; i < num_vars; i++) {
-            if (this->x_lower_[i] == this->x_upper_[i]) {
-                if (!std::isfinite(this->x_lower_[i])) {
-                    throw std::invalid_argument(fmt::format(
-                        "configure_variable_treatment: variable {0} has equal but non-finite "
-                        "bounds ({1}); a fixed variable needs a finite value",
-                        i, this->x_lower_[i]));
+        // --- Classification -------------------------------------------------
+        int num_fixed = 0;
+        if (bounds_materialized) {
+            for (int i = 0; i < num_vars; i++) {
+                if (this->x_lower_[i] == this->x_upper_[i]) {
+                    if (!std::isfinite(this->x_lower_[i])) {
+                        throw std::invalid_argument(fmt::format(
+                            "configure_variable_treatment: variable {0} has equal but non-finite "
+                            "bounds ({1}); a fixed variable needs a finite value",
+                            i, this->x_lower_[i]));
+                    }
+                    num_fixed++;
                 }
-                num_fixed++;
             }
         }
-    }
 
-    // The maps exist whenever anything is eliminated; on the identity path they
-    // stay empty and every consumer treats the mapping as the identity.
-    if (num_fixed > 0) {
-        this->fixed_idx_.resize(num_fixed);
-        this->fixed_vals_.resize(num_fixed);
-        this->full_to_reduced_ = Eigen::VectorXi::Constant(num_vars, -1);
-        this->reduced_to_full_.resize(num_vars - num_fixed);
-    }
-
-    std::vector<int> lower_idx;
-    std::vector<double> lower_val;
-    std::vector<int> upper_idx;
-    std::vector<double> upper_val;
-
-    int next_reduced = 0;
-    int next_fixed = 0;
-    for (int i = 0; i < (bounds_materialized ? num_vars : 0); i++) {
-        const double lower = this->x_lower_[i];
-        const double upper = this->x_upper_[i];
-
-        if (lower == upper) {
-            this->fixed_idx_[next_fixed] = i;
-            this->fixed_vals_[next_fixed] = lower;
-            next_fixed++;
-            continue;
-        }
-
+        // The maps exist whenever anything is eliminated; on the identity path they
+        // stay empty and every consumer treats the mapping as the identity.
         if (num_fixed > 0) {
-            this->full_to_reduced_[i] = next_reduced;
-            this->reduced_to_full_[next_reduced] = i;
+            this->fixed_idx_.resize(num_fixed);
+            this->fixed_vals_.resize(num_fixed);
+            this->full_to_reduced_ = Eigen::VectorXi::Constant(num_vars, -1);
+            this->reduced_to_full_.resize(num_vars - num_fixed);
         }
 
-        // Recorded in the space the solver iterates in, and widened by the relax
-        // factor so consumers never have to re-apply it.
-        if (lower > -kInf) {
-            lower_idx.push_back(next_reduced);
-            lower_val.push_back(lower - bound_relax_factor * std::max(1.0, std::abs(lower)));
-        }
-        if (upper < kInf) {
-            upper_idx.push_back(next_reduced);
-            upper_val.push_back(upper + bound_relax_factor * std::max(1.0, std::abs(upper)));
-        }
-        next_reduced++;
-    }
+        std::vector<int> lower_idx;
+        std::vector<double> lower_val;
+        std::vector<int> upper_idx;
+        std::vector<double> upper_val;
 
-    auto fill_bound_list = [](const std::vector<int> &idx, const std::vector<double> &val,
-                              Eigen::VectorXi &idx_out, Eigen::VectorXd &val_out) {
-        const int count = static_cast<int>(idx.size());
-        idx_out.resize(count);
-        val_out.resize(count);
-        for (int i = 0; i < count; i++) {
-            idx_out[i] = idx[i];
-            val_out[i] = val[i];
-        }
-    };
-    fill_bound_list(lower_idx, lower_val, this->variable_bound_set_.lower_idx_,
-                    this->variable_bound_set_.lower_val_);
-    fill_bound_list(upper_idx, upper_val, this->variable_bound_set_.upper_idx_,
-                    this->variable_bound_set_.upper_val_);
+        int next_reduced = 0;
+        int next_fixed = 0;
+        for (int i = 0; i < (bounds_materialized ? num_vars : 0); i++) {
+            const double lower = this->x_lower_[i];
+            const double upper = this->x_upper_[i];
 
-    // --- Reduction ------------------------------------------------------
-    //
-    // Commit-on-success: fixed_treatment_valid_ and configured_bounds_revision_
-    // are stamped ONLY at the two successful exits below. Everything from here
-    // on can throw, and a configuration that threw must not be remembered as
-    // done -- otherwise the next call would take the idempotence shortcut and
-    // the solve would proceed on the unreduced problem with every fixing bound
-    // silently ignored. Leaving the flag clear makes the next call re-attempt,
-    // and fail the same way, until the bounds are corrected.
-    if (num_fixed == 0) {
-        this->reduced_primal_vars_count_ = num_vars;
-        this->fixed_reduction_active_ = false;
-        if (!was_reduced) {
-            // Identity path, and it already was: nothing to rebuild.
+            if (lower == upper) {
+                this->fixed_idx_[next_fixed] = i;
+                this->fixed_vals_[next_fixed] = lower;
+                next_fixed++;
+                continue;
+            }
+
+            if (num_fixed > 0) {
+                this->full_to_reduced_[i] = next_reduced;
+                this->reduced_to_full_[next_reduced] = i;
+            }
+
+            // Recorded in the space the solver iterates in, and widened by the relax
+            // factor so consumers never have to re-apply it.
+            if (lower > -kInf) {
+                lower_idx.push_back(next_reduced);
+                lower_val.push_back(lower - bound_relax_factor * std::max(1.0, std::abs(lower)));
+            }
+            if (upper < kInf) {
+                upper_idx.push_back(next_reduced);
+                upper_val.push_back(upper + bound_relax_factor * std::max(1.0, std::abs(upper)));
+            }
+            next_reduced++;
+        }
+
+        auto fill_bound_list = [](const std::vector<int> &idx, const std::vector<double> &val,
+                                  Eigen::VectorXi &idx_out, Eigen::VectorXd &val_out) {
+            const int count = static_cast<int>(idx.size());
+            idx_out.resize(count);
+            val_out.resize(count);
+            for (int i = 0; i < count; i++) {
+                idx_out[i] = idx[i];
+                val_out[i] = val[i];
+            }
+        };
+        fill_bound_list(lower_idx, lower_val, this->variable_bound_set_.lower_idx_,
+                        this->variable_bound_set_.lower_val_);
+        fill_bound_list(upper_idx, upper_val, this->variable_bound_set_.upper_idx_,
+                        this->variable_bound_set_.upper_val_);
+
+        // --- Reduction ------------------------------------------------------
+        //
+        // Commit-on-success: fixed_treatment_valid_ and configured_bounds_revision_
+        // are stamped ONLY at the two successful exits below. Everything from here
+        // on can throw, and a configuration that threw must not be remembered as
+        // done -- otherwise the next call would take the idempotence shortcut and
+        // the solve would proceed on the unreduced problem with every fixing bound
+        // silently ignored. Leaving the flag clear makes the next call re-attempt,
+        // and fail the same way, until the bounds are corrected.
+        if (num_fixed == 0) {
+            this->reduced_primal_vars_count_ = num_vars;
+            this->fixed_reduction_active_ = false;
+            if (!was_reduced) {
+                // Identity path, and it already was: nothing to rebuild.
+                this->fixed_treatment_valid_ = true;
+                this->configured_bounds_revision_ = this->bounds_revision_;
+                return false;
+            }
+            // The last fixed bound was dropped. Put every function back on its
+            // pristine input map and lay the structures out over the full space.
+            this->clear_function_output_maps();
+            this->rebuild_structures();
             this->fixed_treatment_valid_ = true;
             this->configured_bounds_revision_ = this->bounds_revision_;
-            return false;
+            return true;
         }
-        // The last fixed bound was dropped. Put every function back on its
-        // pristine input map and lay the structures out over the full space.
-        this->clear_function_output_maps();
-        this->rebuild_structures();
-        this->fixed_treatment_valid_ = true;
-        this->configured_bounds_revision_ = this->bounds_revision_;
-        return true;
-    }
 
-    if (num_fixed == num_vars) {
-        // Nothing would be left to solve for, and a zero-width primal block is
-        // not a system this solver can lay out. Caught here rather than as a
-        // degenerate factorization later, and before anything has been mutated.
-        throw std::invalid_argument(
-            fmt::format("configure_variable_treatment: all {0} primal variables are fixed by "
-                        "their bounds, leaving no variable to solve for",
-                        num_vars));
-    }
+        if (num_fixed == num_vars) {
+            // Nothing would be left to solve for, and a zero-width primal block is
+            // not a system this solver can lay out. Rejected here rather than as a
+            // degenerate factorization later. The classification above has already
+            // rewritten the maps by this point, which is why this throw is inside
+            // the restore.
+            throw std::invalid_argument(
+                fmt::format("configure_variable_treatment: all {0} primal variables are fixed by "
+                            "their bounds, leaving no variable to solve for",
+                            num_vars));
+        }
 
-    try {
         this->reduced_primal_vars_count_ = num_vars - num_fixed;
         this->fixed_reduction_active_ = true;
         this->install_function_output_maps();
@@ -662,13 +671,25 @@ bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
                 this->num_kkt_elems_, this->num_user_kkt_elems_, this->num_solver_kkt_elems_));
         }
     } catch (...) {
-        // A partial install would leave some functions on a reduced output map
-        // and others on the pristine one -- two index spaces in one problem,
-        // which nothing downstream is prepared for. Put the whole problem back
-        // on the full space before letting the exception out, so a caller that
-        // catches it holds a coherent (if unconfigured) NLP.
+        // Put the whole problem back on the full variable space before letting the
+        // exception out, so a caller that catches it holds a coherent (if
+        // unconfigured) NLP rather than one describing two problems at once. Two
+        // ways it could: a partial map install leaves some functions on a reduced
+        // output map and others on the pristine one; and a throw during
+        // classification leaves maps sized for a reduction that is not in effect,
+        // which -- on an NLP that WAS reduced -- would be read off the end by the
+        // next expansion, silently, since Eigen's bounds checks are compiled out.
+        // Clearing the maps and the reduction flag closes both.
+        //
+        // Sequenced deliberately: the allocation-free work first, the rebuild
+        // last, so even if the rebuild itself fails only the KKT layout is left
+        // stale and no index space is left mixed.
         this->reduced_primal_vars_count_ = num_vars;
         this->fixed_reduction_active_ = false;
+        this->full_to_reduced_.resize(0);
+        this->reduced_to_full_.resize(0);
+        this->fixed_idx_.resize(0);
+        this->fixed_vals_.resize(0);
         this->clear_function_output_maps();
         this->rebuild_structures();
         throw;
