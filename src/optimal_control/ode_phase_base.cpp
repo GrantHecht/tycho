@@ -20,10 +20,73 @@
 #include "tycho/detail/vf/common/value_lock.h"
 #include "tycho/detail/vf/scaling/auto_scaling_utils.h"
 
+#include <cstdlib>
+#include <limits>
+#include <map>
+#include <string_view>
+
 using tycho::vf::Arguments;
 using tycho::vf::IOScaled;
 using tycho::vf::StackedOutputs;
 using tycho::vf::SubstitutedVarPlaceholder;
+
+namespace {
+
+/// Temporary A/B switch for the native-bounds bring-up; removed before merge.
+bool dev_native_var_bounds() {
+    static const bool enabled = [] {
+        const char *value = std::getenv("TYCHO_DEV_NATIVE_BOUNDS");
+        if (value == nullptr) {
+            return false;
+        }
+        std::string_view text(value);
+        return !text.empty() && text != "0";
+    }();
+    return enabled;
+}
+
+/// Human-readable name of a phase region, for variable-bound diagnostics.
+const char *var_bound_region_name(tycho::PhaseRegionFlags reg) {
+    switch (reg) {
+    case tycho::PhaseRegionFlags::NotSet:
+        return "NotSet";
+    case tycho::PhaseRegionFlags::Front:
+        return "Front";
+    case tycho::PhaseRegionFlags::Back:
+        return "Back";
+    case tycho::PhaseRegionFlags::FrontandBack:
+        return "FrontandBack";
+    case tycho::PhaseRegionFlags::BackandFront:
+        return "BackandFront";
+    case tycho::PhaseRegionFlags::Path:
+        return "Path";
+    case tycho::PhaseRegionFlags::InnerPath:
+        return "InnerPath";
+    case tycho::PhaseRegionFlags::NodalPath:
+        return "NodalPath";
+    case tycho::PhaseRegionFlags::DefectPath:
+        return "DefectPath";
+    case tycho::PhaseRegionFlags::PairWisePath:
+        return "PairWisePath";
+    case tycho::PhaseRegionFlags::DefectPairWisePath:
+        return "DefectPairWisePath";
+    case tycho::PhaseRegionFlags::FrontNodalBackPath:
+        return "FrontNodalBackPath";
+    case tycho::PhaseRegionFlags::Params:
+        return "Params";
+    case tycho::PhaseRegionFlags::ODEParams:
+        return "ODEParams";
+    case tycho::PhaseRegionFlags::StaticParams:
+        return "StaticParams";
+    case tycho::PhaseRegionFlags::Accumulate:
+        return "Accumulate";
+    case tycho::PhaseRegionFlags::BlockDefectPath:
+        return "BlockDefectPath";
+    }
+    return "Unknown";
+}
+
+} // namespace
 
 int tycho::oc::ODEPhaseBase::add_boundary_value(RegionType reg, VarIndexType args,
                                                 const std::variant<double, VectorXd> &value_t,
@@ -69,6 +132,20 @@ int tycho::oc::ODEPhaseBase::add_periodicity_con(VarIndexType args, ScaleType sc
 int tycho::oc::ODEPhaseBase::add_lu_var_bound(RegionType reg, VarIndexType var, double lowerbound,
                                               double upperbound, double lbscale, double ubscale,
                                               ScaleType scale_t) {
+    if (dev_native_var_bounds()) {
+        // Same validation, in the same order, as the inequality lowering below;
+        // the bound scales only gate the error behavior here, since a recorded
+        // bound carries no constraint row to scale.
+        if (lowerbound > upperbound) {
+            throw std::invalid_argument(
+                fmt::format("Lower-bound({0:.3e}) greater than Upper-bound({1:.3e})", lowerbound,
+                            upperbound));
+        }
+        check_lbscale(lbscale);
+        check_ubscale(ubscale);
+        return this->record_var_bounds(reg, var, lowerbound, upperbound);
+    }
+
     if (lowerbound > upperbound) {
         throw std::invalid_argument(
             fmt::format("Lower-bound({0:.3e}) greater than Upper-bound({1:.3e})", lowerbound,
@@ -86,6 +163,16 @@ int tycho::oc::ODEPhaseBase::add_lu_var_bound(RegionType reg, VarIndexType var, 
 }
 int tycho::oc::ODEPhaseBase::add_lu_var_bound(PhaseRegionFlags reg, int var, double lowerbound,
                                               double upperbound, double lbscale, double ubscale) {
+    if (dev_native_var_bounds()) {
+        if (lowerbound > upperbound) {
+            throw std::invalid_argument(
+                fmt::format("Lower-bound({0:.3e}) greater than Upper-bound({1:.3e})", lowerbound,
+                            upperbound));
+        }
+        check_lbscale(lbscale);
+        check_ubscale(ubscale);
+        return this->record_var_bounds(reg, var, lowerbound, upperbound);
+    }
 
     if (lowerbound > upperbound) {
         throw std::invalid_argument(
@@ -108,6 +195,12 @@ int tycho::oc::ODEPhaseBase::add_lu_var_bound(PhaseRegionFlags reg, int var, dou
 int tycho::oc::ODEPhaseBase::add_lower_var_bound(RegionType reg, VarIndexType var,
                                                  double lowerbound, double lbscale,
                                                  ScaleType scale_t) {
+    if (dev_native_var_bounds()) {
+        check_lbscale(lbscale);
+        return this->record_var_bounds(reg, var, lowerbound,
+                                       std::numeric_limits<double>::infinity());
+    }
+
     check_lbscale(lbscale);
     auto x = Arguments<1>();
     auto lbound = (lowerbound - x) * lbscale;
@@ -118,10 +211,71 @@ int tycho::oc::ODEPhaseBase::add_lower_var_bound(RegionType reg, VarIndexType va
 int tycho::oc::ODEPhaseBase::add_upper_var_bound(RegionType reg, VarIndexType var,
                                                  double upperbound, double ubscale,
                                                  ScaleType scale_t) {
+    if (dev_native_var_bounds()) {
+        check_ubscale(ubscale);
+        return this->record_var_bounds(reg, var, -std::numeric_limits<double>::infinity(),
+                                       upperbound);
+    }
+
     check_ubscale(ubscale);
     auto x = Arguments<1>();
     auto ubound = (x - upperbound) * ubscale;
     return this->add_inequal_con(reg, ubound, var, scale_t);
+}
+
+int tycho::oc::ODEPhaseBase::record_var_bounds(RegionType reg_t, VarIndexType var_t,
+                                               double lowerbound, double upperbound) {
+    // Region and variable resolution is exactly what the inequality lowering
+    // hands to add_inequal_con: get_region() on the region selector, then
+    // get_xt_up_vars() on the variable selector under that region.
+    PhaseRegionFlags reg = this->get_region(reg_t);
+    VectorXi vars = this->get_xt_up_vars(reg, var_t);
+
+    // Validate before any mutation, matching add_func_impl: a throw must not
+    // leave a half-recorded declaration behind to duplicate on retry.
+    if (vars.size() == 0) {
+        throw std::invalid_argument(
+            "ODEPhaseBase::record_var_bounds: the variable selector resolved to zero variables — "
+            "either the selector is empty or the region contains no matching variables");
+    }
+    switch (reg) {
+    case PhaseRegionFlags::Params: {
+        throw std::invalid_argument(
+            "A variable bound cannot be declared on the combined Params region: a combined "
+            "parameter index cannot be split into ODE-parameter and static-parameter indices "
+            "without the phase dimensions. Use ODEParams or StaticParams instead.");
+    }
+    case PhaseRegionFlags::NotSet:
+    case PhaseRegionFlags::Accumulate:
+    case PhaseRegionFlags::BlockDefectPath: {
+        throw std::invalid_argument(fmt::format(
+            "A variable bound cannot be declared on region {0:}: it is an internal sentinel, "
+            "not a user-selectable phase region.",
+            var_bound_region_name(reg)));
+    }
+    default:
+        break;
+    }
+
+    int handle = static_cast<int>(this->user_var_bounds_.size());
+    for (int i = 0; i < vars.size(); i++) {
+        this->user_var_bounds_.push_back(VarBoundRecord{reg, vars[i], lowerbound, upperbound});
+    }
+
+    this->reset_transcription();
+    this->invalidate_post_opt_info();
+    return handle;
+}
+
+void tycho::oc::ODEPhaseBase::check_var_bound_removal_supported() const {
+    if (this->user_var_bounds_.empty()) {
+        return;
+    }
+    throw std::invalid_argument(fmt::format(
+        "This phase holds {0:} recorded variable bound(s), whose declaration handles are "
+        "bound-record indices rather than inequality-constraint indices. Removing an inequality "
+        "constraint while recorded variable bounds are present is not supported.",
+        this->user_var_bounds_.size()));
 }
 
 int tycho::oc::ODEPhaseBase::add_lu_func_bound(RegionType reg, ScalarFunctionalX func,
@@ -1314,6 +1468,115 @@ void tycho::oc::ODEPhaseBase::update_objective_scales(double scale) {
     }
 }
 
+void tycho::oc::ODEPhaseBase::transcribe_var_bounds(std::shared_ptr<NonLinearProgram> np,
+                                                    int pnum) {
+    if (this->user_var_bounds_.empty()) {
+        return;
+    }
+
+    // No clear_variable_bounds() call belongs here. Every path into
+    // transcribe_phase installs a freshly constructed NonLinearProgram first
+    // (ODEPhaseBase::transcribe, ODEPhaseBase::test_partitions, and
+    // OptimalControlProblemBase::transcribe each make_shared one before
+    // transcribing), so `np` never arrives carrying bounds staged by an earlier
+    // transcription. Clearing here would additionally be wrong in the
+    // multi-phase path, where every phase stages into one shared NLP and a
+    // later phase would drop its siblings' bounds.
+
+    constexpr double kInf = std::numeric_limits<double>::infinity();
+
+    // Merged view of this phase's own declarations, keyed by NLP variable index.
+    // The NLP intersects staged declarations itself, but only at make_nlp time —
+    // too late to name the phase and phase-local variable in the message. Merging
+    // here reports the conflict with that context first; the NLP's own check stays
+    // as the backstop. Phases never share an NLP variable index, so merging within
+    // one phase sees every declaration that can conflict.
+    std::map<int, std::pair<double, double>> merged;
+
+    for (const auto &rec : this->user_var_bounds_) {
+        PhaseRegionFlags reg = rec.region_;
+        VectorXi one(1);
+        one[0] = rec.var_;
+        VectorXi rxtuv(0);
+        VectorXi rodepv(0);
+        VectorXi rstatpv(0);
+
+        // Route the index into the same slot StateFunction's single-group
+        // constructor would, so the indexer sees the binding a constraint over
+        // this region would have carried.
+        int block_size = 0;
+        const char *block_name = "";
+        switch (reg) {
+        case PhaseRegionFlags::ODEParams: {
+            reg = PhaseRegionFlags::Params;
+            rodepv = one;
+            block_size = this->p_vars();
+            block_name = "ODE-parameter";
+            break;
+        }
+        case PhaseRegionFlags::StaticParams: {
+            reg = PhaseRegionFlags::Params;
+            rstatpv = one;
+            block_size = this->num_stat_params_;
+            block_name = "static-parameter";
+            break;
+        }
+        default: {
+            rxtuv = one;
+            block_size = this->xtu_vars();
+            block_name = "state/time/control";
+            break;
+        }
+        }
+
+        if (rec.var_ < 0 || rec.var_ >= block_size) {
+            throw std::invalid_argument(fmt::format(
+                "Variable-bound index {0:} is out of bounds in phase {1:}; region {2:} indexes "
+                "the phase's {3:} block, which holds {4:} variable(s).",
+                rec.var_, pnum, var_bound_region_name(rec.region_), block_name, block_size));
+        }
+
+        // Reuse the indexer's own per-region, per-node index arithmetic rather
+        // than restating it: PhaseIndexer::make_Vindex_Cindex builds exactly the
+        // variable-index table a constraint bound to this region and these
+        // variables would receive. Every entry of that table is an NLP variable
+        // index of the declared variable at one application of the region, which
+        // is precisely the set of indices the bound applies to. Requesting zero
+        // output rows keeps the call from consuming constraint rows.
+        auto vincin = this->indexer_.make_Vindex_Cindex(reg, rxtuv, rodepv, rstatpv, /*orows=*/0);
+        const Eigen::MatrixXi &vindex = vincin[0];
+
+        for (int c = 0; c < vindex.cols(); c++) {
+            for (int r = 0; r < vindex.rows(); r++) {
+                int gidx = vindex(r, c);
+
+                auto &bounds = merged.try_emplace(gidx, -kInf, kInf).first->second;
+                bounds.first = std::max(bounds.first, rec.lower_);
+                bounds.second = std::min(bounds.second, rec.upper_);
+                if (bounds.first > bounds.second) {
+                    throw std::invalid_argument(fmt::format(
+                        "Conflicting variable bounds in phase {0:}: region {1:}, phase-local "
+                        "variable index {2:}, NLP variable index {3:}. The declarations "
+                        "intersect to an empty interval (lower={4:.6e} > upper={5:.6e}).",
+                        pnum, var_bound_region_name(rec.region_), rec.var_, gidx, bounds.first,
+                        bounds.second));
+                }
+
+                try {
+                    np->set_variable_bound(gidx, rec.lower_, rec.upper_);
+                } catch (const std::invalid_argument &e) {
+                    throw std::invalid_argument(fmt::format(
+                        "Variable bound in phase {0:} (region {1:}, phase-local variable index "
+                        "{2:}, NLP variable index {3:}, lower={4:.6e}, upper={5:.6e}) was "
+                        "rejected by the NLP: {6:}",
+                        pnum, var_bound_region_name(rec.region_), rec.var_, gidx, rec.lower_,
+                        rec.upper_, e.what()));
+                }
+            }
+        }
+    }
+}
+
 void tycho::oc::ODEPhaseBase::transcribe_phase(int vo, int eqo, int iqo,
                                                std::shared_ptr<NonLinearProgram> np, int pnum)
 
@@ -1325,6 +1588,7 @@ void tycho::oc::ODEPhaseBase::transcribe_phase(int vo, int eqo, int iqo,
     this->transcribe_control_funcs();
     this->transcribe_integrals();
     this->transcribe_basic_funcs();
+    this->transcribe_var_bounds(np, pnum);
 
     //////DO NOT GET RID OF THIS!!!!!!//
     this->do_transcription_ = false;

@@ -152,6 +152,26 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     std::map<int, StateObjective>
         user_param_integrands_; ///< User-added integral-parameter functions.
 
+    /// @internal
+    /// @brief One user variable-bound declaration recorded as a bound rather than
+    /// lowered to an inequality constraint.
+    ///
+    /// Path-like regions stay a single record; the expansion to one entry per
+    /// application node happens in @ref transcribe_var_bounds, so the record list
+    /// stays proportional to the number of declarations, not to the mesh size.
+    /// @endinternal
+    struct VarBoundRecord {
+        PhaseRegionFlags region_; ///< Region the bound applies to.
+        int var_;                 ///< Phase-local variable index within that region's block.
+        double lower_;            ///< Lower bound; -infinity when the declaration sets none.
+        double upper_;            ///< Upper bound; +infinity when the declaration sets none.
+    };
+
+    /// @internal
+    /// @brief Variable bounds recorded by @ref record_var_bounds, in declaration order.
+    /// @endinternal
+    std::vector<VarBoundRecord> user_var_bounds_;
+
     int dynamics_func_index_ = 0;        ///< Global index of the dynamics defect function.
     int control_funcs_index_ = -1;       ///< Global index of the control-spline constraint, or -1.
     VectorXi node_spacing_func_indices_; ///< Global indices of node-spacing constraints.
@@ -1332,7 +1352,11 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     }
     /// @brief Remove a previously added inequality constraint by index.
     /// @param index  Constraint index, or -1 for the most recently added.
+    /// @throws std::invalid_argument if this phase holds recorded variable bounds
+    ///         (their handles are not inequality-constraint indices, so a removal
+    ///         request here cannot be resolved unambiguously).
     void remove_inequal_con(int index) {
+        this->check_var_bound_removal_supported();
         this->remove_func_impl(this->user_inequalities_, index, "Inequality Constraint");
     }
     /// @brief Remove a previously added state objective by index.
@@ -1819,6 +1843,41 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
                 "Upper-bound scale ({0:.3e}) must be a strictly positive number.", ubscale));
         }
     }
+
+    /// @internal
+    /// @brief Record a variable-bound declaration instead of lowering it to an inequality.
+    ///
+    /// Resolves @p reg_t and @p var_t with the same region/variable resolution the
+    /// inequality path applies (@ref get_region followed by @ref get_xt_up_vars) and
+    /// appends one @ref VarBoundRecord per resolved variable. Path-like regions stay
+    /// a single record per resolved variable; the per-node expansion happens in
+    /// @ref transcribe_var_bounds.
+    /// @param reg_t       Region selector.
+    /// @param var_t       Variable selector.
+    /// @param lowerbound  Lower bound; -infinity when the declaration sets none.
+    /// @param upperbound  Upper bound; +infinity when the declaration sets none.
+    /// @return The record index of the first appended record. This is a bound-record
+    ///         handle, not an inequality-constraint index.
+    /// @throws std::invalid_argument if the selector resolves to no variables, or if
+    ///         the region cannot carry a variable bound.
+    /// @endinternal
+    int record_var_bounds(RegionType reg_t, VarIndexType var_t, double lowerbound,
+                          double upperbound);
+
+    /// @internal
+    /// @brief Reject removal requests that recorded variable bounds make ambiguous.
+    /// @throws std::invalid_argument if this phase holds recorded variable bounds.
+    /// @endinternal
+    void check_var_bound_removal_supported() const;
+
+    /// @internal
+    /// @brief Resolve recorded variable bounds to NLP variable indices and stage them.
+    /// @param np    The shared NLP to stage the bounds into.
+    /// @param pnum  The phase index, for diagnostics.
+    /// @throws std::invalid_argument if a recorded index is out of range for its
+    ///         region's block, or if two declarations intersect to an empty interval.
+    /// @endinternal
+    void transcribe_var_bounds(std::shared_ptr<NonLinearProgram> np, int pnum);
 
     /// @internal
     /// @brief Transcribe this phase's variables and constraints into a shared NLP.
