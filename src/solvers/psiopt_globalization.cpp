@@ -1475,10 +1475,11 @@ RecoveryChain::Action WatchdogRecovery::on_step_rejected(
         // Just armed: snapshot the pre-watchdog iterate (XSL as it stands
         // right now, before this iteration's relaxed-accepted step is
         // committed) so a later revert can restore it. The bound multipliers
-        // are part of that iterate and are snapshotted with it; null off the
-        // bound path, where there are none.
+        // are part of that iterate and are snapshotted with it. The dual state
+        // pointer is wired unconditionally, so gate on the bound set itself:
+        // off the bound path there are no multipliers worth copying.
         snapshot_xsl_ = XSL;
-        if (ctx.bound_duals_)
+        if (ctx.bounds_)
             snapshot_bound_duals_ = *ctx.bound_duals_;
         ++watchdog_activations;
         [[fallthrough]];
@@ -1516,7 +1517,7 @@ RecoveryChain::Action WatchdogRecovery::on_step_rejected(
         // infeasibility, and the kappa_sigma clamp is far too loose to pull it
         // back. The dz vectors are left alone: the caller's commit applies
         // alpha * alphad = 0 of them, so they never reach the reverted state.
-        if (ctx.bound_duals_)
+        if (ctx.bounds_)
             *ctx.bound_duals_ = snapshot_bound_duals_;
         alpha = 0.0;
         Citer.accepted_ = true;

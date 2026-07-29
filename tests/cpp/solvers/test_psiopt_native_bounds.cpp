@@ -329,10 +329,12 @@ TEST(NativeBounds, DampingAppliesToOneSidedBoundsInTheBarrierAccountOnly) {
                                 (-mu * std::log(1.0 - 0.0)) + (-mu * std::log(4.0 - 1.0));
     EXPECT_DOUBLE_EQ(tycho::solvers::detail::bound_barrier_objective(x, b, mu), expected_phi);
 
-    // The damping is what makes phi_mu grow as the lower-only variable runs
-    // away, which is the whole point of it: without the term the log barrier
-    // alone falls monotonically in that direction.
-    const Eigen::VectorXd x_far = (Eigen::VectorXd(2) << 1.0e6, 1.0).finished();
+    // The damping is what makes phi_mu eventually grow as the lower-only
+    // variable runs away: without the term the log barrier alone falls
+    // monotonically in that direction. The growth is asymptotic — with
+    // kappa_d = 1e-5 the linear term only overtakes -mu*ln(d) past
+    // d ~ 1.4e6 — so the far point must sit well beyond the crossover.
+    const Eigen::VectorXd x_far = (Eigen::VectorXd(2) << 1.0e8, 1.0).finished();
     EXPECT_GT(tycho::solvers::detail::bound_barrier_objective(x_far, b, mu),
               tycho::solvers::detail::bound_barrier_objective(x, b, mu));
 
