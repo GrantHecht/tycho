@@ -2025,6 +2025,10 @@ class NativeBoundsRestorationExitFixture {
         h_.declare_bound(0, 0.0, 6.0);
         h_.configure_bounds();
         h_.solver().settings().restoration_mode_ = tycho::solvers::RestorationModes::l1_nested;
+        // Driving the exit on a built-but-never-entered restoration is safe
+        // only under the DEFAULT acceptance strategy: Filter/Funnel/ModernMerit
+        // override notify_switch_to_optimality to restore a stash the entry
+        // never took. Keep this fixture on the default acceptance.
         h_.build_components();
     }
 
@@ -2055,7 +2059,7 @@ class NativeBoundsRestorationExitFixture {
 
     double z_lower() { return h_.duals().z_lower_[0]; }
     double z_upper() { return h_.duals().z_upper_[0]; }
-    double z_slack() { return xsl_.tail(h_.sv())[0]; }
+    double z_slack() { return xsl_.tail(h_.ic())[0]; }
     // The direction the ITERATE commit owns. The return must not touch it.
     double dz_lower() { return h_.duals().dz_lower_[0]; }
 
@@ -2139,7 +2143,8 @@ TEST(NativeBounds, TheNestedRestorationReturnResetsEveryFamilyTogether) {
 
     const double tau = 0.5;
     // Only the LOWER bound multiplier is seeded past the threshold. After its
-    // capped step it lands on (1-tau)*z = 4000, still past kBoundMultResetThreshold
+    // capped step it lands just above (1-tau)*z = 4000 (4000.0000000000005 in
+    // doubles), still past kBoundMultResetThreshold
     // (1e3), so the reset fires -- and must take the slack and upper families
     // with it even though neither is anywhere near the threshold.
     f.run(tau, /*stashed_mu=*/0.5, /*slack=*/1.0, /*z_slack=*/1.0, /*z_lower=*/8000.0,
