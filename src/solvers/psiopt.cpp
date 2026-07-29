@@ -1143,34 +1143,97 @@ void tycho::solvers::PSIOPT::exit_feasibility_restoration_nested(Eigen::VectorXd
     KKTVector v_xsl = kkt_view(XSL);
 
     // (1) The phase's final x/s are already in XSL — kept as both current and
-    // trial. (2) Slack-multiplier Newton complementarity step under the STASHED
-    // outer μ (Ipopt ComputeBoundMultiplierStep): the general step
-    // Δz = [(s_curr − s_trial)·z + μ_outer]/s_curr − z reduces to
-    // Δz = μ_outer/s − z here, because this in-place solver keeps the phase's
-    // final slacks as both current and trial (s_curr == s_trial). Damped by the
-    // dual fraction-to-boundary rule (τ = bound_fraction_, the same τ the
-    // solver's slack/bound steps use) so every multiplier stays strictly
-    // positive. (3) If the largest updated multiplier exceeds
-    // kBoundMultResetThreshold, reset ALL inequality multipliers to 1 (Ipopt
-    // resets every bound multiplier, not just the offenders).
+    // trial. (2) Newton complementarity step under the STASHED outer μ (Ipopt
+    // ComputeBoundMultiplierStep) for EVERY bound-multiplier family the solver
+    // carries: the inequality slacks and, when the problem declares variable
+    // bounds, both sides of those. The general step
+    // Δz = [(d_curr − d_trial)·z + μ_outer]/d_curr − z is taken at
+    // d_curr == d_trial, giving Δz = μ_outer/d − z.
+    //
+    // For the slack family that reduction is forced: no pre-restoration s is
+    // retained, so there is no other d_curr to form. For the bound family it is
+    // a CHOICE — the nested phase's proximal term keeps the entry x as its
+    // reference, so a genuine (x_curr − x_trial) could be formed. Taking the
+    // same reduction is the better of the two: one re-anchoring rule across the
+    // families beats being faithful in one and simplified in the other, and the
+    // whole point of the step is to put every multiplier back on the outer
+    // barrier parameter's scale, which μ_outer/d does directly.
+    //
+    // ONE shared dual fraction-to-boundary damping across all families (Ipopt
+    // takes a single alpha_dual over all four of its), so the family whose cap
+    // binds shortens the step for every family — τ = bound_fraction_, the same
+    // τ the solver's own dual steps use, through the same kernel. (3) If the
+    // largest updated multiplier ACROSS ALL FAMILIES exceeds
+    // kBoundMultResetThreshold, reset them all to 1 (Ipopt resets every family,
+    // not just the one that tripped it). The reset value survives the next
+    // commit's κ_Σ clip untouched — that bracket is ten orders wide on each
+    // side — so it is faithful and inert rather than immediately undone.
+    //
+    // Every family's step is formed BEFORE any is applied: the shared fraction
+    // is a minimum over all of them, so stepping one early would damp it by a
+    // fraction taken without the others in view.
+    const double tau = settings_.bound_fraction_;
+    const BoundSet *bounds = this->bounds_;
+    const int nl = bounds ? static_cast<int>(bounds->lower_idx_.size()) : 0;
+    const int nu = bounds ? static_cast<int>(bounds->upper_idx_.size()) : 0;
+    double alpha_dual = 1.0;
+
     if (this->inequal_cons_ > 0) {
         auto s = v_xsl.slacks();
         auto z = v_xsl.iq_lmults();
         this->resto_dz_scratch_.resize(this->inequal_cons_);
         this->resto_dz_scratch_ = this->stashed_mu_ * s.cwiseInverse() - z;
-        const double tau = settings_.bound_fraction_;
-        double alpha_dual = 1.0;
-        for (int i = 0; i < this->inequal_cons_; ++i) {
-            const double dz = this->resto_dz_scratch_[i];
-            if (dz < -tau * z[i]) {
-                const double an = -tau * z[i] / dz;
-                if (an < alpha_dual)
-                    alpha_dual = an;
-            }
+        alpha_dual = std::min(alpha_dual, detail::max_step_to_boundary(z, this->resto_dz_scratch_,
+                                                                       tau, this->inequal_cons_));
+    }
+    if (nl > 0) {
+        auto x = v_xsl.primals();
+        this->resto_bound_dz_lower_scratch_.resize(nl);
+        for (int k = 0; k < nl; k++) {
+            const double d = x[bounds->lower_idx_[k]] - bounds->lower_val_[k];
+            this->resto_bound_dz_lower_scratch_[k] =
+                this->stashed_mu_ / d - this->bound_duals_.z_lower_[k];
         }
+        alpha_dual = std::min(
+            alpha_dual, detail::max_step_to_boundary(this->bound_duals_.z_lower_,
+                                                     this->resto_bound_dz_lower_scratch_, tau, nl));
+    }
+    if (nu > 0) {
+        auto x = v_xsl.primals();
+        this->resto_bound_dz_upper_scratch_.resize(nu);
+        for (int k = 0; k < nu; k++) {
+            const double d = bounds->upper_val_[k] - x[bounds->upper_idx_[k]];
+            this->resto_bound_dz_upper_scratch_[k] =
+                this->stashed_mu_ / d - this->bound_duals_.z_upper_[k];
+        }
+        alpha_dual = std::min(
+            alpha_dual, detail::max_step_to_boundary(this->bound_duals_.z_upper_,
+                                                     this->resto_bound_dz_upper_scratch_, tau, nu));
+    }
+
+    double bound_mult_max = 0.0;
+    if (this->inequal_cons_ > 0) {
+        auto z = v_xsl.iq_lmults();
         z += alpha_dual * this->resto_dz_scratch_;
-        if (z.cwiseAbs().maxCoeff() > kBoundMultResetThreshold)
-            z.setConstant(1.0);
+        bound_mult_max = std::max(bound_mult_max, z.cwiseAbs().maxCoeff());
+    }
+    if (nl > 0) {
+        this->bound_duals_.z_lower_ += alpha_dual * this->resto_bound_dz_lower_scratch_;
+        bound_mult_max =
+            std::max(bound_mult_max, this->bound_duals_.z_lower_.cwiseAbs().maxCoeff());
+    }
+    if (nu > 0) {
+        this->bound_duals_.z_upper_ += alpha_dual * this->resto_bound_dz_upper_scratch_;
+        bound_mult_max =
+            std::max(bound_mult_max, this->bound_duals_.z_upper_.cwiseAbs().maxCoeff());
+    }
+    if (bound_mult_max > kBoundMultResetThreshold) {
+        if (this->inequal_cons_ > 0)
+            v_xsl.iq_lmults().setConstant(1.0);
+        if (nl > 0)
+            this->bound_duals_.z_lower_.setConstant(1.0);
+        if (nu > 0)
+            this->bound_duals_.z_upper_.setConstant(1.0);
     }
 
     // (4) Equality constraint multipliers ← 0 (Ipopt least_square_mults at the
@@ -2731,8 +2794,13 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // Apply step
         XSL += alpha * DXSL;
 
-        // The ONE iterate-commit site, and therefore the one place the bound
-        // multipliers move. Every recovery outcome funnels through the line
+        // The ONE iterate-commit site, and therefore the only place the bound
+        // multipliers move ALONG dz. (They are written at one other site, the
+        // nested restoration return, which re-anchors them on the stashed outer
+        // barrier parameter applying no dz and moving no x — a different event
+        // class, and the same one that has always rewritten the slack
+        // multipliers. See the two-event note on bound_duals_ in psiopt.h.)
+        // Every recovery outcome funnels through the line
         // above: an accepted first trial, a second-order correction, an extended
         // backtrack, a restoration dispatch or a re-center (both alpha = 0), and
         // the watchdog revert (which restores its snapshot into XSL -- and, so

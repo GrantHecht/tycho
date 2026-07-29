@@ -956,6 +956,15 @@ class PSIOPT {
     bool resto_first_iter_ = false;
     double resto_theta_orig_prev_ = 0.0;
     Eigen::VectorXd resto_dz_scratch_;
+    // The bound families' re-centring steps at that same return, backing the two
+    // sides separately because they index different lists. Deliberately NOT
+    // bound_duals_.dz_*: that pair is the ITERATE's Newton direction, consumed by
+    // the commit and by the fraction-to-boundary rule, and the restoration
+    // return is a different event that applies no dz — see the two-event note on
+    // bound_duals_ above. Empty unless a nested restoration phase returns on a
+    // problem with variable bounds.
+    Eigen::VectorXd resto_bound_dz_lower_scratch_;
+    Eigen::VectorXd resto_bound_dz_upper_scratch_;
 
     // --- Native primal variable bounds (all inert on a problem without any) ---
     //
@@ -973,6 +982,17 @@ class PSIOPT {
     // The bound multipliers and their Newton step, index-aligned to bounds_'s
     // two lists. Iterate state, so solver-owned rather than NLP-owned; sized by
     // the interior push at solve entry and empty whenever bounds_ is null.
+    //
+    // TWO EVENTS write z, and only two. It MOVES ALONG dz at exactly one site,
+    // the iterate commit (apply_bound_dual_step), once per committed iterate and
+    // with the κ_Σ clip against the new x. It is RE-ANCHORED at exactly one
+    // other, the nested restoration return (exit_feasibility_restoration_nested),
+    // which applies no dz and moves no x — it re-centres z on the stashed outer
+    // barrier parameter because the phase it is returning from ran on a
+    // different one. The two are different event classes: different formula,
+    // different damping, different trigger. The slack multipliers have always
+    // lived under exactly this discipline (the same restoration return rewrites
+    // them); the bound family matches it rather than being the exception.
     BoundDualState bound_duals_;
 
     // Bound scratch, following the *_scratch_ no-per-call-allocation discipline
@@ -1280,23 +1300,18 @@ class PSIOPT {
     // `theta_orig` is the current original-problem infeasibility (∞-norm),
     // carried into the exit measures. `mu` is restored in place.
     //
-    // SCOPE: steps (2) and (3) reach the inequality (slack) multipliers only.
-    // Ipopt's PerformRestoration applies its ComputeBoundMultiplierStep to
-    // every bound-multiplier family it carries — z_L/z_U on the primal variable
-    // bounds as well as v_L/v_U on the slacks — under one shared dual
-    // fraction-to-boundary damping, and takes its reset-threshold max over all
-    // four. When this sequence was transcribed the slack family WAS the whole
-    // inventory, so the two matched. The native variable-bound multipliers are
-    // a second family, and this sequence does not touch them: they come back
-    // from a phase carrying whatever barrier parameter that phase ran on, while
-    // the slack multipliers are re-centred on the stashed outer μ. Bounds stay
-    // hard throughout the phase either way (barrier terms and both
-    // fraction-to-boundary legs run in feasibility mode exactly as in
-    // optimality mode — the elastic relaxation is on constraint ROWS), so this
-    // is a multiplier-scale parity deviation on the return path, not a
-    // soundness hole. Closing it means adding a bound-family re-centring here,
-    // which is an algorithmic change to the restoration return and needs the
-    // full example-suite evidence before it lands.
+    // SCOPE: steps (2) and (3) reach EVERY bound-multiplier family the solver
+    // carries — the inequality (slack) multipliers and, when the problem
+    // declares variable bounds, both sides of those — matching Ipopt's
+    // PerformRestoration, which applies its ComputeBoundMultiplierStep to all
+    // four of its families under ONE shared dual fraction-to-boundary damping
+    // and takes its reset-threshold max over all four. The shared damping is
+    // the detail worth naming: a per-family fraction is the plausible wrong
+    // implementation, and it is what the exit's unit pin exists to catch.
+    //
+    // This is the second of the two events that write the bound multipliers,
+    // and the only one that applies no dz and moves no x — see the two-event
+    // note on bound_duals_ above.
     void exit_feasibility_restoration_nested(Eigen::VectorXd &XSL, double obj_scale,
                                              double theta_orig, double barr_obj, double &mu);
 

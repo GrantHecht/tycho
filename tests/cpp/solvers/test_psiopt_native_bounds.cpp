@@ -208,6 +208,7 @@ class NativeBoundsHarness {
     int dim() const { return solver_->kkt_dim_; }
     int ec() const { return solver_->equal_cons_; }
     int ic() const { return solver_->inequal_cons_; }
+    int sv() const { return solver_->slack_vars_; }
 
     // Adds x[i0] + x[i1] == target BEFORE transcription is re-run, for the
     // equality-only end-to-end case.
@@ -218,6 +219,34 @@ class NativeBoundsHarness {
                             (Eigen::VectorXi(2) << i0, i1).finished());
         prob_.transcribe();
         solver_ = prob_.optimizer_.get();
+    }
+
+    // Adds x[i0] <= target, which is what gives the solver a slack block --
+    // needed by the restoration-exit pin, whose point is that the slack and
+    // bound families share one damping.
+    void add_upper_inequality(int i0, double target) {
+        auto args = tycho::vf::Arguments<1>();
+        auto con = args.coeff<0>() - target;
+        prob_.add_inequal_con(tycho::vf::GenericFunction<-1, -1>(con),
+                              (Eigen::VectorXi(1) << i0).finished());
+        prob_.transcribe();
+        solver_ = prob_.optimizer_.get();
+    }
+
+    // Builds the globalization components from the current settings, so a
+    // restoration strategy exists for the exit sequence to hand back to without
+    // running a solve first.
+    void build_components() { solver_->rebuild_globalization_components(); }
+
+    void set_stashed_mu(double mu) { solver_->stashed_mu_ = mu; }
+
+    // The nested restoration return, driven directly. Returns the barrier
+    // parameter it restored.
+    double drive_nested_restoration_exit(Eigen::VectorXd &xsl) {
+        double mu = 0.0;
+        solver_->exit_feasibility_restoration_nested(xsl, /*obj_scale=*/1.0, /*theta_orig=*/0.0,
+                                                     /*barr_obj=*/0.0, mu);
+        return mu;
     }
 
     // A full solve through the public entry point: run_phase_sequence does its
@@ -1760,20 +1789,29 @@ TEST(NativeBounds, AProximalRestorationEpisodeKeepsTheBoundsHardThroughout) {
         tycho::solvers::RestorationModes::proximal_switch);
 }
 
-// The bound multipliers move at exactly one place in the solver -- the line
-// after XSL += alpha*DXSL -- and every recovery outcome, restoration entry and
-// re-center included, reaches the iteration's end through it. A restoration
+// The bound multipliers move ALONG dz at exactly one place in the solver -- the
+// line after XSL += alpha*DXSL -- and every recovery outcome, restoration entry
+// and re-center included, reaches the iteration's end through it. A restoration
 // dispatch discards its step by setting alpha to zero, so on that iteration the
 // commit moves neither x nor z; the multiplier clip re-projects whatever z
 // already was, against an x that did not move, and is therefore a no-op.
 //
-// That gives a directly observable statement of "exactly once": at every
-// iterate whose primal block is bit-identical to the previous one -- which is
-// what a zero alpha produces, and a restoration-entering solve produces several
-// of them -- the bound multipliers must be bit-identical too. A second
-// multiplier update on the restoration path, applied anywhere between the two
-// callbacks, would move z while x stood still and this comparison would catch
-// it.
+// SCOPE. What this pins is the ZERO-ALPHA class: at every iterate whose primal
+// block is bit-identical to the previous one, the bound multipliers must be
+// bit-identical too. That is the class the restoration path lives in -- entry,
+// dispatch and re-center are exactly the zero-alpha iterations -- so it is the
+// class worth pinning here. It is NOT a general "z moves exactly once" claim,
+// and cannot be: a pair whose x moved is skipped, so a double-step on a moving
+// iterate would not be seen. That general property is inspection-verified
+// (apply_bound_dual_step has one caller in the tree).
+//
+// Nor is it the whole two-event discipline. z is also RE-ANCHORED at the nested
+// restoration return, which applies no dz and moves no x -- but that event
+// happens on an iteration that pop_back()s and continues before the callback
+// fires, so no observed pair straddles it in this fixture. If one ever did,
+// this comparison would fire, and that firing would be correct signal about the
+// event-class boundary rather than a regression: the answer would be to scope
+// the comparison, not to undo the re-anchoring.
 TEST(NativeBounds, ADiscardedRestorationStepMovesNeitherTheIterateNorItsMultipliers) {
     NativeBoundsRestorationHarness h(tycho::solvers::RestorationModes::l1_nested);
 
@@ -1801,7 +1839,11 @@ TEST(NativeBounds, ADiscardedRestorationStepMovesNeitherTheIterateNorItsMultipli
                 << ", whose primal block did not";
         }
     }
-    EXPECT_GT(held_still, 0) << "no iteration discarded its step, so nothing was compared";
+    EXPECT_GT(held_still, 0) << "no iteration discarded its step, so nothing was compared -- the "
+                                "solve entered restoration "
+                             << h.solver().result().last_feas_rest_entries_
+                             << " time(s), so a zero count here means entry stopped producing a "
+                                "discarded-step commit rather than that restoration stopped";
 }
 
 // --- The five shipped preset configurations ---------------------------------
@@ -1961,4 +2003,149 @@ TEST(NativeBounds, AThrowingTrialTheBoundLegsCannotPreventIsStillJustARejectedRu
     EXPECT_GE(prob.optimizer_->eval_error_log().count_, 1);
     EXPECT_TRUE(prob.nlp_->has_variable_bounds());
     probe.expect_every_iterate_interior();
+}
+
+// --- The nested restoration return re-centres every multiplier family --------
+
+namespace {
+
+// A bounded problem with one inequality row, so the solver carries BOTH
+// multiplier families the restoration return has to re-centre: the inequality
+// slacks and the two sides of the variable bound. Bounds are configured with no
+// relaxation and the components are built without running a solve, so every
+// number the pins below assert is one the test chose.
+//
+// The bound is [0, 6] on x0 and the drive point puts x0 at 2, giving distances
+// of 2 below and 4 above -- both powers of two, so the re-anchored multipliers
+// mu/d are exact and the assertions can be equalities.
+class NativeBoundsRestorationExitFixture {
+  public:
+    NativeBoundsRestorationExitFixture() : h_(2) {
+        h_.add_upper_inequality(1, 10.0);
+        h_.declare_bound(0, 0.0, 6.0);
+        h_.configure_bounds();
+        h_.solver().settings().restoration_mode_ = tycho::solvers::RestorationModes::l1_nested;
+        h_.build_components();
+    }
+
+    NativeBoundsHarness &harness() { return h_; }
+    const BoundSet &bounds() const { return *h_.installed_bounds(); }
+
+    // Seeds the iterate and every multiplier family, then runs the return.
+    // `slack` and `z_slack` are the inequality family; `z_lower` / `z_upper` the
+    // bound family. Returns the barrier parameter the exit restored.
+    double run(double tau, double stashed_mu, double slack, double z_slack, double z_lower,
+               double z_upper) {
+        h_.solver().settings().bound_fraction_ = tau;
+        h_.set_stashed_mu(stashed_mu);
+
+        xsl_ = Eigen::VectorXd::Zero(h_.dim());
+        xsl_[0] = 2.0; // distances 2.0 below and 4.0 above the [0, 6] bound
+        xsl_[1] = 1.0;
+        xsl_.segment(h_.pv(), h_.sv()).setConstant(slack);
+        xsl_.tail(h_.ic()).setConstant(z_slack);
+
+        h_.duals().z_lower_ = (Eigen::VectorXd(1) << z_lower).finished();
+        h_.duals().z_upper_ = (Eigen::VectorXd(1) << z_upper).finished();
+        h_.duals().dz_lower_ = Eigen::VectorXd::Zero(1);
+        h_.duals().dz_upper_ = Eigen::VectorXd::Zero(1);
+
+        return h_.drive_nested_restoration_exit(xsl_);
+    }
+
+    double z_lower() { return h_.duals().z_lower_[0]; }
+    double z_upper() { return h_.duals().z_upper_[0]; }
+    double z_slack() { return xsl_.tail(h_.sv())[0]; }
+    // The direction the ITERATE commit owns. The return must not touch it.
+    double dz_lower() { return h_.duals().dz_lower_[0]; }
+
+  private:
+    NativeBoundsHarness h_;
+    Eigen::VectorXd xsl_;
+};
+
+} // namespace
+
+// (i) Re-anchoring. The bound multipliers come back describing the STASHED
+// OUTER barrier parameter, not the phase's -- which is the whole point of the
+// step, and the thing that was missing: before this, they returned from a
+// nested phase still on the phase's mu, and the kappa_sigma bracket is ten
+// orders wide on each side, so nothing downstream corrected them.
+//
+// Every seeded multiplier steps toward its anchor from BELOW here, so no
+// fraction-to-boundary cap binds and the shared damping is exactly 1 -- which
+// isolates the anchoring from the damping the next test is about.
+TEST(NativeBounds, TheNestedRestorationReturnReAnchorsTheBoundMultipliers) {
+    NativeBoundsRestorationExitFixture f;
+
+    const double stashed_mu = 0.5;
+    // Distances 2.0 and 4.0, so the anchors are 0.25 and 0.125. Seeded at half
+    // of each: the step is positive, no cap binds, and the arithmetic is exact.
+    const double restored_mu =
+        f.run(/*tau=*/0.5, stashed_mu, /*slack=*/1.0, /*z_slack=*/0.25, /*z_lower=*/0.125,
+              /*z_upper=*/0.0625);
+
+    EXPECT_DOUBLE_EQ(f.z_lower(), stashed_mu / 2.0);
+    EXPECT_DOUBLE_EQ(f.z_upper(), stashed_mu / 4.0);
+    // The slack family is re-centred on the same parameter, as it always was.
+    EXPECT_DOUBLE_EQ(f.z_slack(), stashed_mu / 1.0);
+    // The exit restores the stashed parameter as the phase's own.
+    EXPECT_DOUBLE_EQ(restored_mu, stashed_mu);
+    // The iterate's Newton direction is untouched: the return applies no dz.
+    EXPECT_DOUBLE_EQ(f.dz_lower(), 0.0);
+}
+
+// (ii) ONE shared fraction across the families. This is the parity detail a
+// per-family implementation gets wrong while looking right: each family would
+// take its own cap, and the bound multipliers would end up further along their
+// step than the reference allows.
+//
+// Seeded so the SLACK family's cap is the binding one and is strictly shorter
+// than the bound family's. The assertion is that the bound multiplier moved by
+// the SLACK's fraction -- the value a per-family implementation cannot produce.
+TEST(NativeBounds, TheNestedRestorationReturnSharesOneDualFractionAcrossFamilies) {
+    NativeBoundsRestorationExitFixture f;
+
+    const double tau = 0.5;
+    const double stashed_mu = 0.5;
+    const double slack = 1.0;
+    const double z_slack = 10.0; // step -9.5, cap 5/9.5  ~ 0.5263
+    const double z_lower = 2.0;  // step -1.75, cap 1/1.75 ~ 0.5714 (looser)
+    const double z_upper = 0.0625;
+
+    f.run(tau, stashed_mu, slack, z_slack, z_lower, z_upper);
+
+    const double dz_slack = stashed_mu / slack - z_slack;
+    const double dz_lower = stashed_mu / 2.0 - z_lower;
+    const double alpha_slack = -tau * z_slack / dz_slack;
+    const double alpha_lower = -tau * z_lower / dz_lower;
+    ASSERT_LT(alpha_slack, alpha_lower) << "the fixture must make the SLACK cap the binding one";
+
+    // The bound family took the slack family's shorter fraction.
+    EXPECT_DOUBLE_EQ(f.z_lower(), z_lower + alpha_slack * dz_lower);
+    // Which is NOT what its own cap would have produced -- the per-family
+    // implementation this test exists to reject lands here instead.
+    EXPECT_NE(f.z_lower(), z_lower + alpha_lower * dz_lower);
+    // The binding family lands exactly on its fraction-to-boundary floor.
+    EXPECT_DOUBLE_EQ(f.z_slack(), (1.0 - tau) * z_slack);
+}
+
+// (iii) The reset covers every family, not just the one that tripped it. Ipopt
+// takes the threshold max over all four of its families and resets all four;
+// resetting only the offender would leave the others on a scale the threshold
+// just declared unusable.
+TEST(NativeBounds, TheNestedRestorationReturnResetsEveryFamilyTogether) {
+    NativeBoundsRestorationExitFixture f;
+
+    const double tau = 0.5;
+    // Only the LOWER bound multiplier is seeded past the threshold. After its
+    // capped step it lands on (1-tau)*z = 4000, still past kBoundMultResetThreshold
+    // (1e3), so the reset fires -- and must take the slack and upper families
+    // with it even though neither is anywhere near the threshold.
+    f.run(tau, /*stashed_mu=*/0.5, /*slack=*/1.0, /*z_slack=*/1.0, /*z_lower=*/8000.0,
+          /*z_upper=*/0.1);
+
+    EXPECT_DOUBLE_EQ(f.z_lower(), 1.0);
+    EXPECT_DOUBLE_EQ(f.z_upper(), 1.0);
+    EXPECT_DOUBLE_EQ(f.z_slack(), 1.0);
 }

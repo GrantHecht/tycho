@@ -811,15 +811,7 @@ void modern_eval_trial_point(SolverContext &ctx, double obj_scale, double mu, do
 double BacktrackingLineSearch::max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> SLI,
                                                     Eigen::Ref<Eigen::VectorXd> dSLI, double bfrac,
                                                     int count) const {
-    double alpha = 1.0;
-    for (int i = 0; i < count; i++) {
-        if (dSLI[i] < -bfrac * SLI[i]) {
-            double an = -bfrac * SLI[i] / dSLI[i];
-            if (an < alpha)
-                alpha = an;
-        }
-    }
-    return alpha;
+    return detail::max_step_to_boundary(SLI, dSLI, bfrac, count);
 }
 
 void BacktrackingLineSearch::max_primal_dual_step(Eigen::VectorXd &XSL, Eigen::VectorXd &DXSL,

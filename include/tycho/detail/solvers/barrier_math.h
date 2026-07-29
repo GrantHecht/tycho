@@ -77,6 +77,30 @@ inline void apply_reset_slacks(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::
     }
 }
 
+// Fraction-to-boundary step for one block of strictly-positive quantities and
+// their step: the largest alpha in (0, 1] with SLI + alpha*dSLI >= (1-bfrac)*SLI
+// componentwise. `count` is the block length, passed explicitly because the
+// blocks this serves have different lengths -- inequality slacks and their
+// multipliers, variable-bound distances, bound multipliers, and the restoration
+// return's re-centring step.
+//
+// Body moved verbatim from BacktrackingLineSearch::max_step_to_boundary, which
+// is now a one-line forwarder, so every existing caller's arithmetic and trip
+// count are unchanged. Shared for the same reason the kernels above are: this
+// rule was being open-coded a fifth time.
+inline double max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> SLI,
+                                   Eigen::Ref<Eigen::VectorXd> dSLI, double bfrac, int count) {
+    double alpha = 1.0;
+    for (int i = 0; i < count; i++) {
+        if (dSLI[i] < -bfrac * SLI[i]) {
+            double an = -bfrac * SLI[i] / dSLI[i];
+            if (an < alpha)
+                alpha = an;
+        }
+    }
+    return alpha;
+}
+
 // Log-barrier objective -mu * sum(log s_i) over the first `inequal_cons` slacks.
 inline double barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu, int inequal_cons) {
     double psi = 0;
