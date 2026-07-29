@@ -180,6 +180,64 @@ inline void accumulate_bound_dual_terms(const BoundSet &b, const BoundDualState 
     }
 }
 
+// Folds the variable-bound complementarity pairs (x_i - l_i)*zL_i and
+// (u_i - x_i)*zU_i into aggregates already reduced over the inequality
+// slack/multiplier pairs, in place.
+//
+// `base_count` is how many pairs were reduced into `avgcomp` (so their sum can
+// be reconstructed as avgcomp*base_count and re-averaged over the union). The
+// combination is the same shape PSIOPT::augment_complementarity_nested uses for
+// the restoration elastics, and for the same reason: the base aggregates are
+// NOT re-reduced, so the exact Eigen reduction that produced them -- whose
+// ordering feeds mu and is therefore ULP-load-bearing under fast-math -- is
+// preserved untouched. Union min is the min of the mins, union max the max of
+// the maxes, and the union average is count-weighted.
+//
+// A problem with no bounded variables never reaches this (every caller guards
+// on a non-empty set), so the aggregates the barrier oracles consume are
+// bit-identical to what they were before variable bounds existed.
+inline void augment_bound_complementarity(ConstEigenRef<Eigen::VectorXd> x, const BoundSet &b,
+                                          const BoundDualState &z, int base_count, double &avgcomp,
+                                          double &mincomp, double &maxcomp) {
+    const int nl = static_cast<int>(b.lower_idx_.size());
+    const int nu = static_cast<int>(b.upper_idx_.size());
+    if (nl + nu == 0)
+        return;
+
+    double bsum = 0.0;
+    double bmin = 0.0;
+    double bmax = 0.0;
+    bool first = true;
+    auto fold = [&](double pair) {
+        bsum += pair;
+        if (first) {
+            bmin = pair;
+            bmax = pair;
+            first = false;
+        } else {
+            bmin = std::min(bmin, pair);
+            bmax = std::max(bmax, pair);
+        }
+    };
+    for (int k = 0; k < nl; k++) {
+        fold((x[b.lower_idx_[k]] - b.lower_val_[k]) * z.z_lower_[k]);
+    }
+    for (int k = 0; k < nu; k++) {
+        fold((b.upper_val_[k] - x[b.upper_idx_[k]]) * z.z_upper_[k]);
+    }
+
+    const int bcount = nl + nu;
+    if (base_count > 0) {
+        mincomp = std::min(mincomp, bmin);
+        maxcomp = std::max(maxcomp, bmax);
+        avgcomp = (avgcomp * double(base_count) + bsum) / double(base_count + bcount);
+    } else {
+        mincomp = bmin;
+        maxcomp = bmax;
+        avgcomp = bsum / double(bcount);
+    }
+}
+
 // Condensed bound curvature: sigma_i += zL_i/(x_i - l_i) and += zU_i/(u_i - x_i).
 //
 // The Sigma that eliminating the bound-multiplier rows leaves on the Hessian

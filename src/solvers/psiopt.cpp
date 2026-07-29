@@ -185,19 +185,49 @@ void tycho::solvers::PSIOPT::apply_reset_slacks(Eigen::Ref<Eigen::VectorXd> S,
 // max_step_to_boundary was extracted verbatim into BacktrackingLineSearch
 // (src/solvers/psiopt_globalization.cpp).
 
-void tycho::solvers::PSIOPT::complementarity(Eigen::Ref<Eigen::VectorXd> S,
+void tycho::solvers::PSIOPT::complementarity(Eigen::Ref<Eigen::VectorXd> X,
+                                             Eigen::Ref<Eigen::VectorXd> S,
                                              Eigen::Ref<Eigen::VectorXd> LI, double &avgcomp,
                                              double &mincomp, double &maxcomp) const {
-    // Buffer-hoist ONLY: keep the exact Eigen .sum()/minCoeff()/maxCoeff()
-    // reduction expressions unchanged. avgcomp feeds mu (see mpc_mu/loqo_mu
-    // call sites), so a hand-fused loop that reorders the sum could perturb
-    // the reduction by a ULP under fast-math and change iterates -- forbidden.
-    // This change only removes the per-call heap allocation of StLI.
-    this->stli_scratch_.resize(S.size());
-    this->stli_scratch_ = S.cwiseProduct(LI);
-    mincomp = this->stli_scratch_.minCoeff();
-    maxcomp = this->stli_scratch_.maxCoeff();
-    avgcomp = this->stli_scratch_.sum() / double(this->stli_scratch_.size());
+    // Keep the exact Eigen .sum()/minCoeff()/maxCoeff() reduction expressions
+    // over the slack pairs unchanged. avgcomp feeds mu (see mpc_mu/loqo_mu call
+    // sites), so a hand-fused loop that reorders the sum could perturb the
+    // reduction by a ULP under fast-math and change iterates -- forbidden. The
+    // buffer hoist removed the per-call heap allocation of StLI without touching
+    // that ordering, and the variable-bound extension below likewise leaves it
+    // alone: the bound pairs are reduced SEPARATELY and combined by count, never
+    // folded into this reduction.
+    //
+    // The emptiness guard is new and is not a behaviour change on any path that
+    // existed before: this function was only ever called with inequality
+    // constraints present. It exists because a problem whose only barrier terms
+    // are variable-bound terms reaches here with no slack block at all, and the
+    // reductions below are undefined on an empty vector.
+    int base_count = 0;
+    if (S.size() > 0) {
+        this->stli_scratch_.resize(S.size());
+        this->stli_scratch_ = S.cwiseProduct(LI);
+        mincomp = this->stli_scratch_.minCoeff();
+        maxcomp = this->stli_scratch_.maxCoeff();
+        avgcomp = this->stli_scratch_.sum() / double(this->stli_scratch_.size());
+        base_count = static_cast<int>(this->stli_scratch_.size());
+    }
+
+    // Variable-bound pairs join the account the barrier oracles and the barrier
+    // residual read: a bounded variable's (x-l)*z_L and (u-x)*z_U are
+    // complementarity products in exactly the sense s*lambda is, and mu has to
+    // be driven by all of them or the bounded coordinates never centre. Dead on
+    // a problem with no bound set.
+    if (this->bounds_)
+        detail::augment_bound_complementarity(X, *this->bounds_, this->bound_duals_, base_count,
+                                              avgcomp, mincomp, maxcomp);
+}
+
+int tycho::solvers::PSIOPT::complementarity_pair_count(int slack_count) const {
+    if (!this->bounds_)
+        return slack_count;
+    return slack_count + static_cast<int>(this->bounds_->lower_idx_.size()) +
+           static_cast<int>(this->bounds_->upper_idx_.size());
 }
 
 void tycho::solvers::PSIOPT::augment_complementarity_nested(double &avgcomp, double &mincomp,
@@ -391,17 +421,30 @@ void tycho::solvers::PSIOPT::apply_bound_dual_step(double alphad, KKTVector &xsl
             sum += this->bound_duals_.z_upper_[k] * (b.upper_val_[k] - x_new[b.upper_idx_[k]]);
             count++;
         }
+        // An active nested restoration phase's elastic pairs belong in this
+        // average for exactly the reason they belong in complementarity()'s:
+        // they are complementary at restoration scale long after the original
+        // pairs collapse to solve-tolerance, and an average that omits them
+        // describes a central path the iterate is nowhere near. The aggregate
+        // this clamp uses is then the same one the barrier oracle is being
+        // driven by. Dead off the nested path.
+        if (this->restoration_ && this->restoration_->is_active() &&
+            this->restoration_->is_nested()) {
+            double esum = 0.0;
+            double emin = 0.0;
+            double emax = 0.0;
+            int ecount = 0;
+            this->restoration_->nested_complementarity(esum, emin, emax, ecount);
+            sum += esum;
+            count += ecount;
+        }
+
         // count > 0 is guaranteed: bounds_ is non-null only for a non-empty set.
-        //
-        // Every product in that average is positive once a fraction-to-boundary
-        // rule keeps the multipliers positive, which is what makes it a usable
-        // barrier parameter in the first place. That leg does not exist for
-        // bound multipliers yet, so a non-positive average is still reachable
-        // here -- and a non-positive parameter would turn the clamp below into a
-        // bracket that no longer keeps z positive. Fall back to the barrier
-        // parameter, which always is. Dead once the boundary rule lands.
-        const double avg = sum / double(count);
-        mu_clip = (avg > 0.0) ? std::min(avg, kFreeModeClipMuCap) : mu;
+        // Every product in the average is positive, because the
+        // fraction-to-boundary rule keeps every slack, every inequality
+        // multiplier and every bound multiplier strictly positive -- which is
+        // what makes the average a usable barrier parameter at all.
+        mu_clip = std::min(sum / double(count), kFreeModeClipMuCap);
     }
 
     // The clamp is measured at the NEW x: it is a safeguard on how far the
@@ -420,6 +463,17 @@ void tycho::solvers::PSIOPT::apply_bound_dual_step(double alphad, KKTVector &xsl
         this->bound_duals_.z_upper_[k] =
             clamp(this->bound_duals_.z_upper_[k], b.upper_val_[k] - x_new[i]);
     }
+
+    // The direction has been consumed; clear it. dz is only meaningful between
+    // the Newton solve that produced it and this commit, and the
+    // fraction-to-boundary rule now READS it -- so a direction left standing
+    // here would be re-consumed by the next iteration's PROBE predictor scaling,
+    // which runs before that iteration's direction is computed. Zeroing makes
+    // that staleness structurally impossible rather than merely unlikely: an
+    // all-zero dz caps nothing, which is the right answer for a predictor step
+    // that takes no bound-dual step at all.
+    this->bound_duals_.dz_lower_.setZero();
+    this->bound_duals_.dz_upper_.setZero();
 }
 
 void tycho::solvers::PSIOPT::add_bound_sigma(ConstEigenRef<Eigen::VectorXd> x,
@@ -790,12 +844,23 @@ void tycho::solvers::PSIOPT::fill_residual_info(KKTVector &xsl, KKTVector &rhs, 
     if (inequal_cons_ > 0) {
         iter.icon_inf_ = rhs.iq_cons().lpNorm<Eigen::Infinity>();
         iter.max_i_mult_ = xsl.iq_lmults().lpNorm<Eigen::Infinity>();
-        this->complementarity(xsl.slacks(), xsl.iq_lmults(), avgcomp, mincomp, maxcomp);
+    }
+    // The barrier account covers the inequality slack pairs AND the variable-
+    // bound pairs, so it runs whenever either exists. A bounded problem with no
+    // inequality constraints still has complementarity to report, and leaving
+    // barr_inf_ at zero there would make the convergence check's barrier tier
+    // pass vacuously -- the solve would report converged with its bound
+    // multipliers still far off the central path. Byte-identical off the bound
+    // path: same statements, same order, same guard value.
+    if (inequal_cons_ > 0 || this->bounds_) {
+        this->complementarity(xsl.primals(), xsl.slacks(), xsl.iq_lmults(), avgcomp, mincomp,
+                              maxcomp);
         // While a nested restoration phase is active, the barrier error the
         // convergence check and the monitored governor's KKT-error monitor read
         // must reflect the elastic pairs too (dead no-op otherwise).
-        this->augment_complementarity_nested(avgcomp, mincomp, maxcomp,
-                                             static_cast<int>(xsl.slacks().size()));
+        this->augment_complementarity_nested(
+            avgcomp, mincomp, maxcomp,
+            this->complementarity_pair_count(static_cast<int>(xsl.slacks().size())));
 
         iter.barr_inf_ = maxcomp;
     }
@@ -1621,7 +1686,15 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 this->apply_reset_slacks(v_xsl.slacks(), v_rhs.iq_cons());
             this->barrier_hessian(this->kkt_sol_.get_matrix(), v_xsl.slacks(), v_xsl.iq_lmults(),
                                   mu);
-            this->complementarity(v_xsl.slacks(), v_xsl.iq_lmults(), avgcomp, mincomp, maxcomp);
+        }
+        // The complementarity account and the barrier-parameter update below run
+        // whenever there is ANY barrier term to drive -- inequality slacks or
+        // variable bounds. The slack-reset and slack-Hessian work above stays
+        // behind the narrower guard: those are about the slack block alone, and
+        // there is no slack block here. Byte-identical off the bound path.
+        if (this->inequal_cons_ > 0 || this->bounds_) {
+            this->complementarity(v_xsl.primals(), v_xsl.slacks(), v_xsl.iq_lmults(), avgcomp,
+                                  mincomp, maxcomp);
             // avgcomp/mincomp feed the free-mode barrier-parameter oracle
             // (update_barrier below). This augmentation is load-bearing on every
             // path that reaches that oracle while a nested phase is active: the
@@ -1633,8 +1706,9 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             // copy folded into barr_inf_ via fill_residual_info, read by the
             // Fiacco-McCormick subproblem-convergence gate and converge_check. Dead
             // no-op off the nested path (original aggregates returned untouched).
-            this->augment_complementarity_nested(avgcomp, mincomp, maxcomp,
-                                                 static_cast<int>(v_xsl.slacks().size()));
+            this->augment_complementarity_nested(
+                avgcomp, mincomp, maxcomp,
+                this->complementarity_pair_count(static_cast<int>(v_xsl.slacks().size())));
         }
 
         Funtimer.stop();
@@ -2216,7 +2290,16 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // monotone schedule would perturb its established convergence.
         const bool force_monotone_barrier =
             nested_active && !governor_->provides_restoration_barrier_safeguard();
-        if (this->inequal_cons_ > 0) {
+        // The barrier parameter is updated whenever there is a barrier term to
+        // drive. That used to mean inequality slacks; it now also means variable
+        // bounds. Without the added disjunct a problem whose only barrier terms
+        // are bound terms would hold mu at init_mu_ for the whole phase, its
+        // bound complementarity would floor at that value, and the solve could
+        // not reach the barrier tolerance at all. The oracles handle an empty
+        // slack block on their own -- the objective sums nothing, the dual
+        // gradient writes an empty segment, and loqo_mu reads the aggregates the
+        // bound pairs now populate. Provably false off the bound path.
+        if (this->inequal_cons_ > 0 || this->bounds_) {
             if (force_monotone_barrier) {
                 // Ipopt's default restoration mu_strategy is MONOTONE: while the
                 // nested l1 phase is active the barrier parameter must follow the

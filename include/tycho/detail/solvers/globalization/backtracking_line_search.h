@@ -130,10 +130,16 @@ class BacktrackingLineSearch : public GlobalizationMechanism {
         return KKTVector(v, ctx.primal_vars_, ctx.slack_vars_, ctx.equal_cons_, ctx.inequal_cons_);
     }
 
-    // Scalar fraction-to-boundary step for one slack/multiplier block (verbatim
-    // today's PSIOPT::max_step_to_boundary); reads inequal_cons_ through `ctx`.
+    // Scalar fraction-to-boundary step for one block of strictly-positive
+    // quantities and their step (verbatim today's PSIOPT::max_step_to_boundary).
+    // `count` is the block length: it was read off `ctx.inequal_cons_` when the
+    // slack and inequality-multiplier blocks were the only callers, and is now
+    // passed explicitly so the variable-bound distances and multipliers -- whose
+    // length is the bound set's, not the constraint count's -- are held to the
+    // SAME rule by the SAME kernel. The two original call sites pass
+    // ctx.inequal_cons_, so their trip count and body are unchanged.
     double max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> SLI, Eigen::Ref<Eigen::VectorXd> dSLI,
-                                double bfrac, const SolverContext &ctx) const;
+                                double bfrac, int count) const;
 
     // GENERIC driving path (taken by compute_step when the acceptance strategy
     // reports drives_classic_path() == false — e.g. ModernMeritAcceptance).
@@ -159,6 +165,15 @@ class BacktrackingLineSearch : public GlobalizationMechanism {
     // allocation.
     Eigen::VectorXd resto_eq_shift_scratch_;
     Eigen::VectorXd resto_iq_shift_scratch_;
+
+    // Variable-bound fraction-to-boundary scratch (dead unless the problem
+    // declares variable bounds). The primal leg needs a gather -- the distances
+    // to the bounds and their directional derivatives are not contiguous blocks
+    // of the KKT vector the way the slacks are -- and these back it without a
+    // per-iteration heap allocation, the same discipline the two vectors above
+    // follow. Used for the lower side and then reused for the upper.
+    Eigen::VectorXd bound_dist_scratch_;
+    Eigen::VectorXd bound_dir_scratch_;
 };
 
 } // namespace tycho::solvers

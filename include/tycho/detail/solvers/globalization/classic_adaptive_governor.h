@@ -138,10 +138,12 @@ class ClassicAdaptiveGovernor : public BarrierGovernor {
     // TOKEN-IDENTICAL copy of PSIOPT::complementarity INCLUDING the ULP warning:
     // the .sum() reduction order feeds mu (via mpc_mu) and must not be reordered.
     // Uses ctx.stli_scratch_ (the same PSIOPT-owned buffer) instead of a PSIOPT
-    // member.
-    void complementarity(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI,
-                         double &avgcomp, double &mincomp, double &maxcomp,
-                         const SolverContext &ctx) const;
+    // member, and reaches the bound set / bound multipliers through ctx instead
+    // of through PSIOPT's own members -- the same plumbing rename, applied to
+    // one more pair of names. `X` is the primal block the bound pairs need.
+    void complementarity(Eigen::Ref<Eigen::VectorXd> X, Eigen::Ref<Eigen::VectorXd> S,
+                         Eigen::Ref<Eigen::VectorXd> LI, double &avgcomp, double &mincomp,
+                         double &maxcomp, const SolverContext &ctx) const;
     double barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu,
                              const SolverContext &ctx) const;
     void barrier_gradient(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double mu,
@@ -152,9 +154,12 @@ class ClassicAdaptiveGovernor : public BarrierGovernor {
     // took the slack/multiplier blocks too, but never read them.
     double loqo_mu(double avgcomp, double mincomp) const;
     // mpc_mu re-runs complementarity on the predictor point (ctx for the shared
-    // stli_scratch_); the reduction feeds mu, hence the ULP note above.
-    double mpc_mu(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
-                  double mincomp, const SolverContext &ctx) const;
+    // stli_scratch_); the reduction feeds mu, hence the ULP note above. `X` is
+    // the predictor's primal block, so the ratio's numerator is taken over the
+    // same pair set as its denominator when variable bounds are present.
+    double mpc_mu(Eigen::Ref<Eigen::VectorXd> X, Eigen::Ref<Eigen::VectorXd> S,
+                  Eigen::Ref<Eigen::VectorXd> LI, double avgcomp, double mincomp,
+                  const SolverContext &ctx) const;
 };
 
 } // namespace tycho::solvers

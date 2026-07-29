@@ -810,9 +810,9 @@ void modern_eval_trial_point(SolverContext &ctx, double obj_scale, double mu, do
 
 double BacktrackingLineSearch::max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> SLI,
                                                     Eigen::Ref<Eigen::VectorXd> dSLI, double bfrac,
-                                                    const SolverContext &ctx) const {
+                                                    int count) const {
     double alpha = 1.0;
-    for (int i = 0; i < ctx.inequal_cons_; i++) {
+    for (int i = 0; i < count; i++) {
         if (dSLI[i] < -bfrac * SLI[i]) {
             double an = -bfrac * SLI[i] / dSLI[i];
             if (an < alpha)
@@ -827,8 +827,56 @@ void BacktrackingLineSearch::max_primal_dual_step(Eigen::VectorXd &XSL, Eigen::V
                                                   const SolverContext &ctx) {
     KKTVector xsl = kkt_view(XSL, ctx);
     KKTVector dxsl = kkt_view(DXSL, ctx);
-    double Smax = this->max_step_to_boundary(xsl.slacks(), dxsl.slacks(), bfrac, ctx);
-    double Lmax = this->max_step_to_boundary(xsl.iq_lmults(), dxsl.iq_lmults(), bfrac, ctx);
+    double Smax = this->max_step_to_boundary(xsl.slacks(), dxsl.slacks(), bfrac, ctx.inequal_cons_);
+    double Lmax =
+        this->max_step_to_boundary(xsl.iq_lmults(), dxsl.iq_lmults(), bfrac, ctx.inequal_cons_);
+
+    // Native variable-bound fraction-to-boundary. Dead unless the problem
+    // declares variable bounds (ctx.bounds_ null -> short-circuit, exactly like
+    // the nested-restoration legs below). Same tau (bfrac) and the same kernel
+    // the slack and multiplier blocks use, folded into the same two step
+    // lengths -- so a bounded variable is held to precisely the rule an
+    // inequality slack is, and its multiplier to the rule the inequality
+    // multiplier is.
+    //
+    // The primal side needs a gather: the distances (x-l) and (u-x) and their
+    // directional derivatives (+dx and -dx, the upper distance shrinking as x
+    // grows) are not contiguous blocks of the KKT vector the way the slacks
+    // are. The dual side needs none -- z and dz are already the dense parallel
+    // vectors BoundDualState keeps, and dz was filled from the UNSCALED Newton
+    // step before this function scales anything.
+    if (ctx.bounds_) {
+        const BoundSet &b = *ctx.bounds_;
+        BoundDualState &zd = *ctx.bound_duals_;
+        auto x = xsl.primals();
+        auto dx = dxsl.primals();
+        const int nl = static_cast<int>(b.lower_idx_.size());
+        const int nu = static_cast<int>(b.upper_idx_.size());
+        if (nl > 0) {
+            this->bound_dist_scratch_.resize(nl);
+            this->bound_dir_scratch_.resize(nl);
+            for (int k = 0; k < nl; k++) {
+                const int i = b.lower_idx_[k];
+                this->bound_dist_scratch_[k] = x[i] - b.lower_val_[k];
+                this->bound_dir_scratch_[k] = dx[i];
+            }
+            Smax = std::min(Smax, this->max_step_to_boundary(this->bound_dist_scratch_,
+                                                             this->bound_dir_scratch_, bfrac, nl));
+            Lmax = std::min(Lmax, this->max_step_to_boundary(zd.z_lower_, zd.dz_lower_, bfrac, nl));
+        }
+        if (nu > 0) {
+            this->bound_dist_scratch_.resize(nu);
+            this->bound_dir_scratch_.resize(nu);
+            for (int k = 0; k < nu; k++) {
+                const int i = b.upper_idx_[k];
+                this->bound_dist_scratch_[k] = b.upper_val_[k] - x[i];
+                this->bound_dir_scratch_[k] = -dx[i];
+            }
+            Smax = std::min(Smax, this->max_step_to_boundary(this->bound_dist_scratch_,
+                                                             this->bound_dir_scratch_, bfrac, nu));
+            Lmax = std::min(Lmax, this->max_step_to_boundary(zd.z_upper_, zd.dz_upper_, bfrac, nu));
+        }
+    }
 
     // Nested-restoration elastic fraction-to-boundary. Dead unless a nested
     // restoration strategy is active. The condensed elastic slacks (n,p) and
@@ -886,11 +934,14 @@ double BacktrackingLineSearch::compute_step(
     Eigen::VectorXd &RHS2, AcceptanceStrategy &acceptance, double &alphap, double &alphad,
     IterateInfo &Citer, const std::vector<IterateInfo> &iters, SolverContext &ctx) {
     // The fraction-to-boundary scaling runs when there are inequality slacks OR
-    // when a nested restoration strategy is active (whose eliminated elastic
-    // variables carry their own positivity caps even for an equality-only
-    // problem). The added disjunct is provably false on the default path
-    // (ctx.restoration_ null → short-circuit), so the guard is byte-identical off.
-    if (ctx.inequal_cons_ > 0 ||
+    // when the problem declares variable bounds (whose distances and multipliers
+    // need the same positivity caps, on an equality-only problem just as much as
+    // on any other) OR when a nested restoration strategy is active (whose
+    // eliminated elastic variables carry their own caps). Both added disjuncts
+    // are provably false on the default path — ctx.bounds_ is null unless a
+    // bound set was configured, ctx.restoration_ unless a restoration mode was
+    // selected — so the guard is byte-identical off.
+    if (ctx.inequal_cons_ > 0 || ctx.bounds_ ||
         (ctx.restoration_ && ctx.restoration_->is_active() && ctx.restoration_->is_nested()))
         this->max_primal_dual_step(XSL, DXSL, ctx.settings_.bound_fraction_, alphap, alphad, ctx);
 
@@ -1029,20 +1080,43 @@ double BacktrackingLineSearch::generic_line_search(
 // classic_adaptive_governor.h's PROBE-impurity and byte-identity design notes.
 // ============================================================================
 
-void ClassicAdaptiveGovernor::complementarity(Eigen::Ref<Eigen::VectorXd> S,
+void ClassicAdaptiveGovernor::complementarity(Eigen::Ref<Eigen::VectorXd> X,
+                                              Eigen::Ref<Eigen::VectorXd> S,
                                               Eigen::Ref<Eigen::VectorXd> LI, double &avgcomp,
                                               double &mincomp, double &maxcomp,
                                               const SolverContext &ctx) const {
-    // Buffer-hoist ONLY: keep the exact Eigen .sum()/minCoeff()/maxCoeff()
-    // reduction expressions unchanged. avgcomp feeds mu (see mpc_mu/loqo_mu
-    // call sites), so a hand-fused loop that reorders the sum could perturb
-    // the reduction by a ULP under fast-math and change iterates -- forbidden.
-    // This change only removes the per-call heap allocation of StLI.
-    ctx.stli_scratch_.resize(S.size());
-    ctx.stli_scratch_ = S.cwiseProduct(LI);
-    mincomp = ctx.stli_scratch_.minCoeff();
-    maxcomp = ctx.stli_scratch_.maxCoeff();
-    avgcomp = ctx.stli_scratch_.sum() / double(ctx.stli_scratch_.size());
+    // Keep the exact Eigen .sum()/minCoeff()/maxCoeff() reduction expressions
+    // over the slack pairs unchanged. avgcomp feeds mu (see mpc_mu/loqo_mu call
+    // sites), so a hand-fused loop that reorders the sum could perturb the
+    // reduction by a ULP under fast-math and change iterates -- forbidden. The
+    // buffer hoist removed the per-call heap allocation of StLI without touching
+    // that ordering, and the variable-bound extension below likewise leaves it
+    // alone: the bound pairs are reduced SEPARATELY and combined by count, never
+    // folded into this reduction.
+    //
+    // The emptiness guard is new and is not a behaviour change on any path that
+    // existed before: this function was only ever called with inequality
+    // constraints present. It exists because a problem whose only barrier terms
+    // are variable-bound terms reaches here with no slack block at all, and the
+    // reductions below are undefined on an empty vector.
+    int base_count = 0;
+    if (S.size() > 0) {
+        ctx.stli_scratch_.resize(S.size());
+        ctx.stli_scratch_ = S.cwiseProduct(LI);
+        mincomp = ctx.stli_scratch_.minCoeff();
+        maxcomp = ctx.stli_scratch_.maxCoeff();
+        avgcomp = ctx.stli_scratch_.sum() / double(ctx.stli_scratch_.size());
+        base_count = static_cast<int>(ctx.stli_scratch_.size());
+    }
+
+    // Variable-bound pairs join the account the barrier oracles and the barrier
+    // residual read: a bounded variable's (x-l)*z_L and (u-x)*z_U are
+    // complementarity products in exactly the sense s*lambda is, and mu has to
+    // be driven by all of them or the bounded coordinates never centre. Dead on
+    // a problem with no bound set.
+    if (ctx.bounds_)
+        detail::augment_bound_complementarity(X, *ctx.bounds_, *ctx.bound_duals_, base_count,
+                                              avgcomp, mincomp, maxcomp);
 }
 
 double ClassicAdaptiveGovernor::barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu,
@@ -1068,7 +1142,7 @@ double ClassicAdaptiveGovernor::loqo_mu(double avgcomp, double mincomp) const {
     return sigma * avgcomp;
 }
 
-double ClassicAdaptiveGovernor::mpc_mu(Eigen::Ref<Eigen::VectorXd> S,
+double ClassicAdaptiveGovernor::mpc_mu(Eigen::Ref<Eigen::VectorXd> X, Eigen::Ref<Eigen::VectorXd> S,
                                        Eigen::Ref<Eigen::VectorXd> LI, double avgcomp,
                                        double mincomp, const SolverContext &ctx) const {
     // The PROBE predictor recomputes complementarity on the predictor point from
@@ -1082,10 +1156,23 @@ double ClassicAdaptiveGovernor::mpc_mu(Eigen::Ref<Eigen::VectorXd> S,
     // governor. Under the monitored governor it is reachable only inside that
     // governor's own guarded free mode, where the monitor forces a monotone
     // fallback on stall (and avgcomp/mincomp carry the elastic complementarity).
+    //
+    // The VARIABLE-BOUND pairs, by contrast, are augmented on both sides of the
+    // ratio: `avgcomp` carries them (the caller's complementarity() call) and so
+    // does `navgcomp` below, since X is the predictor point's primal block. The
+    // two are therefore taken over the same pair set. What the predictor's bound
+    // pairs do NOT carry is a probed multiplier -- the affine bound-dual step is
+    // not formed here, so they pair the predictor's x against the CURRENT z (the
+    // slack pairs, whose multipliers live in the KKT vector, are fully probed).
+    // The bound distances still move, so the ratio still sees the bounded
+    // coordinates; it just sees them at half the sensitivity. Disclosed rather
+    // than fixed here because forming the affine bound-dual step inside a
+    // governor documented as stateless needs a home for its scratch, and the
+    // shipped default barrier mode is LOQO, which never reaches this oracle.
     double navgcomp = 0;
     double nmincomp = 0;
     double nmaxcomp = 0;
-    this->complementarity(S, LI, navgcomp, nmincomp, nmaxcomp, ctx);
+    this->complementarity(X, S, LI, navgcomp, nmincomp, nmaxcomp, ctx);
     return std::pow(navgcomp / avgcomp, 3) * avgcomp;
 }
 
@@ -1124,7 +1211,8 @@ double ClassicAdaptiveGovernor::update_barrier(PSIOPT::BarrierModes barmode, dou
         mechanism.max_primal_dual_step(XSL, DXSL, ctx.settings_.bound_fraction_, alphap, alphad,
                                        ctx);
         Temp = XSL + DXSL;
-        mu = this->mpc_mu(v_temp.slacks(), v_temp.iq_lmults(), avgcomp, mincomp, ctx);
+        mu = this->mpc_mu(v_temp.primals(), v_temp.slacks(), v_temp.iq_lmults(), avgcomp, mincomp,
+                          ctx);
 
         break;
     case PSIOPT::BarrierModes::LOQO:
@@ -1329,12 +1417,14 @@ RecoveryChain::Action SocRecovery::on_step_rejected(
         // Fraction-to-boundary scale the corrected direction, exactly as the
         // main step path scales DXSL before its backtrack (mechanism's shared
         // entry point, under the same guard compute_step applies): there are
-        // inequality slacks to keep positive, OR a nested restoration strategy
-        // is active, whose eliminated elastic variables carry their own
-        // positivity caps even on an equality-only problem. A corrected
-        // direction is committed in place of the rejected one, so it has to be
-        // held to the same bounds the rejected one was.
-        if (ctx.inequal_cons_ > 0 ||
+        // inequality slacks to keep positive, OR the problem declares variable
+        // bounds, OR a nested restoration strategy is active, whose eliminated
+        // elastic variables carry their own positivity caps even on an
+        // equality-only problem. A corrected direction is committed in place of
+        // the rejected one, so it has to be held to the same bounds the
+        // rejected one was -- which is the whole reason the scaling lives behind
+        // one shared entry point rather than being re-derived here.
+        if (ctx.inequal_cons_ > 0 || ctx.bounds_ ||
             (ctx.restoration_ && ctx.restoration_->is_active() && ctx.restoration_->is_nested()))
             mechanism.max_primal_dual_step(XSL, dxsl_soc, ctx.settings_.bound_fraction_, alphap,
                                            alphad, ctx);

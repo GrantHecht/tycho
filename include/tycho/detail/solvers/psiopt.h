@@ -1079,8 +1079,23 @@ class PSIOPT {
     void apply_reset_slacks(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> FXI) const;
     // max_step_to_boundary was extracted verbatim into BacktrackingLineSearch;
     // it is now a private helper of that mechanism.
-    void complementarity(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI,
-                         double &avgcomp, double &mincomp, double &maxcomp) const;
+    // The complementarity account mu is driven by and barr_inf_ reports: the
+    // inequality slack/multiplier pairs, plus -- when the problem declares
+    // variable bounds -- the bound pairs (x-l)*z_L and (u-x)*z_U, which is why
+    // it takes the primal block `X` alongside the slack and multiplier blocks.
+    void complementarity(Eigen::Ref<Eigen::VectorXd> X, Eigen::Ref<Eigen::VectorXd> S,
+                         Eigen::Ref<Eigen::VectorXd> LI, double &avgcomp, double &mincomp,
+                         double &maxcomp) const;
+
+    // How many pairs complementarity() reduced into its aggregates, given the
+    // slack block length it was handed: the slack/multiplier pairs plus one per
+    // finite variable bound. This is the weight the union average carries, and
+    // therefore the base_count any FURTHER fold-in (augment_complementarity_
+    // nested) has to re-weight against -- that helper reconstructs the base sum
+    // as avgcomp*base_count, so a count that omitted the bound pairs would
+    // reconstruct the wrong sum. Returns the slack count unchanged off the bound
+    // path.
+    int complementarity_pair_count(int slack_count) const;
     // Folds an active nested restoration phase's elastic complementarity pairs
     // into complementarity()'s aggregates. base_count is the number of original
     // slack/multiplier pairs already reduced into avgcomp (so their sum can be

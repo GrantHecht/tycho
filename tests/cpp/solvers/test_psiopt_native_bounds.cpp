@@ -4,10 +4,17 @@
 // and its committed update with the kappa_sigma safeguard, and the condensed
 // sigma diagonal's arrival in the assembled KKT.
 //
-// There is no fraction-to-boundary leg for bounded variables yet, so nothing
-// here drives a bounded solve end to end. Every test is either a pure kernel
-// checked against a written-out formula or a single private helper driven
-// through NativeBoundsHarness, which PSIOPT befriends (psiopt.h).
+// Then the step-length half: the fraction-to-boundary legs that keep a bounded
+// variable and its multiplier strictly interior, the complementarity account
+// the barrier parameter is driven by, and the first solves that run all of it
+// end to end.
+//
+// Tests come in three kinds. Pure kernels are checked against a written-out
+// formula. Single private helpers are driven through NativeBoundsHarness, which
+// PSIOPT befriends (psiopt.h). End-to-end solves go through the public entry
+// point and assert on where they land, what the multipliers say about the
+// active bound, and -- through a late-callback probe -- that no iterate ever
+// left the box on the way there.
 //
 // The last group is the neutrality check the whole feature rests on: a problem
 // that declares no variable bounds leaves the bound state empty, leaves the
@@ -15,9 +22,17 @@
 // the one it assembled before any of this existed.
 ///////////////////////////////////////////////////////////////////////////////
 
+#include "optimal_control/oc_test_utils.h"
+#include "solver_test_utils.h"
+
 #include "tycho/detail/solvers/barrier_math.h"
 #include "tycho/detail/solvers/bound_set.h"
+#include "tycho/detail/solvers/globalization/acceptance_strategy.h"
+#include "tycho/detail/solvers/globalization/backtracking_line_search.h"
+#include "tycho/detail/solvers/globalization/noop_recovery.h"
+#include "tycho/detail/solvers/globalization/recovery_chain.h"
 #include "tycho/detail/solvers/globalization/solver_context.h"
+#include "tycho/detail/solvers/globalization/watchdog.h"
 #include "tycho/detail/solvers/non_linear_program.h"
 #include "tycho/detail/solvers/optimization_problem.h"
 #include "tycho/detail/solvers/psiopt.h"
@@ -25,8 +40,12 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <cstdlib>
 #include <limits>
+#include <memory>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 #include <Eigen/Core>
 
@@ -94,6 +113,26 @@ Eigen::VectorXd native_bounds_interior_point() {
     return (Eigen::VectorXd(3) << 2.0, 5.0, 0.5).finished();
 }
 
+// The watchdog's arm / relaxed-trial / revert outcomes all return without
+// delegating, so no acceptance strategy is reached on the path the revert test
+// drives. Failing loudly if one is beats silently accepting a wrong dispatch.
+class NativeBoundsUnusedAcceptance : public tycho::solvers::AcceptanceStrategy {
+  public:
+    bool drives_classic_path() const override { return true; }
+    bool is_iterate_acceptable(const tycho::solvers::ProgressMeasures &,
+                               const tycho::solvers::ProgressMeasures &,
+                               const tycho::solvers::ProgressMeasures &, double, double) override {
+        ADD_FAILURE() << "the watchdog's own outcomes must not reach an acceptance strategy";
+        return false;
+    }
+    bool
+    is_infeasibility_sufficiently_reduced(const tycho::solvers::ProgressMeasures &,
+                                          const tycho::solvers::ProgressMeasures &) const override {
+        return false;
+    }
+    void reset() override {}
+};
+
 // Adds the objective term (x[index] - center)^2. Started away from its
 // minimizer so neither the objective nor its gradient vanishes at the point the
 // assembly tests evaluate.
@@ -114,10 +153,13 @@ void native_bounds_add_shifted_square(tycho::solvers::OptimizationProblem &prob,
 // exercise the shipped helpers rather than a parallel implementation.
 class NativeBoundsHarness {
   public:
-    explicit NativeBoundsHarness(int num_vars) {
+    // `center` shifts every variable's objective term; the end-to-end tests use
+    // it to place the unconstrained minimizer outside the box so a bound is
+    // genuinely active at the solution.
+    explicit NativeBoundsHarness(int num_vars, double center = 3.0) {
         prob_.set_vars(Eigen::VectorXd::Zero(num_vars));
         for (int i = 0; i < num_vars; i++) {
-            native_bounds_add_shifted_square(prob_, i, 3.0);
+            native_bounds_add_shifted_square(prob_, i, center);
         }
         prob_.optimizer_->set_print_level(3);
         prob_.transcribe();
@@ -128,6 +170,26 @@ class NativeBoundsHarness {
     NonLinearProgram &nlp() { return *prob_.nlp_; }
     int pv() const { return solver_->primal_vars_; }
     int dim() const { return solver_->kkt_dim_; }
+    int ec() const { return solver_->equal_cons_; }
+    int ic() const { return solver_->inequal_cons_; }
+
+    // Adds x[i0] + x[i1] == target BEFORE transcription is re-run, for the
+    // equality-only end-to-end case.
+    void add_sum_equality(int i0, int i1, double target) {
+        auto args = tycho::vf::Arguments<2>();
+        auto con = args.coeff<0>() + args.coeff<1>() - target;
+        prob_.add_equal_con(tycho::vf::GenericFunction<-1, -1>(con),
+                            (Eigen::VectorXi(2) << i0, i1).finished());
+        prob_.transcribe();
+        solver_ = prob_.optimizer_.get();
+    }
+
+    // A full solve through the public entry point: run_phase_sequence does its
+    // own bound classification (at the shipped relax factor), the interior push
+    // and the whole iteration, so this is the end-to-end path rather than the
+    // hand-driven one the kernel tests use.
+    Eigen::VectorXd solve(const Eigen::VectorXd &x0) { return solver_->optimize(x0); }
+    tycho::ConvergenceFlags flag() const { return solver_->result().converge_flag_; }
 
     // Declares a bound and re-materializes the staged declarations, mirroring
     // what a transcription would have staged. make_nlp reallocates the KKT
@@ -154,6 +216,15 @@ class NativeBoundsHarness {
     void install_bounds(const BoundSet *b) { solver_->bounds_ = b; }
     BoundDualState &duals() { return solver_->bound_duals_; }
 
+    // A SolverContext carrying the bound state, the way alg_impl builds one --
+    // what the step-length mechanism reads to find the bound legs.
+    tycho::solvers::SolverContext live_context() {
+        tycho::solvers::SolverContext ctx = this->bare_context();
+        ctx.bounds_ = solver_->bounds_;
+        ctx.bound_duals_ = &solver_->bound_duals_;
+        return ctx;
+    }
+
     // A SolverContext built the way every non-bound call site builds one, i.e.
     // without naming the two bound members. Constructed here because the members
     // it reads are private to PSIOPT.
@@ -171,6 +242,15 @@ class NativeBoundsHarness {
     // `xsl_new` is a full compound iterate. The harness problems carry no
     // constraints, so its width is the primal width and the slack/multiplier
     // blocks the free-mu average would read are empty.
+    // The nested soft pre-stage's primal-dual error at one point, with the base
+    // stationarity block handed over explicitly.
+    double pd_error(Eigen::VectorXd &xsl, Eigen::VectorXd &rhs, const Eigen::VectorXd &prim_base,
+                    double mu) {
+        tycho::solvers::KKTVector vx = solver_->kkt_view(xsl);
+        tycho::solvers::KKTVector vr = solver_->kkt_view(rhs);
+        return solver_->primal_dual_error(vx, vr, prim_base, mu);
+    }
+
     void commit(double alphad, Eigen::VectorXd xsl_new, double mu, bool monotone_mu) {
         tycho::solvers::KKTVector v = solver_->kkt_view(xsl_new);
         solver_->apply_bound_dual_step(alphad, v, mu, monotone_mu);
@@ -520,10 +600,11 @@ TEST(NativeBounds, CommitClipsFromBelowToo) {
     const Eigen::VectorXd x_new = (Eigen::VectorXd(1) << 2.0).finished();
     const double d = 2.0 - 1.0;
 
-    // A step that would drive the multiplier through zero: the floor keeps it
-    // strictly positive, which is what the barrier terms downstream require.
+    // A step landing the multiplier far below the floor -- but still positive,
+    // which is now the only thing the fraction-to-boundary rule permits. The
+    // floor lifts it back onto a bracket the barrier terms downstream can use.
     h.duals().z_lower_ = (Eigen::VectorXd(1) << 1.0).finished();
-    h.duals().dz_lower_ = (Eigen::VectorXd(1) << -1.0e30).finished();
+    h.duals().dz_lower_ = (Eigen::VectorXd(1) << -1.0 + 1.0e-30).finished();
     h.duals().z_upper_ = Eigen::VectorXd::Zero(0);
     h.duals().dz_upper_ = Eigen::VectorXd::Zero(0);
     h.commit(1.0, x_new, mu, /*monotone_mu=*/true);
@@ -575,28 +656,6 @@ TEST(NativeBounds, TheClipBarrierParameterFollowsTheBarrierSchedule) {
     // at kFreeModeClipMuCap, so the ceiling is kappa_sigma * cap / d instead --
     // twelve orders of magnitude higher, and nothing like the monotone answer.
     EXPECT_DOUBLE_EQ(drive(false), kKappaSigma * kFreeModeClipMuCap / d);
-}
-
-// The fraction-to-boundary leg for bound multipliers does not exist yet, so a
-// committed step can still drive one non-positive -- which would make the
-// free-mu average complementarity non-positive and the clamp bracket
-// meaningless. The fallback to the barrier parameter keeps the floor doing its
-// job. Provably dead once that leg lands and every product is positive.
-TEST(NativeBounds, FreeModeFallsBackToTheBarrierParameterOnANonPositiveAverage) {
-    NativeBoundsHarness h(1);
-    h.declare_bound(0, 1.0, kNativeBoundsInf);
-    h.configure_bounds();
-
-    const double mu = 0.1;
-    const double d = 2.0 - 1.0;
-    h.duals().z_lower_ = (Eigen::VectorXd(1) << 1.0).finished();
-    h.duals().dz_lower_ = (Eigen::VectorXd(1) << -1.0e30).finished();
-    h.duals().z_upper_ = Eigen::VectorXd::Zero(0);
-    h.duals().dz_upper_ = Eigen::VectorXd::Zero(0);
-
-    h.commit(1.0, (Eigen::VectorXd(1) << 2.0).finished(), mu, /*monotone_mu=*/false);
-    EXPECT_DOUBLE_EQ(h.duals().z_lower_[0], mu / (kKappaSigma * d));
-    EXPECT_GT(h.duals().z_lower_[0], 0.0);
 }
 
 // --- Settings validation ---------------------------------------------------
@@ -711,4 +770,543 @@ TEST(NativeBounds, ADefaultedSolverContextCarriesNoBoundState) {
     EXPECT_EQ(ctx.bounds_, nullptr);
     EXPECT_EQ(ctx.bound_duals_, nullptr);
     EXPECT_EQ(ctx.restoration_, nullptr);
+}
+
+// --- Fraction-to-boundary legs ---------------------------------------------
+
+namespace {
+
+// Runs the step-length mechanism's scaling on a hand-built direction and hands
+// back the two fractions it chose. `dxsl` is scaled in place, exactly as the
+// solver's own call scales DXSL.
+void native_bounds_scale_step(NativeBoundsHarness &h, Eigen::VectorXd &xsl, Eigen::VectorXd &dxsl,
+                              double bfrac, double &alphap, double &alphad) {
+    tycho::solvers::BacktrackingLineSearch mech;
+    tycho::solvers::SolverContext ctx = h.live_context();
+    mech.max_primal_dual_step(xsl, dxsl, bfrac, alphap, alphad, ctx);
+}
+
+} // namespace
+
+// tau applied to the distance to the bound, through the same kernel and with
+// the same bfrac the slack block uses. One variable in [0, 1] at 0.5, stepping
+// straight at the lower bound: the cap has to leave exactly (1-tau) of the
+// distance behind.
+TEST(NativeBounds, PrimalStepIsCappedByTheDistanceToTheLowerBound) {
+    NativeBoundsHarness h(1);
+    h.declare_bound(0, 0.0, 1.0);
+    h.configure_bounds();
+    ASSERT_NE(h.installed_bounds(), nullptr);
+    h.duals().z_lower_ = (Eigen::VectorXd(1) << 1.0).finished();
+    h.duals().z_upper_ = (Eigen::VectorXd(1) << 1.0).finished();
+    h.duals().dz_lower_ = Eigen::VectorXd::Zero(1);
+    h.duals().dz_upper_ = Eigen::VectorXd::Zero(1);
+
+    const double tau = 0.99;
+    Eigen::VectorXd xsl = (Eigen::VectorXd(1) << 0.5).finished();
+    Eigen::VectorXd dxsl = (Eigen::VectorXd(1) << -1.0).finished();
+    double alphap = 1.0;
+    double alphad = 1.0;
+    native_bounds_scale_step(h, xsl, dxsl, tau, alphap, alphad);
+
+    // -tau*0.5 / -1.0
+    EXPECT_DOUBLE_EQ(alphap, -tau * 0.5 / -1.0);
+    // The direction is scaled in place by that fraction, and the point it lands
+    // on keeps exactly (1-tau) of its original distance to the bound.
+    EXPECT_DOUBLE_EQ(dxsl[0], -1.0 * alphap);
+    EXPECT_GT(xsl[0] + dxsl[0], 0.0);
+    EXPECT_NEAR(xsl[0] + dxsl[0], 0.5 * (1.0 - tau), 1.0e-15);
+}
+
+// The upper side mirrors it: the distance shrinks as x grows, so the gathered
+// direction is -dx and a positive dx is what triggers the cap.
+TEST(NativeBounds, PrimalStepIsCappedByTheDistanceToTheUpperBound) {
+    NativeBoundsHarness h(1);
+    h.declare_bound(0, 0.0, 1.0);
+    h.configure_bounds();
+    h.duals().z_lower_ = (Eigen::VectorXd(1) << 1.0).finished();
+    h.duals().z_upper_ = (Eigen::VectorXd(1) << 1.0).finished();
+    h.duals().dz_lower_ = Eigen::VectorXd::Zero(1);
+    h.duals().dz_upper_ = Eigen::VectorXd::Zero(1);
+
+    const double tau = 0.99;
+    Eigen::VectorXd xsl = (Eigen::VectorXd(1) << 0.5).finished();
+    Eigen::VectorXd dxsl = (Eigen::VectorXd(1) << 2.0).finished();
+    double alphap = 1.0;
+    double alphad = 1.0;
+    native_bounds_scale_step(h, xsl, dxsl, tau, alphap, alphad);
+
+    EXPECT_DOUBLE_EQ(alphap, -tau * 0.5 / -2.0);
+    EXPECT_LT(xsl[0] + dxsl[0], 1.0);
+    EXPECT_NEAR(1.0 - (xsl[0] + dxsl[0]), 0.5 * (1.0 - tau), 1.0e-15);
+}
+
+// The dual leg is the same rule on the multipliers themselves, and it lands in
+// alphad rather than alphap -- so a multiplier heading for zero shortens the
+// dual fraction without shortening the primal one.
+TEST(NativeBounds, DualStepIsCappedByTheBoundMultipliers) {
+    NativeBoundsHarness h(1);
+    h.declare_bound(0, 0.0, kNativeBoundsInf);
+    h.configure_bounds();
+    h.duals().z_lower_ = (Eigen::VectorXd(1) << 1.0).finished();
+    h.duals().dz_lower_ = (Eigen::VectorXd(1) << -2.0).finished();
+    h.duals().z_upper_ = Eigen::VectorXd::Zero(0);
+    h.duals().dz_upper_ = Eigen::VectorXd::Zero(0);
+
+    const double tau = 0.99;
+    // The primal moves away from its bound, so only the dual leg can bind.
+    Eigen::VectorXd xsl = (Eigen::VectorXd(1) << 0.5).finished();
+    Eigen::VectorXd dxsl = (Eigen::VectorXd(1) << 1.0).finished();
+    double alphap = 1.0;
+    double alphad = 1.0;
+    native_bounds_scale_step(h, xsl, dxsl, tau, alphap, alphad);
+
+    EXPECT_DOUBLE_EQ(alphap, 1.0);
+    EXPECT_DOUBLE_EQ(alphad, -tau * 1.0 / -2.0);
+    // z + alphad*dz keeps exactly (1-tau) of the multiplier.
+    EXPECT_NEAR(1.0 + alphad * -2.0, 1.0 * (1.0 - tau), 1.0e-15);
+}
+
+// A direction that moves every bounded quantity inward caps nothing: the legs
+// are a safeguard, not a throttle.
+TEST(NativeBounds, AnInwardDirectionIsNotCappedByTheBoundLegs) {
+    NativeBoundsHarness h(1);
+    h.declare_bound(0, 0.0, 1.0);
+    h.configure_bounds();
+    h.duals().z_lower_ = (Eigen::VectorXd(1) << 1.0).finished();
+    h.duals().z_upper_ = (Eigen::VectorXd(1) << 1.0).finished();
+    h.duals().dz_lower_ = (Eigen::VectorXd(1) << 0.5).finished();
+    h.duals().dz_upper_ = (Eigen::VectorXd(1) << 0.5).finished();
+
+    Eigen::VectorXd xsl = (Eigen::VectorXd(1) << 0.5).finished();
+    Eigen::VectorXd dxsl = (Eigen::VectorXd(1) << 0.0).finished();
+    double alphap = 1.0;
+    double alphad = 1.0;
+    native_bounds_scale_step(h, xsl, dxsl, 0.99, alphap, alphad);
+
+    EXPECT_DOUBLE_EQ(alphap, 1.0);
+    EXPECT_DOUBLE_EQ(alphad, 1.0);
+}
+
+// --- Complementarity account ------------------------------------------------
+
+// The bound pairs join the account as a count-weighted union, exactly the shape
+// the nested-restoration elastics are folded in with. Hand-built over two
+// bounds and no slacks, so the union IS the bound set and every number is
+// checkable by inspection.
+TEST(NativeBounds, BoundPairsJoinTheComplementarityAccountByCount) {
+    const BoundSet b = native_bounds_three_var_set();
+    const BoundDualState z = native_bounds_three_var_duals();
+    const Eigen::VectorXd x = native_bounds_interior_point();
+
+    // Pairs: (2-1)*0.7 = 0.7, (0.5-0)*1.5 = 0.75, (8-5)*0.25 = 0.75,
+    //        (1-0.5)*4.0 = 2.0.
+    double avg = 0.0;
+    double mn = 0.0;
+    double mx = 0.0;
+    tycho::solvers::detail::augment_bound_complementarity(x, b, z, 0, avg, mn, mx);
+    EXPECT_DOUBLE_EQ(mn, 0.7);
+    EXPECT_DOUBLE_EQ(mx, 2.0);
+    EXPECT_DOUBLE_EQ(avg, (0.7 + 0.75 + 0.75 + 2.0) / 4.0);
+}
+
+// With slack pairs already reduced, the union average is count-weighted against
+// them and the base aggregates are NOT re-reduced -- which is what keeps the
+// slack reduction's ordering (and therefore mu) untouched.
+TEST(NativeBounds, TheUnionAverageIsWeightedAgainstTheSlackPairCount) {
+    const BoundSet b = native_bounds_three_var_set();
+    const BoundDualState z = native_bounds_three_var_duals();
+    const Eigen::VectorXd x = native_bounds_interior_point();
+
+    // Two slack pairs already reduced to an average of 3.0, min 1.0, max 5.0.
+    double avg = 3.0;
+    double mn = 1.0;
+    double mx = 5.0;
+    tycho::solvers::detail::augment_bound_complementarity(x, b, z, 2, avg, mn, mx);
+
+    const double bsum = 0.7 + 0.75 + 0.75 + 2.0;
+    EXPECT_DOUBLE_EQ(avg, (3.0 * 2.0 + bsum) / 6.0);
+    EXPECT_DOUBLE_EQ(mn, 0.7); // union min: the bound side is smaller
+    EXPECT_DOUBLE_EQ(mx, 5.0); // union max: the slack side is larger
+}
+
+TEST(NativeBounds, AnEmptyBoundSetLeavesTheComplementarityAggregatesAlone) {
+    const BoundSet empty;
+    const BoundDualState no_duals;
+    double avg = 3.0;
+    double mn = 1.0;
+    double mx = 5.0;
+    tycho::solvers::detail::augment_bound_complementarity(native_bounds_interior_point(), empty,
+                                                          no_duals, 2, avg, mn, mx);
+    EXPECT_DOUBLE_EQ(avg, 3.0);
+    EXPECT_DOUBLE_EQ(mn, 1.0);
+    EXPECT_DOUBLE_EQ(mx, 5.0);
+}
+
+// --- End-to-end solves ------------------------------------------------------
+
+namespace {
+
+constexpr const char *kNativeBoundsEnvVar = "TYCHO_DEV_NATIVE_BOUNDS";
+
+// Sets the bring-up switch for the lifetime of the guard and restores the
+// previous state after. The switch is read fresh at every declaration site, so
+// it has to be held across phase construction, not across the solve.
+class NativeBoundsSwitchGuard {
+  public:
+    explicit NativeBoundsSwitchGuard(bool on) {
+        const char *prev = std::getenv(kNativeBoundsEnvVar);
+        had_previous_ = prev != nullptr;
+        if (had_previous_)
+            previous_ = prev;
+        set(on ? "1" : "0");
+    }
+    ~NativeBoundsSwitchGuard() {
+        if (had_previous_)
+            set(previous_.c_str());
+        else
+            unset();
+    }
+
+    NativeBoundsSwitchGuard(const NativeBoundsSwitchGuard &) = delete;
+    NativeBoundsSwitchGuard &operator=(const NativeBoundsSwitchGuard &) = delete;
+
+  private:
+    static void set(const char *value) {
+#ifdef _WIN32
+        _putenv_s(kNativeBoundsEnvVar, value);
+#else
+        setenv(kNativeBoundsEnvVar, value, 1);
+#endif
+    }
+    static void unset() {
+#ifdef _WIN32
+        _putenv_s(kNativeBoundsEnvVar, "");
+#else
+        unsetenv(kNativeBoundsEnvVar);
+#endif
+    }
+
+    bool had_previous_ = false;
+    std::string previous_;
+};
+
+// Watches every committed iterate for a bound violation. The whole point of the
+// fraction-to-boundary legs is that this never fires: a barrier term evaluated
+// at a point on or outside its bound is a log of a non-positive number, so an
+// iterate that leaves the box does not merely degrade the solve, it ends it.
+struct NativeBoundsInteriorProbe {
+    const NonLinearProgram *nlp = nullptr;
+    int iterates = 0;
+    int violations = 0;
+    double min_distance = std::numeric_limits<double>::infinity();
+
+    // Installs itself as the solver's late callback. The callback sees the
+    // iterate in the solver's REDUCED space, which is the space the bound set's
+    // indices are already recorded in -- so the two index each other directly,
+    // with no mapping.
+    void install(PSIOPT &opt) {
+        opt.set_late_callback([this](const tycho::solvers::IterateInfo &,
+                                     tycho::ConstEigenRef<Eigen::VectorXd> xsl,
+                                     tycho::ConstEigenRef<Eigen::VectorXd>) {
+            const BoundSet &b = this->nlp->variable_bound_set();
+            this->iterates++;
+            for (int k = 0; k < b.lower_idx_.size(); k++) {
+                const double d = xsl[b.lower_idx_[k]] - b.lower_val_[k];
+                this->min_distance = std::min(this->min_distance, d);
+                if (!(d > 0.0))
+                    this->violations++;
+            }
+            for (int k = 0; k < b.upper_idx_.size(); k++) {
+                const double d = b.upper_val_[k] - xsl[b.upper_idx_[k]];
+                this->min_distance = std::min(this->min_distance, d);
+                if (!(d > 0.0))
+                    this->violations++;
+            }
+            return 0;
+        });
+    }
+};
+
+// Builds the standard brachistochrone phase with the bring-up switch held in
+// the requested state across the declaration sites -- which is the only moment
+// the switch is read. Returning from inside the guard's scope keeps the phase
+// alive past it.
+auto native_bounds_build_brach(bool native) {
+    NativeBoundsSwitchGuard guard(native);
+    return TychoTest::make_brach_phase(100, 32);
+}
+
+} // namespace
+
+// (a) The box-constrained QP. min (x-2)^2 subject to 0 <= x <= 1 -- no
+// constraint rows at all, so every barrier term in the problem is a bound term
+// and the whole chain (push, sigma, complementarity, mu schedule, both
+// fraction-to-boundary legs, the z-form residual) has to work with no slack
+// block to lean on. The minimizer sits outside the box, so the upper bound is
+// active and its multiplier is the whole story at the solution.
+TEST(NativeBounds, BoxConstrainedQpConvergesToItsActiveBound) {
+    NativeBoundsHarness h(1, /*center=*/2.0);
+    h.declare_bound(0, 0.0, 1.0);
+
+    NativeBoundsInteriorProbe probe;
+    probe.nlp = &h.nlp();
+    probe.install(h.solver());
+
+    // Started ON the lower bound, so the interior push has to move it before the
+    // first evaluation can even be taken.
+    const Eigen::VectorXd sol = h.solve((Eigen::VectorXd(1) << 0.0).finished());
+
+    EXPECT_EQ(h.flag(), tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_NEAR(sol[0], 1.0, 1.0e-5);
+
+    // Stationarity at the solution is 2(x-2) - z_L + z_U = 0 with the lower
+    // bound inactive, so z_U -> 2 and z_L -> 0.
+    ASSERT_EQ(h.duals().z_upper_.size(), 1);
+    ASSERT_EQ(h.duals().z_lower_.size(), 1);
+    EXPECT_NEAR(h.duals().z_upper_[0], 2.0, 1.0e-3);
+    EXPECT_NEAR(h.duals().z_lower_[0], 0.0, 1.0e-3);
+
+    // The convergence verdict is taken on honest residuals: the reported
+    // dual infeasibility and barrier error are both inside tolerance, and the
+    // barrier error is a real number rather than the vacuous zero it would be
+    // if the bound pairs never reached the complementarity account.
+    EXPECT_GT(probe.iterates, 0);
+    EXPECT_EQ(probe.violations, 0);
+    EXPECT_GT(probe.min_distance, 0.0);
+}
+
+// (d) Equality constraints and a bounded variable, but NO inequality
+// constraints -- the combination that exercises the guard disjuncts. Without
+// them the step is never fraction-to-boundary scaled (compute_step's guard),
+// the barrier parameter is never updated (alg_impl's governor guard), and the
+// barrier residual is never reported (fill_residual_info's guard).
+//
+// min (x0-3)^2 + (x1-3)^2 s.t. x0 + x1 = 4, 0 <= x0 <= 1. On the constraint
+// manifold the objective minimizes at x0 = 2, so the upper bound is active and
+// the solution is (1, 3).
+TEST(NativeBounds, EqualityOnlyProblemWithABoundedVariableSolves) {
+    NativeBoundsHarness h(2);
+    h.add_sum_equality(0, 1, 4.0);
+    h.declare_bound(0, 0.0, 1.0);
+
+    NativeBoundsInteriorProbe probe;
+    probe.nlp = &h.nlp();
+    probe.install(h.solver());
+
+    const Eigen::VectorXd sol = h.solve((Eigen::VectorXd(2) << 0.5, 3.5).finished());
+
+    EXPECT_EQ(h.flag(), tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_NEAR(sol[0], 1.0, 1.0e-5);
+    EXPECT_NEAR(sol[1], 3.0, 1.0e-5);
+    EXPECT_EQ(h.ic(), 0);
+    EXPECT_GT(h.ec(), 0);
+    EXPECT_EQ(probe.violations, 0);
+    EXPECT_GT(probe.iterates, 0);
+}
+
+// (b) A real phase problem with a control path bound, solved natively. The
+// bound is inactive at the brachistochrone optimum, which is the harder case
+// for the barrier: it has to keep every iterate strictly inside a box it never
+// needs to touch, without dragging the solve off the answer.
+TEST(NativeBounds, PhaseWithAControlPathBoundSolvesNatively) {
+    auto phase = native_bounds_build_brach(true);
+    phase->optimizer_->set_print_level(3);
+
+    // The control bound was recorded natively, so no inequality rows carry it.
+    ASSERT_TRUE(phase->nlp_->has_variable_bounds());
+
+    NativeBoundsInteriorProbe probe;
+    probe.nlp = phase->nlp_.get();
+    probe.install(*phase->optimizer_);
+
+    const auto status = phase->solve_optimize();
+    EXPECT_EQ(status, tycho::ConvergenceFlags::CONVERGED);
+
+    const auto traj = phase->return_traj();
+    EXPECT_NEAR(traj.back()[3], 1.8013, 0.01);
+
+    // Every committed iterate stayed strictly inside the declared control box.
+    EXPECT_GT(probe.iterates, 0);
+    EXPECT_EQ(probe.violations, 0);
+    EXPECT_GT(probe.min_distance, 0.0);
+}
+
+// (c) The same problem both ways on one build. Both converge to the same
+// trajectory, and the native formulation's KKT system is smaller by exactly two
+// dimensions per lowered inequality row -- one constraint row and one slack
+// column each, which is the bookkeeping the native path exists to avoid.
+TEST(NativeBounds, NativeAndLoweredControlBoundsAgreeAndTheNativeKktIsSmaller) {
+    auto native = native_bounds_build_brach(true);
+    auto lowered = native_bounds_build_brach(false);
+    native->optimizer_->set_print_level(3);
+    lowered->optimizer_->set_print_level(3);
+
+    ASSERT_EQ(native->solve_optimize(), tycho::ConvergenceFlags::CONVERGED);
+    ASSERT_EQ(lowered->solve_optimize(), tycho::ConvergenceFlags::CONVERGED);
+
+    EXPECT_NEAR(native->return_traj().back()[3], lowered->return_traj().back()[3], 1.0e-3);
+
+    // The lowered formulation carries the bound as inequality rows; the native
+    // one carries none of them.
+    const int lowered_iq = lowered->nlp_->inequal_cons_;
+    const int native_iq = native->nlp_->inequal_cons_;
+    EXPECT_GT(lowered_iq - native_iq, 0);
+    EXPECT_EQ(lowered->nlp_->kkt_dim_ - native->nlp_->kkt_dim_, 2 * (lowered_iq - native_iq));
+    EXPECT_TRUE(native->nlp_->has_variable_bounds());
+    EXPECT_FALSE(lowered->nlp_->has_variable_bounds());
+}
+
+// The recovery links reach step scaling through the SAME shared entry point the
+// main path does, so a corrected or extended direction inherits the bound legs
+// with no code of its own. Driven with the classic ladder capped at one trial
+// so a rejection dispatches recovery immediately, and with every recovery link
+// enabled; the probe is the assertion -- whatever direction is finally
+// committed, it left every bounded variable strictly inside.
+TEST(NativeBounds, RecoveredDirectionsInheritTheBoundFractionToBoundary) {
+    auto phase = native_bounds_build_brach(true);
+    auto &opt = *phase->optimizer_;
+    opt.set_print_level(3);
+    opt.settings().max_ls_iters_ = 1;
+    opt.settings().max_soc_ = 4;
+    opt.settings().ls_extended_iters_ = 2;
+    opt.settings().watchdog_ = true;
+
+    NativeBoundsInteriorProbe probe;
+    probe.nlp = phase->nlp_.get();
+    probe.install(opt);
+
+    const auto status = phase->solve_optimize();
+    EXPECT_TRUE(status == tycho::ConvergenceFlags::CONVERGED ||
+                status == tycho::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_GT(probe.iterates, 0);
+    EXPECT_EQ(probe.violations, 0);
+    EXPECT_GT(probe.min_distance, 0.0);
+}
+
+// --- Riders carried from the previous review --------------------------------
+
+// The watchdog's revert discards a whole trajectory, and the bound multipliers
+// are part of that trajectory: Sigma = z/d and the z-form residual are both
+// built from them, so multipliers belonging to the discarded path would
+// describe an iterate that no longer exists. Driven straight through the
+// decorator's state machine -- arm, one relaxed trial, then window exhaustion --
+// with the bound duals mutated in between, so the restore is observed rather
+// than inferred.
+TEST(NativeBounds, WatchdogRevertRestoresTheBoundMultipliersWithTheIterate) {
+    TychoTest::InertSolverContext inert;
+    inert.primal_vars_ = 1;
+    inert.kkt_dim_ = 1;
+
+    BoundSet bounds;
+    bounds.lower_idx_ = (Eigen::VectorXi(1) << 0).finished();
+    bounds.lower_val_ = (Eigen::VectorXd(1) << 0.0).finished();
+    bounds.lower_damp_ = (Eigen::VectorXd(1) << 1.0).finished();
+
+    BoundDualState duals;
+    duals.z_lower_ = (Eigen::VectorXd(1) << 4.0).finished();
+    duals.dz_lower_ = Eigen::VectorXd::Zero(1);
+
+    tycho::solvers::SolverContext ctx = inert.ctx();
+    ctx.bounds_ = &bounds;
+    ctx.bound_duals_ = &duals;
+
+    tycho::solvers::WatchdogRecovery watchdog(std::make_unique<tycho::solvers::NoopRecovery>());
+    NativeBoundsUnusedAcceptance acceptance;
+    tycho::solvers::BacktrackingLineSearch mechanism;
+
+    Eigen::VectorXd v(1);
+    int resolved_depth = tycho::solvers::kRecoveryDepthUnresolved;
+    int activations = 0;
+    double alpha = 1.0;
+
+    auto drive = [&](double merit) {
+        tycho::solvers::IterateInfo citer;
+        std::vector<tycho::solvers::IterateInfo> iters;
+        double alphap = 1.0;
+        double alphad = 1.0;
+        int soc_steps = 0;
+        return watchdog.on_step_rejected(citer, iters, ctx, acceptance, mechanism,
+                                         PSIOPT::LineSearchModes::AUGLANG, /*obj_scale=*/1.0,
+                                         /*mu=*/1.0, merit, /*barr_obj=*/0.0, v, v, v, v, v, alpha,
+                                         alphap, alphad, soc_steps, resolved_depth, activations);
+    };
+
+    // Arm. The snapshot of x and of z is taken here.
+    v[0] = 7.0;
+    for (int i = 0; i < tycho::solvers::kWatchdogShortenedIterTrigger; ++i)
+        drive(10.0);
+    ASSERT_EQ(activations, 1);
+
+    // The watchdog window now explores: x moves and the multipliers move with
+    // it, exactly as the solver's own commit would move them.
+    v[0] = 99.0;
+    duals.z_lower_[0] = 1234.0;
+    drive(10.0); // relaxed trial, no progress
+
+    // Window exhausted -- revert. Both halves of the iterate come back.
+    const auto action = drive(10.0);
+    EXPECT_EQ(action, tycho::solvers::RecoveryChain::Action::kRetry);
+    EXPECT_DOUBLE_EQ(v[0], 7.0);
+    ASSERT_EQ(duals.z_lower_.size(), 1);
+    EXPECT_DOUBLE_EQ(duals.z_lower_[0], 4.0);
+}
+
+// The nested soft feasibility pre-stage compares a primal-dual error at two
+// points, and its verdict is only meaningful if both are measured the same way.
+// The live right-hand side's primal block is staged in the mu-form for part of
+// each iteration, so the measurement takes the base block explicitly. This pins
+// that the answer depends on the base block alone: staging the vector and
+// passing the snapshot has to give the identical number, or the comparison
+// acquires a direction and the pre-stage stops escalating when it should.
+TEST(NativeBounds, TheSoftStepErrorDependsOnlyOnTheBaseStationarityBlock) {
+    NativeBoundsHarness h(1);
+    h.declare_bound(0, 0.0, 4.0);
+    h.configure_bounds();
+    ASSERT_NE(h.installed_bounds(), nullptr);
+    h.duals().z_lower_ = (Eigen::VectorXd(1) << 0.7).finished();
+    h.duals().z_upper_ = (Eigen::VectorXd(1) << 0.3).finished();
+    h.duals().dz_lower_ = Eigen::VectorXd::Zero(1);
+    h.duals().dz_upper_ = Eigen::VectorXd::Zero(1);
+
+    const double mu = 0.1;
+    Eigen::VectorXd xsl = (Eigen::VectorXd(1) << 1.0).finished();
+
+    // Base staging: the primal block IS grad f + J'lambda.
+    Eigen::VectorXd rhs_base = (Eigen::VectorXd(1) << 0.25).finished();
+    const Eigen::VectorXd snapshot = rhs_base;
+    const double from_base = h.pd_error(xsl, rhs_base, snapshot, mu);
+
+    // Newton staging: the same point, with the mu-form bound terms installed on
+    // the primal block the way alg_impl's bracket installs them. The base block
+    // is handed over separately, as the bracket's snapshot hands it over.
+    Eigen::VectorXd rhs_staged = snapshot;
+    tycho::solvers::detail::accumulate_bound_barrier_gradient(xsl, *h.installed_bounds(), mu,
+                                                              rhs_staged);
+    ASSERT_NE(rhs_staged[0], snapshot[0]); // the staging really did change it
+    const double from_staged = h.pd_error(xsl, rhs_staged, snapshot, mu);
+
+    EXPECT_DOUBLE_EQ(from_staged, from_base);
+}
+
+// The l1 nested restoration mode and a bound set in the same solve. Before the
+// fraction-to-boundary legs existed this combination could not be run at all --
+// a bounded variable walked out of its box and the barrier terms went
+// non-finite -- so the pre-stage's symmetry could only be argued. It runs now.
+TEST(NativeBounds, NestedRestorationComposesWithVariableBounds) {
+    NativeBoundsHarness h(2);
+    h.add_sum_equality(0, 1, 4.0);
+    h.declare_bound(0, 0.0, 1.0);
+    h.solver().settings().restoration_mode_ = tycho::solvers::RestorationModes::l1_nested;
+
+    NativeBoundsInteriorProbe probe;
+    probe.nlp = &h.nlp();
+    probe.install(h.solver());
+
+    const Eigen::VectorXd sol = h.solve((Eigen::VectorXd(2) << 0.5, 3.5).finished());
+
+    EXPECT_EQ(h.flag(), tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_NEAR(sol[0], 1.0, 1.0e-5);
+    EXPECT_NEAR(sol[1], 3.0, 1.0e-5);
+    EXPECT_EQ(probe.violations, 0);
 }
