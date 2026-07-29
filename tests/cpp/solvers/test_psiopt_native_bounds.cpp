@@ -1109,9 +1109,10 @@ struct NativeBoundsInteriorProbe {
 };
 
 // Resolves through a phase, which replaces its NonLinearProgram on every
-// transcription -- including the one its own solve performs.
-std::function<const NonLinearProgram *()> native_bounds_phase_resolver(const auto &phase) {
-    return [&phase]() -> const NonLinearProgram * { return phase->nlp_.get(); };
+// transcription -- including the one its own solve performs. The shared_ptr is
+// captured by value so the resolver cannot dangle if handed a temporary.
+std::function<const NonLinearProgram *()> native_bounds_phase_resolver(auto phase) {
+    return [phase]() -> const NonLinearProgram * { return phase->nlp_.get(); };
 }
 
 // Builds the standard brachistochrone phase with the bring-up switch held in
@@ -1161,7 +1162,9 @@ TEST(NativeBounds, BoxConstrainedQpConvergesToItsActiveBound) {
     // pairs reached the complementarity account -- the vacuous-zero failure the
     // guard disjunct exists to prevent would satisfy the tolerance too, but only
     // by never having been computed.
-    EXPECT_GE(probe.last_barr_inf, 0.0);
+    // Strictly positive: an uncomputed barr_inf_ defaults to exactly 0.0, and
+    // the real barrier error is a max over strictly positive products.
+    EXPECT_GT(probe.last_barr_inf, 0.0);
     EXPECT_LT(probe.last_barr_inf, h.solver().settings().bar_tol_);
     EXPECT_GE(probe.last_kkt_inf, 0.0);
     EXPECT_LT(probe.last_kkt_inf, h.solver().settings().kkt_tol_);
@@ -1263,8 +1266,9 @@ TEST(NativeBounds, CorrectedDirectionsInheritTheBoundFractionToBoundary) {
     h.add_sum_equality(0, 1, 4.0);
     h.declare_bound(0, 0.0, 1.0);
     // A converged solve leaves a live factorization for the correction's
-    // back-substitution and an iterate sitting hard against the upper bound,
-    // which is the only place a correction can overshoot one.
+    // back-substitution (the second-to-last iterate's factors -- convergence
+    // breaks above the factorization) and an iterate sitting hard against the
+    // upper bound, which is the only place a correction can overshoot one.
     const Eigen::VectorXd sol = h.solve((Eigen::VectorXd(2) << 0.5, 3.5).finished());
     ASSERT_EQ(h.flag(), tycho::ConvergenceFlags::CONVERGED);
     ASSERT_NE(h.installed_bounds(), nullptr);
@@ -1295,7 +1299,10 @@ TEST(NativeBounds, CorrectedDirectionsInheritTheBoundFractionToBoundary) {
         Eigen::VectorXd xsl2 = Eigen::VectorXd::Zero(h.dim());
         Eigen::VectorXd rhs = Eigen::VectorXd::Zero(h.dim());
         Eigen::VectorXd rhs2 = Eigen::VectorXd::Zero(h.dim());
-        rhs.tail(h.ec() + h.ic()).setConstant(1.0e3);
+        // Negative residual: the corrected direction is the NEGATED
+        // back-substitution, so its sign follows -r and only a negative r
+        // pushes the bounded variable further INTO its active upper bound.
+        rhs.tail(h.ec() + h.ic()).setConstant(-1.0e3);
 
         tycho::solvers::IterateInfo citer;
         citer.first_rejection_iter_ = 0;         // SOC triggers on a FIRST-trial rejection
