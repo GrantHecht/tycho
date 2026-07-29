@@ -520,13 +520,14 @@ bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
     constexpr double kInf = std::numeric_limits<double>::infinity();
 
     // Set immediately before either of the two statements below that re-lay the
-    // KKT structures, and read by the restore. rebuild_structures() leaves
-    // kkt_locations_ reset to -1 (only analyze_sparsity ever fills it), and the
-    // restore rethrows rather than reporting a rebuild -- so a restore that
-    // calls it unconditionally hands the caller an NLP whose scatter targets are
-    // all -1, with no signal that the pattern has to be re-analyzed. The
-    // classification-stage rejections never touch the layout, so for them the
-    // rest of the restore already suffices and the analyzed pattern stays valid.
+    // KKT structures, and read by the restore alongside was_reduced.
+    // rebuild_structures() leaves kkt_locations_ reset to -1 (only
+    // analyze_sparsity ever fills it), and the restore rethrows rather than
+    // reporting a rebuild -- so a restore that calls it unconditionally hands
+    // the caller an NLP whose scatter targets are all -1, with no signal that
+    // the pattern has to be re-analyzed. A classification-stage rejection
+    // arriving at an NLP that was NOT reduced touches no layout, so for that
+    // case the rest of the restore suffices and the analyzed pattern survives.
     bool layout_touched = false;
 
     // Everything from here to the successful exits is inside the restore. The
@@ -695,10 +696,18 @@ bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
         //
         // Sequenced deliberately: the allocation-free work first, the rebuild
         // last, so even if the rebuild itself fails only the KKT layout is left
-        // stale and no index space is left mixed. The rebuild runs only when the
-        // layout was actually touched (see layout_touched above): re-laying it
-        // for a classification-stage rejection would discard an analyzed
-        // sparsity pattern this path never invalidated.
+        // stale and no index space is left mixed.
+        //
+        // The rebuild runs when this call re-laid the layout itself, OR when the
+        // NLP arrived here ALREADY REDUCED. The second condition is the one a
+        // narrower guard gets wrong: the two lines below declare the problem
+        // full-width again, but the structures on hand were laid out for the
+        // reduced width, so skipping the rebuild leaves kkt_dim_ and every
+        // block offset describing the reduced problem while the width says
+        // otherwise -- exactly the two-problems-at-once state this restore
+        // exists to prevent. Only a classification-stage rejection at an NLP
+        // that was NOT reduced leaves the layout genuinely untouched, and that
+        // is the one case worth sparing an analyzed sparsity pattern for.
         this->reduced_primal_vars_count_ = num_vars;
         this->fixed_reduction_active_ = false;
         this->full_to_reduced_.resize(0);
@@ -706,7 +715,7 @@ bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
         this->fixed_idx_.resize(0);
         this->fixed_vals_.resize(0);
         this->clear_function_output_maps();
-        if (layout_touched)
+        if (was_reduced || layout_touched)
             this->rebuild_structures();
         throw;
     }
