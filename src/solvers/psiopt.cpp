@@ -3148,6 +3148,18 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
         this->mechanism_->reset();
         this->governor_->reset();
         this->recovery_->reset();
+        // The bound-multiplier DIRECTION, cleared for the same reason the commit
+        // clears it: it is meaningful only between the Newton solve that
+        // produced it and the commit that consumes it, and the
+        // fraction-to-boundary rule reads it. A phase's final iteration always
+        // breaks ABOVE the commit, so the last direction of the phase just
+        // ending is never consumed and never zeroed -- and the next phase's
+        // first PROBE predictor scales before it has a direction of its own.
+        // Without this, that predictor shortens the dual fraction against a
+        // direction belonging to a step that was never taken, in a phase that is
+        // over. The multipliers themselves carry across, as the iterate does.
+        this->bound_duals_.dz_lower_.setZero();
+        this->bound_duals_.dz_upper_.setZero();
         // Restoration reset is null-guarded (restoration_ exists only under a
         // restoration mode). alg_impl's teardown guarantees restoration is
         // inactive by the time this runs, so reset() here only clears the

@@ -1177,10 +1177,16 @@ double ClassicAdaptiveGovernor::mpc_mu(Eigen::Ref<Eigen::VectorXd> X, Eigen::Ref
 }
 
 // Verbatim today's psiopt.cpp barmode switch (the former `if (inequal_cons_ > 0)`
-// body): the guard stays at the alg_impl call site, so update_barrier assumes
-// inequal_cons_ > 0. The predictor's alphap/alphad are locals here (discarded —
-// see the divergence-path note in the header). `current` is ignored and
-// `mu_event` is never written (free mode only; see the header).
+// body). The guard stays at the alg_impl call site, but it is no longer an
+// inequality-count guard: it fires when there is ANY barrier term to drive, so
+// this function must NOT assume inequal_cons_ > 0. It does not need to -- the
+// slack-block work below is empty-safe by construction (the barrier objective
+// sums nothing, the dual gradient writes an empty segment, and the oracles read
+// the aggregates the bound pairs populate) -- but slack-block code added here in
+// future has to be written for a possibly-empty block. The predictor's
+// alphap/alphad are locals here (discarded — see the divergence-path note in the
+// header). `current` is ignored and `mu_event` is never written (free mode only;
+// see the header).
 double ClassicAdaptiveGovernor::update_barrier(PSIOPT::BarrierModes barmode, double mu_in,
                                                double avgcomp, double mincomp, Eigen::VectorXd &XSL,
                                                Eigen::VectorXd &RHS, Eigen::VectorXd &DXSL,
