@@ -43,6 +43,21 @@ struct BoundSet {
     Eigen::VectorXi upper_idx_; ///< Variable indices carrying a finite upper bound.
     Eigen::VectorXd upper_val_; ///< Relaxed upper bound, parallel to upper_idx_.
 
+    /// Damping indicators, parallel to the corresponding index list: 1.0 when
+    /// that entry's variable is bounded on THIS side only, 0.0 when it is
+    /// two-sided. They are the classification's answer to "does this bound
+    /// leave the variable free to run to infinity in the other direction",
+    /// which only the classifier can answer cheaply -- it sees both endpoints
+    /// of a variable at once, while the two lists above no longer pair them.
+    ///
+    /// Recorded here rather than derived at use because the consumer is the
+    /// barrier objective and its gradient, on the per-iteration path: pairing
+    /// the lists there would cost a dense lookup per evaluation. Mirrors
+    /// Ipopt's dampind_x_L / dampind_x_U vectors, which are likewise
+    /// materialized once (IpIpoptCalculatedQuantities::ComputeDampingIndicators).
+    Eigen::VectorXd lower_damp_;
+    Eigen::VectorXd upper_damp_;
+
     /// True iff at least one variable carries a finite bound the solver must
     /// keep a barrier term for. False on an unbounded problem AND on a problem
     /// whose only bounds fixed their variables (those are eliminated, not
@@ -55,6 +70,8 @@ struct BoundSet {
         this->lower_val_.resize(0);
         this->upper_idx_.resize(0);
         this->upper_val_.resize(0);
+        this->lower_damp_.resize(0);
+        this->upper_damp_.resize(0);
     }
 };
 
@@ -66,11 +83,9 @@ struct BoundSet {
 ///
 /// Solver-owned rather than NLP-owned: unlike the bound set itself, which is a
 /// property of the problem, these are iterate state that belongs to whichever
-/// solve is running.
-///
-/// Declared here alongside the set it indexes; the barrier terms that fill it
-/// are not part of the fixed-variable reduction and no code writes these
-/// vectors yet.
+/// solve is running. PSIOPT sizes and seeds them at solve entry (the interior
+/// push), fills the step vectors from each Newton solve, and commits the
+/// multipliers once per accepted iterate.
 /// </summary>
 struct BoundDualState {
     Eigen::VectorXd z_lower_;  ///< Lower-bound multipliers, parallel to BoundSet::lower_idx_.
@@ -80,15 +95,31 @@ struct BoundDualState {
 };
 
 /// Cap on how far a bound multiplier may drift from the primal-dual central
-/// path before it is projected back (Ipopt's kappa_sigma): z is clamped into
-/// [mu / (kKappaSigma * d), kKappaSigma * mu / d] for bound distance d. Not
-/// read yet — it belongs to the bound-multiplier contract this header defines.
+/// path before it is projected back (Ipopt's kappa_sigma default): z is clamped
+/// into [mu / (kKappaSigma * d), kKappaSigma * mu / d] for bound distance d.
+/// Applied once per accepted iterate, against the distances at the new point.
 inline constexpr double kKappaSigma = 1.0e10;
 
 /// Cap applied when initializing a bound multiplier from the barrier parameter
 /// and the initial bound distance, so a point started very close to a bound
-/// cannot seed an enormous multiplier. Not read yet — same contract note as
-/// kKappaSigma.
+/// cannot seed an enormous multiplier.
 inline constexpr double kBoundMultInitCap = 1.0e3;
+
+/// Cap on the barrier parameter the kappa_sigma clamp uses in FREE-mu mode,
+/// where that parameter is the average complementarity at the new point rather
+/// than the barrier parameter itself (Ipopt IpIpoptAlg.cpp
+/// correct_bound_multiplier: `mu = Min(trial_avrg_compl, 1e3)` under
+/// FreeMuMode, `mu = curr_mu` otherwise).
+inline constexpr double kFreeModeClipMuCap = 1.0e3;
+
+/// Coefficient of the linear damping term the barrier objective carries for
+/// variables bounded on ONE side only (Ipopt's kappa_d default). Its purpose is
+/// to stop such a variable running to infinity in its unbounded direction,
+/// which the log barrier alone does nothing to discourage. It enters phi_mu as
+/// `+ kKappaD * mu * distance` and the mu-form gradient as `+/- kKappaD * mu`,
+/// on one-sided entries only -- and NOWHERE else: Ipopt keeps it out of the
+/// dual-infeasibility residual (curr_grad_lag_x) and out of sigma, so the
+/// convergence account and the condensed curvature stay undamped.
+inline constexpr double kKappaD = 1.0e-5;
 
 } // namespace tycho::solvers

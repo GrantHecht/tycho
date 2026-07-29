@@ -144,6 +144,7 @@
 
 #include <Eigen/Core>
 
+#include "tycho/detail/solvers/bound_set.h"
 #include "tycho/detail/solvers/globalization/acceptance_strategy.h"
 #include "tycho/detail/solvers/globalization/globalization_mechanism.h"
 #include "tycho/detail/solvers/globalization/recovery_chain.h"
@@ -328,6 +329,7 @@ class WatchdogRecovery : public RecoveryChain {
     void reset() override {
         state_.reset();
         snapshot_xsl_.resize(0);
+        snapshot_bound_duals_ = BoundDualState{};
         inner_->reset();
     }
 
@@ -335,6 +337,13 @@ class WatchdogRecovery : public RecoveryChain {
     std::unique_ptr<RecoveryChain> inner_;
     WatchdogState state_;
     Eigen::VectorXd snapshot_xsl_;
+    // The bound multipliers belonging to snapshot_xsl_. A revert discards the
+    // whole trajectory the watchdog window explored, and z is part of that
+    // trajectory: Sigma = z/d and the z-form dual infeasibility are both built
+    // from it, so multipliers left over from a discarded path would describe an
+    // iterate that no longer exists. Empty (and both stash and restore are
+    // skipped) on a problem with no variable bounds.
+    BoundDualState snapshot_bound_duals_;
 };
 
 // =============================================================================

@@ -351,29 +351,74 @@ void tycho::solvers::PSIOPT::compute_bound_dual_direction(ConstEigenRef<Eigen::V
     }
 }
 
-void tycho::solvers::PSIOPT::apply_bound_dual_step(double alphad,
-                                                   ConstEigenRef<Eigen::VectorXd> x_new,
-                                                   double mu) {
+void tycho::solvers::PSIOPT::apply_bound_dual_step(double alphad, KKTVector &xsl_new, double mu,
+                                                   bool monotone_mu) {
     if (!this->bounds_)
         return;
     const BoundSet &b = *this->bounds_;
+    const int nl = static_cast<int>(b.lower_idx_.size());
+    const int nu = static_cast<int>(b.upper_idx_.size());
+    auto x_new = xsl_new.primals();
+
+    // Take the step first: the clamp below is a correction applied to the
+    // multipliers this iterate actually landed on, and the free-mu barrier
+    // parameter it uses is measured from them.
+    for (int k = 0; k < nl; k++)
+        this->bound_duals_.z_lower_[k] += alphad * this->bound_duals_.dz_lower_[k];
+    for (int k = 0; k < nu; k++)
+        this->bound_duals_.z_upper_[k] += alphad * this->bound_duals_.dz_upper_[k];
+
+    // The barrier parameter the clamp is taken at (Ipopt IpIpoptAlg.cpp,
+    // correct_bound_multiplier): the barrier parameter itself under a monotone
+    // schedule, and otherwise the average complementarity at the new point --
+    // over EVERY complementary pair, the inequality slack/multiplier pairs as
+    // well as the bound pairs -- capped at kFreeModeClipMuCap.
+    double mu_clip = mu;
+    if (!monotone_mu) {
+        double sum = 0.0;
+        int count = 0;
+        auto s = xsl_new.slacks();
+        auto li = xsl_new.iq_lmults();
+        for (int i = 0; i < this->slack_vars_; i++) {
+            sum += s[i] * li[i];
+            count++;
+        }
+        for (int k = 0; k < nl; k++) {
+            sum += this->bound_duals_.z_lower_[k] * (x_new[b.lower_idx_[k]] - b.lower_val_[k]);
+            count++;
+        }
+        for (int k = 0; k < nu; k++) {
+            sum += this->bound_duals_.z_upper_[k] * (b.upper_val_[k] - x_new[b.upper_idx_[k]]);
+            count++;
+        }
+        // count > 0 is guaranteed: bounds_ is non-null only for a non-empty set.
+        //
+        // Every product in that average is positive once a fraction-to-boundary
+        // rule keeps the multipliers positive, which is what makes it a usable
+        // barrier parameter in the first place. That leg does not exist for
+        // bound multipliers yet, so a non-positive average is still reachable
+        // here -- and a non-positive parameter would turn the clamp below into a
+        // bracket that no longer keeps z positive. Fall back to the barrier
+        // parameter, which always is. Dead once the boundary rule lands.
+        const double avg = sum / double(count);
+        mu_clip = (avg > 0.0) ? std::min(avg, kFreeModeClipMuCap) : mu;
+    }
+
     // The clamp is measured at the NEW x: it is a safeguard on how far the
     // committed multipliers may sit off the primal-dual central path of the
     // point they now belong to, not of the point they were computed at.
-    auto clamp = [mu](double z, double d) {
-        return std::max(std::min(z, kKappaSigma * mu / d), mu / (kKappaSigma * d));
+    auto clamp = [mu_clip](double z, double d) {
+        return std::max(std::min(z, kKappaSigma * mu_clip / d), mu_clip / (kKappaSigma * d));
     };
-    const int nl = static_cast<int>(b.lower_idx_.size());
-    const int nu = static_cast<int>(b.upper_idx_.size());
     for (int k = 0; k < nl; k++) {
         const int i = b.lower_idx_[k];
-        const double z = this->bound_duals_.z_lower_[k] + alphad * this->bound_duals_.dz_lower_[k];
-        this->bound_duals_.z_lower_[k] = clamp(z, x_new[i] - b.lower_val_[k]);
+        this->bound_duals_.z_lower_[k] =
+            clamp(this->bound_duals_.z_lower_[k], x_new[i] - b.lower_val_[k]);
     }
     for (int k = 0; k < nu; k++) {
         const int i = b.upper_idx_[k];
-        const double z = this->bound_duals_.z_upper_[k] + alphad * this->bound_duals_.dz_upper_[k];
-        this->bound_duals_.z_upper_[k] = clamp(z, b.upper_val_[k] - x_new[i]);
+        this->bound_duals_.z_upper_[k] =
+            clamp(this->bound_duals_.z_upper_[k], b.upper_val_[k] - x_new[i]);
     }
 }
 
@@ -395,10 +440,11 @@ void tycho::solvers::PSIOPT::install_primal_diags_with_sigma(ConstEigenRef<Eigen
     this->nlp_->set_primal_diags(this->bound_sigma_scratch_);
 }
 
-double tycho::solvers::PSIOPT::dual_infeasibility_inf(KKTVector &rhs) const {
+double
+tycho::solvers::PSIOPT::dual_infeasibility_inf(ConstEigenRef<Eigen::VectorXd> prim_base) const {
     if (!this->bounds_)
-        return rhs.prim_grad().lpNorm<Eigen::Infinity>();
-    this->bound_resid_scratch_ = rhs.prim_grad();
+        return prim_base.lpNorm<Eigen::Infinity>();
+    this->bound_resid_scratch_ = prim_base;
     detail::accumulate_bound_dual_terms(*this->bounds_, this->bound_duals_,
                                         this->bound_resid_scratch_);
     return this->bound_resid_scratch_.lpNorm<Eigen::Infinity>();
@@ -734,7 +780,9 @@ void tycho::solvers::PSIOPT::fill_residual_info(KKTVector &xsl, KKTVector &rhs, 
     // is the prim_grad() norm it always was; with bounds it additionally carries
     // -z_L + z_U, which the RHS block itself deliberately does not (that block
     // has to serve as the condensed Newton right-hand side, in the mu-form).
-    iter.kkt_inf_ = this->dual_infeasibility_inf(rhs);
+    // Both call sites of this function run OUTSIDE alg_impl's Newton bracket, so
+    // prim_grad() is the base block here.
+    iter.kkt_inf_ = this->dual_infeasibility_inf(rhs.prim_grad());
 
     double avgcomp = 0;
     double mincomp = 0;
@@ -1119,10 +1167,12 @@ bool tycho::solvers::PSIOPT::try_recenter_elastics(double mu) {
 
 // Primal-dual system error at μ: the ∞-norm of the full KKT residual. See the
 // declaration in psiopt.h for the Ipopt mapping. Dead on the default path.
-double tycho::solvers::PSIOPT::primal_dual_error(KKTVector &xsl, KKTVector &rhs, double mu) const {
+double tycho::solvers::PSIOPT::primal_dual_error(KKTVector &xsl, KKTVector &rhs,
+                                                 ConstEigenRef<Eigen::VectorXd> prim_base,
+                                                 double mu) const {
     double err = 0.0;
     if (this->primal_vars_ > 0)
-        err = std::max(err, rhs.prim_grad().template lpNorm<Eigen::Infinity>());
+        err = std::max(err, this->dual_infeasibility_inf(prim_base));
     if (this->equal_cons_ > 0)
         err = std::max(err, rhs.eq_cons().template lpNorm<Eigen::Infinity>());
     if (this->inequal_cons_ > 0) {
@@ -1149,7 +1199,17 @@ bool tycho::solvers::PSIOPT::try_soft_feasibility_step(AlgorithmModes algmode, d
     // Current point: the live RHS already carries the full stationarity (the
     // main loop added the objective/barrier gradient before this point) and the
     // constraint residuals, so no re-evaluation is needed.
-    const double curr_pd = this->primal_dual_error(v_xsl, v_rhs, mu);
+    //
+    // Its primal block is staged in the mu-form, though -- this call sits inside
+    // alg_impl's Newton bracket -- so the BASE block comes from the snapshot the
+    // bracket took. Measuring the current point mu-form while the trial below is
+    // measured base-form would put extra -mu/(x-l) + mu/(u-x) mass on one side
+    // of the reduction test only, biasing it toward accepting the soft step and
+    // away from escalating to restoration. Off the bound path the staging is a
+    // no-op and the two expressions name the same numbers.
+    const double curr_pd =
+        this->bounds_ ? this->primal_dual_error(v_xsl, v_rhs, this->bound_grad_scratch_, mu)
+                      : this->primal_dual_error(v_xsl, v_rhs, v_rhs.prim_grad(), mu);
     if (curr_pd == 0.0)
         return true; // already at the KKT point for this μ — trivially reduced.
 
@@ -1183,7 +1243,10 @@ bool tycho::solvers::PSIOPT::try_soft_feasibility_step(AlgorithmModes algmode, d
     v_rhs2.prim_grad() += GX;
     if (this->inequal_cons_ > 0)
         this->apply_reset_slacks(v_xsl2.slacks(), v_rhs2.iq_cons());
-    const double trial_pd = this->primal_dual_error(v_xsl2, v_rhs2, mu);
+    // The trial RHS was just built by the eval above and never staged, so its
+    // primal block IS the base block -- the same form the current point is
+    // measured in above.
+    const double trial_pd = this->primal_dual_error(v_xsl2, v_rhs2, v_rhs2.prim_grad(), mu);
 
     return trial_pd <= kSoftRestoPdErrorReductionFactor * curr_pd;
 }
@@ -2589,14 +2652,27 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // multipliers move. Every recovery outcome funnels through the line
         // above: an accepted first trial, a second-order correction, an extended
         // backtrack, a restoration dispatch or a re-center (both alpha = 0), and
-        // the watchdog revert (which restores its snapshot into XSL and leaves
-        // alpha = 0). The dual fraction is alpha*alphad, matching the damping the
-        // KKT dual blocks took inside compute_step and the elastic commit below;
-        // on the alpha = 0 paths the multipliers do not move, but the
-        // kappa_sigma clamp still re-projects them against whatever x now is,
-        // which is what a reverted iterate needs.
-        if (this->bounds_)
-            this->apply_bound_dual_step(alpha * alphad, v_xsl.primals(), step_mu);
+        // the watchdog revert (which restores its snapshot into XSL -- and, so
+        // the pair stays consistent, its snapshot of the bound multipliers too --
+        // and leaves alpha = 0). The dual fraction is alpha*alphad, matching the
+        // damping the KKT dual blocks took inside compute_step and the elastic
+        // commit below; on the alpha = 0 paths the multipliers do not move, and
+        // the kappa_sigma clamp simply re-projects whatever x and z now are.
+        //
+        // Which barrier parameter that clamp is taken at depends on the barrier
+        // schedule in force this iteration: a monotone one holds mu fixed for
+        // the whole subproblem, so mu describes the iterate; a free-mode oracle
+        // proposes mu for the NEXT step, so the clamp measures the iterate's own
+        // average complementarity instead. A phase with no inequality
+        // constraints runs no governor at all, which is a fixed-mu schedule by
+        // definition; force_monotone_barrier is the nested-restoration route
+        // through update_barrier_monotone; otherwise the governor reports its
+        // own live mode (always free for classic_adaptive).
+        if (this->bounds_) {
+            const bool monotone_clip_mu = this->inequal_cons_ == 0 || force_monotone_barrier ||
+                                          this->governor_->in_monotone_mode();
+            this->apply_bound_dual_step(alpha * alphad, v_xsl, step_mu, monotone_clip_mu);
+        }
 
         // Commit the recovered elastic step alongside the outer primal/dual step.
         // Dead unless a nested restoration strategy is active. The outer primal

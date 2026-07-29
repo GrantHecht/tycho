@@ -26,6 +26,7 @@
 
 #include <cmath>
 #include <limits>
+#include <stdexcept>
 
 #include <Eigen/Core>
 
@@ -33,6 +34,8 @@ using tycho::solvers::BoundDualState;
 using tycho::solvers::BoundSet;
 using tycho::solvers::FixedVariableTreatments;
 using tycho::solvers::kBoundMultInitCap;
+using tycho::solvers::kFreeModeClipMuCap;
+using tycho::solvers::kKappaD;
 using tycho::solvers::kKappaSigma;
 using tycho::solvers::NonLinearProgram;
 using tycho::solvers::PSIOPT;
@@ -46,13 +49,31 @@ constexpr double kNativeBoundsInf = std::numeric_limits<double>::infinity();
 //   variable 1 -- upper bound 8.0 only
 //   variable 2 -- two-sided, [0.0, 1.0]
 // A two-sided variable appears in BOTH lists, which is what makes the shared
-// accumulation onto one gradient/diagonal entry worth checking.
+// accumulation onto one gradient/diagonal entry worth checking. The damping
+// indicators mark the one-sided entries (variables 0 and 1) and clear the
+// two-sided ones, matching what the classifier records.
 BoundSet native_bounds_three_var_set() {
     BoundSet b;
     b.lower_idx_ = (Eigen::VectorXi(2) << 0, 2).finished();
     b.lower_val_ = (Eigen::VectorXd(2) << 1.0, 0.0).finished();
+    b.lower_damp_ = (Eigen::VectorXd(2) << 1.0, 0.0).finished();
     b.upper_idx_ = (Eigen::VectorXi(2) << 1, 2).finished();
     b.upper_val_ = (Eigen::VectorXd(2) << 8.0, 1.0).finished();
+    b.upper_damp_ = (Eigen::VectorXd(2) << 1.0, 0.0).finished();
+    return b;
+}
+
+// The same three variables made purely TWO-SIDED, so every damping indicator is
+// zero. Used where the damping term would otherwise obscure the property under
+// test.
+BoundSet native_bounds_two_sided_set() {
+    BoundSet b;
+    b.lower_idx_ = (Eigen::VectorXi(2) << 0, 2).finished();
+    b.lower_val_ = (Eigen::VectorXd(2) << 1.0, 0.0).finished();
+    b.lower_damp_ = Eigen::VectorXd::Zero(2);
+    b.upper_idx_ = (Eigen::VectorXi(2) << 0, 2).finished();
+    b.upper_val_ = (Eigen::VectorXd(2) << 8.0, 1.0).finished();
+    b.upper_damp_ = Eigen::VectorXd::Zero(2);
     return b;
 }
 
@@ -147,8 +168,12 @@ class NativeBoundsHarness {
     void direction(const Eigen::VectorXd &x, const Eigen::VectorXd &dx, double mu) {
         solver_->compute_bound_dual_direction(x, dx, mu);
     }
-    void commit(double alphad, const Eigen::VectorXd &x_new, double mu) {
-        solver_->apply_bound_dual_step(alphad, x_new, mu);
+    // `xsl_new` is a full compound iterate. The harness problems carry no
+    // constraints, so its width is the primal width and the slack/multiplier
+    // blocks the free-mu average would read are empty.
+    void commit(double alphad, Eigen::VectorXd xsl_new, double mu, bool monotone_mu) {
+        tycho::solvers::KKTVector v = solver_->kkt_view(xsl_new);
+        solver_->apply_bound_dual_step(alphad, v, mu, monotone_mu);
     }
 
     // Puts the solver's primal-diagonal coefficients into the state every
@@ -185,9 +210,13 @@ TEST(NativeBounds, BarrierObjectiveIsTheLogSumOverBothLists) {
     const Eigen::VectorXd x = native_bounds_interior_point();
     const double mu = 0.1;
 
-    // -mu * [ ln(2-1) + ln(0.5-0) + ln(8-5) + ln(1-0.5) ]
-    const double expected =
-        -mu * std::log(1.0) - mu * std::log(0.5) - mu * std::log(3.0) - mu * std::log(0.5);
+    // -mu*ln(d) per entry, plus kappa_d*mu*d on the two ONE-SIDED entries
+    // (variable 0's lower bound, variable 1's upper bound) and nothing on the
+    // two-sided ones. Grouped in the accumulation order the kernel uses.
+    const double expected = (-mu * std::log(1.0) + kKappaD * mu * 1.0 * (2.0 - 1.0)) +
+                            (-mu * std::log(0.5) + kKappaD * mu * 0.0 * (0.5 - 0.0)) +
+                            (-mu * std::log(3.0) + kKappaD * mu * 1.0 * (8.0 - 5.0)) +
+                            (-mu * std::log(0.5) + kKappaD * mu * 0.0 * (1.0 - 0.5));
     EXPECT_DOUBLE_EQ(tycho::solvers::detail::bound_barrier_objective(x, b, mu), expected);
 }
 
@@ -199,10 +228,14 @@ TEST(NativeBounds, MuFormGradientAccumulatesTheBarrierDerivative) {
     Eigen::VectorXd gx = (Eigen::VectorXd(3) << 1.0, 2.0, 3.0).finished();
     tycho::solvers::detail::accumulate_bound_barrier_gradient(x, b, mu, gx);
 
-    EXPECT_DOUBLE_EQ(gx[0], 1.0 - mu / (2.0 - 1.0));
-    EXPECT_DOUBLE_EQ(gx[1], 2.0 + mu / (8.0 - 5.0));
-    // The two-sided variable takes both terms onto the same entry.
-    EXPECT_DOUBLE_EQ(gx[2], 3.0 - mu / (0.5 - 0.0) + mu / (1.0 - 0.5));
+    // One-sided entries also carry the damping derivative: +kappa_d*mu on a
+    // lower-only bound, -kappa_d*mu on an upper-only one.
+    EXPECT_DOUBLE_EQ(gx[0], 1.0 + (-mu / (2.0 - 1.0) + kKappaD * mu * 1.0));
+    EXPECT_DOUBLE_EQ(gx[1], 2.0 + (mu / (8.0 - 5.0) - kKappaD * mu * 1.0));
+    // The two-sided variable takes both terms onto the same entry, and no
+    // damping on either.
+    EXPECT_DOUBLE_EQ(gx[2], (3.0 + (-mu / (0.5 - 0.0) + kKappaD * mu * 0.0)) +
+                                (mu / (1.0 - 0.5) - kKappaD * mu * 0.0));
 }
 
 TEST(NativeBounds, ZFormGradientAccumulatesTheMultipliersWithIpoptSigns) {
@@ -212,7 +245,9 @@ TEST(NativeBounds, ZFormGradientAccumulatesTheMultipliersWithIpoptSigns) {
     Eigen::VectorXd gx = (Eigen::VectorXd(3) << 1.0, 2.0, 3.0).finished();
     tycho::solvers::detail::accumulate_bound_dual_terms(b, z, gx);
 
-    // Dual infeasibility is grad f + J'lambda - z_L + z_U.
+    // Dual infeasibility is grad f + J'lambda - z_L + z_U. No damping term:
+    // variables 0 and 1 are one-sided, but the residual is undamped by
+    // construction -- these expectations would not hold if it leaked in.
     EXPECT_DOUBLE_EQ(gx[0], 1.0 - 0.7);
     EXPECT_DOUBLE_EQ(gx[1], 2.0 + 0.25);
     EXPECT_DOUBLE_EQ(gx[2], 3.0 - 1.5 + 4.0);
@@ -228,6 +263,8 @@ TEST(NativeBounds, SigmaAccumulatesOntoAnExistingDiagonalBase) {
     Eigen::VectorXd sigma = (Eigen::VectorXd(3) << 10.0, 20.0, 30.0).finished();
     tycho::solvers::detail::accumulate_bound_sigma(x, b, z, sigma);
 
+    // Pure z/d, with no damping on the one-sided entries: the condensed
+    // curvature is undamped by construction, and these expectations pin it.
     EXPECT_DOUBLE_EQ(sigma[0], 10.0 + 0.7 / (2.0 - 1.0));
     EXPECT_DOUBLE_EQ(sigma[1], 20.0 + 0.25 / (8.0 - 5.0));
     EXPECT_DOUBLE_EQ(sigma[2], 30.0 + 1.5 / (0.5 - 0.0) + 4.0 / (1.0 - 0.5));
@@ -237,14 +274,20 @@ TEST(NativeBounds, SigmaAccumulatesOntoAnExistingDiagonalBase) {
 // point at which they coincide. Getting the two seams the wrong way round is
 // invisible on the central path and wrong everywhere else, so a test that only
 // evaluated at a complementary point would not catch it -- hence both arms.
+//
+// Deliberately run on the two-sided set: the damping term lives in the mu-form
+// only, so on a one-sided bound the two forms differ by kappa_d*mu even at
+// perfect complementarity. That offset is real and is pinned by
+// DampingAppliesToOneSidedBoundsInTheBarrierAccountOnly below; here it would
+// only obscure the seam property under test.
 TEST(NativeBounds, TheTwoGradientFormsAgreeOnlyOnTheCentralPath) {
-    const BoundSet b = native_bounds_three_var_set();
+    const BoundSet b = native_bounds_two_sided_set();
     const Eigen::VectorXd x = native_bounds_interior_point();
     const double mu = 0.1;
 
     BoundDualState central;
     central.z_lower_ = (Eigen::VectorXd(2) << mu / (2.0 - 1.0), mu / (0.5 - 0.0)).finished();
-    central.z_upper_ = (Eigen::VectorXd(2) << mu / (8.0 - 5.0), mu / (1.0 - 0.5)).finished();
+    central.z_upper_ = (Eigen::VectorXd(2) << mu / (8.0 - 2.0), mu / (1.0 - 0.5)).finished();
 
     Eigen::VectorXd mu_form = Eigen::VectorXd::Zero(3);
     Eigen::VectorXd z_form = Eigen::VectorXd::Zero(3);
@@ -256,10 +299,63 @@ TEST(NativeBounds, TheTwoGradientFormsAgreeOnlyOnTheCentralPath) {
 
     // Off the central path they must differ, or the two seams would be the same
     // seam and the split would be untestable.
+    BoundDualState off_central;
+    off_central.z_lower_ = (Eigen::VectorXd(2) << 0.7, 1.5).finished();
+    off_central.z_upper_ = (Eigen::VectorXd(2) << 0.25, 4.0).finished();
     Eigen::VectorXd off_path = Eigen::VectorXd::Zero(3);
-    tycho::solvers::detail::accumulate_bound_dual_terms(b, native_bounds_three_var_duals(),
-                                                        off_path);
+    tycho::solvers::detail::accumulate_bound_dual_terms(b, off_central, off_path);
     EXPECT_NE(mu_form[0], off_path[0]);
+}
+
+// The kappa_d damping: present in phi_mu and in the mu-form gradient, on
+// one-sided entries only, and absent from the residual and from sigma. Two
+// variables, one bounded below only and one two-sided, so the presence and the
+// absence are pinned side by side in a single hand calculation.
+TEST(NativeBounds, DampingAppliesToOneSidedBoundsInTheBarrierAccountOnly) {
+    BoundSet b;
+    b.lower_idx_ = (Eigen::VectorXi(2) << 0, 1).finished();
+    b.lower_val_ = (Eigen::VectorXd(2) << 1.0, 0.0).finished();
+    b.lower_damp_ = (Eigen::VectorXd(2) << 1.0, 0.0).finished(); // var 0 one-sided, var 1 not
+    b.upper_idx_ = (Eigen::VectorXi(1) << 1).finished();
+    b.upper_val_ = (Eigen::VectorXd(1) << 4.0).finished();
+    b.upper_damp_ = Eigen::VectorXd::Zero(1);
+
+    const Eigen::VectorXd x = (Eigen::VectorXd(2) << 2.0, 1.0).finished();
+    const double mu = 0.1;
+
+    // phi_mu: the lower-only variable's log term gains kappa_d*mu*(x-l), the
+    // two-sided variable's two log terms gain nothing.
+    const double expected_phi = (-mu * std::log(2.0 - 1.0) + kKappaD * mu * (2.0 - 1.0)) +
+                                (-mu * std::log(1.0 - 0.0)) + (-mu * std::log(4.0 - 1.0));
+    EXPECT_DOUBLE_EQ(tycho::solvers::detail::bound_barrier_objective(x, b, mu), expected_phi);
+
+    // The damping is what makes phi_mu grow as the lower-only variable runs
+    // away, which is the whole point of it: without the term the log barrier
+    // alone falls monotonically in that direction.
+    const Eigen::VectorXd x_far = (Eigen::VectorXd(2) << 1.0e6, 1.0).finished();
+    EXPECT_GT(tycho::solvers::detail::bound_barrier_objective(x_far, b, mu),
+              tycho::solvers::detail::bound_barrier_objective(x, b, mu));
+
+    // mu-form gradient: +kappa_d*mu on the one-sided entry only.
+    Eigen::VectorXd gx = Eigen::VectorXd::Zero(2);
+    tycho::solvers::detail::accumulate_bound_barrier_gradient(x, b, mu, gx);
+    EXPECT_DOUBLE_EQ(gx[0], -mu / (2.0 - 1.0) + kKappaD * mu * 1.0);
+    EXPECT_DOUBLE_EQ(gx[1], (-mu / (1.0 - 0.0) + kKappaD * mu * 0.0) +
+                                (mu / (4.0 - 1.0) - kKappaD * mu * 0.0));
+
+    // Residual and sigma: undamped, so the one-sided entry is pure -z_L and
+    // pure z_L/d respectively.
+    BoundDualState z;
+    z.z_lower_ = (Eigen::VectorXd(2) << 0.7, 1.5).finished();
+    z.z_upper_ = (Eigen::VectorXd(1) << 0.25).finished();
+
+    Eigen::VectorXd resid = Eigen::VectorXd::Zero(2);
+    tycho::solvers::detail::accumulate_bound_dual_terms(b, z, resid);
+    EXPECT_DOUBLE_EQ(resid[0], -0.7);
+
+    Eigen::VectorXd sigma = Eigen::VectorXd::Zero(2);
+    tycho::solvers::detail::accumulate_bound_sigma(x, b, z, sigma);
+    EXPECT_DOUBLE_EQ(sigma[0], 0.7 / (2.0 - 1.0));
 }
 
 TEST(NativeBounds, EveryKernelIsANoOpOnAnEmptyBoundSet) {
@@ -409,7 +505,7 @@ TEST(NativeBounds, CommitTakesTheDualFractionThenClipsFromAbove) {
     h.duals().dz_lower_ = (Eigen::VectorXd(1) << 1.0e30).finished();
     h.duals().z_upper_ = Eigen::VectorXd::Zero(0);
     h.duals().dz_upper_ = Eigen::VectorXd::Zero(0);
-    h.commit(0.5, x_new, mu);
+    h.commit(0.5, x_new, mu, /*monotone_mu=*/true);
     EXPECT_DOUBLE_EQ(h.duals().z_lower_[0], kKappaSigma * mu / d);
 }
 
@@ -428,7 +524,7 @@ TEST(NativeBounds, CommitClipsFromBelowToo) {
     h.duals().dz_lower_ = (Eigen::VectorXd(1) << -1.0e30).finished();
     h.duals().z_upper_ = Eigen::VectorXd::Zero(0);
     h.duals().dz_upper_ = Eigen::VectorXd::Zero(0);
-    h.commit(1.0, x_new, mu);
+    h.commit(1.0, x_new, mu, /*monotone_mu=*/true);
     EXPECT_DOUBLE_EQ(h.duals().z_lower_[0], mu / (kKappaSigma * d));
     EXPECT_GT(h.duals().z_lower_[0], 0.0);
 }
@@ -442,8 +538,90 @@ TEST(NativeBounds, CommitLeavesAnUnclippedStepExactlyWhereItLands) {
     h.duals().dz_lower_ = (Eigen::VectorXd(1) << 0.4).finished();
     h.duals().z_upper_ = Eigen::VectorXd::Zero(0);
     h.duals().dz_upper_ = Eigen::VectorXd::Zero(0);
-    h.commit(0.5, (Eigen::VectorXd(1) << 2.0).finished(), 0.1);
+    h.commit(0.5, (Eigen::VectorXd(1) << 2.0).finished(), 0.1, /*monotone_mu=*/true);
     EXPECT_DOUBLE_EQ(h.duals().z_lower_[0], 1.0 + 0.5 * 0.4);
+}
+
+// Free-mu mode clamps against the average complementarity at the new point
+// (capped), not against the barrier parameter -- so the SAME committed
+// multiplier lands in two different places depending on which barrier schedule
+// produced the step. One variable, lower bound only, no slacks, so the average
+// is a single product and the whole thing is a hand calculation.
+TEST(NativeBounds, TheClipBarrierParameterFollowsTheBarrierSchedule) {
+    NativeBoundsHarness h(1);
+    h.declare_bound(0, 1.0, kNativeBoundsInf);
+    h.configure_bounds();
+
+    const double mu = 0.1;
+    const Eigen::VectorXd x_new = (Eigen::VectorXd(1) << 2.0).finished();
+    const double d = 2.0 - 1.0;
+
+    // A step landing the multiplier at 1e30, far above either ceiling.
+    auto drive = [&](bool monotone) {
+        h.duals().z_lower_ = (Eigen::VectorXd(1) << 0.0).finished();
+        h.duals().dz_lower_ = (Eigen::VectorXd(1) << 1.0e30).finished();
+        h.duals().z_upper_ = Eigen::VectorXd::Zero(0);
+        h.duals().dz_upper_ = Eigen::VectorXd::Zero(0);
+        h.commit(1.0, x_new, mu, monotone);
+        return h.duals().z_lower_[0];
+    };
+
+    // Monotone: the ceiling is kappa_sigma * mu / d.
+    EXPECT_DOUBLE_EQ(drive(true), kKappaSigma * mu / d);
+
+    // Free: the average complementarity at the new point is z*d = 1e30, capped
+    // at kFreeModeClipMuCap, so the ceiling is kappa_sigma * cap / d instead --
+    // twelve orders of magnitude higher, and nothing like the monotone answer.
+    EXPECT_DOUBLE_EQ(drive(false), kKappaSigma * kFreeModeClipMuCap / d);
+}
+
+// The fraction-to-boundary leg for bound multipliers does not exist yet, so a
+// committed step can still drive one non-positive -- which would make the
+// free-mu average complementarity non-positive and the clamp bracket
+// meaningless. The fallback to the barrier parameter keeps the floor doing its
+// job. Provably dead once that leg lands and every product is positive.
+TEST(NativeBounds, FreeModeFallsBackToTheBarrierParameterOnANonPositiveAverage) {
+    NativeBoundsHarness h(1);
+    h.declare_bound(0, 1.0, kNativeBoundsInf);
+    h.configure_bounds();
+
+    const double mu = 0.1;
+    const double d = 2.0 - 1.0;
+    h.duals().z_lower_ = (Eigen::VectorXd(1) << 1.0).finished();
+    h.duals().dz_lower_ = (Eigen::VectorXd(1) << -1.0e30).finished();
+    h.duals().z_upper_ = Eigen::VectorXd::Zero(0);
+    h.duals().dz_upper_ = Eigen::VectorXd::Zero(0);
+
+    h.commit(1.0, (Eigen::VectorXd(1) << 2.0).finished(), mu, /*monotone_mu=*/false);
+    EXPECT_DOUBLE_EQ(h.duals().z_lower_[0], mu / (kKappaSigma * d));
+    EXPECT_GT(h.duals().z_lower_[0], 0.0);
+}
+
+// --- Settings validation ---------------------------------------------------
+
+// settings() hands out a mutable reference and promises re-validation at solve
+// entry. kappa2 at or above one half lets the lower and upper projections
+// cross, landing the point on or outside a bound, whose barrier term then takes
+// the log of a non-positive number with no diagnostic -- so the range is
+// enforced rather than assumed.
+TEST(NativeBounds, TheIntervalPushIsRangeCheckedByValidate) {
+    PSIOPT opt;
+    EXPECT_NO_THROW(opt.settings().validate());
+
+    opt.settings().bound_interval_push_ = 0.5;
+    EXPECT_THROW(opt.settings().validate(), std::invalid_argument);
+
+    opt.settings().bound_interval_push_ = 1.0;
+    EXPECT_THROW(opt.settings().validate(), std::invalid_argument);
+
+    opt.settings().bound_interval_push_ = 0.0;
+    EXPECT_THROW(opt.settings().validate(), std::invalid_argument);
+
+    opt.settings().bound_interval_push_ = -1.0e-3;
+    EXPECT_THROW(opt.settings().validate(), std::invalid_argument);
+
+    opt.settings().bound_interval_push_ = 0.25;
+    EXPECT_NO_THROW(opt.settings().validate());
 }
 
 // --- Assembly -------------------------------------------------------------
@@ -516,7 +694,7 @@ TEST(NativeBounds, AProblemWithoutBoundsLeavesTheWholeBoundStateEmpty) {
 
     // And the two step helpers are no-ops rather than out-of-range reads.
     h.direction(x, Eigen::VectorXd::Zero(2), 0.1);
-    h.commit(1.0, x, 0.1);
+    h.commit(1.0, x, 0.1, /*monotone_mu=*/true);
     EXPECT_EQ(h.duals().z_lower_.size(), 0);
 }
 

@@ -48,6 +48,7 @@
 // build instead); that one-directional arrangement is what keeps every
 // header below self-sufficient/standalone-compilable without a fragile
 // circular-include trick.
+#include "tycho/detail/solvers/bound_set.h"
 #include "tycho/detail/solvers/eval_error_log.h"
 #include "tycho/detail/solvers/psiopt.h"
 

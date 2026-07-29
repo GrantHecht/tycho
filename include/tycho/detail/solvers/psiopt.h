@@ -1118,9 +1118,21 @@ class PSIOPT {
 
     // Commits the bound multipliers for an accepted iterate: z += alphad*dz,
     // then the kappa_sigma safeguard clamps each into
-    // [mu/(kKappaSigma*d), kKappaSigma*mu/d] for the distance d measured at the
-    // NEW x. Exactly one call per committed iterate.
-    void apply_bound_dual_step(double alphad, ConstEigenRef<Eigen::VectorXd> x_new, double mu);
+    // [mu_clip/(kKappaSigma*d), kKappaSigma*mu_clip/d] for the distance d
+    // measured at the NEW x. Exactly one call per committed iterate; `xsl_new`
+    // is the already-committed iterate.
+    //
+    // `monotone_mu` selects which barrier parameter the clamp is taken at,
+    // transcribing Ipopt's correct_bound_multiplier: under a MONOTONE schedule
+    // the clamp uses the barrier parameter itself (`mu`), and under a FREE-mu
+    // schedule it uses the average complementarity at the new point, capped at
+    // kFreeModeClipMuCap. The two differ because a free-mode barrier parameter
+    // is an oracle's proposal for the NEXT step rather than a description of
+    // where the iterate currently sits, and it is the latter the safeguard
+    // needs. PSIOPT's classic_adaptive governor is the free-mu case, the
+    // monitored governor reports its live mode, and a phase with no inequality
+    // constraints runs no governor at all and so holds mu fixed.
+    void apply_bound_dual_step(double alphad, KKTVector &xsl_new, double mu, bool monotone_mu);
 
     // Accumulates the condensed bound curvature onto a primal-diagonal base
     // vector. The two callers that already have a base vector in hand call this
@@ -1130,12 +1142,17 @@ class PSIOPT {
     void install_primal_diags_with_sigma(ConstEigenRef<Eigen::VectorXd> x, double base);
 
     // The dual infeasibility whose infinity norm is the solver's kkt_inf_. Off
-    // the bound path this is exactly rhs.prim_grad()'s norm, as it always was;
+    // the bound path this is exactly the base block's norm, as it always was;
     // with bounds it is that block plus the z-FORM terms (-z_L + z_U), built in
     // scratch. It is deliberately NOT accumulated into the RHS itself: the same
     // primal block is the condensed Newton right-hand side, which carries the
     // mu-form instead -- see the staging comments in alg_impl().
-    double dual_infeasibility_inf(KKTVector &rhs) const;
+    //
+    // `prim_base` is the BASE-form primal stationarity block (grad f + J'lambda)
+    // for the point being measured, passed explicitly rather than read off a
+    // KKTVector because the live RHS's own block is staged in the mu-form for
+    // part of each iteration; a caller inside that bracket passes the snapshot.
+    double dual_infeasibility_inf(ConstEigenRef<Eigen::VectorXd> prim_base) const;
 
     // loqo_mu / mpc_mu were extracted verbatim into ClassicAdaptiveGovernor
     // (src/solvers/psiopt_globalization.cpp); the barrier-
@@ -1298,7 +1315,15 @@ class PSIOPT {
     // main loop populates the current iterate's RHS (stationarity including the
     // objective/barrier gradient contribution, inequality residual slack-
     // completed). Used only by the nested soft feasibility pre-stage.
-    double primal_dual_error(KKTVector &xsl, KKTVector &rhs, double mu) const;
+    //
+    // The stationarity term is the z-FORM dual infeasibility, matching Ipopt's
+    // error, which norms the undamped Lagrangian gradient at whichever point it
+    // measures. `prim_base` carries that point's BASE primal block for the same
+    // reason dual_infeasibility_inf takes one: the comparison this feeds comes
+    // from two points, and both must be measured in the same form or the
+    // reduction test acquires a direction.
+    double primal_dual_error(KKTVector &xsl, KKTVector &rhs,
+                             ConstEigenRef<Eigen::VectorXd> prim_base, double mu) const;
 
     // Nested soft feasibility pre-stage trial (defined in psiopt.cpp). Forms the
     // full fraction-to-boundary trial point XSL + DXSL (DXSL already carries the

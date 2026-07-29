@@ -107,40 +107,56 @@ inline void barrier_gradient(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::Ve
 // are what guarantee it, and none of these kernels re-checks.
 // =============================================================================
 
-// -mu * [ sum ln(x_i - l_i) + sum ln(u_i - x_i) ] over the bound set.
+// -mu * [ sum ln(x_i - l_i) + sum ln(u_i - x_i) ] over the bound set, plus the
+// one-sided damping term kappa_d * mu * sum(distance) over the entries whose
+// variable is bounded on that side only.
+//
+// The damping is Ipopt's (IpIpoptCalculatedQuantities::CalcBarrierTerm adds
+// `kappa_d * mu * slack.Dot(dampind)` per side). Without it the log barrier
+// gives a variable with only one finite bound nothing to push back against in
+// its unbounded direction, and a barrier subproblem can drive it arbitrarily
+// far out. It belongs to the barrier OBJECTIVE and its mu-form gradient only --
+// see kKappaD's note in bound_set.h for the seams it must stay out of.
 inline double bound_barrier_objective(ConstEigenRef<Eigen::VectorXd> x, const BoundSet &b,
                                       double mu) {
     const int nl = static_cast<int>(b.lower_idx_.size());
     const int nu = static_cast<int>(b.upper_idx_.size());
     double psi = 0.0;
     for (int k = 0; k < nl; k++) {
-        psi += -mu * std::log(x[b.lower_idx_[k]] - b.lower_val_[k]);
+        const double d = x[b.lower_idx_[k]] - b.lower_val_[k];
+        psi += -mu * std::log(d) + kKappaD * mu * b.lower_damp_[k] * d;
     }
     for (int k = 0; k < nu; k++) {
-        psi += -mu * std::log(b.upper_val_[k] - x[b.upper_idx_[k]]);
+        const double d = b.upper_val_[k] - x[b.upper_idx_[k]];
+        psi += -mu * std::log(d) + kKappaD * mu * b.upper_damp_[k] * d;
     }
     return psi;
 }
 
-// mu-FORM primal gradient terms: gx_i += -mu/(x_i - l_i) and += +mu/(u_i - x_i).
+// mu-FORM primal gradient terms: gx_i += -mu/(x_i - l_i) and += +mu/(u_i - x_i),
+// plus the derivative of the one-sided damping term, += +kappa_d*mu on a
+// lower-only entry and -= kappa_d*mu on an upper-only entry.
 //
-// This is the gradient of the barrier objective itself, and it is what the
+// This is the gradient of the barrier objective above, and it is what the
 // CONDENSED NEWTON RIGHT-HAND SIDE carries. Eliminating the bound-multiplier
 // rows from the primal-dual system turns the primal row's right-hand side
 // (grad f + J'lambda - z_L + z_U) into exactly grad phi_mu + J'lambda: the
 // -z_L + z_U cancels against the multiplier steps that were substituted in.
-// Never use this form for a residual a convergence test consumes.
+// Ipopt keeps the same split, damping and all: its Newton RHS reads
+// curr_grad_lag_WITH_DAMPING_x while its optimality error reads the undamped
+// curr_grad_lag_x. Never use this form for a residual a convergence test
+// consumes.
 inline void accumulate_bound_barrier_gradient(ConstEigenRef<Eigen::VectorXd> x, const BoundSet &b,
                                               double mu, EigenRef<Eigen::VectorXd> gx) {
     const int nl = static_cast<int>(b.lower_idx_.size());
     const int nu = static_cast<int>(b.upper_idx_.size());
     for (int k = 0; k < nl; k++) {
         const int i = b.lower_idx_[k];
-        gx[i] += -mu / (x[i] - b.lower_val_[k]);
+        gx[i] += -mu / (x[i] - b.lower_val_[k]) + kKappaD * mu * b.lower_damp_[k];
     }
     for (int k = 0; k < nu; k++) {
         const int i = b.upper_idx_[k];
-        gx[i] += mu / (b.upper_val_[k] - x[i]);
+        gx[i] += mu / (b.upper_val_[k] - x[i]) - kKappaD * mu * b.upper_damp_[k];
     }
 }
 

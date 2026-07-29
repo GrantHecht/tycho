@@ -595,6 +595,15 @@ void tycho::solvers::PSIOPT::Settings::validate() const {
     // --- Step parameters ---
     in_open_unit(bound_fraction_, "bound_fraction");
     greater_than(bound_push_, 0.0, "bound_push");
+    // The interior push gives a two-sided variable p_L + p_U <= 2*k2*(u-l) of
+    // its own interval, so the lower and upper projections can only cross --
+    // landing the point on or outside a bound, whose barrier term then takes
+    // the log of a non-positive number with no diagnostic -- once k2 reaches
+    // one half. The upper bound is what makes the push's non-crossing property
+    // an enforced invariant rather than a documented assumption.
+    if (!(bound_interval_push_ > 0.0) || !(bound_interval_push_ < 0.5))
+        throw std::invalid_argument(
+            fmt::format("bound_interval_push must be in (0, 0.5), got {}", bound_interval_push_));
     pos_finite(neg_slack_reset_, "neg_slack_reset");
     greater_than(alpha_red_, 1.0, "alpha_red");
 

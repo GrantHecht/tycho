@@ -1474,8 +1474,12 @@ RecoveryChain::Action WatchdogRecovery::on_step_rejected(
     case WatchdogState::Outcome::kArmed:
         // Just armed: snapshot the pre-watchdog iterate (XSL as it stands
         // right now, before this iteration's relaxed-accepted step is
-        // committed) so a later revert can restore it.
+        // committed) so a later revert can restore it. The bound multipliers
+        // are part of that iterate and are snapshotted with it; null off the
+        // bound path, where there are none.
         snapshot_xsl_ = XSL;
+        if (ctx.bound_duals_)
+            snapshot_bound_duals_ = *ctx.bound_duals_;
         ++watchdog_activations;
         [[fallthrough]];
     case WatchdogState::Outcome::kTrialRelax:
@@ -1507,6 +1511,13 @@ RecoveryChain::Action WatchdogRecovery::on_step_rejected(
         // what caught the ordering bug this comment now documents.
         DXSL.setZero();
         XSL = snapshot_xsl_;
+        // The bound multipliers revert with the primals they belong to. Without
+        // this the discarded trajectory's z survives into Sigma and the dual
+        // infeasibility, and the kappa_sigma clamp is far too loose to pull it
+        // back. The dz vectors are left alone: the caller's commit applies
+        // alpha * alphad = 0 of them, so they never reach the reverted state.
+        if (ctx.bound_duals_)
+            *ctx.bound_duals_ = snapshot_bound_duals_;
         alpha = 0.0;
         Citer.accepted_ = true;
         resolved_depth = kRecoveryDepthWatchdog;

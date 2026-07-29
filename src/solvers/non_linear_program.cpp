@@ -574,8 +574,10 @@ bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
 
         std::vector<int> lower_idx;
         std::vector<double> lower_val;
+        std::vector<double> lower_damp;
         std::vector<int> upper_idx;
         std::vector<double> upper_val;
+        std::vector<double> upper_damp;
 
         int next_reduced = 0;
         int next_fixed = 0;
@@ -596,32 +598,43 @@ bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
             }
 
             // Recorded in the space the solver iterates in, and widened by the relax
-            // factor so consumers never have to re-apply it.
+            // factor so consumers never have to re-apply it. The damping
+            // indicator is recorded alongside because this loop is the only place
+            // that still sees both endpoints of a variable at once -- once the
+            // two lists are separate, "is this bound the only one on its
+            // variable" is no longer a local question.
             if (lower > -kInf) {
                 lower_idx.push_back(next_reduced);
                 lower_val.push_back(lower - bound_relax_factor * std::max(1.0, std::abs(lower)));
+                lower_damp.push_back(upper < kInf ? 0.0 : 1.0);
             }
             if (upper < kInf) {
                 upper_idx.push_back(next_reduced);
                 upper_val.push_back(upper + bound_relax_factor * std::max(1.0, std::abs(upper)));
+                upper_damp.push_back(lower > -kInf ? 0.0 : 1.0);
             }
             next_reduced++;
         }
 
         auto fill_bound_list = [](const std::vector<int> &idx, const std::vector<double> &val,
-                                  Eigen::VectorXi &idx_out, Eigen::VectorXd &val_out) {
+                                  const std::vector<double> &damp, Eigen::VectorXi &idx_out,
+                                  Eigen::VectorXd &val_out, Eigen::VectorXd &damp_out) {
             const int count = static_cast<int>(idx.size());
             idx_out.resize(count);
             val_out.resize(count);
+            damp_out.resize(count);
             for (int i = 0; i < count; i++) {
                 idx_out[i] = idx[i];
                 val_out[i] = val[i];
+                damp_out[i] = damp[i];
             }
         };
-        fill_bound_list(lower_idx, lower_val, this->variable_bound_set_.lower_idx_,
-                        this->variable_bound_set_.lower_val_);
-        fill_bound_list(upper_idx, upper_val, this->variable_bound_set_.upper_idx_,
-                        this->variable_bound_set_.upper_val_);
+        fill_bound_list(lower_idx, lower_val, lower_damp, this->variable_bound_set_.lower_idx_,
+                        this->variable_bound_set_.lower_val_,
+                        this->variable_bound_set_.lower_damp_);
+        fill_bound_list(upper_idx, upper_val, upper_damp, this->variable_bound_set_.upper_idx_,
+                        this->variable_bound_set_.upper_val_,
+                        this->variable_bound_set_.upper_damp_);
 
         // --- Reduction ------------------------------------------------------
         //
