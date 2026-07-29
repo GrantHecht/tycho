@@ -549,10 +549,18 @@ ValueError
                "modes.");
     nb::enum_<InertiaModes>(m, "InertiaModes")
         .value("classic", InertiaModes::classic,
-               "The on-demand inertia ladder inline in factor_impl -- the bit-identical "
-               "default. Each iteration first attempts an unperturbed factorization and only "
-               "shifts the Hessian diagonal (by increasing amounts) when the factorization "
-               "reports wrong inertia. No constraint-block shift.")
+               "The on-demand inertia ladder inline in factor_impl -- the default. Each call "
+               "attempts an unperturbed factorization first, unless the sticky per-phase "
+               "degeneracy latch is already set from an earlier iteration, in which case the "
+               "constraint-block dual shift (delta_c) is pre-applied before that base attempt. "
+               "The full Ipopt inertia-correction condition (Wachter & Biegler 2006, Algorithm "
+               "IC) accepts only exact inertia (kkt_dim - m, m, 0); a singularity signal -- "
+               "rank deficiency, or neigs < m by Gould's inertia theorem -- engages the "
+               "on-demand constraint-block dual shift once per call and sets the latch, and if "
+               "inertia is still wrong the classic Hessian-diagonal shift ladder fires on top "
+               "(by increasing amounts). Ladder exhaustion, under either mode, force-rejects "
+               "the step through the recovery chain and -- if the rejection goes unresolved -- "
+               "aborts the phase as ConvergenceFlags.SINGULAR_KKT (see max_refac).")
         .value("proximal_regularization", InertiaModes::proximal_regularization,
                "Proximal primal-dual regularization: a small persistent, decaying primal base "
                "shift (rho_k, floored at 1e-10, the Cipolla-Gondzio floor) on the Hessian "

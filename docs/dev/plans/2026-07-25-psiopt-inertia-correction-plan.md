@@ -81,7 +81,9 @@ nanobind (one enum value), the standalone-probe pipeline for fast red/green.
 
 In `tests/cpp/solvers/test_inertia_regularization.cpp`, replace the whole test
 `ClassicOnRankDeficientKktDocumented` (comment block through closing brace, at :165)
-with:
+with: (as-built note: this name is pre-this-step and no longer exists in the tree —
+Step 1 itself renames it to `ClassicConvergesOnRankDeficientKkt`; grepping the
+current file for the old name will not find it.)
 
 ```cpp
 // (b) The SAME rank-deficient problem under classic. The full Ipopt IC condition

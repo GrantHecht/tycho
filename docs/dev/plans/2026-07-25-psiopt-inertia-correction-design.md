@@ -3,7 +3,7 @@
 **Date:** 2026-07-25 (rev 3, 2026-07-27 — re-anchored after merging main through #114
 `e2314a3e`; degeneracy latch added per the lean-toward-IPOPT decision)
 **Branch:** `fix/psiopt-inertia-correction` (main merged through `e2314a3e`)
-**Status:** approved design, pre-implementation
+**Status:** implemented on fix/psiopt-inertia-correction, PR pending, awaiting human review
 **Review flag:** PSIOPT optimizer internals + a Python-visible enum addition — requires
 explicit human review before merge (CLAUDE.md policy).
 
@@ -224,3 +224,60 @@ latch + call-site hoist; SINGULAR_KKT + routing; tests ride with their component
 File the proximal-Maratos divergence GH issue and a campaign-measurement issue for
 adopting IPOPT's δ_w schedule via the #108 sweep driver. Pre-merge gates per CLAUDE.md
 on macOS plus Linux CI corpus. Explicit human review required.
+
+## Deviations from this design (as-built)
+
+This document was approved pre-implementation (rev 3) and is linked from the PR body
+as the authoritative spec. The final whole-branch review (F2) found five places where
+the as-built tree on `fix/psiopt-inertia-correction` diverges from the text above —
+all correct, intentional refinements that landed during the two round-of-review fix
+passes (task-1-review.md, task-2-review.md), not regressions. Recorded here so the
+spec is current with the merged tree rather than silently stale:
+
+1. **δ_c engagement trigger widened.** The Algorithm block and Design decision 1
+   above describe engagement as `if Singular(): EngageDualReg()`. As built, the
+   trigger is `SingularitySignal() = Singular() || IncEigs < 0`
+   (psiopt.cpp:1144 region) — a round-2 review finding (I1), not an original design
+   decision. Rationale: by Gould's inertia theorem, `In(KKT) = In(Z^T H Z) + (m, m, 0)`
+   for a full-rank constraint Jacobian, so `neigs < m` with `zeigs == 0` cannot occur
+   for a full-rank `J`; it can only be a masked rank-deficiency report from a
+   pivot-perturbing backend (e.g. MKL Pardiso's static pivot perturbation), and
+   `IncEigs < 0` is exactly that signal. `delta_w` cannot correct this case (Weyl's
+   inequality: `+p*I` on the primal diagonal is PSD, so `neigs` is non-increasing in
+   `p`), so it is routed to `delta_c` instead.
+2. **The Risk section's δ_c-inertness claim is backend-conditional.** "δ_c on demand
+   changes no solve where `Singular()` never fires" holds only on honest-inertia
+   backends (Apple Accelerate). On a pivot-perturbing backend (MKL Pardiso), the
+   widened trigger from point 1 can engage δ_c — and set the degeneracy latch — on a
+   masked `neigs < m` report where `Singular()` never fires. That is the trigger's
+   purpose, not a side effect, and it is a real MKL-reachable behavioral delta that
+   the Linux CI corpus run exercises.
+3. **`Settings::validate()` relaxed to `max_refac_ >= 0`.** The Tests section (item 4)
+   says "public member, no validating setter" — stale. `validate()` already pinned
+   `max_refac_ >= 1` (added by #113's settings-contract sweep); this branch had to
+   relax that bound to `>= 0` (src/solvers/psiopt_settings.cpp) so the exhaustion-
+   routing test's `settings().max_refac_ = 0` is a legal configuration, and re-pinned
+   the settings-contract test to assert both directions (0 valid, -1 throws). A real
+   settings-contract change the original spec denies exists.
+4. **The two backend-dependent tests are gated `#ifdef USE_ACCELERATE_SPARSE`,** not
+   merely documented as platform-dependent: the `EXPECT_TRUE` half of
+   `InertiaRegularizationSolve.ClassicDegeneracyLatchTracksSingularity`
+   (test_inertia_regularization.cpp) and the whole of
+   `DivergencePersistence.ExhaustedInertiaCorrectionAbortsAsSingularKkt`
+   (test_divergence_persistence.cpp) compile out entirely on MKL Pardiso builds,
+   because a pivot-perturbing backend can mask the premise (an honest wrong-inertia/
+   singular report) outright rather than merely produce a flaky assertion.
+5. **`run_phase_sequence` gained a new severity consumer.** The exhaustion-routing
+   consumer list (Component changes item 4 / the `SINGULAR_KKT` paragraph) omits that
+   `run_phase_sequence`'s inter-phase skip guard was widened from `== DIVERGING` to
+   `>= DIVERGING` (psiopt.cpp:2767) — a round-2 review finding (I4) — so that a later
+   phase's own `converge_flag_` can never silently overwrite the more-severe
+   `SINGULAR_KKT` verdict left by an earlier phase; this is necessary for the new
+   severity ordering (`... < DIVERGING < SINGULAR_KKT`) to mean anything across a
+   multi-phase solve.
+
+**Recorded limitation (F4):** when a configured recovery link (watchdog revert, SOC
+retry, feasibility switch, nested re-center) resolves the exhaustion-forced rejection,
+the resolution outranks the `SINGULAR_KKT` abort by design — a step vetted by recovery
+may still be committed from a wrong-inertia factorization; only an UNRESOLVED
+rejection aborts.
