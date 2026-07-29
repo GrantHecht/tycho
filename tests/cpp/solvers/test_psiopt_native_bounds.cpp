@@ -258,10 +258,12 @@ class NativeBoundsHarness {
 
     // Declares a bound and re-materializes the staged declarations, mirroring
     // what a transcription would have staged. make_nlp reallocates the KKT
-    // arrays, so the solver is re-pointed at the NLP afterwards.
+    // arrays, so the solver is re-pointed at the NLP afterwards. The row count it
+    // is handed is user_equal_cons_, the caller's own: equal_cons_ would also
+    // count the internal fixing rows the make_constraint treatment installs.
     void declare_bound(int index, double lower, double upper) {
         prob_.nlp_->set_variable_bound(index, lower, upper);
-        prob_.nlp_->make_nlp(prob_.nlp_->primal_vars_, prob_.nlp_->equal_cons_,
+        prob_.nlp_->make_nlp(prob_.nlp_->primal_vars_, prob_.nlp_->user_equal_cons_,
                              prob_.nlp_->inequal_cons_);
         solver_->set_nlp(prob_.nlp_);
     }
@@ -759,6 +761,55 @@ TEST(NativeBounds, TheIntervalPushIsRangeCheckedByValidate) {
 
     opt.settings().bound_interval_push_ = 0.25;
     EXPECT_NO_THROW(opt.settings().validate());
+
+    // The setter enforces the same range at the call that made the mistake.
+    EXPECT_THROW(opt.set_bound_interval_push(0.5), std::invalid_argument);
+    EXPECT_THROW(opt.set_bound_interval_push(0.0), std::invalid_argument);
+    EXPECT_NO_THROW(opt.set_bound_interval_push(0.2));
+    EXPECT_DOUBLE_EQ(opt.settings().bound_interval_push_, 0.2);
+}
+
+// The relax factor is the width of the box every barrier term actually divides
+// by, so an out-of-range one does not merely loosen a bound -- it solves a
+// measurably different problem than the one declared, silently. And the treatment
+// is a closed-set enum that still reaches Settings through a mutable reference, so
+// a value outside the set is a reachable input rather than an impossible one.
+TEST(NativeBounds, TheRelaxFactorAndTheTreatmentAreRangeCheckedByValidate) {
+    PSIOPT opt;
+    EXPECT_NO_THROW(opt.settings().validate());
+    EXPECT_EQ(opt.settings().fixed_variable_treatment_, FixedVariableTreatments::MakeParameter);
+    EXPECT_DOUBLE_EQ(opt.settings().bound_relax_factor_, tycho::solvers::kDefaultBoundRelaxFactor);
+
+    opt.settings().bound_relax_factor_ = -1.0e-12;
+    EXPECT_THROW(opt.settings().validate(), std::invalid_argument);
+    opt.settings().bound_relax_factor_ = 1.0e-1;
+    EXPECT_THROW(opt.settings().validate(), std::invalid_argument);
+    opt.settings().bound_relax_factor_ = std::numeric_limits<double>::quiet_NaN();
+    EXPECT_THROW(opt.settings().validate(), std::invalid_argument);
+
+    // Both endpoints are in range: zero records every declared bound verbatim,
+    // and the ceiling itself is a legal (if extreme) choice.
+    opt.settings().bound_relax_factor_ = 0.0;
+    EXPECT_NO_THROW(opt.settings().validate());
+    opt.settings().bound_relax_factor_ = tycho::solvers::kMaxBoundRelaxFactor;
+    EXPECT_NO_THROW(opt.settings().validate());
+
+    opt.settings().fixed_variable_treatment_ = static_cast<FixedVariableTreatments>(17);
+    EXPECT_THROW(opt.settings().validate(), std::invalid_argument);
+    opt.settings().fixed_variable_treatment_ = FixedVariableTreatments::RelaxBounds;
+    EXPECT_NO_THROW(opt.settings().validate());
+    opt.settings().fixed_variable_treatment_ = FixedVariableTreatments::MakeConstraint;
+    EXPECT_NO_THROW(opt.settings().validate());
+
+    // And the setters enforce the same two conditions at the call site.
+    EXPECT_THROW(opt.set_bound_relax_factor(1.0), std::invalid_argument);
+    EXPECT_THROW(opt.set_bound_relax_factor(-1.0), std::invalid_argument);
+    EXPECT_NO_THROW(opt.set_bound_relax_factor(1.0e-6));
+    EXPECT_DOUBLE_EQ(opt.settings().bound_relax_factor_, 1.0e-6);
+    EXPECT_THROW(opt.set_fixed_variable_treatment(static_cast<FixedVariableTreatments>(-3)),
+                 std::invalid_argument);
+    EXPECT_NO_THROW(opt.set_fixed_variable_treatment(FixedVariableTreatments::RelaxBounds));
+    EXPECT_EQ(opt.settings().fixed_variable_treatment_, FixedVariableTreatments::RelaxBounds);
 }
 
 // --- Assembly -------------------------------------------------------------
@@ -1721,7 +1772,7 @@ class NativeBoundsRestorationHarness {
         prob_.optimizer_->set_qp_threads(1);
         prob_.transcribe();
         prob_.nlp_->set_variable_bound(0, 0.9, 0.99);
-        prob_.nlp_->make_nlp(prob_.nlp_->primal_vars_, prob_.nlp_->equal_cons_,
+        prob_.nlp_->make_nlp(prob_.nlp_->primal_vars_, prob_.nlp_->user_equal_cons_,
                              prob_.nlp_->inequal_cons_);
         prob_.optimizer_->set_nlp(prob_.nlp_);
         prob_.optimizer_->settings().restoration_mode_ = mode;
@@ -1987,7 +2038,8 @@ TEST(NativeBounds, AThrowingTrialTheBoundLegsCannotPreventIsStillJustARejectedRu
     prob.optimizer_->set_print_level(3);
     prob.transcribe();
     prob.nlp_->set_variable_bound(0, -5.0, 5.0);
-    prob.nlp_->make_nlp(prob.nlp_->primal_vars_, prob.nlp_->equal_cons_, prob.nlp_->inequal_cons_);
+    prob.nlp_->make_nlp(prob.nlp_->primal_vars_, prob.nlp_->user_equal_cons_,
+                        prob.nlp_->inequal_cons_);
     prob.optimizer_->set_nlp(prob.nlp_);
 
     NativeBoundsInteriorProbe probe;
@@ -2153,4 +2205,237 @@ TEST(NativeBounds, TheNestedRestorationReturnResetsEveryFamilyTogether) {
     EXPECT_DOUBLE_EQ(f.z_lower(), 1.0);
     EXPECT_DOUBLE_EQ(f.z_upper(), 1.0);
     EXPECT_DOUBLE_EQ(f.z_slack(), 1.0);
+}
+
+// --- The fixed-variable treatment trio ---------------------------------------
+//
+// One problem, one fixed variable, three treatments. What the solver factorizes
+// differs by two dimensions per fixed variable between the narrowest and the
+// widest of them, and how exactly the variable sits at its value differs too --
+// but the answer does not.
+
+namespace {
+
+// The value the fixed variable is declared at, and the relax factor the
+// comparison runs at. The shipped default (1e-8) leaves a relaxed fixed variable
+// an interval a few times 1e-8 wide, finer than any cross-treatment comparison
+// can resolve; 1e-5 keeps both halves of the claim measurable -- the variable
+// sits strictly inside a box wide enough to see, and the answer still agrees with
+// the other two treatments to well inside the tolerances below.
+constexpr double kNativeBoundsFixedValue = 2.5;
+constexpr double kNativeBoundsTreatmentRelaxFactor = 1.0e-5;
+
+// What each treatment can be held to on this problem, and why they differ. The
+// elimination pins the variable exactly, so only the solver's own convergence
+// tolerance stands between it and the closed form. The internal row reaches the
+// value to equality-constraint tolerance. The relaxation deliberately displaces
+// it, by up to the half width of the box it built -- so its tolerance is set by
+// the treatment rather than by the solver, and is generous on purpose.
+constexpr double kNativeBoundsExactTol = 1.0e-6;
+constexpr double kNativeBoundsRowTol = 1.0e-5;
+constexpr double kNativeBoundsRelaxedTol = 1.0e-3;
+
+struct NativeBoundsTreatmentOutcome {
+    Eigen::VectorXd solution_;
+    tycho::ConvergenceFlags flag_ = tycho::ConvergenceFlags::NOTCONVERGED;
+    int kkt_dim_ = 0;
+    int internal_rows_ = 0;
+    int fixed_count_ = 0;
+    int bound_entries_ = 0;
+    bool reduced_ = false;
+};
+
+// min sum_i (x_i - 3)^2  s.t.  x0 + x1 = 4,  x1 fixed at 2.5.
+//
+// The fixed value has to reach the constraint RESIDUAL for x0 to come out at
+// 4 - 2.5 = 1.5, so a treatment that lost it moves x0 as well as x1 -- the two
+// failures are distinguishable in the assertions. x2 couples to nothing and stays
+// at its own minimum, 3.
+//
+// Started at the origin, away from the fixed value and away from every
+// coordinate's minimum, so neither the objective nor its gradient vanishes there
+// and a treatment that never enforced the fixing would leave x1 near the guess.
+NativeBoundsTreatmentOutcome native_bounds_solve_under_treatment(FixedVariableTreatments treatment,
+                                                                 double relax_factor) {
+    NativeBoundsHarness h(3);
+    h.add_sum_equality(0, 1, 4.0);
+    h.declare_bound(1, kNativeBoundsFixedValue, kNativeBoundsFixedValue);
+    h.solver().set_fixed_variable_treatment(treatment);
+    h.solver().set_bound_relax_factor(relax_factor);
+
+    NativeBoundsTreatmentOutcome out;
+    out.solution_ = h.solve(Eigen::VectorXd::Zero(3));
+    out.flag_ = h.flag();
+    out.kkt_dim_ = h.nlp().kkt_dim_;
+    out.internal_rows_ = h.nlp().internal_fixed_constraints();
+    out.fixed_count_ = static_cast<int>(h.nlp().fixed_variable_indices().size());
+    out.bound_entries_ = static_cast<int>(h.nlp().variable_bound_set().lower_idx_.size()) +
+                         static_cast<int>(h.nlp().variable_bound_set().upper_idx_.size());
+    out.reduced_ = h.nlp().is_reduced();
+    return out;
+}
+
+} // namespace
+
+// The equivalence the whole trio rests on: the same declared problem, solved
+// three ways, reaches the same solution. Each treatment's own mechanism is
+// asserted alongside, so an agreement reached by all three quietly doing the same
+// thing would fail rather than pass.
+TEST(NativeBounds, EveryFixedVariableTreatmentReachesTheSameSolution) {
+    const auto eliminated = native_bounds_solve_under_treatment(
+        FixedVariableTreatments::MakeParameter, kNativeBoundsTreatmentRelaxFactor);
+    const auto constrained = native_bounds_solve_under_treatment(
+        FixedVariableTreatments::MakeConstraint, kNativeBoundsTreatmentRelaxFactor);
+    const auto relaxed = native_bounds_solve_under_treatment(FixedVariableTreatments::RelaxBounds,
+                                                             kNativeBoundsTreatmentRelaxFactor);
+
+    ASSERT_EQ(eliminated.flag_, tycho::ConvergenceFlags::CONVERGED);
+    ASSERT_EQ(constrained.flag_, tycho::ConvergenceFlags::CONVERGED);
+    ASSERT_EQ(relaxed.flag_, tycho::ConvergenceFlags::CONVERGED);
+
+    // Every treatment reports the solution in the caller's own variable space,
+    // whatever space it solved in.
+    ASSERT_EQ(eliminated.solution_.size(), 3);
+    ASSERT_EQ(constrained.solution_.size(), 3);
+    ASSERT_EQ(relaxed.solution_.size(), 3);
+
+    // The closed form, first: x0 = 4 - 2.5, x1 at its declared value, x2 at its
+    // own minimum.
+    EXPECT_NEAR(eliminated.solution_[0], 1.5, kNativeBoundsExactTol);
+    EXPECT_DOUBLE_EQ(eliminated.solution_[1], kNativeBoundsFixedValue); // pinned, not converged to
+    EXPECT_NEAR(eliminated.solution_[2], 3.0, kNativeBoundsExactTol);
+    EXPECT_NEAR(constrained.solution_[0], 1.5, kNativeBoundsRowTol);
+    EXPECT_NEAR(constrained.solution_[1], kNativeBoundsFixedValue, kNativeBoundsRowTol);
+    EXPECT_NEAR(constrained.solution_[2], 3.0, kNativeBoundsRowTol);
+    EXPECT_NEAR(relaxed.solution_[0], 1.5, kNativeBoundsRelaxedTol);
+    EXPECT_NEAR(relaxed.solution_[1], kNativeBoundsFixedValue, kNativeBoundsRelaxedTol);
+    EXPECT_NEAR(relaxed.solution_[2], 3.0, kNativeBoundsRelaxedTol);
+
+    // ... and then the agreement itself, coordinate by coordinate.
+    for (int i = 0; i < 3; i++) {
+        EXPECT_NEAR(constrained.solution_[i], eliminated.solution_[i], kNativeBoundsRowTol)
+            << "coordinate " << i;
+        EXPECT_NEAR(relaxed.solution_[i], eliminated.solution_[i], kNativeBoundsRelaxedTol)
+            << "coordinate " << i;
+    }
+
+    // Each of them got there its own way. The elimination narrows the system and
+    // carries no bound for the fixed variable; the internal row widens it by two
+    // and also carries no bound; the relaxation carries a two-sided bound and
+    // leaves the system the declared size.
+    EXPECT_TRUE(eliminated.reduced_);
+    EXPECT_EQ(eliminated.internal_rows_, 0);
+    EXPECT_EQ(eliminated.bound_entries_, 0);
+    EXPECT_FALSE(constrained.reduced_);
+    EXPECT_EQ(constrained.internal_rows_, 1);
+    EXPECT_EQ(constrained.bound_entries_, 0);
+    EXPECT_FALSE(relaxed.reduced_);
+    EXPECT_EQ(relaxed.internal_rows_, 0);
+    EXPECT_EQ(relaxed.bound_entries_, 2);
+    EXPECT_EQ(eliminated.fixed_count_, 1);
+    EXPECT_EQ(constrained.fixed_count_, 1);
+    EXPECT_EQ(relaxed.fixed_count_, 1);
+
+    // The dimension claim, on the problem that was actually solved: the internal
+    // row costs two dimensions against the elimination, and the relaxation one.
+    EXPECT_EQ(constrained.kkt_dim_ - eliminated.kkt_dim_, 2);
+    EXPECT_EQ(relaxed.kkt_dim_ - eliminated.kkt_dim_, 1);
+}
+
+// The same dimension claim, per fixed variable rather than for one: two fixed
+// variables, and the gap between the narrowest and the widest treatment is four.
+// Driven through the NLP's own classification rather than a solve, because what is
+// under test is the size of the system each treatment lays out.
+TEST(NativeBounds, TheInternalRowCostsTwoDimensionsPerFixedVariableAgainstTheElimination) {
+    NativeBoundsHarness h(4);
+    h.declare_bound(1, kNativeBoundsFixedValue, kNativeBoundsFixedValue);
+    h.declare_bound(3, -1.0, -1.0);
+
+    ASSERT_TRUE(h.nlp().configure_variable_treatment(FixedVariableTreatments::MakeParameter,
+                                                     kNativeBoundsTreatmentRelaxFactor));
+    const int n_fixed = static_cast<int>(h.nlp().fixed_variable_indices().size());
+    ASSERT_EQ(n_fixed, 2);
+    const int eliminated_dim = h.nlp().kkt_dim_;
+
+    ASSERT_TRUE(h.nlp().configure_variable_treatment(FixedVariableTreatments::MakeConstraint,
+                                                     kNativeBoundsTreatmentRelaxFactor));
+    const int constrained_dim = h.nlp().kkt_dim_;
+
+    // One column per fixed variable between them, twice over: the elimination
+    // drops the column, and the internal row keeps it AND adds a row of its own.
+    EXPECT_EQ(constrained_dim - eliminated_dim, 2 * n_fixed);
+    EXPECT_EQ(eliminated_dim, h.nlp().primal_vars_ - n_fixed);
+    EXPECT_EQ(constrained_dim, h.nlp().primal_vars_ + n_fixed);
+    EXPECT_EQ(h.nlp().internal_fixed_constraints(), n_fixed);
+}
+
+// The relaxation holds the variable near its value through the barrier rather than
+// pinning it: it lands strictly inside the box the treatment built -- the pair
+// separated by the factor times max(1, |value|) per side, and then widened again by
+// the same factor along with every other bound the classifier records -- and it is
+// carried as an ordinary two-sided bound, which is the mechanism doing the holding.
+TEST(NativeBounds, RelaxBoundsHoldsTheVariableInsideItsRelaxedBox) {
+    const auto relaxed = native_bounds_solve_under_treatment(FixedVariableTreatments::RelaxBounds,
+                                                             kNativeBoundsTreatmentRelaxFactor);
+    ASSERT_EQ(relaxed.flag_, tycho::ConvergenceFlags::CONVERGED);
+
+    const double half_width =
+        2.0 * kNativeBoundsTreatmentRelaxFactor * std::max(1.0, std::abs(kNativeBoundsFixedValue));
+    EXPECT_LE(std::abs(relaxed.solution_[1] - kNativeBoundsFixedValue), half_width);
+
+    // Not vacuous: the variable really was carried as a bounded one, so the
+    // distance above is a barrier's doing rather than a pinned coordinate's.
+    EXPECT_EQ(relaxed.bound_entries_, 2);
+    EXPECT_EQ(relaxed.internal_rows_, 0);
+    EXPECT_FALSE(relaxed.reduced_);
+}
+
+// One solver, four solves, a different treatment each time. Every solve
+// re-classifies: the treatment change alone invalidates the previous
+// classification even though the declared bounds never move, and the system's size
+// follows the treatment rather than the first one that ran. The last solve returns
+// to the first treatment and must reach the state and the answer it reached then.
+TEST(NativeBounds, TheTreatmentIsSwitchableBetweenSolvesOnOneSolver) {
+    NativeBoundsHarness h(3);
+    h.add_sum_equality(0, 1, 4.0);
+    h.declare_bound(1, kNativeBoundsFixedValue, kNativeBoundsFixedValue);
+    h.solver().set_bound_relax_factor(kNativeBoundsTreatmentRelaxFactor);
+
+    h.solver().set_fixed_variable_treatment(FixedVariableTreatments::MakeParameter);
+    const Eigen::VectorXd eliminated = h.solve(Eigen::VectorXd::Zero(3));
+    ASSERT_EQ(h.flag(), tycho::ConvergenceFlags::CONVERGED);
+    const int eliminated_dim = h.nlp().kkt_dim_;
+    EXPECT_TRUE(h.nlp().is_reduced());
+    EXPECT_EQ(h.nlp().internal_fixed_constraints(), 0);
+
+    h.solver().set_fixed_variable_treatment(FixedVariableTreatments::MakeConstraint);
+    const Eigen::VectorXd constrained = h.solve(Eigen::VectorXd::Zero(3));
+    ASSERT_EQ(h.flag(), tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_FALSE(h.nlp().is_reduced());
+    EXPECT_EQ(h.nlp().internal_fixed_constraints(), 1);
+    EXPECT_EQ(h.nlp().kkt_dim_, eliminated_dim + 2);
+
+    h.solver().set_fixed_variable_treatment(FixedVariableTreatments::RelaxBounds);
+    const Eigen::VectorXd relaxed = h.solve(Eigen::VectorXd::Zero(3));
+    ASSERT_EQ(h.flag(), tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_FALSE(h.nlp().is_reduced());
+    // The internal row is gone with the treatment that installed it, not merely
+    // unused: the row space is the caller's own again.
+    EXPECT_EQ(h.nlp().internal_fixed_constraints(), 0);
+    EXPECT_EQ(h.nlp().equal_cons_, h.nlp().user_equal_cons_);
+    EXPECT_EQ(h.nlp().kkt_dim_, eliminated_dim + 1);
+
+    h.solver().set_fixed_variable_treatment(FixedVariableTreatments::MakeParameter);
+    const Eigen::VectorXd again = h.solve(Eigen::VectorXd::Zero(3));
+    ASSERT_EQ(h.flag(), tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_TRUE(h.nlp().is_reduced());
+    EXPECT_EQ(h.nlp().internal_fixed_constraints(), 0);
+    EXPECT_EQ(h.nlp().kkt_dim_, eliminated_dim);
+
+    for (int i = 0; i < 3; i++) {
+        EXPECT_NEAR(constrained[i], eliminated[i], kNativeBoundsRowTol) << "coordinate " << i;
+        EXPECT_NEAR(relaxed[i], eliminated[i], kNativeBoundsRelaxedTol) << "coordinate " << i;
+        EXPECT_NEAR(again[i], eliminated[i], kNativeBoundsExactTol) << "coordinate " << i;
+    }
+    EXPECT_DOUBLE_EQ(again[1], kNativeBoundsFixedValue);
 }

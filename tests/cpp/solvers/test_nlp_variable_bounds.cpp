@@ -312,8 +312,12 @@ nlp_var_bounds_transcribe(tycho::solvers::OptimizationProblem &prob, int num_var
 // Re-materializes the bounds staged on an already-transcribed NLP (make_nlp
 // reallocates every KKT array, so the solver has to be re-pointed at it, which
 // is what recomputes the storage locations the reduction addresses).
+//
+// user_equal_cons_, not equal_cons_: the latter counts the internal fixing rows
+// the MakeConstraint treatment installs, and make_nlp takes the user's own row
+// count. The two are the same number under every other treatment.
 void nlp_var_bounds_rebuild(NonLinearProgram &nlp) {
-    nlp.make_nlp(nlp.primal_vars_, nlp.equal_cons_, nlp.inequal_cons_);
+    nlp.make_nlp(nlp.primal_vars_, nlp.user_equal_cons_, nlp.inequal_cons_);
 }
 
 struct NlpVarBoundsSolveOutcome {
@@ -329,6 +333,24 @@ NlpVarBoundsSolveOutcome nlp_var_bounds_solve(const std::shared_ptr<NonLinearPro
                                               const Eigen::VectorXd &guess) {
     tycho::solvers::PSIOPT opt;
     opt.set_print_level(3);
+    opt.set_nlp(nlp);
+    NlpVarBoundsSolveOutcome outcome;
+    outcome.solution_ = opt.optimize(guess);
+    outcome.flag_ = opt.result().converge_flag_;
+    return outcome;
+}
+
+// The same, under a chosen fixed-variable treatment. The settings go on before
+// set_nlp so that the analysis set_nlp performs is the one the solve's own
+// classification will confirm rather than replace.
+NlpVarBoundsSolveOutcome nlp_var_bounds_solve_under(const std::shared_ptr<NonLinearProgram> &nlp,
+                                                    const Eigen::VectorXd &guess,
+                                                    FixedVariableTreatments treatment,
+                                                    double relax_factor) {
+    tycho::solvers::PSIOPT opt;
+    opt.set_print_level(3);
+    opt.set_fixed_variable_treatment(treatment);
+    opt.set_bound_relax_factor(relax_factor);
     opt.set_nlp(nlp);
     NlpVarBoundsSolveOutcome outcome;
     outcome.solution_ = opt.optimize(guess);
@@ -538,23 +560,251 @@ TEST(NlpVarBoundsReduction, ReconfigureAfterBoundChangeReclassifies) {
     EXPECT_EQ(problem.nlp_.reduced_primal_vars(), 4);
 }
 
-// --- Rejected configurations ----------------------------------------------
+// --- The treatments that keep the variable ---------------------------------
 
-TEST(NlpVarBoundsReduction, UnavailableTreatmentsThrow) {
+// MakeConstraint hands the fixed variable to an internal equality row instead of
+// eliminating it: the variable keeps its column (so a bound declared on a LATER
+// variable is not renumbered), carries no bound of its own, and the row space
+// grows by one row per fixed variable -- appended after every row the caller
+// declared, which is what keeps the user's own row indices theirs.
+TEST(NlpVarBoundsReduction, MakeConstraintAppendsOneEqualityRowPerFixedVariable) {
     NlpVarBoundsBareNlp problem;
+    problem.nlp_.set_variable_bound(1, 2.0, 2.0);   // fixed
+    problem.nlp_.set_variable_bound(3, -4.0, -4.0); // fixed
+    problem.nlp_.set_variable_bound(4, 0.0, 8.0);   // ordinary two-sided
+    problem.build(5);
+    ASSERT_EQ(problem.nlp_.kkt_dim_, 5);
+    ASSERT_EQ(problem.nlp_.user_equal_cons_, 0);
+
+    EXPECT_TRUE(
+        problem.nlp_.configure_variable_treatment(FixedVariableTreatments::MakeConstraint, 1.0e-8));
+
+    // Nothing eliminated: the primal block is the declared one, and the maps the
+    // reduction would need stay empty.
+    EXPECT_FALSE(problem.nlp_.is_reduced());
+    EXPECT_EQ(problem.nlp_.reduced_primal_vars(), 5);
+    EXPECT_EQ(problem.nlp_.full_to_reduced().size(), 0);
+    EXPECT_EQ(problem.nlp_.reduced_to_full().size(), 0);
+
+    // Two internal rows, on top of the caller's own count, and the system is
+    // wider by exactly that many.
+    EXPECT_EQ(problem.nlp_.internal_fixed_constraints(), 2);
+    EXPECT_EQ(problem.nlp_.equal_cons_, problem.nlp_.user_equal_cons_ + 2);
+    EXPECT_EQ(problem.nlp_.kkt_dim_, 5 + 2);
+
+    // The fixed variables are reported, and carry no barrier bound: the rows hold
+    // them. The one genuinely bounded variable is the only entry in the set, at
+    // index 4 -- the index it was declared on, because no column was dropped
+    // ahead of it.
+    ASSERT_EQ(problem.nlp_.fixed_variable_indices().size(), 2);
+    EXPECT_EQ(problem.nlp_.fixed_variable_indices()[0], 1);
+    EXPECT_EQ(problem.nlp_.fixed_variable_indices()[1], 3);
+    EXPECT_DOUBLE_EQ(problem.nlp_.fixed_variable_values()[0], 2.0);
+    EXPECT_DOUBLE_EQ(problem.nlp_.fixed_variable_values()[1], -4.0);
+    const auto &bounds = problem.nlp_.variable_bound_set();
+    ASSERT_EQ(bounds.lower_idx_.size(), 1);
+    ASSERT_EQ(bounds.upper_idx_.size(), 1);
+    EXPECT_EQ(bounds.lower_idx_[0], 4);
+    EXPECT_EQ(bounds.upper_idx_[0], 4);
+
+    // A repeat call is still idempotent, and does not append a second copy.
+    EXPECT_FALSE(
+        problem.nlp_.configure_variable_treatment(FixedVariableTreatments::MakeConstraint, 1.0e-8));
+    EXPECT_EQ(problem.nlp_.internal_fixed_constraints(), 2);
+    EXPECT_EQ(problem.nlp_.kkt_dim_, 5 + 2);
+}
+
+// RelaxBounds leaves the layout alone entirely and records the fixed variable as
+// an ordinary two-sided bound whose endpoints have been pushed apart. Two
+// widenings compose on the recorded values: the treatment separates the pair, and
+// the shared classification path then relaxes every finite bound it records by
+// the same factor -- which is how Ipopt's own two relaxations compose as well.
+TEST(NlpVarBoundsReduction, RelaxBoundsRecordsATwoSidedPairAroundTheFixedValue) {
+    NlpVarBoundsBareNlp problem;
+    problem.nlp_.set_variable_bound(1, 4.0, 4.0);
+    problem.build(3);
+
+    const double factor = 1.0e-3;
+    // Nothing structural changed, so there is nothing for the caller to re-read.
+    EXPECT_FALSE(
+        problem.nlp_.configure_variable_treatment(FixedVariableTreatments::RelaxBounds, factor));
+    EXPECT_FALSE(problem.nlp_.is_reduced());
+    EXPECT_EQ(problem.nlp_.reduced_primal_vars(), 3);
+    EXPECT_EQ(problem.nlp_.kkt_dim_, 3);
+    EXPECT_EQ(problem.nlp_.internal_fixed_constraints(), 0);
+
+    const auto &bounds = problem.nlp_.variable_bound_set();
+    ASSERT_EQ(bounds.lower_idx_.size(), 1);
+    ASSERT_EQ(bounds.upper_idx_.size(), 1);
+    EXPECT_EQ(bounds.lower_idx_[0], 1);
+    EXPECT_EQ(bounds.upper_idx_[0], 1);
+
+    const double separated_lower = nlp_var_bounds_relax(4.0, factor, false);
+    const double separated_upper = nlp_var_bounds_relax(4.0, factor, true);
+    EXPECT_DOUBLE_EQ(bounds.lower_val_[0], nlp_var_bounds_relax(separated_lower, factor, false));
+    EXPECT_DOUBLE_EQ(bounds.upper_val_[0], nlp_var_bounds_relax(separated_upper, factor, true));
+    EXPECT_LT(bounds.lower_val_[0], 4.0);
+    EXPECT_GT(bounds.upper_val_[0], 4.0);
+
+    // Two-sided, so neither entry carries the one-sided damping indicator.
+    EXPECT_DOUBLE_EQ(bounds.lower_damp_[0], 0.0);
+    EXPECT_DOUBLE_EQ(bounds.upper_damp_[0], 0.0);
+
+    // And it is still reported as a fixed variable, which is what the treatment
+    // acted on.
+    ASSERT_EQ(problem.nlp_.fixed_variable_indices().size(), 1);
+    EXPECT_EQ(problem.nlp_.fixed_variable_indices()[0], 1);
+}
+
+// One NLP, every treatment in turn. Each configuration must derive its own answer
+// from the pristine state rather than compound the previous one -- which for
+// MakeConstraint means its rows are gone the moment another treatment takes over,
+// and for MakeParameter means the elimination is gone again when it does not.
+TEST(NlpVarBoundsReduction, SwitchingTreatmentReclassifiesFromScratch) {
+    NlpVarBoundsBareNlp problem;
+    problem.nlp_.set_variable_bound(2, 4.0, 4.0);
+    problem.build(4);
+
+    EXPECT_TRUE(
+        problem.nlp_.configure_variable_treatment(FixedVariableTreatments::MakeParameter, 1.0e-8));
+    EXPECT_TRUE(problem.nlp_.is_reduced());
+    EXPECT_EQ(problem.nlp_.kkt_dim_, 3);
+    EXPECT_EQ(problem.nlp_.internal_fixed_constraints(), 0);
+
+    EXPECT_TRUE(
+        problem.nlp_.configure_variable_treatment(FixedVariableTreatments::MakeConstraint, 1.0e-8));
+    EXPECT_FALSE(problem.nlp_.is_reduced());
+    EXPECT_EQ(problem.nlp_.reduced_primal_vars(), 4);
+    EXPECT_EQ(problem.nlp_.internal_fixed_constraints(), 1);
+    EXPECT_EQ(problem.nlp_.kkt_dim_, 5);
+
+    // Back to a treatment that adds no row: the row space returns to the
+    // caller's own, and the system with it.
+    EXPECT_TRUE(
+        problem.nlp_.configure_variable_treatment(FixedVariableTreatments::RelaxBounds, 1.0e-8));
+    EXPECT_FALSE(problem.nlp_.is_reduced());
+    EXPECT_EQ(problem.nlp_.internal_fixed_constraints(), 0);
+    EXPECT_EQ(problem.nlp_.equal_cons_, problem.nlp_.user_equal_cons_);
+    EXPECT_EQ(problem.nlp_.kkt_dim_, 4);
+    EXPECT_TRUE(problem.nlp_.variable_bound_set().any());
+
+    // And back to the elimination, which must reach exactly the state it reached
+    // the first time.
+    EXPECT_TRUE(
+        problem.nlp_.configure_variable_treatment(FixedVariableTreatments::MakeParameter, 1.0e-8));
+    EXPECT_TRUE(problem.nlp_.is_reduced());
+    EXPECT_EQ(problem.nlp_.reduced_primal_vars(), 3);
+    EXPECT_EQ(problem.nlp_.kkt_dim_, 3);
+    EXPECT_EQ(problem.nlp_.internal_fixed_constraints(), 0);
+    EXPECT_FALSE(problem.nlp_.variable_bound_set().any());
+    ASSERT_EQ(problem.nlp_.fixed_variable_indices().size(), 1);
+    EXPECT_EQ(problem.nlp_.fixed_variable_indices()[0], 2);
+}
+
+// A problem all of whose variables are fixed has nothing left to solve for only
+// under the treatment that eliminates them. The other two keep every variable, so
+// the same declaration is an ordinary square system of internal rows in one case
+// and a fully boxed problem in the other.
+TEST(NlpVarBoundsReduction, AnAllFixedProblemIsRejectedOnlyByTheElimination) {
+    NlpVarBoundsBareNlp problem;
+    problem.nlp_.set_variable_bound(0, 1.0, 1.0);
+    problem.nlp_.set_variable_bound(1, 2.0, 2.0);
     problem.build(2);
 
+    EXPECT_THROW(
+        problem.nlp_.configure_variable_treatment(FixedVariableTreatments::MakeParameter, 1.0e-8),
+        std::invalid_argument);
+
+    EXPECT_TRUE(
+        problem.nlp_.configure_variable_treatment(FixedVariableTreatments::MakeConstraint, 1.0e-8));
+    EXPECT_EQ(problem.nlp_.internal_fixed_constraints(), 2);
+    EXPECT_EQ(problem.nlp_.kkt_dim_, 4);
+
+    EXPECT_TRUE(
+        problem.nlp_.configure_variable_treatment(FixedVariableTreatments::RelaxBounds, 1.0e-8));
+    EXPECT_EQ(problem.nlp_.internal_fixed_constraints(), 0);
+    EXPECT_EQ(problem.nlp_.kkt_dim_, 2);
+    EXPECT_EQ(problem.nlp_.variable_bound_set().lower_idx_.size(), 2);
+}
+
+// --- Rejected configurations ----------------------------------------------
+
+// The relaxation is the whole mechanism by which RelaxBounds gives the variable
+// somewhere to sit, so a zero factor is not a conservative choice -- it leaves an
+// interval of zero width, which the interior push has no interior to land in and
+// the barrier divides by. Rejected at configuration rather than as a non-finite
+// objective a few evaluations later. With nothing fixed there is no pair to
+// separate and the same factor is fine.
+TEST(NlpVarBoundsReduction, RelaxBoundsRejectsAZeroRelaxFactorOnAFixedVariable) {
+    NlpVarBoundsBareNlp fixed_problem;
+    fixed_problem.nlp_.set_variable_bound(0, 3.0, 3.0);
+    fixed_problem.build(2);
+
     try {
-        problem.nlp_.configure_variable_treatment(FixedVariableTreatments::MakeConstraint, 1.0e-8);
-        FAIL() << "expected std::invalid_argument for an unavailable treatment";
+        fixed_problem.nlp_.configure_variable_treatment(FixedVariableTreatments::RelaxBounds, 0.0);
+        FAIL() << "expected std::invalid_argument for a zero relax factor on a fixed variable";
     } catch (const std::invalid_argument &e) {
         const std::string msg = e.what();
-        EXPECT_NE(msg.find("make_constraint"), std::string::npos) << msg;
+        EXPECT_NE(msg.find("relax_bounds"), std::string::npos) << msg;
         EXPECT_NE(msg.find("make_parameter"), std::string::npos) << msg;
     }
-    EXPECT_THROW(
-        problem.nlp_.configure_variable_treatment(FixedVariableTreatments::RelaxBounds, 1.0e-8),
-        std::invalid_argument);
+    EXPECT_FALSE(fixed_problem.nlp_.variable_bound_set().any());
+
+    NlpVarBoundsBareNlp bounded_problem;
+    bounded_problem.nlp_.set_variable_bound(0, -1.0, 1.0);
+    bounded_problem.build(2);
+    EXPECT_NO_THROW(bounded_problem.nlp_.configure_variable_treatment(
+        FixedVariableTreatments::RelaxBounds, 0.0));
+    EXPECT_TRUE(bounded_problem.nlp_.variable_bound_set().any());
+}
+
+// A rejected configuration arriving at an NLP that has internal fixing rows
+// installed must leave neither the rows nor the layout they were laid out for
+// behind. This is the MakeConstraint half of the restore: the rows are dropped
+// before the new classification runs, so a classification that then rejects has
+// to have re-derived the element counts, the work partitioning and the layout
+// over the caller's own row space -- and the rejected configuration must not be
+// remembered as done.
+TEST(NlpVarBoundsReduction, ARejectedTreatmentSwitchLeavesNoInternalRowBehind) {
+    tycho::solvers::OptimizationProblem prob;
+    nlp_var_bounds_add_separable_objective(prob, {1.0, 2.0, 3.0});
+    nlp_var_bounds_add_pair_sum_con(prob, 0, 2, 6.0);
+    auto nlp = nlp_var_bounds_transcribe(prob, 3);
+    nlp->set_variable_bound(1, 7.0, 7.0);
+    nlp_var_bounds_rebuild(*nlp);
+
+    const int user_eq = nlp->user_equal_cons_;
+    ASSERT_GT(user_eq, 0);
+    ASSERT_TRUE(nlp->configure_variable_treatment(FixedVariableTreatments::MakeConstraint, 1.0e-8));
+    ASSERT_EQ(nlp->internal_fixed_constraints(), 1);
+    ASSERT_EQ(nlp->kkt_dim_, nlp->primal_vars_ + user_eq + 1);
+
+    // The switch this NLP cannot honor: RelaxBounds with nothing to separate the
+    // fixed pair by.
+    EXPECT_THROW(nlp->configure_variable_treatment(FixedVariableTreatments::RelaxBounds, 0.0),
+                 std::invalid_argument);
+
+    EXPECT_EQ(nlp->internal_fixed_constraints(), 0);
+    EXPECT_EQ(nlp->equal_cons_, user_eq);
+    EXPECT_FALSE(nlp->is_reduced());
+    EXPECT_EQ(nlp->reduced_primal_vars(), nlp->primal_vars_);
+    EXPECT_EQ(nlp->kkt_dim_, nlp->primal_vars_ + user_eq);
+
+    // Not remembered as done: the same call fails the same way instead of
+    // reporting "no change".
+    EXPECT_THROW(nlp->configure_variable_treatment(FixedVariableTreatments::RelaxBounds, 0.0),
+                 std::invalid_argument);
+
+    // And the NLP is still solvable, on the layout the restore left: the
+    // elimination reaches the same answer as the identity-path problem's, with the
+    // pinned value exact.
+    // min sum (x_i - c_i)^2, c = (1, 2, 3), s.t. x0 + x2 = 6, x1 fixed at 7.
+    auto outcome = nlp_var_bounds_solve(nlp, Eigen::VectorXd::Zero(3));
+    EXPECT_EQ(outcome.flag_, tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_TRUE(nlp->is_reduced());
+    EXPECT_DOUBLE_EQ(outcome.solution_[1], 7.0);
+    EXPECT_NEAR(outcome.solution_[0], 2.0, 1e-6);
+    EXPECT_NEAR(outcome.solution_[2], 4.0, 1e-6);
 }
 
 TEST(NlpVarBoundsReduction, InvalidRelaxFactorThrows) {

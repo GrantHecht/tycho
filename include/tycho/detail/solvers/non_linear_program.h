@@ -45,16 +45,27 @@ namespace tycho::solvers {
 
 /// <summary>
 /// How a primal variable whose declared lower and upper bounds are equal is
-/// handed to the solver.
+/// handed to the solver. All three are implemented, and all three reach the same
+/// solution on a well-posed problem; they differ in the size of the system the
+/// solver factorizes and in how exactly the variable sits at its value.
 ///
-/// MakeParameter removes the variable from the optimization entirely: it is
-/// pinned at its bound value for every evaluation and the Newton system the
-/// solver factorizes is the system of the REMAINING variables. MakeConstraint
-/// would instead keep the variable free and add an equality constraint fixing
-/// it; RelaxBounds would keep it as an ordinary two-sided bounded variable with
-/// its bounds pushed apart. Only MakeParameter is implemented —
-/// NonLinearProgram::configure_variable_treatment rejects the other two with a
-/// clear message.
+/// MakeParameter (the default) removes the variable from the optimization
+/// entirely: it is pinned at its bound value for every evaluation and the Newton
+/// system the solver factorizes is the system of the REMAINING variables, one
+/// row and column narrower per fixed variable. Its value in the returned
+/// solution is exact.
+///
+/// MakeConstraint keeps the variable free and adds one internal equality row
+/// x_i - c = 0 per fixed variable, appended AFTER every row the transcription
+/// declared, so the solved system is one row and one column WIDER per fixed
+/// variable than MakeParameter's and every user row keeps its own index. The
+/// variable reaches its value to equality-constraint tolerance rather than
+/// exactly.
+///
+/// RelaxBounds keeps the variable as an ordinary two-sided bounded variable with
+/// its bounds pushed apart by the relax factor, so it is held near its value by
+/// the barrier, within the relaxation, and the system is the same size as the
+/// declared problem's.
 /// </summary>
 enum class FixedVariableTreatments { MakeParameter, MakeConstraint, RelaxBounds };
 
@@ -75,6 +86,25 @@ inline const char *fixed_variable_treatment_name(FixedVariableTreatments treatme
 /// it is recorded in the BoundSet: b is moved outward by this factor times
 /// max(1, |b|). Matches Ipopt's bound_relax_factor default.
 inline constexpr double kDefaultBoundRelaxFactor = 1.0e-8;
+
+/// Largest widening the solver's settings accept. The relaxed box is the one
+/// every barrier term actually divides by, so a large factor does not merely
+/// loosen a bound -- it solves a measurably different problem than the one
+/// declared, without saying so. A hundredth of max(1, |b|) is already far past
+/// any tolerance a caller would set.
+inline constexpr double kMaxBoundRelaxFactor = 1.0e-2;
+
+/// <summary>
+/// One internal equality row pinning a single primal variable to a value:
+/// x[index] - value = 0, addressed over the problem's own variable space and
+/// writing constraint row @p row.
+///
+/// The MakeConstraint fixed-variable treatment's whole payload. Defined in its
+/// own translation unit so that building it -- which needs the VectorFunction
+/// expression machinery -- does not put those headers in front of every
+/// NonLinearProgram compile.
+/// </summary>
+ConstraintFunction make_fixed_variable_row(int index, double value, int row);
 
 struct NonLinearProgram {
     using VectorXi = Eigen::VectorXi;
@@ -180,6 +210,19 @@ struct NonLinearProgram {
         this->make_nlp(PV, EQ, IQ);
     }
 
+    /// <summary>
+    /// Lays the whole problem out over PV primal variables, EQ equality rows and
+    /// IQ inequality rows, from the objective and constraint lists as they stand.
+    ///
+    /// EQ is the count of equality rows the USER's own constraint functions
+    /// address. The MakeConstraint fixed-variable treatment appends its internal
+    /// fixing rows on top of that count, so equal_cons_ is EQ only while no such
+    /// row is installed; a caller re-materializing an already configured NLP
+    /// hands back user_equal_cons_ (which is EQ as passed here), not equal_cons_.
+    /// This call drops any installed fixing row itself -- it re-materializes the
+    /// bounds those rows were derived from, so the next configuration re-derives
+    /// them.
+    /// </summary>
     void make_nlp(int PV, int EQ, int IQ);
 
     /// <summary>
@@ -286,28 +329,49 @@ struct NonLinearProgram {
     // no output map is installed, so every scatter takes its original loop,
     // every table is the pristine one, no expansion buffer is built, and the
     // assembled system is what it was before this feature existed.
+    //
+    // The other two treatments leave the variable space alone and take the
+    // identity fast path through all of the above -- neither of them eliminates
+    // anything, so is_reduced() stays false and no output map is ever installed.
+    // They differ from each other only in what classification records:
+    //
+    //   * MakeConstraint records no bound for the variable (it goes to the solver
+    //     free) and appends one internal equality row per fixed variable, which
+    //     widens the equality row space and therefore re-lays the layout -- the
+    //     element counts and the work partitioning included, since the set of
+    //     functions itself changed.
+    //   * RelaxBounds records the variable as an ordinary two-sided bound whose
+    //     endpoints have been pushed apart, which changes nothing structural at
+    //     all: the layout on hand is already the answer.
     ////////////////////////////////////////////////////////////////////////////
 
     /// <summary>
     /// Classifies every primal variable against the materialized
     /// x_lower_/x_upper_ (free / lower-only / upper-only / two-sided / fixed),
-    /// records the non-fixed finite bounds in variable_bound_set_, and -- under
-    /// MakeParameter, when at least one variable is fixed -- rewrites every
-    /// function's output map into the reduced space and rebuilds the KKT/RHS
-    /// structures over it.
+    /// records the finite bounds of everything the treatment leaves bounded in
+    /// variable_bound_set_, and then applies the treatment to the fixed
+    /// variables: under MakeParameter rewriting every function's output map into
+    /// the reduced space and rebuilding the KKT/RHS structures over it, under
+    /// MakeConstraint appending one internal equality row per fixed variable and
+    /// re-laying the layout over the widened row space, and under RelaxBounds
+    /// nothing structural at all.
     ///
     /// Called once at solve setup. Idempotent and re-entrant: a call that
     /// repeats the same treatment, the same relax factor, and the same bound
-    /// state returns immediately having changed nothing; a call after the bounds
-    /// were re-materialized (make_nlp / clear_variable_bounds) reclassifies from
-    /// scratch. Every rewritten output map is regenerated from the pristine
-    /// input map, which is never edited, so repeated configuration cannot
-    /// compound -- including the return to the identity path when the last fixed
-    /// bound is dropped.
+    /// state returns immediately having changed nothing; a call that changes the
+    /// treatment, the factor, or arrives after the bounds were re-materialized
+    /// (make_nlp / clear_variable_bounds) reclassifies from scratch. Every
+    /// rewritten output map is regenerated from the pristine input map, which is
+    /// never edited, and every internal fixing row is dropped before the new
+    /// classification derives its own, so repeated configuration cannot compound
+    /// -- including the return to the identity path when the last fixed bound is
+    /// dropped, and the switch from one treatment to another between two solves.
     ///
-    /// Throws std::invalid_argument for a treatment that is not yet available,
-    /// for a negative or non-finite relax factor, and for an infinite fixing
-    /// value.
+    /// Throws std::invalid_argument for an unrecognized treatment, for a negative
+    /// or non-finite relax factor, for an infinite fixing value, for a
+    /// zero relax factor under RelaxBounds while a variable is fixed (the pair
+    /// would be pushed nowhere and the barrier would divide by zero), and, under
+    /// MakeParameter only, for a problem all of whose variables are fixed.
     ///
     /// @return true iff this call rebuilt the KKT/RHS structures, in which case
     /// the caller must re-read the dimensions and recompute the sparsity pattern
@@ -328,19 +392,29 @@ struct NonLinearProgram {
     /// solver runs exactly the code it ran before the treatment existed.
     bool is_reduced() const { return this->fixed_reduction_active_; }
 
-    /// The finite bounds that survived classification (eliminated variables
-    /// excluded), in REDUCED indices -- the same space every primal vector the
-    /// solver holds is in -- and relaxed by the configured factor. Empty before
+    /// The finite bounds that survived classification (variables the treatment
+    /// eliminated or handed to an internal equality row excluded), in REDUCED
+    /// indices -- the same space every primal vector the solver holds is in --
+    /// and relaxed by the configured factor. Empty before
     /// configure_variable_treatment has run.
     const BoundSet &variable_bound_set() const { return this->variable_bound_set_; }
 
-    /// Indices of the eliminated variables in the FULL problem space, ascending.
-    /// Empty on the identity path.
+    /// Indices of the variables the treatment acted on -- the ones whose declared
+    /// bounds are equal -- in the FULL problem space, ascending. Empty when
+    /// nothing is fixed, whatever the treatment.
     const VectorXi &fixed_variable_indices() const { return this->fixed_idx_; }
 
-    /// Values the eliminated variables are pinned at, parallel to
-    /// fixed_variable_indices().
+    /// Values those variables are fixed at, parallel to
+    /// fixed_variable_indices(). Under MakeParameter they are pinned there
+    /// exactly; under the other two treatments they are what the internal
+    /// equality row, or the relaxed bound pair, holds the variable to.
     const VectorXd &fixed_variable_values() const { return this->fixed_vals_; }
+
+    /// Number of internal equality rows the MakeConstraint treatment currently
+    /// has installed: one per fixed variable, at the tail of
+    /// equality_constraints_ and of the equality row space. Zero under every
+    /// other treatment, and zero whenever nothing is fixed.
+    int internal_fixed_constraints() const { return this->internal_fixed_cons_; }
 
     /// Full-space index -> reduced index, -1 for an eliminated variable. Empty
     /// on the identity path (where the map is the identity).
@@ -419,8 +493,20 @@ struct NonLinearProgram {
 
     VectorXi full_to_reduced_; ///< primal_vars_ entries, -1 where eliminated.
     VectorXi reduced_to_full_; ///< reduced_primal_vars_count_ entries.
-    VectorXi fixed_idx_;       ///< Eliminated variable indices, ascending.
-    VectorXd fixed_vals_;      ///< Their pinned values.
+    VectorXi fixed_idx_;       ///< Fixed variable indices, ascending.
+    VectorXd fixed_vals_;      ///< The values they are fixed at.
+
+    /// Equality-row count of the user's own constraint functions, as handed to
+    /// make_nlp. equal_cons_ counts the internal fixing rows the MakeConstraint
+    /// treatment installs on top of it, and this is the count the row space
+    /// returns to when they are dropped.
+    int user_equal_cons_ = 0;
+
+    /// Internal fixing rows currently installed -- see
+    /// internal_fixed_constraints(). They occupy the tail of
+    /// equality_constraints_ and the tail of the equality row space, so dropping
+    /// them is a truncation at both ends and no user row is ever renumbered.
+    int internal_fixed_cons_ = 0;
 
     /// Full-space buffer the objective and constraint functions read while the
     /// solver iterates in the reduced space -- reduced values in their own
@@ -473,6 +559,31 @@ struct NonLinearProgram {
     /// over the full space, and again by configure_variable_treatment whenever
     /// that width changes.
     void rebuild_structures();
+
+    /// count_elems -> analyze_partitioning: the part of make_nlp's tail that
+    /// depends on WHICH functions the problem has rather than on how wide its
+    /// primal block is. Run whenever that set changes -- which is whenever the
+    /// MakeConstraint treatment installs or drops its internal fixing rows -- and
+    /// always followed by a map install-or-clear and rebuild_structures(), in
+    /// that order, because re-partitioning hands out fresh copies of the master
+    /// functions and those copies carry the pristine input map.
+    ///
+    /// make_nlp's partition CAP is deliberately not repeated: the only thing that
+    /// reaches here adds work rather than removing it, so re-capping could only
+    /// ever widen the partitioning, and holding it where the transcription left it
+    /// keeps a treatment switch from silently re-partitioning the problem.
+    void refresh_function_partitions();
+
+    /// Appends one internal equality row per entry of fixed_idx_/fixed_vals_ and
+    /// grows equal_cons_ by that many. The layout is NOT re-laid here; the caller
+    /// owns that (see refresh_function_partitions).
+    void install_fixed_variable_rows();
+
+    /// Truncates the internal fixing rows off equality_constraints_ and returns
+    /// equal_cons_ to user_equal_cons_. A no-op when none are installed. The
+    /// layout is NOT re-laid here either: every caller either re-lays it or is
+    /// about to overwrite the whole thing.
+    void discard_fixed_variable_rows();
 
     /// Rewrites every partitioned function's output map into the reduced space
     /// from its pristine input map (-1 where the variable is eliminated).

@@ -1810,8 +1810,15 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
                 EM.segment(EStart, this->num_phase_eq_cons_[i]),
                 IM.segment(IStart, this->num_phase_iq_cons_[i]));
         }
-        this->active_eq_lmults_ = EM.tail(this->num_link_eq_cons_);
-        this->active_iq_lmults_ = IM.tail(this->num_link_iq_cons_);
+        // Addressed from the front, not as a tail. The link rows follow the phase
+        // rows, but they are not necessarily the LAST rows of the solved problem:
+        // the make_constraint fixed-variable treatment appends one internal row
+        // per fixed variable behind everything the transcription declared, and a
+        // tail slice would silently return those instead.
+        this->active_eq_lmults_ =
+            EM.segment(this->num_phase_eq_cons_.sum(), this->num_link_eq_cons_);
+        this->active_iq_lmults_ =
+            IM.segment(this->num_phase_iq_cons_.sum(), this->num_link_iq_cons_);
     }
 
     /// @internal
@@ -1838,10 +1845,15 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
                                                    IC.segment(IStart, this->num_phase_iq_cons_[i]),
                                                    IM.segment(IStart, this->num_phase_iq_cons_[i]));
         }
-        this->active_eq_lmults_ = EM.tail(this->num_link_eq_cons_);
-        this->active_iq_lmults_ = IM.tail(this->num_link_iq_cons_);
-        this->active_eq_cons_ = EC.tail(this->num_link_eq_cons_);
-        this->active_iq_cons_ = IC.tail(this->num_link_iq_cons_);
+        // Addressed from the front for the same reason as in
+        // collect_solver_multipliers above: rows the solver added itself sit
+        // behind the link rows, so the link block is a segment, not a tail.
+        const int link_eq_start = this->num_phase_eq_cons_.sum();
+        const int link_iq_start = this->num_phase_iq_cons_.sum();
+        this->active_eq_lmults_ = EM.segment(link_eq_start, this->num_link_eq_cons_);
+        this->active_iq_lmults_ = IM.segment(link_iq_start, this->num_link_iq_cons_);
+        this->active_eq_cons_ = EC.segment(link_eq_start, this->num_link_eq_cons_);
+        this->active_iq_cons_ = IC.segment(link_iq_start, this->num_link_iq_cons_);
     }
 
   public:

@@ -19,7 +19,15 @@
 #include "tycho/detail/utils/timer.h"
 
 void tycho::solvers::NonLinearProgram::make_nlp(int PV, int EQ, int IQ) {
+    // A previous configuration's internal fixing rows describe the bounds as they
+    // were then, and this call re-materializes those bounds from scratch -- so the
+    // rows go first, and the next configure_variable_treatment call derives its
+    // own. Dropped before equal_cons_ is set from EQ, which is the USER's own row
+    // count and knows nothing about them.
+    this->discard_fixed_variable_rows();
+
     this->primal_vars_ = PV;
+    this->user_equal_cons_ = EQ;
     this->equal_cons_ = EQ;
     this->inequal_cons_ = IQ;
     this->slack_vars_ = IQ;
@@ -61,6 +69,41 @@ void tycho::solvers::NonLinearProgram::rebuild_structures() {
     this->get_mat_space();
     this->get_rhs_space();
     this->finalize_data();
+}
+
+void tycho::solvers::NonLinearProgram::refresh_function_partitions() {
+    this->count_elems();
+    this->analyze_partitioning();
+}
+
+void tycho::solvers::NonLinearProgram::install_fixed_variable_rows() {
+    const int count = static_cast<int>(this->fixed_idx_.size());
+    for (int k = 0; k < count; k++) {
+        // Appended after every row the transcription declared, so the user's own
+        // constraint rows keep the indices they were given and the multipliers
+        // that come back are still theirs.
+        this->equality_constraints_.push_back(make_fixed_variable_row(
+            this->fixed_idx_[k], this->fixed_vals_[k], this->user_equal_cons_ + k));
+    }
+    this->internal_fixed_cons_ = count;
+    this->equal_cons_ = this->user_equal_cons_ + count;
+}
+
+void tycho::solvers::NonLinearProgram::discard_fixed_variable_rows() {
+    if (this->internal_fixed_cons_ <= 0) {
+        return;
+    }
+    const int installed = this->internal_fixed_cons_;
+    const int total = static_cast<int>(this->equality_constraints_.size());
+    if (total < installed) {
+        throw std::logic_error(
+            fmt::format("discard_fixed_variable_rows: {0} internal fixing rows are recorded but "
+                        "the equality list holds only {1} functions",
+                        installed, total));
+    }
+    this->equality_constraints_.resize(total - installed);
+    this->internal_fixed_cons_ = 0;
+    this->equal_cons_ = this->user_equal_cons_;
 }
 
 void tycho::solvers::NonLinearProgram::clear_function_output_maps() {
@@ -489,13 +532,26 @@ void tycho::solvers::NonLinearProgram::analyze_sparsity(
 bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
     FixedVariableTreatments treatment, double bound_relax_factor) {
 
-    if (treatment != FixedVariableTreatments::MakeParameter) {
+    // Written as a switch with no default label, like
+    // fixed_variable_treatment_name, so that adding a treatment to the enum makes
+    // the compiler point here rather than letting a new value fall through as
+    // "unrecognized".
+    bool treatment_known = false;
+    switch (treatment) {
+    case FixedVariableTreatments::MakeParameter:
+    case FixedVariableTreatments::MakeConstraint:
+    case FixedVariableTreatments::RelaxBounds:
+        treatment_known = true;
+        break;
+    }
+    if (!treatment_known) {
         throw std::invalid_argument(fmt::format(
-            "configure_variable_treatment: fixed-variable treatment '{0}' is not available "
-            "yet. Only '{1}' (eliminate every variable whose lower and upper bounds are "
-            "equal) is implemented.",
-            fixed_variable_treatment_name(treatment),
-            fixed_variable_treatment_name(FixedVariableTreatments::MakeParameter)));
+            "configure_variable_treatment: unrecognized fixed-variable treatment ({0}); "
+            "expected one of '{1}', '{2}', '{3}'",
+            static_cast<int>(treatment),
+            fixed_variable_treatment_name(FixedVariableTreatments::MakeParameter),
+            fixed_variable_treatment_name(FixedVariableTreatments::MakeConstraint),
+            fixed_variable_treatment_name(FixedVariableTreatments::RelaxBounds)));
     }
     if (!std::isfinite(bound_relax_factor) || bound_relax_factor < 0.0) {
         throw std::invalid_argument(
@@ -519,6 +575,14 @@ bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
     const bool was_reduced = this->fixed_reduction_active_;
     constexpr double kInf = std::numeric_limits<double>::infinity();
 
+    // What this treatment does with a variable whose bounds are equal, decided
+    // once here and read wherever the three paths differ: eliminate it from the
+    // solver's variable space, hand it to an internal equality row, or keep it as
+    // a two-sided bounded variable with its bounds pushed apart.
+    const bool eliminate_fixed = (treatment == FixedVariableTreatments::MakeParameter);
+    const bool constrain_fixed = (treatment == FixedVariableTreatments::MakeConstraint);
+    const bool relax_fixed = (treatment == FixedVariableTreatments::RelaxBounds);
+
     // Set immediately before either of the two statements below that re-lay the
     // KKT structures, and read by the restore alongside was_reduced.
     // rebuild_structures() leaves kkt_locations_ reset to -1 (only
@@ -529,6 +593,14 @@ bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
     // arriving at an NLP that was NOT reduced touches no layout, so for that
     // case the rest of the restore suffices and the analyzed pattern survives.
     bool layout_touched = false;
+
+    // Set when this call has changed the SET of functions the problem is made of
+    // -- the MakeConstraint treatment installing or dropping its internal fixing
+    // rows, and nothing else. The element counts and the work partitioning are
+    // derived from that set, so re-laying the layout alone would not describe the
+    // problem the NLP now holds; every exit that sees this flag set, the restore
+    // included, re-derives all three.
+    bool functions_touched = false;
 
     // Everything from here to the successful exits is inside the restore. The
     // first statement below already rewrites derived state, so any throw past
@@ -543,6 +615,17 @@ bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
         this->reduced_to_full_.resize(0);
         this->fixed_idx_.resize(0);
         this->fixed_vals_.resize(0);
+
+        // The internal fixing rows a previous configuration installed belong to
+        // the classification that produced them, so they go before this one
+        // starts. Dropping them up front -- rather than at the point the new
+        // treatment would install its own -- is what makes a treatment SWITCH
+        // clean: every path out of here, the restore included, then starts from
+        // the user's own row space and cannot leave a stale row behind.
+        if (this->internal_fixed_cons_ > 0) {
+            this->discard_fixed_variable_rows();
+            functions_touched = true;
+        }
 
         const bool bounds_materialized = (num_vars > 0 && this->x_lower_.size() == num_vars &&
                                           this->x_upper_.size() == num_vars);
@@ -563,11 +646,32 @@ bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
             }
         }
 
-        // The maps exist whenever anything is eliminated; on the identity path they
-        // stay empty and every consumer treats the mapping as the identity.
+        // A zero factor under RelaxBounds would push the pair nowhere, leaving a
+        // "two-sided" variable whose interval has zero width: the interior push
+        // has no interior to land in and the barrier takes the log of zero. Caught
+        // here rather than as a non-finite objective a few evaluations later.
+        if (relax_fixed && num_fixed > 0 && !(bound_relax_factor > 0.0)) {
+            throw std::invalid_argument(fmt::format(
+                "configure_variable_treatment: the '{0}' treatment separates the bounds of "
+                "the {1} variable(s) whose bounds are equal by bound_relax_factor * "
+                "max(1, |bound|), and a factor of {2} separates them not at all. Pass a "
+                "positive factor, or use the '{3}' treatment.",
+                fixed_variable_treatment_name(FixedVariableTreatments::RelaxBounds), num_fixed,
+                bound_relax_factor,
+                fixed_variable_treatment_name(FixedVariableTreatments::MakeParameter)));
+        }
+
+        // The fixed variables themselves are recorded whatever the treatment:
+        // MakeConstraint builds its rows out of them, and under the other two they
+        // are what fixed_variable_indices()/_values() report. The index MAPS are
+        // narrower than that -- they exist only where something is actually
+        // eliminated, and on every other path they stay empty and every consumer
+        // treats the mapping as the identity.
         if (num_fixed > 0) {
             this->fixed_idx_.resize(num_fixed);
             this->fixed_vals_.resize(num_fixed);
+        }
+        if (eliminate_fixed && num_fixed > 0) {
             this->full_to_reduced_ = Eigen::VectorXi::Constant(num_vars, -1);
             this->reduced_to_full_.resize(num_vars - num_fixed);
         }
@@ -582,17 +686,38 @@ bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
         int next_reduced = 0;
         int next_fixed = 0;
         for (int i = 0; i < (bounds_materialized ? num_vars : 0); i++) {
-            const double lower = this->x_lower_[i];
-            const double upper = this->x_upper_[i];
+            double lower = this->x_lower_[i];
+            double upper = this->x_upper_[i];
+            const bool is_fixed = (lower == upper);
 
-            if (lower == upper) {
+            if (is_fixed) {
                 this->fixed_idx_[next_fixed] = i;
                 this->fixed_vals_[next_fixed] = lower;
                 next_fixed++;
-                continue;
+
+                if (eliminate_fixed) {
+                    // Gone from the solver's variable space: no column, no bound,
+                    // and next_reduced does not advance past it.
+                    continue;
+                }
+                if (relax_fixed) {
+                    // Ipopt's rule for this treatment: move each side out by the
+                    // relax factor times max(1, |bound|), after which the variable
+                    // is an ordinary two-sided one and takes the shared path below.
+                    // That path applies the SAME widening to every declared bound,
+                    // so a relaxed pair ends up separated by twice this much --
+                    // which is what Ipopt's own two relaxations compose to as well
+                    // (the adapter separates the fixing pair, and the NLP then
+                    // relaxes every bound by the same factor).
+                    lower -= bound_relax_factor * std::max(1.0, std::abs(lower));
+                    upper += bound_relax_factor * std::max(1.0, std::abs(upper));
+                }
+                // MakeConstraint records nothing here: the internal equality row
+                // installed below is what holds the variable, and the variable
+                // itself reaches the solver free, keeping its column.
             }
 
-            if (num_fixed > 0) {
+            if (eliminate_fixed && num_fixed > 0) {
                 this->full_to_reduced_[i] = next_reduced;
                 this->reduced_to_full_[next_reduced] = i;
             }
@@ -603,12 +728,13 @@ bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
             // that still sees both endpoints of a variable at once -- once the
             // two lists are separate, "is this bound the only one on its
             // variable" is no longer a local question.
-            if (lower > -kInf) {
+            const bool record_bounds = !is_fixed || relax_fixed;
+            if (record_bounds && lower > -kInf) {
                 lower_idx.push_back(next_reduced);
                 lower_val.push_back(lower - bound_relax_factor * std::max(1.0, std::abs(lower)));
                 lower_damp.push_back(upper < kInf ? 0.0 : 1.0);
             }
-            if (upper < kInf) {
+            if (record_bounds && upper < kInf) {
                 upper_idx.push_back(next_reduced);
                 upper_val.push_back(upper + bound_relax_factor * std::max(1.0, std::abs(upper)));
                 upper_damp.push_back(lower > -kInf ? 0.0 : 1.0);
@@ -636,27 +762,65 @@ bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
                         this->variable_bound_set_.upper_val_,
                         this->variable_bound_set_.upper_damp_);
 
-        // --- Reduction ------------------------------------------------------
+        // --- Treatment ------------------------------------------------------
         //
         // Commit-on-success: fixed_treatment_valid_ and configured_bounds_revision_
-        // are stamped ONLY at the two successful exits below. Everything from here
+        // are stamped ONLY at the three successful exits below. Everything from here
         // on can throw, and a configuration that threw must not be remembered as
         // done -- otherwise the next call would take the idempotence shortcut and
         // the solve would proceed on the unreduced problem with every fixing bound
         // silently ignored. Leaving the flag clear makes the next call re-attempt,
         // and fail the same way, until the bounds are corrected.
-        if (num_fixed == 0) {
-            this->reduced_primal_vars_count_ = num_vars;
-            this->fixed_reduction_active_ = false;
-            if (!was_reduced) {
-                // Identity path, and it already was: nothing to rebuild.
+        if (eliminate_fixed && num_fixed > 0 && num_fixed == num_vars) {
+            // Nothing would be left to solve for, and a zero-width primal block is
+            // not a system this solver can lay out. Rejected here rather than as a
+            // degenerate factorization later. The classification above has already
+            // rewritten the maps by this point, which is why this throw is inside
+            // the restore.
+            //
+            // Only this treatment can reach it: the other two keep every variable,
+            // so an all-fixed problem is a square system of internal rows under
+            // MakeConstraint and a fully boxed one under RelaxBounds.
+            throw std::invalid_argument(fmt::format(
+                "configure_variable_treatment: all {0} primal variables are fixed by "
+                "their bounds, leaving no variable to solve for. The '{1}' and '{2}' "
+                "treatments keep every variable and can solve this problem.",
+                num_vars, fixed_variable_treatment_name(FixedVariableTreatments::MakeConstraint),
+                fixed_variable_treatment_name(FixedVariableTreatments::RelaxBounds)));
+        }
+
+        if (constrain_fixed && num_fixed > 0) {
+            // One internal equality row per fixed variable, appended to the master
+            // list before the counts and the partitioning below are re-derived --
+            // so the rows are sized, partitioned and laid out exactly as a user's
+            // own constraint would have been.
+            this->install_fixed_variable_rows();
+            functions_touched = true;
+        }
+
+        const bool reduce_now = (eliminate_fixed && num_fixed > 0);
+        this->reduced_primal_vars_count_ = reduce_now ? num_vars - num_fixed : num_vars;
+        this->fixed_reduction_active_ = reduce_now;
+
+        if (!reduce_now) {
+            if (!was_reduced && !functions_touched) {
+                // Identity path, and it already was: nothing to rebuild. Both
+                // treatments that keep every variable land here whenever they
+                // changed no row either -- RelaxBounds always, MakeConstraint when
+                // nothing is fixed.
                 this->fixed_treatment_valid_ = true;
                 this->configured_bounds_revision_ = this->bounds_revision_;
                 return false;
             }
-            // The last fixed bound was dropped. Put every function back on its
-            // pristine input map and lay the structures out over the full space.
+            // Either an elimination is no longer in force (the last fixing bound
+            // was dropped, or the treatment changed to one that keeps the
+            // variable), or the equality row space changed under MakeConstraint.
+            // Put every function back on its pristine input map and lay the
+            // structures out over the full variable space.
             layout_touched = true;
+            if (functions_touched) {
+                this->refresh_function_partitions();
+            }
             this->clear_function_output_maps();
             this->rebuild_structures();
             this->fixed_treatment_valid_ = true;
@@ -664,21 +828,12 @@ bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
             return true;
         }
 
-        if (num_fixed == num_vars) {
-            // Nothing would be left to solve for, and a zero-width primal block is
-            // not a system this solver can lay out. Rejected here rather than as a
-            // degenerate factorization later. The classification above has already
-            // rewritten the maps by this point, which is why this throw is inside
-            // the restore.
-            throw std::invalid_argument(
-                fmt::format("configure_variable_treatment: all {0} primal variables are fixed by "
-                            "their bounds, leaving no variable to solve for",
-                            num_vars));
-        }
-
-        this->reduced_primal_vars_count_ = num_vars - num_fixed;
-        this->fixed_reduction_active_ = true;
         layout_touched = true;
+        // Before the map install, not after: re-partitioning hands out fresh copies
+        // of the master functions, and those copies carry the pristine input map.
+        if (functions_touched) {
+            this->refresh_function_partitions();
+        }
         this->install_function_output_maps();
         this->rebuild_structures();
 
@@ -721,14 +876,27 @@ bool tycho::solvers::NonLinearProgram::configure_variable_treatment(
         // exists to prevent. Only a classification-stage rejection at an NLP
         // that was NOT reduced leaves the layout genuinely untouched, and that
         // is the one case worth sparing an analyzed sparsity pattern for.
+        //
+        // The internal fixing rows get the same treatment for the same reason. A
+        // rejection reaching here with rows installed -- or, just as importantly,
+        // with a previous configuration's rows already dropped -- leaves the
+        // equality row space describing something other than what the counts and
+        // the partitioning were derived from, so both are re-derived before the
+        // layout is, and the row space itself goes back to the user's own.
         this->reduced_primal_vars_count_ = num_vars;
         this->fixed_reduction_active_ = false;
         this->full_to_reduced_.resize(0);
         this->reduced_to_full_.resize(0);
         this->fixed_idx_.resize(0);
         this->fixed_vals_.resize(0);
+        if (this->internal_fixed_cons_ > 0) {
+            this->discard_fixed_variable_rows();
+            functions_touched = true;
+        }
+        if (functions_touched)
+            this->refresh_function_partitions();
         this->clear_function_output_maps();
-        if (was_reduced || layout_touched)
+        if (was_reduced || layout_touched || functions_touched)
             this->rebuild_structures();
         throw;
     }

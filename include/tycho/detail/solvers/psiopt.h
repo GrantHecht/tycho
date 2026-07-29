@@ -337,6 +337,33 @@ class PSIOPT {
         double neg_slack_reset_ = 1.0e-12;
         double alpha_red_ = 2.0;
 
+        // --- Fixed-variable treatment ---
+        // How a primal variable whose declared lower and upper bounds are equal
+        // is handed to the solver. make_parameter (the default) eliminates it,
+        // so the factorized system is one row and column narrower per fixed
+        // variable and the variable's value in the returned solution is exact.
+        // make_constraint keeps it and adds one internal equality row per fixed
+        // variable, appended after every row the transcription declared, so the
+        // system is one row and column WIDER instead. relax_bounds keeps it as a
+        // two-sided bounded variable whose bounds have been pushed apart by
+        // bound_relax_factor_, holding it near its value through the barrier.
+        // All three reach the same solution on a well-posed problem. Closed-set
+        // enum; it lives in non_linear_program.h alongside the classification
+        // that reads it.
+        FixedVariableTreatments fixed_variable_treatment_ = FixedVariableTreatments::MakeParameter;
+
+        // Widening applied to every finite variable bound before the classifier
+        // records it: the bound is moved outward by this factor times
+        // max(1, |bound|), so the box the barrier terms divide by is never
+        // exactly the declared one (Ipopt's bound_relax_factor, same default).
+        // It is also what separates the bounds of a fixed variable under the
+        // relax_bounds treatment, which therefore requires it to be positive.
+        // Zero records every declared bound verbatim.
+        //
+        // Both of these are read once per solve, at the NLP's classification
+        // pass; changing either between two solves on one solver re-classifies.
+        double bound_relax_factor_ = kDefaultBoundRelaxFactor;
+
         // --- Hessian perturbation ---
         double delta_h_ = 1.0e-5;
         double incr_h_ = 8.0;
@@ -715,6 +742,9 @@ class PSIOPT {
 
     void set_bound_fraction(double bound_fraction);
     void set_bound_push(double bound_push);
+    void set_bound_interval_push(double bound_interval_push);
+    void set_bound_relax_factor(double bound_relax_factor);
+    void set_fixed_variable_treatment(FixedVariableTreatments treatment);
     void set_alpha_red(double ared);
 
     void set_delta_h(double delta_h);

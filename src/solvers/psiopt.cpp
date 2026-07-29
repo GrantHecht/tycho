@@ -3102,11 +3102,13 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
 #endif
 
     // Classify the NLP's variable bounds for this solve, once, before any
-    // evaluation: free / lower-only / upper-only / two-sided / fixed, with every
-    // variable whose bounds are equal eliminated from the solver's variable
-    // space. The treatment and the bound relax factor are fixed here because the
-    // settings surface that selects between the treatments does not exist yet;
-    // when it does, these two arguments come from settings_.
+    // evaluation: free / lower-only / upper-only / two-sided / fixed, with the
+    // fixed ones handed to the configured treatment -- eliminated from the
+    // solver's variable space (make_parameter, the default), given an internal
+    // equality row each (make_constraint), or kept as two-sided variables with
+    // their bounds pushed apart (relax_bounds). Both arguments come from the
+    // Settings validated at the top of this function, so a solver switching
+    // treatment between two solves re-classifies here and nowhere else.
     //
     // The call is idempotent and reports whether it rebuilt anything. When it
     // did, the problem the solver is about to factorize is a different size than
@@ -3123,8 +3125,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
     // bounds_. A set with nothing in it is left null, so "has variable-bound
     // barrier terms" and "bounds_ != nullptr" are the same question everywhere.
     this->bounds_ = nullptr;
-    if (this->nlp_->configure_variable_treatment(FixedVariableTreatments::MakeParameter,
-                                                 kDefaultBoundRelaxFactor)) {
+    if (this->nlp_->configure_variable_treatment(settings_.fixed_variable_treatment_,
+                                                 settings_.bound_relax_factor_)) {
         this->refresh_nlp_dimensions();
         this->nlp_->analyze_sparsity(this->kkt_sol_.get_matrix());
 #ifdef USE_ACCELERATE_SPARSE
