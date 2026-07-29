@@ -1279,6 +1279,24 @@ class PSIOPT {
     // optimality (with true-objective exit measures), reset the recovery chain.
     // `theta_orig` is the current original-problem infeasibility (∞-norm),
     // carried into the exit measures. `mu` is restored in place.
+    //
+    // SCOPE: steps (2) and (3) reach the inequality (slack) multipliers only.
+    // Ipopt's PerformRestoration applies its ComputeBoundMultiplierStep to
+    // every bound-multiplier family it carries — z_L/z_U on the primal variable
+    // bounds as well as v_L/v_U on the slacks — under one shared dual
+    // fraction-to-boundary damping, and takes its reset-threshold max over all
+    // four. When this sequence was transcribed the slack family WAS the whole
+    // inventory, so the two matched. The native variable-bound multipliers are
+    // a second family, and this sequence does not touch them: they come back
+    // from a phase carrying whatever barrier parameter that phase ran on, while
+    // the slack multipliers are re-centred on the stashed outer μ. Bounds stay
+    // hard throughout the phase either way (barrier terms and both
+    // fraction-to-boundary legs run in feasibility mode exactly as in
+    // optimality mode — the elastic relaxation is on constraint ROWS), so this
+    // is a multiplier-scale parity deviation on the return path, not a
+    // soundness hole. Closing it means adding a bound-family re-centring here,
+    // which is an algorithmic change to the restoration return and needs the
+    // full example-suite evidence before it lands.
     void exit_feasibility_restoration_nested(Eigen::VectorXd &XSL, double obj_scale,
                                              double theta_orig, double barr_obj, double &mu);
 
