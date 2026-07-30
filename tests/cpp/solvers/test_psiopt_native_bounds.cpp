@@ -171,7 +171,8 @@ class NativeBoundsAcceptingLineSearch : public tycho::solvers::AcceptanceStrateg
 
 // Adds the objective term (x[index] - center)^2. Started away from its
 // minimizer so neither the objective nor its gradient vanishes at the point the
-// assembly tests evaluate.
+// assembly tests evaluate -- a habit rather than a requirement now that
+// squared_norm's derivatives are finite at the centre of the norm.
 void native_bounds_add_shifted_square(tycho::solvers::OptimizationProblem &prob, int index,
                                       double center) {
     auto args = tycho::vf::Arguments<1>();
@@ -2219,31 +2220,25 @@ namespace {
 // The value the fixed variable is declared at.
 constexpr double kNativeBoundsFixedValue = 2.5;
 
-// The two knobs the relax_bounds leg is run with, and they are at the edge of
-// their ranges on purpose.
+// The two knobs the relax_bounds leg is run with, both at ordinary settings.
 //
 // relax_bounds turns a fixed variable into a two-sided box of width
-// 2 * factor * max(1, |value|) -- 5e-8 at the shipped 1e-8 default. On THIS
-// problem shape (a bounded variable that also appears in an equality row) the
-// solver cannot drive such a box to a converged verdict: the condensed system's
-// sigma = z/d grows without bound as mu collapses, and the second Newton solve
-// comes back non-finite, which the iteration reports as divergence. That is not a
-// property of the treatment -- an ordinary two-sided box of the same width,
-// declared directly by the caller under the default treatment, behaves
-// identically, and the same narrow box with no equality row in the problem
-// converges fine. The test below
-// (RelaxBoundsAtTheShippedDefaultTracksTheSameBoxDeclaredDirectly) pins that
-// attribution instead of leaving it as a claim.
+// 2 * factor * max(1, |value|), so the factor is what decides how far the relaxed
+// leg may differ from the other two, and kNativeBoundsRelaxedTol below is derived
+// from it. The factor here is two decades inside the validate ceiling
+// (kMaxBoundRelaxFactor) and wide enough that the box it builds is resolvable
+// against the solver's own convergence tolerance; the push is the shipped default.
 //
-// So the comparison legs run at the widest box the settings allow
-// (kMaxBoundRelaxFactor, the validate ceiling) with the interior push at a
-// quarter of the interval rather than the default hundredth. Measured boundary on
-// this problem: that combination converges in 6 iterations; dropping the push to
-// its default, or the factor to 1e-4 at this push, does not. A factor above the
-// ceiling would be needed to converge at the default push -- i.e. there is no
-// legal factor that converges with it, which is why the push moves too.
-constexpr double kNativeBoundsTreatmentRelaxFactor = tycho::solvers::kMaxBoundRelaxFactor;
-constexpr double kNativeBoundsTreatmentIntervalPush = 0.25;
+// They used to sit at the edge of their ranges -- the factor AT the ceiling, the
+// push at 25x its default -- to escape a divergence on this problem shape that was
+// never the bounds'. squared_norm formed its derivative coefficient as
+// 2 n^2 / n^2, which is 0/0 at the centre of the norm, and this problem's third
+// variable lands exactly on its own objective centre, so the KKT matrix carried a
+// NaN and the next condensed solve returned a non-finite step. With that fixed, all
+// three treatments converge here at every legal factor from the shipped 1e-8 up to
+// the ceiling, under the default push.
+constexpr double kNativeBoundsTreatmentRelaxFactor = 1.0e-4;
+constexpr double kNativeBoundsTreatmentIntervalPush = 1.0e-2;
 
 // What each treatment can be held to on this problem, and why they differ. The
 // elimination pins the variable exactly, so only the solver's own convergence
@@ -2251,7 +2246,7 @@ constexpr double kNativeBoundsTreatmentIntervalPush = 0.25;
 // value to equality-constraint tolerance. The relaxation solves a deliberately
 // DIFFERENT (relaxed) problem, so it cannot agree more closely than the box it
 // built is wide: its tolerance is the box's half width,
-// factor * max(1, |value|) = 2.5e-2, plus a little room -- set by the treatment,
+// factor * max(1, |value|) = 2.5e-4, plus a little room -- set by the treatment,
 // not by the solver.
 constexpr double kNativeBoundsExactTol = 1.0e-6;
 constexpr double kNativeBoundsRowTol = 1.0e-5;
@@ -2492,12 +2487,11 @@ TEST(NativeBounds, TheTreatmentIsSwitchableBetweenSolvesOnOneSolver) {
 // The shipped default, which every comparison above deliberately steps away from.
 //
 // At bound_relax_factor = 1e-8 the box relax_bounds builds around a fixed variable
-// is 5e-8 wide, and on this problem shape the solver does not reach a converged
-// verdict inside it: as mu collapses, sigma = z/d on that coordinate grows without
-// bound, and the next condensed solve returns a non-finite step, which the
-// iteration classifies as divergence. This test exists so that the configuration
-// users get is exercised at all, and so that the limitation is attributed to the
-// right layer -- because it is NOT the treatment's.
+// is 5e-8 wide -- narrower than the solver's own convergence tolerance, so what the
+// returned point can be held to is the box itself rather than a place inside it.
+// This test exists so that the configuration users get is exercised at all, and so
+// that whatever the solver does in a box that narrow is attributed to the right
+// layer -- because it is NOT the treatment's.
 //
 // The attribution is the assertion. The same box is declared DIRECTLY as an
 // ordinary two-sided bound (nothing fixed, so no treatment does anything to it,
@@ -2509,10 +2503,13 @@ TEST(NativeBounds, TheTreatmentIsSwitchableBetweenSolvesOnOneSolver) {
 // meaningful, if the narrow-box behaviour is later improved, and it does not pin a
 // factorization outcome that could differ across sparse backends.
 //
-// (For the record, on the reference platform both legs report DIVERGING after two
-// iterations at the right answer to within the box. The same narrow box in a
-// problem with no equality row converges normally, which is what places the
-// difficulty in the bounded-plus-coupled KKT rather than in the classification.)
+// (For the record, on the reference platform both legs CONVERGE in three
+// iterations, to the right answer within the box. This block used to record both
+// legs DIVERGING and read that as a difficulty in the bounded-plus-coupled KKT. The
+// divergence was squared_norm's 0/0 derivative coefficient at the centre of the
+// norm, reached by this problem's third variable, and it is fixed -- and writing the
+// assertion as a comparison rather than a verdict is why the test survived the
+// correction unchanged.)
 TEST(NativeBounds, RelaxBoundsAtTheShippedDefaultTracksTheSameBoxDeclaredDirectly) {
     const double default_factor = tycho::solvers::kDefaultBoundRelaxFactor;
     const double half_width = default_factor * std::max(1.0, std::abs(kNativeBoundsFixedValue));
