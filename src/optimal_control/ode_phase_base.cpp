@@ -21,6 +21,7 @@
 #include "tycho/detail/vf/scaling/auto_scaling_utils.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <limits>
 #include <map>
@@ -1492,6 +1493,10 @@ void tycho::oc::ODEPhaseBase::transcribe_var_bounds(std::shared_ptr<NonLinearPro
     constexpr double kInf = std::numeric_limits<double>::infinity();
 
     // Merged view of this phase's own declarations, keyed by NLP variable index.
+    // Held in declared (physical) units, not in the scaled units the bounds are
+    // staged in: a common positive unit divides out of the lower > upper test, so
+    // merging before the division detects exactly the same conflicts while keeping
+    // the diagnostic's numbers the ones the caller passed in.
     // The NLP intersects staged declarations itself, but only at make_nlp time —
     // too late to name the phase and phase-local variable in the message. Merging
     // here reports the conflict with that context first; the NLP's own check stays
@@ -1509,15 +1514,25 @@ void tycho::oc::ODEPhaseBase::transcribe_var_bounds(std::shared_ptr<NonLinearPro
 
         // Route the index into the same slot StateFunction's single-group
         // constructor would, so the indexer sees the binding a constraint over
-        // this region would have carried.
+        // this region would have carried. The unit vector and offset picked here
+        // are the ones get_input_scale draws from for the same index — each block's
+        // index lives in its own unit array (state/time/control and ODE params in
+        // xtup_units_, the latter behind an xtu_vars() offset; static params in
+        // sp_units_) — so a bound and a constraint over the same variable scale by
+        // the same factor. Selecting the source here but reading it only after the
+        // range check below keeps a bad index from indexing a unit array.
         int block_size = 0;
         const char *block_name = "";
+        const Eigen::VectorXd *unit_source = nullptr;
+        int unit_index = rec.var_;
         switch (reg) {
         case PhaseRegionFlags::ODEParams: {
             reg = PhaseRegionFlags::Params;
             rodepv = one;
             block_size = this->p_vars();
             block_name = "ODE-parameter";
+            unit_source = &this->xtup_units_;
+            unit_index = rec.var_ + this->xtu_vars();
             break;
         }
         case PhaseRegionFlags::StaticParams: {
@@ -1525,12 +1540,17 @@ void tycho::oc::ODEPhaseBase::transcribe_var_bounds(std::shared_ptr<NonLinearPro
             rstatpv = one;
             block_size = this->num_stat_params_;
             block_name = "static-parameter";
+            // sp_units_ is sized to the static-parameter count by every path that
+            // sets them (set_static_params sizes both together, add_static_params
+            // funnels through it), so the block-size check below also bounds this.
+            unit_source = &this->sp_units_;
             break;
         }
         default: {
             rxtuv = one;
             block_size = this->xtu_vars();
             block_name = "state/time/control";
+            unit_source = &this->xtup_units_;
             break;
         }
         }
@@ -1541,6 +1561,30 @@ void tycho::oc::ODEPhaseBase::transcribe_var_bounds(std::shared_ptr<NonLinearPro
                 "the phase's {3:} block, which holds {4:} variable(s).",
                 rec.var_, pnum, var_bound_region_name(rec.region_), block_name, block_size));
         }
+
+        // Under auto-scaling the NLP decision variable is the physical value
+        // divided by that variable's unit (make_solver_input divides on the way in,
+        // collect_solver_output multiplies on the way out). The inequality lowering
+        // this path replaces still compared physical values: add_inequal_con wrapped
+        // the bound expression in IOScaled with get_input_scale's units, which
+        // multiply the NLP variable back up to physical before the comparison. A
+        // bound staged directly on the NLP variable carries no such wrapper, so it
+        // must be divided by the same unit here. Skipping this leaves the enforced
+        // box off by the unit in every scaled problem -- silently loosened where the
+        // unit exceeds one, silently tightened where it falls below.
+        double unit = 1.0;
+        if (this->auto_scaling_) {
+            unit = (*unit_source)[unit_index];
+            if (!std::isfinite(unit) || unit <= 0.0) {
+                throw std::invalid_argument(fmt::format(
+                    "Variable bound in phase {0:} (region {1:}, phase-local variable index {2:}) "
+                    "cannot be scaled: this phase has auto-scaling enabled and the {3:} unit for "
+                    "that variable is {4:.6e}. Scaling units must be finite and positive.",
+                    pnum, var_bound_region_name(rec.region_), rec.var_, block_name, unit));
+            }
+        }
+        const double scaled_lower = rec.lower_ / unit;
+        const double scaled_upper = rec.upper_ / unit;
 
         // Reuse the indexer's own per-region, per-node index arithmetic rather
         // than restating it: PhaseIndexer::make_Vindex_Cindex builds exactly the
@@ -1569,14 +1613,15 @@ void tycho::oc::ODEPhaseBase::transcribe_var_bounds(std::shared_ptr<NonLinearPro
                 }
 
                 try {
-                    np->set_variable_bound(gidx, rec.lower_, rec.upper_);
+                    np->set_variable_bound(gidx, scaled_lower, scaled_upper);
                 } catch (const std::invalid_argument &e) {
                     throw std::invalid_argument(fmt::format(
                         "Variable bound in phase {0:} (region {1:}, phase-local variable index "
-                        "{2:}, NLP variable index {3:}, lower={4:.6e}, upper={5:.6e}) was "
-                        "rejected by the NLP: {6:}",
+                        "{2:}, NLP variable index {3:}, declared lower={4:.6e}, upper={5:.6e}; "
+                        "staged as lower={6:.6e}, upper={7:.6e} after division by the scaling "
+                        "unit {8:.6e}) was rejected by the NLP: {9:}",
                         pnum, var_bound_region_name(rec.region_), rec.var_, gidx, rec.lower_,
-                        rec.upper_, e.what()));
+                        rec.upper_, scaled_lower, scaled_upper, unit, e.what()));
                 }
             }
         }

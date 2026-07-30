@@ -1914,10 +1914,16 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
 
     /// @internal
     /// @brief Resolve recorded variable bounds to NLP variable indices and stage them.
+    ///
+    /// Declared bounds are in physical units. When auto-scaling is enabled the NLP
+    /// decision variable is the physical value divided by that variable's scaling
+    /// unit, so each bound is divided by the same unit before being staged.
     /// @param np    The shared NLP to stage the bounds into.
     /// @param pnum  The phase index, for diagnostics.
     /// @throws std::invalid_argument if a recorded index is out of range for its
-    ///         region's block, or if two declarations intersect to an empty interval.
+    ///         region's block, if two declarations intersect to an empty interval,
+    ///         or if auto-scaling is on and the variable's unit is not finite and
+    ///         positive.
     /// @endinternal
     void transcribe_var_bounds(std::shared_ptr<NonLinearProgram> np, int pnum);
 

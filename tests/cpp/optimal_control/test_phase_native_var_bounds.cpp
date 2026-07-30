@@ -331,6 +331,186 @@ TEST(PhaseNativeVarBounds, ReTranscriptionReproducesTheSameBounds) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Auto-scaling: a declared bound is in physical units, but the NLP decision
+// variable is the physical value divided by that variable's scaling unit
+// (make_solver_input divides on the way in, collect_solver_output multiplies on
+// the way out). The inequality lowering this path replaces kept comparing
+// physical values -- add_inequal_con wrapped the bound expression in IOScaled
+// with get_input_scale's units, undoing the packing before the comparison -- so
+// a bound staged straight onto the NLP variable has to carry the same division.
+//
+// LinearODE has x_vars=2, u_vars=0, p_vars=0, so xtu_p_vars == 3 and set_units
+// takes [x, v, t].
+///////////////////////////////////////////////////////////////////////////////
+
+TEST(PhaseNativeVarBoundsScaling, StagedBoundsAreDividedByTheVariableUnit) {
+    auto phase = make_native_var_bounds_phase();
+    Eigen::VectorXd units(3);
+    units << 1.0, 4.0, 2.0;
+    phase->set_auto_scaling(true);
+    phase->set_units(units);
+
+    phase->push_var_bound(PhaseRegionFlags::Path, /*var=*/1, -3.0, 5.0);
+    phase->transcribe();
+
+    // v carries unit 4, so the physical box [-3, 5] is the scaled box
+    // [-0.75, 1.25] on every node the Path region touches.
+    for (int gidx : {1, 4, 7}) {
+        EXPECT_DOUBLE_EQ(phase->nlp_->x_lower_[gidx], -0.75) << "index " << gidx;
+        EXPECT_DOUBLE_EQ(phase->nlp_->x_upper_[gidx], 1.25) << "index " << gidx;
+    }
+    native_var_bounds_expect_only(phase->nlp_, {1, 4, 7});
+}
+
+TEST(PhaseNativeVarBoundsScaling, EachVariableIsDividedByItsOwnUnit) {
+    auto phase = make_native_var_bounds_phase();
+    Eigen::VectorXd units(3);
+    units << 1.0, 4.0, 2.0;
+    phase->set_auto_scaling(true);
+    phase->set_units(units);
+
+    // x (unit 1) is untouched by the division; t (unit 2) is halved.
+    phase->push_var_bound(PhaseRegionFlags::Front, /*var=*/0, -1.5, 3.5);
+    phase->push_var_bound(PhaseRegionFlags::Back, /*var=*/2, 1.0, 9.0);
+    phase->transcribe();
+
+    EXPECT_DOUBLE_EQ(phase->nlp_->x_lower_[0], -1.5);
+    EXPECT_DOUBLE_EQ(phase->nlp_->x_upper_[0], 3.5);
+    EXPECT_DOUBLE_EQ(phase->nlp_->x_lower_[8], 0.5);
+    EXPECT_DOUBLE_EQ(phase->nlp_->x_upper_[8], 4.5);
+    native_var_bounds_expect_only(phase->nlp_, {0, 8});
+}
+
+TEST(PhaseNativeVarBoundsScaling, UnitUnitsLeaveTheDeclaredBoundUnchanged) {
+    auto phase = make_native_var_bounds_phase();
+    phase->set_auto_scaling(true);
+    phase->set_units(Eigen::VectorXd::Ones(3));
+
+    phase->push_var_bound(PhaseRegionFlags::Path, /*var=*/1, -3.0, 5.0);
+    phase->transcribe();
+
+    // The all-ones default must divide out exactly, not scale twice.
+    for (int gidx : {1, 4, 7}) {
+        EXPECT_DOUBLE_EQ(phase->nlp_->x_lower_[gidx], -3.0) << "index " << gidx;
+        EXPECT_DOUBLE_EQ(phase->nlp_->x_upper_[gidx], 5.0) << "index " << gidx;
+    }
+}
+
+TEST(PhaseNativeVarBoundsScaling, UnitsAreIgnoredWhenAutoScalingIsOff) {
+    auto phase = make_native_var_bounds_phase();
+    Eigen::VectorXd units(3);
+    units << 1.0, 4.0, 2.0;
+    // Units are set but never consumed: without auto-scaling make_solver_input
+    // packs physical values, so the staged bound must stay physical too.
+    phase->set_units(units);
+
+    phase->push_var_bound(PhaseRegionFlags::Path, /*var=*/1, -3.0, 5.0);
+    phase->transcribe();
+
+    for (int gidx : {1, 4, 7}) {
+        EXPECT_DOUBLE_EQ(phase->nlp_->x_lower_[gidx], -3.0) << "index " << gidx;
+        EXPECT_DOUBLE_EQ(phase->nlp_->x_upper_[gidx], 5.0) << "index " << gidx;
+    }
+}
+
+TEST(PhaseNativeVarBoundsScaling, OpenBoundSidesSurviveTheUnitDivision) {
+    auto phase = make_native_var_bounds_phase();
+    Eigen::VectorXd units(3);
+    units << 1.0, 4.0, 2.0;
+    phase->set_auto_scaling(true);
+    phase->set_units(units);
+
+    phase->push_var_bound(PhaseRegionFlags::Back, /*var=*/2, -kNativeVarBoundsInf, 9.0);
+    phase->push_var_bound(PhaseRegionFlags::Front, /*var=*/1, -6.0, kNativeVarBoundsInf);
+    phase->transcribe();
+
+    EXPECT_EQ(phase->nlp_->x_lower_[8], -kNativeVarBoundsInf);
+    EXPECT_DOUBLE_EQ(phase->nlp_->x_upper_[8], 4.5);
+    EXPECT_DOUBLE_EQ(phase->nlp_->x_lower_[1], -1.5);
+    EXPECT_EQ(phase->nlp_->x_upper_[1], kNativeVarBoundsInf);
+}
+
+TEST(PhaseNativeVarBoundsScaling, StaticParamBoundsUseTheStaticParamUnits) {
+    auto phase = make_native_var_bounds_phase();
+    Eigen::VectorXd parm(1);
+    parm << 3.0;
+    Eigen::VectorXd sp_units(1);
+    sp_units << 5.0;
+    phase->set_static_params(parm, sp_units);
+    phase->set_auto_scaling(true);
+    phase->set_units(Eigen::VectorXd::Ones(3));
+
+    phase->push_var_bound(PhaseRegionFlags::StaticParams, /*var=*/0, -10.0, 20.0);
+    phase->transcribe();
+
+    // The static-parameter index is drawn from sp_units_, not xtup_units_ (all
+    // ones here), so a scaled bound proves the right unit array was consulted.
+    // Located by scan rather than by a hardcoded index: this is the only bounded
+    // variable, and its NLP slot sits past the phase's own variable block.
+    int bounded = -1;
+    for (int i = 0; i < phase->nlp_->x_lower_.size(); ++i) {
+        if (phase->nlp_->x_lower_[i] != -kNativeVarBoundsInf ||
+            phase->nlp_->x_upper_[i] != kNativeVarBoundsInf) {
+            EXPECT_EQ(bounded, -1) << "more than one variable was bounded, at " << i;
+            bounded = i;
+        }
+    }
+    ASSERT_GE(bounded, kNativeVarBoundsPhaseVars);
+    EXPECT_DOUBLE_EQ(phase->nlp_->x_lower_[bounded], -2.0);
+    EXPECT_DOUBLE_EQ(phase->nlp_->x_upper_[bounded], 4.0);
+}
+
+TEST(PhaseNativeVarBoundsScaling, SetUnitsRetranscriptionRestagesAgainstTheNewUnits) {
+    auto phase = make_native_var_bounds_phase();
+    phase->set_auto_scaling(true);
+
+    Eigen::VectorXd first(3);
+    first << 1.0, 4.0, 2.0;
+    phase->set_units(first);
+    phase->push_var_bound(PhaseRegionFlags::Path, /*var=*/1, -3.0, 5.0);
+    phase->transcribe();
+    for (int gidx : {1, 4, 7}) {
+        EXPECT_DOUBLE_EQ(phase->nlp_->x_lower_[gidx], -0.75) << "index " << gidx;
+        EXPECT_DOUBLE_EQ(phase->nlp_->x_upper_[gidx], 1.25) << "index " << gidx;
+    }
+
+    // set_units() resets the transcription; the records outlive it, and the next
+    // transcribe() must re-divide them by the NEW units rather than carrying the
+    // values staged against the old ones.
+    Eigen::VectorXd second(3);
+    second << 1.0, 0.5, 2.0;
+    phase->set_units(second);
+    phase->transcribe();
+
+    EXPECT_EQ(phase->num_var_bound_records(), 1u) << "set_units must not drop the declaration";
+    for (int gidx : {1, 4, 7}) {
+        EXPECT_DOUBLE_EQ(phase->nlp_->x_lower_[gidx], -6.0) << "index " << gidx;
+        EXPECT_DOUBLE_EQ(phase->nlp_->x_upper_[gidx], 10.0) << "index " << gidx;
+    }
+    native_var_bounds_expect_only(phase->nlp_, {1, 4, 7});
+}
+
+TEST(PhaseNativeVarBoundsScaling, NonPositiveUnitUnderAutoScalingThrowsWithContext) {
+    auto phase = make_native_var_bounds_phase();
+    Eigen::VectorXd units(3);
+    units << 1.0, 1.0, -2.0;
+    phase->set_auto_scaling(true);
+    phase->set_units(units);
+
+    phase->push_var_bound(PhaseRegionFlags::Back, /*var=*/2, 1.0, 9.0);
+
+    try {
+        phase->transcribe();
+        FAIL() << "expected std::invalid_argument for a non-positive scaling unit";
+    } catch (const std::invalid_argument &e) {
+        const std::string msg = e.what();
+        EXPECT_NE(msg.find("phase 0"), std::string::npos) << msg;
+        EXPECT_NE(msg.find("variable index 2"), std::string::npos) << msg;
+        EXPECT_NE(msg.find("finite and positive"), std::string::npos) << msg;
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Multi-phase: the same resolution picks up the phase's variable offset.
 ///////////////////////////////////////////////////////////////////////////////
 
