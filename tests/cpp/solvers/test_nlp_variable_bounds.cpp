@@ -615,10 +615,12 @@ TEST(NlpVarBoundsReduction, MakeConstraintAppendsOneEqualityRowPerFixedVariable)
 }
 
 // RelaxBounds leaves the layout alone entirely and records the fixed variable as
-// an ordinary two-sided bound whose endpoints have been pushed apart. Two
-// widenings compose on the recorded values: the treatment separates the pair, and
-// the shared classification path then relaxes every finite bound it records by
-// the same factor -- which is how Ipopt's own two relaxations compose as well.
+// an ordinary two-sided bound whose endpoints have been pushed apart. The widening
+// is applied ONCE, by the same shared path that widens every other finite bound --
+// there is no separate separation step, which is also what the reference does (its
+// adapter enters a relaxed variable in both bound maps at the declared value and
+// does not count it among the fixed ones, so the only widening it ever gets is the
+// universal relax factor).
 TEST(NlpVarBoundsReduction, RelaxBoundsRecordsATwoSidedPairAroundTheFixedValue) {
     NlpVarBoundsBareNlp problem;
     problem.nlp_.set_variable_bound(1, 4.0, 4.0);
@@ -639,12 +641,18 @@ TEST(NlpVarBoundsReduction, RelaxBoundsRecordsATwoSidedPairAroundTheFixedValue) 
     EXPECT_EQ(bounds.lower_idx_[0], 1);
     EXPECT_EQ(bounds.upper_idx_[0], 1);
 
-    const double separated_lower = nlp_var_bounds_relax(4.0, factor, false);
-    const double separated_upper = nlp_var_bounds_relax(4.0, factor, true);
-    EXPECT_DOUBLE_EQ(bounds.lower_val_[0], nlp_var_bounds_relax(separated_lower, factor, false));
-    EXPECT_DOUBLE_EQ(bounds.upper_val_[0], nlp_var_bounds_relax(separated_upper, factor, true));
+    // One application of the widening, and it is the same helper every other
+    // bound's expected value in this file is computed with.
+    EXPECT_DOUBLE_EQ(bounds.lower_val_[0], nlp_var_bounds_relax(4.0, factor, false));
+    EXPECT_DOUBLE_EQ(bounds.upper_val_[0], nlp_var_bounds_relax(4.0, factor, true));
     EXPECT_LT(bounds.lower_val_[0], 4.0);
     EXPECT_GT(bounds.upper_val_[0], 4.0);
+    // The box is 2 * factor * max(1, |value|) wide -- the width every consumer of
+    // this treatment has to plan around. Compared with a tolerance rather than
+    // exactly: the two endpoints are each rounded once, so their difference is not
+    // required to reproduce the product bit for bit (it does not, at this factor).
+    EXPECT_NEAR(bounds.upper_val_[0] - bounds.lower_val_[0],
+                2.0 * factor * std::max(1.0, std::abs(4.0)), 1.0e-15);
 
     // Two-sided, so neither entry carries the one-sided damping indicator.
     EXPECT_DOUBLE_EQ(bounds.lower_damp_[0], 0.0);
@@ -791,9 +799,21 @@ TEST(NlpVarBoundsReduction, ARejectedTreatmentSwitchLeavesNoInternalRowBehind) {
     EXPECT_EQ(nlp->kkt_dim_, nlp->primal_vars_ + user_eq);
 
     // Not remembered as done: the same call fails the same way instead of
-    // reporting "no change".
+    // reporting "no change". This is the sharpest form of that requirement --
+    // unlike every other rejection in this suite, this one arrives at an NLP a
+    // previous call had SUCCESSFULLY configured, and the treatment and factor it
+    // was called with are already recorded. If the restore left the validity stamp
+    // standing, this second call would match the idempotence shortcut exactly and
+    // report "no change" on a problem the restore has just put back to
+    // unconfigured -- and a solve would then run with the fixing bound ignored.
     EXPECT_THROW(nlp->configure_variable_treatment(FixedVariableTreatments::RelaxBounds, 0.0),
                  std::invalid_argument);
+
+    // ... and the next VALID configuration is a real one, not a shortcut: it
+    // reports that it rebuilt the structures, which a stamp left standing would
+    // have suppressed.
+    EXPECT_TRUE(nlp->configure_variable_treatment(FixedVariableTreatments::MakeParameter, 1.0e-8));
+    EXPECT_TRUE(nlp->is_reduced());
 
     // And the NLP is still solvable, on the layout the restore left: the
     // elimination reaches the same answer as the identity-path problem's, with the

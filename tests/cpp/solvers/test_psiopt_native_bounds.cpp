@@ -2216,24 +2216,47 @@ TEST(NativeBounds, TheNestedRestorationReturnResetsEveryFamilyTogether) {
 
 namespace {
 
-// The value the fixed variable is declared at, and the relax factor the
-// comparison runs at. The shipped default (1e-8) leaves a relaxed fixed variable
-// an interval a few times 1e-8 wide, finer than any cross-treatment comparison
-// can resolve; 1e-5 keeps both halves of the claim measurable -- the variable
-// sits strictly inside a box wide enough to see, and the answer still agrees with
-// the other two treatments to well inside the tolerances below.
+// The value the fixed variable is declared at.
 constexpr double kNativeBoundsFixedValue = 2.5;
-constexpr double kNativeBoundsTreatmentRelaxFactor = 1.0e-5;
+
+// The two knobs the relax_bounds leg is run with, and they are at the edge of
+// their ranges on purpose.
+//
+// relax_bounds turns a fixed variable into a two-sided box of width
+// 2 * factor * max(1, |value|) -- 5e-8 at the shipped 1e-8 default. On THIS
+// problem shape (a bounded variable that also appears in an equality row) the
+// solver cannot drive such a box to a converged verdict: the condensed system's
+// sigma = z/d grows without bound as mu collapses, and the second Newton solve
+// comes back non-finite, which the iteration reports as divergence. That is not a
+// property of the treatment -- an ordinary two-sided box of the same width,
+// declared directly by the caller under the default treatment, behaves
+// identically, and the same narrow box with no equality row in the problem
+// converges fine. The test below
+// (RelaxBoundsAtTheShippedDefaultTracksTheSameBoxDeclaredDirectly) pins that
+// attribution instead of leaving it as a claim.
+//
+// So the comparison legs run at the widest box the settings allow
+// (kMaxBoundRelaxFactor, the validate ceiling) with the interior push at a
+// quarter of the interval rather than the default hundredth. Measured boundary on
+// this problem: that combination converges in 6 iterations; dropping the push to
+// its default, or the factor to 1e-4 at this push, does not. A factor above the
+// ceiling would be needed to converge at the default push -- i.e. there is no
+// legal factor that converges with it, which is why the push moves too.
+constexpr double kNativeBoundsTreatmentRelaxFactor = tycho::solvers::kMaxBoundRelaxFactor;
+constexpr double kNativeBoundsTreatmentIntervalPush = 0.25;
 
 // What each treatment can be held to on this problem, and why they differ. The
 // elimination pins the variable exactly, so only the solver's own convergence
 // tolerance stands between it and the closed form. The internal row reaches the
-// value to equality-constraint tolerance. The relaxation deliberately displaces
-// it, by up to the half width of the box it built -- so its tolerance is set by
-// the treatment rather than by the solver, and is generous on purpose.
+// value to equality-constraint tolerance. The relaxation solves a deliberately
+// DIFFERENT (relaxed) problem, so it cannot agree more closely than the box it
+// built is wide: its tolerance is the box's half width,
+// factor * max(1, |value|) = 2.5e-2, plus a little room -- set by the treatment,
+// not by the solver.
 constexpr double kNativeBoundsExactTol = 1.0e-6;
 constexpr double kNativeBoundsRowTol = 1.0e-5;
-constexpr double kNativeBoundsRelaxedTol = 1.0e-3;
+constexpr double kNativeBoundsRelaxedTol =
+    1.2 * kNativeBoundsTreatmentRelaxFactor * kNativeBoundsFixedValue;
 
 struct NativeBoundsTreatmentOutcome {
     Eigen::VectorXd solution_;
@@ -2243,6 +2266,11 @@ struct NativeBoundsTreatmentOutcome {
     int fixed_count_ = 0;
     int bound_entries_ = 0;
     bool reduced_ = false;
+    // The box the treatment recorded for the fixed variable, when it recorded one
+    // at all -- read off the bound set rather than recomputed, so an assertion
+    // about the iterate sitting inside it is exact rather than knife-edge.
+    double box_lower_ = 0.0;
+    double box_upper_ = 0.0;
 };
 
 // min sum_i (x_i - 3)^2  s.t.  x0 + x1 = 4,  x1 fixed at 2.5.
@@ -2262,6 +2290,11 @@ NativeBoundsTreatmentOutcome native_bounds_solve_under_treatment(FixedVariableTr
     h.declare_bound(1, kNativeBoundsFixedValue, kNativeBoundsFixedValue);
     h.solver().set_fixed_variable_treatment(treatment);
     h.solver().set_bound_relax_factor(relax_factor);
+    // Set on every leg, not just the relaxed one, so the three differ in the
+    // treatment and in nothing else. It is inert on the other two: neither records
+    // a bound for the fixed variable, so there is no interval for the push to
+    // measure itself against.
+    h.solver().set_bound_interval_push(kNativeBoundsTreatmentIntervalPush);
 
     NativeBoundsTreatmentOutcome out;
     out.solution_ = h.solve(Eigen::VectorXd::Zero(3));
@@ -2271,6 +2304,10 @@ NativeBoundsTreatmentOutcome native_bounds_solve_under_treatment(FixedVariableTr
     out.fixed_count_ = static_cast<int>(h.nlp().fixed_variable_indices().size());
     out.bound_entries_ = static_cast<int>(h.nlp().variable_bound_set().lower_idx_.size()) +
                          static_cast<int>(h.nlp().variable_bound_set().upper_idx_.size());
+    if (out.bound_entries_ == 2) {
+        out.box_lower_ = h.nlp().variable_bound_set().lower_val_[0];
+        out.box_upper_ = h.nlp().variable_bound_set().upper_val_[0];
+    }
     out.reduced_ = h.nlp().is_reduced();
     return out;
 }
@@ -2370,22 +2407,33 @@ TEST(NativeBounds, TheInternalRowCostsTwoDimensionsPerFixedVariableAgainstTheEli
 }
 
 // The relaxation holds the variable near its value through the barrier rather than
-// pinning it: it lands strictly inside the box the treatment built -- the pair
-// separated by the factor times max(1, |value|) per side, and then widened again by
-// the same factor along with every other bound the classifier records -- and it is
-// carried as an ordinary two-sided bound, which is the mechanism doing the holding.
+// pinning it: it lands strictly inside the box the treatment built -- the declared
+// pair moved out by the factor times max(1, |bound|) per side, once, by the same
+// widening every other recorded bound gets -- and it is carried as an ordinary
+// two-sided bound, which is the mechanism doing the holding.
 TEST(NativeBounds, RelaxBoundsHoldsTheVariableInsideItsRelaxedBox) {
     const auto relaxed = native_bounds_solve_under_treatment(FixedVariableTreatments::RelaxBounds,
                                                              kNativeBoundsTreatmentRelaxFactor);
     ASSERT_EQ(relaxed.flag_, tycho::ConvergenceFlags::CONVERGED);
 
+    // Strictly inside the box the classifier recorded, which is the barrier's
+    // guarantee and the treatment's whole claim. Asserted against the recorded
+    // endpoints rather than a recomputed half width: the relaxed problem's optimum
+    // sits ON its active bound, so a recomputed comparison would be decided by the
+    // last bit of the interior distance.
+    ASSERT_EQ(relaxed.bound_entries_, 2);
+    EXPECT_GT(relaxed.solution_[1], relaxed.box_lower_);
+    EXPECT_LT(relaxed.solution_[1], relaxed.box_upper_);
+
+    // And the box is the one the treatment says it builds, around the declared
+    // value, one widening per side.
     const double half_width =
-        2.0 * kNativeBoundsTreatmentRelaxFactor * std::max(1.0, std::abs(kNativeBoundsFixedValue));
-    EXPECT_LE(std::abs(relaxed.solution_[1] - kNativeBoundsFixedValue), half_width);
+        kNativeBoundsTreatmentRelaxFactor * std::max(1.0, std::abs(kNativeBoundsFixedValue));
+    EXPECT_NEAR(relaxed.box_lower_, kNativeBoundsFixedValue - half_width, 1.0e-15);
+    EXPECT_NEAR(relaxed.box_upper_, kNativeBoundsFixedValue + half_width, 1.0e-15);
 
     // Not vacuous: the variable really was carried as a bounded one, so the
     // distance above is a barrier's doing rather than a pinned coordinate's.
-    EXPECT_EQ(relaxed.bound_entries_, 2);
     EXPECT_EQ(relaxed.internal_rows_, 0);
     EXPECT_FALSE(relaxed.reduced_);
 }
@@ -2400,6 +2448,7 @@ TEST(NativeBounds, TheTreatmentIsSwitchableBetweenSolvesOnOneSolver) {
     h.add_sum_equality(0, 1, 4.0);
     h.declare_bound(1, kNativeBoundsFixedValue, kNativeBoundsFixedValue);
     h.solver().set_bound_relax_factor(kNativeBoundsTreatmentRelaxFactor);
+    h.solver().set_bound_interval_push(kNativeBoundsTreatmentIntervalPush);
 
     h.solver().set_fixed_variable_treatment(FixedVariableTreatments::MakeParameter);
     const Eigen::VectorXd eliminated = h.solve(Eigen::VectorXd::Zero(3));
@@ -2438,4 +2487,66 @@ TEST(NativeBounds, TheTreatmentIsSwitchableBetweenSolvesOnOneSolver) {
         EXPECT_NEAR(again[i], eliminated[i], kNativeBoundsExactTol) << "coordinate " << i;
     }
     EXPECT_DOUBLE_EQ(again[1], kNativeBoundsFixedValue);
+}
+
+// The shipped default, which every comparison above deliberately steps away from.
+//
+// At bound_relax_factor = 1e-8 the box relax_bounds builds around a fixed variable
+// is 5e-8 wide, and on this problem shape the solver does not reach a converged
+// verdict inside it: as mu collapses, sigma = z/d on that coordinate grows without
+// bound, and the next condensed solve returns a non-finite step, which the
+// iteration classifies as divergence. This test exists so that the configuration
+// users get is exercised at all, and so that the limitation is attributed to the
+// right layer -- because it is NOT the treatment's.
+//
+// The attribution is the assertion. The same box is declared DIRECTLY as an
+// ordinary two-sided bound (nothing fixed, so no treatment does anything to it,
+// and the relax factor is zeroed so the declared box is recorded verbatim) and the
+// same problem is solved again. Both legs must reach the same verdict and the same
+// point: whatever the solver does with a box this narrow, it does it for a box the
+// caller wrote by hand exactly as much as for one relax_bounds derived. Written as
+// a comparison rather than as a hard verdict on purpose -- it stays true, and stays
+// meaningful, if the narrow-box behaviour is later improved, and it does not pin a
+// factorization outcome that could differ across sparse backends.
+//
+// (For the record, on the reference platform both legs report DIVERGING after two
+// iterations at the right answer to within the box. The same narrow box in a
+// problem with no equality row converges normally, which is what places the
+// difficulty in the bounded-plus-coupled KKT rather than in the classification.)
+TEST(NativeBounds, RelaxBoundsAtTheShippedDefaultTracksTheSameBoxDeclaredDirectly) {
+    const double default_factor = tycho::solvers::kDefaultBoundRelaxFactor;
+    const double half_width = default_factor * std::max(1.0, std::abs(kNativeBoundsFixedValue));
+
+    // Leg one: the fixed variable, relaxed by the treatment at the shipped default.
+    const auto relaxed =
+        native_bounds_solve_under_treatment(FixedVariableTreatments::RelaxBounds, default_factor);
+    ASSERT_EQ(relaxed.bound_entries_, 2)
+        << "the treatment must have carried it as a two-sided bound";
+    EXPECT_EQ(relaxed.internal_rows_, 0);
+    EXPECT_FALSE(relaxed.reduced_);
+
+    // Whatever the verdict, the returned iterate is inside the box the treatment
+    // built -- which is the claim the treatment itself makes.
+    EXPECT_GE(relaxed.solution_[1], relaxed.box_lower_);
+    EXPECT_LE(relaxed.solution_[1], relaxed.box_upper_);
+    EXPECT_NEAR(relaxed.box_lower_, kNativeBoundsFixedValue - half_width, 1.0e-15);
+    EXPECT_NEAR(relaxed.box_upper_, kNativeBoundsFixedValue + half_width, 1.0e-15);
+
+    // Leg two: the identical box, declared by hand on a variable nothing fixes.
+    NativeBoundsHarness h(3);
+    h.add_sum_equality(0, 1, 4.0);
+    h.declare_bound(1, kNativeBoundsFixedValue - half_width, kNativeBoundsFixedValue + half_width);
+    h.solver().set_bound_relax_factor(0.0); // record the declared box verbatim
+    h.solver().set_bound_interval_push(kNativeBoundsTreatmentIntervalPush);
+    const Eigen::VectorXd declared = h.solve(Eigen::VectorXd::Zero(3));
+
+    ASSERT_EQ(static_cast<int>(h.nlp().variable_bound_set().lower_idx_.size()), 1);
+    ASSERT_EQ(h.nlp().fixed_variable_indices().size(), 0) << "nothing is fixed on this leg";
+
+    // Same verdict, same point: the narrow box is what the solver is reacting to,
+    // not the treatment that produced it.
+    EXPECT_EQ(relaxed.flag_, h.flag());
+    for (int i = 0; i < 3; i++) {
+        EXPECT_NEAR(relaxed.solution_[i], declared[i], 1.0e-6) << "coordinate " << i;
+    }
 }
