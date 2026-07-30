@@ -5,40 +5,18 @@
 // NonLinearProgram::set_variable_bound instead of lowering them to inequality
 // constraints.
 //
-// TEST STRUCTURE — how the environment-dependent tests stay unconditional
+// TEST STRUCTURE
 // ------------------------------------------------------------------------
-// The declaration sites (add_lu_var_bound / add_lower_var_bound /
-// add_upper_var_bound) choose between the old inequality lowering and the
-// native recording path through a file-local helper in
-// src/optimal_control/ode_phase_base.cpp that reads TYCHO_DEV_NATIVE_BOUNDS
-// fresh on every call — it is a setup-path check (bound declaration time),
-// not a hot path, so there is no process-wide caching to work around. Each
-// test that needs a specific switch state sets TYCHO_DEV_NATIVE_BOUNDS
-// in-fixture (PhaseNativeVarBoundsSwitchOn / PhaseNativeVarBoundsSwitchOff
-// below) and restores the prior environment (including "was unset") in
-// TearDown, so every test in this file runs unconditionally in the default
-// tycho_tests binary — none of them skip.
-//
-// The one rule this relies on: do not toggle TYCHO_DEV_NATIVE_BOUNDS between
-// a phase's bound declarations and that phase's transcription. Declarations
-// record into user_var_bounds_ (native) or user_inequalities_ (lowered)
-// under whichever state was active when they were made; transcribe_phase
-// only ever consults those two stores, never the switch itself. Toggling
-// mid-phase would not corrupt anything, but it would produce a phase with a
-// mix of records and inequalities that no test here intends to exercise, so
-// each fixture holds the switch fixed for its own test's whole body.
-//
-// Consequently:
 //   * The recording and transcription machinery (record_var_bounds,
 //     transcribe_var_bounds, the indexer resolution, the intersection and
 //     conflict rules, multi-phase offsets) is exercised DIRECTLY through a
-//     derived phase that reaches the protected members, independent of the
-//     switch.
-//   * The routing question — "does add_lu_var_bound record instead of lower
-//     when the switch is on (or keep lowering when it's off)?" — is covered
-//     by the PhaseNativeVarBoundsSwitchOn / PhaseNativeVarBoundsSwitchOff
-//     fixtures below, which set/clear TYCHO_DEV_NATIVE_BOUNDS for their
-//     duration.
+//     derived phase that reaches the protected members, so each rule can be
+//     driven without going through a public declaration call.
+//   * The public declaration sites (add_lu_var_bound / add_lower_var_bound /
+//     add_upper_var_bound) are covered separately at the end of the file:
+//     those tests pin that a declaration lands on the bound record list and
+//     on the NLP's variable-bound contract, and that it produces no
+//     inequality constraint.
 //
 // Hand-computed indexer layout used by the assertions below
 // --------------------------------------------------------
@@ -62,7 +40,6 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
-#include <cstdlib>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -72,31 +49,14 @@
 namespace {
 
 constexpr double kNativeVarBoundsInf = std::numeric_limits<double>::infinity();
-constexpr const char *kNativeVarBoundsEnvVar = "TYCHO_DEV_NATIVE_BOUNDS";
 
 /// Number of NLP decision variables of a phase built by
 /// make_native_var_bounds_phase(), per the layout note in the file header.
 constexpr int kNativeVarBoundsPhaseVars = 9;
 
-void native_var_bounds_set_env(const char *value) {
-#ifdef _WIN32
-    _putenv_s(kNativeVarBoundsEnvVar, value);
-#else
-    setenv(kNativeVarBoundsEnvVar, value, 1);
-#endif
-}
-
-void native_var_bounds_clear_env() {
-#ifdef _WIN32
-    _putenv_s(kNativeVarBoundsEnvVar, "");
-#else
-    unsetenv(kNativeVarBoundsEnvVar);
-#endif
-}
-
-/// A LinearODE phase that exposes ODEPhaseBase's protected native
-/// variable-bound machinery, so the recording and transcription steps can be
-/// driven without depending on the process-wide declaration-site switch.
+/// A LinearODE phase that exposes ODEPhaseBase's protected variable-bound
+/// machinery, so the recording and transcription steps can be driven without
+/// going through a public declaration call.
 struct NativeVarBoundsPhase : ODEPhase<TychoTest::LinearODE> {
     using ODEPhase<TychoTest::LinearODE>::ODEPhase;
 
@@ -781,44 +741,35 @@ TEST(PhaseNativeVarBounds, RecordVarBoundsRejectsAnEmptySelector) {
     EXPECT_EQ(phase->num_var_bound_records(), 0u);
 }
 
-TEST(PhaseNativeVarBounds, RemovingAnInequalityByExplicitIndexIsRejectedWhileBoundsAreRecorded) {
+// Bound records and inequality constraints live in separate stores with
+// separate handle spaces, so a recorded bound must not disturb the
+// inequality-index operations. Nothing translates between the two handle
+// spaces, which is exactly why a bound-record handle must never be passed to
+// these entry points.
+TEST(PhaseNativeVarBounds, InequalityIndexOperationsAreUnaffectedByRecordedBounds) {
     auto phase = make_native_var_bounds_phase();
     // A genuine inequality constraint, added the ordinary way.
     int handle = phase->add_lu_func_bound(PhaseRegionFlags::Front, native_var_bounds_scalar_fn(), 0,
                                           -1.0, 1.0, 1.0, 1.0, ScaleModes::AUTO);
     ASSERT_EQ(phase->num_inequalities(), 1u);
+
+    phase->record_bounds(PhaseRegionFlags::Front, 0, -1.0, 1.0);
+    ASSERT_EQ(phase->num_var_bound_records(), 1u);
+
+    // The inequality's own index still reads and removes its own constraint.
+    EXPECT_NO_THROW(phase->return_inequal_con_scales(handle));
     EXPECT_NO_THROW(phase->remove_inequal_con(handle));
-
-    handle = phase->add_lu_func_bound(PhaseRegionFlags::Front, native_var_bounds_scalar_fn(), 0,
-                                      -1.0, 1.0, 1.0, 1.0, ScaleModes::AUTO);
-    phase->record_bounds(PhaseRegionFlags::Front, 0, -1.0, 1.0);
-    // An explicit index is not unambiguously an inequality-constraint index
-    // once bound records exist.
-    EXPECT_THROW(phase->remove_inequal_con(handle), std::invalid_argument);
-
-    // -1 ("the most recently added") resolves within user_inequalities_
-    // itself and is unambiguous regardless of any recorded bounds.
-    EXPECT_NO_THROW(phase->remove_inequal_con(-1));
     EXPECT_EQ(phase->num_inequalities(), 0u);
-}
-
-TEST(PhaseNativeVarBounds, InequalityScaleAccessorIsRejectedWhileBoundsAreRecorded) {
-    auto phase = make_native_var_bounds_phase();
-    phase->add_lu_func_bound(PhaseRegionFlags::Front, native_var_bounds_scalar_fn(), 0, -1.0, 1.0,
-                             1.0, 1.0, ScaleModes::AUTO);
-    EXPECT_NO_THROW(phase->return_inequal_con_scales(0));
-
-    phase->record_bounds(PhaseRegionFlags::Front, 0, -1.0, 1.0);
-    EXPECT_THROW(phase->return_inequal_con_scales(0), std::invalid_argument);
+    EXPECT_EQ(phase->num_var_bound_records(), 1u) << "removal must not touch the bound records";
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Bound kinds that must keep lowering to inequality constraints under BOTH
-// switch states: function bounds, norm bounds, and delta-variable bounds never
-// consult the switch.
+// Bound kinds that are constraints on expressions, not on variables: function
+// bounds, norm bounds, and delta-variable bounds. They stay inequality
+// constraints and never produce a bound record.
 ///////////////////////////////////////////////////////////////////////////////
 
-TEST(PhaseNativeVarBounds, FuncNormAndDeltaBoundsStillLowerToInequalities) {
+TEST(PhaseNativeVarBounds, FuncNormAndDeltaBoundsRemainInequalityConstraints) {
     auto phase = make_native_var_bounds_phase();
 
     phase->add_lu_func_bound(PhaseRegionFlags::Front, native_var_bounds_scalar_fn(), 0, -1.0, 1.0,
@@ -845,67 +796,16 @@ TEST(PhaseNativeVarBounds, FuncNormAndDeltaBoundsStillLowerToInequalities) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Declaration-site routing under TYCHO_DEV_NATIVE_BOUNDS. Both fixtures below
-// set/restore the environment variable per test (see the file header), so
-// every test here always runs — none of them skip.
+// The public declaration sites. Everything above drives the protected
+// machinery directly; these pin that add_lu_var_bound / add_lower_var_bound /
+// add_upper_var_bound reach it -- a declaration lands on the bound record list
+// and on the NLP's variable-bound contract, and produces no inequality
+// constraint.
 ///////////////////////////////////////////////////////////////////////////////
 
-// Defined at namespace scope (not in the anonymous namespace above) so the
-// TEST_F-generated classes do not derive from an internal-linkage base. The
-// names are unique across tests/cpp/, which is what the unity build requires.
-class PhaseNativeVarBoundsSwitchOn : public ::testing::Test {
-  protected:
-    void SetUp() override {
-        const char *prior = std::getenv(kNativeVarBoundsEnvVar);
-        had_prior_ = prior != nullptr;
-        if (had_prior_) {
-            prior_ = prior;
-        }
-        native_var_bounds_set_env("1");
-    }
-
-    void TearDown() override {
-        if (had_prior_) {
-            native_var_bounds_set_env(prior_.c_str());
-        } else {
-            native_var_bounds_clear_env();
-        }
-    }
-
-    bool had_prior_ = false;
-    std::string prior_;
-};
-
-// The mirror-image fixture: forces the switch OFF for its duration, so the
-// old lowering behavior can be pinned regardless of what the environment
-// looked like before this test ran.
-class PhaseNativeVarBoundsSwitchOff : public ::testing::Test {
-  protected:
-    void SetUp() override {
-        const char *prior = std::getenv(kNativeVarBoundsEnvVar);
-        had_prior_ = prior != nullptr;
-        if (had_prior_) {
-            prior_ = prior;
-        }
-        native_var_bounds_clear_env();
-    }
-
-    void TearDown() override {
-        if (had_prior_) {
-            native_var_bounds_set_env(prior_.c_str());
-        } else {
-            native_var_bounds_clear_env();
-        }
-    }
-
-    bool had_prior_ = false;
-    std::string prior_;
-};
-
-TEST_F(PhaseNativeVarBoundsSwitchOn, LuVarBoundRecordsInsteadOfLowering) {
+TEST(PhaseNativeVarBounds, LuVarBoundDeclarationLandsOnTheNlpBoundContract) {
     auto phase = make_native_var_bounds_phase();
-    int handle = phase->add_lu_var_bound(PhaseRegionFlags::Path, /*var=*/1, -1.0, 2.0, 1.0,
-                                         ScaleModes::AUTO);
+    int handle = phase->add_lu_var_bound(PhaseRegionFlags::Path, /*var=*/1, -1.0, 2.0);
 
     EXPECT_EQ(handle, 0);
     EXPECT_EQ(phase->num_inequalities(), 0u);
@@ -915,16 +815,18 @@ TEST_F(PhaseNativeVarBoundsSwitchOn, LuVarBoundRecordsInsteadOfLowering) {
     EXPECT_DOUBLE_EQ(phase->record_upper(0), 2.0);
 
     phase->transcribe();
+    ASSERT_TRUE(phase->nlp_->has_variable_bounds());
+    native_var_bounds_expect_only(phase->nlp_, {1, 4, 7});
     for (int gidx : {1, 4, 7}) {
         EXPECT_DOUBLE_EQ(phase->nlp_->x_lower_[gidx], -1.0) << "index " << gidx;
         EXPECT_DOUBLE_EQ(phase->nlp_->x_upper_[gidx], 2.0) << "index " << gidx;
     }
 }
 
-TEST_F(PhaseNativeVarBoundsSwitchOn, LowerAndUpperVarBoundsLeaveTheOtherSideOpen) {
+TEST(PhaseNativeVarBounds, LowerAndUpperVarBoundDeclarationsLeaveTheOtherSideOpen) {
     auto phase = make_native_var_bounds_phase();
-    phase->add_lower_var_bound(PhaseRegionFlags::Front, /*var=*/0, -1.0, 1.0, ScaleModes::AUTO);
-    phase->add_upper_var_bound(PhaseRegionFlags::Back, /*var=*/0, 7.0, 1.0, ScaleModes::AUTO);
+    phase->add_lower_var_bound(PhaseRegionFlags::Front, /*var=*/0, -1.0);
+    phase->add_upper_var_bound(PhaseRegionFlags::Back, /*var=*/0, 7.0);
 
     ASSERT_EQ(phase->num_var_bound_records(), 2u);
     EXPECT_EQ(phase->num_inequalities(), 0u);
@@ -932,55 +834,22 @@ TEST_F(PhaseNativeVarBoundsSwitchOn, LowerAndUpperVarBoundsLeaveTheOtherSideOpen
     EXPECT_EQ(phase->record_upper(0), kNativeVarBoundsInf);
     EXPECT_EQ(phase->record_lower(1), -kNativeVarBoundsInf);
     EXPECT_DOUBLE_EQ(phase->record_upper(1), 7.0);
+
+    phase->transcribe();
+    ASSERT_TRUE(phase->nlp_->has_variable_bounds());
+    EXPECT_DOUBLE_EQ(phase->nlp_->x_lower_[0], -1.0);
+    EXPECT_EQ(phase->nlp_->x_upper_[0], kNativeVarBoundsInf);
+    EXPECT_EQ(phase->nlp_->x_lower_[6], -kNativeVarBoundsInf);
+    EXPECT_DOUBLE_EQ(phase->nlp_->x_upper_[6], 7.0);
 }
 
-TEST_F(PhaseNativeVarBoundsSwitchOn, ValidationMatchesTheInequalityPath) {
+TEST(PhaseNativeVarBounds, LuVarBoundDeclarationRejectsAnInvertedInterval) {
     auto phase = make_native_var_bounds_phase();
 
-    // Lower > upper is rejected exactly as the lowering path rejects it.
-    EXPECT_THROW(phase->add_lu_var_bound(PhaseRegionFlags::Front, /*var=*/0, 2.0, 1.0, 1.0, 1.0,
-                                         ScaleModes::AUTO),
+    EXPECT_THROW(phase->add_lu_var_bound(PhaseRegionFlags::Front, /*var=*/0, 2.0, 1.0),
                  std::invalid_argument);
-    // Non-positive bound scales still throw, even though the recorded bound
-    // does not use their values.
-    EXPECT_THROW(phase->add_lu_var_bound(PhaseRegionFlags::Front, /*var=*/0, -1.0, 1.0, 0.0, 1.0,
-                                         ScaleModes::AUTO),
-                 std::invalid_argument);
-    EXPECT_THROW(phase->add_lu_var_bound(PhaseRegionFlags::Front, /*var=*/0, -1.0, 1.0, 1.0, -1.0,
-                                         ScaleModes::AUTO),
-                 std::invalid_argument);
-    EXPECT_THROW(
-        phase->add_lower_var_bound(PhaseRegionFlags::Front, /*var=*/0, -1.0, 0.0, ScaleModes::AUTO),
-        std::invalid_argument);
-    EXPECT_THROW(
-        phase->add_upper_var_bound(PhaseRegionFlags::Front, /*var=*/0, 1.0, 0.0, ScaleModes::AUTO),
-        std::invalid_argument);
 
+    // A rejected declaration leaves nothing behind, in either store.
     EXPECT_EQ(phase->num_var_bound_records(), 0u);
     EXPECT_EQ(phase->num_inequalities(), 0u);
-}
-
-TEST_F(PhaseNativeVarBoundsSwitchOn, FuncAndDeltaBoundsStillLowerToInequalities) {
-    auto phase = make_native_var_bounds_phase();
-    phase->add_lu_func_bound(PhaseRegionFlags::Front, native_var_bounds_scalar_fn(), 0, -1.0, 1.0,
-                             1.0, 1.0, ScaleModes::AUTO);
-    phase->add_lower_delta_var_bound(/*var=*/2, 0.1, 1.0, ScaleModes::AUTO);
-
-    Eigen::VectorXi norm_vars(2);
-    norm_vars << 0, 1;
-    phase->add_lu_norm_bound(PhaseRegionFlags::Front, norm_vars, 0.0, 5.0, 1.0, 1.0,
-                             ScaleModes::AUTO);
-
-    EXPECT_EQ(phase->num_inequalities(), 3u);
-    EXPECT_EQ(phase->num_var_bound_records(), 0u);
-}
-
-TEST_F(PhaseNativeVarBoundsSwitchOff, AddLuVarBoundStillLowersToInequality) {
-    auto phase = make_native_var_bounds_phase();
-    int handle = phase->add_lu_var_bound(PhaseRegionFlags::Front, /*var=*/0, -1.0, 1.0, 1.0,
-                                         ScaleModes::AUTO);
-
-    EXPECT_EQ(handle, 0);
-    EXPECT_EQ(phase->num_inequalities(), 1u);
-    EXPECT_EQ(phase->num_var_bound_records(), 0u);
 }

@@ -541,7 +541,7 @@ inline void bm_brachistochrone_solve_body(benchmark::State& state) {
         phase.add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val,
                                  ScaleModes::AUTO);
 
-        phase.add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0, 1.0);
+        phase.add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0);
         phase.add_delta_time_objective(1.0, ScaleModes::AUTO);
 
         auto status = phase.solve_optimize();

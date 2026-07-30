@@ -122,9 +122,9 @@ int main() {
     auto aphase = ode.phase(tmode, ascent_traj, nsegs);
 
     // ODEParams region expects raw ODE param index, not phase vector index.
-    aphase.add_lower_var_bound(PhaseRegionFlags::ODEParams, 0, 0.0, 1.0);
+    aphase.add_lower_var_bound(PhaseRegionFlags::ODEParams, 0, 0.0);
 
-    aphase.add_lower_var_bound(PhaseRegionFlags::Front, "gamma", 0.0, 1.0);
+    aphase.add_lower_var_bound(PhaseRegionFlags::Front, "gamma", 0.0);
 
     Eigen::VectorXd front_vals(3);
     front_vals << h0, r0, 0.0;

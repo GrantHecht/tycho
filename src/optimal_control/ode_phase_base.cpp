@@ -22,10 +22,8 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdlib>
 #include <limits>
 #include <map>
-#include <string_view>
 
 using tycho::vf::Arguments;
 using tycho::vf::IOScaled;
@@ -33,23 +31,6 @@ using tycho::vf::StackedOutputs;
 using tycho::vf::SubstitutedVarPlaceholder;
 
 namespace {
-
-/// Temporary A/B switch for the native-bounds bring-up; removed before merge.
-/// Read fresh on every call: this is a setup-path check (bound declaration
-/// time, not a hot path), so there is nothing to gain by caching it, and a
-/// per-call read lets the same process observe both switch states. Do not
-/// toggle the environment variable between a bound declaration and that
-/// phase's transcription — declarations record into user_var_bounds_ under
-/// whichever state was active when they were made, and transcribe_var_bounds
-/// only ever sees those records, not the switch itself.
-bool dev_native_var_bounds() {
-    const char *value = std::getenv("TYCHO_DEV_NATIVE_BOUNDS");
-    if (value == nullptr) {
-        return false;
-    }
-    std::string_view text(value);
-    return !text.empty() && text != "0";
-}
 
 /// Human-readable name of a phase region, for variable-bound diagnostics.
 const char *var_bound_region_name(tycho::PhaseRegionFlags reg) {
@@ -136,104 +117,30 @@ int tycho::oc::ODEPhaseBase::add_periodicity_con(VarIndexType args, ScaleType sc
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 int tycho::oc::ODEPhaseBase::add_lu_var_bound(RegionType reg, VarIndexType var, double lowerbound,
-                                              double upperbound, double lbscale, double ubscale,
-                                              ScaleType scale_t) {
-    if (dev_native_var_bounds()) {
-        // Same validation, in the same order, as the inequality lowering below;
-        // the bound scales only gate the error behavior here, since a recorded
-        // bound carries no constraint row to scale.
-        if (lowerbound > upperbound) {
-            throw std::invalid_argument(
-                fmt::format("Lower-bound({0:.3e}) greater than Upper-bound({1:.3e})", lowerbound,
-                            upperbound));
-        }
-        check_lbscale(lbscale);
-        check_ubscale(ubscale);
-        return this->record_var_bounds(reg, var, lowerbound, upperbound);
-    }
-
+                                              double upperbound) {
     if (lowerbound > upperbound) {
         throw std::invalid_argument(
             fmt::format("Lower-bound({0:.3e}) greater than Upper-bound({1:.3e})", lowerbound,
                         upperbound));
     }
-    check_lbscale(lbscale);
-    check_ubscale(ubscale);
-
-    auto x = Arguments<1>();
-    auto lowbound = (lowerbound - x) * lbscale;
-    auto ubound = (x - upperbound) * ubscale;
-    auto lubound = StackedOutputs{lowbound, ubound};
-
-    return this->add_inequal_con(reg, lubound, var, scale_t);
-}
-int tycho::oc::ODEPhaseBase::add_lu_var_bound(PhaseRegionFlags reg, int var, double lowerbound,
-                                              double upperbound, double lbscale, double ubscale) {
-    if (dev_native_var_bounds()) {
-        if (lowerbound > upperbound) {
-            throw std::invalid_argument(
-                fmt::format("Lower-bound({0:.3e}) greater than Upper-bound({1:.3e})", lowerbound,
-                            upperbound));
-        }
-        check_lbscale(lbscale);
-        check_ubscale(ubscale);
-        return this->record_var_bounds(reg, var, lowerbound, upperbound);
-    }
-
-    if (lowerbound > upperbound) {
-        throw std::invalid_argument(
-            fmt::format("Lower-bound({0:.3e}) greater than Upper-bound({1:.3e})", lowerbound,
-                        upperbound));
-    }
-    check_lbscale(lbscale);
-    check_ubscale(ubscale);
-
-    auto x = Arguments<1>();
-    auto lowbound = (lowerbound - x) * lbscale;
-    auto ubound = (x - upperbound) * ubscale;
-
-    auto lubound = StackedOutputs{lowbound, ubound};
-    VectorXi v(1);
-    v[0] = var;
-    return this->add_inequal_con(StateConstraint(lubound, reg, v));
+    return this->record_var_bounds(reg, var, lowerbound, upperbound);
 }
 
 int tycho::oc::ODEPhaseBase::add_lower_var_bound(RegionType reg, VarIndexType var,
-                                                 double lowerbound, double lbscale,
-                                                 ScaleType scale_t) {
-    if (dev_native_var_bounds()) {
-        check_lbscale(lbscale);
-        return this->record_var_bounds(reg, var, lowerbound,
-                                       std::numeric_limits<double>::infinity());
-    }
-
-    check_lbscale(lbscale);
-    auto x = Arguments<1>();
-    auto lbound = (lowerbound - x) * lbscale;
-
-    return this->add_inequal_con(reg, lbound, var, scale_t);
+                                                 double lowerbound) {
+    return this->record_var_bounds(reg, var, lowerbound, std::numeric_limits<double>::infinity());
 }
 
 int tycho::oc::ODEPhaseBase::add_upper_var_bound(RegionType reg, VarIndexType var,
-                                                 double upperbound, double ubscale,
-                                                 ScaleType scale_t) {
-    if (dev_native_var_bounds()) {
-        check_ubscale(ubscale);
-        return this->record_var_bounds(reg, var, -std::numeric_limits<double>::infinity(),
-                                       upperbound);
-    }
-
-    check_ubscale(ubscale);
-    auto x = Arguments<1>();
-    auto ubound = (x - upperbound) * ubscale;
-    return this->add_inequal_con(reg, ubound, var, scale_t);
+                                                 double upperbound) {
+    return this->record_var_bounds(reg, var, -std::numeric_limits<double>::infinity(), upperbound);
 }
 
 int tycho::oc::ODEPhaseBase::record_var_bounds(RegionType reg_t, VarIndexType var_t,
                                                double lowerbound, double upperbound) {
-    // Region and variable resolution is exactly what the inequality lowering
-    // hands to add_inequal_con: get_region() on the region selector, then
-    // get_xt_up_vars() on the variable selector under that region.
+    // Region and variable resolution is exactly what add_inequal_con performs
+    // for a constraint over the same region: get_region() on the region
+    // selector, then get_xt_up_vars() on the variable selector under it.
     PhaseRegionFlags reg = this->get_region(reg_t);
     VectorXi vars = this->get_xt_up_vars(reg, var_t);
 
@@ -271,18 +178,6 @@ int tycho::oc::ODEPhaseBase::record_var_bounds(RegionType reg_t, VarIndexType va
     this->reset_transcription();
     this->invalidate_post_opt_info();
     return handle;
-}
-
-void tycho::oc::ODEPhaseBase::check_inequality_index_unambiguous() const {
-    if (this->user_var_bounds_.empty()) {
-        return;
-    }
-    throw std::invalid_argument(fmt::format(
-        "This phase holds {0:} recorded variable bound(s), whose declaration handles are "
-        "bound-record indices rather than inequality-constraint indices. Accessing or removing "
-        "an inequality constraint by index while recorded variable bounds are present is not "
-        "supported.",
-        this->user_var_bounds_.size()));
 }
 
 int tycho::oc::ODEPhaseBase::add_lu_func_bound(RegionType reg, ScalarFunctionalX func,
@@ -1564,14 +1459,14 @@ void tycho::oc::ODEPhaseBase::transcribe_var_bounds(std::shared_ptr<NonLinearPro
 
         // Under auto-scaling the NLP decision variable is the physical value
         // divided by that variable's unit (make_solver_input divides on the way in,
-        // collect_solver_output multiplies on the way out). The inequality lowering
-        // this path replaces still compared physical values: add_inequal_con wrapped
-        // the bound expression in IOScaled with get_input_scale's units, which
-        // multiply the NLP variable back up to physical before the comparison. A
-        // bound staged directly on the NLP variable carries no such wrapper, so it
-        // must be divided by the same unit here. Skipping this leaves the enforced
-        // box off by the unit in every scaled problem -- silently loosened where the
-        // unit exceeds one, silently tightened where it falls below.
+        // collect_solver_output multiplies on the way out). A constraint over the
+        // same variable still compares physical values: add_inequal_con wraps the
+        // expression in IOScaled with get_input_scale's units, which multiply the
+        // NLP variable back up to physical before the comparison. A bound staged
+        // directly on the NLP variable carries no such wrapper, so it must be
+        // divided by the same unit here. Skipping this leaves the enforced box off
+        // by the unit in every scaled problem -- silently loosened where the unit
+        // exceeds one, silently tightened where it falls below.
         double unit = 1.0;
         if (this->auto_scaling_) {
             unit = (*unit_source)[unit_index];

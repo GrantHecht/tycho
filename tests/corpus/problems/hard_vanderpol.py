@@ -85,7 +85,7 @@ def build():
     phase.integrator.set_initial_step_size(0.25)
     phase.set_control_mode("BlockConstant")
     phase.add_boundary_value("Front", range(0, 3), [0, 1, 0])
-    phase.add_lu_var_bound("Path", 3, -0.75, 1.0, 1.0)
+    phase.add_lu_var_bound("Path", 3, -0.75, 1.0)
     phase.add_integral_objective(Args(3).squared_norm(), [0, 1, 3])
     phase.add_boundary_value("Back", [0, 1, 2], [0.0, 0.0, tf])
     phase.set_num_partitions(8, 8)

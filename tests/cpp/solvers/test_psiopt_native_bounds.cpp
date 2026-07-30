@@ -46,7 +46,6 @@
 #include <atomic>
 #include <cmath>
 #include <cstddef>
-#include <cstdlib>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -1075,50 +1074,6 @@ TEST(NativeBounds, AnEmptyBoundSetLeavesTheComplementarityAggregatesAlone) {
 
 namespace {
 
-constexpr const char *kNativeBoundsEnvVar = "TYCHO_DEV_NATIVE_BOUNDS";
-
-// Sets the bring-up switch for the lifetime of the guard and restores the
-// previous state after. The switch is read fresh at every declaration site, so
-// it has to be held across phase construction, not across the solve.
-class NativeBoundsSwitchGuard {
-  public:
-    explicit NativeBoundsSwitchGuard(bool on) {
-        const char *prev = std::getenv(kNativeBoundsEnvVar);
-        had_previous_ = prev != nullptr;
-        if (had_previous_)
-            previous_ = prev;
-        set(on ? "1" : "0");
-    }
-    ~NativeBoundsSwitchGuard() {
-        if (had_previous_)
-            set(previous_.c_str());
-        else
-            unset();
-    }
-
-    NativeBoundsSwitchGuard(const NativeBoundsSwitchGuard &) = delete;
-    NativeBoundsSwitchGuard &operator=(const NativeBoundsSwitchGuard &) = delete;
-
-  private:
-    static void set(const char *value) {
-#ifdef _WIN32
-        _putenv_s(kNativeBoundsEnvVar, value);
-#else
-        setenv(kNativeBoundsEnvVar, value, 1);
-#endif
-    }
-    static void unset() {
-#ifdef _WIN32
-        _putenv_s(kNativeBoundsEnvVar, "");
-#else
-        unsetenv(kNativeBoundsEnvVar);
-#endif
-    }
-
-    bool had_previous_ = false;
-    std::string previous_;
-};
-
 // Watches every committed iterate for a bound violation. The whole point of the
 // fraction-to-boundary legs is that this never fires: a barrier term evaluated
 // at a point on or outside its bound is a log of a non-positive number, so an
@@ -1251,13 +1206,16 @@ std::function<const NonLinearProgram *()> native_bounds_phase_resolver(auto phas
     return [phase]() -> const NonLinearProgram * { return phase->nlp_.get(); };
 }
 
-// Builds the standard brachistochrone phase with the bring-up switch held in
-// the requested state across the declaration sites -- which is the only moment
-// the switch is read. Returning from inside the guard's scope keeps the phase
-// alive past it.
-auto native_bounds_build_brach(bool native) {
-    NativeBoundsSwitchGuard guard(native);
-    return TychoTest::make_brach_phase(100, 32);
+// The standard brachistochrone phase: a control path bound over 32 segments,
+// carried as native variable bounds.
+auto native_bounds_build_brach() { return TychoTest::make_brach_phase(100, 32); }
+
+// The same problem with the control box written as a pair of inequality rows
+// instead. Same feasible set, different NLP structure -- the comparison arm
+// for the bookkeeping claim below.
+auto native_bounds_build_brach_with_inequality_box() {
+    return TychoTest::make_brach_phase(100, 32, tycho::TranscriptionModes::LGL3,
+                                       /*control_bound_as_inequality=*/true);
 }
 
 } // namespace
@@ -1340,7 +1298,7 @@ TEST(NativeBounds, EqualityOnlyProblemWithABoundedVariableSolves) {
 // for the barrier: it has to keep every iterate strictly inside a box it never
 // needs to touch, without dragging the solve off the answer.
 TEST(NativeBounds, PhaseWithAControlPathBoundSolvesNatively) {
-    auto phase = native_bounds_build_brach(true);
+    auto phase = native_bounds_build_brach();
     phase->optimizer_->set_print_level(3);
 
     NativeBoundsInteriorProbe probe;
@@ -1363,29 +1321,31 @@ TEST(NativeBounds, PhaseWithAControlPathBoundSolvesNatively) {
     probe.expect_every_iterate_interior();
 }
 
-// (c) The same problem both ways on one build. Both converge to the same
-// trajectory, and the native formulation's KKT system is smaller by exactly two
-// dimensions per lowered inequality row -- one constraint row and one slack
-// column each, which is the bookkeeping the native path exists to avoid.
-TEST(NativeBounds, NativeAndLoweredControlBoundsAgreeAndTheNativeKktIsSmaller) {
-    auto native = native_bounds_build_brach(true);
-    auto lowered = native_bounds_build_brach(false);
-    native->optimizer_->set_print_level(3);
-    lowered->optimizer_->set_print_level(3);
+// (c) The same feasible set expressed both ways on one build. Both converge to
+// the same trajectory, and the bound formulation's KKT system is smaller by
+// exactly two dimensions per inequality row the other one carries -- one
+// constraint row and one slack column each, which is the bookkeeping native
+// bounds exist to avoid.
+TEST(NativeBounds, ABoundAndAnEquivalentInequalityBoxAgreeAndTheBoundKktIsSmaller) {
+    auto bounded = native_bounds_build_brach();
+    auto constrained = native_bounds_build_brach_with_inequality_box();
+    bounded->optimizer_->set_print_level(3);
+    constrained->optimizer_->set_print_level(3);
 
-    ASSERT_EQ(native->solve_optimize(), tycho::ConvergenceFlags::CONVERGED);
-    ASSERT_EQ(lowered->solve_optimize(), tycho::ConvergenceFlags::CONVERGED);
+    ASSERT_EQ(bounded->solve_optimize(), tycho::ConvergenceFlags::CONVERGED);
+    ASSERT_EQ(constrained->solve_optimize(), tycho::ConvergenceFlags::CONVERGED);
 
-    EXPECT_NEAR(native->return_traj().back()[3], lowered->return_traj().back()[3], 1.0e-3);
+    EXPECT_NEAR(bounded->return_traj().back()[3], constrained->return_traj().back()[3], 1.0e-3);
 
-    // The lowered formulation carries the bound as inequality rows; the native
-    // one carries none of them.
-    const int lowered_iq = lowered->nlp_->inequal_cons_;
-    const int native_iq = native->nlp_->inequal_cons_;
-    EXPECT_GT(lowered_iq - native_iq, 0);
-    EXPECT_EQ(lowered->nlp_->kkt_dim_ - native->nlp_->kkt_dim_, 2 * (lowered_iq - native_iq));
-    EXPECT_TRUE(native->nlp_->has_variable_bounds());
-    EXPECT_FALSE(lowered->nlp_->has_variable_bounds());
+    // The constrained formulation carries the box as inequality rows; the
+    // bounded one carries none of them.
+    const int constrained_iq = constrained->nlp_->inequal_cons_;
+    const int bounded_iq = bounded->nlp_->inequal_cons_;
+    EXPECT_GT(constrained_iq - bounded_iq, 0);
+    EXPECT_EQ(constrained->nlp_->kkt_dim_ - bounded->nlp_->kkt_dim_,
+              2 * (constrained_iq - bounded_iq));
+    EXPECT_TRUE(bounded->nlp_->has_variable_bounds());
+    EXPECT_FALSE(constrained->nlp_->has_variable_bounds());
 }
 
 // The recovery links reach step scaling through the SAME shared entry point the
@@ -1747,9 +1707,9 @@ namespace {
 // edge, (0.9, sqrt(0.19)), so a bound is active at the solution and the
 // restoration episodes are entered AND left.
 //
-// The bound is declared straight on the NonLinearProgram rather than through
-// the dev switch, the same way NativeBoundsHarness declares one: the switch
-// only governs where an ODEPhase's declarations go, and this is not a phase.
+// The bound is declared straight on the NonLinearProgram, the same way
+// NativeBoundsHarness declares one: this is not a phase, so there is no
+// declaration site to route it through.
 class NativeBoundsRestorationHarness {
   public:
     explicit NativeBoundsRestorationHarness(tycho::solvers::RestorationModes mode) {
@@ -1902,18 +1862,17 @@ TEST(NativeBounds, ADiscardedRestorationStepMovesNeitherTheIterateNorItsMultipli
 
 namespace {
 
-// One preset, one natively bounded phase problem, solved end to end. The
-// brachistochrone phase is the file's established native-bounds fixture: its
-// control path bound is recorded natively (dev switch ON) rather than lowered
-// into inequality rows, so every acceptance/governor/recovery combination a
-// preset selects is driving a solve whose only barrier terms on that variable
-// are bound terms.
+// One preset, one bounded phase problem, solved end to end. The brachistochrone
+// phase is the file's established fixture: its control path bound is a variable
+// bound rather than a pair of inequality rows, so every acceptance/governor/
+// recovery combination a preset selects is driving a solve whose only barrier
+// terms on that variable are bound terms.
 //
 // A failure here is a gap in the site enumeration behind the bound legs and the
 // bound barrier account, not a preset problem: the presets touch nine Settings
 // fields and no algorithm code.
 void native_bounds_expect_preset_solves(const char *preset) {
-    auto phase = native_bounds_build_brach(true);
+    auto phase = native_bounds_build_brach();
     phase->optimizer_->set_print_level(3);
     phase->optimizer_->set_qp_threads(1);
     phase->optimizer_->apply_preset(preset);
@@ -1925,8 +1884,8 @@ void native_bounds_expect_preset_solves(const char *preset) {
     const auto status = phase->solve_optimize();
     EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE) << "preset: " << preset;
 
-    // The bound is carried natively under every one of them -- a preset that
-    // silently fell back to lowered rows would make the rest of this vacuous.
+    // The bound reaches the solver as a bound under every one of them -- an
+    // empty bound set would make the rest of this vacuous.
     ASSERT_TRUE(phase->nlp_->has_variable_bounds()) << "preset: " << preset;
     EXPECT_NEAR(phase->return_traj().back()[3], 1.8013, 0.01) << "preset: " << preset;
     probe.expect_every_iterate_interior();

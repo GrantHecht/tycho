@@ -101,41 +101,34 @@ class Phase {
     /// @param var_name Name of the variable to bound.
     /// @param lower    Lower bound value.
     /// @param upper    Upper bound value.
-    /// @param scale    Shared bound-constraint scale (default 1.0).
-    /// @return The index assigned to the bound constraint(s).
+    /// @return The bound-record handle assigned to the declaration.
     /// @throws std::invalid_argument if @p var_name is unknown or maps to multiple indices.
     int add_lu_var_bound(PhaseRegionFlags flag, const std::string &var_name, double lower,
-                         double upper, double scale = 1.0) {
+                         double upper) {
         return phase_->add_lu_var_bound(
-            flag, resolve_for_region(flag, var_name, "add_lu_var_bound"), lower, upper, scale);
+            flag, resolve_for_region(flag, var_name, "add_lu_var_bound"), lower, upper);
     }
 
     /// @brief Bound a variable from below.
     /// @param flag     The phase region.
     /// @param var_name Name of the variable to bound.
     /// @param lower    Lower bound value.
-    /// @param scale    Lower-bound constraint scale (default 1.0).
-    /// @param scale_t  Output-scale selector (default AUTO).
-    /// @return The index assigned to the bound constraint.
+    /// @return The bound-record handle assigned to the declaration.
     /// @throws std::invalid_argument if @p var_name is unknown or maps to multiple indices.
-    int add_lower_var_bound(PhaseRegionFlags flag, const std::string &var_name, double lower,
-                            double scale = 1.0, ScaleType scale_t = ScaleModes::AUTO) {
+    int add_lower_var_bound(PhaseRegionFlags flag, const std::string &var_name, double lower) {
         return phase_->add_lower_var_bound(
-            flag, resolve_for_region(flag, var_name, "add_lower_var_bound"), lower, scale, scale_t);
+            flag, resolve_for_region(flag, var_name, "add_lower_var_bound"), lower);
     }
 
     /// @brief Bound a variable from above.
     /// @param flag     The phase region.
     /// @param var_name Name of the variable to bound.
     /// @param upper    Upper bound value.
-    /// @param scale    Upper-bound constraint scale (default 1.0).
-    /// @param scale_t  Output-scale selector (default AUTO).
-    /// @return The index assigned to the bound constraint.
+    /// @return The bound-record handle assigned to the declaration.
     /// @throws std::invalid_argument if @p var_name is unknown or maps to multiple indices.
-    int add_upper_var_bound(PhaseRegionFlags flag, const std::string &var_name, double upper,
-                            double scale = 1.0, ScaleType scale_t = ScaleModes::AUTO) {
+    int add_upper_var_bound(PhaseRegionFlags flag, const std::string &var_name, double upper) {
         return phase_->add_upper_var_bound(
-            flag, resolve_for_region(flag, var_name, "add_upper_var_bound"), upper, scale, scale_t);
+            flag, resolve_for_region(flag, var_name, "add_upper_var_bound"), upper);
     }
 
     /// @brief Add an objective equal to a scaled variable value.
@@ -421,11 +414,9 @@ class Phase {
     /// @param var   Variable index within the region.
     /// @param lower Lower bound value.
     /// @param upper Upper bound value.
-    /// @param scale Shared bound-constraint scale (default 1.0).
-    /// @return The index assigned to the bound constraint(s).
-    int add_lu_var_bound(PhaseRegionFlags flag, int var, double lower, double upper,
-                         double scale = 1.0) {
-        return phase_->add_lu_var_bound(flag, var, lower, upper, scale);
+    /// @return The bound-record handle assigned to the declaration.
+    int add_lu_var_bound(PhaseRegionFlags flag, int var, double lower, double upper) {
+        return phase_->add_lu_var_bound(flag, var, lower, upper);
     }
 
     /// @brief Add an equality constraint over a phase region.
@@ -483,27 +474,21 @@ class Phase {
     }
 
     /// @brief Bound a variable from below.
-    /// @param flag    The phase region.
-    /// @param var     Variable index within the region.
-    /// @param lower   Lower bound value.
-    /// @param scale   Lower-bound constraint scale (default 1.0).
-    /// @param scale_t Output-scale selector (default AUTO).
-    /// @return The index assigned to the bound constraint.
-    int add_lower_var_bound(PhaseRegionFlags flag, int var, double lower, double scale = 1.0,
-                            ScaleType scale_t = ScaleModes::AUTO) {
-        return phase_->add_lower_var_bound(flag, var, lower, scale, scale_t);
+    /// @param flag  The phase region.
+    /// @param var   Variable index within the region.
+    /// @param lower Lower bound value.
+    /// @return The bound-record handle assigned to the declaration.
+    int add_lower_var_bound(PhaseRegionFlags flag, int var, double lower) {
+        return phase_->add_lower_var_bound(flag, var, lower);
     }
 
     /// @brief Bound a variable from above.
-    /// @param flag    The phase region.
-    /// @param var     Variable index within the region.
-    /// @param upper   Upper bound value.
-    /// @param scale   Upper-bound constraint scale (default 1.0).
-    /// @param scale_t Output-scale selector (default AUTO).
-    /// @return The index assigned to the bound constraint.
-    int add_upper_var_bound(PhaseRegionFlags flag, int var, double upper, double scale = 1.0,
-                            ScaleType scale_t = ScaleModes::AUTO) {
-        return phase_->add_upper_var_bound(flag, var, upper, scale, scale_t);
+    /// @param flag  The phase region.
+    /// @param var   Variable index within the region.
+    /// @param upper Upper bound value.
+    /// @return The bound-record handle assigned to the declaration.
+    int add_upper_var_bound(PhaseRegionFlags flag, int var, double upper) {
+        return phase_->add_upper_var_bound(flag, var, upper);
     }
 
     /// @brief Lock selected region variables to their current trajectory values.

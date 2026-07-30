@@ -153,8 +153,8 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
         user_param_integrands_; ///< User-added integral-parameter functions.
 
     /// @internal
-    /// @brief One user variable-bound declaration recorded as a bound rather than
-    /// lowered to an inequality constraint.
+    /// @brief One user variable-bound declaration, held as a bound on the NLP
+    /// decision variables rather than as a constraint function.
     ///
     /// Path-like regions stay a single record; the expansion to one entry per
     /// application node happens in @ref transcribe_var_bounds, so the record list
@@ -802,76 +802,43 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     }
 
     ////////////////////////
-    /// @brief Bound a variable below and above with separate bound scales.
+    /// @brief Bound a variable below and above.
+    ///
+    /// The bound is recorded and applied to the NLP decision variables the
+    /// selector resolves to; it produces no constraint row, no slack, and no
+    /// multiplier. Bound values are the variable's physical values — when the
+    /// phase auto-scales, @ref transcribe_var_bounds converts them into the
+    /// scaled units the NLP variable is expressed in. Repeated declarations on
+    /// the same variable intersect, tightest wins.
     /// @param reg         Region selector.
     /// @param var         Variable selector.
     /// @param lowerbound  Lower bound.
     /// @param upperbound  Upper bound.
-    /// @param lbscale     Lower-bound constraint scale.
-    /// @param ubscale     Upper-bound constraint scale.
-    /// @param scale_t     Output-scale selector.
-    /// @return The index of the added inequality constraint, unless the temporary
-    ///         native variable-bounds dev switch is active, in which case a
-    ///         bound-record handle instead (see @ref record_var_bounds) — not an
+    /// @return A bound-record handle (see @ref record_var_bounds) — not an
     ///         inequality-constraint index.
-    int add_lu_var_bound(RegionType reg, VarIndexType var, double lowerbound, double upperbound,
-                         double lbscale, double ubscale, ScaleType scale_t);
-
-    /// @brief Bound a variable below and above with a shared bound scale.
-    /// @param reg         Region selector.
-    /// @param var         Variable selector.
-    /// @param lowerbound  Lower bound.
-    /// @param upperbound  Upper bound.
-    /// @param scale       Shared bound scale.
-    /// @param scale_t     Output-scale selector.
-    /// @return The index of the added inequality constraint, unless the temporary
-    ///         native variable-bounds dev switch is active, in which case a
-    ///         bound-record handle instead (see @ref record_var_bounds) — not an
-    ///         inequality-constraint index.
-    int add_lu_var_bound(RegionType reg, VarIndexType var, double lowerbound, double upperbound,
-                         double scale, ScaleType scale_t) {
-        return this->add_lu_var_bound(reg, var, lowerbound, upperbound, scale, scale, scale_t);
-    }
-    /// @brief Bound a variable below and above with unit bound scales.
-    /// @param reg         Region selector.
-    /// @param var         Variable selector.
-    /// @param lowerbound  Lower bound.
-    /// @param upperbound  Upper bound.
-    /// @param scale_t     Output-scale selector.
-    /// @return The index of the added inequality constraint, unless the temporary
-    ///         native variable-bounds dev switch is active, in which case a
-    ///         bound-record handle instead (see @ref record_var_bounds) — not an
-    ///         inequality-constraint index.
-    int add_lu_var_bound(RegionType reg, VarIndexType var, double lowerbound, double upperbound,
-                         ScaleType scale_t) {
-        return this->add_lu_var_bound(reg, var, lowerbound, upperbound, 1.0, 1.0, scale_t);
-    }
+    int add_lu_var_bound(RegionType reg, VarIndexType var, double lowerbound, double upperbound);
 
     /// @brief Bound a variable from below.
+    ///
+    /// Leaves the upper side open. See @ref add_lu_var_bound for the semantics
+    /// shared by all three variable-bound declarations.
     /// @param reg         Region selector.
     /// @param var         Variable selector.
     /// @param lowerbound  Lower bound.
-    /// @param lbscale     Lower-bound constraint scale.
-    /// @param scale_t     Output-scale selector.
-    /// @return The index of the added inequality constraint, unless the temporary
-    ///         native variable-bounds dev switch is active, in which case a
-    ///         bound-record handle instead (see @ref record_var_bounds) — not an
+    /// @return A bound-record handle (see @ref record_var_bounds) — not an
     ///         inequality-constraint index.
-    int add_lower_var_bound(RegionType reg, VarIndexType var, double lowerbound, double lbscale,
-                            ScaleType scale_t);
+    int add_lower_var_bound(RegionType reg, VarIndexType var, double lowerbound);
 
     /// @brief Bound a variable from above.
+    ///
+    /// Leaves the lower side open. See @ref add_lu_var_bound for the semantics
+    /// shared by all three variable-bound declarations.
     /// @param reg         Region selector.
     /// @param var         Variable selector.
     /// @param upperbound  Upper bound.
-    /// @param ubscale     Upper-bound constraint scale.
-    /// @param scale_t     Output-scale selector.
-    /// @return The index of the added inequality constraint, unless the temporary
-    ///         native variable-bounds dev switch is active, in which case a
-    ///         bound-record handle instead (see @ref record_var_bounds) — not an
+    /// @return A bound-record handle (see @ref record_var_bounds) — not an
     ///         inequality-constraint index.
-    int add_upper_var_bound(RegionType reg, VarIndexType var, double upperbound, double ubscale,
-                            ScaleType scale_t);
+    int add_upper_var_bound(RegionType reg, VarIndexType var, double upperbound);
 
     /// @brief Bound a scalar function of region variables below and above.
     /// @param reg         Region selector.
@@ -1157,66 +1124,33 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     ///////////////////////////////////////////////////////////////
 
     ////////////////////////////////////////////////////
-    /// @brief Bound a variable below and above using concrete enum/index arguments.
-    /// @param reg         The phase region.
-    /// @param var         Variable index within the region.
-    /// @param lowerbound  Lower bound.
-    /// @param upperbound  Upper bound.
-    /// @param lbscale     Lower-bound constraint scale.
-    /// @param ubscale     Upper-bound constraint scale.
-    /// @return The index of the added inequality constraint, unless the temporary
-    ///         native variable-bounds dev switch is active, in which case a
-    ///         bound-record handle instead (see @ref record_var_bounds) — not an
-    ///         inequality-constraint index.
-    int add_lu_var_bound(PhaseRegionFlags reg, int var, double lowerbound, double upperbound,
-                         double lbscale, double ubscale);
-
-    /// @brief Bound a variable below and above with a shared scale (enum/index arguments).
-    /// @param reg         The phase region.
-    /// @param var         Variable index within the region.
-    /// @param lowerbound  Lower bound.
-    /// @param upperbound  Upper bound.
-    /// @param scale       Shared bound scale.
-    /// @return The index of the added inequality constraint, unless the temporary
-    ///         native variable-bounds dev switch is active, in which case a
-    ///         bound-record handle instead (see @ref record_var_bounds) — not an
-    ///         inequality-constraint index.
-    int add_lu_var_bound(PhaseRegionFlags reg, int var, double lowerbound, double upperbound,
-                         double scale) {
-        return this->add_lu_var_bound(reg, var, lowerbound, upperbound, scale, scale);
-    }
-
-    /// @brief Bound several variables below and above with a shared scale.
+    /// @brief Bound several variables below and above with the same interval.
     /// @param reg         The phase region.
     /// @param vars        Variable indices within the region.
     /// @param lowerbound  Lower bound applied to each.
     /// @param upperbound  Upper bound applied to each.
-    /// @param scale       Shared bound scale.
-    /// @return One entry per variable: the added inequality-constraint index, unless
-    ///         the temporary native variable-bounds dev switch is active, in which
-    ///         case bound-record handles instead (see @ref record_var_bounds).
+    /// @return One bound-record handle per variable (see @ref record_var_bounds) —
+    ///         not inequality-constraint indices.
     Eigen::VectorXi add_lu_var_bounds(PhaseRegionFlags reg, Eigen::VectorXi vars, double lowerbound,
-                                      double upperbound, double scale) {
+                                      double upperbound) {
         Eigen::VectorXi cnums(vars.size());
         for (int i = 0; i < cnums.size(); i++) {
-            cnums[i] = this->add_lu_var_bound(reg, vars[i], lowerbound, upperbound, scale, scale);
+            cnums[i] = this->add_lu_var_bound(reg, vars[i], lowerbound, upperbound);
         }
 
         return cnums;
     }
 
-    /// @brief Bound several variables below and above with a shared scale (region by name).
+    /// @brief Bound several variables below and above with the same interval (region by name).
     /// @param reg         The phase region name.
     /// @param vars        Variable indices within the region.
     /// @param lowerbound  Lower bound applied to each.
     /// @param upperbound  Upper bound applied to each.
-    /// @param scale       Shared bound scale.
-    /// @return One entry per variable: the added inequality-constraint index, unless
-    ///         the temporary native variable-bounds dev switch is active, in which
-    ///         case bound-record handles instead (see @ref record_var_bounds).
+    /// @return One bound-record handle per variable (see @ref record_var_bounds) —
+    ///         not inequality-constraint indices.
     Eigen::VectorXi add_lu_var_bounds(std::string reg, Eigen::VectorXi vars, double lowerbound,
-                                      double upperbound, double scale) {
-        return add_lu_var_bounds(strto_PhaseRegionFlag(reg), vars, lowerbound, upperbound, scale);
+                                      double upperbound) {
+        return add_lu_var_bounds(strto_PhaseRegionFlag(reg), vars, lowerbound, upperbound);
     }
 
     ////////////////////////////////////////////////////
@@ -1377,15 +1311,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     }
     /// @brief Remove a previously added inequality constraint by index.
     /// @param index  Constraint index, or -1 for the most recently added.
-    /// @throws std::invalid_argument if this phase holds recorded variable bounds
-    ///         and @p index is not -1 (an explicit index is not an inequality-
-    ///         constraint index unambiguously; -1 always means "the most
-    ///         recently added inequality" and resolves within
-    ///         user_inequalities_ regardless of any recorded bounds).
     void remove_inequal_con(int index) {
-        if (index != -1) {
-            this->check_inequality_index_unambiguous();
-        }
         this->remove_func_impl(this->user_inequalities_, index, "Inequality Constraint");
     }
     /// @brief Remove a previously added state objective by index.
@@ -1664,11 +1590,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     /// @param index  Inequality-constraint index.
     /// @return Per-application multiplier vectors for the constraint.
     /// @throws std::invalid_argument if no solve/optimize has been run.
-    /// @throws std::invalid_argument if this phase holds recorded variable bounds
-    ///         (their handles are not inequality-constraint indices, so @p index
-    ///         cannot be resolved unambiguously).
     std::vector<Eigen::VectorXd> return_inequal_con_lmults(int index) const {
-        this->check_inequality_index_unambiguous();
         if (!this->post_opt_info_valid_) {
             throw std::invalid_argument(
                 "No multipliers to return, a solve or optimize call must be made "
@@ -1682,11 +1604,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     /// @param index  Inequality-constraint index.
     /// @return Per-application residual vectors for the constraint.
     /// @throws std::invalid_argument if no solve/optimize has been run.
-    /// @throws std::invalid_argument if this phase holds recorded variable bounds
-    ///         (their handles are not inequality-constraint indices, so @p index
-    ///         cannot be resolved unambiguously).
     std::vector<Eigen::VectorXd> return_inequal_con_vals(int index) const {
-        this->check_inequality_index_unambiguous();
         if (!this->post_opt_info_valid_) {
             throw std::invalid_argument(
                 "No constraints to return, a solve or optimize call must be made "
@@ -1698,11 +1616,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     /// @brief Return the output scales of an inequality constraint.
     /// @param index  Inequality-constraint index.
     /// @return The constraint's per-output scale vector.
-    /// @throws std::invalid_argument if this phase holds recorded variable bounds
-    ///         (their handles are not inequality-constraint indices, so @p index
-    ///         cannot be resolved unambiguously).
     Eigen::VectorXd return_inequal_con_scales(int index) const {
-        this->check_inequality_index_unambiguous();
         return this->user_inequalities_.at(index).output_scales_;
     }
 
@@ -1904,13 +1818,6 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     /// @endinternal
     int record_var_bounds(RegionType reg_t, VarIndexType var_t, double lowerbound,
                           double upperbound);
-
-    /// @internal
-    /// @brief Reject inequality-index operations (removal or accessor reads) that
-    ///        recorded variable bounds make ambiguous.
-    /// @throws std::invalid_argument if this phase holds recorded variable bounds.
-    /// @endinternal
-    void check_inequality_index_unambiguous() const;
 
     /// @internal
     /// @brief Resolve recorded variable bounds to NLP variable indices and stage them.

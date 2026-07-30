@@ -137,13 +137,13 @@ int main() {
                              front_bc);
 
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "theta", -89.0 * M_PI / 180.0,
-                           89.0 * M_PI / 180.0, 1.0);
+                           89.0 * M_PI / 180.0);
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "gamma", -89.0 * M_PI / 180.0,
-                           89.0 * M_PI / 180.0, 1.0);
+                           89.0 * M_PI / 180.0);
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "alpha", -90.0 * M_PI / 180.0,
-                           90.0 * M_PI / 180.0, 1.0);
+                           90.0 * M_PI / 180.0);
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "beta", -90.0 * M_PI / 180.0,
-                           1.0 * M_PI / 180.0, 1.0);
+                           1.0 * M_PI / 180.0);
     phase.add_upper_delta_time_bound(tmax, 1.0);
 
     phase.add_boundary_value(PhaseRegionFlags::Back, {"h", "v", "gamma"},

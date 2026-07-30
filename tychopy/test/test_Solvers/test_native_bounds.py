@@ -5,21 +5,17 @@ fixed_variable_treatment_`` / ``bound_relax_factor_`` / ``bound_interval_push_``
 in ``include/tycho/detail/solvers/psiopt.h``, validated through
 ``set_fixed_variable_treatment`` / ``set_bound_relax_factor`` /
 ``set_bound_interval_push`` in ``src/solvers/psiopt_settings.cpp``), the
-``FixedVariableTreatments`` enum, and the ``TYCHO_DEV_NATIVE_BOUNDS`` dev
-switch that routes a phase's variable-bound declarations
-(``add_lu_var_bound``/``add_lower_var_bound``/``add_upper_var_bound``) into
-the native recording path (``ODEPhaseBase::transcribe_var_bounds`` in
-``src/optimal_control/ode_phase_base.cpp``) instead of the legacy lowered
-inequality rows.
+``FixedVariableTreatments`` enum, and the phase-level variable-bound
+declarations (``add_lu_var_bound``/``add_lower_var_bound``/
+``add_upper_var_bound``), which are staged onto the solver's variable-bound
+contract by ``ODEPhaseBase::transcribe_var_bounds`` in
+``src/optimal_control/ode_phase_base.cpp`` rather than becoming inequality
+rows.
 
 Each property round-trips within its documented range and rejects an
 out-of-range value with ``ValueError`` (the validated setter raises
 immediately on assignment, mirroring every other validated Settings field --
 see test_psiopt_globalization_settings.py's ``test_MaxSocRoundTrip`` etc.).
-The switch itself is read fresh at every bound-declaration call site, so
-every switch-dependent test below sets ``TYCHO_DEV_NATIVE_BOUNDS`` via
-``monkeypatch.setenv`` before constructing the phase and declaring any bound
--- monkeypatch restores the prior environment automatically at teardown.
 """
 
 import numpy as np
@@ -132,7 +128,7 @@ def test_bound_interval_push_rejects_out_of_range():
 
 
 # =============================================================================
-# TYCHO_DEV_NATIVE_BOUNDS end to end through a phase problem
+# Variable bounds end to end through a phase problem
 # =============================================================================
 
 
@@ -214,11 +210,7 @@ def _make_bounded_brachistochrone_phase():
     return phase
 
 
-def test_bounded_phase_solves_and_returns_in_bounds_trajectory(monkeypatch):
-    # Set BEFORE any phase construction/bound declaration -- the switch is
-    # read fresh at each declaration call site, not cached.
-    monkeypatch.setenv("TYCHO_DEV_NATIVE_BOUNDS", "1")
-
+def test_bounded_phase_solves_and_returns_in_bounds_trajectory():
     phase = _make_bounded_brachistochrone_phase()
     flag = phase.optimize()
     assert flag == solvs.ConvergenceFlags.CONVERGED
@@ -235,28 +227,22 @@ def test_bounded_phase_solves_and_returns_in_bounds_trajectory(monkeypatch):
     assert np.all(control <= upper + margin)
 
 
-def test_conflicting_bound_declaration_raises_value_error_naming_the_variable(
-    monkeypatch,
-):
-    monkeypatch.setenv("TYCHO_DEV_NATIVE_BOUNDS", "1")
+def test_bound_declarations_take_no_scale_argument():
+    # A variable bound adds no constraint row, so there is no output for a
+    # constraint scale to act on and none of the three declarations accept one.
+    phase = _make_oscillator_phase()
+    with pytest.raises(TypeError):
+        phase.add_lu_var_bound("Front", 0, -1.0, 1.0, 1.0)
+    with pytest.raises(TypeError):
+        phase.add_lower_var_bound("Front", 0, -1.0, 1.0)
+    with pytest.raises(TypeError):
+        phase.add_upper_var_bound("Front", 0, 1.0, 1.0)
 
+
+def test_conflicting_bound_declaration_raises_value_error_naming_the_variable():
     phase = _make_oscillator_phase()
     phase.add_lu_var_bound("Front", 0, 5.0, 10.0)
     phase.add_lu_var_bound("Front", 0, 20.0, 30.0)
 
     with pytest.raises(ValueError, match=r"variable index 0"):
         phase.transcribe(False, False)
-
-
-def test_conflicting_bound_declaration_does_not_raise_without_the_switch(monkeypatch):
-    # Regression guard: the legacy lowered-inequality path (the switch left
-    # unset) has no conflict detection -- each declaration becomes its own
-    # inequality row -- so the same two declarations that raise above must
-    # not raise here.
-    monkeypatch.delenv("TYCHO_DEV_NATIVE_BOUNDS", raising=False)
-
-    phase = _make_oscillator_phase()
-    phase.add_lu_var_bound("Front", 0, 5.0, 10.0)
-    phase.add_lu_var_bound("Front", 0, 20.0, 30.0)
-
-    phase.transcribe(False, False)  # must not raise

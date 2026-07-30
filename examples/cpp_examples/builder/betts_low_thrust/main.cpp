@@ -206,7 +206,7 @@ int main() {
                               {"p", "f", "g", "h", "k", "L"});
     }
 
-    phase.add_lu_var_bound(PhaseRegionFlags::ODEParams, 0, -50.0, 0.0, 1.0);
+    phase.add_lu_var_bound(PhaseRegionFlags::ODEParams, 0, -50.0, 0.0);
 
     phase.add_lower_var_bound(PhaseRegionFlags::Back, "w", 0.05);
 

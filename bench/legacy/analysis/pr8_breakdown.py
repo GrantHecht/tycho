@@ -242,7 +242,7 @@ def build_delta3():
     phase4.add_lower_norm_bound("Path", [0, 1, 2], re)
     phase4.add_lu_norm_bound("Path", [8, 9, 10], 0.5, 1.5)
     phase4.add_boundary_value("Front", [6], [m0_phase4])
-    phase4.add_upper_var_bound("Back", 7, tf_phase4, 1.0)
+    phase4.add_upper_var_bound("Back", 7, tf_phase4)
     phase4.add_equal_con("Back", target_orbit(at, et, inc, om, argp), range(0, 6))
     phase4.add_value_objective("Back", 6, -1.0)
 
@@ -337,8 +337,8 @@ def build_cannon():
     )[0]
 
     aphase = ode.phase("LGL5", ascent_ig, 128)
-    aphase.add_lower_var_bound("ODEParams", 0, 0.0, 1)
-    aphase.add_lower_var_bound("Front", 1, 0.0, 1.0)
+    aphase.add_lower_var_bound("ODEParams", 0, 0.0)
+    aphase.add_lower_var_bound("Front", 1, 0.0)
     aphase.add_boundary_value("Front", [2, 3, 4], [h0, r0, 0])
     aphase.add_inequal_con("Front", energy_constraint() * 0.01, [0], [0], [])
     aphase.add_boundary_value("Back", [1], [0.0])
@@ -460,8 +460,8 @@ def build_optimal_docking():
     phase = ode.phase("LGL3", traj, 384)
     phase.set_control_mode("BlockConstant")
     phase.add_boundary_value("Front", range(0, 14), x0[0:14])
-    phase.add_lu_var_bounds("Path", [14, 15, 16], -max_thrust, max_thrust, 0.1)
-    phase.add_lu_var_bounds("Path", [17, 18, 19], -max_torque, max_torque, 1)
+    phase.add_lu_var_bounds("Path", [14, 15, 16], -max_thrust, max_thrust)
+    phase.add_lu_var_bounds("Path", [17, 18, 19], -max_torque, max_torque)
     phase.add_lower_norm_bound("Path", [0, 1, 2], 2 * srad, 1.0)
     phase.add_equal_con("Last", rend_con2(udvec, target_tab), range(0, 14))
     phase.add_upper_delta_time_bound(sim_time)

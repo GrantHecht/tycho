@@ -68,7 +68,7 @@ int main() {
                             XF);
 
     for (const auto &u_name : {"u0", "u1", "u2", "u3"}) {
-        phase.add_lu_var_bound(PhaseRegionFlags::Path, u_name, 0.0, 1.0, 1.0);
+        phase.add_lu_var_bound(PhaseRegionFlags::Path, u_name, 0.0, 1.0);
     }
 
     {

@@ -59,8 +59,8 @@ int main() {
     phase.add_boundary_value(PhaseRegionFlags::Front, {"r", "theta", "vr", "vtheta", "t"},
                              front_val);
 
-    phase.add_lu_var_bound(PhaseRegionFlags::Path, "u", 0.0001, 1.0, 100.0);
-    phase.add_lu_var_bound(PhaseRegionFlags::Path, "alpha", -2.0 * M_PI, 2.0 * M_PI, 1.0);
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, "u", 0.0001, 1.0);
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, "alpha", -2.0 * M_PI, 2.0 * M_PI);
 
     Eigen::VectorXd back_val(3);
     back_val << RF, 0.0, VF;

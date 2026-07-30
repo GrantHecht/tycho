@@ -121,7 +121,7 @@ def build():
     phase.add_boundary_value("Front", [0, 1], A)
     phase.add_boundary_value("Front", [2], [0.0])
     phase.add_boundary_value("Back", [0, 1], B)
-    phase.add_lu_var_bound("Path", 3, -np.pi, np.pi, 1)
+    phase.add_lu_var_bound("Path", 3, -np.pi, np.pi)
     phase.add_delta_time_objective(1.0)
 
     phase.optimizer.set_eq_con_tol(_TOL)

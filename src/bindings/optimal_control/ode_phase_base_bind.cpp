@@ -523,7 +523,9 @@ Parameters
 ----------
 index : int
     The inequality-constraint index returned by :meth:`add_inequal_con` (or a
-    similar ``add_*`` call).
+    similar ``add_*`` call that adds a constraint row, such as
+    :meth:`add_lu_func_bound`). The variable-bound declarations return
+    bound-record handles instead and must not be passed here.
 
 Returns
 -------
@@ -918,32 +920,41 @@ int
 )doc");
 
     obj.def("add_lu_var_bound",
-            nb::overload_cast<RegionType, VarIndexType, double, double, double, ScaleType>(
+            nb::overload_cast<RegionType, VarIndexType, double, double>(
                 &ODEPhaseBase::add_lu_var_bound),
             nb::arg("phase_region"), nb::arg("var"), nb::arg("lowerbound"), nb::arg("upperbound"),
-            nb::arg("scale") = 1.0, nb::arg("auto_scale").none() = std::string("auto"),
-            R"doc(Bound a variable from below and above (an inequality constraint).
+            R"doc(Bound a variable from below and above.
+
+The bound is applied directly to the solver's decision variables: it adds no
+constraint row, no slack, and no multiplier. Conditioning of a badly scaled
+bounded variable is therefore a job for variable scaling (:meth:`set_units`
+with :meth:`set_auto_scaling`), not for a constraint scale factor.
+
+Bounds are given as physical values. When the phase auto-scales, they are
+converted into the scaled units the decision variable is expressed in, using
+the same per-variable unit a constraint over that variable would use.
+
+Repeated declarations on the same variable intersect — the tightest lower and
+upper bound win. Declarations that intersect to an empty interval raise at
+transcription, naming the variable.
 
 Parameters
 ----------
 phase_region : PhaseRegionFlags or str
     Region the variable is read from, e.g. ``"Path"`` to bound it at every node.
-var : int
-    Variable index (into the packed ``[x, t, u, p]`` layout) to bound.
+var : int, sequence of int, or str
+    Variable index/indices (into the packed ``[x, t, u, p]`` layout) to bound.
 lowerbound : float
     Lower bound.
 upperbound : float
     Upper bound.
-scale : float, optional
-    Constraint scaling applied to both the lower and upper bound. Default 1.0.
-auto_scale : ScaleModes or str, optional
-    Output-scaling mode (``"auto"``, ``"custom"``, or ``"none"``). Defaults to
-    ``"auto"``.
 
 Returns
 -------
 int
-    The index assigned to the new bound constraint.
+    A bound-record handle for the declaration. This is not an
+    inequality-constraint index and must not be passed to
+    ``remove_inequal_con`` or the ``return_inequal_con_*`` accessors.
 
 Examples
 --------
@@ -952,57 +963,53 @@ Bound the control variable along the whole path::
     phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
 )doc");
     obj.def("add_lower_var_bound",
-            nb::overload_cast<RegionType, VarIndexType, double, double, ScaleType>(
+            nb::overload_cast<RegionType, VarIndexType, double>(
                 &ODEPhaseBase::add_lower_var_bound),
-            nb::arg("phase_region"), nb::arg("var"), nb::arg("lowerbound"), nb::arg("scale") = 1.0,
-            nb::arg("auto_scale").none() = std::string("auto"),
-            R"doc(Bound a variable from below (an inequality constraint).
+            nb::arg("phase_region"), nb::arg("var"), nb::arg("lowerbound"),
+            R"doc(Bound a variable from below, leaving the upper side open.
+
+See :meth:`add_lu_var_bound` for the semantics shared by all three
+variable-bound declarations.
 
 Parameters
 ----------
 phase_region : PhaseRegionFlags or str
     Region the variable is read from.
-var : int
-    Variable index (into the packed ``[x, t, u, p]`` layout) to bound.
+var : int, sequence of int, or str
+    Variable index/indices (into the packed ``[x, t, u, p]`` layout) to bound.
 lowerbound : float
     Lower bound.
-scale : float, optional
-    Constraint scaling. Default 1.0.
-auto_scale : ScaleModes or str, optional
-    Output-scaling mode (``"auto"``, ``"custom"``, or ``"none"``). Defaults to
-    ``"auto"``.
 
 Returns
 -------
 int
-    The index assigned to the new bound constraint.
+    A bound-record handle for the declaration, not an inequality-constraint
+    index.
 )doc");
 
     obj.def("add_upper_var_bound",
-            nb::overload_cast<RegionType, VarIndexType, double, double, ScaleType>(
+            nb::overload_cast<RegionType, VarIndexType, double>(
                 &ODEPhaseBase::add_upper_var_bound),
-            nb::arg("phase_region"), nb::arg("var"), nb::arg("upperbound"), nb::arg("scale") = 1.0,
-            nb::arg("auto_scale").none() = std::string("auto"),
-            R"doc(Bound a variable from above (an inequality constraint).
+            nb::arg("phase_region"), nb::arg("var"), nb::arg("upperbound"),
+            R"doc(Bound a variable from above, leaving the lower side open.
+
+See :meth:`add_lu_var_bound` for the semantics shared by all three
+variable-bound declarations.
 
 Parameters
 ----------
 phase_region : PhaseRegionFlags or str
     Region the variable is read from.
-var : int
-    Variable index (into the packed ``[x, t, u, p]`` layout) to bound.
+var : int, sequence of int, or str
+    Variable index/indices (into the packed ``[x, t, u, p]`` layout) to bound.
 upperbound : float
     Upper bound.
-scale : float, optional
-    Constraint scaling. Default 1.0.
-auto_scale : ScaleModes or str, optional
-    Output-scaling mode (``"auto"``, ``"custom"``, or ``"none"``). Defaults to
-    ``"auto"``.
 
 Returns
 -------
 int
-    The index assigned to the new bound constraint.
+    A bound-record handle for the declaration, not an inequality-constraint
+    index.
 )doc");
 
     obj.def(
@@ -1618,9 +1625,12 @@ int
 )doc");
     ////////////////////////////////////////////////////////////////////////////
     obj.def("add_lu_var_bounds",
-            nb::overload_cast<PhaseRegionFlags, Eigen::VectorXi, double, double, double>(
+            nb::overload_cast<PhaseRegionFlags, Eigen::VectorXi, double, double>(
                 &ODEPhaseBase::add_lu_var_bounds),
-            R"doc(Bound several variables from below and above with a shared scale.
+            R"doc(Bound several variables from below and above with the same interval.
+
+Equivalent to one :meth:`add_lu_var_bound` call per entry of ``vars``; see that
+method for the bound semantics.
 
 Parameters
 ----------
@@ -1632,16 +1642,15 @@ lowerbound : float
     Lower bound applied to each variable.
 upperbound : float
     Upper bound applied to each variable.
-scale : float
-    Shared constraint scaling.
 
 Returns
 -------
 numpy.ndarray of int
-    Indices assigned to the new bound constraints (one per variable).
+    One bound-record handle per variable. These are not inequality-constraint
+    indices.
 )doc");
     obj.def("add_lu_var_bounds",
-            nb::overload_cast<std::string, Eigen::VectorXi, double, double, double>(
+            nb::overload_cast<std::string, Eigen::VectorXi, double, double>(
                 &ODEPhaseBase::add_lu_var_bounds),
             "");
 
