@@ -154,6 +154,78 @@ GenericFunction<-1, 1> native_var_bounds_scalar_fn() {
     return GenericFunction<-1, 1>(Arguments<1>().coeff<0>());
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// A LinearODE variant carrying one ODE parameter, for the ODEParams arm of the
+// scaled-bound unit lookup.
+//
+// TychoTest::LinearODE has p_vars == 0, so no fixture built on it can reach that
+// arm at all. Here x_vars=2, u_vars=0, p_vars=1, giving the input layout
+// [x, v, t, p]: xtu_vars() == 3 and xtu_p_vars() == 4, so the ODE parameter's
+// scaling unit is the LAST entry of xtup_units_ and is reached only through the
+// + xtu_vars() offset. Dynamics are xdot = v, vdot = p (the parameter is a
+// constant acceleration) -- the tests below never solve, so only the sizes and
+// the parameter's presence in the index space matter.
+///////////////////////////////////////////////////////////////////////////////
+
+struct NativeVarBoundsParamODE_Impl : ODESize<2, 0, 1> {
+    static auto Definition() {
+        auto args = Arguments<4>(); // [x, v, t, p]
+        auto v = args.coeff<1>();
+        auto p = args.coeff<3>();
+        return StackedOutputs{v, p};
+    }
+};
+BUILD_ODE_FROM_EXPRESSION(NativeVarBoundsParamODE, NativeVarBoundsParamODE_Impl);
+
+/// The NativeVarBoundsPhase equivalent for the parameter-bearing ODE: exposes
+/// the protected bound-record list so a declaration can be staged without
+/// depending on the process-wide declaration-site switch.
+struct NativeVarBoundsParamPhase : ODEPhase<NativeVarBoundsParamODE> {
+    using ODEPhase<NativeVarBoundsParamODE>::ODEPhase;
+
+    void push_var_bound(PhaseRegionFlags reg, int var, double lower, double upper) {
+        this->user_var_bounds_.push_back(VarBoundRecord{reg, var, lower, upper});
+        this->reset_transcription();
+    }
+};
+
+/// Build a NativeVarBoundsParamPhase on the same 2-defect LGL3 mesh as
+/// make_native_var_bounds_phase(), with the ODE-parameter column held constant.
+std::shared_ptr<NativeVarBoundsParamPhase> make_native_var_bounds_param_phase() {
+    constexpr double x0 = 0.0, v0 = 1.0, t0 = 0.0, tf = 1.0, p0 = 0.0;
+    constexpr int n_pts = 5;
+
+    std::vector<Eigen::VectorXd> traj;
+    traj.reserve(n_pts);
+    for (int i = 0; i < n_pts; ++i) {
+        double s = static_cast<double>(i) / (n_pts - 1);
+        double t = t0 + (tf - t0) * s;
+        Eigen::VectorXd pt(4); // [x, v, t, p]
+        pt[0] = x0 + v0 * (t - t0);
+        pt[1] = v0;
+        pt[2] = t;
+        pt[3] = p0;
+        traj.push_back(pt);
+    }
+
+    NativeVarBoundsParamODE ode;
+    return std::make_shared<NativeVarBoundsParamPhase>(ode, TranscriptionModes::LGL3, traj, 2);
+}
+
+/// The index of the single bounded variable in @p nlp, asserting there is
+/// exactly one. Used where the NLP slot of a parameter is not worth hardcoding.
+int native_var_bounds_only_bounded_index(
+    const std::shared_ptr<tycho::solvers::NonLinearProgram> &nlp) {
+    int bounded = -1;
+    for (int i = 0; i < nlp->x_lower_.size(); ++i) {
+        if (nlp->x_lower_[i] != -kNativeVarBoundsInf || nlp->x_upper_[i] != kNativeVarBoundsInf) {
+            EXPECT_EQ(bounded, -1) << "more than one variable was bounded, at " << i;
+            bounded = i;
+        }
+    }
+    return bounded;
+}
+
 /// Assert that every NLP variable except those in @p bounded is unbounded.
 void native_var_bounds_expect_only(const std::shared_ptr<tycho::solvers::NonLinearProgram> &nlp,
                                    const std::vector<int> &bounded) {
@@ -447,17 +519,88 @@ TEST(PhaseNativeVarBoundsScaling, StaticParamBoundsUseTheStaticParamUnits) {
     // ones here), so a scaled bound proves the right unit array was consulted.
     // Located by scan rather than by a hardcoded index: this is the only bounded
     // variable, and its NLP slot sits past the phase's own variable block.
-    int bounded = -1;
-    for (int i = 0; i < phase->nlp_->x_lower_.size(); ++i) {
-        if (phase->nlp_->x_lower_[i] != -kNativeVarBoundsInf ||
-            phase->nlp_->x_upper_[i] != kNativeVarBoundsInf) {
-            EXPECT_EQ(bounded, -1) << "more than one variable was bounded, at " << i;
-            bounded = i;
-        }
-    }
+    int bounded = native_var_bounds_only_bounded_index(phase->nlp_);
     ASSERT_GE(bounded, kNativeVarBoundsPhaseVars);
     EXPECT_DOUBLE_EQ(phase->nlp_->x_lower_[bounded], -2.0);
     EXPECT_DOUBLE_EQ(phase->nlp_->x_upper_[bounded], 4.0);
+}
+
+TEST(PhaseNativeVarBoundsScaling, ODEParamBoundsUseTheOffsetParameterUnit) {
+    auto phase = make_native_var_bounds_param_phase();
+    // [x, v, t, p]: every state/time slot is one, so ONLY the parameter's own
+    // unit can scale the bound. A lookup that dropped the + xtu_vars() offset
+    // would read xtup_units_[0] == 1 and stage the declared numbers unscaled;
+    // a lookup that reached for sp_units_ would find an empty array. Either way
+    // the assertion below fails, which is the point of the all-ones padding.
+    Eigen::VectorXd units(4);
+    units << 1.0, 1.0, 1.0, 5.0;
+    phase->set_auto_scaling(true);
+    phase->set_units(units);
+
+    phase->push_var_bound(PhaseRegionFlags::ODEParams, /*var=*/0, -10.0, 20.0);
+    phase->transcribe();
+
+    int bounded = native_var_bounds_only_bounded_index(phase->nlp_);
+    ASSERT_GE(bounded, 0);
+    EXPECT_DOUBLE_EQ(phase->nlp_->x_lower_[bounded], -2.0);
+    EXPECT_DOUBLE_EQ(phase->nlp_->x_upper_[bounded], 4.0);
+}
+
+TEST(PhaseNativeVarBoundsScaling, ODEParamUnitsAreIgnoredWhenAutoScalingIsOff) {
+    auto phase = make_native_var_bounds_param_phase();
+    Eigen::VectorXd units(4);
+    units << 1.0, 1.0, 1.0, 5.0;
+    phase->set_units(units);
+
+    phase->push_var_bound(PhaseRegionFlags::ODEParams, /*var=*/0, -10.0, 20.0);
+    phase->transcribe();
+
+    int bounded = native_var_bounds_only_bounded_index(phase->nlp_);
+    ASSERT_GE(bounded, 0);
+    EXPECT_DOUBLE_EQ(phase->nlp_->x_lower_[bounded], -10.0);
+    EXPECT_DOUBLE_EQ(phase->nlp_->x_upper_[bounded], 20.0);
+}
+
+TEST(PhaseNativeVarBoundsScaling, EachPhaseUsesItsOwnUnitsInAMultiPhaseProblem) {
+    auto phase0 = make_native_var_bounds_phase();
+    auto phase1 = make_native_var_bounds_phase();
+
+    // Same declaration in both phases, different unit on the bounded variable:
+    // the two staged boxes must differ, which they can only do if the divisor is
+    // read per phase. Auto-scaling is set on the phases rather than on the
+    // problem because that is the flag the packing reads too --
+    // OptimalControlProblemBase::make_solver_input delegates to each phase's own
+    // make_solver_input, so each phase's variables are scaled by its own units.
+    Eigen::VectorXd units0(3);
+    units0 << 1.0, 4.0, 2.0;
+    Eigen::VectorXd units1(3);
+    units1 << 1.0, 0.5, 2.0;
+    phase0->set_auto_scaling(true);
+    phase0->set_units(units0);
+    phase1->set_auto_scaling(true);
+    phase1->set_units(units1);
+
+    phase0->push_var_bound(PhaseRegionFlags::Path, /*var=*/1, -3.0, 5.0);
+    phase1->push_var_bound(PhaseRegionFlags::Path, /*var=*/1, -3.0, 5.0);
+
+    OptimalControlProblemBase ocp;
+    ocp.add_phase(phase0);
+    ocp.add_phase(phase1);
+    ocp.transcribe();
+
+    ASSERT_EQ(ocp.nlp_->x_lower_.size(), 2 * kNativeVarBoundsPhaseVars);
+
+    // Phase 0 owns indices [0, 9) and divides by 4; phase 1 owns [9, 18) and
+    // divides by 0.5.
+    for (int gidx : {1, 4, 7}) {
+        EXPECT_DOUBLE_EQ(ocp.nlp_->x_lower_[gidx], -0.75) << "index " << gidx;
+        EXPECT_DOUBLE_EQ(ocp.nlp_->x_upper_[gidx], 1.25) << "index " << gidx;
+    }
+    for (int gidx : {9 + 1, 9 + 4, 9 + 7}) {
+        EXPECT_DOUBLE_EQ(ocp.nlp_->x_lower_[gidx], -6.0) << "index " << gidx;
+        EXPECT_DOUBLE_EQ(ocp.nlp_->x_upper_[gidx], 10.0) << "index " << gidx;
+    }
+    native_var_bounds_expect_only(ocp.nlp_, {1, 4, 7, 10, 13, 16});
 }
 
 TEST(PhaseNativeVarBoundsScaling, SetUnitsRetranscriptionRestagesAgainstTheNewUnits) {
@@ -507,6 +650,36 @@ TEST(PhaseNativeVarBoundsScaling, NonPositiveUnitUnderAutoScalingThrowsWithConte
         EXPECT_NE(msg.find("phase 0"), std::string::npos) << msg;
         EXPECT_NE(msg.find("variable index 2"), std::string::npos) << msg;
         EXPECT_NE(msg.find("finite and positive"), std::string::npos) << msg;
+    }
+}
+
+TEST(PhaseNativeVarBoundsScaling, NonFiniteUnitUnderAutoScalingThrowsWithContext) {
+    // set_units() validates only the vector's length, so this guard -- not an
+    // upstream check -- is what stops a non-finite unit. The NaN leg matters
+    // independently of the infinity leg: NaN fails every ordered comparison, so
+    // `unit <= 0.0` is false for it and only the !isfinite clause catches it.
+    const double bad_units[] = {kNativeVarBoundsInf, -kNativeVarBoundsInf,
+                                std::numeric_limits<double>::quiet_NaN()};
+
+    for (double bad : bad_units) {
+        auto phase = make_native_var_bounds_phase();
+        Eigen::VectorXd units(3);
+        units << 1.0, 1.0, bad;
+        phase->set_auto_scaling(true);
+        phase->set_units(units);
+
+        phase->push_var_bound(PhaseRegionFlags::Back, /*var=*/2, 1.0, 9.0);
+
+        try {
+            phase->transcribe();
+            FAIL() << "expected std::invalid_argument for a non-finite scaling unit (" << bad
+                   << ")";
+        } catch (const std::invalid_argument &e) {
+            const std::string msg = e.what();
+            EXPECT_NE(msg.find("phase 0"), std::string::npos) << msg;
+            EXPECT_NE(msg.find("variable index 2"), std::string::npos) << msg;
+            EXPECT_NE(msg.find("finite and positive"), std::string::npos) << msg;
+        }
     }
 }
 
