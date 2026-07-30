@@ -245,7 +245,8 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
         "this factor times max(1, |bound|), so the box every barrier term divides by is never "
         "exactly the declared one (Ipopt's bound_relax_factor, same default). 1e-8 (default); "
         "must lie in [0, 1e-2]. Zero records every declared bound verbatim. Also separates the "
-        "bounds of a fixed variable under fixed_variable_treatment=RelaxBounds.");
+        "bounds of a fixed variable under fixed_variable_treatment=RelaxBounds. Read only when "
+        "native variable bounds are declared.");
 
     BIND_SETTINGS_VALIDATED(
         obj, "fixed_variable_treatment", fixed_variable_treatment_, set_fixed_variable_treatment,
