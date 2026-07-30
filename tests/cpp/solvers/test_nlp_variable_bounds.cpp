@@ -185,11 +185,17 @@ double nlp_var_bounds_relax(double bound, double factor, bool upper) {
 
 // Adds the objective term (x[index] - center)^2.
 //
-// Every solve below is built from SHIFTED squares rather than a plain ||x||^2,
+// Most solves below are built from SHIFTED squares rather than a plain ||x||^2,
 // and started away from the minimizer, so that neither the objective value nor
-// its gradient is identically zero at the initial point. A problem whose
-// gradient vanishes at the start point is a degenerate input to the barrier /
-// merit machinery and does not exercise anything this suite is about.
+// its gradient is identically zero at the initial point -- which keeps them about
+// the bound classification and the reduction rather than about what the solver
+// does on a stationary start.
+//
+// The stationary start is not itself a hazard any more. It used to be, and not for
+// a barrier or merit reason: squared_norm formed its derivative coefficient as
+// 2 n^2 / n^2, which is 0/0 at the centre of the norm, so a variable sitting
+// exactly on its own objective centre put a NaN on its KKT diagonal.
+// ObjectiveStartedAtItsOwnCentreConverges pins the fixed behaviour.
 void nlp_var_bounds_add_shifted_square(tycho::solvers::OptimizationProblem &prob, int index,
                                        double center) {
     auto args = tycho::vf::Arguments<1>();
@@ -882,6 +888,48 @@ TEST(NlpVarBoundsReduction, InfiniteFixingValueThrows) {
 // both that the reference converged and that it reached its own closed-form
 // optimum -- a reference that failed to solve can then never masquerade as
 // agreement with the eliminated problem.
+//
+// The two degenerate-start solves that open the section are the deliberate
+// exception: they start ON the objective's centre, which is the case
+// squared_norm's 0/0 derivative coefficient used to turn into a DIVERGING verdict.
+
+// min sum_i x_i^2 started at the origin -- which is the minimizer, so the solve is
+// over as soon as the convergence test is applied, and every coordinate sits on
+// its own objective centre when it is.
+TEST(NlpVarBoundsReduction, ObjectiveStartedAtItsOwnCentreConverges) {
+    tycho::solvers::OptimizationProblem prob;
+    nlp_var_bounds_add_separable_objective(prob, {0.0, 0.0, 0.0});
+    auto nlp = nlp_var_bounds_transcribe(prob, 3);
+
+    auto outcome = nlp_var_bounds_solve(nlp, Eigen::VectorXd::Zero(3));
+
+    EXPECT_EQ(outcome.flag_, tycho::ConvergenceFlags::CONVERGED);
+    for (int i = 0; i < 3; i++) {
+        EXPECT_NEAR(outcome.solution_[i], 0.0, 1e-9) << "coordinate " << i;
+    }
+}
+
+// The same degeneracy with a step still required, which is the harder half: two
+// coordinates have to move to satisfy x0 + x1 = 4, so the iteration cannot finish
+// before a Newton solve, and the third coordinate is on its own objective centre
+// at every iterate of it. The NaN this used to put on that coordinate's KKT
+// diagonal was invisible in the residual table -- an infinity-norm reduction drops
+// it -- and surfaced only as a non-finite step and a DIVERGING verdict.
+TEST(NlpVarBoundsReduction, ObjectiveAtItsOwnCentreConvergesWithAStepStillRequired) {
+    tycho::solvers::OptimizationProblem prob;
+    nlp_var_bounds_add_separable_objective(prob, {0.0, 0.0, 0.0});
+    nlp_var_bounds_add_pair_sum_con(prob, 0, 1, 4.0);
+    auto nlp = nlp_var_bounds_transcribe(prob, 3);
+
+    auto outcome = nlp_var_bounds_solve(nlp, Eigen::VectorXd::Zero(3));
+
+    EXPECT_EQ(outcome.flag_, tycho::ConvergenceFlags::CONVERGED);
+    // Closed form: the row splits evenly between the two coordinates it couples,
+    // and the third is already at its minimum and must stay there.
+    EXPECT_NEAR(outcome.solution_[0], 2.0, 1e-6);
+    EXPECT_NEAR(outcome.solution_[1], 2.0, 1e-6);
+    EXPECT_NEAR(outcome.solution_[2], 0.0, 1e-9);
+}
 
 // Identity path end to end: min sum (x_i - c_i)^2 over three variables with
 // c = (1, 2, 3), s.t. x0 + x2 = 6, no bounds. Stationarity gives
