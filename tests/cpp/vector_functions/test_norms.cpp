@@ -131,9 +131,9 @@ TEST_F(CommonFunctionsTest, ShiftedSquaredNormDerivativesAtItsCentreAreExact) {
 }
 
 // The quotient degenerates for an argument that is merely small, too: ||x||^2
-// underflows to exactly zero well before ||x|| does, taking the coefficient's
-// denominator with it. The derivatives stay exact there even though the value
-// itself has already underflowed.
+// underflows to exactly zero well before ||x|| does, taking the denominator of BOTH
+// coefficients with it. The derivatives stay exact there even though the value itself
+// has already underflowed.
 TEST_F(CommonFunctionsTest, SquaredNormDerivativesSurviveAnUnderflowingArgument) {
     auto args = Arguments<3>();
     auto sn = args.squared_norm();
@@ -141,6 +141,27 @@ TEST_F(CommonFunctionsTest, SquaredNormDerivativesSurviveAnUnderflowingArgument)
     x << 1.0e-200, -2.0e-200, 3.0e-200;
     const double lm0 = 1.75;
     ASSERT_DOUBLE_EQ(x.squaredNorm(), 0.0) << "premise: the squared norm underflows to zero here";
+
+    const auto out = norms_all_derivatives(sn, x, lm0);
+
+    norms_expect_squared_norm_derivatives(out, x, lm0);
+}
+
+// The band between the two underflows, which is a distinct regime and a wide one:
+// ||x||^2 is still an ordinary normal number, so the Jacobian's coefficient never
+// degenerated, but ||x||^4 -- the rank-one Hessian coefficient's denominator -- has
+// already reached zero. Only the Hessian was exposed here, which is why the premise
+// is asserted from both sides.
+TEST_F(CommonFunctionsTest, SquaredNormHessianSurvivesTheFourthPowerUnderflowBand) {
+    auto args = Arguments<3>();
+    auto sn = args.squared_norm();
+    Eigen::VectorXd x(3);
+    x << 1.0e-100, -2.0e-100, 3.0e-100;
+    const double lm0 = 1.75;
+    const double squared = x.squaredNorm();
+    ASSERT_NE(squared, 0.0) << "premise: the Jacobian coefficient's denominator is still normal";
+    ASSERT_DOUBLE_EQ(squared * squared, 0.0)
+        << "premise: the rank-one Hessian coefficient's denominator is not";
 
     const auto out = norms_all_derivatives(sn, x, lm0);
 
@@ -167,6 +188,92 @@ TEST_F(CommonFunctionsTest, SquaredNormDerivativesAwayFromItsCentreAreUnchanged)
     lm << lm0;
     verify_jacobian_fd(sn, x);
     verify_adjoint_hessian_fd(sn, x, lm);
+}
+
+// The SuperScalar arm of both derivative entry points, which is the one the
+// collocation inner loop runs and the one carrying new code -- the lane-wise blend
+// that stands in for the scalar branch's compare. Driven with the lanes deliberately
+// mixed: lane 0 sits exactly on the centre of the norm and the rest are ordinary
+// nonzero arguments, so a blend that leaked across lanes in either direction fails.
+// Lane 0 is held to the exact closed form; every other lane is held to the scalar
+// path evaluated on that lane's own argument, which is the stronger statement of the
+// two (it survives whatever the packet schedule does to the arithmetic).
+TEST_F(CommonFunctionsTest, SquaredNormSuperScalarDerivativesMatchTheScalarPathLaneByLane) {
+    using SuperScalar = tycho::DefaultSuperScalar;
+    constexpr int kWidth = SuperScalar::SizeAtCompileTime;
+    constexpr int kRows = 3;
+    // Dyadic, so every lane's argument and its doubling are exactly representable and
+    // the comparison is about the code path rather than about rounding.
+    const Eigen::Matrix<double, kRows, 1> lane_step(1.0, -1.25, 1.5);
+    const double lm0 = 1.75;
+
+    tycho::vf::SquaredNorm<kRows> sn(kRows);
+
+    Eigen::Matrix<SuperScalar, kRows, 1> x;
+    for (int j = 0; j < kRows; j++) {
+        for (int k = 0; k < kWidth; k++) {
+            x[j][k] = lane_step[j] * static_cast<double>(k);
+        }
+    }
+    Eigen::Matrix<SuperScalar, 1, 1> fx, lm;
+    Eigen::Matrix<SuperScalar, 1, kRows> jx;
+    Eigen::Matrix<SuperScalar, kRows, 1> gx;
+    Eigen::Matrix<SuperScalar, kRows, kRows> hx;
+    fx.setZero();
+    jx.setZero();
+    gx.setZero();
+    hx.setZero();
+    lm[0] = SuperScalar::Constant(lm0);
+    sn.compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, gx, hx, lm);
+
+    // The Jacobian entry point separately, since it forms its coefficient on its own.
+    Eigen::Matrix<SuperScalar, 1, 1> fx_j;
+    Eigen::Matrix<SuperScalar, 1, kRows> jx_j;
+    fx_j.setZero();
+    jx_j.setZero();
+    sn.compute_jacobian(x, fx_j, jx_j);
+
+    for (int k = 0; k < kWidth; k++) {
+        SCOPED_TRACE("lane " + std::to_string(k));
+        Eigen::VectorXd x_lane(kRows);
+        for (int j = 0; j < kRows; j++) {
+            x_lane[j] = x[j][k];
+        }
+        const auto scalar = norms_all_derivatives(sn, x_lane, lm0);
+
+        // Agreement with the scalar path, entry point by entry point.
+        for (int j = 0; j < kRows; j++) {
+            EXPECT_DOUBLE_EQ(jx(0, j)[k], scalar.jx_(0, j)) << "Jacobian column " << j;
+            EXPECT_DOUBLE_EQ(jx_j(0, j)[k], scalar.jx_(0, j))
+                << "Jacobian-only entry point, column " << j;
+            EXPECT_DOUBLE_EQ(gx[j][k], scalar.adjgrad_[j]) << "adjoint gradient row " << j;
+        }
+        EXPECT_DOUBLE_EQ(fx[0][k], scalar.fx_[0]);
+        EXPECT_DOUBLE_EQ(fx_j[0][k], scalar.fx_[0]);
+        for (int i = 0; i < kRows; i++) {
+            for (int j = 0; j < kRows; j++) {
+                EXPECT_DOUBLE_EQ(hx(i, j)[k], scalar.adjhess_(i, j))
+                    << "adjoint Hessian (" << i << "," << j << ")";
+            }
+        }
+
+        // ... and the closed form as well, on the centre lane and the others alike, so a
+        // regression that broke both paths the same way cannot pass on agreement alone.
+        NormsDerivativeOutputs lane;
+        lane.fx_ = Eigen::VectorXd::Zero(1);
+        lane.adjgrad_ = Eigen::VectorXd::Zero(kRows);
+        lane.jx_ = Eigen::MatrixXd::Zero(1, kRows);
+        lane.adjhess_ = Eigen::MatrixXd::Zero(kRows, kRows);
+        lane.fx_[0] = fx[0][k];
+        for (int j = 0; j < kRows; j++) {
+            lane.jx_(0, j) = jx(0, j)[k];
+            lane.adjgrad_[j] = gx[j][k];
+            for (int i = 0; i < kRows; i++) {
+                lane.adjhess_(i, j) = hx(i, j)[k];
+            }
+        }
+        norms_expect_squared_norm_derivatives(lane, x_lane, lm0);
+    }
 }
 
 TEST_F(CommonFunctionsTest, InverseNormAnalyticalJacobian) {

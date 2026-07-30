@@ -47,6 +47,10 @@ template <int IR> struct Norm : IntegralNorm_Impl<Norm<IR>, IR, 1> {
 ///       @f$2x^T=0@f$ and the adjoint Hessian @f$2\lambda I@f$, both exact. An objective
 ///       of this shape reaching its own centre is an ordinary occurrence at a solution, so
 ///       this is the norm expression to reach for when the argument can vanish.
+/// @note The value underflows before the derivatives do: for @f$\|x\|@f$ below about
+///       @f$10^{-154}@f$ the sum of squares rounds to zero while the Jacobian is still the
+///       exactly-representable @f$2x^T \neq 0@f$. Both are correctly rounded on their own;
+///       do not infer a vanishing gradient from a vanishing value.
 /// @tparam IR  Compile-time input row count (Eigen::Dynamic for runtime size).
 template <int IR> struct SquaredNorm : IntegralNorm_Impl<SquaredNorm<IR>, IR, 2> {
     /// @brief Convenience alias for the underlying integral-power-norm implementation.
@@ -90,11 +94,13 @@ template <int IR> struct InverseSquaredNorm : IntegralNorm_Impl<InverseSquaredNo
 /// values (±1 through ±4) are specialised for speed. Produced in C++ via
 /// `f.norm_power<PW>()`; Python exposes `cubed_norm` (`f.cubed_norm()`) as the
 /// only named positive-power shorthand — higher powers use the C++ member directly.
-/// @note @f$\|x\|^{PW}@f$ is twice differentiable at @f$x=0@f$ for @c PW @c >= @c 2, but
-///       only @c PW @c == @c 2 (@ref SquaredNorm) evaluates its derivatives there; for
-///       @c PW @c >= @c 3 the shared coefficient quotient still returns non-finite at the
-///       origin even though the true derivatives are zero. @c PW @c == @c 1 is @ref Norm's
-///       case and is genuinely not differentiable there.
+/// @note @f$\|x\|^{PW}@f$ is twice differentiable at @f$x=0@f$ for @c PW @c >= @c 2 and for
+///       the degenerate @c PW @c == @c 0, but only @c PW @c == @c 2 (@ref SquaredNorm)
+///       evaluates its derivatives there; for @c PW @c >= @c 3, and for @c PW @c == @c 0
+///       (whose derivatives are those of the constant @f$1@f$), the shared coefficient
+///       quotient still returns non-finite at the origin even though the true derivatives
+///       are zero. @c PW @c == @c 1 is @ref Norm's case and is genuinely not differentiable
+///       there.
 /// @tparam IR  Compile-time input row count (Eigen::Dynamic for runtime size).
 /// @tparam PW  Integer power applied to the norm.
 template <int IR, int PW> struct NormPower : IntegralNorm_Impl<NormPower<IR, PW>, IR, PW> {
@@ -278,14 +284,17 @@ struct IntegralNorm_Impl : VectorFunction<Derived, USZ, 1> {
         Scalar pow_n = this->calc_pow_n(n);
 
         Scalar np = pow_n;
-        Scalar npd;
+        Scalar npd = power * np / (n * n);
         if constexpr (power == 2) {
+            // Re-formed from operands that are defined at the centre of the norm, which
+            // makes the initialiser above dead for this one power. Substituting the
+            // operands rather than correcting the quotient is what keeps the coefficient
+            // bit-identical off the degenerate set -- see
+            // substitute_unit_quotient_at_zero.
             Scalar npd_num = np;
             Scalar npd_den = n * n;
             substitute_unit_quotient_at_zero(npd_num, npd_den);
             npd = power * npd_num / npd_den;
-        } else {
-            npd = power * np / (n * n);
         }
         fx[0] = np;
         jx = npd * x.transpose();
@@ -330,8 +339,14 @@ struct IntegralNorm_Impl : VectorFunction<Derived, USZ, 1> {
         Scalar pow_n = this->calc_pow_n(n);
 
         Scalar np = pow_n;
-        Scalar npd, npdd;
+        Scalar npd = power * np / (n * n);
+        Scalar npdd = adjvars[0] * ppm2 * np / (n * n * n * n);
         if constexpr (power == 2) {
+            // Both coefficients re-formed from operands that are defined at the centre of
+            // the norm, which makes the two initialisers above dead for this one power.
+            // Their own denominators degenerate at different scales: n^2 reaches zero only
+            // at the centre and just below it, n^4 across a whole band of small arguments,
+            // so each quotient carries its own substitution.
             Scalar npd_num = np;
             Scalar npd_den = n * n;
             Scalar npdd_num = np;
@@ -344,9 +359,6 @@ struct IntegralNorm_Impl : VectorFunction<Derived, USZ, 1> {
             // rank-one term at all. The substitution only keeps the quotient out of 0/0; the
             // leading factor does the rest.
             npdd = adjvars[0] * ppm2 * npdd_num / npdd_den;
-        } else {
-            npd = power * np / (n * n);
-            npdd = adjvars[0] * ppm2 * np / (n * n * n * n);
         }
 
         fx[0] = np;
