@@ -13,6 +13,8 @@
 //   - Migrated to tycho:: sub-namespaces (PR #35)
 //   - PSIOPT refactor (PR #39): Settings/SolveResult structs with def_prop_rw/def_prop_ro,
 //     validated setters, result read-only bindings, dead binding removal
+//   - Native variable bounds: bound_interval_push/bound_relax_factor/
+//     fixed_variable_treatment properties and the FixedVariableTreatments enum
 // =============================================================================
 
 #include "psiopt_bind.h"
@@ -228,6 +230,34 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     obj.def("set_bound_fraction", &PSIOPT::set_bound_fraction);
 
     BIND_SETTINGS_VALIDATED(obj, "bound_push", bound_push_, set_bound_push, "");
+
+    BIND_SETTINGS_VALIDATED(
+        obj, "bound_interval_push", bound_interval_push_, set_bound_interval_push,
+        "Fraction of a two-sided bounded variable's declared interval (upper - lower) that "
+        "additionally caps its interior push at solve entry, on top of bound_push's absolute "
+        "push, so a narrow interval is never pushed past its own midpoint (Ipopt's "
+        "bound_frac, same default). Read only when the problem declares native variable "
+        "bounds. 1e-2 (default); must lie in (0, 0.5).");
+
+    BIND_SETTINGS_VALIDATED(
+        obj, "bound_relax_factor", bound_relax_factor_, set_bound_relax_factor,
+        "Widening applied to every finite declared variable bound before it is recorded, as "
+        "this factor times max(1, |bound|), so the box every barrier term divides by is never "
+        "exactly the declared one (Ipopt's bound_relax_factor, same default). 1e-8 (default); "
+        "must lie in [0, 1e-2]. Zero records every declared bound verbatim. Also separates the "
+        "bounds of a fixed variable under fixed_variable_treatment=RelaxBounds.");
+
+    BIND_SETTINGS_VALIDATED(
+        obj, "fixed_variable_treatment", fixed_variable_treatment_, set_fixed_variable_treatment,
+        "How a primal variable whose declared lower and upper bounds are equal is handed to "
+        "the solver, corresponding to Ipopt's fixed_variable_treatment option. MakeParameter "
+        "(default) eliminates the variable from the factorized system entirely -- one row and "
+        "column narrower per fixed variable, with an exact value in the returned solution. "
+        "MakeConstraint keeps the variable free and adds one internal equality row per fixed "
+        "variable instead -- one row and column wider. RelaxBounds keeps the variable as a "
+        "two-sided bounded variable with its bounds pushed apart by bound_relax_factor, held "
+        "near its value by the barrier. All three reach the same solution on a well-posed "
+        "problem. See FixedVariableTreatments for the full mechanism.");
 
     // --- Hessian perturbation ---
     BIND_SETTINGS_VALIDATED(obj, "delta_h", delta_h_, set_delta_h, "");
@@ -477,6 +507,21 @@ ValueError
     nb::enum_<QPPivotModes>(m, "QPPivotModes")
         .value("OneByOne", QPPivotModes::OneByOne)
         .value("TwoByTwo", QPPivotModes::TwoByTwo);
+    nb::enum_<FixedVariableTreatments>(
+        m, "FixedVariableTreatments",
+        "Fixed-variable handling selector for PSIOPT.fixed_variable_treatment, corresponding "
+        "to Ipopt's fixed_variable_treatment option.")
+        .value("MakeParameter", FixedVariableTreatments::MakeParameter,
+               "Eliminates a fixed variable (equal declared lower and upper bound) from the "
+               "factorized system entirely -- one row and column narrower per fixed variable, "
+               "with an exact value in the returned solution. Default.")
+        .value("MakeConstraint", FixedVariableTreatments::MakeConstraint,
+               "Keeps a fixed variable free and adds one internal equality row per fixed "
+               "variable instead -- one row and column wider than MakeParameter.")
+        .value("RelaxBounds", FixedVariableTreatments::RelaxBounds,
+               "Keeps a fixed variable as an ordinary two-sided bounded variable with its "
+               "bounds pushed apart by bound_relax_factor, held near its value by the "
+               "barrier.");
     nb::enum_<AcceptanceStrategies>(m, "AcceptanceStrategies")
         .value("classic_merit", AcceptanceStrategies::classic_merit)
         .value("merit", AcceptanceStrategies::merit)
