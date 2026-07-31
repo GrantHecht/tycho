@@ -88,6 +88,9 @@ class test_MultiPhaseCannon(unittest.TestCase):
     def setUpClass(self):
         self.FinalObj = -3280.2039356471037
         self.MaxObjError = 1.0
+        # Native variable bounds converge in more iterations than the old
+        # inequality-row lowering (observed 26 on LGL3/LGL5, 27 on LGL7/Trapezoidal,
+        # vs. under 25 previously).
         self.MaximumIters = 35
         self.NumSegments = 64
 

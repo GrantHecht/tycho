@@ -123,6 +123,8 @@ class test_Reentry(unittest.TestCase):
         self.FinalObj2 = -0.534620087611498
         self.MaxObjError2 = 0.01
 
+        # Native variable bounds take more iterations than the old inequality-row
+        # lowering (observed 288 on HighestOrderSpline/LGL7, vs. under 250 previously).
         self.MaximumIters1 = 350
         self.MaximumIters2 = 50
 
