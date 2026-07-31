@@ -121,6 +121,18 @@ RED = "\033[31m"
 YELLOW = "\033[33m"
 RESET = "\033[0m"
 
+# PSIOPT's terminal failure banners (src/solvers/psiopt_print.cpp,
+# print_exit_stats): printed once per solve, at ConvergenceFlags::DIVERGING
+# or ConvergenceFlags::NOTCONVERGED. An example that reaches one of these but
+# still exits 0 (e.g. it doesn't check the returned convergence flag) is a
+# silent regression the process exit code alone won't catch.
+FAILURE_BANNERS = ("Solution Diverging", "No Solution Found")
+
+
+def _find_failure_banners(output: str) -> list[str]:
+    """Return which of FAILURE_BANNERS appear in an example's captured stdout."""
+    return [banner for banner in FAILURE_BANNERS if banner in output]
+
 
 def _can_import(module: str) -> bool:
     r = subprocess.run(
@@ -196,6 +208,7 @@ def main() -> None:
     print(f"Running {len(examples)} examples  (cwd: {EXAMPLES_DIR})\n" + "=" * 72)
 
     results: list[tuple[str, str, float, str]] = []  # (path, status, seconds, detail)
+    banner_hits: list[tuple[str, list[str]]] = []  # (path, banners found) -- report-only
 
     for rel in examples:
         label = rel.ljust(col_width)
@@ -228,8 +241,21 @@ def main() -> None:
             )
             elapsed = time.monotonic() - t0
 
+            banners = _find_failure_banners(proc.stdout)
+            if banners and proc.returncode == 0:
+                # Report-only (see FAILURE_BANNERS above): a solver failure
+                # banner reached stdout but the process still exited 0. Noted
+                # here, not yet turned into a failure -- see the summary.
+                banner_hits.append((rel, banners))
+
             if proc.returncode == 0:
-                print(f"  {label} {GREEN}PASS{RESET}  ({elapsed:.1f}s)")
+                if banners:
+                    print(
+                        f"  {label} {GREEN}PASS{RESET}  ({elapsed:.1f}s)  "
+                        f"{YELLOW}[banner: {', '.join(banners)}]{RESET}"
+                    )
+                else:
+                    print(f"  {label} {GREEN}PASS{RESET}  ({elapsed:.1f}s)")
                 results.append((rel, "PASS", elapsed, ""))
             else:
                 # Show the last few lines of stderr for quick diagnosis.
@@ -263,6 +289,17 @@ def main() -> None:
             if detail:
                 for line in detail.splitlines()[-8:]:
                     print(f"    {line}")
+        print()
+
+    # Report-only: examples whose stdout carried a PSIOPT terminal failure
+    # banner (see FAILURE_BANNERS) despite exiting 0. This does not affect
+    # PASS/FAIL above -- it's surfaced so a real "printed failure, exited
+    # clean" defect can be told apart from a legitimate mid-script retry
+    # before this becomes a hard failure.
+    if banner_hits:
+        print(f"{YELLOW}Examples with a failure banner in their output (exit 0):{RESET}")
+        for name, banners in banner_hits:
+            print(f"  {name}  [{', '.join(banners)}]")
         print()
 
     sys.exit(0 if not failed else 1)
