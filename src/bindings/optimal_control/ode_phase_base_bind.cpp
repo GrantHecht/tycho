@@ -976,8 +976,9 @@ Parameters
 ----------
 phase_region : PhaseRegionFlags or str
     Region the variable is read from.
-var : int, sequence of int, or str
-    Variable index/indices (into the packed ``[x, t, u, p]`` layout) to bound.
+var : int, sequence of int, str, or list of str
+    Variable index/indices (into the packed ``[x, t, u, p]`` layout) to bound, or
+    the name(s) of the variable(s) to resolve to indices.
 lowerbound : float
     Lower bound.
 
@@ -1001,8 +1002,9 @@ Parameters
 ----------
 phase_region : PhaseRegionFlags or str
     Region the variable is read from.
-var : int, sequence of int, or str
-    Variable index/indices (into the packed ``[x, t, u, p]`` layout) to bound.
+var : int, sequence of int, str, or list of str
+    Variable index/indices (into the packed ``[x, t, u, p]`` layout) to bound, or
+    the name(s) of the variable(s) to resolve to indices.
 upperbound : float
     Upper bound.
 
