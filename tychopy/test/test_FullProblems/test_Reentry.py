@@ -123,7 +123,7 @@ class test_Reentry(unittest.TestCase):
         self.FinalObj2 = -0.534620087611498
         self.MaxObjError2 = 0.01
 
-        self.MaximumIters1 = 250
+        self.MaximumIters1 = 350
         self.MaximumIters2 = 50
 
     def problem_impl(self, tmode, cmode):

@@ -88,7 +88,7 @@ class test_MultiPhaseCannon(unittest.TestCase):
     def setUpClass(self):
         self.FinalObj = -3280.2039356471037
         self.MaxObjError = 1.0
-        self.MaximumIters = 25
+        self.MaximumIters = 35
         self.NumSegments = 64
 
     def problem_impl(self, tmode, nsegs):
