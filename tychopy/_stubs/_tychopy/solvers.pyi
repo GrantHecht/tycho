@@ -341,7 +341,7 @@ class PSIOPT:
     @property
     def bound_relax_factor(self) -> float:
         """
-        Widening applied to every finite declared variable bound before it is recorded, as this factor times max(1, |bound|), so the box every barrier term divides by is never exactly the declared one (Ipopt's bound_relax_factor, same default). 1e-8 (default); must lie in [0, 1e-2]. Zero records every declared bound verbatim. Also separates the bounds of a fixed variable under fixed_variable_treatment=RelaxBounds.
+        Widening applied to every finite declared variable bound before it is recorded, as this factor times max(1, |bound|), so the box every barrier term divides by is never exactly the declared one (Ipopt's bound_relax_factor, same default). 1e-8 (default); must lie in [0, 1e-2]. Zero records every declared bound verbatim. Also separates the bounds of a fixed variable under fixed_variable_treatment=RelaxBounds. Read only when native variable bounds are declared.
         """
 
     @bound_relax_factor.setter

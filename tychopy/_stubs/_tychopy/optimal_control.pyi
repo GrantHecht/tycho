@@ -1073,7 +1073,9 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
         ----------
         index : int
             The inequality-constraint index returned by :meth:`add_inequal_con` (or a
-            similar ``add_*`` call).
+            similar ``add_*`` call that adds a constraint row, such as
+            :meth:`add_lu_func_bound`). The variable-bound declarations return
+            bound-record handles instead and must not be passed here.
 
         Returns
         -------
@@ -1495,30 +1497,40 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
             The index assigned to the new constraint.
         """
 
-    def add_lu_var_bound(self, phase_region: PhaseRegionFlags | str, var: int | Sequence[int] | str | list[str], lowerbound: float, upperbound: float, scale: float = 1.0, auto_scale: Union[float, numpy.ndarray, ScaleModes, str, None] | None = 'auto') -> int:
+    def add_lu_var_bound(self, phase_region: PhaseRegionFlags | str, var: int | Sequence[int] | str | list[str], lowerbound: float, upperbound: float) -> int:
         """
-        Bound a variable from below and above (an inequality constraint).
+        Bound a variable from below and above.
+
+        The bound is applied directly to the solver's decision variables: it adds no
+        constraint row, no slack, and no multiplier. Conditioning of a badly scaled
+        bounded variable is therefore a job for variable scaling (:meth:`set_units`
+        with :meth:`set_auto_scaling`), not for a constraint scale factor.
+
+        Bounds are given as physical values. When the phase auto-scales, they are
+        converted into the scaled units the decision variable is expressed in, using
+        the same per-variable unit a constraint over that variable would use.
+
+        Repeated declarations on the same variable intersect — the tightest lower and
+        upper bound win. Declarations that intersect to an empty interval raise at
+        transcription, naming the variable.
 
         Parameters
         ----------
         phase_region : PhaseRegionFlags or str
             Region the variable is read from, e.g. ``"Path"`` to bound it at every node.
-        var : int
-            Variable index (into the packed ``[x, t, u, p]`` layout) to bound.
+        var : int, sequence of int, or str
+            Variable index/indices (into the packed ``[x, t, u, p]`` layout) to bound.
         lowerbound : float
             Lower bound.
         upperbound : float
             Upper bound.
-        scale : float, optional
-            Constraint scaling applied to both the lower and upper bound. Default 1.0.
-        auto_scale : ScaleModes or str, optional
-            Output-scaling mode (``"auto"``, ``"custom"``, or ``"none"``). Defaults to
-            ``"auto"``.
 
         Returns
         -------
         int
-            The index assigned to the new bound constraint.
+            A bound-record handle for the declaration. This is not an
+            inequality-constraint index and must not be passed to
+            ``remove_inequal_con`` or the ``return_inequal_con_*`` accessors.
 
         Examples
         --------
@@ -1527,52 +1539,50 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
             phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
         """
 
-    def add_lower_var_bound(self, phase_region: PhaseRegionFlags | str, var: int | Sequence[int] | str | list[str], lowerbound: float, scale: float = 1.0, auto_scale: Union[float, numpy.ndarray, ScaleModes, str, None] | None = 'auto') -> int:
+    def add_lower_var_bound(self, phase_region: PhaseRegionFlags | str, var: int | Sequence[int] | str | list[str], lowerbound: float) -> int:
         """
-        Bound a variable from below (an inequality constraint).
+        Bound a variable from below, leaving the upper side open.
+
+        See :meth:`add_lu_var_bound` for the semantics shared by all three
+        variable-bound declarations.
 
         Parameters
         ----------
         phase_region : PhaseRegionFlags or str
             Region the variable is read from.
-        var : int
-            Variable index (into the packed ``[x, t, u, p]`` layout) to bound.
+        var : int, sequence of int, or str
+            Variable index/indices (into the packed ``[x, t, u, p]`` layout) to bound.
         lowerbound : float
             Lower bound.
-        scale : float, optional
-            Constraint scaling. Default 1.0.
-        auto_scale : ScaleModes or str, optional
-            Output-scaling mode (``"auto"``, ``"custom"``, or ``"none"``). Defaults to
-            ``"auto"``.
 
         Returns
         -------
         int
-            The index assigned to the new bound constraint.
+            A bound-record handle for the declaration, not an inequality-constraint
+            index.
         """
 
-    def add_upper_var_bound(self, phase_region: PhaseRegionFlags | str, var: int | Sequence[int] | str | list[str], upperbound: float, scale: float = 1.0, auto_scale: Union[float, numpy.ndarray, ScaleModes, str, None] | None = 'auto') -> int:
+    def add_upper_var_bound(self, phase_region: PhaseRegionFlags | str, var: int | Sequence[int] | str | list[str], upperbound: float) -> int:
         """
-        Bound a variable from above (an inequality constraint).
+        Bound a variable from above, leaving the lower side open.
+
+        See :meth:`add_lu_var_bound` for the semantics shared by all three
+        variable-bound declarations.
 
         Parameters
         ----------
         phase_region : PhaseRegionFlags or str
             Region the variable is read from.
-        var : int
-            Variable index (into the packed ``[x, t, u, p]`` layout) to bound.
+        var : int, sequence of int, or str
+            Variable index/indices (into the packed ``[x, t, u, p]`` layout) to bound.
         upperbound : float
             Upper bound.
-        scale : float, optional
-            Constraint scaling. Default 1.0.
-        auto_scale : ScaleModes or str, optional
-            Output-scaling mode (``"auto"``, ``"custom"``, or ``"none"``). Defaults to
-            ``"auto"``.
 
         Returns
         -------
         int
-            The index assigned to the new bound constraint.
+            A bound-record handle for the declaration, not an inequality-constraint
+            index.
         """
 
     @overload
@@ -2129,9 +2139,12 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
         """
 
     @overload
-    def add_lu_var_bounds(self, arg0: PhaseRegionFlags, arg1: numpy.ndarray, arg2: float, arg3: float, arg4: float, /) -> numpy.ndarray:
+    def add_lu_var_bounds(self, arg0: PhaseRegionFlags, arg1: numpy.ndarray, arg2: float, arg3: float, /) -> numpy.ndarray:
         """
-        Bound several variables from below and above with a shared scale.
+        Bound several variables from below and above with the same interval.
+
+        Equivalent to one :meth:`add_lu_var_bound` call per entry of ``vars``; see that
+        method for the bound semantics.
 
         Parameters
         ----------
@@ -2143,17 +2156,16 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
             Lower bound applied to each variable.
         upperbound : float
             Upper bound applied to each variable.
-        scale : float
-            Shared constraint scaling.
 
         Returns
         -------
         numpy.ndarray of int
-            Indices assigned to the new bound constraints (one per variable).
+            One bound-record handle per variable. These are not inequality-constraint
+            indices.
         """
 
     @overload
-    def add_lu_var_bounds(self, arg0: str, arg1: numpy.ndarray, arg2: float, arg3: float, arg4: float, /) -> numpy.ndarray: ...
+    def add_lu_var_bounds(self, arg0: str, arg1: numpy.ndarray, arg2: float, arg3: float, /) -> numpy.ndarray: ...
 
     def get_mesh_info(self, arg0: bool, arg1: int, /) -> tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]:
         """
