@@ -823,6 +823,39 @@ TEST(PhaseNativeVarBounds, LuVarBoundDeclarationLandsOnTheNlpBoundContract) {
     }
 }
 
+// add_lu_var_bounds (plural) accepts a multi-variable selector, something the
+// old inequality-row lowering never supported. It must resolve to one bound
+// record per variable, not one record spanning the whole selector, and each
+// record's box must reach every NLP index the Path region expands to.
+TEST(PhaseNativeVarBounds, MultiVariableSelectorRecordsOneBoundPerVariable) {
+    auto phase = make_native_var_bounds_phase();
+
+    Eigen::VectorXi vars(2);
+    vars << 0, 1;
+    Eigen::VectorXi handles = phase->add_lu_var_bounds(PhaseRegionFlags::Path, vars, -3.0, 3.0);
+
+    EXPECT_EQ(handles.size(), 2);
+    EXPECT_EQ(phase->num_inequalities(), 0u);
+    ASSERT_EQ(phase->num_var_bound_records(), 2u)
+        << "one record per resolved variable, not one record for the whole selector";
+    EXPECT_EQ(phase->record_var(0), 0);
+    EXPECT_EQ(phase->record_var(1), 1);
+    for (std::size_t i = 0; i < 2u; ++i) {
+        EXPECT_EQ(phase->record_region(i), PhaseRegionFlags::Path);
+        EXPECT_DOUBLE_EQ(phase->record_lower(i), -3.0);
+        EXPECT_DOUBLE_EQ(phase->record_upper(i), 3.0);
+    }
+
+    phase->transcribe();
+    ASSERT_TRUE(phase->nlp_->has_variable_bounds());
+    // Path expands var 0 to {0, 3, 6} and var 1 to {1, 4, 7}.
+    for (int gidx : {0, 1, 3, 4, 6, 7}) {
+        EXPECT_DOUBLE_EQ(phase->nlp_->x_lower_[gidx], -3.0) << "index " << gidx;
+        EXPECT_DOUBLE_EQ(phase->nlp_->x_upper_[gidx], 3.0) << "index " << gidx;
+    }
+    native_var_bounds_expect_only(phase->nlp_, {0, 1, 3, 4, 6, 7});
+}
+
 TEST(PhaseNativeVarBounds, LowerAndUpperVarBoundDeclarationsLeaveTheOtherSideOpen) {
     auto phase = make_native_var_bounds_phase();
     phase->add_lower_var_bound(PhaseRegionFlags::Front, /*var=*/0, -1.0);
