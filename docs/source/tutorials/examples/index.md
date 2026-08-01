@@ -33,6 +33,12 @@ A hard state path constraint with an integral control-effort objective.
 Multi-phase linkage and a nonlinear path constraint defining a singular arc.
 :::
 
+:::{grid-item-card} Van der Pol oscillator
+:link: van_der_pol
+:link-type: doc
+An integral objective, block-constant control, and a control path bound.
+:::
+
 :::{grid-item-card} Multi-phase cannonball
 :link: multi_phase_cannon
 :link-type: doc
@@ -60,6 +66,7 @@ Interpolated table data (`InterpTable1D`/`2D`) with adaptive mesh refinement.
 brachistochrone
 bryson_denham
 goddard_rocket
+van_der_pol
 multi_phase_cannon
 simple_low_thrust
 min_time_to_climb

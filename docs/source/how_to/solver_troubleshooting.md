@@ -32,7 +32,7 @@ five names, and the exact fields each assigns, are in the
 | `filter_l1` | Steps are rejected that look like they should have been accepted; or you need a feasibility-restoration certificate. |
 | `soc_recovery_l1` | Repeated rejection *and* an ill-conditioned KKT system — this is the everything-on recovery arm. |
 | `soc_proximal` | Rank deficiency or heavy Hessian perturbation, without the l1 elastic machinery. |
-| `merit_l1` | You want the modernized penalty-based merit test rather than filter or funnel bookkeeping. For a wrong-basin guess the lever is [call shape](#call-shape-staged-solve-then-single-optimize), not this preset. |
+| `merit_l1` | You want the modernized penalty-based merit test rather than filter or funnel bookkeeping. For a wrong-basin guess, try [call shape](#call-shape-staged-solve-then-single-optimize) as an independent lever before reaching for a different preset. |
 
 `funnel` acceptance appears in none of the five presets; select it by hand
 if you want it.
@@ -391,22 +391,29 @@ For those problems, hand the whole problem to a single call instead:
 flag = phase.optimize()           # objective present from iteration 0
 ```
 
-The measured case, transcribed from the globalization campaign's post-fixes
-evidence refresh (`docs/dev/analysis/2026-07-e2-fixes-evidence-refresh.md`,
-2026-07-26): under the `merit_l1` configuration — merit acceptance with the
+The measured case, re-measured after variable bounds became native solver
+bounds: under the `merit_l1` configuration — merit acceptance with the
 classic adaptive governor and nested l1 restoration — the corpus scores
-7 converged + 2 acceptable under the corpus problems' own call shapes, with
-the zermelo problem's wrong-basin guess **diverging**, and 8 + 2 under a
-single `optimize()` per problem, with **zermelo converging at iteration 40
-to objective 1.7009270229362865 — the value the Ipopt backend agrees on.**
-The refresh's own conclusion: "The zermelo class is a call-shape problem,
-not an acceptance-mechanism problem."
+9 converged + 2 acceptable under the corpus problems' own call shapes. Call
+shape still changes individual outcomes: run the same corpus through a
+single `optimize()` per problem instead and three problems move.
+`hard_mountaincar_badguess` moves from converged at iteration 164 to
+acceptable at iteration 195; `hard_hypersens_stiff` moves from acceptable at
+iteration 123 to acceptable at iteration 72; and the zermelo wrong-basin
+problem moves from **diverging** to **failing** — worse, not better, under
+native bounds (this problem's own module docstring already flags its exact
+iteration count and objective near this failure as order-sensitive from run
+to run; the status change is the stable part of the measurement). The
+combined corpus total is unchanged either way (11 of 17
+converged-or-acceptable); which individual problems land where is not.
 
-So: keep `solve_optimize()` as the default. When a solve converges to
-something you believe is the wrong answer, or when the feasibility stage
-itself is where the trouble lives, try a single `optimize()` before you try
-another preset — the two levers are independent, and call shape decided
-that outcome regardless of which acceptance mechanism was selected.
+So: keep `solve_optimize()` as the default, and do not assume a single
+`optimize()` call is a strict improvement — call shape is a lever
+independent of the acceptance mechanism, and it can move an individual
+problem in either direction. When a solve converges to something you believe
+is the wrong answer, or the feasibility stage itself is where the trouble
+lives, trying the other call shape is still worth a measurement; just
+measure it rather than assume it will help.
 
 ## Honest limits
 
