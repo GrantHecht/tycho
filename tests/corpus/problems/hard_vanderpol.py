@@ -55,8 +55,10 @@ TIER = "hard"
 TIMEOUT = 60
 SOLVE_MODE = "optimize"
 NOTES = (
-    "Diverges toolchain-dependently (KKT=nan at iter 0) on "
-    "clang22/MKL2026 fast-math; see project_vanderpol_diverges memory."
+    "Historically diverged (KKT=nan at iteration 0) because the squared_norm "
+    "derivative was 0/0 at the norm's centre and the all-zero initial guess sat "
+    "exactly there; converges since that derivative was fixed. Kept in the hard "
+    "tier as a regression sentinel for the centre-of-norm start."
 )
 
 
