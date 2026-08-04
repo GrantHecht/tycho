@@ -578,6 +578,11 @@ ScalarFunction
             obj.def("squared_norm", [](const Derived &a) { return GenS(a.squared_norm()); },
                     R"doc(Squared Euclidean norm of the output vector: ``||self(x)||²``.
 
+The first and second derivatives are exact everywhere, the norm's centre
+included — the only power of the norm for which that holds. This makes it the
+preferred norm term in penalty and objective expressions whose argument can
+pass through or start at zero.
+
 Returns
 -------
 ScalarFunction
@@ -586,6 +591,13 @@ ScalarFunction
             obj.def("cubed_norm",
                     [](const Derived &a) { return GenS(a.template norm_power<3>()); },
                     R"doc(Euclidean norm of the output raised to the third power: ``||self(x)||³``.
+
+At the norm's centre the derivatives evaluate non-finite, even though the true
+derivatives there are zero: the coefficient shared by every power of the norm
+is a ``0/0`` quotient at that point, and the exact value is substituted back
+only for the squared norm. The same holds for any power of 3 or higher. Avoid
+initial guesses that place the argument exactly at the centre; use
+:meth:`squared_norm` where the argument can sit there.
 
 Returns
 -------

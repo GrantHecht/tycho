@@ -48,6 +48,7 @@
 // build instead); that one-directional arrangement is what keeps every
 // header below self-sufficient/standalone-compilable without a fragile
 // circular-include trick.
+#include "tycho/detail/solvers/bound_set.h"
 #include "tycho/detail/solvers/eval_error_log.h"
 #include "tycho/detail/solvers/psiopt.h"
 
@@ -159,6 +160,18 @@ struct SolverContext {
     // existing braced-init call sites (unit tests constructing a bare
     // SolverContext) compiling, and every recording site null-guards.
     EvalErrorLog *eval_errors_ = nullptr;
+
+    // --- Native primal variable bounds (optional; null when there are none) ---
+    // `bounds_` is the NLP-owned classification of the finite variable bounds
+    // the solve must keep barrier terms for, in the solver's REDUCED index
+    // space; `bound_duals_` is the matching PSIOPT-owned multiplier state.
+    // PSIOPT sets both only on the configuration success path, and only when the
+    // set is non-empty -- so a problem with no variable bounds leaves them null
+    // and every component's bound branch is provably unreachable, which is what
+    // makes the assembly on such a problem byte-identical. A defaulted nullptr
+    // keeps existing braced-init call sites compiling; every reader null-guards.
+    const BoundSet *bounds_ = nullptr;
+    BoundDualState *bound_duals_ = nullptr;
 };
 
 } // namespace tycho::solvers

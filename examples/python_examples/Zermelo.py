@@ -125,7 +125,7 @@ def navigate(A, B, vM=1, wF=uniformWind):
     phase.add_boundary_value("Front", [2], [0.0])
     phase.add_boundary_value("Back", [0, 1], B)
 
-    phase.add_lu_var_bound("Path", 3, -np.pi, np.pi, 1)
+    phase.add_lu_var_bound("Path", 3, -np.pi, np.pi)
 
     # 4. Add objective function
     phase.add_delta_time_objective(1.0)

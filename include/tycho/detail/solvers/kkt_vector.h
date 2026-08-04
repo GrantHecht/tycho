@@ -25,6 +25,13 @@
 // Each component supplies its own kkt_view() factory, since the dimensions come
 // from different places (PSIOPT's own members; a SolverContext's dimension
 // references).
+//
+// Not every multiplier the solver carries lives in this vector. The native
+// primal variable-bound multipliers (z_L, z_U) are held separately, in the
+// PSIOPT-owned BoundDualState (detail/solvers/bound_set.h), because the bound
+// rows are condensed into the primal diagonal rather than enlarging the KKT
+// system — which is precisely why the layout above is unchanged by that
+// feature. A reader looking for "all the duals" needs both.
 
 #pragma once
 

@@ -12,6 +12,8 @@
 //   - Extracted the slack-reset and log-barrier objective/gradient kernels from
 //     PSIOPT (psiopt.cpp), where the globalization component extraction had left
 //     one verbatim copy per component
+//   - Added the primal variable-bound barrier kernels (objective, the two
+//     gradient forms, and the condensed sigma diagonal)
 // =============================================================================
 //
 // Three tiny pure kernels the barrier machinery evaluates everywhere: the slack
@@ -21,6 +23,13 @@
 // MonitoredBarrierGovernor) could carry its own verbatim copy reading through a
 // SolverContext instead of a PSIOPT member. This header is the single home; each
 // former member is now a one-line forwarder, so the arithmetic exists once.
+//
+// The four bound kernels at the bottom are the same idea for barrier terms on
+// PRIMAL VARIABLE BOUNDS rather than on inequality slacks. They walk a BoundSet
+// (index/value pairs, reduced-space indices), so a problem with no variable
+// bounds gives them no trip count at all and every caller guards on an empty
+// set anyway. Two of them are gradient accumulators that look interchangeable
+// and are NOT -- see the mu-form / z-form note on the pair below.
 //
 // The bodies below are token-identical to the copies they replace, with the
 // former member reads (slack_vars_ / inequal_cons_ / neg_slack_reset_) turned
@@ -39,6 +48,9 @@
 #include <cmath>
 
 #include <Eigen/Core>
+
+#include "tycho/detail/solvers/bound_set.h"
+#include "tycho/detail/typedefs/eigen_types.h"
 
 namespace tycho::solvers::detail {
 
@@ -65,6 +77,30 @@ inline void apply_reset_slacks(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::
     }
 }
 
+// Fraction-to-boundary step for one block of strictly-positive quantities and
+// their step: the largest alpha in (0, 1] with SLI + alpha*dSLI >= (1-bfrac)*SLI
+// componentwise. `count` is the block length, passed explicitly because the
+// blocks this serves have different lengths -- inequality slacks and their
+// multipliers, variable-bound distances, bound multipliers, and the restoration
+// return's re-centring step.
+//
+// Body moved verbatim from BacktrackingLineSearch::max_step_to_boundary, which
+// is now a one-line forwarder, so every existing caller's arithmetic and trip
+// count are unchanged. Shared for the same reason the kernels above are: this
+// rule was being open-coded a fifth time.
+inline double max_step_to_boundary(Eigen::Ref<Eigen::VectorXd> SLI,
+                                   Eigen::Ref<Eigen::VectorXd> dSLI, double bfrac, int count) {
+    double alpha = 1.0;
+    for (int i = 0; i < count; i++) {
+        if (dSLI[i] < -bfrac * SLI[i]) {
+            double an = -bfrac * SLI[i] / dSLI[i];
+            if (an < alpha)
+                alpha = an;
+        }
+    }
+    return alpha;
+}
+
 // Log-barrier objective -mu * sum(log s_i) over the first `inequal_cons` slacks.
 inline double barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu, int inequal_cons) {
     double psi = 0;
@@ -79,6 +115,171 @@ inline double barrier_objective(Eigen::Ref<Eigen::VectorXd> S, double mu, int in
 inline void barrier_gradient(Eigen::Ref<Eigen::VectorXd> S, Eigen::Ref<Eigen::VectorXd> LI,
                              double mu, Eigen::Ref<Eigen::VectorXd> AGS) {
     AGS = LI - mu * (S.cwiseInverse());
+}
+
+// =============================================================================
+// Primal variable-bound barrier kernels.
+//
+// For the bounds recorded in `b` (reduced-space indices; a two-sided variable
+// appears in both lists) the barrier objective is
+//
+//     phi_mu(x) = f(x) - mu * sum ln(x_i - l_i) - mu * sum ln(u_i - x_i)
+//
+// and its primal gradient contribution is -mu/(x_i - l_i) + mu/(u_i - x_i).
+// Every caller is responsible for keeping x strictly inside the recorded
+// bounds; the interior push at solve entry and the fraction-to-boundary rule
+// are what guarantee it, and none of these kernels re-checks.
+// =============================================================================
+
+// -mu * [ sum ln(x_i - l_i) + sum ln(u_i - x_i) ] over the bound set, plus the
+// one-sided damping term kappa_d * mu * sum(distance) over the entries whose
+// variable is bounded on that side only.
+//
+// The damping is Ipopt's (IpIpoptCalculatedQuantities::CalcBarrierTerm adds
+// `kappa_d * mu * slack.Dot(dampind)` per side). Without it the log barrier
+// gives a variable with only one finite bound nothing to push back against in
+// its unbounded direction, and a barrier subproblem can drive it arbitrarily
+// far out. It belongs to the barrier OBJECTIVE and its mu-form gradient only --
+// see kKappaD's note in bound_set.h for the seams it must stay out of.
+inline double bound_barrier_objective(ConstEigenRef<Eigen::VectorXd> x, const BoundSet &b,
+                                      double mu) {
+    const int nl = static_cast<int>(b.lower_idx_.size());
+    const int nu = static_cast<int>(b.upper_idx_.size());
+    double psi = 0.0;
+    for (int k = 0; k < nl; k++) {
+        const double d = x[b.lower_idx_[k]] - b.lower_val_[k];
+        psi += -mu * std::log(d) + kKappaD * mu * b.lower_damp_[k] * d;
+    }
+    for (int k = 0; k < nu; k++) {
+        const double d = b.upper_val_[k] - x[b.upper_idx_[k]];
+        psi += -mu * std::log(d) + kKappaD * mu * b.upper_damp_[k] * d;
+    }
+    return psi;
+}
+
+// mu-FORM primal gradient terms: gx_i += -mu/(x_i - l_i) and += +mu/(u_i - x_i),
+// plus the derivative of the one-sided damping term, += +kappa_d*mu on a
+// lower-only entry and -= kappa_d*mu on an upper-only entry.
+//
+// This is the gradient of the barrier objective above, and it is what the
+// CONDENSED NEWTON RIGHT-HAND SIDE carries. Eliminating the bound-multiplier
+// rows from the primal-dual system turns the primal row's right-hand side
+// (grad f + J'lambda - z_L + z_U) into exactly grad phi_mu + J'lambda: the
+// -z_L + z_U cancels against the multiplier steps that were substituted in.
+// Ipopt keeps the same split, damping and all: its Newton RHS reads
+// curr_grad_lag_WITH_DAMPING_x while its optimality error reads the undamped
+// curr_grad_lag_x. Never use this form for a residual a convergence test
+// consumes.
+inline void accumulate_bound_barrier_gradient(ConstEigenRef<Eigen::VectorXd> x, const BoundSet &b,
+                                              double mu, EigenRef<Eigen::VectorXd> gx) {
+    const int nl = static_cast<int>(b.lower_idx_.size());
+    const int nu = static_cast<int>(b.upper_idx_.size());
+    for (int k = 0; k < nl; k++) {
+        const int i = b.lower_idx_[k];
+        gx[i] += -mu / (x[i] - b.lower_val_[k]) + kKappaD * mu * b.lower_damp_[k];
+    }
+    for (int k = 0; k < nu; k++) {
+        const int i = b.upper_idx_[k];
+        gx[i] += mu / (b.upper_val_[k] - x[i]) - kKappaD * mu * b.upper_damp_[k];
+    }
+}
+
+// z-FORM primal gradient terms: gx_i += -zL_i and += +zU_i.
+//
+// This is the DUAL INFEASIBILITY contribution -- the residual whose norm the
+// convergence check consumes, grad f + J'lambda - z_L + z_U. It agrees with the
+// mu-form only at a point that satisfies the bound complementarity exactly
+// (z_L = mu/(x-l), z_U = mu/(u-x)); away from the central path the two differ,
+// which is the whole reason both exist. Never use this form for a Newton
+// right-hand side.
+inline void accumulate_bound_dual_terms(const BoundSet &b, const BoundDualState &z,
+                                        EigenRef<Eigen::VectorXd> gx) {
+    const int nl = static_cast<int>(b.lower_idx_.size());
+    const int nu = static_cast<int>(b.upper_idx_.size());
+    for (int k = 0; k < nl; k++) {
+        gx[b.lower_idx_[k]] += -z.z_lower_[k];
+    }
+    for (int k = 0; k < nu; k++) {
+        gx[b.upper_idx_[k]] += z.z_upper_[k];
+    }
+}
+
+// Folds the variable-bound complementarity pairs (x_i - l_i)*zL_i and
+// (u_i - x_i)*zU_i into aggregates already reduced over the inequality
+// slack/multiplier pairs, in place.
+//
+// `base_count` is how many pairs were reduced into `avgcomp` (so their sum can
+// be reconstructed as avgcomp*base_count and re-averaged over the union). The
+// combination is the same shape PSIOPT::augment_complementarity_nested uses for
+// the restoration elastics, and for the same reason: the base aggregates are
+// NOT re-reduced, so the exact Eigen reduction that produced them -- whose
+// ordering feeds mu and is therefore ULP-load-bearing under fast-math -- is
+// preserved untouched. Union min is the min of the mins, union max the max of
+// the maxes, and the union average is count-weighted.
+//
+// A problem with no bounded variables never reaches this (every caller guards
+// on a non-empty set), so the aggregates the barrier oracles consume are
+// bit-identical to what they were before variable bounds existed.
+inline void augment_bound_complementarity(ConstEigenRef<Eigen::VectorXd> x, const BoundSet &b,
+                                          const BoundDualState &z, int base_count, double &avgcomp,
+                                          double &mincomp, double &maxcomp) {
+    const int nl = static_cast<int>(b.lower_idx_.size());
+    const int nu = static_cast<int>(b.upper_idx_.size());
+    if (nl + nu == 0)
+        return;
+
+    double bsum = 0.0;
+    double bmin = 0.0;
+    double bmax = 0.0;
+    bool first = true;
+    auto fold = [&](double pair) {
+        bsum += pair;
+        if (first) {
+            bmin = pair;
+            bmax = pair;
+            first = false;
+        } else {
+            bmin = std::min(bmin, pair);
+            bmax = std::max(bmax, pair);
+        }
+    };
+    for (int k = 0; k < nl; k++) {
+        fold((x[b.lower_idx_[k]] - b.lower_val_[k]) * z.z_lower_[k]);
+    }
+    for (int k = 0; k < nu; k++) {
+        fold((b.upper_val_[k] - x[b.upper_idx_[k]]) * z.z_upper_[k]);
+    }
+
+    const int bcount = nl + nu;
+    if (base_count > 0) {
+        mincomp = std::min(mincomp, bmin);
+        maxcomp = std::max(maxcomp, bmax);
+        avgcomp = (avgcomp * double(base_count) + bsum) / double(base_count + bcount);
+    } else {
+        mincomp = bmin;
+        maxcomp = bmax;
+        avgcomp = bsum / double(bcount);
+    }
+}
+
+// Condensed bound curvature: sigma_i += zL_i/(x_i - l_i) and += zU_i/(u_i - x_i).
+//
+// The Sigma that eliminating the bound-multiplier rows leaves on the Hessian
+// (1,1) diagonal. Accumulated onto whatever base the solver already writes to
+// the primal-diagonal slots, so it composes with the restoration and proximal
+// bases instead of replacing them, and it does not grow the KKT system.
+inline void accumulate_bound_sigma(ConstEigenRef<Eigen::VectorXd> x, const BoundSet &b,
+                                   const BoundDualState &z, EigenRef<Eigen::VectorXd> sigma) {
+    const int nl = static_cast<int>(b.lower_idx_.size());
+    const int nu = static_cast<int>(b.upper_idx_.size());
+    for (int k = 0; k < nl; k++) {
+        const int i = b.lower_idx_[k];
+        sigma[i] += z.z_lower_[k] / (x[i] - b.lower_val_[k]);
+    }
+    for (int k = 0; k < nu; k++) {
+        const int i = b.upper_idx_[k];
+        sigma[i] += z.z_upper_[k] / (b.upper_val_[k] - x[i]);
+    }
 }
 
 } // namespace tycho::solvers::detail

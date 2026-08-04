@@ -470,21 +470,26 @@ inert in four of the five) and `never_monotone` is `False`.
 
 ### Measured behaviour
 
-The numbers below are transcribed from the globalization campaign's
-post-fixes evidence refresh,
-`docs/dev/analysis/2026-07-e2-fixes-evidence-refresh.md` (2026-07-26). The
-corpus column is the 17-problem solver corpus, scored as converged plus
-acceptable. The iteration columns come from temporary default-flip captures of
-the 34-example suite with MKL's conditional bitwise reproducibility pinned,
-compared against the stock baseline.
+The corpus column below is re-measured after variable bounds became native
+solver bounds: bounds no longer lower to inequality rows, which changes what
+the barrier subproblem sees on every bound-bearing problem, so the 17-problem
+solver corpus was re-run per preset. `classic` is the bit-identical
+`Settings{}` default, so its own corpus run *is* its scorecard; the corpus
+column is scored as converged plus acceptable. The iteration columns predate
+this change and have not been recaptured under native bounds: they come from
+the globalization campaign's post-fixes evidence refresh,
+`docs/dev/analysis/2026-07-e2-fixes-evidence-refresh.md` (2026-07-26), a
+temporary default-flip capture of the 34-example suite with MKL's conditional
+bitwise reproducibility pinned, compared against that campaign's own stock
+baseline.
 
 | Preset | Corpus (of 17) | Example-suite iterations vs stock | Worst example tails |
 | --- | --- | --- | --- |
-| `classic` | stock baseline the corpus was measured against | baseline | baseline |
-| `filter_l1` | 12 (8 converged, 4 acceptable) | +31% aggregate, median at parity | DionysusLowThrust +609%, MinimumTimeToClimb +395%, MultiPhaseCannon +387% |
-| `soc_recovery_l1` | 12 (8 converged, 4 acceptable) | +42% aggregate, median at parity | OptimalDocking +100%, Zermelo +64%, BettsLowThrust +56% |
-| `soc_proximal` | 12 (8 converged, 4 acceptable) | +27% aggregate, median at parity | MinimumTimeToClimb +219%, OptimalDocking +100%, MultiPhaseCannon +67% |
-| `merit_l1` | 7 converged + 2 acceptable under the corpus modules' own call shapes; 8 + 2 under a single `optimize()` per problem | not captured | not captured |
+| `classic` | 10 (8 converged, 2 acceptable) — the corpus baseline | baseline | baseline |
+| `filter_l1` | 12 (9 converged, 3 acceptable) | +31% aggregate, median at parity | DionysusLowThrust +609%, MinimumTimeToClimb +395%, MultiPhaseCannon +387% |
+| `soc_recovery_l1` | 11 (9 converged, 2 acceptable) | +42% aggregate, median at parity | OptimalDocking +100%, Zermelo +64%, BettsLowThrust +56% |
+| `soc_proximal` | 11 (9 converged, 2 acceptable) | +27% aggregate, median at parity | MinimumTimeToClimb +219%, OptimalDocking +100%, MultiPhaseCannon +67% |
+| `merit_l1` | 11 (9 converged, 2 acceptable) | not captured | not captured |
 
 All three example-suite arms passed 33 of 34 examples with the same single
 failure, BettsLowThrustCentralShooting — a committed-point integrator failure
@@ -494,16 +499,15 @@ document as machine-unstable (MultiSpacecraftOptimization, SimpleLowThrust,
 ParallelParking) are excluded from the ratio statistics. `merit_l1` was not
 captured as an example arm, so it has no iteration-ratio row.
 
-`merit_l1`'s two corpus scores differ only in how each problem was called. The
-mover is the zermelo problem from a wrong-basin initial guess: it diverges
-under that problem's own call shape and converges when the whole problem is
-handed to a single `optimize()` call, at iteration 40 to objective
-1.7009270229362865 — the value the Ipopt backend agrees on. Call shape rather
-than the acceptance mechanism decides that outcome, so a single `optimize()`
-is worth trying against a staged solve independently of which preset is
-selected; see
+The `merit_l1` corpus score above uses each problem's own call shape, the way
+`apply_preset` is normally exercised. Under native bounds it no longer takes
+two different scores to describe: the corpus problems' own call shapes and a
+single `optimize()` per problem land on the same combined total, though not
+on the same per-problem outcomes — call shape still moves individual
+problems, including the zermelo wrong-basin case, in both directions; see
 {doc}`How to troubleshoot a failing solve </how_to/solver_troubleshooting>`
-for the full treatment.
+for the current worked example and the full treatment of the call-shape
+lever.
 
 ## Problem containers
 

@@ -71,7 +71,7 @@ navigate(tycho::vf::GenericFunction<-1, -1> erased_ode, const Eigen::VectorXd &A
     phase.add_boundary_value(PhaseRegionFlags::Back, xy_idx, B, ScaleModes::AUTO);
 
     // Control bounds
-    phase.add_lu_var_bound(PhaseRegionFlags::Path, 3, -M_PI, M_PI, 1.0);
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, 3, -M_PI, M_PI);
 
     // Minimise travel time
     phase.add_delta_time_objective(1.0, ScaleModes::AUTO);

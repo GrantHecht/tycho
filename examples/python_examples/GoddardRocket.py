@@ -117,7 +117,7 @@ if __name__ == "__main__":
     phase.set_units(units)
 
     phase.add_boundary_value("Front", ["h", "v", "m", "t"], TrajIG[0][0:4])
-    phase.add_lu_var_bound("Path", "u", 0.0, 1.0, 1.0)
+    phase.add_lu_var_bound("Path", "u", 0.0, 1.0)
     phase.add_value_objective("Back", "h", -1.0)
     phase.add_boundary_value("Back", ["v", "m"], [0, mf])
     phase.optimize()
@@ -142,7 +142,7 @@ if __name__ == "__main__":
     phase2 = ode.phase("LGL3", TrajIG2, 32)
     # PathCon makse Control splines redundant for LGL>3
     phase2.set_control_mode("NoSpline")
-    phase2.add_lu_var_bound("Path", "u", 0.0, 1.0, 1.0)
+    phase2.add_lu_var_bound("Path", "u", 0.0, 1.0)
     phase2.add_equal_con(
         "Path", PathCon(sigma, c, h_ref, Tmag, g), ["h", "v", "m", "u"]
     )

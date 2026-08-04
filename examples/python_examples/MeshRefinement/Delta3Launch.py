@@ -398,7 +398,7 @@ if __name__ == "__main__":
     phase4.add_lower_norm_bound("Path", [0, 1, 2], Re)
     phase4.add_lu_norm_bound("Path", [8, 9, 10], 0.5, 1.5)
     phase4.add_boundary_value("Front", [6], [m0_phase4])
-    phase4.add_upper_var_bound("Back", 7, tf_phase4, 1.0)
+    phase4.add_upper_var_bound("Back", 7, tf_phase4)
     phase4.add_equal_con("Back", TargetOrbit(at, et, istart, Ot, Wt), range(0, 6))
     # Maximize final mass
     phase4.add_value_objective("Back", 6, -1.0)

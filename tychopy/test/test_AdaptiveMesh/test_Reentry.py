@@ -165,11 +165,9 @@ class test_Reentry(unittest.TestCase):
         phase.set_control_mode(cmode)
 
         phase.add_boundary_value("Front", range(0, 6), TrajIG[0][0:6])
-        phase.add_lu_var_bounds(
-            "Path", [1, 3], np.deg2rad(-89.0), np.deg2rad(89.0), 1.0
-        )
-        phase.add_lu_var_bound("Path", 6, np.deg2rad(-90.0), np.deg2rad(90.0), 1.0)
-        phase.add_lu_var_bound("Path", 7, np.deg2rad(-90.0), np.deg2rad(1.0), 1.0)
+        phase.add_lu_var_bounds("Path", [1, 3], np.deg2rad(-89.0), np.deg2rad(89.0))
+        phase.add_lu_var_bound("Path", 6, np.deg2rad(-90.0), np.deg2rad(90.0))
+        phase.add_lu_var_bound("Path", 7, np.deg2rad(-90.0), np.deg2rad(1.0))
         phase.add_upper_delta_time_bound(tmax, 1.0)
         phase.add_boundary_value("Back", [0, 2, 3], [htf, vtf, gammatf])
         phase.add_delta_var_objective(1, -1.0)

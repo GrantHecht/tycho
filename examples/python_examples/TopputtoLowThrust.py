@@ -153,8 +153,8 @@ if __name__ == "__main__":
 
     phase = ode.phase("LGL3", ToptIG, 400)
     phase.add_boundary_value("Front", range(0, 5), IState[0:5])
-    phase.add_lu_var_bound("Path", 5, 0.0001, 1, 100.0)
-    phase.add_lu_var_bound("Path", 6, -2 * np.pi, 2 * np.pi, 1.0)
+    phase.add_lu_var_bound("Path", 5, 0.0001, 1)
+    phase.add_lu_var_bound("Path", 6, -2 * np.pi, 2 * np.pi)
 
     phase.add_boundary_value("Back", [0, 2, 3], [RF, 0, VF])
 

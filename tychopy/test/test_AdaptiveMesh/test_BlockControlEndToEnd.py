@@ -72,8 +72,8 @@ class test_BlockControlEndToEnd(unittest.TestCase):
         phase = ode.phase(tmode, IG, nsegs)
         phase.add_boundary_value("Front", range(0, 5), [0, 0, 0, 0, 0])
         phase.add_boundary_value("Back", range(0, 5), [self.d, np.pi, 0, 0, self.tf])
-        phase.add_lu_var_bound("Path", 5, -self.umax, self.umax, 1.0)
-        phase.add_lu_var_bound("Path", 0, -self.dmax, self.dmax, 1.0)
+        phase.add_lu_var_bound("Path", 5, -self.umax, self.umax)
+        phase.add_lu_var_bound("Path", 0, -self.dmax, self.dmax)
         phase.add_integral_objective(Args(1)[0] ** 2, [5])
         phase.optimizer.print_level = 0
         phase.optimizer.eq_con_tol = 1.0e-8

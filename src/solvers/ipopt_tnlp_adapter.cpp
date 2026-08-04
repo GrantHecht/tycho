@@ -193,6 +193,17 @@ TychoTNLP::TychoTNLP(std::shared_ptr<NonLinearProgram> nlp, Eigen::VectorXd x0, 
         throw std::invalid_argument(fmt::format(
             "TychoTNLP: NLP has {0} primal variables; at least one is required", primal_vars_));
     }
+    if (nlp_->is_reduced()) {
+        // A prior PSIOPT solve with fixed_variable_treatment=MakeParameter left this
+        // NLP on its reduced variable space (fixed variables eliminated). This
+        // adapter sizes over the full space and hands fixed variables to Ipopt as
+        // equal bounds, so it cannot consume the reduced layout.
+        throw std::invalid_argument(
+            "TychoTNLP: this NLP was left on its reduced variable space by a prior "
+            "PSIOPT solve with fixed_variable_treatment=MakeParameter. Solve with the "
+            "ipopt backend on a freshly transcribed problem, or re-transcribe before "
+            "switching backends; Ipopt applies its own fixed-variable treatment.");
+    }
     if (nlp_->kkt_dim_ != primal_vars_ + slack_vars_ + equal_cons_ + inequal_cons_) {
         throw std::logic_error(
             fmt::format("TychoTNLP: NLP kkt_dim ({0}) != primal_vars ({1}) + slack_vars ({2}) + "
@@ -380,13 +391,15 @@ bool TychoTNLP::get_bounds_info(Index n, Number *x_l, Number *x_u, Index m, Numb
                             primal_vars_, equal_cons_ + inequal_cons_));
         }
 
-        // The NLP has no variable bounds: every bound the user expressed is
-        // already a general constraint, and lifting some of them into
-        // variable bounds would hand Ipopt a different problem than the
-        // built-in solver solves.
+        // Forward the NLP's dense variable bounds, clamped to the magnitude
+        // Ipopt treats as infinite. nlp_->x_lower_/x_upper_ are materialized
+        // by make_nlp from whatever the transcription layer staged via
+        // set_variable_bound; where nothing was staged for a variable, both
+        // vectors carry +-inf and this loop reproduces the previous
+        // unconditionally-unbounded behavior.
         for (Index i = 0; i < n; ++i) {
-            x_l[i] = -kIpoptInfinity;
-            x_u[i] = kIpoptInfinity;
+            x_l[i] = std::max(nlp_->x_lower_[i], -kIpoptInfinity);
+            x_u[i] = std::min(nlp_->x_upper_[i], kIpoptInfinity);
         }
 
         // Equalities h(x) = 0 first, then inequalities g(x) <= 0.

@@ -44,6 +44,17 @@ namespace tycho::solvers {
 // directly — see ls_lang/ls_l1/ls_auglang in merit_acceptance.h); the slot
 // exists so this data shape did not need to change when filter/funnel were
 // added.
+//
+// θ is the KKT constraint block and nothing else — ‖c‖ over the equality and
+// inequality rows, as built by the trial-point evaluators. Native primal
+// variable bounds are not rows (they are condensed into the primal diagonal;
+// see barrier_math.h), so a bound never enters θ no matter how tightly an
+// iterate is pressed against one; their barrier contribution arrives in
+// auxiliary alongside the slack barrier. That is a structural exclusion, not a
+// guarded one, and it is what lets the filter, the funnel, the
+// feasibility-stall detector and the restoration-entry gate read the same
+// purified constraint-violation signal on a bounded problem as on an
+// unbounded one.
 // =============================================================================
 struct ProgressMeasures {
     double infeasibility = 0.0; ///< θ — constraint violation measure.

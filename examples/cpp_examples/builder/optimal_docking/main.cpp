@@ -233,9 +233,9 @@ static bool run_form2() {
                              X0.head(14));
 
     for (int i = 14; i <= 16; ++i)
-        phase.add_lu_var_bound(PhaseRegionFlags::Path, i, -MaxThrust, MaxThrust, 0.1);
+        phase.add_lu_var_bound(PhaseRegionFlags::Path, i, -MaxThrust, MaxThrust);
     for (int i = 17; i <= 19; ++i)
-        phase.add_lu_var_bound(PhaseRegionFlags::Path, i, -MaxTorque, MaxTorque, 1.0);
+        phase.add_lu_var_bound(PhaseRegionFlags::Path, i, -MaxTorque, MaxTorque);
 
     // Safety sphere
     Eigen::VectorXi pos_vars(3);
@@ -312,9 +312,9 @@ static bool run_form1() {
                              X0.head(21));
 
     for (int i = 21; i <= 23; ++i)
-        phase.add_lu_var_bound(PhaseRegionFlags::Path, i, -MaxThrust, MaxThrust, 0.1);
+        phase.add_lu_var_bound(PhaseRegionFlags::Path, i, -MaxThrust, MaxThrust);
     for (int i = 24; i <= 26; ++i)
-        phase.add_lu_var_bound(PhaseRegionFlags::Path, i, -MaxTorque, MaxTorque, 1.0);
+        phase.add_lu_var_bound(PhaseRegionFlags::Path, i, -MaxTorque, MaxTorque);
 
     Eigen::VectorXi pos_vars(3);
     pos_vars << 0, 1, 2;

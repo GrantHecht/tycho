@@ -77,6 +77,37 @@ void greater_than(double v, double bound, const char *name) {
             fmt::format("{} must be greater than {}, got {}", name, bound, v));
 }
 
+// The two range helpers are written as negated comparisons so that a NaN, which
+// compares false against everything, is rejected rather than let through.
+void in_open_interval(double v, double lo, double hi, const char *name) {
+    if (!(v > lo) || !(v < hi))
+        throw std::invalid_argument(fmt::format("{} must be in ({}, {}), got {}", name, lo, hi, v));
+}
+
+void in_closed_interval(double v, double lo, double hi, const char *name) {
+    if (!(v >= lo) || !(v <= hi))
+        throw std::invalid_argument(fmt::format("{} must be in [{}, {}], got {}", name, lo, hi, v));
+}
+
+// A closed-set enum still reaches Settings through a mutable reference, so a
+// value outside the set is a reachable input. Written as a switch with no default
+// label so that adding a treatment makes the compiler point here.
+void check_fixed_variable_treatment(tycho::solvers::FixedVariableTreatments treatment) {
+    using tycho::solvers::FixedVariableTreatments;
+    switch (treatment) {
+    case FixedVariableTreatments::MakeParameter:
+    case FixedVariableTreatments::MakeConstraint:
+    case FixedVariableTreatments::RelaxBounds:
+        return;
+    }
+    throw std::invalid_argument(fmt::format(
+        "fixed_variable_treatment must be one of {}, {}, {} (got {})",
+        tycho::solvers::fixed_variable_treatment_name(FixedVariableTreatments::MakeParameter),
+        tycho::solvers::fixed_variable_treatment_name(FixedVariableTreatments::MakeConstraint),
+        tycho::solvers::fixed_variable_treatment_name(FixedVariableTreatments::RelaxBounds),
+        static_cast<int>(treatment)));
+}
+
 } // namespace
 
 // =============================================================================
@@ -306,6 +337,21 @@ void tycho::solvers::PSIOPT::set_bound_fraction(double bound_fraction) {
 void tycho::solvers::PSIOPT::set_bound_push(double bound_push) {
     greater_than(bound_push, 0.0, "bound_push");
     settings_.bound_push_ = bound_push;
+}
+
+void tycho::solvers::PSIOPT::set_bound_interval_push(double bound_interval_push) {
+    in_open_interval(bound_interval_push, 0.0, 0.5, "bound_interval_push");
+    settings_.bound_interval_push_ = bound_interval_push;
+}
+
+void tycho::solvers::PSIOPT::set_bound_relax_factor(double bound_relax_factor) {
+    in_closed_interval(bound_relax_factor, 0.0, kMaxBoundRelaxFactor, "bound_relax_factor");
+    settings_.bound_relax_factor_ = bound_relax_factor;
+}
+
+void tycho::solvers::PSIOPT::set_fixed_variable_treatment(FixedVariableTreatments treatment) {
+    check_fixed_variable_treatment(treatment);
+    settings_.fixed_variable_treatment_ = treatment;
 }
 
 void tycho::solvers::PSIOPT::set_alpha_red(double ared) {
@@ -595,8 +641,23 @@ void tycho::solvers::PSIOPT::Settings::validate() const {
     // --- Step parameters ---
     in_open_unit(bound_fraction_, "bound_fraction");
     greater_than(bound_push_, 0.0, "bound_push");
+    // The interior push gives a two-sided variable p_L + p_U <= 2*k2*(u-l) of
+    // its own interval, so the lower and upper projections can only cross --
+    // landing the point on or outside a bound, whose barrier term then takes
+    // the log of a non-positive number with no diagnostic -- once k2 reaches
+    // one half. The upper bound is what makes the push's non-crossing property
+    // an enforced invariant rather than a documented assumption.
+    in_open_interval(bound_interval_push_, 0.0, 0.5, "bound_interval_push");
     pos_finite(neg_slack_reset_, "neg_slack_reset");
     greater_than(alpha_red_, 1.0, "alpha_red");
+
+    // --- Fixed-variable treatment ---
+    // Zero is allowed: it records every declared bound verbatim. The ceiling is
+    // what keeps a widened box from quietly becoming a different problem than the
+    // declared one -- see kMaxBoundRelaxFactor. A NaN factor is rejected by the
+    // helper's negated comparisons rather than passing both bounds.
+    in_closed_interval(bound_relax_factor_, 0.0, kMaxBoundRelaxFactor, "bound_relax_factor");
+    check_fixed_variable_treatment(fixed_variable_treatment_);
 
     // --- Hessian perturbation ---
     greater_than(delta_h_, 0.0, "delta_h");

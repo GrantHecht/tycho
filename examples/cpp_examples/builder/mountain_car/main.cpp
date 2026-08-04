@@ -47,11 +47,11 @@ int main() {
                             Eigen::Vector3d(x0, v0, 0.0));
     phase.add_boundary_value(PhaseRegionFlags::Back, "x", xf);
 
-    phase.add_lower_var_bound(PhaseRegionFlags::Back, "v", 0.0, 1.0);
+    phase.add_lower_var_bound(PhaseRegionFlags::Back, "v", 0.0);
 
-    phase.add_lu_var_bound(PhaseRegionFlags::Path, "x", -1.2, 0.55, 1.0);
-    phase.add_lu_var_bound(PhaseRegionFlags::Path, "v", -0.07, 0.07, 100.0);
-    phase.add_lu_var_bound(PhaseRegionFlags::Path, "u", -1.0, 1.0, 1.0);
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, "x", -1.2, 0.55);
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, "v", -0.07, 0.07);
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, "u", -1.0, 1.0);
 
     phase.add_delta_time_objective(0.01);
 

@@ -106,7 +106,7 @@ an integrator-with-control initial guess.
    # Phase 2 - singular arc: control defined by the equality path constraint.
    phase2 = ode.phase("LGL3", TrajIG2, 32)
    phase2.set_control_mode("NoSpline")  # PathCon makes control splines redundant
-   phase2.add_lu_var_bound("Path", "u", 0.0, 1.0, 1.0)
+   phase2.add_lu_var_bound("Path", "u", 0.0, 1.0)
    phase2.add_equal_con("Path", PathCon(sigma, c, h_ref, Tmag, g), ["h", "v", "m", "u"])
 
    # Phase 3 - coast (u = 0), maximize final altitude.

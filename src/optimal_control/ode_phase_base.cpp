@@ -20,10 +20,60 @@
 #include "tycho/detail/vf/common/value_lock.h"
 #include "tycho/detail/vf/scaling/auto_scaling_utils.h"
 
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <map>
+
 using tycho::vf::Arguments;
 using tycho::vf::IOScaled;
 using tycho::vf::StackedOutputs;
 using tycho::vf::SubstitutedVarPlaceholder;
+
+namespace {
+
+/// Human-readable name of a phase region, for variable-bound diagnostics.
+const char *var_bound_region_name(tycho::PhaseRegionFlags reg) {
+    switch (reg) {
+    case tycho::PhaseRegionFlags::NotSet:
+        return "NotSet";
+    case tycho::PhaseRegionFlags::Front:
+        return "Front";
+    case tycho::PhaseRegionFlags::Back:
+        return "Back";
+    case tycho::PhaseRegionFlags::FrontandBack:
+        return "FrontandBack";
+    case tycho::PhaseRegionFlags::BackandFront:
+        return "BackandFront";
+    case tycho::PhaseRegionFlags::Path:
+        return "Path";
+    case tycho::PhaseRegionFlags::InnerPath:
+        return "InnerPath";
+    case tycho::PhaseRegionFlags::NodalPath:
+        return "NodalPath";
+    case tycho::PhaseRegionFlags::DefectPath:
+        return "DefectPath";
+    case tycho::PhaseRegionFlags::PairWisePath:
+        return "PairWisePath";
+    case tycho::PhaseRegionFlags::DefectPairWisePath:
+        return "DefectPairWisePath";
+    case tycho::PhaseRegionFlags::FrontNodalBackPath:
+        return "FrontNodalBackPath";
+    case tycho::PhaseRegionFlags::Params:
+        return "Params";
+    case tycho::PhaseRegionFlags::ODEParams:
+        return "ODEParams";
+    case tycho::PhaseRegionFlags::StaticParams:
+        return "StaticParams";
+    case tycho::PhaseRegionFlags::Accumulate:
+        return "Accumulate";
+    case tycho::PhaseRegionFlags::BlockDefectPath:
+        return "BlockDefectPath";
+    }
+    return "Unknown";
+}
+
+} // namespace
 
 int tycho::oc::ODEPhaseBase::add_boundary_value(RegionType reg, VarIndexType args,
                                                 const std::variant<double, VectorXd> &value_t,
@@ -67,61 +117,67 @@ int tycho::oc::ODEPhaseBase::add_periodicity_con(VarIndexType args, ScaleType sc
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 int tycho::oc::ODEPhaseBase::add_lu_var_bound(RegionType reg, VarIndexType var, double lowerbound,
-                                              double upperbound, double lbscale, double ubscale,
-                                              ScaleType scale_t) {
+                                              double upperbound) {
     if (lowerbound > upperbound) {
         throw std::invalid_argument(
             fmt::format("Lower-bound({0:.3e}) greater than Upper-bound({1:.3e})", lowerbound,
                         upperbound));
     }
-    check_lbscale(lbscale);
-    check_ubscale(ubscale);
-
-    auto x = Arguments<1>();
-    auto lowbound = (lowerbound - x) * lbscale;
-    auto ubound = (x - upperbound) * ubscale;
-    auto lubound = StackedOutputs{lowbound, ubound};
-
-    return this->add_inequal_con(reg, lubound, var, scale_t);
-}
-int tycho::oc::ODEPhaseBase::add_lu_var_bound(PhaseRegionFlags reg, int var, double lowerbound,
-                                              double upperbound, double lbscale, double ubscale) {
-
-    if (lowerbound > upperbound) {
-        throw std::invalid_argument(
-            fmt::format("Lower-bound({0:.3e}) greater than Upper-bound({1:.3e})", lowerbound,
-                        upperbound));
-    }
-    check_lbscale(lbscale);
-    check_ubscale(ubscale);
-
-    auto x = Arguments<1>();
-    auto lowbound = (lowerbound - x) * lbscale;
-    auto ubound = (x - upperbound) * ubscale;
-
-    auto lubound = StackedOutputs{lowbound, ubound};
-    VectorXi v(1);
-    v[0] = var;
-    return this->add_inequal_con(StateConstraint(lubound, reg, v));
+    return this->record_var_bounds(reg, var, lowerbound, upperbound);
 }
 
 int tycho::oc::ODEPhaseBase::add_lower_var_bound(RegionType reg, VarIndexType var,
-                                                 double lowerbound, double lbscale,
-                                                 ScaleType scale_t) {
-    check_lbscale(lbscale);
-    auto x = Arguments<1>();
-    auto lbound = (lowerbound - x) * lbscale;
-
-    return this->add_inequal_con(reg, lbound, var, scale_t);
+                                                 double lowerbound) {
+    return this->record_var_bounds(reg, var, lowerbound, std::numeric_limits<double>::infinity());
 }
 
 int tycho::oc::ODEPhaseBase::add_upper_var_bound(RegionType reg, VarIndexType var,
-                                                 double upperbound, double ubscale,
-                                                 ScaleType scale_t) {
-    check_ubscale(ubscale);
-    auto x = Arguments<1>();
-    auto ubound = (x - upperbound) * ubscale;
-    return this->add_inequal_con(reg, ubound, var, scale_t);
+                                                 double upperbound) {
+    return this->record_var_bounds(reg, var, -std::numeric_limits<double>::infinity(), upperbound);
+}
+
+int tycho::oc::ODEPhaseBase::record_var_bounds(RegionType reg_t, VarIndexType var_t,
+                                               double lowerbound, double upperbound) {
+    // Region and variable resolution is exactly what add_inequal_con performs
+    // for a constraint over the same region: get_region() on the region
+    // selector, then get_xt_up_vars() on the variable selector under it.
+    PhaseRegionFlags reg = this->get_region(reg_t);
+    VectorXi vars = this->get_xt_up_vars(reg, var_t);
+
+    // Validate before any mutation, matching add_func_impl: a throw must not
+    // leave a half-recorded declaration behind to duplicate on retry.
+    if (vars.size() == 0) {
+        throw std::invalid_argument(
+            "ODEPhaseBase::record_var_bounds: the variable selector resolved to zero variables — "
+            "either the selector is empty or the region contains no matching variables");
+    }
+    switch (reg) {
+    case PhaseRegionFlags::Params: {
+        throw std::invalid_argument(
+            "A variable bound cannot be declared on the combined Params region: a combined "
+            "parameter index cannot be split into ODE-parameter and static-parameter indices "
+            "without the phase dimensions. Use ODEParams or StaticParams instead.");
+    }
+    case PhaseRegionFlags::NotSet:
+    case PhaseRegionFlags::Accumulate:
+    case PhaseRegionFlags::BlockDefectPath: {
+        throw std::invalid_argument(fmt::format(
+            "A variable bound cannot be declared on region {0:}: it is an internal sentinel, "
+            "not a user-selectable phase region.",
+            var_bound_region_name(reg)));
+    }
+    default:
+        break;
+    }
+
+    int handle = static_cast<int>(this->user_var_bounds_.size());
+    for (int i = 0; i < vars.size(); i++) {
+        this->user_var_bounds_.push_back(VarBoundRecord{reg, vars[i], lowerbound, upperbound});
+    }
+
+    this->reset_transcription();
+    this->invalidate_post_opt_info();
+    return handle;
 }
 
 int tycho::oc::ODEPhaseBase::add_lu_func_bound(RegionType reg, ScalarFunctionalX func,
@@ -1314,6 +1370,159 @@ void tycho::oc::ODEPhaseBase::update_objective_scales(double scale) {
     }
 }
 
+void tycho::oc::ODEPhaseBase::transcribe_var_bounds(std::shared_ptr<NonLinearProgram> np,
+                                                    int pnum) {
+    if (this->user_var_bounds_.empty()) {
+        return;
+    }
+
+    // No clear_variable_bounds() call belongs here. Every path into
+    // transcribe_phase installs a freshly constructed NonLinearProgram first
+    // (ODEPhaseBase::transcribe, ODEPhaseBase::test_partitions, and
+    // OptimalControlProblemBase::transcribe each make_shared one before
+    // transcribing), so `np` never arrives carrying bounds staged by an earlier
+    // transcription. Clearing here would additionally be wrong in the
+    // multi-phase path, where every phase stages into one shared NLP and a
+    // later phase would drop its siblings' bounds.
+
+    constexpr double kInf = std::numeric_limits<double>::infinity();
+
+    // Merged view of this phase's own declarations, keyed by NLP variable index.
+    // Held in declared (physical) units, not in the scaled units the bounds are
+    // staged in: a common positive unit divides out of the lower > upper test, so
+    // merging before the division detects exactly the same conflicts while keeping
+    // the diagnostic's numbers the ones the caller passed in.
+    // The NLP intersects staged declarations itself, but only at make_nlp time —
+    // too late to name the phase and phase-local variable in the message. Merging
+    // here reports the conflict with that context first; the NLP's own check stays
+    // as the backstop. Phases never share an NLP variable index, so merging within
+    // one phase sees every declaration that can conflict.
+    std::map<int, std::pair<double, double>> merged;
+
+    for (const auto &rec : this->user_var_bounds_) {
+        PhaseRegionFlags reg = rec.region_;
+        VectorXi one(1);
+        one[0] = rec.var_;
+        VectorXi rxtuv(0);
+        VectorXi rodepv(0);
+        VectorXi rstatpv(0);
+
+        // Route the index into the same slot StateFunction's single-group
+        // constructor would, so the indexer sees the binding a constraint over
+        // this region would have carried. The unit vector and offset picked here
+        // are the ones get_input_scale draws from for the same index — each block's
+        // index lives in its own unit array (state/time/control and ODE params in
+        // xtup_units_, the latter behind an xtu_vars() offset; static params in
+        // sp_units_) — so a bound and a constraint over the same variable scale by
+        // the same factor. Selecting the source here but reading it only after the
+        // range check below keeps a bad index from indexing a unit array.
+        int block_size = 0;
+        const char *block_name = "";
+        const Eigen::VectorXd *unit_source = nullptr;
+        int unit_index = rec.var_;
+        switch (reg) {
+        case PhaseRegionFlags::ODEParams: {
+            reg = PhaseRegionFlags::Params;
+            rodepv = one;
+            block_size = this->p_vars();
+            block_name = "ODE-parameter";
+            unit_source = &this->xtup_units_;
+            unit_index = rec.var_ + this->xtu_vars();
+            break;
+        }
+        case PhaseRegionFlags::StaticParams: {
+            reg = PhaseRegionFlags::Params;
+            rstatpv = one;
+            block_size = this->num_stat_params_;
+            block_name = "static-parameter";
+            // sp_units_ is sized to the static-parameter count by every path that
+            // sets them (set_static_params sizes both together, add_static_params
+            // funnels through it), so the block-size check below also bounds this.
+            unit_source = &this->sp_units_;
+            break;
+        }
+        default: {
+            rxtuv = one;
+            block_size = this->xtu_vars();
+            block_name = "state/time/control";
+            unit_source = &this->xtup_units_;
+            break;
+        }
+        }
+
+        if (rec.var_ < 0 || rec.var_ >= block_size) {
+            throw std::invalid_argument(fmt::format(
+                "Variable-bound index {0:} is out of bounds in phase {1:}; region {2:} indexes "
+                "the phase's {3:} block, which holds {4:} variable(s).",
+                rec.var_, pnum, var_bound_region_name(rec.region_), block_name, block_size));
+        }
+
+        // Under auto-scaling the NLP decision variable is the physical value
+        // divided by that variable's unit (make_solver_input divides on the way in,
+        // collect_solver_output multiplies on the way out). A constraint over the
+        // same variable still compares physical values: add_inequal_con wraps the
+        // expression in IOScaled with get_input_scale's units, which multiply the
+        // NLP variable back up to physical before the comparison. A bound staged
+        // directly on the NLP variable carries no such wrapper, so it must be
+        // divided by the same unit here. Skipping this leaves the enforced box off
+        // by the unit in every scaled problem -- silently loosened where the unit
+        // exceeds one, silently tightened where it falls below.
+        double unit = 1.0;
+        if (this->auto_scaling_) {
+            unit = (*unit_source)[unit_index];
+            if (!std::isfinite(unit) || unit <= 0.0) {
+                throw std::invalid_argument(fmt::format(
+                    "Variable bound in phase {0:} (region {1:}, phase-local variable index {2:}) "
+                    "cannot be scaled: this phase has auto-scaling enabled and the {3:} unit for "
+                    "that variable is {4:.6e}. Scaling units must be finite and positive.",
+                    pnum, var_bound_region_name(rec.region_), rec.var_, block_name, unit));
+            }
+        }
+        const double scaled_lower = rec.lower_ / unit;
+        const double scaled_upper = rec.upper_ / unit;
+
+        // Reuse the indexer's own per-region, per-node index arithmetic rather
+        // than restating it: PhaseIndexer::make_Vindex_Cindex builds exactly the
+        // variable-index table a constraint bound to this region and these
+        // variables would receive. Every entry of that table is an NLP variable
+        // index of the declared variable at one application of the region, which
+        // is precisely the set of indices the bound applies to. Requesting zero
+        // output rows keeps the call from consuming constraint rows.
+        auto vincin = this->indexer_.make_Vindex_Cindex(reg, rxtuv, rodepv, rstatpv, /*orows=*/0);
+        const Eigen::MatrixXi &vindex = vincin[0];
+
+        for (int c = 0; c < vindex.cols(); c++) {
+            for (int r = 0; r < vindex.rows(); r++) {
+                int gidx = vindex(r, c);
+
+                auto &bounds = merged.try_emplace(gidx, -kInf, kInf).first->second;
+                bounds.first = std::max(bounds.first, rec.lower_);
+                bounds.second = std::min(bounds.second, rec.upper_);
+                if (bounds.first > bounds.second) {
+                    throw std::invalid_argument(fmt::format(
+                        "Conflicting variable bounds in phase {0:}: region {1:}, phase-local "
+                        "variable index {2:}, NLP variable index {3:}. The declarations "
+                        "intersect to an empty interval (lower={4:.6e} > upper={5:.6e}).",
+                        pnum, var_bound_region_name(rec.region_), rec.var_, gidx, bounds.first,
+                        bounds.second));
+                }
+
+                try {
+                    np->set_variable_bound(gidx, scaled_lower, scaled_upper);
+                } catch (const std::invalid_argument &e) {
+                    throw std::invalid_argument(fmt::format(
+                        "Variable bound in phase {0:} (region {1:}, phase-local variable index "
+                        "{2:}, NLP variable index {3:}, declared lower={4:.6e}, upper={5:.6e}; "
+                        "staged as lower={6:.6e}, upper={7:.6e} after division by the scaling "
+                        "unit {8:.6e}) was rejected by the NLP: {9:}",
+                        pnum, var_bound_region_name(rec.region_), rec.var_, gidx, rec.lower_,
+                        rec.upper_, scaled_lower, scaled_upper, unit, e.what()));
+                }
+            }
+        }
+    }
+}
+
 void tycho::oc::ODEPhaseBase::transcribe_phase(int vo, int eqo, int iqo,
                                                std::shared_ptr<NonLinearProgram> np, int pnum)
 
@@ -1325,6 +1534,7 @@ void tycho::oc::ODEPhaseBase::transcribe_phase(int vo, int eqo, int iqo,
     this->transcribe_control_funcs();
     this->transcribe_integrals();
     this->transcribe_basic_funcs();
+    this->transcribe_var_bounds(np, pnum);
 
     //////DO NOT GET RID OF THIS!!!!!!//
     this->do_transcription_ = false;
