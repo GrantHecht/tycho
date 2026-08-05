@@ -76,7 +76,7 @@ TEST(EnzymePhaseE2E, BrachistochroneEnzymeFwdFDiff) {
                              ScaleModes::AUTO);
 
     // Control bounds: theta in [-0.1, 2.0].
-    phase.add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0, 1.0);
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0);
 
     // Minimum-time objective.
     phase.add_delta_time_objective(1.0, ScaleModes::AUTO);
@@ -146,7 +146,7 @@ TEST(EnzymePhaseE2E, BrachistochroneFullEnzymePipeline) {
     phase.add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val,
                              ScaleModes::AUTO);
 
-    phase.add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0, 1.0);
+    phase.add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0);
     phase.add_delta_time_objective(1.0, ScaleModes::AUTO);
 
     const auto status = phase.solve_optimize();

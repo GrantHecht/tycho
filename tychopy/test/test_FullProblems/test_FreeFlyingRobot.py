@@ -69,7 +69,7 @@ class test_FreeFlyingRobot(unittest.TestCase):
         phase.set_control_mode(cmode)
         phase.add_boundary_value("Front", range(0, 7), X0)
         phase.add_boundary_value("Back", range(0, 7), XF)
-        phase.add_lu_var_bounds("Path", range(7, 11), 0.0, 1.0, 1)
+        phase.add_lu_var_bounds("Path", range(7, 11), 0.0, 1.0)
         phase.add_integral_objective(Args(4).sum(), range(7, 11))
         phase.optimizer.print_level = 3
         phase.optimizer.opt_ls_mode = sol.LineSearchModes.L1

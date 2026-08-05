@@ -32,6 +32,8 @@
 // =============================================================================
 
 #pragma once
+#include <cassert>
+
 #include "tycho/detail/vf/core/assignment_types.h"
 #include "tycho/detail/vf/core/computable_base.h"
 #include "tycho/detail/vf/core/dense_function_operations.h"
@@ -1345,14 +1347,36 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
                        tycho::solvers::SolverIndexingData &data) {
         data.inner_kkt_starts_.resize(data.num_appl());
 
+        // CLAIM SIDE of the cursor contract. One slot is claimed per Hessian
+        // element with hessian_elem_is_nonzero(j, i) and per Jacobian element
+        // with jacobian_elem_is_nonzero(j, i) -- the same two predicates
+        // num_kkt_elements counts by, add_hessian_elem advances by, and the
+        // reduced fill arms step over eliminated elements by. Note the asymmetry
+        // the two sides carry: the Hessian predicate is a real gate that the
+        // sparsity-aware transcription defects override, while the Jacobian
+        // predicate is total (constexpr true, no overrides), which is what lets
+        // add_jacobian_elem advance unconditionally. Keep all of these in step.
+        //
+        // Indices come from the OUTPUT map (data.v_scatter_loc), which equals the
+        // input map unless the solver has eliminated variables. An element that
+        // touches an eliminated variable is recorded as (-1, -1): it keeps its
+        // claim -- the claims stay contiguous and the scatter's cursor walks them
+        // in lockstep exactly as before -- but it names no matrix entry, so
+        // NonLinearProgram::analyze_sparsity leaves it out of the pattern and
+        // out of the clash bookkeeping, and the scatter never writes it. That is
+        // what makes the eliminated variable's row and column simply not exist
+        // in the assembled matrix.
         for (int V = 0; V < data.num_appl(); V++) {
             data.inner_kkt_starts_[V] = freeloc;
             for (int i = 0; i < this->input_rows(); i++) {
+                const int col = data.v_scatter_loc(i, V);
                 if (dohess) {
                     for (int j = i; j < this->input_rows(); j++) {
                         if (this->derived().hessian_elem_is_nonzero(j, i)) {
-                            KKTrows[freeloc] = data.v_loc(j, V);
-                            KKTcols[freeloc] = data.v_loc(i, V);
+                            const int row = data.v_scatter_loc(j, V);
+                            const bool eliminated = (row < 0) || (col < 0);
+                            KKTrows[freeloc] = eliminated ? -1 : row;
+                            KKTcols[freeloc] = eliminated ? -1 : col;
                             freeloc++;
                         }
                     }
@@ -1360,8 +1384,8 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
                 if (dojac) {
                     for (int j = 0; j < this->output_rows(); j++) {
                         if (this->derived().jacobian_elem_is_nonzero(j, i)) {
-                            KKTrows[freeloc] = data.c_loc(j, V) + conoffset;
-                            KKTcols[freeloc] = data.v_loc(i, V);
+                            KKTrows[freeloc] = (col < 0) ? -1 : data.c_loc(j, V) + conoffset;
+                            KKTcols[freeloc] = col;
                             freeloc++;
                         }
                     }
@@ -1832,13 +1856,40 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
 
         const int IRR = (IR > 0) ? IR : this->input_rows();
 
+        // Reduced variant hoisted out of the loop -- see the argument, and the
+        // cursor contract the step arm mirrors, in kkt_fill_all. Without
+        // bound-fixed variables the loop below is the original one and costs one
+        // predicated branch per application.
+        if (!data.v_out_reduced_) {
+            for (int i = 0; i < IRR; i++) {
+                ActiveVar = data.v_loc(i, Apl);
+                int held = -1;
+                if constexpr (!LinearVF<Derived>) {
+                    for (int j = i; j < IRR; j++) {
+                        const int lockcol =
+                            tycho::solvers::kkt_canonical_lock_col(data.v_loc(j, Apl), ActiveVar);
+                        held = Relock(held, lockcol);
+                        this->derived().add_hessian_elem(hx(j, i), j, i, mpt, lpt, freeloc);
+                    }
+                }
+                if (held != -1)
+                    UnLock(held);
+            }
+            return;
+        }
+
         for (int i = 0; i < IRR; i++) {
-            ActiveVar = data.v_loc(i, Apl);
+            const int active_out = data.v_out_loc(i, Apl);
             int held = -1;
             if constexpr (!LinearVF<Derived>) {
                 for (int j = i; j < IRR; j++) {
-                    const int lockcol =
-                        tycho::solvers::kkt_canonical_lock_col(data.v_loc(j, Apl), ActiveVar);
+                    const int row_out = data.v_out_loc(j, Apl);
+                    if (row_out < 0 || active_out < 0) {
+                        if (this->derived().hessian_elem_is_nonzero(j, i))
+                            freeloc++;
+                        continue;
+                    }
+                    const int lockcol = tycho::solvers::kkt_canonical_lock_col(row_out, active_out);
                     held = Relock(held, lockcol);
                     this->derived().add_hessian_elem(hx(j, i), j, i, mpt, lpt, freeloc);
                 }
@@ -1866,6 +1917,16 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
     }
     /// @brief Add one Hessian value into the KKT value array (no-op if linear).
     /// @internal
+    /// CURSOR CONTRACT (load-bearing; see get_kkt_space and the reduced fill
+    /// arms): this advances @p freeloc if and only if
+    /// `hessian_elem_is_nonzero(row, col)` would return true. The base pair
+    /// satisfies that identically -- both are governed by `LinearVF<Derived>` --
+    /// and every override in the tree must keep the pair in step, because
+    /// get_kkt_space CLAIMS a slot under exactly that predicate and the reduced
+    /// fill arms STEP OVER an eliminated element under exactly that predicate.
+    /// A pair that disagrees desynchronizes the cursor from the claims, which is
+    /// caught by the assert below in debug builds.
+    ///
     /// @param v        Value to add.
     /// @param row      Hessian row (unused; documentary).
     /// @param col      Hessian column (unused; documentary).
@@ -1876,12 +1937,31 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
     inline void add_hessian_elem(double v, int row, int col, double *mpt, const int *lpt,
                                  int &freeloc) const {
         if constexpr (!LinearVF<Derived>) {
+            // An eliminated element's location stays -1, so a cursor that has
+            // drifted out of step with the claims would write through
+            // valuePtr()[-1]. Debug-only; compiled out under NDEBUG.
+            assert(lpt[freeloc] >= 0 &&
+                   "KKT Hessian fill cursor landed on an eliminated element's slot");
             mpt[lpt[freeloc]] += v;
             freeloc++;
         }
     }
     /// @brief Add one Jacobian value into the KKT value array.
     /// @internal
+    /// CURSOR CONTRACT, and note that the Jacobian side's is shaped differently
+    /// from the Hessian's. This advances @p freeloc UNCONDITIONALLY -- it is
+    /// claim-side-total -- and matches get_kkt_space only because
+    /// `jacobian_elem_is_nonzero` is `constexpr true` with no override anywhere
+    /// in the tree, so the claim is total too. The Hessian side is instead
+    /// predicate-gated on both halves (see add_hessian_elem). The reduced fill
+    /// arms mirror the CLAIM-side predicate in both cases, which is the same
+    /// thing here only for as long as that predicate stays total: an override of
+    /// `jacobian_elem_is_nonzero` alone would desynchronize get_kkt_space's
+    /// claim count from this function's write count with or without variable
+    /// elimination, so such an override must come with a matching override here,
+    /// exactly as the sparsity-aware transcription defects pair their Hessian
+    /// halves.
+    ///
     /// @param v        Value to add.
     /// @param row      Jacobian row (unused; documentary).
     /// @param col      Jacobian column (unused; documentary).
@@ -1891,6 +1971,9 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
     /// @endinternal
     inline void add_jacobian_elem(double v, int row, int col, double *mpt, const int *lpt,
                                   int &freeloc) const {
+        // See the cursor contract on this function's doc comment.
+        assert(lpt[freeloc] >= 0 &&
+               "KKT Jacobian fill cursor landed on an eliminated element's slot");
         mpt[lpt[freeloc]] += v;
         freeloc++;
     }
@@ -1985,33 +2068,110 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
             return want;
         };
 
+        // Fixed-variable elimination: hoisted out of the loops on purpose. A
+        // function only carries a solver-space output map when the solver has
+        // eliminated bound-fixed variables, so on every problem without them the
+        // loop below is the original one, instruction for instruction, and the
+        // only cost of the feature existing is this one predicated branch per
+        // application. The reduced variant is a separate loop nest further down,
+        // so nothing on the common path pays a per-element test.
+        if (!data.v_out_reduced_) {
+            for (int i = 0; i < IRR; i++) {
+                ActiveVar = data.v_loc(i, Apl);
+                int held = -1;
+                ///// insert hessian column symetrically -- each element under its canonical
+                ///// (min-endpoint) lock column min(v_loc(j), v_loc(i))
+                if constexpr (!LinearVF<Derived>) {
+                    for (int j = i; j < IRR; j++) {
+                        const int lockcol =
+                            tycho::solvers::kkt_canonical_lock_col(data.v_loc(j, Apl), ActiveVar);
+                        held = Relock(held, lockcol);
+                        this->derived().add_hessian_elem(hx(j, i), j, i, mpt, lpt, freeloc);
+                    }
+                }
+                ///// insert jacobian column -- canonical lock column is always ActiveVar
+                ///// (constraint rows sort above every variable column); unlocked when the
+                ///// constraint rows are unique to this application (no cross-partition clash)
+                if (uniquecon) {
+                    if (held != -1)
+                        UnLock(held);
+                    held = -1;
+                } else {
+                    held = Relock(held, ActiveVar);
+                }
+                for (int j = 0; j < ORR; j++) {
+                    this->derived().add_jacobian_elem(jx(j, i), j, i, mpt, lpt, freeloc);
+                }
+                ///////////////////////////////////////////////////////////////////////////////
+                if (held != -1)
+                    UnLock(held);
+            }
+            return;
+        }
+
+        // Reduced variant. Two differences from the loop above, and no others:
+        // an element whose row or column names an eliminated variable is stepped
+        // over instead of written, and every index -- lock key included -- reads
+        // the solver-space output map rather than the problem-space input map.
+        // The second is required for the same structural reason the original
+        // keying is: every claimant of one physical slot must derive the same
+        // lock column, and once the space is renumbered the slot is determined
+        // by the SOLVER-space pair. The clash table is sized and marked in that
+        // same space, so the two agree by construction.
+        //
+        // Stepping over an element must advance the cursor by exactly what
+        // add_*_elem would have. The skip arms below mirror the CLAIM-side
+        // predicates -- the ones get_kkt_space claimed the slots by -- which is
+        // the contract that makes this work without a new hook:
+        //   * Hessian: predicate-gated on both halves. add_hessian_elem advances
+        //     iff hessian_elem_is_nonzero(row, col), identically for this base
+        //     (both governed by LinearVF) and for the sparsity-aware overrides
+        //     in the transcription defects (both testing the same nz_locs_
+        //     entry), so mirroring the predicate mirrors the advance.
+        //   * Jacobian: claim-side-total. jacobian_elem_is_nonzero is constexpr
+        //     true with no override in the tree, so the claim is total and
+        //     add_jacobian_elem advances unconditionally; the skip below spells
+        //     the predicate anyway so it stays correct if that ever changes in
+        //     the one way that would be legal (predicate and add overridden
+        //     together -- see add_jacobian_elem's contract note).
+        // kkt_fill_jac already used this same idiom to step over the Hessian
+        // block, and a drifted cursor is caught by the asserts in add_*_elem.
         for (int i = 0; i < IRR; i++) {
-            ActiveVar = data.v_loc(i, Apl);
+            const int active_out = data.v_out_loc(i, Apl);
             int held = -1;
-            ///// insert hessian column symetrically -- each element under its canonical
-            ///// (min-endpoint) lock column min(v_loc(j), v_loc(i))
             if constexpr (!LinearVF<Derived>) {
                 for (int j = i; j < IRR; j++) {
-                    const int lockcol =
-                        tycho::solvers::kkt_canonical_lock_col(data.v_loc(j, Apl), ActiveVar);
+                    const int row_out = data.v_out_loc(j, Apl);
+                    if (row_out < 0 || active_out < 0) {
+                        if (this->derived().hessian_elem_is_nonzero(j, i))
+                            freeloc++;
+                        continue;
+                    }
+                    const int lockcol = tycho::solvers::kkt_canonical_lock_col(row_out, active_out);
                     held = Relock(held, lockcol);
                     this->derived().add_hessian_elem(hx(j, i), j, i, mpt, lpt, freeloc);
                 }
             }
-            ///// insert jacobian column -- canonical lock column is always ActiveVar
-            ///// (constraint rows sort above every variable column); unlocked when the
-            ///// constraint rows are unique to this application (no cross-partition clash)
+            if (active_out < 0) {
+                // The whole Jacobian column belongs to an eliminated variable.
+                if (held != -1)
+                    UnLock(held);
+                for (int j = 0; j < ORR; j++) {
+                    if (this->derived().jacobian_elem_is_nonzero(j, i))
+                        freeloc++;
+                }
+                continue;
+            }
             if (uniquecon) {
                 if (held != -1)
                     UnLock(held);
                 held = -1;
             } else {
-                held = Relock(held, ActiveVar);
+                held = Relock(held, active_out);
             }
             for (int j = 0; j < ORR; j++) {
                 this->derived().add_jacobian_elem(jx(j, i), j, i, mpt, lpt, freeloc);
             }
-            ///////////////////////////////////////////////////////////////////////////////
             if (held != -1)
                 UnLock(held);
         }
@@ -2042,6 +2202,41 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
         double *mpt = KKTmat.valuePtr();
         const int *lpt = KKTLocs.data();
         int ActiveVar;
+
+        // Reduced variant, hoisted for the same reason as in kkt_fill_all: on a
+        // problem with no bound-fixed variables the loops below are the original
+        // ones. Simpler here than there -- this routine only ever steps over the
+        // Hessian block, so elimination matters for the Jacobian column alone,
+        // and a column whose variable was eliminated is stepped over whole (one
+        // test per column, not per element). Both step loops spell the
+        // claim-side predicate get_kkt_space claimed by; see the cursor contract
+        // in kkt_fill_all's reduced arm.
+        if (data.v_out_reduced_) {
+            for (int i = 0; i < this->input_rows(); i++) {
+                const int active_out = data.v_out_loc(i, Apl);
+                for (int j = i; j < this->input_rows(); j++) {
+                    if (this->derived().hessian_elem_is_nonzero(j, i))
+                        freeloc++;
+                }
+                if (active_out < 0) {
+                    for (int j = 0; j < this->output_rows(); j++) {
+                        if (this->derived().jacobian_elem_is_nonzero(j, i))
+                            freeloc++;
+                    }
+                    continue;
+                }
+                const bool lock_column =
+                    !data.unique_constraints_ && (VarClashes[active_out] != -1);
+                if (lock_column)
+                    ClashLocks[VarClashes[active_out]].lock();
+                for (int j = 0; j < this->output_rows(); j++) {
+                    this->derived().add_jacobian_elem(jx(j, i), j, i, mpt, lpt, freeloc);
+                }
+                if (lock_column)
+                    ClashLocks[VarClashes[active_out]].unlock();
+            }
+            return;
+        }
 
         if (data.unique_constraints_) {
             for (int i = 0; i < this->input_rows(); i++) {

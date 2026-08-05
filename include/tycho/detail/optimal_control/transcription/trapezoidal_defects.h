@@ -17,6 +17,8 @@
 #include "tycho/detail/optimal_control/transcription/transcription_sizing.h"
 #include "tycho/detail/vf/core/vector_function.h"
 
+#include <cassert>
+
 namespace tycho::oc {
 
 // Import cross-namespace types from vf and utils.
@@ -183,10 +185,19 @@ struct TrapezoidalDefects
                                  int &freeloc) const {
         if (this->enable_hessian_sparsity_) {
             if (bool(this->nz_locs_(row, col))) {
+                // Slot validity, on the path where the cursor contract is a RUNTIME
+                // predicate rather than a compile-time one and can therefore drift:
+                // an eliminated element's location stays -1, so a cursor out of step
+                // with get_kkt_space's claims would write through valuePtr()[-1].
+                // Debug-only; compiled out under NDEBUG.
+                assert(lpt[freeloc] >= 0 &&
+                       "KKT Hessian fill cursor landed on an eliminated element's slot");
                 mpt[lpt[freeloc]] += v;
                 freeloc++;
             }
         } else {
+            assert(lpt[freeloc] >= 0 &&
+                   "KKT Hessian fill cursor landed on an eliminated element's slot");
             mpt[lpt[freeloc]] += v;
             freeloc++;
         }

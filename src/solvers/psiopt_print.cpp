@@ -71,7 +71,19 @@ void tycho::solvers::PSIOPT::print_stats() {
     fmt::print(" Primal Variables         : ");
     fmt::print(cyan, "{:<10}\n", this->primal_vars_);
     fmt::print(" Equality Constraints     : ");
-    fmt::print(cyan, "{:<10}\n", this->equal_cons_);
+    // The count of the SOLVED system, which under the make_constraint
+    // fixed-variable treatment includes one internal row per fixed variable. Those
+    // rows are the solver's own, so the breakdown is spelled out rather than
+    // leaving a user who declared three rows wondering why five are reported. No
+    // other treatment installs any, so the suffix is absent everywhere else.
+    const int internal_rows = this->nlp_ ? this->nlp_->internal_fixed_constraints() : 0;
+    if (internal_rows > 0) {
+        fmt::print(cyan, "{:<10}\n",
+                   fmt::format("{0} ({1} declared + {2} fixing)", this->equal_cons_,
+                               this->equal_cons_ - internal_rows, internal_rows));
+    } else {
+        fmt::print(cyan, "{:<10}\n", this->equal_cons_);
+    }
     fmt::print(" Inequality Constraints   : ");
     fmt::print(cyan, "{:<10}\n", this->inequal_cons_);
     fmt::print("\n");

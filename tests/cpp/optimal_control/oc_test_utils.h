@@ -28,9 +28,20 @@ class OptimalControlTest : public VectorFunctionFixture {};
 // Helper: build a standard Brachistochrone phase
 ///////////////////////////////////////////////////////////////////////////////
 
+/// @brief Build the standard Brachistochrone phase.
+/// @param n_pts      Number of initial-guess trajectory points.
+/// @param n_defects  Number of collocation segments.
+/// @param mode       Transcription scheme.
+/// @param control_bound_as_inequality  Carry the control box as a pair of
+///        inequality-constraint rows (``-0.1 - u <= 0`` and ``u - 2 <= 0``)
+///        instead of as a variable bound. The two formulations describe the
+///        same feasible set through different NLP structures, which is what
+///        lets a test compare them side by side; every other caller wants the
+///        default.
 inline std::shared_ptr<ODEPhase<BrachODE>>
 make_brach_phase(int n_pts = 100, int n_defects = 32,
-                 TranscriptionModes mode = TranscriptionModes::LGL3) {
+                 TranscriptionModes mode = TranscriptionModes::LGL3,
+                 bool control_bound_as_inequality = false) {
     constexpr double g = 9.81;
     constexpr double x0 = 0.0, y0 = 10.0, v0 = 0.0, t0 = 0.0;
     constexpr double xf = 10.0, yf = 5.0;
@@ -66,7 +77,17 @@ make_brach_phase(int n_pts = 100, int n_defects = 32,
     phase->add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val, ScaleModes::AUTO);
 
     // Control bounds
-    phase->add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0, 1.0);
+    constexpr double u_lower = -0.1, u_upper = 2.0;
+    if (control_bound_as_inequality) {
+        auto u = vf::Arguments<1>();
+        Eigen::VectorXi u_idx(1);
+        u_idx << 4;
+        phase->add_inequal_con(PhaseRegionFlags::Path,
+                               vf::StackedOutputs{u_lower - u, u - u_upper}, u_idx,
+                               ScaleModes::AUTO);
+    } else {
+        phase->add_lu_var_bound(PhaseRegionFlags::Path, 4, u_lower, u_upper);
+    }
 
     // Objective
     phase->add_delta_time_objective(1.0, ScaleModes::AUTO);

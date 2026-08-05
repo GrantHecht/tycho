@@ -49,7 +49,7 @@ inline std::shared_ptr<ODEPhase<BrachODE>> make_brach_phase(int n_segs, int prin
     back_val << xf, yf;
     phase->add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val, ScaleModes::AUTO);
 
-    phase->add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0, 1.0);
+    phase->add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0);
     phase->add_delta_time_objective(1.0, ScaleModes::AUTO);
 
     if (print_level >= 0) {
@@ -109,8 +109,8 @@ inline std::shared_ptr<ODEPhase<PolarLTODE>> make_polar_lt_phase(int n_segs,
     phase->add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val, ScaleModes::AUTO);
 
     // Control bounds
-    phase->add_lu_var_bound(PhaseRegionFlags::Path, 5, 0.0, 1.0, 1.0);
-    phase->add_lu_var_bound(PhaseRegionFlags::Path, 6, -std::numbers::pi, std::numbers::pi, 1.0);
+    phase->add_lu_var_bound(PhaseRegionFlags::Path, 5, 0.0, 1.0);
+    phase->add_lu_var_bound(PhaseRegionFlags::Path, 6, -std::numbers::pi, std::numbers::pi);
 
     // Minimize transfer time
     phase->add_delta_time_objective(1.0, ScaleModes::AUTO);

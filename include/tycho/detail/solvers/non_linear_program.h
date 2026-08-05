@@ -21,7 +21,9 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -31,12 +33,78 @@
 #include <Eigen/Core>
 #include <Eigen/Sparse>
 
+#include <fmt/format.h>
+
+#include "tycho/detail/solvers/bound_set.h"
 #include "tycho/detail/solvers/constraint_function.h"
 #include "tycho/detail/solvers/objective_function.h"
 #include "tycho/detail/typedefs/eigen_types.h"
 #include "tycho/detail/utils/thread_pool.h"
 
 namespace tycho::solvers {
+
+/// <summary>
+/// How a primal variable whose declared lower and upper bounds are equal is
+/// handed to the solver. All three are implemented, and all three reach the same
+/// solution on a well-posed problem; they differ in the size of the system the
+/// solver factorizes and in how exactly the variable sits at its value.
+///
+/// MakeParameter (the default) removes the variable from the optimization
+/// entirely: it is pinned at its bound value for every evaluation and the Newton
+/// system the solver factorizes is the system of the REMAINING variables, one
+/// row and column narrower per fixed variable. Its value in the returned
+/// solution is exact.
+///
+/// MakeConstraint keeps the variable free and adds one internal equality row
+/// x_i - c = 0 per fixed variable, appended AFTER every row the transcription
+/// declared, so the solved system is one row and one column WIDER per fixed
+/// variable than MakeParameter's and every user row keeps its own index. The
+/// variable reaches its value to equality-constraint tolerance rather than
+/// exactly.
+///
+/// RelaxBounds keeps the variable as an ordinary two-sided bounded variable with
+/// its bounds pushed apart by the relax factor, so it is held near its value by
+/// the barrier, within the relaxation, and the system is the same size as the
+/// declared problem's.
+/// </summary>
+enum class FixedVariableTreatments { MakeParameter, MakeConstraint, RelaxBounds };
+
+/// Human-readable name for a treatment, for diagnostics and error messages.
+inline const char *fixed_variable_treatment_name(FixedVariableTreatments treatment) {
+    switch (treatment) {
+    case FixedVariableTreatments::MakeParameter:
+        return "make_parameter";
+    case FixedVariableTreatments::MakeConstraint:
+        return "make_constraint";
+    case FixedVariableTreatments::RelaxBounds:
+        return "relax_bounds";
+    }
+    return "unknown";
+}
+
+/// Default widening applied to every finite, non-fixing variable bound before
+/// it is recorded in the BoundSet: b is moved outward by this factor times
+/// max(1, |b|). Matches Ipopt's bound_relax_factor default.
+inline constexpr double kDefaultBoundRelaxFactor = 1.0e-8;
+
+/// Largest widening the solver's settings accept. The relaxed box is the one
+/// every barrier term actually divides by, so a large factor does not merely
+/// loosen a bound -- it solves a measurably different problem than the one
+/// declared, without saying so. A hundredth of max(1, |b|) is already far past
+/// any tolerance a caller would set.
+inline constexpr double kMaxBoundRelaxFactor = 1.0e-2;
+
+/// <summary>
+/// One internal equality row pinning a single primal variable to a value:
+/// x[index] - value = 0, addressed over the problem's own variable space and
+/// writing constraint row @p row.
+///
+/// The MakeConstraint fixed-variable treatment's whole payload. Defined in its
+/// own translation unit so that building it -- which needs the VectorFunction
+/// expression machinery -- does not put those headers in front of every
+/// NonLinearProgram compile.
+/// </summary>
+ConstraintFunction make_fixed_variable_row(int index, double value, int row);
 
 struct NonLinearProgram {
     using VectorXi = Eigen::VectorXi;
@@ -142,7 +210,311 @@ struct NonLinearProgram {
         this->make_nlp(PV, EQ, IQ);
     }
 
+    /// <summary>
+    /// Lays the whole problem out over PV primal variables, EQ equality rows and
+    /// IQ inequality rows, from the objective and constraint lists as they stand.
+    ///
+    /// EQ is the count of equality rows the USER's own constraint functions
+    /// address. The MakeConstraint fixed-variable treatment appends its internal
+    /// fixing rows on top of that count, so equal_cons_ is EQ only while no such
+    /// row is installed; a caller re-materializing an already configured NLP
+    /// hands back user_equal_cons_ (which is EQ as passed here), not equal_cons_.
+    /// This call drops any installed fixing row itself -- it re-materializes the
+    /// bounds those rows were derived from, so the next configuration re-derives
+    /// them.
+    /// </summary>
     void make_nlp(int PV, int EQ, int IQ);
+
+    /// <summary>
+    /// One staged variable-bound declaration, as handed to set_variable_bound.
+    /// Recorded verbatim (no merging at declaration time) so that repeated
+    /// make_nlp calls re-derive the same tightest-wins result from the same
+    /// history.
+    /// </summary>
+    struct VariableBoundStage {
+        int index_;
+        double lower_;
+        double upper_;
+    };
+
+    /// Staged variable-bound declarations, applied by make_nlp. Declaration
+    /// may precede sizing (primal_vars_ is only known once make_nlp runs), so
+    /// index-range validation and the tightest-wins merge both happen at
+    /// materialization time, not here. Cleared only by clear_variable_bounds().
+    std::vector<VariableBoundStage> staged_variable_bounds_;
+
+    /// Dense per-primal-variable bounds materialized from
+    /// staged_variable_bounds_ by make_nlp. Length primal_vars_ after
+    /// make_nlp; -inf/+inf where no staged bound narrows the variable. Empty
+    /// (size 0) before the first make_nlp call or after clear_variable_bounds().
+    VectorXd x_lower_;
+    VectorXd x_upper_;
+
+    /// <summary>
+    /// Stages a bound declaration for primal variable global_index. Repeated
+    /// declarations on the same index are intersected (tightest wins) when
+    /// make_nlp materializes x_lower_/x_upper_: l = max(l_prev, l_new),
+    /// u = min(u_prev, u_new). A declaration with both bounds infinite leaves
+    /// the variable unbounded and is a no-op. NaN bounds are rejected
+    /// immediately, since they cannot participate in the max/min merge.
+    /// </summary>
+    void set_variable_bound(int global_index, double lower, double upper) {
+        if (std::isnan(lower) || std::isnan(upper)) {
+            throw std::invalid_argument(
+                fmt::format("set_variable_bound: bound for index {0} is NaN (lower={1}, "
+                            "upper={2})",
+                            global_index, lower, upper));
+        }
+        constexpr double kInf = std::numeric_limits<double>::infinity();
+        if (lower == -kInf && upper == kInf) {
+            return;
+        }
+        this->staged_variable_bounds_.push_back({global_index, lower, upper});
+    }
+
+    /// Drops every staged declaration and the materialized x_lower_/x_upper_
+    /// vectors. The next make_nlp call starts from an unbounded problem.
+    void clear_variable_bounds() {
+        this->staged_variable_bounds_.clear();
+        this->x_lower_.resize(0);
+        this->x_upper_.resize(0);
+        this->bounds_revision_++;
+    }
+
+    /// True iff any primal variable has a finite lower or upper bound after
+    /// materialization. False before the first make_nlp call.
+    bool has_variable_bounds() const {
+        if (this->x_lower_.size() == 0) {
+            return false;
+        }
+        constexpr double kInf = std::numeric_limits<double>::infinity();
+        return (this->x_lower_.array() > -kInf).any() || (this->x_upper_.array() < kInf).any();
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Bound-fixed variable treatment
+    //
+    // A variable declared with lower == upper carries no degree of freedom.
+    // Under the MakeParameter treatment it is ELIMINATED: it does not appear in
+    // the solver's variable space at all, and the KKT system the solver
+    // factorizes is the system of the remaining variables -- narrower by exactly
+    // one row and column per eliminated variable.
+    //
+    // How the elimination is realized. Each objective and constraint addresses
+    // primal variables by index, and does so for two different purposes: to
+    // GATHER its arguments out of the primal vector, and to say where its
+    // outputs (KKT columns, gradient rows) belong. Those two roles are split
+    // here. The input map is left alone -- a function still reads exactly the
+    // variables it was declared over -- and every evaluation hands it a
+    // full-space buffer built from the reduced iterate plus the pinned values,
+    // so the functions never learn anything happened and their contributions to
+    // constraint values and to the surviving variables' derivatives are correct
+    // for free. Only the OUTPUT map is rewritten, at configuration time, from
+    // the pristine input map:
+    //
+    //   * retained variables' outputs are renumbered into the reduced space;
+    //   * eliminated variables' outputs are marked -1;
+    //   * the KKT/RHS location tables, the sparsity pattern, the partition clash
+    //     marks and the solver-coefficient ranges are all rebuilt over that
+    //     rewritten map.
+    //
+    // Element CLAIMS stay exactly as they were -- same count, same contiguous
+    // per-application ranges -- because the scatters walk their claims in
+    // lockstep with the function's own loop bounds. A -1 element keeps its claim
+    // and simply names no matrix entry: analyze_sparsity leaves it out of the
+    // pattern, so the eliminated row and column never exist, and the scatter
+    // steps over it instead of writing.
+    //
+    // Identity fast path. With no fixed variables nothing is rewritten at all:
+    // no output map is installed, so every scatter takes its original loop,
+    // every table is the pristine one, no expansion buffer is built, and the
+    // assembled system is what it was before this feature existed.
+    //
+    // The other two treatments leave the variable space alone and take the
+    // identity fast path through all of the above -- neither of them eliminates
+    // anything, so is_reduced() stays false and no output map is ever installed.
+    // They differ from each other only in what classification records:
+    //
+    //   * MakeConstraint records no bound for the variable (it goes to the solver
+    //     free) and appends one internal equality row per fixed variable, which
+    //     widens the equality row space and therefore re-lays the layout -- the
+    //     element counts and the work partitioning included, since the set of
+    //     functions itself changed.
+    //   * RelaxBounds records the variable as an ordinary two-sided bound whose
+    //     endpoints have been pushed apart, which changes nothing structural at
+    //     all: the layout on hand is already the answer.
+    ////////////////////////////////////////////////////////////////////////////
+
+    /// <summary>
+    /// Classifies every primal variable against the materialized
+    /// x_lower_/x_upper_ (free / lower-only / upper-only / two-sided / fixed),
+    /// records the finite bounds of everything the treatment leaves bounded in
+    /// variable_bound_set_, and then applies the treatment to the fixed
+    /// variables: under MakeParameter rewriting every function's output map into
+    /// the reduced space and rebuilding the KKT/RHS structures over it, under
+    /// MakeConstraint appending one internal equality row per fixed variable and
+    /// re-laying the layout over the widened row space, and under RelaxBounds
+    /// nothing structural at all.
+    ///
+    /// Called once at solve setup. Idempotent and re-entrant: a call that
+    /// repeats the same treatment, the same relax factor, and the same bound
+    /// state returns immediately having changed nothing; a call that changes the
+    /// treatment, the factor, or arrives after the bounds were re-materialized
+    /// (make_nlp / clear_variable_bounds) reclassifies from scratch. Every
+    /// rewritten output map is regenerated from the pristine input map, which is
+    /// never edited, and every internal fixing row is dropped before the new
+    /// classification derives its own, so repeated configuration cannot compound
+    /// -- including the return to the identity path when the last fixed bound is
+    /// dropped, and the switch from one treatment to another between two solves.
+    ///
+    /// Throws std::invalid_argument for an unrecognized treatment, for a negative
+    /// or non-finite relax factor, for an infinite fixing value, for a
+    /// zero relax factor under RelaxBounds while a variable is fixed (the pair
+    /// would be pushed nowhere and the barrier would divide by zero), and, under
+    /// MakeParameter only, for a problem all of whose variables are fixed.
+    ///
+    /// @return true iff this call rebuilt the KKT/RHS structures, in which case
+    /// the caller must re-read the dimensions and recompute the sparsity pattern
+    /// (PSIOPT does both at its solve entry). false means nothing changed.
+    /// </summary>
+    bool configure_variable_treatment(FixedVariableTreatments treatment, double bound_relax_factor);
+
+    /// Width of the primal block of the KKT system the solver factorizes:
+    /// primal_vars_ minus the eliminated variables. This is the size of every
+    /// primal vector the solver works with, and the size gather_reduced_x
+    /// compacts to and scatter_full_x expands from. Equal to primal_vars_ on the
+    /// identity path.
+    int reduced_primal_vars() const { return this->reduced_primal_vars_count_; }
+
+    /// True iff at least one variable was eliminated by the configured
+    /// treatment. The guard for every piece of reduction work outside the
+    /// scatters (which carry their own, per-function): when it is false the
+    /// solver runs exactly the code it ran before the treatment existed.
+    bool is_reduced() const { return this->fixed_reduction_active_; }
+
+    /// The finite bounds that survived classification (variables the treatment
+    /// eliminated or handed to an internal equality row excluded), in REDUCED
+    /// indices -- the same space every primal vector the solver holds is in --
+    /// and relaxed by the configured factor. Empty before
+    /// configure_variable_treatment has run.
+    const BoundSet &variable_bound_set() const { return this->variable_bound_set_; }
+
+    /// Indices of the variables the treatment acted on -- the ones whose declared
+    /// bounds are equal -- in the FULL problem space, ascending. Empty when
+    /// nothing is fixed, whatever the treatment.
+    const VectorXi &fixed_variable_indices() const { return this->fixed_idx_; }
+
+    /// Values those variables are fixed at, parallel to
+    /// fixed_variable_indices(). Under MakeParameter they are pinned there
+    /// exactly; under the other two treatments they are what the internal
+    /// equality row, or the relaxed bound pair, holds the variable to.
+    const VectorXd &fixed_variable_values() const { return this->fixed_vals_; }
+
+    /// Number of internal equality rows the MakeConstraint treatment currently
+    /// has installed: one per fixed variable, at the tail of
+    /// equality_constraints_ and of the equality row space. Zero under every
+    /// other treatment, and zero whenever nothing is fixed.
+    int internal_fixed_constraints() const { return this->internal_fixed_cons_; }
+
+    /// Full-space index -> reduced index, -1 for an eliminated variable. Empty
+    /// on the identity path (where the map is the identity).
+    const VectorXi &full_to_reduced() const { return this->full_to_reduced_; }
+
+    /// Reduced index -> full-space index. Empty on the identity path.
+    const VectorXi &reduced_to_full() const { return this->reduced_to_full_; }
+
+    /// <summary>
+    /// Compacts a full-space primal vector into reduced_primal_vars() entries,
+    /// dropping the eliminated coordinates. Used at the solve entry to turn a
+    /// caller's initial guess into the solver's iterate. Pass-through copy on
+    /// the identity path. Throws std::invalid_argument on a size mismatch.
+    /// </summary>
+    void gather_reduced_x(ConstEigenRef<VectorXd> x_full, EigenRef<VectorXd> x_reduced) const;
+
+    /// <summary>
+    /// Expands a reduced primal vector back to primal_vars_ entries, writing
+    /// each eliminated coordinate's pinned value.
+    ///
+    /// Two callers, and they are the whole reinsertion story. Every evaluation
+    /// uses it to build the full-space buffer the functions read, which is why
+    /// they never learn a variable was eliminated. And the solver uses it once
+    /// at its return boundary to hand the solution back in the caller's own
+    /// variable space -- the single seam where the reduced space stops being an
+    /// internal detail.
+    ///
+    /// Pass-through copy on the identity path. Throws std::invalid_argument on a
+    /// size mismatch.
+    /// </summary>
+    void scatter_full_x(ConstEigenRef<VectorXd> x_reduced, EigenRef<VectorXd> x_full) const;
+
+    /// <summary>
+    /// The full-space primal vector the objective and constraint functions must
+    /// read, given the solver's reduced iterate: the reduced values put back in
+    /// their own coordinates, with the eliminated ones pinned at their declared
+    /// values.
+    ///
+    /// Returns a view of @p x itself on the identity path -- no buffer, no copy.
+    /// Otherwise returns a view of an internal buffer, valid until the next
+    /// call. Like vals_scratch_, that buffer is safe to share because a single
+    /// NLP is inside at most one evaluation at a time; the parallelism inside an
+    /// evaluation only reads it.
+    /// </summary>
+    Eigen::Ref<const VectorXd> primal_view(ConstEigenRef<VectorXd> x) {
+        if (!this->fixed_reduction_active_) {
+            return x;
+        }
+        this->full_x_scratch_.resize(this->primal_vars_);
+        this->scatter_full_x(x, this->full_x_scratch_);
+        return this->full_x_scratch_;
+    }
+
+    /// Selected treatment, as last configured.
+    FixedVariableTreatments variable_treatment_ = FixedVariableTreatments::MakeParameter;
+    /// Relax factor, as last configured.
+    double bound_relax_factor_ = 0.0;
+
+    /// Bumped whenever x_lower_/x_upper_ are (re)materialized or dropped, so
+    /// configure_variable_treatment can tell a repeat call from a real change.
+    /// Staging a declaration does NOT bump it: staged declarations only reach
+    /// x_lower_/x_upper_ through make_nlp, which does.
+    long bounds_revision_ = 0;
+
+    /// True once a classification pass has produced structures consistent with
+    /// the current bounds. make_nlp clears it: it rebuilds the whole layout from
+    /// the pristine full space, so whatever the previous configuration derived
+    /// is gone.
+    bool fixed_treatment_valid_ = false;
+    long configured_bounds_revision_ = -1;
+
+    /// Cached is_reduced() answer -- the bool the evaluation-path guards outside
+    /// the scatters read.
+    bool fixed_reduction_active_ = false;
+    int reduced_primal_vars_count_ = 0;
+
+    VectorXi full_to_reduced_; ///< primal_vars_ entries, -1 where eliminated.
+    VectorXi reduced_to_full_; ///< reduced_primal_vars_count_ entries.
+    VectorXi fixed_idx_;       ///< Fixed variable indices, ascending.
+    VectorXd fixed_vals_;      ///< The values they are fixed at.
+
+    /// Equality-row count of the user's own constraint functions, as handed to
+    /// make_nlp. equal_cons_ counts the internal fixing rows the MakeConstraint
+    /// treatment installs on top of it, and this is the count the row space
+    /// returns to when they are dropped.
+    int user_equal_cons_ = 0;
+
+    /// Internal fixing rows currently installed -- see
+    /// internal_fixed_constraints(). They occupy the tail of
+    /// equality_constraints_ and the tail of the equality row space, so dropping
+    /// them is a truncation at both ends and no user row is ever renumbered.
+    int internal_fixed_cons_ = 0;
+
+    /// Full-space buffer the objective and constraint functions read while the
+    /// solver iterates in the reduced space -- reduced values in their own
+    /// coordinates plus the pinned ones. Empty and untouched on the identity
+    /// path. See primal_view().
+    VectorXd full_x_scratch_;
+
+    BoundSet variable_bound_set_;
 
     void print_data() {
         for (int i = 0; i < this->num_partitions_; i++) {
@@ -168,6 +540,8 @@ struct NonLinearProgram {
 
     void count_elems();
 
+    void materialize_variable_bounds();
+
     void analyze_partitioning();
 
     void get_mat_space();
@@ -179,6 +553,44 @@ struct NonLinearProgram {
     void set_rhs_dimensions();
 
     void finalize_data();
+
+    /// The set_mat_dimensions -> finalize_data chain: everything whose layout
+    /// depends on the width of the solver's primal block. Run once by make_nlp
+    /// over the full space, and again by configure_variable_treatment whenever
+    /// that width changes.
+    void rebuild_structures();
+
+    /// count_elems -> analyze_partitioning: the part of make_nlp's tail that
+    /// depends on WHICH functions the problem has rather than on how wide its
+    /// primal block is. Run whenever that set changes -- which is whenever the
+    /// MakeConstraint treatment installs or drops its internal fixing rows -- and
+    /// always followed by a map install-or-clear and rebuild_structures(), in
+    /// that order, because re-partitioning hands out fresh copies of the master
+    /// functions and those copies carry the pristine input map.
+    ///
+    /// make_nlp's partition CAP is deliberately not repeated: the only thing that
+    /// reaches here adds work rather than removing it, so re-capping could only
+    /// ever widen the partitioning, and holding it where the transcription left it
+    /// keeps a treatment switch from silently re-partitioning the problem.
+    void refresh_function_partitions();
+
+    /// Appends one internal equality row per entry of fixed_idx_/fixed_vals_ and
+    /// grows equal_cons_ by that many. The layout is NOT re-laid here; the caller
+    /// owns that (see refresh_function_partitions).
+    void install_fixed_variable_rows();
+
+    /// Truncates the internal fixing rows off equality_constraints_ and returns
+    /// equal_cons_ to user_equal_cons_. A no-op when none are installed. The
+    /// layout is NOT re-laid here either: every caller either re-lays it or is
+    /// about to overwrite the whole thing.
+    void discard_fixed_variable_rows();
+
+    /// Rewrites every partitioned function's output map into the reduced space
+    /// from its pristine input map (-1 where the variable is eliminated).
+    void install_function_output_maps();
+
+    /// Puts every partitioned function back on its pristine input map.
+    void clear_function_output_maps();
 
     void analyze_sparsity(Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat);
     void make_compressed() {
@@ -192,7 +604,8 @@ struct NonLinearProgram {
         return this->solver_coeffs_.segment(this->slack_jac_data_start_, this->slack_vars_);
     }
     EigenRef<VectorXd> primal_diag_coeffs() {
-        return this->solver_coeffs_.segment(this->primal_diags_data_start_, this->primal_vars_);
+        return this->solver_coeffs_.segment(this->primal_diags_data_start_,
+                                            this->reduced_primal_vars_count_);
     }
     EigenRef<VectorXd> slack_diag_coeffs() {
         return this->solver_coeffs_.segment(this->slack_diag_data_start_, this->slack_vars_);
@@ -209,8 +622,9 @@ struct NonLinearProgram {
             this->slack_jac_data_start_ + this->num_user_kkt_elems_, this->slack_vars_);
     }
     EigenRef<VectorXi> primal_diag_coeff_cols() {
-        return this->kkt_coeff_cols_.segment(
-            this->primal_diags_data_start_ + this->num_user_kkt_elems_, this->primal_vars_);
+        return this->kkt_coeff_cols_.segment(this->primal_diags_data_start_ +
+                                                 this->num_user_kkt_elems_,
+                                             this->reduced_primal_vars_count_);
     }
     EigenRef<VectorXi> slack_diag_coeff_cols() {
         return this->kkt_coeff_cols_.segment(
@@ -230,8 +644,9 @@ struct NonLinearProgram {
             this->slack_jac_data_start_ + this->num_user_kkt_elems_, this->slack_vars_);
     }
     EigenRef<VectorXi> primal_diag_coeff_rows() {
-        return this->kkt_coeff_rows_.segment(
-            this->primal_diags_data_start_ + this->num_user_kkt_elems_, this->primal_vars_);
+        return this->kkt_coeff_rows_.segment(this->primal_diags_data_start_ +
+                                                 this->num_user_kkt_elems_,
+                                             this->reduced_primal_vars_count_);
     }
     EigenRef<VectorXi> slack_diag_coeff_rows() {
         return this->kkt_coeff_rows_.segment(
@@ -276,7 +691,7 @@ struct NonLinearProgram {
     }
     void perturb_kkt_p_diags(double pert, Eigen::SparseMatrix<double, Eigen::RowMajor> &mat) {
         int ofs = this->primal_diags_data_start_ + this->num_user_kkt_elems_;
-        for (int i = 0; i < this->primal_vars_; i++) {
+        for (int i = 0; i < this->reduced_primal_vars_count_; i++) {
             mat.valuePtr()[this->kkt_locations_[ofs + i]] += pert;
         }
     }
@@ -326,7 +741,9 @@ struct NonLinearProgram {
     EigenRef<VectorXi> get_kkt_locations() {
         return this->kkt_locations_.head(this->num_user_kkt_elems_);
     }
-    EigenRef<VectorXi> get_kkt_clashes() { return this->kkt_clashes_.head(this->primal_vars_); }
+    EigenRef<VectorXi> get_kkt_clashes() {
+        return this->kkt_clashes_.head(this->reduced_primal_vars_count_);
+    }
 
     void set_con_coeffs_zero() {
         this->econ_coeffs().setZero();
@@ -340,11 +757,24 @@ struct NonLinearProgram {
         this->set_con_coeffs_zero();
     }
 
+    // Gradient rows for eliminated variables are marked -1 by get_gradient_space
+    // (the claim keeps its size -- the function still writes a gradient value
+    // per argument -- but that value has no row to be summed into). The skip is
+    // hoisted to the call, so the unreduced fill loop is the original one and
+    // the whole cost of the feature here is one branch per fill.
     void fill_pgx(EigenRef<VectorXd> PGX) {
-        this->rhs_fill_op(PGX, this->pgx_coeffs(), this->pgx_coeff_rows());
+        if (this->fixed_reduction_active_) {
+            rhs_fill_op_reduced(PGX, this->pgx_coeffs(), this->pgx_coeff_rows());
+        } else {
+            rhs_fill_op(PGX, this->pgx_coeffs(), this->pgx_coeff_rows());
+        }
     }
     void fill_agx(EigenRef<VectorXd> AGX) {
-        this->rhs_fill_op(AGX, this->agx_coeffs(), this->agx_coeff_rows());
+        if (this->fixed_reduction_active_) {
+            rhs_fill_op_reduced(AGX, this->agx_coeffs(), this->agx_coeff_rows());
+        } else {
+            rhs_fill_op(AGX, this->agx_coeffs(), this->agx_coeff_rows());
+        }
     }
     void fill_fxe(EigenRef<VectorXd> FXE) {
         this->rhs_fill_op(FXE, this->econ_coeffs(), this->econ_coeff_rows());
@@ -364,6 +794,21 @@ struct NonLinearProgram {
                             EigenRef<VectorXi> sourcelocs) {
         for (int i = 0; i < source.size(); i++) {
             target[sourcelocs[i]] += source[i];
+        }
+    }
+
+    /// rhs_fill_op over a location table that may carry -1 for the gradient rows
+    /// of eliminated variables. Those rows are dropped: an eliminated variable's
+    /// stationarity row is not part of the reduced problem's residual, and its
+    /// value at a solution is the bound multiplier that holds the variable at
+    /// its bound. Reached only under is_reduced().
+    static void rhs_fill_op_reduced(EigenRef<VectorXd> target, EigenRef<VectorXd> source,
+                                    EigenRef<VectorXi> sourcelocs) {
+        for (int i = 0; i < source.size(); i++) {
+            const int row = sourcelocs[i];
+            if (row >= 0) {
+                target[row] += source[i];
+            }
         }
     }
 

@@ -192,7 +192,7 @@ int main() {
     phase4.add_boundary_value(PhaseRegionFlags::Front, m_idx, m0_p4_val, ScaleModes::AUTO);
 
     // Upper bound on final time
-    phase4.add_upper_var_bound(PhaseRegionFlags::Back, 7, c.tf_phase4, 1.0, ScaleModes::AUTO);
+    phase4.add_upper_var_bound(PhaseRegionFlags::Back, 7, c.tf_phase4);
 
     // Terminal orbital element constraint — returned pre-erased from the ODE TU.
     auto target_orbit_fn = tycho_examples::make_target_orbit_residuals(at, et, istart, Ot, Wt);

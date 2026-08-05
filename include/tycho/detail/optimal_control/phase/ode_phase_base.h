@@ -152,6 +152,26 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     std::map<int, StateObjective>
         user_param_integrands_; ///< User-added integral-parameter functions.
 
+    /// @internal
+    /// @brief One user variable-bound declaration, held as a bound on the NLP
+    /// decision variables rather than as a constraint function.
+    ///
+    /// Path-like regions stay a single record; the expansion to one entry per
+    /// application node happens in @ref transcribe_var_bounds, so the record list
+    /// stays proportional to the number of declarations, not to the mesh size.
+    /// @endinternal
+    struct VarBoundRecord {
+        PhaseRegionFlags region_; ///< Region the bound applies to.
+        int var_;                 ///< Phase-local variable index within that region's block.
+        double lower_;            ///< Lower bound; -infinity when the declaration sets none.
+        double upper_;            ///< Upper bound; +infinity when the declaration sets none.
+    };
+
+    /// @internal
+    /// @brief Variable bounds recorded by @ref record_var_bounds, in declaration order.
+    /// @endinternal
+    std::vector<VarBoundRecord> user_var_bounds_;
+
     int dynamics_func_index_ = 0;        ///< Global index of the dynamics defect function.
     int control_funcs_index_ = -1;       ///< Global index of the control-spline constraint, or -1.
     VectorXi node_spacing_func_indices_; ///< Global indices of node-spacing constraints.
@@ -782,61 +802,43 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     }
 
     ////////////////////////
-    /// @brief Bound a variable below and above with separate bound scales.
+    /// @brief Bound a variable below and above.
+    ///
+    /// The bound is recorded and applied to the NLP decision variables the
+    /// selector resolves to; it produces no constraint row, no slack, and no
+    /// multiplier. Bound values are the variable's physical values — when the
+    /// phase auto-scales, @ref transcribe_var_bounds converts them into the
+    /// scaled units the NLP variable is expressed in. Repeated declarations on
+    /// the same variable intersect, tightest wins.
     /// @param reg         Region selector.
     /// @param var         Variable selector.
     /// @param lowerbound  Lower bound.
     /// @param upperbound  Upper bound.
-    /// @param lbscale     Lower-bound constraint scale.
-    /// @param ubscale     Upper-bound constraint scale.
-    /// @param scale_t     Output-scale selector.
-    /// @return The index assigned to the bound constraint(s).
-    int add_lu_var_bound(RegionType reg, VarIndexType var, double lowerbound, double upperbound,
-                         double lbscale, double ubscale, ScaleType scale_t);
-
-    /// @brief Bound a variable below and above with a shared bound scale.
-    /// @param reg         Region selector.
-    /// @param var         Variable selector.
-    /// @param lowerbound  Lower bound.
-    /// @param upperbound  Upper bound.
-    /// @param scale       Shared bound scale.
-    /// @param scale_t     Output-scale selector.
-    /// @return The index assigned to the bound constraint(s).
-    int add_lu_var_bound(RegionType reg, VarIndexType var, double lowerbound, double upperbound,
-                         double scale, ScaleType scale_t) {
-        return this->add_lu_var_bound(reg, var, lowerbound, upperbound, scale, scale, scale_t);
-    }
-    /// @brief Bound a variable below and above with unit bound scales.
-    /// @param reg         Region selector.
-    /// @param var         Variable selector.
-    /// @param lowerbound  Lower bound.
-    /// @param upperbound  Upper bound.
-    /// @param scale_t     Output-scale selector.
-    /// @return The index assigned to the bound constraint(s).
-    int add_lu_var_bound(RegionType reg, VarIndexType var, double lowerbound, double upperbound,
-                         ScaleType scale_t) {
-        return this->add_lu_var_bound(reg, var, lowerbound, upperbound, 1.0, 1.0, scale_t);
-    }
+    /// @return A bound-record handle (see @ref record_var_bounds) — not an
+    ///         inequality-constraint index.
+    int add_lu_var_bound(RegionType reg, VarIndexType var, double lowerbound, double upperbound);
 
     /// @brief Bound a variable from below.
+    ///
+    /// Leaves the upper side open. See @ref add_lu_var_bound for the semantics
+    /// shared by all three variable-bound declarations.
     /// @param reg         Region selector.
     /// @param var         Variable selector.
     /// @param lowerbound  Lower bound.
-    /// @param lbscale     Lower-bound constraint scale.
-    /// @param scale_t     Output-scale selector.
-    /// @return The index assigned to the bound constraint.
-    int add_lower_var_bound(RegionType reg, VarIndexType var, double lowerbound, double lbscale,
-                            ScaleType scale_t);
+    /// @return A bound-record handle (see @ref record_var_bounds) — not an
+    ///         inequality-constraint index.
+    int add_lower_var_bound(RegionType reg, VarIndexType var, double lowerbound);
 
     /// @brief Bound a variable from above.
+    ///
+    /// Leaves the lower side open. See @ref add_lu_var_bound for the semantics
+    /// shared by all three variable-bound declarations.
     /// @param reg         Region selector.
     /// @param var         Variable selector.
     /// @param upperbound  Upper bound.
-    /// @param ubscale     Upper-bound constraint scale.
-    /// @param scale_t     Output-scale selector.
-    /// @return The index assigned to the bound constraint.
-    int add_upper_var_bound(RegionType reg, VarIndexType var, double upperbound, double ubscale,
-                            ScaleType scale_t);
+    /// @return A bound-record handle (see @ref record_var_bounds) — not an
+    ///         inequality-constraint index.
+    int add_upper_var_bound(RegionType reg, VarIndexType var, double upperbound);
 
     /// @brief Bound a scalar function of region variables below and above.
     /// @param reg         Region selector.
@@ -1122,56 +1124,33 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
     ///////////////////////////////////////////////////////////////
 
     ////////////////////////////////////////////////////
-    /// @brief Bound a variable below and above using concrete enum/index arguments.
-    /// @param reg         The phase region.
-    /// @param var         Variable index within the region.
-    /// @param lowerbound  Lower bound.
-    /// @param upperbound  Upper bound.
-    /// @param lbscale     Lower-bound constraint scale.
-    /// @param ubscale     Upper-bound constraint scale.
-    /// @return The index assigned to the bound constraint(s).
-    int add_lu_var_bound(PhaseRegionFlags reg, int var, double lowerbound, double upperbound,
-                         double lbscale, double ubscale);
-
-    /// @brief Bound a variable below and above with a shared scale (enum/index arguments).
-    /// @param reg         The phase region.
-    /// @param var         Variable index within the region.
-    /// @param lowerbound  Lower bound.
-    /// @param upperbound  Upper bound.
-    /// @param scale       Shared bound scale.
-    /// @return The index assigned to the bound constraint(s).
-    int add_lu_var_bound(PhaseRegionFlags reg, int var, double lowerbound, double upperbound,
-                         double scale) {
-        return this->add_lu_var_bound(reg, var, lowerbound, upperbound, scale, scale);
-    }
-
-    /// @brief Bound several variables below and above with a shared scale.
+    /// @brief Bound several variables below and above with the same interval.
     /// @param reg         The phase region.
     /// @param vars        Variable indices within the region.
     /// @param lowerbound  Lower bound applied to each.
     /// @param upperbound  Upper bound applied to each.
-    /// @param scale       Shared bound scale.
-    /// @return Vector of indices assigned to the bound constraints.
+    /// @return One bound-record handle per variable (see @ref record_var_bounds) —
+    ///         not inequality-constraint indices.
     Eigen::VectorXi add_lu_var_bounds(PhaseRegionFlags reg, Eigen::VectorXi vars, double lowerbound,
-                                      double upperbound, double scale) {
+                                      double upperbound) {
         Eigen::VectorXi cnums(vars.size());
         for (int i = 0; i < cnums.size(); i++) {
-            cnums[i] = this->add_lu_var_bound(reg, vars[i], lowerbound, upperbound, scale, scale);
+            cnums[i] = this->add_lu_var_bound(reg, vars[i], lowerbound, upperbound);
         }
 
         return cnums;
     }
 
-    /// @brief Bound several variables below and above with a shared scale (region by name).
+    /// @brief Bound several variables below and above with the same interval (region by name).
     /// @param reg         The phase region name.
     /// @param vars        Variable indices within the region.
     /// @param lowerbound  Lower bound applied to each.
     /// @param upperbound  Upper bound applied to each.
-    /// @param scale       Shared bound scale.
-    /// @return Vector of indices assigned to the bound constraints.
+    /// @return One bound-record handle per variable (see @ref record_var_bounds) —
+    ///         not inequality-constraint indices.
     Eigen::VectorXi add_lu_var_bounds(std::string reg, Eigen::VectorXi vars, double lowerbound,
-                                      double upperbound, double scale) {
-        return add_lu_var_bounds(strto_PhaseRegionFlag(reg), vars, lowerbound, upperbound, scale);
+                                      double upperbound) {
+        return add_lu_var_bounds(strto_PhaseRegionFlag(reg), vars, lowerbound, upperbound);
     }
 
     ////////////////////////////////////////////////////
@@ -1819,6 +1798,41 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
                 "Upper-bound scale ({0:.3e}) must be a strictly positive number.", ubscale));
         }
     }
+
+    /// @internal
+    /// @brief Record a variable-bound declaration instead of lowering it to an inequality.
+    ///
+    /// Resolves @p reg_t and @p var_t with the same region/variable resolution the
+    /// inequality path applies (@ref get_region followed by @ref get_xt_up_vars) and
+    /// appends one @ref VarBoundRecord per resolved variable. Path-like regions stay
+    /// a single record per resolved variable; the per-node expansion happens in
+    /// @ref transcribe_var_bounds.
+    /// @param reg_t       Region selector.
+    /// @param var_t       Variable selector.
+    /// @param lowerbound  Lower bound; -infinity when the declaration sets none.
+    /// @param upperbound  Upper bound; +infinity when the declaration sets none.
+    /// @return The record index of the first appended record. This is a bound-record
+    ///         handle, not an inequality-constraint index.
+    /// @throws std::invalid_argument if the selector resolves to no variables, or if
+    ///         the region cannot carry a variable bound.
+    /// @endinternal
+    int record_var_bounds(RegionType reg_t, VarIndexType var_t, double lowerbound,
+                          double upperbound);
+
+    /// @internal
+    /// @brief Resolve recorded variable bounds to NLP variable indices and stage them.
+    ///
+    /// Declared bounds are in physical units. When auto-scaling is enabled the NLP
+    /// decision variable is the physical value divided by that variable's scaling
+    /// unit, so each bound is divided by the same unit before being staged.
+    /// @param np    The shared NLP to stage the bounds into.
+    /// @param pnum  The phase index, for diagnostics.
+    /// @throws std::invalid_argument if a recorded index is out of range for its
+    ///         region's block, if two declarations intersect to an empty interval,
+    ///         or if auto-scaling is on and the variable's unit is not finite and
+    ///         positive.
+    /// @endinternal
+    void transcribe_var_bounds(std::shared_ptr<NonLinearProgram> np, int pnum);
 
     /// @internal
     /// @brief Transcribe this phase's variables and constraints into a shared NLP.

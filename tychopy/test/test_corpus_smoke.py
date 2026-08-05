@@ -71,14 +71,18 @@ def test_harness_end_to_end_fast_problems(tmp_path):
 
     Uses the two fastest real corpus problems instead of the original
     throwaway stub problems (since deleted): ``deg_dup_equality`` (converges in
-    3 iterations, ~1 s) and ``hard_vanderpol`` (diverges in 1 iteration,
-    ~1 s — the fastest genuine failure in the corpus; the other degenerate-
-    tier failures grind through the full 500-iteration ``max_iters`` cap).
+    3 iterations, ~1 s) and ``hard_zermelo_wrongbasin`` (diverges, ~0.8 s —
+    the fastest genuine failure in the corpus; the other degenerate-tier
+    failures grind through the full 500-iteration ``max_iters`` cap).
+    ``hard_vanderpol`` previously filled the diverging slot, but the
+    ``squared_norm`` derivative fix and the switch to native variable
+    bounds cured its divergence, so it now converges and no longer serves
+    the purpose of this test.
     Each is run in its own ``--filter`` invocation since the two problem
     names share no common substring.
     """
     by_problem = {}
-    for name in ("deg_dup_equality", "hard_vanderpol"):
+    for name in ("deg_dup_equality", "hard_zermelo_wrongbasin"):
         out_path = tmp_path / f"{name}_result.jsonl"
         proc = subprocess.run(
             [sys.executable, str(RUN_CORPUS), "--filter", name, "--out", str(out_path)],
@@ -100,7 +104,7 @@ def test_harness_end_to_end_fast_problems(tmp_path):
         by_problem[name] = record
 
     assert by_problem["deg_dup_equality"]["status"] == "converged"
-    assert by_problem["hard_vanderpol"]["status"] == "diverged"
+    assert by_problem["hard_zermelo_wrongbasin"]["status"] == "diverged"
 
 
 class _CallShapeProbeProblem:

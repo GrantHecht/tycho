@@ -77,6 +77,7 @@ add_library(psiopt STATIC
     solvers/psiopt_print.cpp
     solvers/psiopt_settings.cpp
     solvers/non_linear_program.cpp
+    solvers/fixed_variable_row.cpp
     solvers/optimization_problem.cpp
     solvers/solver_init.cpp
 )

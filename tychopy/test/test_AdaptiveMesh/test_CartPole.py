@@ -70,8 +70,8 @@ class test_CartPole(unittest.TestCase):
         phase.set_control_mode(cmode)
         phase.add_boundary_value("Front", range(0, 5), [0, 0, 0, 0, 0])
         phase.add_boundary_value("Back", range(0, 5), [d, np.pi, 0, 0, tf])
-        phase.add_lu_var_bound("Path", 5, -umax, umax, 1.0)
-        phase.add_lu_var_bound("Path", 0, -dmax, dmax, 1.0)
+        phase.add_lu_var_bound("Path", 5, -umax, umax)
+        phase.add_lu_var_bound("Path", 0, -dmax, dmax)
         phase.add_integral_objective(Args(1)[0] ** 2, [5])
         phase.optimizer.print_level = 3
         phase.optimizer.eq_con_tol = 1.0e-8

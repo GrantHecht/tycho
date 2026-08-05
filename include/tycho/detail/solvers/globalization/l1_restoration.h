@@ -23,12 +23,22 @@
 //     src/Algorithm/IpRestoMinC_1Nrm.cpp               — the penalty parameter
 //         and bound-multiplier reset threshold defaults.
 //
-// The elastic reformulation, per constraint row with residual value c
+// The elastic reformulation, per constraint ROW with residual value c
 // (equality rows: c = h_j(x); inequality rows: c = g_j(x) + s_j):
 //
 //     row:        c + n − p = 0,   n, p ≥ 0
 //                 (Ipopt sign convention c(x) − p_c + n_c = 0, IpRestoIpoptNLP.cpp)
 //     objective:  ρ·Σ(n + p) + (η(μ)/2)·‖D_R (x − x_R)‖²
+//
+// Rows are the entire reach of the relaxation. Native primal variable bounds
+// are not rows and get no elastic pair: their barrier terms, their condensed
+// sigma contribution and both of their fraction-to-boundary legs run inside a
+// restoration phase exactly as they run outside one, so a bounded variable is
+// as strictly interior on the phase's last iterate as on its first. That is
+// deliberate and matches Ipopt, whose restoration NLP keeps the original
+// variable bounds and relaxes only the constraints — a phase that let a
+// variable reach its bound would put the bound's own barrier term at the log of
+// a non-positive number and end the solve, restoration or not.
 //
 // (1) Penalty parameter ρ = kRestoPenaltyParameter = 1e3, Ipopt option
 //     "resto_penalty_parameter" default (IpRestoIpoptNLP.cpp RegisterOptions).

@@ -55,8 +55,10 @@ TIER = "hard"
 TIMEOUT = 60
 SOLVE_MODE = "optimize"
 NOTES = (
-    "Diverges toolchain-dependently (KKT=nan at iter 0) on "
-    "clang22/MKL2026 fast-math; see project_vanderpol_diverges memory."
+    "Historically diverged (KKT=nan at iteration 0) because the squared_norm "
+    "derivative was 0/0 at the norm's centre and the all-zero initial guess sat "
+    "exactly there; converges since that derivative was fixed. Kept in the hard "
+    "tier as a regression sentinel for the centre-of-norm start."
 )
 
 
@@ -85,7 +87,7 @@ def build():
     phase.integrator.set_initial_step_size(0.25)
     phase.set_control_mode("BlockConstant")
     phase.add_boundary_value("Front", range(0, 3), [0, 1, 0])
-    phase.add_lu_var_bound("Path", 3, -0.75, 1.0, 1.0)
+    phase.add_lu_var_bound("Path", 3, -0.75, 1.0)
     phase.add_integral_objective(Args(3).squared_norm(), [0, 1, 3])
     phase.add_boundary_value("Back", [0, 1, 2], [0.0, 0.0, tf])
     phase.set_num_partitions(8, 8)

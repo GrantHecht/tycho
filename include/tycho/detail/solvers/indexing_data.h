@@ -90,6 +90,36 @@ struct SolverIndexingData {
     MatrixXi c_index_;
 
     /// <summary>
+    /// Where this function's outputs go in the SOLVER's variable space, when
+    /// that differs from the problem's own variable space.
+    ///
+    /// v_index_ above is the function's INPUT map: which entries of the primal
+    /// vector its arguments are gathered from. It always addresses the full
+    /// problem space and is never rewritten -- a function always reads the same
+    /// variables it was declared over.
+    ///
+    /// This is the OUTPUT map: which KKT column, and which gradient row, each of
+    /// those arguments corresponds to once the solver has eliminated the
+    /// variables whose bounds fix them. Entry (i, V) is the solver-space index
+    /// of the same variable v_index_(i, V) names, or -1 when that variable has
+    /// been eliminated and the corresponding outputs have nowhere to go.
+    ///
+    /// Empty on the identity path: with nothing eliminated, the solver's space
+    /// IS the problem's space and v_index_ serves as both maps, so no second
+    /// table is built and no copy is made. Derived state -- always regenerated
+    /// from v_index_, never edited in place, so repeated configuration cannot
+    /// compound.
+    /// </summary>
+    MatrixXi v_out_index_;
+
+    /// True while v_out_index_ is live, i.e. the output map differs from the
+    /// input map. THE flag the KKT scatters hoist their branch on: false selects
+    /// the untouched original loops, and it is false for every function on every
+    /// problem with no bound-fixed variables. Setup-time emitters read
+    /// v_scatter_loc(), which dispatches on the same flag.
+    bool v_out_reduced_ = false;
+
+    /// <summary>
     /// Each element indicates whether the corresponding indices in v_index_ are sorted
     /// and contigous (ie: 10,11,12...)
     /// </summary>
@@ -130,12 +160,52 @@ struct SolverIndexingData {
         this->set_v_index(vindex);
     }
 
+    /// <summary>
+    /// Installs the solver-space output map. @p vout must have the same shape as
+    /// v_index_; -1 entries mark eliminated variables. Regenerated wholesale by
+    /// the caller from v_index_ on every configuration, so this never has to
+    /// undo a previous mapping.
+    /// </summary>
+    void set_output_v_index(const MatrixXi &vout) {
+        if (vout.rows() != this->v_index_.rows() || vout.cols() != this->v_index_.cols()) {
+            throw std::invalid_argument(fmt::format(
+                "SolverIndexingData::set_output_v_index: expected a {}x{} map to "
+                "match the input map, got {}x{}",
+                this->v_index_.rows(), this->v_index_.cols(), vout.rows(), vout.cols()));
+        }
+        this->v_out_index_ = vout;
+        this->v_out_reduced_ = true;
+    }
+
+    /// Drops the output map, returning this function to the identity path where
+    /// v_index_ is both maps.
+    void clear_output_v_index() {
+        this->v_out_index_.resize(0, 0);
+        this->v_out_reduced_ = false;
+    }
+
+    /// Solver-space output index, valid only while v_out_reduced_ is true --
+    /// which is exactly when the KKT scatters take their reduced loop.
+    inline int v_out_loc(int loc, int col) const { return this->v_out_index_(loc, col); }
+
+    /// Output index for setup-time emitters (KKT/gradient location tables),
+    /// which run once per configuration and can afford the dispatch: the
+    /// solver-space index when an output map is live, the problem-space index
+    /// otherwise. Returns -1 for an eliminated variable.
+    inline int v_scatter_loc(int loc, int col) const {
+        return this->v_out_reduced_ ? this->v_out_index_(loc, col) : this->v_index_(loc, col);
+    }
+
     void get_gradient_space(EigenRef<VectorXi> GXrows, int &freeloc) {
         this->inner_gradient_starts_.resize(this->num_appl());
         for (int V = 0; V < this->num_appl(); V++) {
             this->inner_gradient_starts_[V] = freeloc;
             for (int i = 0; i < this->input_size_; i++) {
-                GXrows[freeloc] = this->v_loc(i, V);
+                // -1 for an eliminated variable: the claim stays the same size
+                // (the function still writes input_size_ gradient values into
+                // it) but that value has no row to be summed into, and the RHS
+                // fill skips it.
+                GXrows[freeloc] = this->v_scatter_loc(i, V);
                 freeloc++;
             }
         }
@@ -220,21 +290,6 @@ struct SolverIndexingData {
         this->set_v_index(vt);
         this->set_c_index(ct);
     }
-    void push_v_index(int push) {
-        for (int i = 0; i < this->v_index_.size(); i++) {
-            this->v_index_(i) += push;
-        }
-    }
-    void push_c_index(int push) {
-        for (int i = 0; i < c_index_.size(); i++) {
-            this->c_index_(i) += push;
-        }
-    }
-    void push_v_index_c_index(int vpush, int cpush) {
-        this->push_v_index(vpush);
-        this->push_c_index(cpush);
-    }
-
     inline int num_appl() const { return this->num_funcappl_; }
     inline int c_loc(int loc, int col) const { return this->c_index_(loc, col); }
     inline int v_loc(int loc, int col) const { return this->v_index_(loc, col); }

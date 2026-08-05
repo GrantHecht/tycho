@@ -1314,7 +1314,7 @@ int main() {
     Eigen::VectorXd back_val(2); back_val << 10, 5;
     phase->add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val, std::string("auto"));
 
-    phase->add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0, 1.0);
+    phase->add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0);
     phase->add_delta_time_objective(1.0, std::string("auto"));
 
     phase->solve_optimize();

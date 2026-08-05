@@ -59,7 +59,7 @@ class TestErrorMessagesNotEmpty(unittest.TestCase):
     def test_lbscale_nonpositive_message(self):
         """Pattern B: a non-positive bound scale must raise with the value named."""
         with self.assertRaisesRegex(ValueError, r"scale.*strictly positive"):
-            self.phase.add_lu_var_bound("Path", 0, 0.0, 1.0, -1.0)  # negative scale
+            self.phase.add_lower_delta_var_bound(0, 1.0, -1.0)  # negative scale
 
     def test_check_function_size_message(self):
         """Pattern E: a boundary-value constraint built over more args than the

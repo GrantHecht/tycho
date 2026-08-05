@@ -203,6 +203,13 @@ set(TYCHO_TEST_HEAVY_SOURCES
     # -- grep the prefix before reusing it), the same convention documented on
     # the SKIP_UNITY_BUILD_INCLUSION entries below.
     solvers/test_psiopt_presets.cpp # file-local prefix: PresetGate*
+    solvers/test_nlp_variable_bounds.cpp # file-local prefix: NlpVarBounds*
+    # Pulls optimal_control/oc_test_utils.h for the end-to-end phase solves (the
+    # brachistochrone builder that header exists to share with solver tests).
+    solvers/test_psiopt_native_bounds.cpp # file-local prefix: NativeBounds*/native_bounds_*
+    # OC test, appended here rather than in the OptimalControl block so the
+    # unity batching of every file above stays exactly as it was.
+    optimal_control/test_phase_native_var_bounds.cpp # file-local prefix: NativeVarBounds*
 )
 
 #-------------------------------------------------------------------------------

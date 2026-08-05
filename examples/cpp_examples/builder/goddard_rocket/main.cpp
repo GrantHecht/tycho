@@ -123,7 +123,7 @@ int main() {
     auto phase2 = ode.phase(tmode, TrajIG2, 32);
     phase2.set_control_mode(ControlModes::NoSpline);
 
-    phase2.add_lu_var_bound(PhaseRegionFlags::Path, "u", 0.0, 1.0, 1.0);
+    phase2.add_lu_var_bound(PhaseRegionFlags::Path, "u", 0.0, 1.0);
 
     auto path_con = make_path_constraint();
     phase2.add_equal_con(PhaseRegionFlags::Path, path_con, {"h", "v", "m", "u"});

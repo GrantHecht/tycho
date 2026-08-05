@@ -119,7 +119,7 @@ NavResult navigate(ODE &ode, const std::vector<Eigen::Vector2d> &points, double 
                                      Eigen::Vector2d(B));
         }
 
-        phase.add_lu_var_bound(PhaseRegionFlags::Path, "theta", -M_PI, M_PI, 1.0);
+        phase.add_lu_var_bound(PhaseRegionFlags::Path, "theta", -M_PI, M_PI);
 
         phase.add_delta_time_objective(1.0);
         phase.add_lower_delta_time_bound(0.0);
