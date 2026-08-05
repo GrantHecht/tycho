@@ -494,9 +494,10 @@ class PSIOPT {
         // that increments when SOC/extended/watchdog are all off),
         // [4] restoration (a feasibility-restoration mode-switch was taken —
         // only increments when restoration_mode_ != off). Counts
-        // rejections, i.e. every should_dispatch_recovery-gated call, not
-        // just ones where a recovery link actually intervened. Reset per
-        // solve alongside the other accumulators.
+        // rejections — every should_dispatch_recovery-gated chain call plus
+        // the exhausted-inertia-correction dispatch that runs instead of the
+        // chain — not just ones where a recovery link actually intervened.
+        // Reset per solve alongside the other accumulators.
         std::array<int, 5> recovery_depth_histogram_{};
 
         // Final funnel width (τ) reported by FunnelAcceptance::

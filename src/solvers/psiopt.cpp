@@ -2608,19 +2608,23 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // on every path either writes it or leaves the seeded default.
         //
         // Exhausted inertia correction takes its own route, bypassing the chain.
-        // Every merit-retry link in it -- SOC, extended backtracking, the
-        // watchdog's relaxed acceptance, the soft feasibility pre-stage -- can
-        // only re-test, or relax the acceptance of, the SAME direction the
-        // exhausted factorization produced, so any of them could "resolve" the
-        // forced rejection by re-accepting a step that must not be accepted at
-        // all (an indefinite-curvature direction can decrease the merit
-        // perfectly well while walking into a saddle). Only two outcomes count
-        // as genuine resolutions here, and neither commits that direction:
-        // re-centering the elastic pairs of an active nested l1 phase, and
-        // entering feasibility restoration. Failing both, the phase aborts.
-        // The reference method treats the same condition as a step-computation
-        // error and goes to restoration or gives up; it never re-tests the
-        // direction.
+        // Every merit-retry link in it -- extended backtracking and the
+        // watchdog's relaxed acceptance re-test or re-accept the SAME direction
+        // the exhausted factorization produced; SOC and the soft feasibility
+        // pre-stage re-solve or re-trial on that same never-correct-inertia
+        // factorization -- so any of them could "resolve" the forced rejection
+        // by committing a step no correct-inertia system vetted (an
+        // indefinite-curvature direction can decrease the merit perfectly well
+        // while walking into a saddle). Only two outcomes count as genuine
+        // resolutions here, and neither commits such a step: re-centering the
+        // elastic pairs of an active nested l1 phase, and entering feasibility
+        // restoration. Failing both, the phase aborts. The reference method
+        // treats the same condition as a step-computation error and goes to
+        // restoration or gives up; it never re-tests the direction. Trial
+        // evaluations that threw during this iteration's line search do not
+        // divert this route: SINGULAR_KKT is decisive over the un-evaluable
+        // dispatch's acceptable-tier exit (see the loop tail), and the
+        // exception count still lands in the iterate via eval_exceptions_.
         if (kkt_exhausted && GoodStep) {
             int resolved_depth = kRecoveryDepthUnresolved;
             if (nested_active && this->try_recenter_elastics(step_mu)) {
@@ -2662,8 +2666,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 this->result_.watchdog_activations_);
             switch (recovery_action) {
             case RecoveryChain::Action::kAcceptAsIs:
-                // Classic ladder-exhaustion fallback: take the step compute_step
-                // produced (DXSL/alpha unchanged). EXCEPTION (dead off the nested
+                // No link resolved the ordinary rejection: take the step
+                // compute_step produced (DXSL/alpha unchanged). Exhausted
+                // inertia correction never reaches this switch — it takes the
+                // dedicated dispatch above. EXCEPTION (dead off the nested
                 // path): while a nested l1 restoration phase is active and no
                 // recovery link resolved the rejection (resolved_depth still the
                 // unresolved sentinel — the discriminator FeasibilitySwitchRecovery
