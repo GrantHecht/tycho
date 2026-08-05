@@ -274,18 +274,20 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
 
     BIND_SETTINGS_RW(
         obj, "inertia_mode", inertia_mode_,
-        "KKT inertia-correction / regularization mode: classic (default) reproduces the "
-        "on-demand inertia ladder bit-for-bit -- each iteration first attempts an unperturbed "
-        "factorization and only shifts the Hessian diagonal (by increasing amounts) when the "
-        "factorization reports wrong inertia, with no constraint-block shift. "
-        "proximal_regularization bakes two shifts into the base matrix every iteration instead "
-        "of the classic zero-perturbation first attempt: a small persistent, decaying primal "
-        "base shift on the Hessian diagonal, and an always-on barrier-scaled dual shift on the "
-        "constraint-row diagonals (suppressed while a nested l1 restoration phase is active, "
-        "since the elastic pivots already regularize those rows). The same incr_h/decr_h "
-        "escalation ladder still fires on top when the base attempt has wrong inertia or is "
-        "singular; a singular base attempt is treated as wrong inertia under this mode (classic "
-        "only warns and proceeds). See InertiaModes for the full mechanism and literature "
+        "KKT inertia-correction / regularization mode: classic (default) runs the on-demand "
+        "inertia ladder -- each iteration first attempts an unperturbed factorization and "
+        "shifts the Hessian diagonal (by increasing amounts) when the factorization's inertia "
+        "is not exactly (kkt_dim - m, m, 0); on a singularity signal (rank deficiency, or "
+        "neigs < m by Gould's inertia theorem) it additionally engages the barrier-scaled dual "
+        "shift on the constraint-row diagonals, at most once per phase (later iterations "
+        "pre-apply it), and an exhausted ladder fails the step -- SINGULAR_KKT when nothing "
+        "resolves it. proximal_regularization bakes two shifts into the base matrix every "
+        "iteration instead of the classic zero-perturbation first attempt: a small persistent, "
+        "decaying primal base shift on the Hessian diagonal, and an always-on barrier-scaled "
+        "dual shift on the constraint-row diagonals (suppressed while a nested l1 restoration "
+        "phase is active, since the elastic pivots already regularize those rows). The same "
+        "incr_h/decr_h escalation ladder still fires on top when the base attempt has wrong "
+        "inertia or is singular. See InertiaModes for the full mechanism and literature "
         "citations, and last_prox_reg_primal/last_prox_reg_dual for the resulting diagnostics.");
 
     // --- Barrier parameters ---

@@ -1523,7 +1523,8 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
     // constraint-row diagonals -- the caller suppresses it). The proximal branch
     // applies it up-front as part of the base matrix; the classic branch applies
     // it here, at most once per call, the first time a factorization reports
-    // rank deficiency -- it lands in the matrix and takes effect at the next
+    // the singularity signal (rank deficiency, or neigs < m -- see
+    // SingularitySignal below) -- it lands in the matrix and takes effect at the next
     // Refactor(), so a singular base costs one ladder rung (a small delta_w
     // rides along with delta_c, matching Ipopt, which raises both on
     // singularity). dc_latched_ is the Ipopt hess/jac-degenerate adaptation:

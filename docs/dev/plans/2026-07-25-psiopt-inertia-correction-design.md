@@ -276,8 +276,21 @@ spec is current with the merged tree rather than silently stale:
    severity ordering (`... < DIVERGING < SINGULAR_KKT`) to mean anything across a
    multi-phase solve.
 
-**Recorded limitation (F4):** when a configured recovery link (watchdog revert, SOC
-retry, feasibility switch, nested re-center) resolves the exhaustion-forced rejection,
-the resolution outranks the `SINGULAR_KKT` abort by design — a step vetted by recovery
-may still be committed from a wrong-inertia factorization; only an UNRESOLVED
-rejection aborts.
+6. **Exhaustion no longer consults the merit-retry recovery links.** A limitation
+   was originally recorded here ("resolution outranks abort": a configured recovery
+   link could resolve the exhaustion-forced rejection, so a step vetted by recovery
+   might still be committed from a wrong-inertia factorization). Post-merge review
+   found that every merit-retry link (SOC, extended backtracking, watchdog
+   relaxation, the soft feasibility pre-stage) can only re-test or relax acceptance
+   of the very direction the never-correct-inertia factorization produced — which is
+   not a resolution of the underlying step-computation error, and could commit a
+   false-convergence step (a merit-decreasing Newton direction at a saddle). As
+   built, `kkt_exhausted` now dispatches directly, bypassing the chain: nested
+   elastic re-center when a nested l1 phase is active, else direct restoration entry
+   when configured, inactive, and entry-permitted (skipping the soft pre-stage,
+   whose trial would be the untrusted direction itself), else the `SINGULAR_KKT`
+   abort — mirroring the un-evaluable-step routing and Ipopt's
+   `Error_In_Step_Computation`. Regression-pinned by the backend-portable
+   `DivergencePersistence.ExhaustedInertiaCorrectionIsNotResolvedByExtendedBacktracking`
+   (wrong inertia by excess negative-eigenvalue count, which pivot-perturbing
+   backends report honestly).

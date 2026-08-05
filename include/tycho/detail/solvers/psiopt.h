@@ -371,7 +371,11 @@ class PSIOPT {
         double decr_h_ = 0.333333;
 
         // KKT inertia-correction / regularization mode. classic (default) runs
-        // the on-demand inertia ladder exactly as before — bit-identical.
+        // the on-demand inertia ladder under the full inertia condition (accept
+        // only (kkt_dim − m, m, 0)); on a singularity signal it engages the
+        // on-demand dual shift −δ_c, at most once per phase (then latched, see
+        // dc_latched_), and an exhausted ladder fails the step — SINGULAR_KKT
+        // when nothing resolves it.
         // proximal_regularization bakes a persistent, decaying primal base shift
         // ρ_k and an always-on barrier-scaled dual shift −δ_c into the base
         // matrix each iteration (the same ladder still escalates on top when the
@@ -1126,7 +1130,7 @@ class PSIOPT {
     // diagonal), read only when inertia_mode_ == proximal_regularization.
     // `dual_shift` is the δ_c magnitude AVAILABLE to this call for both modes:
     // the proximal branch applies it up-front; the classic branch applies it on
-    // demand when a factorization reports rank deficiency, or up-front once
+    // demand at the singularity signal (rank deficiency, or neigs < m), or up-front once
     // dc_latched_ is set (0.0 = suppressed, e.g. during nested l1 restoration).
     // `exhausted` is set (never cleared) when the ladder runs out of attempts
     // with inertia still wrong -- the return value alone cannot distinguish

@@ -10,6 +10,11 @@
 // diagonal when the factorization reports wrong inertia, the mode carries a
 // small persistent primal shift AND an always-on barrier-scaled dual shift into
 // the base matrix, then lets the same ladder escalate on top when needed.
+// (The classic ladder also borrows δ_c below on demand — engaged at most once
+// per phase when a factorization reports the singularity signal, see
+// PSIOPT::factor_impl — so δ_c's constants are shared by both modes; what is
+// exclusive to this mode is applying both shifts always-on, in the base
+// matrix.)
 //
 // The two shifts and their references:
 //
