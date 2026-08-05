@@ -697,10 +697,12 @@ struct NonLinearProgram {
     }
     // Post-assembly `+=` onto every constraint-row diagonal slot (the equality
     // and inequality pivot ranges), the mirror of perturb_kkt_p_diags over the
-    // constraint block. Used by the proximal primal-dual regularization mode to
-    // apply the dual shift (−δ_c) as part of the base matrix, after the KKT
-    // assembly and before the first factorization; on the default path these
-    // slots are 0.0 and this helper is never called.
+    // constraint block. The proximal primal-dual regularization mode applies
+    // the dual shift (−δ_c) here as part of the base matrix, after the KKT
+    // assembly and before the first factorization; the classic (default) mode
+    // calls it on demand, at most once per phase, when a factorization reports
+    // the singularity signal (see PSIOPT::factor_impl). Until either happens
+    // these slots hold 0.0.
     void perturb_kkt_c_diags(double pert, Eigen::SparseMatrix<double, Eigen::RowMajor> &mat) {
         int eofs = this->e_pivot_data_start_ + this->num_user_kkt_elems_;
         for (int i = 0; i < this->equal_cons_; i++) {

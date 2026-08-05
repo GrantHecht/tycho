@@ -1469,9 +1469,16 @@ tycho::ConvergenceFlags tycho::solvers::PSIOPT::converge_check(std::vector<Itera
 // achieved or max_refac_ attempts are exhausted.
 int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt, double incpurt0,
                                         double incpurt, double &finalpert, double &cumpert,
-                                        double base_prox, double dual_shift) {
+                                        double base_prox, double dual_shift, bool &exhausted) {
     auto Inertia = [&]() {
         return this->kkt_sol_.neigs() - (this->equal_cons_ + this->inequal_cons_);
+    };
+    // Full Ipopt inertia-correction condition (Algorithm IC, Wächter & Biegler
+    // 2006): accept only inertia exactly (kkt_dim - m, m, 0). Singular() is the
+    // rank-deficiency part; Inertia() != 0 covers both excess (the only case the
+    // pre-2026-07 ladder corrected) and missing negative eigenvalues.
+    auto Singular = [&]() {
+        return (this->kkt_sol_.neigs() + this->kkt_sol_.peigs() - this->kkt_dim_) != 0;
     };
     auto RankDef = [&]() {
         if ((this->kkt_sol_.neigs() + this->kkt_sol_.peigs() - this->kkt_dim_) != 0) {
@@ -1508,8 +1515,53 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
     };
     auto Refactor = [&]() { this->kkt_sol_.refactorize_internal(); };
     auto Compute = [&]() { this->kkt_sol_.compute_internal(); };
+    auto PerturbC = [&](double p) {
+        this->nlp_->perturb_kkt_c_diags(p, this->kkt_sol_.get_matrix());
+    };
+    // On-demand dual regularization (delta_c). dual_shift is the magnitude
+    // available to this call (0.0 while a nested l1 restoration phase owns the
+    // constraint-row diagonals -- the caller suppresses it). The proximal branch
+    // applies it up-front as part of the base matrix; the classic branch applies
+    // it here, at most once per call, the first time a factorization reports
+    // the singularity signal (rank deficiency, or neigs < m -- see
+    // SingularitySignal below) -- it lands in the matrix and takes effect at the next
+    // Refactor(), so a singular base costs one ladder rung (a small delta_w
+    // rides along with delta_c, matching Ipopt, which raises both on
+    // singularity). dc_latched_ is the Ipopt hess/jac-degenerate adaptation:
+    // sticky per phase, it makes later calls pre-apply delta_c at the base
+    // attempt instead of re-paying the singular factorization every iteration.
+    bool dc_applied = false;
+    auto EngageDualReg = [&]() {
+        if (!dc_applied && dual_shift != 0.0) {
+            PerturbC(-dual_shift);
+            dc_applied = true;
+            this->dc_latched_ = true;
+        }
+    };
     int IncEigs = 0;
     cumpert = 0.0;
+    // Engagement signal for on-demand delta_c: fires on Singular() (rank
+    // deficiency, zeigs != 0) OR IncEigs < 0 (neigs < m). By Gould's inertia
+    // theorem, In(KKT) = In(Z^T H Z) + (m, m, 0) for a full-rank constraint
+    // Jacobian, so neigs < m with zeigs == 0 cannot occur for a full-rank J --
+    // it is a masked rank-deficiency report from a pivot-perturbing backend
+    // (e.g. MKL Pardiso's static pivot perturbation). delta_w cannot correct
+    // this case (Weyl's inequality: +p*I on the primal diagonal is PSD, so
+    // neigs is non-increasing in p, never able to grow to m), so treat it as
+    // the singularity signal it is and let delta_c (the one shift that raises
+    // neigs) engage.
+    auto SingularitySignal = [&]() { return Singular() || IncEigs < 0; };
+
+    // Latched pre-apply, classic mode only: once dc_latched_ is set (a prior
+    // call this phase observed SingularitySignal()), pre-apply delta_c before
+    // this rung's factorization even runs -- hoisted above the Zfac/docompute
+    // gate below (unlike the mode branches, this must fire on EVERY classic
+    // call regardless of the fast_factor_alg_ cycling heuristic, or the latch
+    // would be bypassed on ~3 of every 4 iterations, defeating its purpose).
+    // Proximal applies delta_c itself (see its branch below) and never
+    // consults the latch.
+    if (settings_.inertia_mode_ != InertiaModes::proximal_regularization && this->dc_latched_)
+        EngageDualReg();
 
     if (settings_.inertia_mode_ == InertiaModes::proximal_regularization) {
         // Proximal primal-dual base shift. The persistent primal shift base_prox
@@ -1525,12 +1577,11 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
         // factorization for it to skip). The ladder's finalpert/cumpert
         // accounting below is unchanged -- it counts only the ladder increments,
         // never the base shifts, which alg_impl tracks separately.
-        auto PerturbC = [&](double p) {
-            this->nlp_->perturb_kkt_c_diags(p, this->kkt_sol_.get_matrix());
-        };
         Perturb(base_prox);
-        if (dual_shift != 0.0)
+        if (dual_shift != 0.0) {
             PerturbC(-dual_shift);
+            dc_applied = true;
+        }
         if (!docompute)
             Refactor();
         else
@@ -1539,13 +1590,8 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
         RankDef();
         IncEigs = Inertia();
         finalpert = 0.0;
-        // A singular base factorization is treated as wrong inertia (enter the
-        // ladder) -- the reference fallback once the dual shift is already
-        // applied and the matrix is still singular. Classic treats the same
-        // condition as warn-and-proceed (RankDef only warns); that behavior is
-        // untouched on the classic branch below.
-        bool singular = (this->kkt_sol_.neigs() + this->kkt_sol_.peigs() - this->kkt_dim_) != 0;
-        if (IncEigs <= 0 && !singular)
+        // A singular or wrong-inertia base factorization enters the ladder.
+        if (IncEigs == 0 && !Singular())
             return 0;
     } else if (Zfac || docompute) {
         if (!docompute)
@@ -1556,7 +1602,9 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
         RankDef();
         IncEigs = Inertia();
         finalpert = 0.0;
-        if (IncEigs <= 0)
+        if (SingularitySignal())
+            EngageDualReg();
+        if (IncEigs == 0 && !Singular())
             return 0;
     }
     double p = ipurt;
@@ -1574,7 +1622,9 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
         IncEigs = Inertia();
         finalpert = p;
 
-        if (IncEigs <= 0)
+        if (SingularitySignal())
+            EngageDualReg();
+        if (IncEigs == 0 && !Singular())
             return i + 1;
         if (i == 0)
             p *= incpurt0;
@@ -1585,8 +1635,12 @@ int tycho::solvers::PSIOPT::factor_impl(bool docompute, bool Zfac, double ipurt,
     if (settings_.print_level_ < 3)
         fmt::print(fmt::fg(fmt::color::yellow),
                    "Warning: Inertia correction exhausted ({} perturbation attempts, "
-                   "{} excess eigenvalue(s))\n",
-                   settings_.max_refac_, IncEigs);
+                   "inertia p/n/z = {}/{}/{}, expected {}/{}/0)\n",
+                   settings_.max_refac_, this->kkt_sol_.peigs(), this->kkt_sol_.neigs(),
+                   this->kkt_dim_ - this->kkt_sol_.peigs() - this->kkt_sol_.neigs(),
+                   this->kkt_dim_ - (this->equal_cons_ + this->inequal_cons_),
+                   this->equal_cons_ + this->inequal_cons_);
+    exhausted = true;
     return settings_.max_refac_;
 }
 
@@ -1633,6 +1687,9 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
     // Per-phase: print_exit_stats reports this phase's factorization status, so
     // a status left over from an earlier phase in the sequence must not leak in.
     this->result_.last_kkt_info_ = Eigen::Success;
+    // Fresh phase: re-probe rank rather than inheriting the previous phase's
+    // degeneracy diagnosis.
+    this->dc_latched_ = false;
 
     Eigen::VectorXd Temp(this->kkt_dim_);
 
@@ -2252,31 +2309,21 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
             Zfac = !cycling;
         }
 
-        // Proximal primal-dual regularization base shifts for this iteration
-        // (0.0 on the classic path, which leaves factor_impl byte-identical).
-        // base_prox = ρ_k, the persistent primal shift. dual_shift = δ_c, the
-        // barrier-scaled dual shift, computed against the same μ the KKT assembly
-        // used above -- SUPPRESSED to 0.0 while a nested l1 restoration phase is
-        // active, because the elastic pivots already own the constraint-row
-        // diagonals (~1/μ) and the condensed elastic step recovery assumes the
-        // (y,y) diagonal equals the elastic pivot exactly (see
-        // globalization/inertia_regularization.h). The proximal mode-switch
-        // restoration touches only the primal diagonal, so δ_c stays on under it.
+        // δ_c availability is computed for BOTH inertia modes: the classic
+        // ladder engages it on demand when a factorization reports rank
+        // deficiency (see factor_impl). Suppressed while a nested l1
+        // restoration phase owns the constraint-row diagonals
+        // (inertia_regularization.h).
+        const bool dc_suppressed = this->restoration_ && this->restoration_->is_active() &&
+                                   this->restoration_->is_nested();
         double base_prox = 0.0;
-        double dual_shift = 0.0;
-        if (settings_.inertia_mode_ == InertiaModes::proximal_regularization) {
+        double dual_shift = dc_suppressed ? 0.0 : tycho::solvers::dual_regularization(mu);
+        if (settings_.inertia_mode_ == InertiaModes::proximal_regularization)
             base_prox = rho_k;
-            bool nested_active = this->restoration_ && this->restoration_->is_active() &&
-                                 this->restoration_->is_nested();
-            dual_shift = nested_active ? 0.0 : tycho::solvers::dual_regularization(mu);
-        }
 
+        bool kkt_exhausted = false;
         Citer.h_facs_ = this->factor_impl(false, Zfac, Hpert0, Incr, Incr2, nhpert, nhpert_cum,
-                                          base_prox, dual_shift);
-        // Note: if factor_impl exhausted all perturbation attempts (h_facs_ == max_refac_),
-        // we proceed rather than aborting. The line search evaluates actual function values
-        // and will reject truly bad steps by reducing alpha. Forcing GoodStep=false here
-        // would be an algorithmic change that could break existing convergence behavior.
+                                          base_prox, dual_shift, kkt_exhausted);
 
         if (Citer.h_facs_ > 0) {
             // Hpert0 warm-start MUST keep consuming nhpert (the last perturbation
@@ -2487,6 +2534,12 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // level instead of aborting. Read once, next to the !GoodStep
         // divergence override at the bottom of the loop.
         bool exit_at_acceptable = false;
+        // Set by the exhausted-inertia-correction dispatch below: the KKT
+        // factorization never reached correct inertia and neither an elastic
+        // re-center nor a restoration entry was available to resolve it.
+        // Terminates the phase as SINGULAR_KKT at the loop tail (same idiom as
+        // exit_at_acceptable / exit_stage_stalled).
+        bool singular_abort = false;
 
         Funtimer.start();
         if (GoodStep) {
@@ -2503,6 +2556,16 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         } else {
             Citer.h_facs_ = -1;
         }
+
+        // Inertia-correction exhaustion (Ipopt-faithful fail-the-step): a step
+        // solved on a factorization that never reached correct inertia must not
+        // be accepted on merit. The rejection is forced here -- the bookkeeping
+        // below (and the acceptance accounting) reads accepted_ -- and the
+        // dedicated dispatch below decides what happens instead. The non-finite
+        // case (!GoodStep) already exits as DIVERGING at the loop tail -- the
+        // non-finite verdict dominates and needs no special-casing here.
+        if (kkt_exhausted)
+            Citer.accepted_ = false;
 
         Funtimer.stop();
 
@@ -2522,7 +2585,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // KKT step direction was usable (GoodStep). An accepted step -- full or
         // backtracked -- never reaches the hook, and the !GoodStep path (which
         // runs no line search) is excluded too. On the default solve path every
-        // step is accepted, so the hook is never invoked at all.
+        // step is accepted, so the hook is never invoked at all. It is
+        // additionally gated on !kkt_exhausted: an exhausted factorization's
+        // forced rejection is owned by the dedicated dispatch below, which runs
+        // INSTEAD of the chain.
         //
         // By default recovery_ is a NoopRecovery
         // (rebuild_globalization_components() installs it whenever
@@ -2540,7 +2606,58 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // recovery_chain.h's kRecoveryDepth* constants); it always ends up
         // valid by the time the histogram below reads it, since every link
         // on every path either writes it or leaves the seeded default.
-        if (should_dispatch_recovery(GoodStep, Citer)) {
+        //
+        // Exhausted inertia correction takes its own route, bypassing the chain.
+        // Every merit-retry link in it -- extended backtracking and the
+        // watchdog's relaxed acceptance re-test or re-accept the SAME direction
+        // the exhausted factorization produced; SOC and the soft feasibility
+        // pre-stage re-solve or re-trial on that same never-correct-inertia
+        // factorization -- so any of them could "resolve" the forced rejection
+        // by committing a step no correct-inertia system vetted (an
+        // indefinite-curvature direction can decrease the merit perfectly well
+        // while walking into a saddle). Only two outcomes count as genuine
+        // resolutions here, and neither commits such a step: re-centering the
+        // elastic pairs of an active nested l1 phase, and entering feasibility
+        // restoration. Failing both, the phase aborts. The reference method
+        // treats the same condition as a step-computation error and goes to
+        // restoration or gives up; it never re-tests the direction. Trial
+        // evaluations that threw during this iteration's line search do not
+        // divert this route: SINGULAR_KKT is decisive over the un-evaluable
+        // dispatch's acceptable-tier exit (see the loop tail), and the
+        // exception count still lands in the iterate via eval_exceptions_.
+        if (kkt_exhausted && GoodStep) {
+            int resolved_depth = kRecoveryDepthUnresolved;
+            if (nested_active && this->try_recenter_elastics(step_mu)) {
+                // Nested l1 restoration active: re-center the elastic pairs in
+                // closed form at the current phase mu and discard the step
+                // (alpha = 0 no-ops the XSL += alpha*DXSL commit below; the
+                // re-centered elastics change the NEXT iteration's condensed
+                // system). try_recenter_elastics enforces the one-shot budget,
+                // so a second consecutive exhaustion falls through to the
+                // restoration/abort decision below.
+                alpha = 0.0;
+                resolved_depth = kRecoveryDepthRestoration;
+            } else {
+                const double violation_sk = this->constraint_violation_l1(v_rhs);
+                if (this->restoration_ && !this->restoration_->is_active() &&
+                    this->restoration_->entry_permitted(violation_sk, ctx)) {
+                    // Enter feasibility restoration, skipping the soft
+                    // pre-stage, whose trial would be the very direction the
+                    // exhausted factorization produced -- the same precedent as
+                    // the un-evaluable-step dispatch in the chain below.
+                    this->dispatch_restoration_entry(XSL, RHS, prim_obj, barr_obj, mu, violation_sk,
+                                                     feas_stall);
+                    alpha = 0.0;
+                    resolved_depth = kRecoveryDepthRestoration;
+                } else {
+                    // Nothing can resolve it: discard the step and abort the
+                    // phase as SINGULAR_KKT at the loop tail.
+                    alpha = 0.0;
+                    singular_abort = true;
+                }
+            }
+            this->result_.recovery_depth_histogram_[resolved_depth]++;
+        } else if (should_dispatch_recovery(GoodStep, Citer)) {
             int resolved_depth = kRecoveryDepthUnresolved;
             const RecoveryChain::Action recovery_action = this->recovery_->on_step_rejected(
                 Citer, iters, ctx, *acceptance_, *mechanism_, lsmode, obj_scale * lsobjscale,
@@ -2549,8 +2666,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                 this->result_.watchdog_activations_);
             switch (recovery_action) {
             case RecoveryChain::Action::kAcceptAsIs:
-                // Classic ladder-exhaustion fallback: take the step compute_step
-                // produced (DXSL/alpha unchanged). EXCEPTION (dead off the nested
+                // No link resolved the ordinary rejection: take the step
+                // compute_step produced (DXSL/alpha unchanged). Exhausted
+                // inertia correction never reaches this switch — it takes the
+                // dedicated dispatch above. EXCEPTION (dead off the nested
                 // path): while a nested l1 restoration phase is active and no
                 // recovery link resolved the rejection (resolved_depth still the
                 // unresolved sentinel — the discriminator FeasibilitySwitchRecovery
@@ -2768,6 +2887,12 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         if (exit_at_acceptable && ExitCode == ConvergenceFlags::NOTCONVERGED)
             ExitCode = ConvergenceFlags::ACCEPTABLE;
 
+        // SINGULAR_KKT is decisive: an inertia-correction failure is a
+        // step-computation error (Ipopt Error_In_Step_Computation), reported as
+        // such even at an otherwise-acceptable iterate.
+        if (singular_abort)
+            ExitCode = ConvergenceFlags::SINGULAR_KKT;
+
         if (settings_.print_level_ == 0) {
             Printtimer.start();
             this->print_last_iterate(iters);
@@ -2779,8 +2904,8 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // upgrade the verdict, so converge_check's own answer (NOTCONVERGED,
         // or better if this iterate happens to qualify) is what gets reported.
         if (ExitCode == ConvergenceFlags::CONVERGED || ExitCode == ConvergenceFlags::ACCEPTABLE ||
-            ExitCode == ConvergenceFlags::DIVERGING || exit_stage_stalled ||
-            i == (settings_.max_iters_ - 1)) {
+            ExitCode == ConvergenceFlags::DIVERGING || ExitCode == ConvergenceFlags::SINGULAR_KKT ||
+            exit_stage_stalled || i == (settings_.max_iters_ - 1)) {
 
             if (ExitCode != ConvergenceFlags::CONVERGED && settings_.return_best_) {
                 XSL = BestXSL;
@@ -3279,9 +3404,16 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
         if (settings_.print_level_ < 2)
             print_finished(step.label_);
 
-        // If a phase diverged, skip subsequent phases — result_.primals_ may contain
-        // garbage and feeding it into init_impl for the next phase would be pointless.
-        if (result_.converge_flag_ == ConvergenceFlags::DIVERGING) {
+        // If a phase reached DIVERGING or anything at least as severe, skip
+        // subsequent phases. For DIVERGING itself, result_.primals_ may
+        // contain garbage and feeding it into init_impl for the next phase
+        // would be pointless. SINGULAR_KKT's primals are NOT garbage (the
+        // forced-rejected step was discarded, alpha = 0.0), but the
+        // most-severe verdict reached so far must not be silently
+        // overwritten by a later phase's own converge_flag_ (severity order
+        // via operator<=> in psiopt_fwd.h) -- DIVERGING and anything more
+        // severe ends the sequence.
+        if (result_.converge_flag_ >= ConvergenceFlags::DIVERGING) {
             if (settings_.print_level_ < 3)
                 fmt::print(fmt::fg(fmt::color::yellow),
                            "Phase diverged; skipping remaining phases.\n");

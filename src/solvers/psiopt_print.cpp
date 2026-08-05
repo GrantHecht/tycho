@@ -224,6 +224,8 @@ void tycho::solvers::PSIOPT::print_exit_stats(ConvergenceFlags ExitCode, const I
             fmt::print(fmt::fg(fmt::color::dark_red), "\nSolution Diverging\n");
         } else if (ExitCode == ConvergenceFlags::NOTCONVERGED) {
             fmt::print(fmt::fg(fmt::color::red), "\nNo Solution Found\n");
+        } else if (ExitCode == ConvergenceFlags::SINGULAR_KKT) {
+            fmt::print(fmt::fg(fmt::color::dark_red), "\nKKT System Persistently Singular\n");
         }
     }
 

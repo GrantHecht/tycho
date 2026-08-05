@@ -274,18 +274,20 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
 
     BIND_SETTINGS_RW(
         obj, "inertia_mode", inertia_mode_,
-        "KKT inertia-correction / regularization mode: classic (default) reproduces the "
-        "on-demand inertia ladder bit-for-bit -- each iteration first attempts an unperturbed "
-        "factorization and only shifts the Hessian diagonal (by increasing amounts) when the "
-        "factorization reports wrong inertia, with no constraint-block shift. "
-        "proximal_regularization bakes two shifts into the base matrix every iteration instead "
-        "of the classic zero-perturbation first attempt: a small persistent, decaying primal "
-        "base shift on the Hessian diagonal, and an always-on barrier-scaled dual shift on the "
-        "constraint-row diagonals (suppressed while a nested l1 restoration phase is active, "
-        "since the elastic pivots already regularize those rows). The same incr_h/decr_h "
-        "escalation ladder still fires on top when the base attempt has wrong inertia or is "
-        "singular; a singular base attempt is treated as wrong inertia under this mode (classic "
-        "only warns and proceeds). See InertiaModes for the full mechanism and literature "
+        "KKT inertia-correction / regularization mode: classic (default) runs the on-demand "
+        "inertia ladder -- each iteration first attempts an unperturbed factorization and "
+        "shifts the Hessian diagonal (by increasing amounts) when the factorization's inertia "
+        "is not exactly (kkt_dim - m, m, 0); on a singularity signal (rank deficiency, or "
+        "neigs < m by Gould's inertia theorem) it additionally engages the barrier-scaled dual "
+        "shift on the constraint-row diagonals, at most once per phase (later iterations "
+        "pre-apply it), and an exhausted ladder fails the step -- SINGULAR_KKT when nothing "
+        "resolves it. proximal_regularization bakes two shifts into the base matrix every "
+        "iteration instead of the classic zero-perturbation first attempt: a small persistent, "
+        "decaying primal base shift on the Hessian diagonal, and an always-on barrier-scaled "
+        "dual shift on the constraint-row diagonals (suppressed while a nested l1 restoration "
+        "phase is active, since the elastic pivots already regularize those rows). The same "
+        "incr_h/decr_h escalation ladder still fires on top when the base attempt has wrong "
+        "inertia or is singular. See InertiaModes for the full mechanism and literature "
         "citations, and last_prox_reg_primal/last_prox_reg_dual for the resulting diagnostics.");
 
     // --- Barrier parameters ---
@@ -595,10 +597,18 @@ ValueError
                "modes.");
     nb::enum_<InertiaModes>(m, "InertiaModes")
         .value("classic", InertiaModes::classic,
-               "The on-demand inertia ladder inline in factor_impl -- the bit-identical "
-               "default. Each iteration first attempts an unperturbed factorization and only "
-               "shifts the Hessian diagonal (by increasing amounts) when the factorization "
-               "reports wrong inertia. No constraint-block shift.")
+               "The on-demand inertia ladder inline in factor_impl -- the default. Each call "
+               "attempts an unperturbed factorization first, unless the sticky per-phase "
+               "degeneracy latch is already set from an earlier iteration, in which case the "
+               "constraint-block dual shift (delta_c) is pre-applied before that base attempt. "
+               "The full Ipopt inertia-correction condition (Wachter & Biegler 2006, Algorithm "
+               "IC) accepts only exact inertia (kkt_dim - m, m, 0); a singularity signal -- "
+               "rank deficiency, or neigs < m by Gould's inertia theorem -- engages the "
+               "on-demand constraint-block dual shift once per call and sets the latch, and if "
+               "inertia is still wrong the classic Hessian-diagonal shift ladder fires on top "
+               "(by increasing amounts). Ladder exhaustion, under either mode, force-rejects "
+               "the step through the recovery chain and -- if the rejection goes unresolved -- "
+               "aborts the phase as ConvergenceFlags.SINGULAR_KKT (see max_refac).")
         .value("proximal_regularization", InertiaModes::proximal_regularization,
                "Proximal primal-dual regularization: a small persistent, decaying primal base "
                "shift (rho_k, floored at 1e-10, the Cipolla-Gondzio floor) on the Hessian "
@@ -608,7 +618,10 @@ ValueError
                "the base matrix every iteration in place of the classic zero-perturbation first "
                "attempt -- the same escalation ladder still fires on top when the base attempt "
                "has wrong inertia or is singular (a singular base attempt is itself treated as "
-               "wrong inertia under this mode, unlike classic's warn-and-proceed). rho_k decays "
+               "wrong inertia under this mode, matching classic). Ladder exhaustion, under "
+               "either mode, force-rejects the step through the recovery chain and -- if the "
+               "rejection goes unresolved -- aborts the phase as ConvergenceFlags.SINGULAR_KKT "
+               "(see max_refac). rho_k decays "
                "toward its floor by decr_h each iteration the base attempt sufficed, or "
                "persists at the decayed total shift (rho_k plus the ladder's last delta) when "
                "the ladder fired. The dual shift is suppressed while a nested l1 restoration "
@@ -648,7 +661,8 @@ ValueError
         .value("CONVERGED", ConvergenceFlags::CONVERGED)
         .value("ACCEPTABLE", ConvergenceFlags::ACCEPTABLE)
         .value("NOTCONVERGED", ConvergenceFlags::NOTCONVERGED)
-        .value("DIVERGING", ConvergenceFlags::DIVERGING);
+        .value("DIVERGING", ConvergenceFlags::DIVERGING)
+        .value("SINGULAR_KKT", ConvergenceFlags::SINGULAR_KKT);
     nb::enum_<AlgorithmModes>(m, "AlgorithmModes")
         .value("OPT", AlgorithmModes::OPT)
         .value("OPTNO", AlgorithmModes::OPTNO)

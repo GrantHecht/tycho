@@ -70,15 +70,21 @@
 //
 // Architectural scope note (read before touching arming semantics): the ONLY
 // REJECTION-observing hook this recovery-chain layer has into the solve loop
-// is on_step_rejected, invoked exactly when the classic backtrack FULLY
-// rejects a step (every one of max_ls_iters_ trials failed the merit test) —
-// see should_dispatch_recovery in recovery_chain.h. An iteration that
-// backtracks to some alpha < 1 but still finds an acceptable trial
-// (Citer.accepted_ == true at some j > 0) never reaches this hook at all.
-// Consequently "shortened iteration" for WatchdogState's purposes means "a
-// full rejection was dispatched here", not the broader "any alpha < 1
-// iteration" a fully integrated watchdog (observing every solve iteration)
-// would use. This is a CONSERVATIVE narrowing: it can only arm later (or not
+// is on_step_rejected, invoked whenever Citer.accepted_ is false at the gate
+// (see should_dispatch_recovery in recovery_chain.h). That happens two ways:
+// (1) the classic backtrack FULLY rejects a step (every one of
+// max_ls_iters_ trials failed the merit test), or (2) a step the merit test
+// found acceptable is force-rejected anyway by psiopt.cpp's alg_impl when
+// this iteration's KKT factorization exhausted the inertia-correction ladder
+// (the `if (kkt_exhausted) Citer.accepted_ = false;` site, upstream of this
+// gate) -- a genuinely accepted step can therefore still reach this hook. An
+// iteration that backtracks to some alpha < 1, finds an acceptable trial, and
+// is NOT on an exhausted factorization (Citer.accepted_ == true at some
+// j > 0) never reaches this hook at all. Consequently "shortened iteration"
+// for WatchdogState's purposes means "a full or forced rejection was
+// dispatched here", not the broader "any alpha < 1 iteration" a fully
+// integrated watchdog (observing every solve iteration) would use. This is a
+// CONSERVATIVE narrowing: it can only arm later (or not
 // at all) relative to full paper semantics, counting only the most severe
 // form of shortening. A genuinely ACCEPTED iteration in between two
 // rejections is observed through the separate notify_step_accepted() hook

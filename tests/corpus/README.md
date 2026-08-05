@@ -131,7 +131,7 @@ import as the single source of truth for "what's in the corpus."
 ## The convergence-flag -> status mapping
 
 Discovered by introspecting `_tychopy.solvers.ConvergenceFlags` in the tycho
-conda env (`tychopy/_stubs/_tychopy/solvers.pyi` confirms the same 4 members
+conda env (`tychopy/_stubs/_tychopy/solvers.pyi` confirms the same 5 members
 statically):
 
 ```
@@ -140,10 +140,11 @@ statically):
 [('CONVERGED', <ConvergenceFlags.CONVERGED: 0>),
  ('ACCEPTABLE', <ConvergenceFlags.ACCEPTABLE: 1>),
  ('NOTCONVERGED', <ConvergenceFlags.NOTCONVERGED: 2>),
- ('DIVERGING', <ConvergenceFlags.DIVERGING: 3>)]
+ ('DIVERGING', <ConvergenceFlags.DIVERGING: 3>),
+ ('SINGULAR_KKT', <ConvergenceFlags.SINGULAR_KKT: 4>)]
 ```
 
-`ConvergenceFlags` is an `enum.IntEnum` with **exactly these four members** —
+`ConvergenceFlags` is an `enum.IntEnum` with **exactly these five members** —
 it is what `phase.optimize()` / `.solve()` / `.solve_optimize()` /
 `.optimize_solve()` / `.solve_optimize_solve()` return, and also what
 `optimizer.converge_flag` reports after the fact. `phase.optimizer` (a
@@ -161,6 +162,7 @@ The harness maps flag name to JSONL `status` exhaustively:
 | `ACCEPTABLE` | `acceptable` |
 | `NOTCONVERGED` | `failed` |
 | `DIVERGING` | `diverged` |
+| `SINGULAR_KKT` | `singular_kkt` |
 | *(anything else — should never happen)* | `error` (with the unrecognized name recorded in `notes`) |
 
 Two more `status` values are synthesized entirely by the harness, not from
@@ -315,7 +317,7 @@ a scorecard as a baseline.
 Prints a per-problem table of status and iteration-count changes between
 two previously recorded JSONL files, plus summary counts (`unchanged`,
 `improved`, `regressed` — ranked `converged < acceptable < failed < diverged
-< timeout < error`, so a lower rank is "better" — plus `only-in-a` /
+< singular_kkt < timeout < error`, so a lower rank is "better" — plus `only-in-a` /
 `only-in-b` for problems present in only one file). If a file has multiple
 records for the same problem (e.g. from `--repeat`), the diff compares each
 file's *last* recorded run per problem. Does not run anything; exits after
@@ -326,7 +328,7 @@ printing.
 One JSON object per line, one line per (problem, repeat):
 
 ```json
-{"problem": "...", "tier": "...", "status": "converged|acceptable|failed|diverged|timeout|error",
+{"problem": "...", "tier": "...", "status": "converged|acceptable|failed|diverged|singular_kkt|timeout|error",
  "flag": "..." | null, "iterations": <int, -1 if unmatched>, "wall_s": <float>,
  "objective": <float | null>, "returncode": <int | null>, "notes": "...",
  "backend": "psiopt" | "ipopt"}

@@ -28,9 +28,11 @@ enum class ConvergenceFlags {
     ACCEPTABLE = 1,
     NOTCONVERGED = 2,
     DIVERGING = 3,
+    SINGULAR_KKT = 4,
 };
 
-// Severity ordering: CONVERGED < ACCEPTABLE < NOTCONVERGED < DIVERGING
+// Severity ordering:
+// CONVERGED < ACCEPTABLE < NOTCONVERGED < DIVERGING < SINGULAR_KKT
 constexpr auto operator<=>(ConvergenceFlags a, ConvergenceFlags b) {
     return static_cast<int>(a) <=> static_cast<int>(b);
 }

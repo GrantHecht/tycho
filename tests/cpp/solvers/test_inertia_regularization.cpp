@@ -158,33 +158,23 @@ TEST(InertiaRegularizationSolve, ProximalRegularizationConvergesOnRankDeficientK
     EXPECT_NEAR(r.primals_[1], 0.5, 1e-4);
 }
 
-// (b) The SAME rank-deficient problem under classic. This documents the classic
-// behavior only -- static (Pardiso) pivoting may rescue the singular
-// factorization, so no failure is asserted; the point is that the mode above is
-// what carries a principled regularization for this case.
-TEST(InertiaRegularizationSolve, ClassicOnRankDeficientKktDocumented) {
+// (b) The SAME rank-deficient problem under classic. The full Ipopt IC condition
+// engages the on-demand dual regularization when the factorization reports rank
+// deficiency, so classic converges here too. (On MKL the static pivot
+// perturbation may mask the deficiency instead; either road must reach the
+// unique optimum.)
+TEST(InertiaRegularizationSolve, ClassicConvergesOnRankDeficientKkt) {
     auto prob = build_inertia_duplicated_equality_nlp();
     prob->optimizer_->settings().inertia_mode_ = InertiaModes::classic;
     prob->optimizer_->set_max_iters(100);
     auto flag = prob->optimize();
 
+    EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
     const auto &r = prob->optimizer_->result();
+    EXPECT_NEAR(r.obj_val_, 0.5, 1e-5);
     ASSERT_EQ(r.primals_.size(), 2);
-    // "Classic never converges to a WRONG point on this problem" is the whole
-    // property, and it is asserted unconditionally: a converged flag obliges the
-    // value checks, a non-converged flag is a permitted outcome. Written as
-    // implications rather than an `if` block so no assertion can silently drop
-    // out of the run on a toolchain where classic does not converge. The
-    // tolerances are one decade looser than the proximal test's: this path
-    // reaches the optimum through static pivot perturbation on a singular KKT
-    // rather than a principled shift, so its terminal accuracy is weaker.
-    const bool converged = (flag == tycho::ConvergenceFlags::CONVERGED);
-    EXPECT_TRUE(!converged || std::abs(r.obj_val_ - 0.5) < 1e-4)
-        << "classic converged to obj_val_ = " << r.obj_val_ << ", expected 0.5";
-    EXPECT_TRUE(!converged || std::abs(r.primals_[0] - 0.5) < 1e-3)
-        << "classic converged to x0 = " << r.primals_[0] << ", expected 0.5";
-    EXPECT_TRUE(!converged || std::abs(r.primals_[1] - 0.5) < 1e-3)
-        << "classic converged to x1 = " << r.primals_[1] << ", expected 0.5";
+    EXPECT_NEAR(r.primals_[0], 0.5, 1e-4);
+    EXPECT_NEAR(r.primals_[1], 0.5, 1e-4);
 }
 
 // A well-conditioned equality NLP: min x^2 s.t. x - 1 = 0, optimum x = 1,
@@ -207,6 +197,56 @@ std::unique_ptr<OptimizationProblem> build_inertia_wellcond_nlp() {
     prob->optimizer_->set_print_level(3);
     return prob;
 }
+
+} // namespace
+
+// InertiaRegularizationSolve_ClassicDegeneracyLatchTracksSingularity_Test reaches
+// PSIOPT::dc_latched_ (private) via the friend declaration in psiopt.h, which
+// befriends the GLOBAL-scope class ::InertiaRegularizationSolve_..._Test that
+// gtest's TEST() macro generates. TEST() declares its fixture class as a member
+// of whatever namespace textually encloses it -- inside the anonymous namespace
+// above, that would be a DISTINCT (anonymous namespace)::..._Test entity that the
+// friend declaration does not name, so the access would be denied at compile
+// time despite the friend declaration being syntactically present (see the
+// established precedent in test_recovery_dispatch_gate.cpp, which closes its
+// anonymous namespace before its own friended RecoveryDispatchGate_* tests for
+// the same reason). Hence this test sits between the two anonymous-namespace
+// blocks, at true global scope; build_inertia_duplicated_equality_nlp() and
+// build_inertia_wellcond_nlp() remain reachable here because unqualified lookup
+// from an enclosing scope finds anonymous-namespace members via their implicit
+// using-directive (that direction is unaffected by the issue above).
+
+// The degeneracy latch (Ipopt hess/jac-degenerate adaptation, sticky per phase):
+// set once delta_c is engaged for a singular factorization, so later iterations
+// pre-apply it at the base attempt instead of re-discovering the singularity;
+// never set on problems whose factorizations stay full-rank.
+TEST(InertiaRegularizationSolve, ClassicDegeneracyLatchTracksSingularity) {
+    auto degen = build_inertia_duplicated_equality_nlp();
+    degen->optimizer_->settings().inertia_mode_ = InertiaModes::classic;
+    degen->optimizer_->set_max_iters(100);
+    (void)degen->optimize();
+#ifdef USE_ACCELERATE_SPARSE
+    // Accelerate reports inertia honestly (no Pardiso-style static pivot
+    // perturbation), so the duplicated-equality problem's singular KKT is
+    // observed as such and delta_c engages, setting the latch. On a
+    // pivot-perturbing backend (MKL Pardiso, Windows/Linux) the masked
+    // deficiency may report neigs == m with zeigs == 0 and never trip
+    // SingularitySignal(), so this half of the assertion is platform-dependent
+    // -- see the sibling ClassicConvergesOnRankDeficientKkt test's comment for
+    // the same caveat. The healthy-problem EXPECT_FALSE below is NOT guarded:
+    // a never-singular solve must never latch on any backend.
+    EXPECT_TRUE(degen->optimizer_->dc_latched_)
+        << "delta_c engaged on a rank-deficient problem must set the latch";
+#endif
+
+    auto healthy = build_inertia_wellcond_nlp();
+    healthy->optimizer_->settings().inertia_mode_ = InertiaModes::classic;
+    (void)healthy->optimize();
+    EXPECT_FALSE(healthy->optimizer_->dc_latched_)
+        << "a full-rank problem must never engage delta_c or the latch";
+}
+
+namespace {
 
 // (c) Parity smoke: a well-conditioned problem reaches the same objective under
 // both modes within solver tolerance (on healthy problems ρ_k sits at the floor

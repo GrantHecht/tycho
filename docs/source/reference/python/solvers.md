@@ -167,7 +167,7 @@ own problem before adopting one.
 
 | Property | Meaning | Default |
 | --- | --- | --- |
-| `inertia_mode` | `classic` attempts an unperturbed factorization each iteration and shifts the Hessian diagonal only when the factorization reports wrong inertia. `proximal_regularization` instead bakes a persistent decaying primal shift and an always-on barrier-scaled dual shift into the base matrix every iteration, and treats a singular base attempt as wrong inertia. | `classic` |
+| `inertia_mode` | `classic` attempts an unperturbed factorization each iteration, unless the sticky per-phase degeneracy latch pre-applies the constraint-block dual shift; it accepts only exact inertia (`kkt_dim - m, m, 0`) and, on a singularity signal (rank deficiency or `neigs < m`), engages the on-demand constraint-block dual shift and — if inertia is still wrong — escalates through the Hessian-diagonal shift ladder, whose exhaustion aborts the phase as `SINGULAR_KKT` via the recovery chain. `proximal_regularization` instead bakes a persistent decaying primal shift and an always-on barrier-scaled dual shift into the base matrix every iteration, and treats a singular base attempt as wrong inertia. | `classic` |
 | `delta_h` | First Hessian-diagonal shift tried when the inertia ladder fires. | `1e-5` |
 | `incr_h` | Multiplier that grows the shift on each further wrong-inertia factorization. | `8.0` |
 | `decr_h` | Multiplier that shrinks the retained shift after a successful factorization. | `0.333333` |
