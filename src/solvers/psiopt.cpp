@@ -2534,9 +2534,9 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // divergence override at the bottom of the loop.
         bool exit_at_acceptable = false;
         // Set by the exhausted-inertia-correction dispatch below: the KKT
-        // factorization never reached correct inertia, the forced rejection
-        // went through the recovery chain, and nothing resolved it. Terminates
-        // the phase as SINGULAR_KKT at the loop tail (same idiom as
+        // factorization never reached correct inertia and neither an elastic
+        // re-center nor a restoration entry was available to resolve it.
+        // Terminates the phase as SINGULAR_KKT at the loop tail (same idiom as
         // exit_at_acceptable / exit_stage_stalled).
         bool singular_abort = false;
 
@@ -2558,10 +2558,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
 
         // Inertia-correction exhaustion (Ipopt-faithful fail-the-step): a step
         // solved on a factorization that never reached correct inertia must not
-        // be accepted on merit. Force the rejection so the recovery chain gets
-        // its say (feasibility switch when configured); if nothing resolves it,
-        // singular_abort terminates the phase below. The non-finite case
-        // (!GoodStep) already exits as DIVERGING at the loop tail -- the
+        // be accepted on merit. The rejection is forced here -- the bookkeeping
+        // below (and the acceptance accounting) reads accepted_ -- and the
+        // dedicated dispatch below decides what happens instead. The non-finite
+        // case (!GoodStep) already exits as DIVERGING at the loop tail -- the
         // non-finite verdict dominates and needs no special-casing here.
         if (kkt_exhausted)
             Citer.accepted_ = false;
@@ -2584,7 +2584,10 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // KKT step direction was usable (GoodStep). An accepted step -- full or
         // backtracked -- never reaches the hook, and the !GoodStep path (which
         // runs no line search) is excluded too. On the default solve path every
-        // step is accepted, so the hook is never invoked at all.
+        // step is accepted, so the hook is never invoked at all. It is
+        // additionally gated on !kkt_exhausted: an exhausted factorization's
+        // forced rejection is owned by the dedicated dispatch below, which runs
+        // INSTEAD of the chain.
         //
         // By default recovery_ is a NoopRecovery
         // (rebuild_globalization_components() installs it whenever
@@ -2602,7 +2605,54 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
         // recovery_chain.h's kRecoveryDepth* constants); it always ends up
         // valid by the time the histogram below reads it, since every link
         // on every path either writes it or leaves the seeded default.
-        if (should_dispatch_recovery(GoodStep, Citer)) {
+        //
+        // Exhausted inertia correction takes its own route, bypassing the chain.
+        // Every merit-retry link in it -- SOC, extended backtracking, the
+        // watchdog's relaxed acceptance, the soft feasibility pre-stage -- can
+        // only re-test, or relax the acceptance of, the SAME direction the
+        // exhausted factorization produced, so any of them could "resolve" the
+        // forced rejection by re-accepting a step that must not be accepted at
+        // all (an indefinite-curvature direction can decrease the merit
+        // perfectly well while walking into a saddle). Only two outcomes count
+        // as genuine resolutions here, and neither commits that direction:
+        // re-centering the elastic pairs of an active nested l1 phase, and
+        // entering feasibility restoration. Failing both, the phase aborts.
+        // The reference method treats the same condition as a step-computation
+        // error and goes to restoration or gives up; it never re-tests the
+        // direction.
+        if (kkt_exhausted && GoodStep) {
+            int resolved_depth = kRecoveryDepthUnresolved;
+            if (nested_active && this->try_recenter_elastics(step_mu)) {
+                // Nested l1 restoration active: re-center the elastic pairs in
+                // closed form at the current phase mu and discard the step
+                // (alpha = 0 no-ops the XSL += alpha*DXSL commit below; the
+                // re-centered elastics change the NEXT iteration's condensed
+                // system). try_recenter_elastics enforces the one-shot budget,
+                // so a second consecutive exhaustion falls through to the
+                // restoration/abort decision below.
+                alpha = 0.0;
+                resolved_depth = kRecoveryDepthRestoration;
+            } else {
+                const double violation_sk = this->constraint_violation_l1(v_rhs);
+                if (this->restoration_ && !this->restoration_->is_active() &&
+                    this->restoration_->entry_permitted(violation_sk, ctx)) {
+                    // Enter feasibility restoration, skipping the soft
+                    // pre-stage, whose trial would be the very direction the
+                    // exhausted factorization produced -- the same precedent as
+                    // the un-evaluable-step dispatch in the chain below.
+                    this->dispatch_restoration_entry(XSL, RHS, prim_obj, barr_obj, mu, violation_sk,
+                                                     feas_stall);
+                    alpha = 0.0;
+                    resolved_depth = kRecoveryDepthRestoration;
+                } else {
+                    // Nothing can resolve it: discard the step and abort the
+                    // phase as SINGULAR_KKT at the loop tail.
+                    alpha = 0.0;
+                    singular_abort = true;
+                }
+            }
+            this->result_.recovery_depth_histogram_[resolved_depth]++;
+        } else if (should_dispatch_recovery(GoodStep, Citer)) {
             int resolved_depth = kRecoveryDepthUnresolved;
             const RecoveryChain::Action recovery_action = this->recovery_->on_step_rejected(
                 Citer, iters, ctx, *acceptance_, *mechanism_, lsmode, obj_scale * lsobjscale,
@@ -2695,15 +2745,6 @@ Eigen::VectorXd tycho::solvers::PSIOPT::alg_impl(AlgorithmModes algmode, Barrier
                             Citer.iter_, this->eval_error_log_.count_ - eval_errs_before,
                             alpha * settings_.alpha_red_, this->eval_error_log_.last_message_));
                     }
-                }
-                if (kkt_exhausted && resolved_depth == kRecoveryDepthUnresolved) {
-                    // Exhausted ladder and no recovery link resolved the forced
-                    // rejection: discard the step and abort the phase (the Ipopt
-                    // analogue is Error_In_Step_Computation). A nested re-center
-                    // above stamps kRecoveryDepthRestoration and is a
-                    // resolution, so it does not abort.
-                    alpha = 0.0;
-                    singular_abort = true;
                 }
                 break;
             case RecoveryChain::Action::kRetry:

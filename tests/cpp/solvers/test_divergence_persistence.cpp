@@ -319,4 +319,47 @@ TEST(DivergencePersistence, ExhaustedInertiaCorrectionAbortsAsSingularKkt) {
 }
 #endif
 
+// A merit-retry recovery link must not be able to resolve the exhaustion. Every
+// link in the chain (SOC, extended backtracking, the watchdog relaxation, the
+// soft feasibility pre-stage) can only re-test -- or relax acceptance of -- the
+// very direction the exhausted factorization produced, so exhaustion bypasses
+// the chain and routes straight to re-center/restoration/abort.
+//
+// The instance is the smallest one that makes the bypass observable: the
+// indefinite quadratic 0.5*x0^2 - 0.5*x1^2, a saddle at the origin, started at
+// (2, 1). With no constraints the KKT matrix IS the Hessian diag(1, -1), whose
+// inertia carries one excess negative eigenvalue, so with the ladder disabled
+// every factorization exhausts at once. The Newton direction (-2, -1)
+// nonetheless DECREASES the objective (1.5 -> 0) and lands exactly on the
+// saddle, where the KKT residual is zero -- so if extended backtracking were
+// allowed to re-accept it, the solve would commit the wrong-inertia step and
+// report CONVERGED at a saddle point.
+//
+// Unlike the rank-deficiency trigger of the sibling test above, wrong inertia
+// by eigenvalue COUNT is backend-portable: a pivot-perturbing backend masks
+// zero pivots, but still reports honest positive/negative counts for a
+// well-conditioned indefinite matrix. Hence no backend gate here.
+TEST(DivergencePersistence, ExhaustedInertiaCorrectionIsNotResolvedByExtendedBacktracking) {
+    using tycho::vf::Arguments;
+    using tycho::vf::GenericFunction;
+
+    OptimizationProblem prob;
+    prob.set_vars((Eigen::VectorXd(2) << 2.0, 1.0).finished());
+    {
+        auto args = Arguments<2>();
+        auto x0 = args.coeff<0>();
+        auto x1 = args.coeff<1>();
+        prob.add_objective(GenericFunction<-1, 1>(0.5 * (x0 * x0) - 0.5 * (x1 * x1)),
+                           (Eigen::VectorXi(2) << 0, 1).finished());
+    }
+    prob.optimizer_->set_print_level(3);
+    prob.optimizer_->settings().max_refac_ = 0;         // ladder off: exhaust immediately
+    prob.optimizer_->settings().ls_extended_iters_ = 2; // extended backtracking armed
+
+    auto flag = prob.optimize();
+
+    EXPECT_EQ(flag, tycho::ConvergenceFlags::SINGULAR_KKT);
+    EXPECT_LE(prob.optimizer_->result().iter_num_, 10);
+}
+
 } // namespace
