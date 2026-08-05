@@ -94,12 +94,13 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 _ITER_RE = re.compile(r"Iterations : *([0-9]+)")
 
 # Exhaustive PSIOPT ConvergenceFlags -> harness status mapping. Verified
-# against _tychopy.solvers.ConvergenceFlags (4 members) — see README.md.
+# against _tychopy.solvers.ConvergenceFlags (5 members) — see README.md.
 _FLAG_TO_STATUS = {
     "CONVERGED": "converged",
     "ACCEPTABLE": "acceptable",
     "NOTCONVERGED": "failed",
     "DIVERGING": "diverged",
+    "SINGULAR_KKT": "singular_kkt",
 }
 
 # Relative ranking used by --diff to classify a status change as an
@@ -109,8 +110,9 @@ _STATUS_RANK = {
     "acceptable": 1,
     "failed": 2,
     "diverged": 3,
-    "timeout": 4,
-    "error": 5,
+    "singular_kkt": 4,
+    "timeout": 5,
+    "error": 6,
 }
 
 

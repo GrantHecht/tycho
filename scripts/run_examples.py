@@ -122,11 +122,16 @@ YELLOW = "\033[33m"
 RESET = "\033[0m"
 
 # PSIOPT's terminal failure banners (src/solvers/psiopt_print.cpp,
-# print_exit_stats): printed once per solve, at ConvergenceFlags::DIVERGING
-# or ConvergenceFlags::NOTCONVERGED. An example that reaches one of these but
-# still exits 0 (e.g. it doesn't check the returned convergence flag) is a
-# silent regression the process exit code alone won't catch.
-FAILURE_BANNERS = ("Solution Diverging", "No Solution Found")
+# print_exit_stats): printed once per solve, at ConvergenceFlags::DIVERGING,
+# ConvergenceFlags::NOTCONVERGED, or ConvergenceFlags::SINGULAR_KKT. An
+# example that reaches one of these but still exits 0 (e.g. it doesn't check
+# the returned convergence flag) is a silent regression the process exit code
+# alone won't catch.
+FAILURE_BANNERS = (
+    "Solution Diverging",
+    "No Solution Found",
+    "KKT System Persistently Singular",
+)
 
 
 def _find_failure_banners(output: str) -> list[str]:
