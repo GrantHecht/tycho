@@ -17,6 +17,24 @@
 #
 # Extracted verbatim from the root CMakeLists.txt MKL/Accelerate resolution
 # block -- no behavior changes.
+#
+# Prerequisites the caller must set before invoking (all read from caller
+# scope):
+#
+#   CMAKE_MODULE_PATH   must contain tycho's cmake/ directory, which supplies
+#                       FindMKL.cmake and FindAccelerateSparse.cmake.
+#   Threads             find_package(Threads) must already have run; LINK_LIBS
+#                       is assembled with Threads::Threads in it.
+#   ENABLE_PYTHON_BINDINGS
+#                       ON also resolves Python (Interpreter + Development).
+#                       Leave unset in a build with no Python surface.
+#   PYVERSION_EXACT     optional version argument forwarded to
+#                       find_package(Python); only read when
+#                       ENABLE_PYTHON_BINDINGS is ON.
+#
+# Sets in caller scope: INCLUDE_DIRS (MKL headers) and LINK_LIBS (the sparse
+# backend plus Threads and dl), and on Apple the USE_ACCELERATE_SPARSE
+# compile definition and the AccelerateSparse::AccelerateSparse target.
 ################################################################################
 
 macro(tycho_resolve_sparse_backend)

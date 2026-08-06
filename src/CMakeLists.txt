@@ -1,5 +1,11 @@
+# The PSIOPT subproject owns the solver headers plus the Eigen typedefs and
+# utility headers they need, so its header root sits alongside include/ for
+# every target here; psiopt/src and psiopt/src/utils carry the two private
+# headers (fmtlib.h, color_text.h) that src/pch.h and src/utils/tycho_utils.h
+# still include unqualified.
 set(_TYCHO_SRC_INCLUDES
   ${PROJECT_SOURCE_DIR}/include
+  ${PROJECT_SOURCE_DIR}/psiopt/include
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/optimal_control
   ${CMAKE_CURRENT_SOURCE_DIR}/solvers
@@ -7,6 +13,8 @@ set(_TYCHO_SRC_INCLUDES
   ${CMAKE_CURRENT_SOURCE_DIR}/utils
   ${CMAKE_CURRENT_SOURCE_DIR}/vf
   ${CMAKE_CURRENT_SOURCE_DIR}/integrators
+  ${PROJECT_SOURCE_DIR}/psiopt/src
+  ${PROJECT_SOURCE_DIR}/psiopt/src/utils
 )
 set(TYCHO_INCLUDES ${_TYCHO_SRC_INCLUDES} PARENT_SCOPE)
 
@@ -59,6 +67,22 @@ set_property(TARGET integrators_instantiations PROPERTY JOB_POOL_COMPILE heavy_c
 
 
 
+# The solver's VectorFunction glue. OptimizationProblem is the convenience
+# layer that turns user VF expressions into the solver's abstract constraint
+# and objective functions, so it is the one piece of the old psiopt target that
+# cannot live in the standalone solver library (psiopt/). It sits on top of it
+# instead: everything that used to get these symbols from psiopt links this
+# target, which links psiopt in turn.
+add_library(solvers_vf_glue STATIC
+    solvers/optimization_problem.cpp
+)
+target_include_directories(solvers_vf_glue PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
+target_compile_options(solvers_vf_glue PRIVATE ${COMPILE_FLAGS})
+target_link_libraries(solvers_vf_glue PUBLIC psiopt)
+target_precompile_headers(solvers_vf_glue REUSE_FROM pch)
+set_property(TARGET solvers_vf_glue PROPERTY JOB_POOL_COMPILE heavy_compile)
+
+
 add_library(optimalcontrol STATIC
     optimal_control/tycho_optimal_control.h
     optimal_control/ode_phase_base.cpp
@@ -70,64 +94,10 @@ add_library(optimalcontrol STATIC
 
 target_include_directories(optimalcontrol PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
 target_precompile_headers(optimalcontrol REUSE_FROM pch)
-target_link_libraries(optimalcontrol PRIVATE psiopt)
+target_link_libraries(optimalcontrol PRIVATE solvers_vf_glue)
 target_compile_options(optimalcontrol PRIVATE ${COMPILE_FLAGS})
 set_property(TARGET optimalcontrol PROPERTY JOB_POOL_COMPILE heavy_compile)
 
-
-
-
-
-add_library(psiopt STATIC
-    solvers/psiopt.cpp
-    solvers/psiopt_globalization.cpp
-    solvers/psiopt_print.cpp
-    solvers/psiopt_settings.cpp
-    solvers/non_linear_program.cpp
-    solvers/optimization_problem.cpp
-    solvers/solver_init.cpp
-)
-target_include_directories(psiopt PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
-target_compile_options(psiopt PRIVATE ${COMPILE_FLAGS})
-target_link_libraries(psiopt PRIVATE utils)
-
-# Alternative NLP solver backend. Exactly one of the two implementations of the
-# backend entry points is compiled in: the real adapter when Ipopt is linked,
-# the fallback that reports the missing build support otherwise.
-#
-# The Ipopt imported target is wrapped in BUILD_INTERFACE because psiopt is part
-# of the installed export set: a PRIVATE dependency on a static library is still
-# recorded (as $<LINK_ONLY:...>) in its interface, and install(EXPORT) rejects an
-# imported target that is not itself exported. Build-tree consumers still link
-# Ipopt transitively; the include directories are attached explicitly so they do
-# not depend on that wrapping.
-if(ENABLE_IPOPT)
-    target_sources(psiopt PRIVATE solvers/ipopt_tnlp_adapter.cpp)
-    target_compile_definitions(psiopt PRIVATE TYCHO_ENABLE_IPOPT)
-    target_include_directories(psiopt PRIVATE ${IPOPT_INCLUDE_DIRS})
-    target_link_libraries(psiopt PRIVATE $<BUILD_INTERFACE:PkgConfig::IPOPT>)
-else()
-    target_sources(psiopt PRIVATE solvers/ipopt_backend_stub.cpp)
-endif()
-
-if(APPLE)
-    target_link_libraries(psiopt PUBLIC AccelerateSparse::AccelerateSparse)
-endif()
-
-
-
-add_library(utils STATIC
-    utils/color_text.h utils/color_text.cpp
-    utils/get_core_count.cpp
-    utils/memory_management.cpp
-    utils/thread_pool.cpp
-)
-target_include_directories(utils PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
-target_compile_options(utils PRIVATE ${COMPILE_FLAGS})
-# fmt is header-only (FMT_HEADER_ONLY defined globally); include path comes from
-# the global include_directories(dep/fmt/include) in the root CMakeLists.txt.
-# We do not link fmt::fmt-header-only because it would require exporting the fmt
-# target alongside tycho.
 
 
 add_library(astro STATIC
@@ -146,7 +116,7 @@ target_compile_options(astro PRIVATE ${COMPILE_FLAGS})
 # tycho: public INTERFACE target bundling all core static libs.
 # Used by Python bindings, C++ consumers (find_package/FetchContent), and future frontends.
 add_library(tycho INTERFACE)
-target_link_libraries(tycho INTERFACE psiopt utils optimalcontrol vectorfunctions vf_instantiations integrators_instantiations astro)
+target_link_libraries(tycho INTERFACE psiopt utils solvers_vf_glue optimalcontrol vectorfunctions vf_instantiations integrators_instantiations astro)
 # CRITICAL: LINK_LIBS is wrapped in BUILD_INTERFACE to avoid encoding
 # host-specific absolute paths in the export set. ALL libraries in LINK_LIBS
 # (set in root CMakeLists.txt) must be re-found and re-attached in
@@ -232,8 +202,8 @@ target_compile_options(tycho INTERFACE
 #-------------------------------------------------------------------------------
 # Install rules
 
-install(TARGETS tycho psiopt utils optimalcontrol astro vectorfunctions vf_instantiations
-        integrators_instantiations
+install(TARGETS tycho psiopt utils solvers_vf_glue optimalcontrol astro vectorfunctions
+        vf_instantiations integrators_instantiations
     EXPORT tychoTargets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}

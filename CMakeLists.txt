@@ -523,6 +523,10 @@ endif()
 ################################################################################
 # Code Directories
 include(GNUInstallDirs)
+# PSIOPT is its own CMake project (it also configures standalone, see
+# psiopt/CMakeLists.txt). It must come before src/, which links its targets
+# and adds its header root to the shared include list.
+add_subdirectory(psiopt)
 add_subdirectory(src)
 
 # add_subdirectory(extensions)

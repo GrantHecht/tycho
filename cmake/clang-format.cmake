@@ -4,6 +4,9 @@ file(GLOB_RECURSE ALL_SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/extensions/*.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/extensions/*.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/tycho/detail/*.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/psiopt/src/*.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/psiopt/src/*.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/psiopt/include/tycho/detail/*.h
 )
 
 find_program(CLANG_FORMAT_EXE

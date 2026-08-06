@@ -5,7 +5,8 @@ OUTPUT_DIRECTORY       = @CMAKE_CURRENT_BINARY_DIR@/doxygen
 CREATE_SUBDIRS         = NO
 
 # Input
-INPUT                  = @PROJECT_SOURCE_DIR@/include/tycho
+INPUT                  = @PROJECT_SOURCE_DIR@/include/tycho \
+                         @PROJECT_SOURCE_DIR@/psiopt/include/tycho
 RECURSIVE              = YES
 FILE_PATTERNS          = *.h *.hpp
 # Reserved for future internal helpers — no matching symbols/files exist

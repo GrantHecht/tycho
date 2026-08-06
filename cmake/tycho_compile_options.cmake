@@ -18,6 +18,31 @@
 #
 # Extracted verbatim from the root CMakeLists.txt "Set Compiler Flags"
 # section -- no flag values were changed by this move.
+#
+# Prerequisites the caller must set before invoking (all read from caller
+# scope; the macro sets none of them itself):
+#
+#   TYCHO_FP_MODE   STRICT | SAFER_FAST | FAST. Selects FP_FLAGS. An unset or
+#                   unrecognized value silently yields no FP flags, so callers
+#                   should validate it first (the root listfile does).
+#   _TYCHO_WINDOWS_CLANG_NO_FINITE_MATH_ONLY_FLAG
+#                   The spelling of -fno-finite-math-only that the active
+#                   Windows frontend accepts ("/clang:-..." under clang-cl).
+#                   Only read when WIN32 and TYCHO_FP_MODE=SAFER_FAST.
+#   BUILD_TYCHO_WHEEL
+#                   TRUE selects the portable wheel SIMD baseline (AVX2 /
+#                   apple-m1) and forces LTO; unset/FALSE selects -march=native.
+#   LINK_TIME_OPT   TRUE enables IPO/LTO. Ignored when BUILD_TYCHO_WHEEL forces
+#                   it on.
+#   CLANG_MAX_INLINE_DEPTH
+#                   Value for Clang's -inline-threshold. Overwritten to 400 by
+#                   the wheel path; otherwise used as given.
+#   COMPILE_TIME_TRACE
+#                   ON adds -ftime-trace directory-wide (Clang only).
+#
+# A standalone subproject that includes this module (psiopt/CMakeLists.txt)
+# must set these itself -- see the PSIOPT_STANDALONE block there for the
+# defaults the Tycho root supplies.
 ################################################################################
 
 macro(tycho_compile_options)

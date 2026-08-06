@@ -14,7 +14,8 @@
 
 # Scope: the Utils umbrella header + every transitively-owned detail header.
 INPUT                  = @PROJECT_SOURCE_DIR@/include/tycho/utils.h \
-                         @PROJECT_SOURCE_DIR@/include/tycho/detail/utils
+                         @PROJECT_SOURCE_DIR@/include/tycho/detail/utils \
+                         @PROJECT_SOURCE_DIR@/psiopt/include/tycho/detail/utils
 OUTPUT_DIRECTORY       = @CMAKE_CURRENT_BINARY_DIR@/doxygen-utils-strict
 
 # Coverage enforcement: surface undocumented entities instead of hiding them,

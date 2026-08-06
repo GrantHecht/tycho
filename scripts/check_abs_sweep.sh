@@ -48,7 +48,7 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
-SCAN_DIRS=(include/tycho src extensions)
+SCAN_DIRS=(include/tycho psiopt/include/tycho psiopt/src src extensions)
 
 # ---------------------------------------------------------------------------
 # Allowlists — exact "path:line" entries. Update the line number if the
@@ -61,12 +61,12 @@ SCAN_DIRS=(include/tycho src extensions)
 # the declaration itself, not just call sites).
 ABS_ALLOWLIST=(
     # numext::abs ADL overload for SuperScalar (Eigen::Array<double, W, 1>) packs.
-    "include/tycho/detail/typedefs/super_scalar_traits.h:130"
+    "psiopt/include/tycho/detail/typedefs/super_scalar_traits.h:130"
     # VectorFunction `abs(f)` expression-operator definition (builds a CwiseAbs node).
     "include/tycho/detail/vf/operators/math_overloads.h:199"
     # nanobind docstring raw string literal ("...(``abs(self)``)."), not code;
     # not caught by the `//`-comment filter above since it isn't `//`-prefixed.
-    "src/bindings/vf/dense_function_base_bind.h:901"
+    "src/bindings/vf/dense_function_base_bind.h:913"
 )
 
 # pow() — no expression-operator `pow(...)` *definition* exists in
