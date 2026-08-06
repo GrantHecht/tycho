@@ -52,8 +52,13 @@ include/                Public C++ API headers
       integrators/      RK steppers and coefficients
       optimal_control/  Phase/ODE transcription (core/, phase/, transcription/,
                           interp/, builder/)
-      solvers/          PSIOPT and NLP layer (linear/ for sparse solver interfaces)
       astro/            Astrodynamics models
+
+      solvers_glue/     OptimizationProblem's declaration (optimization_problem.h),
+                          the VectorFunction-coupled convenience layer over the
+                          solver — its implementation lives in src/solvers/
+      (the rest of the old solvers/ — the PSIOPT/NLP layer itself — moved
+       to the psiopt/ subproject below)
 
 src/                    C++ source code (private implementation)
   tycho_internal.h      Internal aggregate (forwards to include/tycho/tycho.h)
@@ -63,11 +68,38 @@ src/                    C++ source code (private implementation)
                           type_casters.h, tycho_module.cpp
   vf/                   tycho_vector_functions.h aggregate + function_domains.cpp
   optimal_control/      tycho_optimal_control.h aggregate + snake_case .cpp files
-  solvers/              tycho_solvers.h aggregate + snake_case .cpp files
+  solvers/              tycho_solvers.h aggregate + optimization_problem.cpp —
+                          the OptimizationProblem glue that turns VectorFunction
+                          expressions into psiopt constraint/objective functions;
+                          links against psiopt::psiopt (see psiopt/ below)
   astro/                tycho_astro.h aggregate + snake_case .cpp files
   integrators/          tycho_integrators.h aggregate (header-only)
   utils/                tycho_utils.h aggregate + private utility .cpp files
   typedefs/             tycho_typedefs.h aggregate (header-only)
+
+psiopt/                 PSIOPT, as its own CMake project (configures and
+                          builds standalone via `cmake -S psiopt`, or as a
+                          subdirectory of the root build — see
+                          psiopt/CMakeLists.txt). Nothing here depends on
+                          VectorFunction; the one piece of the old solver
+                          surface that does (OptimizationProblem) stays on
+                          the Tycho side, above.
+  include/tycho/detail/
+    solvers/            PSIOPT and NLP layer (globalization/ for the
+                          globalization mechanisms, linear/ for the sparse-KKT
+                          backends, ipopt/ for the alternative-backend adapter)
+    typedefs/           Eigen type aliases the solver needs, standalone
+    utils/              Threading, math helpers, type utilities, standalone
+  src/                  psiopt.cpp, non_linear_program.cpp, globalization,
+                          settings/printing, the Ipopt adapter (real +
+                          fallback-stub implementations) — snake_case .cpp
+                          files
+    utils/              Thread pool, core count, arena allocator, color text
+                          (the psiopt::utils static library)
+  tests/                Solver-core test suite (globalization, linear
+                          backends, ...) — the VectorFunction-free slice of
+                          the C++ suite; runs standalone and, via
+                          add_subdirectory(psiopt), as part of the root ctest
 
 tychopy/                Python package (pure-Python layer over _tychopy extension)
   VectorFunctions/      Python-side VectorFunction utilities
@@ -263,6 +295,28 @@ See `CMakePresets.json` for compiler paths. Sparse solver: Intel MKL.
 ```bash
 cd build && ninja -j<N> all    # N = 6 on all platforms (4 on RAM-constrained 16 GB)
 ```
+
+### ccache and the precompiled header
+
+The build auto-detects ccache. The PCH targets compile with
+`-Xclang -fno-pch-timestamp` (clang only) so that a regenerated-but-identical
+PCH does not force every consumer to recompile — but that benefit only
+materializes with this user-level `~/.config/ccache/ccache.conf`:
+
+```ini
+max_size = 40G                          # one full build writes several GiB;
+                                        # the 5G default thrashes
+sloppiness = pch_defines,time_macros    # allow caching PCH-consuming compiles
+pch_external_checksum = true            # consumers hash the PCH CONTENT, so a
+                                        # genuinely changed PCH still invalidates
+```
+
+Without `pch_external_checksum`, ccache refuses PCH-consuming compiles
+entirely (they were ~94% of this tree's uncacheable calls). Note the
+timestamp-free PCH means clang itself no longer rejects a stale PCH whose
+input headers changed only in content+mtime (size changes are still caught) —
+ccache's content checksum is the guard that replaces it, which is why the
+config above is recommended, not merely optional, on clang dev machines.
 
 ### Enzyme AD (experimental)
 
@@ -637,6 +691,22 @@ cd build && ninja -j<N> tycho_tests tycho_tests_light
 ctest --output-on-failure
 ```
 
+### Standalone PSIOPT smoke check
+
+`psiopt/` configures, builds, and tests on its own — it has no VectorFunction
+dependency. `scripts/check_standalone_psiopt.sh` proves this in one shot
+(fresh build directory, `-j2`, `conda activate tycho` first so `$CC`/`$CXX`
+are set):
+
+```bash
+conda activate tycho
+scripts/check_standalone_psiopt.sh
+```
+
+It configures `psiopt/` as the top-level project into `build-psiopt-standalone/`,
+builds it, and runs its `ctest` suite. Delete `build-psiopt-standalone/`
+afterward — it is a scratch directory, not a build to keep alongside `build/`.
+
 ### Fast iteration: isolated correctness probes
 
 Touching a widely-included header (`function_domains.h`, `common_functions.h`,
@@ -703,19 +773,21 @@ Expected: "Optimal Solution Found", objective ≈ 1.8013 s.
 
 ### Pre-Merge Verification Sequence
 
-Run all four steps in order before opening or merging any PR into `main`:
+Run all five steps in order before opening or merging any PR into `main`:
 
 1. **C++ unit tests** — `ctest --output-on-failure` — all must pass; also record the skipped count and investigate any change from the previous run (an environment-dependent `GTEST_SKIP()` can silently void a slice of the suite while ctest still prints green). `tests/cpp/solvers/ipopt/` is a separate, developer-opt-in test executable gated on `-DENABLE_IPOPT=ON` (see `ENABLE_IPOPT` above) — it is not built or run by the default `ctest` invocation and does not count toward the skipped total above.
 2. **Python examples** — `conda run -n tycho bash -c "MPLBACKEND=Agg python scripts/run_examples.py"` — all 34 must exit 0
 3. **C++ brachistochrone** — `cmake --preset <preset> -DBUILD_CPP_EXAMPLES=ON && cd build && ninja -j<N> brachistochrone_cpp && ./examples/cpp_examples/static/brachistochrone/brachistochrone_cpp` — must print "Optimal Solution Found", obj ≈ 1.8013 s
-4. **Benchmarks** — `bench/bench_track.sh compare` — justify any regressions in the PR description
+4. **Standalone PSIOPT smoke** — `scripts/check_standalone_psiopt.sh` (tycho conda env active) — psiopt must configure, build, and pass its ctest suite as a top-level project; this is what keeps "separately buildable" true rather than quietly rotting
+5. **Benchmarks** — `bench/bench_track.sh compare` — justify any regressions in the PR description
 
 ### Merge policy
 
 **All C++ unit tests must pass, all 34 Python examples must pass, the C++
-brachistochrone example must converge, and benchmarks must show no unexplained
-regressions before any pull request can be merged into `main`.** Fix broken examples
-or justify benchmark regressions in the same PR.
+brachistochrone example must converge, the standalone PSIOPT smoke check must
+pass, and benchmarks must show no unexplained regressions before any pull
+request can be merged into `main`.** Fix broken examples or justify benchmark
+regressions in the same PR.
 
 ## Benchmarking
 

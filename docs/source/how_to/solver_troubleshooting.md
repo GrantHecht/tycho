@@ -294,7 +294,7 @@ phase.optimizer.barrier_governor = slv.BarrierGovernors.monitored
 ## What these mechanisms are, briefly
 
 Citations below are transcribed from the source headers under
-`include/tycho/detail/solvers/globalization/`, which carry the full
+`psiopt/include/tycho/detail/solvers/globalization/`, which carry the full
 rule-by-rule derivations.
 
 **Filter acceptance and the switching skeleton.** The filter stores

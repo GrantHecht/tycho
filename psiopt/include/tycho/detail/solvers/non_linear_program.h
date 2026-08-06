@@ -37,6 +37,7 @@
 
 #include "tycho/detail/solvers/bound_set.h"
 #include "tycho/detail/solvers/constraint_function.h"
+#include "tycho/detail/solvers/fixed_variable_row.h"
 #include "tycho/detail/solvers/objective_function.h"
 #include "tycho/detail/typedefs/eigen_types.h"
 #include "tycho/detail/utils/thread_pool.h"
@@ -93,18 +94,6 @@ inline constexpr double kDefaultBoundRelaxFactor = 1.0e-8;
 /// declared, without saying so. A hundredth of max(1, |b|) is already far past
 /// any tolerance a caller would set.
 inline constexpr double kMaxBoundRelaxFactor = 1.0e-2;
-
-/// <summary>
-/// One internal equality row pinning a single primal variable to a value:
-/// x[index] - value = 0, addressed over the problem's own variable space and
-/// writing constraint row @p row.
-///
-/// The MakeConstraint fixed-variable treatment's whole payload. Defined in its
-/// own translation unit so that building it -- which needs the VectorFunction
-/// expression machinery -- does not put those headers in front of every
-/// NonLinearProgram compile.
-/// </summary>
-ConstraintFunction make_fixed_variable_row(int index, double value, int row);
 
 struct NonLinearProgram {
     using VectorXi = Eigen::VectorXi;

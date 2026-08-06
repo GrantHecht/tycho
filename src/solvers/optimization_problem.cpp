@@ -12,7 +12,7 @@
 //   - Python binding methods moved to src/bindings/ (nanobind)
 // =============================================================================
 
-#include "tycho/detail/solvers/optimization_problem.h"
+#include "tycho/detail/solvers_glue/optimization_problem.h"
 
 using tycho::solvers::ConstraintFunction;
 using tycho::solvers::ObjectiveFunction;

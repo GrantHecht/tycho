@@ -1,24 +1,37 @@
 ///////////////////////////////////////////////////////////////////////////////
 // Shared utilities for solver tests
 //
-// Provides the SolverTest fixture, a Brachistochrone phase builder
+// Provides the SolverTest fixture and a Brachistochrone phase builder
 // pre-configured for solver/Jet tests (silent output: print_level is inverted,
-// 0 is full output and 3+ is fully silent -- see PSIOPT::Settings::print_level_),
-// and InertSolverContext, an owning stand-in for globalization-component unit
-// tests that only need a SolverContext-satisfying signature, not a live solve.
+// 0 is full output and 3+ is fully silent -- see PSIOPT::Settings::print_level_).
+//
+// This is the VF-heavy half of what used to be a single
+// tests/cpp/solvers/solver_test_utils.h. The other half -- InertSolverContext,
+// which needs only tycho/detail/solvers/globalization/solver_context.h +
+// tycho/detail/solvers/jet.h and no VectorFunction dependency -- moved into
+// the psiopt project (psiopt/tests/solver_test_utils.h) alongside the
+// solver-internal tests that use nothing else.
+//
+// InertSolverContext is kept here too (duplicated, not cross-included from
+// psiopt/tests/): test_feasibility_switch.cpp and test_psiopt_native_bounds.cpp
+// stayed on the Tycho side (they build real VF phases via make_brach_solver_phase)
+// but also use InertSolverContext directly. A tycho-side test including a
+// psiopt/tests/ header would run the cross-boundary include the split was
+// meant to avoid in the other direction, so the ~15-line struct is duplicated
+// instead of shared. Keep both copies in sync if SolverContext's shape changes.
 ///////////////////////////////////////////////////////////////////////////////
 
 #pragma once
 
-#include "tycho/detail/solvers/globalization/solver_context.h"
-#include "tycho/detail/solvers/jet.h"
-#include <tycho/tycho.h>
 #include "oc_test_utils.h"
 #include "test_utils.h"
+#include "tycho/detail/solvers/globalization/solver_context.h"
+#include "tycho/detail/solvers/jet.h"
 #include <cmath>
 #include <functional>
 #include <gtest/gtest.h>
 #include <memory>
+#include <tycho/tycho.h>
 
 namespace TychoTest {
 
@@ -44,30 +57,8 @@ inline std::shared_ptr<ODEPhase<BrachODE>> make_brach_solver_phase(int n_segs = 
 ///////////////////////////////////////////////////////////////////////////////
 // Helper: an inert (all-zero-by-default) owning SolverContext for
 // globalization-component unit tests that only need a context satisfying a
-// signature, not a live solve.
-//
-// SolverContext (solver_context.h) is references-only, so nothing can hand
-// one back by value on its own -- every referenced object must outlive every
-// read through the context. InertSolverContext instead OWNS the storage
-// (Settings, KKT solver, scratch vector, dimension ints) as members and
-// ctx() returns a SolverContext borrowing from THIS object.
-//
-// CRITICAL LIFETIME RULE: keep the InertSolverContext instance alive (a
-// named local) for as long as the SolverContext returned by ctx() is used.
-// `InertSolverContext().ctx()` is a dangling-reference bug -- the temporary
-// is destroyed at the end of the full expression, taking its members (and
-// every reference ctx() handed out into them) with it. The correct pattern
-// is:
-//   TychoTest::InertSolverContext inert;
-//   inert.settings_.econ_tol_ = 1e-6;   // mutate before calling ctx()
-//   SomeComponent c(inert.ctx());       // `inert` outlives `c`'s use of it
-//
-// Dimensions default to zero (nlp_ stays null, restoration_/eval_errors_
-// stay null) -- the common case where the context is never dereferenced for
-// real work, only threaded through a signature. Tests that need a specific
-// KKT layout set primal_vars_/slack_vars_/equal_cons_/inequal_cons_/kkt_dim_
-// directly before calling ctx() (see e.g.
-// NestedRestorationMonotoneSchedule in test_feasibility_switch.cpp).
+// signature, not a live solve. See psiopt/tests/solver_test_utils.h for the
+// full contract/lifetime-rule documentation -- identical here.
 ///////////////////////////////////////////////////////////////////////////////
 
 struct InertSolverContext {

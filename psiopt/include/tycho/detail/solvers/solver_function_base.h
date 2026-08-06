@@ -28,13 +28,10 @@
 
 #include "tycho/detail/solvers/indexing_data.h"
 #include "tycho/detail/solvers/solver_interface_specs.h"
+#include "tycho/detail/solvers/threading_flags.h"
 #include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/vf/core/functional_flags.h"
 
 namespace tycho::solvers {
-
-// Import cross-namespace types used by the solver function base.
-using vf::ThreadingFlags;
 
 template <class FuncType> struct SolverFunctionBase {
     using MatrixXi = Eigen::MatrixXi;

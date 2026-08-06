@@ -12,7 +12,7 @@
 
 #include "tycho/detail/solvers/ipopt/tnlp_adapter.h"
 #include "tycho/detail/solvers/ipopt_backend.h"
-#include "tycho/detail/solvers/optimization_problem.h"
+#include "tycho/detail/solvers_glue/optimization_problem.h"
 
 #include <gtest/gtest.h>
 

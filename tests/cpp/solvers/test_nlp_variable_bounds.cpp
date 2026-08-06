@@ -16,7 +16,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "tycho/detail/solvers/non_linear_program.h"
-#include "tycho/detail/solvers/optimization_problem.h"
+#include "tycho/detail/solvers_glue/optimization_problem.h"
 
 #include <gtest/gtest.h>
 

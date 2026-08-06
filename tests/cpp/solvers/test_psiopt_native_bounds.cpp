@@ -36,7 +36,7 @@
 #include "tycho/detail/solvers/globalization/solver_context.h"
 #include "tycho/detail/solvers/globalization/watchdog.h"
 #include "tycho/detail/solvers/non_linear_program.h"
-#include "tycho/detail/solvers/optimization_problem.h"
+#include "tycho/detail/solvers_glue/optimization_problem.h"
 #include "tycho/detail/solvers/psiopt.h"
 #include "tycho/detail/solvers/psiopt_presets.h"
 
