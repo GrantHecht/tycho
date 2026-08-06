@@ -202,6 +202,7 @@ add_library(psiopt STATIC
     src/psiopt_print.cpp
     src/psiopt_settings.cpp
     src/non_linear_program.cpp
+    src/nlp_adapter.cpp
     src/solver_init.cpp
 )
 add_library(psiopt::psiopt ALIAS psiopt)

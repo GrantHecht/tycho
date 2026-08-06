@@ -59,6 +59,7 @@ set(PSIOPT_TEST_SOURCES
     test_l1_restoration.cpp
     test_merit_rules.cpp
     test_monitored_governor.cpp
+    test_nlp_adapter.cpp
     test_proximal_restoration.cpp
     test_recovery_dispatch_gate.cpp
     test_switching_acceptance.cpp
