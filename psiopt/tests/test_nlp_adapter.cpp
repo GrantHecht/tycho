@@ -143,3 +143,164 @@ TEST(NLPAdapterCoreTest, HessianOwnerFallsBackToEqThenObjective) {
     q->jc_.resize(0);
     EXPECT_EQ(NLPAdapterCore{q}.hess_owner_, NLPAdapterCore::HessOwner::Objective);
 }
+
+// Assembly test problem (n=2): f = x0^2 + x1^2; rows: x0 + 2*x1 = 4 (equality),
+// x0^2 + x1 <= 9 (upper-bounded), x0*x1 >= 1 (lower-bounded, negated by the
+// adapter). The Hessian structure carries a duplicate (0, 0) slot to prove
+// duplicate slots are summed rather than overwritten.
+struct AsmTestProblem : NLPProblem {
+    mutable int n_eval_g_ = 0, n_eval_jac_ = 0, n_eval_hess_ = 0;
+
+    int num_vars() const override { return 2; }
+    int num_cons() const override { return 3; }
+    int num_jac_nonzeros() const override { return 6; }
+    int num_hess_nonzeros() const override { return 4; }
+
+    void bounds(Eigen::Ref<Eigen::VectorXd> xl, Eigen::Ref<Eigen::VectorXd> xu,
+                Eigen::Ref<Eigen::VectorXd> gl, Eigen::Ref<Eigen::VectorXd> gu) const override {
+        xl << -kInf, -kInf;
+        xu << kInf, kInf;
+        gl << 4.0, -kInf, 1.0;
+        gu << 4.0, 9.0, kInf;
+    }
+    void eval_f(ConstEigenRef<Eigen::VectorXd> x, double &f) const override {
+        f = x[0] * x[0] + x[1] * x[1];
+    }
+    void eval_grad_f(ConstEigenRef<Eigen::VectorXd> x,
+                     Eigen::Ref<Eigen::VectorXd> g) const override {
+        g[0] = 2.0 * x[0];
+        g[1] = 2.0 * x[1];
+    }
+    void eval_g(ConstEigenRef<Eigen::VectorXd> x, Eigen::Ref<Eigen::VectorXd> g) const override {
+        n_eval_g_++;
+        g[0] = x[0] + 2.0 * x[1];
+        g[1] = x[0] * x[0] + x[1];
+        g[2] = x[0] * x[1];
+    }
+    void jac_structure(Eigen::Ref<Eigen::VectorXi> r,
+                       Eigen::Ref<Eigen::VectorXi> c) const override {
+        r << 0, 0, 1, 1, 2, 2;
+        c << 0, 1, 0, 1, 0, 1;
+    }
+    void hess_structure(Eigen::Ref<Eigen::VectorXi> r,
+                        Eigen::Ref<Eigen::VectorXi> c) const override {
+        r << 0, 1, 1, 0;
+        c << 0, 1, 0, 0;
+    }
+    void eval_jac(ConstEigenRef<Eigen::VectorXd> x, Eigen::Ref<Eigen::VectorXd> v) const override {
+        n_eval_jac_++;
+        v[0] = 1.0;
+        v[1] = 2.0;
+        v[2] = 2.0 * x[0];
+        v[3] = 1.0;
+        v[4] = x[1];
+        v[5] = x[0];
+    }
+    void eval_hess(ConstEigenRef<Eigen::VectorXd>, double obj_factor,
+                   ConstEigenRef<Eigen::VectorXd> lambda,
+                   Eigen::Ref<Eigen::VectorXd> v) const override {
+        n_eval_hess_++;
+        v[0] = 1.5 * obj_factor + 2.0 * lambda[1];
+        v[1] = 2.0 * obj_factor;
+        v[2] = lambda[2];
+        v[3] = 0.5 * obj_factor;
+    }
+};
+
+TEST(NLPAdapterAssemblyTest, KktMatchesDenseReferenceAndCallbacksAreCounted) {
+    auto prob = std::make_shared<AsmTestProblem>();
+    auto core = std::make_shared<NLPAdapterCore>(prob);
+    auto nlp = tycho::solvers::make_nlp_program(core);
+
+    Eigen::SparseMatrix<double, Eigen::RowMajor> kkt(nlp->kkt_dim_, nlp->kkt_dim_);
+    nlp->analyze_sparsity(kkt);
+    // analyze_sparsity establishes the sparsity pattern by summing dummy 1.0
+    // triplets at every physical slot (duplicate-slot claims sum, so a slot
+    // two claims share reads back as 2.0) -- it is not a zeroed matrix, so a
+    // fresh eval_kkt scatter must start from an explicit zero.
+    Eigen::Map<Eigen::VectorXd>(kkt.valuePtr(), kkt.nonZeros()).setZero();
+
+    Eigen::VectorXd X(2);
+    X << 1.3, 0.7;
+    Eigen::VectorXd LE(1), LI(2);
+    LE << 0.4;
+    LI << 0.9, 0.2;
+    const double sigma = 2.0;
+
+    double val = 0.0;
+    Eigen::VectorXd PGX = Eigen::VectorXd::Zero(nlp->primal_vars_);
+    Eigen::VectorXd AGX = Eigen::VectorXd::Zero(nlp->primal_vars_);
+    Eigen::VectorXd FXE = Eigen::VectorXd::Zero(nlp->equal_cons_);
+    Eigen::VectorXd FXI = Eigen::VectorXd::Zero(nlp->inequal_cons_);
+    nlp->eval_kkt(sigma, X, LE, LI, val, PGX, AGX, FXE, FXI, kkt);
+
+    const double x0 = X[0], x1 = X[1];
+    EXPECT_NEAR(val, sigma * (x0 * x0 + x1 * x1), 1e-14);
+    EXPECT_NEAR(FXE[0], x0 + 2 * x1 - 4.0, 1e-14);
+    EXPECT_NEAR(FXI[0], x0 * x0 + x1 - 9.0, 1e-14);
+    EXPECT_NEAR(FXI[1], 1.0 - x0 * x1, 1e-14);
+    EXPECT_NEAR(PGX[0], sigma * 2 * x0, 1e-14);
+    EXPECT_NEAR(PGX[1], sigma * 2 * x1, 1e-14);
+    // Adjoint gradient: J_eq^T LE + J_iq^T LI over the SOLVER rows (lower negated).
+    EXPECT_NEAR(AGX[0], LE[0] * 1.0 + LI[0] * 2 * x0 + LI[1] * (-x1), 1e-14);
+    EXPECT_NEAR(AGX[1], LE[0] * 2.0 + LI[0] * 1.0 + LI[1] * (-x0), 1e-14);
+
+    // User-space lambda: eq passes through, upper passes through, lower negates.
+    const double lam1 = LI[0], lam2 = -LI[1];
+    // NonLinearProgram::analyze_sparsity stores every claimed (row, col) pair
+    // physically at (min(row, col), max(row, col)) -- PSIOPT's sparse backends
+    // want the upper triangle of the symmetric KKT system filled, so a claim
+    // like (constraint_row, variable_col), with constraint_row always the
+    // larger index, is read back via kkt.coeff(variable_col, constraint_row).
+    // The Hessian block's own diagonal entries need no such reordering.
+    EXPECT_NEAR(kkt.coeff(0, 0), sigma * 2 + 2 * lam1, 1e-14); // duplicate slots summed
+    EXPECT_NEAR(kkt.coeff(1, 1), sigma * 2, 1e-14);
+    EXPECT_NEAR(kkt.coeff(0, 1), lam2, 1e-14);
+    // Jacobian block: constraint rows sit after primals and slacks.
+    const int con0 = nlp->primal_vars_ + nlp->slack_vars_;
+    EXPECT_NEAR(kkt.coeff(0, con0 + 0), 1.0, 1e-14);
+    EXPECT_NEAR(kkt.coeff(1, con0 + 0), 2.0, 1e-14);
+    const int iq0 = con0 + nlp->equal_cons_;
+    EXPECT_NEAR(kkt.coeff(0, iq0 + 0), 2 * x0, 1e-14);
+    EXPECT_NEAR(kkt.coeff(1, iq0 + 0), 1.0, 1e-14);
+    EXPECT_NEAR(kkt.coeff(0, iq0 + 1), -x1, 1e-14);
+    EXPECT_NEAR(kkt.coeff(1, iq0 + 1), -x0, 1e-14);
+
+    // Exactly one user callback of each kind for the whole assembly.
+    EXPECT_EQ(prob->n_eval_g_, 1);
+    EXPECT_EQ(prob->n_eval_jac_, 1);
+    EXPECT_EQ(prob->n_eval_hess_, 1);
+}
+
+TEST(NLPAdapterAssemblyTest, NoObjectiveChainUsesZeroObjFactorConsumeOnce) {
+    auto prob = std::make_shared<AsmTestProblem>();
+    auto core = std::make_shared<NLPAdapterCore>(prob);
+    auto nlp = tycho::solvers::make_nlp_program(core);
+    Eigen::SparseMatrix<double, Eigen::RowMajor> kkt(nlp->kkt_dim_, nlp->kkt_dim_);
+    nlp->analyze_sparsity(kkt);
+
+    Eigen::VectorXd X(2), LE(1), LI(2);
+    X << 1.3, 0.7;
+    LE << 0.4;
+    LI << 0.9, 0.2;
+    double val = 0.0;
+    Eigen::VectorXd PGX = Eigen::VectorXd::Zero(nlp->primal_vars_);
+    Eigen::VectorXd AGX = Eigen::VectorXd::Zero(nlp->primal_vars_);
+    Eigen::VectorXd FXE = Eigen::VectorXd::Zero(nlp->equal_cons_);
+    Eigen::VectorXd FXI = Eigen::VectorXd::Zero(nlp->inequal_cons_);
+    auto zero_kkt = [&] { Eigen::Map<Eigen::VectorXd>(kkt.valuePtr(), kkt.nonZeros()).setZero(); };
+
+    // A full assembly first: leaves NO stale objective-scale record behind...
+    nlp->eval_kkt(2.0, X, LE, LI, val, PGX, AGX, FXE, FXI, kkt);
+    // ...so the no-objective assembly gets a pure-constraint Hessian.
+    zero_kkt();
+    nlp->eval_kkt_no(2.0, X, LE, LI, val, PGX, AGX, FXE, FXI, kkt);
+    EXPECT_NEAR(kkt.coeff(1, 1), 0.0, 1e-14);       // the 2*sigma term is gone
+    EXPECT_NEAR(kkt.coeff(0, 0), 2 * LI[0], 1e-14); // constraint curvature stays
+    // Physically stored at (min, max) -- see the comment in the previous test.
+    EXPECT_NEAR(kkt.coeff(0, 1), -LI[1], 1e-14);
+    // And a full assembly afterwards has the objective curvature back.
+    zero_kkt();
+    nlp->eval_kkt(2.0, X, LE, LI, val, PGX, AGX, FXE, FXI, kkt);
+    EXPECT_NEAR(kkt.coeff(1, 1), 2.0 * 2.0, 1e-14);
+}

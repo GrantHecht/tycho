@@ -7,6 +7,8 @@
 #include <cmath>
 #include <limits>
 
+#include "tycho/detail/solvers/non_linear_program.h"
+
 namespace tycho::solvers {
 
 namespace {
@@ -253,6 +255,48 @@ void NLPAdapterCore::eval_hessian_values(ConstEigenRef<Eigen::VectorXd> x, doubl
     if (hess_nnz_ > 0) {
         problem_->eval_hess(x, obj_factor, lambda_user_, hess_vals_);
     }
+}
+
+std::shared_ptr<NonLinearProgram> make_nlp_program(const std::shared_ptr<NLPAdapterCore> &core) {
+    const int n = core->n_;
+    Eigen::MatrixXi vindex(n, 1);
+    for (int i = 0; i < n; i++) {
+        vindex(i, 0) = i;
+    }
+
+    auto nlp = std::make_shared<NonLinearProgram>(1);
+
+    ObjectiveFunction obj(ObjectiveInterface(NLPObjectivePiece(core)), vindex);
+    obj.thread_mode_ = ThreadingFlags::MainThread;
+    nlp->objectives_.push_back(obj);
+
+    if (core->rows_.num_eq_ > 0) {
+        Eigen::MatrixXi cindex(core->rows_.num_eq_, 1);
+        for (int k = 0; k < core->rows_.num_eq_; k++) {
+            cindex(k, 0) = k;
+        }
+        ConstraintFunction eq(ConstraintInterface(NLPConstraintPiece(core, false)), vindex, cindex);
+        eq.thread_mode_ = ThreadingFlags::MainThread;
+        nlp->equality_constraints_.push_back(eq);
+    }
+    if (core->rows_.num_iq_ > 0) {
+        Eigen::MatrixXi cindex(core->rows_.num_iq_, 1);
+        for (int k = 0; k < core->rows_.num_iq_; k++) {
+            cindex(k, 0) = k;
+        }
+        ConstraintFunction iq(ConstraintInterface(NLPConstraintPiece(core, true)), vindex, cindex);
+        iq.thread_mode_ = ThreadingFlags::MainThread;
+        nlp->inequality_constraints_.push_back(iq);
+    }
+
+    for (int i = 0; i < n; i++) {
+        if (std::isfinite(core->x_lower_[i]) || std::isfinite(core->x_upper_[i])) {
+            nlp->set_variable_bound(i, core->x_lower_[i], core->x_upper_[i]);
+        }
+    }
+
+    nlp->make_nlp(n, core->rows_.num_eq_, core->rows_.num_iq_);
+    return nlp;
 }
 
 } // namespace tycho::solvers
