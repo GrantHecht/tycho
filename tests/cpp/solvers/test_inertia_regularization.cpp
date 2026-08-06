@@ -13,16 +13,23 @@
 // rank-deficient (duplicated-equality) KKT the dual shift is meant to make
 // factorizable, a parity smoke on a well-conditioned problem under both modes,
 // and the mode composed with a nested l1 restoration on an infeasible problem
-// (the dual-shift suppression path, exercised end-to-end).
+// (the dual-shift suppression path, exercised end-to-end). Layer 2 also carries
+// the composition sentinels for native variable bounds: a solution sitting ON a
+// bound drives the condensed bound curvature on the primal diagonal enormous,
+// and a healthy system in that regime must still be accepted on its own
+// inertia.
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "solver_test_utils.h"
 
+#include "tycho/detail/solvers/barrier_math.h"
 #include "tycho/detail/solvers/globalization/inertia_regularization.h"
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include <Eigen/Core>
 
@@ -198,6 +205,92 @@ std::unique_ptr<OptimizationProblem> build_inertia_wellcond_nlp() {
     return prob;
 }
 
+// A convex NLP with a natively bounded variable whose solution sits ON its
+// upper bound:
+//
+//   min (x0 - 2)^2 + x1^2   s.t.   x0 + x1 = 1.5,   lower <= x0 <= upper.
+//
+// On the constraint manifold the objective minimizes at x0 = 1.75, decisively
+// outside any box this file passes, so the upper bound is active at the
+// solution: x* = (upper, 1.5 - upper), and at upper = 1 the analytic optimum is
+// (1, 0.5) with objective 1.25. Stationarity there fixes the multipliers --
+// 2*x1 + lambda = 0 gives lambda = -1, and 2*(x0 - 2) + lambda + z_U = 0 gives
+// z_U = 3 -- so the bound multiplier stays O(1) while the barrier drives the
+// distance to the bound toward zero, which is exactly the regime that makes the
+// condensed curvature z_U / d blow up.
+//
+// The equality row is not decoration: it gives the KKT system a constraint
+// block, so the inertia the factorization is required to report is
+// (kkt_dim - 1, 1, 0) rather than a trivially all-positive one.
+std::unique_ptr<OptimizationProblem> build_inertia_active_bound_nlp(double lower, double upper) {
+    using tycho::vf::Arguments;
+    using tycho::vf::GenericFunction;
+    auto prob = std::make_unique<OptimizationProblem>();
+    prob->set_vars((Eigen::VectorXd(2) << 0.5, 1.0).finished());
+    {
+        auto args = Arguments<2>();
+        auto x0 = args.coeff<0>();
+        auto x1 = args.coeff<1>();
+        prob->add_objective(GenericFunction<-1, 1>((x0 - 2.0) * (x0 - 2.0) + x1 * x1),
+                            (Eigen::VectorXi(2) << 0, 1).finished());
+    }
+    {
+        auto args = Arguments<2>();
+        auto x0 = args.coeff<0>();
+        auto x1 = args.coeff<1>();
+        prob->add_equal_con(GenericFunction<-1, -1>(x0 + x1 - 1.5),
+                            (Eigen::VectorXi(2) << 0, 1).finished());
+    }
+    prob->optimizer_->set_print_level(3);
+    prob->optimizer_->settings().inertia_mode_ = InertiaModes::classic;
+    // Bound declarations are staged on the NonLinearProgram, which transcription
+    // creates -- so the declaration has to follow it. make_nlp then
+    // re-materializes the staged box (the row count it is handed is the user's
+    // own, user_equal_cons_) and the solver is re-pointed at the rebuilt
+    // program. optimize() below does not re-transcribe: transcribe() clears the
+    // pending flag, so the bound survives into the solve.
+    prob->transcribe();
+    prob->nlp_->set_variable_bound(0, lower, upper);
+    prob->nlp_->make_nlp(prob->nlp_->primal_vars_, prob->nlp_->user_equal_cons_,
+                         prob->nlp_->inequal_cons_);
+    prob->optimizer_->set_nlp(prob->nlp_);
+    return prob;
+}
+
+// What the bound machinery leaves on the primal (1,1) diagonal at a point, and
+// how close that point is to a bound. Computed with the shipped kernel rather
+// than a parallel implementation, so the number reported here is the one the
+// solver actually assembled.
+struct InertiaBoundCurvature {
+    double max_sigma_;
+    double min_distance_;
+};
+
+InertiaBoundCurvature inertia_bound_curvature_at(const Eigen::VectorXd &x,
+                                                 const tycho::solvers::BoundSet &b,
+                                                 const tycho::solvers::BoundDualState &z) {
+    Eigen::VectorXd sigma = Eigen::VectorXd::Zero(x.size());
+    tycho::solvers::detail::accumulate_bound_sigma(x, b, z, sigma);
+    double dmin = std::numeric_limits<double>::infinity();
+    for (int k = 0; k < b.lower_idx_.size(); k++) {
+        dmin = std::min(dmin, x[b.lower_idx_[k]] - b.lower_val_[k]);
+    }
+    for (int k = 0; k < b.upper_idx_.size(); k++) {
+        dmin = std::min(dmin, b.upper_val_[k] - x[b.upper_idx_[k]]);
+    }
+    return {sigma.maxCoeff(), dmin};
+}
+
+// Floor the curvature has to clear for the sentinels below to be about anything.
+// It is not a tuned constant: a converged solve on these problems reports a
+// barrier error below bar_tol_ = 1e-6, that error is entirely the bound pair's
+// complementarity z*d (no inequality rows means no slack pairs to dilute it),
+// and z settles at 3 -- so sigma = z/d = z^2/(z*d) > 9/1e-6 = 9e6 follows from
+// the convergence test itself. Measured values are far past it (order 1e12 on
+// the wide box, 1e7 on the narrow one), and the Hessian entries the curvature
+// lands beside are order 2.
+constexpr double kInertiaLargeSigma = 1.0e6;
+
 } // namespace
 
 // InertiaRegularizationSolve_ClassicDegeneracyLatchTracksSingularity_Test reaches
@@ -214,7 +307,9 @@ std::unique_ptr<OptimizationProblem> build_inertia_wellcond_nlp() {
 // blocks, at true global scope; build_inertia_duplicated_equality_nlp() and
 // build_inertia_wellcond_nlp() remain reachable here because unqualified lookup
 // from an enclosing scope finds anonymous-namespace members via their implicit
-// using-directive (that direction is unaffected by the issue above).
+// using-directive (that direction is unaffected by the issue above). The two
+// bound-curvature sentinels that follow it are befriended and placed the same
+// way, for the same reason, and reach bounds_ / bound_duals_ as well.
 
 // The degeneracy latch (Ipopt hess/jac-degenerate adaptation, sticky per phase):
 // set once delta_c is engaged for a singular factorization, so later iterations
@@ -244,6 +339,92 @@ TEST(InertiaRegularizationSolve, ClassicDegeneracyLatchTracksSingularity) {
     (void)healthy->optimize();
     EXPECT_FALSE(healthy->optimizer_->dc_latched_)
         << "a full-rank problem must never engage delta_c or the latch";
+}
+
+// Composition sentinel: native variable bounds against the inertia machinery.
+//
+// Eliminating the bound-multiplier rows condenses a curvature term z/d onto the
+// primal (1,1) KKT diagonal for every bounded variable, where d is the distance
+// to the bound. When the solution sits ON a bound the barrier drives d -> 0 as
+// mu -> 0 while z stays O(1), so that diagonal entry grows without bound (up to
+// the multiplier clamp) even though the system stays full rank and well posed.
+// The full inertia condition accepts a factorization only at exactly
+// (kkt_dim - m, m, 0), and treats anything else -- a reported rank deficiency,
+// or too few negative eigenvalues -- as a singularity, engaging the on-demand
+// dual shift and setting the sticky per-phase latch. A large curvature entry
+// makes the corresponding small eigenvalue of the system small in the opposite
+// sense, which is precisely the shape a factorization backend could mistake for
+// a zero pivot.
+//
+// So: on a healthy, full-rank, bounded problem whose solution is on a bound,
+// the solve must converge outright and the singularity signal must never have
+// fired -- no engaged dual shift, no latch, no exhausted ladder. Neither half
+// is backend-conditional: a full-rank system reported as singular is a bug on
+// any backend.
+TEST(InertiaRegularizationSolve, ActiveBoundCurvatureNeverTripsSingularitySignal) {
+    auto prob = build_inertia_active_bound_nlp(/*lower=*/0.0, /*upper=*/1.0);
+    const auto flag = prob->optimize();
+    auto &opt = *prob->optimizer_;
+
+    // Not ACCEPTABLE (that would mean the solve limped in on the relaxed
+    // tolerances), and not SINGULAR_KKT (an exhausted ladder).
+    EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
+    const auto &r = opt.result();
+    ASSERT_EQ(r.primals_.size(), 2);
+    EXPECT_NEAR(r.primals_[0], 1.0, 1.0e-5);
+    EXPECT_NEAR(r.primals_[1], 0.5, 1.0e-5);
+    EXPECT_NEAR(r.obj_val_, 1.25, 1.0e-5);
+
+    // The constraint block really is part of the inertia count, and there are no
+    // inequality rows -- so no slack pairs dilute the barrier account, and the
+    // curvature the sentinel is about is the only one on the diagonal.
+    EXPECT_EQ(opt.equal_cons_, 1);
+    EXPECT_EQ(opt.inequal_cons_, 0);
+
+    // The regime is asserted, not assumed: without a genuinely large curvature
+    // this test would pass vacuously. Nothing is eliminated from this problem
+    // (no variable is fixed), so the solution vector and the bound set index the
+    // same space.
+    ASSERT_NE(opt.bounds_, nullptr);
+    const auto curv = inertia_bound_curvature_at(r.primals_, *opt.bounds_, opt.bound_duals_);
+    EXPECT_GT(curv.max_sigma_, kInertiaLargeSigma)
+        << "the bound curvature never got large, so this solve did not exercise "
+           "the regime the sentinel is about (closest bound distance "
+        << curv.min_distance_ << ")";
+
+    EXPECT_FALSE(opt.dc_latched_)
+        << "a full-rank bounded system whose solution sits on a bound must not "
+           "read as singular (bound curvature "
+        << curv.max_sigma_ << ", closest bound distance " << curv.min_distance_ << ")";
+}
+
+// The same problem with the box tightened around the solution, so the distance
+// to a bound is small from the interior push onward rather than only at the end
+// -- the curvature is large for essentially every factorization of the solve,
+// not just the last few. Same assertions.
+TEST(InertiaRegularizationSolve, NarrowBoxCurvatureNeverTripsSingularitySignal) {
+    auto prob = build_inertia_active_bound_nlp(/*lower=*/0.99, /*upper=*/1.0);
+    const auto flag = prob->optimize();
+    auto &opt = *prob->optimizer_;
+
+    EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
+    const auto &r = opt.result();
+    ASSERT_EQ(r.primals_.size(), 2);
+    EXPECT_NEAR(r.primals_[0], 1.0, 1.0e-5);
+    EXPECT_NEAR(r.primals_[1], 0.5, 1.0e-5);
+    EXPECT_NEAR(r.obj_val_, 1.25, 1.0e-5);
+
+    ASSERT_NE(opt.bounds_, nullptr);
+    const auto curv = inertia_bound_curvature_at(r.primals_, *opt.bounds_, opt.bound_duals_);
+    EXPECT_GT(curv.max_sigma_, kInertiaLargeSigma)
+        << "the bound curvature never got large, so this solve did not exercise "
+           "the regime the sentinel is about (closest bound distance "
+        << curv.min_distance_ << ")";
+
+    EXPECT_FALSE(opt.dc_latched_)
+        << "a full-rank bounded system solved inside a narrow box must not read "
+           "as singular (bound curvature "
+        << curv.max_sigma_ << ", closest bound distance " << curv.min_distance_ << ")";
 }
 
 namespace {

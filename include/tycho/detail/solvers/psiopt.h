@@ -83,6 +83,13 @@ class DivergencePersistenceHarness;
 // generic acceptance strategy (see test_soc_generic_acceptance.cpp).
 class SocGenericHarness;
 class InertiaRegularizationSolve_ClassicDegeneracyLatchTracksSingularity_Test;
+// Composition sentinels for native variable bounds against the inertia
+// machinery: a solution sitting ON a bound drives the condensed bound curvature
+// on the primal diagonal very large, and these read dc_latched_ / bounds_ /
+// bound_duals_ to check that a healthy system's factorization is still accepted
+// on its own inertia (see test_inertia_regularization.cpp).
+class InertiaRegularizationSolve_ActiveBoundCurvatureNeverTripsSingularitySignal_Test;
+class InertiaRegularizationSolve_NarrowBoxCurvatureNeverTripsSingularitySignal_Test;
 // Test harness for the native variable-bound machinery: reaches the private
 // interior push, the bound-multiplier direction/update helpers and the
 // bound_duals_/bounds_ state so each can be checked against a hand calculation
@@ -845,6 +852,8 @@ class PSIOPT {
     friend class ::DivergencePersistenceHarness;
     friend class ::SocGenericHarness;
     friend class ::InertiaRegularizationSolve_ClassicDegeneracyLatchTracksSingularity_Test;
+    friend class ::InertiaRegularizationSolve_ActiveBoundCurvatureNeverTripsSingularitySignal_Test;
+    friend class ::InertiaRegularizationSolve_NarrowBoxCurvatureNeverTripsSingularitySignal_Test;
     friend class ::NativeBoundsHarness;
 
     Settings settings_;
