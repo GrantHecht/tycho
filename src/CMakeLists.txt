@@ -17,6 +17,13 @@ target_precompile_headers(pch PRIVATE pch.h
     vf/tycho_vector_functions.h)
 target_include_directories(pch PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
 target_compile_options(pch PRIVATE ${COMPILE_FLAGS})
+# Omit the embedded timestamp from the generated PCH so ccache can reuse cached
+# object files across PCH regenerations (with sloppiness=pch_defines,time_macros
+# and pch_external_checksum in the user's ccache config, consumers hash the PCH
+# CONTENT — a byte-identical PCH after an innocuous regen then costs nothing).
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_options(pch PRIVATE -Xclang -fno-pch-timestamp)
+endif()
 
 
 ## Put all ".h"/".cpp" pairs here

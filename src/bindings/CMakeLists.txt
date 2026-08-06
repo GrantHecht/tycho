@@ -22,6 +22,11 @@ target_precompile_headers(pch_bindings PRIVATE
 target_compile_definitions(pch_bindings PRIVATE TYCHO_PYTHON_BINDINGS)
 target_include_directories(pch_bindings PRIVATE ${_TYCHO_SRC_INCLUDES} ${_TYCHO_BINDINGS_INCLUDES} ${INCLUDE_DIRS})
 target_compile_options(pch_bindings PUBLIC ${BINDING_COMPILE_FLAGS})
+# Timestamp-free PCH for ccache reuse across regenerations — see the matching
+# option on the `pch` target in src/CMakeLists.txt for the rationale.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_options(pch_bindings PRIVATE -Xclang -fno-pch-timestamp)
+endif()
 target_link_libraries(pch_bindings PRIVATE nanobind-static)
 
 #-------------------------------------------------------------------------------
