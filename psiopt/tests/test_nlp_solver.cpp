@@ -437,3 +437,75 @@ TEST(NLPSolverTest, SeedingBeforePsioptEntryThrows) {
     Eigen::VectorXd x0 = Eigen::VectorXd::Zero(2);
     EXPECT_THROW(solver.optimize(x0), std::invalid_argument);
 }
+
+// The no-arg optimize() override reuses whatever is already in
+// active_variables_ as the input iterate -- must match the x0-arg path
+// solving from the same starting point.
+TEST(NLPSolverTest, NoArgOptimizeUsesActiveVariables) {
+    Eigen::VectorXd x0 = Eigen::VectorXd::Zero(2);
+
+    tycho::solvers::NLPSolver x0_solver(std::make_shared<EqOnlyProblem>());
+    x0_solver.optimizer_->set_print_level(10);
+    ASSERT_EQ(x0_solver.optimize(x0), tycho::ConvergenceFlags::CONVERGED);
+
+    tycho::solvers::NLPSolver noarg_solver(std::make_shared<EqOnlyProblem>());
+    noarg_solver.optimizer_->set_print_level(10);
+    noarg_solver.active_variables_ = x0;
+    ASSERT_EQ(noarg_solver.optimize(), tycho::ConvergenceFlags::CONVERGED);
+
+    EXPECT_LT((noarg_solver.return_x() - x0_solver.return_x()).lpNorm<Eigen::Infinity>(), 1e-8);
+}
+
+// A fresh solver's active_variables_ is a 0-element vector; the no-arg
+// optimize() override must hit the size-mismatch check in run(), not attempt
+// a solve from an empty iterate.
+TEST(NLPSolverTest, NoArgOptimizeOnFreshSolverThrows) {
+    tycho::solvers::NLPSolver solver(std::make_shared<EqOnlyProblem>());
+    solver.optimizer_->set_print_level(10);
+    EXPECT_THROW(solver.optimize(), std::invalid_argument);
+}
+
+// jet_initialize() transcribes once; a subsequent no-arg solve must not
+// re-transcribe; jet_release() resets do_transcription_ so the next x0-arg
+// solve builds a fresh NonLinearProgram from scratch.
+TEST(NLPSolverTest, JetLifecycleRoundTrip) {
+    tycho::solvers::NLPSolver solver(std::make_shared<EqOnlyProblem>());
+    solver.optimizer_->set_print_level(10);
+
+    solver.jet_initialize();
+    EXPECT_FALSE(solver.do_transcription_);
+
+    solver.active_variables_ = Eigen::VectorXd::Zero(2);
+    ASSERT_EQ(solver.optimize(), tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_FALSE(solver.do_transcription_); // no re-transcription happened
+
+    solver.jet_release();
+    EXPECT_TRUE(solver.do_transcription_);
+    solver.optimizer_->set_print_level(10); // jet_release() resets print level; re-silence
+
+    Eigen::VectorXd x0 = Eigen::VectorXd::Zero(2);
+    EXPECT_EQ(solver.optimize(x0), tycho::ConvergenceFlags::CONVERGED); // fresh transcription works
+}
+
+// starting_multipliers() returning a non-finite entry must fail the
+// allFinite() guard in apply_starting_multipliers -- before ever reaching the
+// seeding placeholder throw, and with a distinct message.
+struct NonFiniteSeedProblem : EqOnlyProblem {
+    bool starting_multipliers(Eigen::Ref<Eigen::VectorXd> lambda) const override {
+        lambda[0] = std::numeric_limits<double>::quiet_NaN();
+        return true;
+    }
+    std::string name() const override { return "NonFiniteSeedProblem"; }
+};
+
+TEST(NLPSolverTest, NonFiniteStartingMultipliersThrow) {
+    tycho::solvers::NLPSolver solver(std::make_shared<NonFiniteSeedProblem>());
+    solver.optimizer_->set_print_level(10);
+    Eigen::VectorXd x0 = Eigen::VectorXd::Zero(2);
+    try {
+        solver.optimize(x0);
+        FAIL() << "expected std::invalid_argument";
+    } catch (const std::invalid_argument &e) {
+        EXPECT_NE(std::string(e.what()).find("non-finite"), std::string::npos);
+    }
+}
