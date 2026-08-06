@@ -3178,6 +3178,27 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     return XSL;
 }
 
+void tycho::solvers::PSIOPT::apply_staged_multipliers(Eigen::VectorXd &XSL) {
+    // Consume the staging even on the throw path: a bad seed must not leak
+    // into an unrelated later solve.
+    this->mults_staged_ = false;
+    if (this->staged_eq_mults_.size() != this->equal_cons_ ||
+        this->staged_iq_mults_.size() != this->inequal_cons_) {
+        throw std::invalid_argument(fmt::format(
+            "PSIOPT: seeded multipliers sized ({} eq, {} iq) do not match the problem's ({} eq, "
+            "{} iq) constraint rows",
+            this->staged_eq_mults_.size(), this->staged_iq_mults_.size(), this->equal_cons_,
+            this->inequal_cons_));
+    }
+    KKTVector v_xsl = kkt_view(XSL);
+    if (this->equal_cons_ > 0) {
+        v_xsl.eq_lmults() = this->staged_eq_mults_;
+    }
+    for (int i = 0; i < this->inequal_cons_; i++) {
+        v_xsl.iq_lmults()[i] = std::max(this->staged_iq_mults_[i], kSeededIqMultFloor);
+    }
+}
+
 Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd &x,
                                                            std::initializer_list<PhaseStep> steps) {
     if (!this->nlp_) {
@@ -3309,6 +3330,9 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
 
     bool docompute = claim_kkt_analysis();
     Eigen::VectorXd XSL = this->init_impl(x_solver, settings_.init_mu_, docompute);
+    if (this->mults_staged_) {
+        this->apply_staged_multipliers(XSL);
+    }
 
     auto it = steps.begin();
     auto end = steps.end();

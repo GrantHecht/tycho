@@ -832,6 +832,33 @@ class PSIOPT {
     }
     void disable_late_callback() { this->late_callback_enabled_ = false; }
 
+    // --- Constraint-multiplier seeding ---
+    /// Floor applied to seeded inequality multipliers when they are installed:
+    /// the slack-complementarity update divides by these values, so a seed at
+    /// or below zero would put the very first iterate outside the interior the
+    /// method is defined on.
+    static constexpr double kSeededIqMultFloor = 1.0e-8;
+
+    /// Staged constraint-multiplier seeds, applied once at the start of the
+    /// NEXT solve/optimize call (after the standard one-shot initializer runs)
+    /// and then cleared. Sizes must match the problem's equality and
+    /// inequality row counts exactly at that point. An unseeded solve does not
+    /// touch any of this.
+    Eigen::VectorXd staged_eq_mults_;
+    Eigen::VectorXd staged_iq_mults_;
+    bool mults_staged_ = false;
+
+    void set_initial_multipliers(const Eigen::VectorXd &eq_mults, const Eigen::VectorXd &iq_mults) {
+        this->staged_eq_mults_ = eq_mults;
+        this->staged_iq_mults_ = iq_mults;
+        this->mults_staged_ = true;
+    }
+    void clear_initial_multipliers() {
+        this->staged_eq_mults_.resize(0);
+        this->staged_iq_mults_.resize(0);
+        this->mults_staged_ = false;
+    }
+
     // --- Printing ---
     static void print_header() { fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65); }
 
@@ -1118,6 +1145,11 @@ class PSIOPT {
                              double obj_scale, double MuI, Eigen::Ref<Eigen::VectorXd> xsl);
 
     Eigen::VectorXd init_impl(const Eigen::VectorXd &x, double Mu, bool docompute);
+
+    // Consumes staged_eq_mults_/staged_iq_mults_ into XSL's multiplier block
+    // and clears mults_staged_. Called only from run_phase_sequence's initial
+    // init_impl call, guarded on mults_staged_ -- see set_initial_multipliers.
+    void apply_staged_multipliers(Eigen::VectorXd &XSL);
 
     // --- Line search ---
     // The classic merit line search (former ls_impl/ls_lang/ls_l1/ls_auglang and
