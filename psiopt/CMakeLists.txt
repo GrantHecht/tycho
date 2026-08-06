@@ -39,6 +39,49 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set(PSIOPT_STANDALONE ON)
 else()
     set(PSIOPT_STANDALONE OFF)
+
+    # Subproject mode assumes the Tycho super-build: the state the targets
+    # below are built from -- COMPILE_FLAGS and the resolved sparse backend --
+    # is set by the parent, not here. Any other parent leaves that state
+    # missing, and the targets would then be configured with no optimization,
+    # SIMD or fast-math flags and no sparse solver, which surfaces much later
+    # as a link failure or a silently slow library. Check for it and say so
+    # instead.
+    #
+    # The check is on the variables rather than on the macros being visible
+    # (`if(NOT COMMAND tycho_compile_options)`): including a module makes the
+    # command visible without having called it, and it is the call's results
+    # this file consumes.
+    set(_psiopt_missing "")
+    if(NOT DEFINED COMPILE_FLAGS)
+        list(APPEND _psiopt_missing "COMPILE_FLAGS (call tycho_compile_options())")
+    endif()
+    if(APPLE)
+        if(NOT TARGET AccelerateSparse::AccelerateSparse)
+            list(APPEND _psiopt_missing
+                 "AccelerateSparse::AccelerateSparse (call tycho_resolve_sparse_backend())")
+        endif()
+    elseif(NOT MKL_FOUND)
+        list(APPEND _psiopt_missing "MKL (call tycho_resolve_sparse_backend())")
+    endif()
+    if(_psiopt_missing)
+        string(REPLACE ";" "\n    " _psiopt_missing_text "${_psiopt_missing}")
+        message(FATAL_ERROR
+            "PSIOPT was added as a subdirectory, but the state it expects a parent "
+            "project to provide is missing:\n"
+            "    ${_psiopt_missing_text}\n"
+            "Two configurations are supported today:\n"
+            "  1. Standalone -- configure psiopt/ as the top-level project "
+            "(cmake -S psiopt -B <dir>). It then resolves the toolchain, the sparse "
+            "backend and the header-only dependencies itself.\n"
+            "  2. As part of the Tycho super-build, which resolves all of the above "
+            "before add_subdirectory(psiopt).\n"
+            "Consuming psiopt directly from a third-party project "
+            "(add_subdirectory/FetchContent) is a planned later phase; it needs "
+            "usage requirements this build does not carry yet.")
+    endif()
+    unset(_psiopt_missing)
+    unset(_psiopt_missing_text)
 endif()
 
 include(GNUInstallDirs)
