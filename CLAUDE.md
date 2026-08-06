@@ -54,9 +54,11 @@ include/                Public C++ API headers
                           interp/, builder/)
       astro/            Astrodynamics models
 
-      (solvers/ — the PSIOPT/NLP layer — moved to the psiopt/ subproject
-       below; only OptimizationProblem, the VectorFunction-coupled
-       convenience layer over it, stays under src/solvers/ here.)
+      solvers_glue/     OptimizationProblem's declaration (optimization_problem.h),
+                          the VectorFunction-coupled convenience layer over the
+                          solver — its implementation lives in src/solvers/
+      (the rest of the old solvers/ — the PSIOPT/NLP layer itself — moved
+       to the psiopt/ subproject below)
 
 src/                    C++ source code (private implementation)
   tycho_internal.h      Internal aggregate (forwards to include/tycho/tycho.h)
