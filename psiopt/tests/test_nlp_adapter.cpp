@@ -360,3 +360,88 @@ TEST(NLPAdapterAssemblyTest, AbortedAssemblyDoesNotLeakStalePendingRecords) {
     nlp->eval_kkt_no(2.0, X1, LE, LI, val, PGX, AGX, FXE, FXI, kkt);
     EXPECT_NEAR(kkt.coeff(1, 1), 0.0, 1e-14);
 }
+
+// Range-row assembly test problem (n=1): f = x0^2 is irrelevant to the
+// assertions below (eval_hess is wired to lambda alone, so the test isolates
+// the Range row's own composed multiplier); the single user row 1 <= x0 <= 3
+// is Range-kind and splits into two solver inequality rows sharing the one
+// declared Jacobian slot (upper: x0 - 3, lower: 1 - x0).
+struct RangeAsmTestProblem : NLPProblem {
+    int num_vars() const override { return 1; }
+    int num_cons() const override { return 1; }
+    int num_jac_nonzeros() const override { return 1; }
+    int num_hess_nonzeros() const override { return 1; }
+
+    void bounds(Eigen::Ref<Eigen::VectorXd> xl, Eigen::Ref<Eigen::VectorXd> xu,
+                Eigen::Ref<Eigen::VectorXd> gl, Eigen::Ref<Eigen::VectorXd> gu) const override {
+        xl << -kInf;
+        xu << kInf;
+        gl << 1.0;
+        gu << 3.0;
+    }
+    void eval_f(ConstEigenRef<Eigen::VectorXd> x, double &f) const override { f = x[0] * x[0]; }
+    void eval_grad_f(ConstEigenRef<Eigen::VectorXd> x,
+                     Eigen::Ref<Eigen::VectorXd> g) const override {
+        g[0] = 2.0 * x[0];
+    }
+    void eval_g(ConstEigenRef<Eigen::VectorXd> x, Eigen::Ref<Eigen::VectorXd> g) const override {
+        g[0] = x[0];
+    }
+    void jac_structure(Eigen::Ref<Eigen::VectorXi> r,
+                       Eigen::Ref<Eigen::VectorXi> c) const override {
+        r << 0;
+        c << 0;
+    }
+    void hess_structure(Eigen::Ref<Eigen::VectorXi> r,
+                        Eigen::Ref<Eigen::VectorXi> c) const override {
+        r << 0;
+        c << 0;
+    }
+    void eval_jac(ConstEigenRef<Eigen::VectorXd>, Eigen::Ref<Eigen::VectorXd> v) const override {
+        v[0] = 1.0;
+    }
+    void eval_hess(ConstEigenRef<Eigen::VectorXd>, double, ConstEigenRef<Eigen::VectorXd> lambda,
+                   Eigen::Ref<Eigen::VectorXd> v) const override {
+        v[0] = lambda[0]; // isolates lambda_user_ = li_upper - li_lower
+    }
+};
+
+TEST(NLPAdapterAssemblyTest, RangeRowScattersDuplicatedJacobianAndComposedLambdaHessian) {
+    auto prob = std::make_shared<RangeAsmTestProblem>();
+    auto core = std::make_shared<NLPAdapterCore>(prob);
+    ASSERT_EQ(core->rows_.kinds_[0], NLPRowKind::Range);
+    auto nlp = tycho::solvers::make_nlp_program(core);
+
+    Eigen::SparseMatrix<double, Eigen::RowMajor> kkt(nlp->kkt_dim_, nlp->kkt_dim_);
+    nlp->analyze_sparsity(kkt);
+    // As in the assembly tests above, analyze_sparsity leaves placeholder 1.0
+    // sums at every physical slot, so a fresh scatter must start from zero.
+    Eigen::Map<Eigen::VectorXd>(kkt.valuePtr(), kkt.nonZeros()).setZero();
+
+    Eigen::VectorXd X(1);
+    X << 1.7;
+    Eigen::VectorXd LE(0), LI(2);
+    LI << 0.9, 0.4; // li_upper, li_lower
+    const double sigma = 1.0;
+
+    double val = 0.0;
+    Eigen::VectorXd PGX = Eigen::VectorXd::Zero(nlp->primal_vars_);
+    Eigen::VectorXd AGX = Eigen::VectorXd::Zero(nlp->primal_vars_);
+    Eigen::VectorXd FXE = Eigen::VectorXd::Zero(nlp->equal_cons_);
+    Eigen::VectorXd FXI = Eigen::VectorXd::Zero(nlp->inequal_cons_);
+    nlp->eval_kkt(sigma, X, LE, LI, val, PGX, AGX, FXE, FXI, kkt);
+
+    // (a) both inequality residuals land in FXI: upper is g-gu, lower is gl-g.
+    EXPECT_NEAR(FXI[0], X[0] - 3.0, 1e-14);
+    EXPECT_NEAR(FXI[1], 1.0 - X[0], 1e-14);
+
+    // (b) the duplicated Jacobian claims scatter +J into the upper row and -J
+    // into the lower row. Physically stored at (min(row, col), max(row, col)) --
+    // see the comment on the dense assembly test above.
+    const int con0 = nlp->primal_vars_ + nlp->slack_vars_ + nlp->equal_cons_;
+    EXPECT_NEAR(kkt.coeff(0, con0 + 0), 1.0, 1e-14);
+    EXPECT_NEAR(kkt.coeff(0, con0 + 1), -1.0, 1e-14);
+
+    // (c) the Hessian slot uses lambda_user_ = li_upper - li_lower.
+    EXPECT_NEAR(kkt.coeff(0, 0), LI[0] - LI[1], 1e-14);
+}
