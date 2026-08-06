@@ -271,11 +271,21 @@ if(PSIOPT_STANDALONE)
 endif()
 
 ################################################################################
-# Tests — the solver-core slice of the C++ suite (populated in a later step of
-# the standalone split; absent for now).
+# Tests — the solver-core slice of the C++ suite that has no VectorFunction
+# dependency (psiopt/tests/).
 
 if(PSIOPT_STANDALONE OR BUILD_CPP_TESTS)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt")
+        # enable_testing() is idempotent, so call it here even though the
+        # standalone branch above already did: as a Tycho subproject, this
+        # directory is added (CMakeLists.txt: add_subdirectory(psiopt)) BEFORE
+        # the root project's own enable_testing() call, which sits right next
+        # to add_subdirectory(tests/cpp). Without a call here, CTest never
+        # learns this directory contains tests -- gtest_discover_tests(psiopt_tests)
+        # still runs and the binary still has every test case, but no
+        # CTestTestfile.cmake is generated for it and `ctest` silently never
+        # sees them.
+        enable_testing()
         add_subdirectory(tests)
     endif()
 endif()

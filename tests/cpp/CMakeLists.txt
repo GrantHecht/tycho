@@ -53,7 +53,6 @@ set(TYCHO_TEST_LIGHT_SOURCES
     integrators/test_rk_tableau_consistency.cpp
     vector_functions/test_fd_coeffs.cpp
     solvers/test_kkt_canonical_lock.cpp
-    solvers/test_accelerate_interface.cpp
 )
 
 set(TYCHO_TEST_HEAVY_SOURCES
@@ -171,20 +170,8 @@ set(TYCHO_TEST_HEAVY_SOURCES
     solvers/test_solver_interfaces.cpp
     solvers/test_jet_batch.cpp
     solvers/test_nlp_structure.cpp
-    solvers/test_jet_mkl_guard.cpp
-    solvers/test_recovery_dispatch_gate.cpp
     solvers/test_soc.cpp
     solvers/test_soc_generic_acceptance.cpp
-    solvers/test_watchdog.cpp
-    solvers/test_merit_rules.cpp
-    solvers/test_classic_merit_restoration.cpp
-    solvers/test_switching_acceptance.cpp
-    solvers/test_funnel_acceptance.cpp
-    solvers/test_filter_acceptance.cpp
-    solvers/test_acceptance_diagnostics.cpp
-    solvers/test_monitored_governor.cpp
-    solvers/test_proximal_restoration.cpp
-    solvers/test_l1_restoration.cpp
     solvers/test_feasibility_switch.cpp
     solvers/test_feasibility_stall.cpp
     solvers/test_divergence_persistence.cpp
