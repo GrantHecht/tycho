@@ -304,3 +304,59 @@ TEST(NLPAdapterAssemblyTest, NoObjectiveChainUsesZeroObjFactorConsumeOnce) {
     nlp->eval_kkt(2.0, X, LE, LI, val, PGX, AGX, FXE, FXI, kkt);
     EXPECT_NEAR(kkt.coeff(1, 1), 2.0 * 2.0, 1e-14);
 }
+
+// AsmTestProblem whose eval_jac throws once armed -- models a user callback
+// that aborts an in-flight KKT assembly partway through (e.g. the equality
+// piece's own refresh_jac, after the objective piece already ran).
+struct ThrowingJacAsmTestProblem : AsmTestProblem {
+    bool armed_ = false;
+
+    void eval_jac(ConstEigenRef<Eigen::VectorXd> x, Eigen::Ref<Eigen::VectorXd> v) const override {
+        if (armed_) {
+            throw std::runtime_error("ThrowingJacAsmTestProblem: eval_jac armed to throw");
+        }
+        AsmTestProblem::eval_jac(x, v);
+    }
+};
+
+TEST(NLPAdapterAssemblyTest, AbortedAssemblyDoesNotLeakStalePendingRecords) {
+    auto prob = std::make_shared<ThrowingJacAsmTestProblem>();
+    auto core = std::make_shared<NLPAdapterCore>(prob);
+    auto nlp = tycho::solvers::make_nlp_program(core);
+
+    Eigen::SparseMatrix<double, Eigen::RowMajor> kkt(nlp->kkt_dim_, nlp->kkt_dim_);
+    nlp->analyze_sparsity(kkt);
+    auto zero_kkt = [&] { Eigen::Map<Eigen::VectorXd>(kkt.valuePtr(), kkt.nonZeros()).setZero(); };
+    zero_kkt();
+
+    Eigen::VectorXd X1(2), X2(2), LE(1), LI(2);
+    X1 << 1.3, 0.7;
+    X2 << 2.1, -0.4;
+    LE << 0.4;
+    LI << 0.9, 0.2;
+    double val = 0.0;
+    Eigen::VectorXd PGX = Eigen::VectorXd::Zero(nlp->primal_vars_);
+    Eigen::VectorXd AGX = Eigen::VectorXd::Zero(nlp->primal_vars_);
+    Eigen::VectorXd FXE = Eigen::VectorXd::Zero(nlp->equal_cons_);
+    Eigen::VectorXd FXI = Eigen::VectorXd::Zero(nlp->inequal_cons_);
+
+    // (1) A full assembly at x1 succeeds -- the objective piece's Hessian-
+    // bearing method runs and records, and the IQ owner consumes and resets.
+    nlp->eval_kkt(2.0, X1, LE, LI, val, PGX, AGX, FXE, FXI, kkt);
+
+    // (2) Arm the throw and run a second full assembly at x2. The objective
+    // piece runs first and records pending_obj_scale_ = 2.0; the equality
+    // piece's own refresh_jac then throws, aborting the chain before the IQ
+    // owner ever runs to consume that record.
+    prob->armed_ = true;
+    EXPECT_THROW(nlp->eval_kkt(2.0, X2, LE, LI, val, PGX, AGX, FXE, FXI, kkt), std::runtime_error);
+    prob->armed_ = false;
+
+    // (3) A no-objective assembly (PSIOPT's restoration entry point) at the
+    // now-cached x1 iterate must see obj_factor == 0: without the fix, the
+    // stale pending_obj_scale_ left behind by the aborted assembly in (2)
+    // would leak sigma's curvature into this constraint-only Hessian.
+    zero_kkt();
+    nlp->eval_kkt_no(2.0, X1, LE, LI, val, PGX, AGX, FXE, FXI, kkt);
+    EXPECT_NEAR(kkt.coeff(1, 1), 0.0, 1e-14);
+}

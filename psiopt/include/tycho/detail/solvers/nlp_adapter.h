@@ -208,13 +208,28 @@ struct NLPObjectivePiece {
                                     EigenRef<Eigen::VectorXi> KKTClashes,
                                     std::vector<std::mutex> &KKTLocks,
                                     const SolverIndexingData &data) const {
-        this->objective_gradient(ObjScale, X, Val, GX, data);
-        if (this->owns_hessian()) {
-            core_->eval_hessian_values(X, ObjScale, Eigen::VectorXd(), Eigen::VectorXd());
-            nlp_scatter_hessian_block(*core_, hess_claim_start_, KKTmat, KKTLocations, KKTClashes,
-                                      KKTLocks, data);
-        } else {
-            core_->pending_obj_scale_ = ObjScale;
+        // A user callback further down this same assembly (an eq/iq piece's
+        // eval_g/eval_jac/eval_hess) can throw after this method has already
+        // recorded pending_obj_scale_. An aborted assembly must not leave that
+        // record behind for a later, unrelated chain (PSIOPT's restoration
+        // entry runs eval_kkt_no next; a caller can also retry solve() after a
+        // propagated exception) to read as if it were this chain's own -- so
+        // any exception escaping this method clears both consume-once records
+        // before propagating. A completed chain is unaffected: the records are
+        // still set/consumed exactly as before.
+        try {
+            this->objective_gradient(ObjScale, X, Val, GX, data);
+            if (this->owns_hessian()) {
+                core_->eval_hessian_values(X, ObjScale, Eigen::VectorXd(), Eigen::VectorXd());
+                nlp_scatter_hessian_block(*core_, hess_claim_start_, KKTmat, KKTLocations,
+                                          KKTClashes, KKTLocks, data);
+            } else {
+                core_->pending_obj_scale_ = ObjScale;
+            }
+        } catch (...) {
+            core_->pending_obj_scale_.reset();
+            core_->pending_le_.reset();
+            throw;
         }
     }
 
@@ -343,26 +358,40 @@ struct NLPConstraintPiece {
         Eigen::SparseMatrix<double, Eigen::RowMajor> &KKTmat,
         EigenRef<Eigen::VectorXi> KKTLocations, EigenRef<Eigen::VectorXi> KKTClashes,
         std::vector<std::mutex> &KKTLocks, const SolverIndexingData &data) const {
-        this->constraints_jacobian_adjointgradient(X, L, FX, AGX, KKTmat, KKTLocations, KKTClashes,
-                                                   KKTLocks, data);
-        if (!is_inequality_ && !this->owns_hessian()) {
-            // The inequality piece runs after this one in every Hessian-bearing
-            // chain; leave it these multipliers.
-            core_->pending_le_ = Eigen::VectorXd(L);
-        }
-        if (this->owns_hessian()) {
-            const double obj_factor = core_->pending_obj_scale_.value_or(0.0);
-            core_->pending_obj_scale_.reset();
-            if (is_inequality_) {
-                const Eigen::VectorXd le =
-                    core_->pending_le_ ? *core_->pending_le_ : Eigen::VectorXd();
-                core_->pending_le_.reset();
-                core_->eval_hessian_values(X, obj_factor, le, L);
-            } else {
-                core_->eval_hessian_values(X, obj_factor, L, Eigen::VectorXd());
+        // Same exception-safety concern as NLPObjectivePiece::objective_gradient_hessian
+        // above: this piece's own eval_g/eval_jac/eval_hess can throw either
+        // before or after it has recorded pending_le_, and the owner (this
+        // piece or the one after it) may never run to consume a record either
+        // piece left behind. Clear both consume-once records on the way out
+        // through any exception so an aborted assembly can never leak a stale
+        // objective scale or equality multiplier into a later, unrelated
+        // chain.
+        try {
+            this->constraints_jacobian_adjointgradient(X, L, FX, AGX, KKTmat, KKTLocations,
+                                                       KKTClashes, KKTLocks, data);
+            if (!is_inequality_ && !this->owns_hessian()) {
+                // The inequality piece runs after this one in every Hessian-bearing
+                // chain; leave it these multipliers.
+                core_->pending_le_ = Eigen::VectorXd(L);
             }
-            nlp_scatter_hessian_block(*core_, hess_claim_start_, KKTmat, KKTLocations, KKTClashes,
-                                      KKTLocks, data);
+            if (this->owns_hessian()) {
+                const double obj_factor = core_->pending_obj_scale_.value_or(0.0);
+                core_->pending_obj_scale_.reset();
+                if (is_inequality_) {
+                    const Eigen::VectorXd le =
+                        core_->pending_le_ ? *core_->pending_le_ : Eigen::VectorXd();
+                    core_->pending_le_.reset();
+                    core_->eval_hessian_values(X, obj_factor, le, L);
+                } else {
+                    core_->eval_hessian_values(X, obj_factor, L, Eigen::VectorXd());
+                }
+                nlp_scatter_hessian_block(*core_, hess_claim_start_, KKTmat, KKTLocations,
+                                          KKTClashes, KKTLocks, data);
+            }
+        } catch (...) {
+            core_->pending_obj_scale_.reset();
+            core_->pending_le_.reset();
+            throw;
         }
     }
 
