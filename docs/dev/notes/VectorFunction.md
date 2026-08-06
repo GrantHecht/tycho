@@ -1420,7 +1420,8 @@ include/tycho/detail/vf/
         eigen_ref_aliases.h       CVecRef/VecRef/CMatRef Eigen reference aliases
         function_domains.h        SingleDomain, CompositeDomain, DomainHolder
         input_output_size.h       Static/dynamic size storage
-        functional_flags.h        ParsedIOFlags, VarTypes enums
+        functional_flags.h        VarTypes enum; re-exports ParsedIOFlags and
+                                    ThreadingFlags, which live in detail/solvers/
         assignment_types.h        DirectAssignment, PlusEqualsAssignment, etc.
         dense_function_operations.h  right_jacobian_product implementations
         dense_function_specs.h    Concepts for compute/jacobian interfaces

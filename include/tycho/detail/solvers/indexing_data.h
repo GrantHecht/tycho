@@ -17,7 +17,7 @@
 // =============================================================================
 
 #pragma once
-#include "tycho/detail/vf/core/functional_flags.h"
+#include "tycho/detail/solvers/parsed_io_flags.h"
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -123,13 +123,13 @@ struct SolverIndexingData {
     /// Each element indicates whether the corresponding indices in v_index_ are sorted
     /// and contigous (ie: 10,11,12...)
     /// </summary>
-    std::vector<vf::ParsedIOFlags> v_index_continuity_;
+    std::vector<ParsedIOFlags> v_index_continuity_;
 
     /// <summary>
     /// Each element indicates whether the corresponding indices in c_index_ are sorted
     /// and contigous (ie: 10,11,12...)
     /// </summary>
-    std::vector<vf::ParsedIOFlags> c_index_continuity_;
+    std::vector<ParsedIOFlags> c_index_continuity_;
 
     /// <summary>
     /// Holds the index of the start of the region of memory allocated by Psiopt to sum the
@@ -294,14 +294,14 @@ struct SolverIndexingData {
     inline int c_loc(int loc, int col) const { return this->c_index_(loc, col); }
     inline int v_loc(int loc, int col) const { return this->v_index_(loc, col); }
 
-    static vf::ParsedIOFlags check_continuity(const Eigen::VectorXi &ix) {
+    static ParsedIOFlags check_continuity(const Eigen::VectorXi &ix) {
         int s = 0;
         for (int i = 0; i < (ix.size() - 1); i++) {
             s = ix[i + 1] - ix[i] - 1;
             if (s != 0)
-                return vf::ParsedIOFlags::NotContiguous;
+                return ParsedIOFlags::NotContiguous;
         }
-        return vf::ParsedIOFlags::Contiguous;
+        return ParsedIOFlags::Contiguous;
     }
 };
 

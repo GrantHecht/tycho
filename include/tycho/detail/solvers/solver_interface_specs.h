@@ -22,7 +22,6 @@
 
 #include "tycho/detail/solvers/indexing_data.h"
 #include "tycho/detail/solvers/sizing_specs.h"
-#include "tycho/detail/vf/core/expression_fwd_declarations.h"
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -49,6 +48,18 @@
 #include "tycho/detail/utils/thread_pool.h"
 #include "tycho/detail/utils/type_name.h"
 #include "tycho/detail/utils/type_storage.h"
+
+// GenericFunction is only NAMED here. The two converting constructors below are
+// templates, and a template's body is only instantiated where it is used: every
+// such use is in a translation unit that already includes the full
+// VectorFunction machinery, and the solver library itself never instantiates
+// them. Naming the template is therefore all this header needs, and a forward
+// declaration keeps it -- and with it the whole solver subtree -- free of any
+// VectorFunction include. The declaration must stay identical in kind and
+// parameters to the real one in vf/core/expression_fwd_declarations.h.
+namespace tycho::vf {
+template <int IR, int OR> struct GenericFunction;
+}
 
 namespace tycho::solvers {
 
