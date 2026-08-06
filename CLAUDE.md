@@ -52,8 +52,11 @@ include/                Public C++ API headers
       integrators/      RK steppers and coefficients
       optimal_control/  Phase/ODE transcription (core/, phase/, transcription/,
                           interp/, builder/)
-      solvers/          PSIOPT and NLP layer (linear/ for sparse solver interfaces)
       astro/            Astrodynamics models
+
+      (solvers/ — the PSIOPT/NLP layer — moved to the psiopt/ subproject
+       below; only OptimizationProblem, the VectorFunction-coupled
+       convenience layer over it, stays under src/solvers/ here.)
 
 src/                    C++ source code (private implementation)
   tycho_internal.h      Internal aggregate (forwards to include/tycho/tycho.h)
@@ -63,11 +66,38 @@ src/                    C++ source code (private implementation)
                           type_casters.h, tycho_module.cpp
   vf/                   tycho_vector_functions.h aggregate + function_domains.cpp
   optimal_control/      tycho_optimal_control.h aggregate + snake_case .cpp files
-  solvers/              tycho_solvers.h aggregate + snake_case .cpp files
+  solvers/              tycho_solvers.h aggregate + optimization_problem.cpp —
+                          the OptimizationProblem glue that turns VectorFunction
+                          expressions into psiopt constraint/objective functions;
+                          links against psiopt::psiopt (see psiopt/ below)
   astro/                tycho_astro.h aggregate + snake_case .cpp files
   integrators/          tycho_integrators.h aggregate (header-only)
   utils/                tycho_utils.h aggregate + private utility .cpp files
   typedefs/             tycho_typedefs.h aggregate (header-only)
+
+psiopt/                 PSIOPT, as its own CMake project (configures and
+                          builds standalone via `cmake -S psiopt`, or as a
+                          subdirectory of the root build — see
+                          psiopt/CMakeLists.txt). Nothing here depends on
+                          VectorFunction; the one piece of the old solver
+                          surface that does (OptimizationProblem) stays on
+                          the Tycho side, above.
+  include/tycho/detail/
+    solvers/            PSIOPT and NLP layer (globalization/ for the
+                          globalization mechanisms, linear/ for the sparse-KKT
+                          backends, ipopt/ for the alternative-backend adapter)
+    typedefs/           Eigen type aliases the solver needs, standalone
+    utils/              Threading, math helpers, type utilities, standalone
+  src/                  psiopt.cpp, non_linear_program.cpp, globalization,
+                          settings/printing, the Ipopt adapter (real +
+                          fallback-stub implementations) — snake_case .cpp
+                          files
+    utils/              Thread pool, core count, arena allocator, color text
+                          (the psiopt::utils static library)
+  tests/                Solver-core test suite (globalization, linear
+                          backends, ...) — the VectorFunction-free slice of
+                          the C++ suite; runs standalone and, via
+                          add_subdirectory(psiopt), as part of the root ctest
 
 tychopy/                Python package (pure-Python layer over _tychopy extension)
   VectorFunctions/      Python-side VectorFunction utilities
@@ -636,6 +666,22 @@ cmake --preset <preset> -DBUILD_CPP_TESTS=ON   # one-time reconfigure
 cd build && ninja -j<N> tycho_tests tycho_tests_light
 ctest --output-on-failure
 ```
+
+### Standalone PSIOPT smoke check
+
+`psiopt/` configures, builds, and tests on its own — it has no VectorFunction
+dependency. `scripts/check_standalone_psiopt.sh` proves this in one shot
+(fresh build directory, `-j2`, `conda activate tycho` first so `$CC`/`$CXX`
+are set):
+
+```bash
+conda activate tycho
+scripts/check_standalone_psiopt.sh
+```
+
+It configures `psiopt/` as the top-level project into `build-psiopt-standalone/`,
+builds it, and runs its `ctest` suite. Delete `build-psiopt-standalone/`
+afterward — it is a scratch directory, not a build to keep alongside `build/`.
 
 ### Fast iteration: isolated correctness probes
 
