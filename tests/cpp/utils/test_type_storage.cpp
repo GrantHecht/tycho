@@ -8,6 +8,8 @@
 #include "tycho/detail/utils/type_storage.h"
 #include <gtest/gtest.h>
 
+#include <array>
+
 using namespace tycho::utils;
 
 // ---------------------------------------------------------------------------

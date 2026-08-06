@@ -14,7 +14,7 @@
 
 #include "color_text.h"
 #ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
+// WIN32_LEAN_AND_MEAN is defined globally by the build (see root CMakeLists.txt).
 #define VC_EXTRALEAN
 #include <Windows.h>
 #include <stdio.h>
