@@ -420,9 +420,10 @@ TEST(NLPSolverTest, FixedVariableSolvesExactlyAtItsFixedValue) {
     EXPECT_NEAR(x[1], 3.0, 1e-12);
 }
 
-// EqOnlyProblem plus a starting_multipliers() override that returns true --
-// used only to prove that seeding requests fail loudly until PSIOPT grows the
-// seeding entry point (Task 4 flips this test's expectation).
+// EqOnlyProblem plus a starting_multipliers() override that returns true and
+// seeds the exact solution multiplier (lambda = -2, see
+// EqualityMultiplierHasIpoptSign above) -- proves the seed reaches PSIOPT and
+// still converges to the same optimum as the unseeded solve.
 struct SeededEqOnlyProblem : EqOnlyProblem {
     bool starting_multipliers(Eigen::Ref<Eigen::VectorXd> lambda) const override {
         lambda[0] = -2.0;
@@ -431,11 +432,16 @@ struct SeededEqOnlyProblem : EqOnlyProblem {
     std::string name() const override { return "SeededEqOnlyProblem"; }
 };
 
-TEST(NLPSolverTest, SeedingBeforePsioptEntryThrows) {
+TEST(NLPSolverTest, SeededSolveConverges) {
     tycho::solvers::NLPSolver solver(std::make_shared<SeededEqOnlyProblem>());
     solver.optimizer_->set_print_level(10);
     Eigen::VectorXd x0 = Eigen::VectorXd::Zero(2);
-    EXPECT_THROW(solver.optimize(x0), std::invalid_argument);
+    ASSERT_EQ(solver.optimize(x0), tycho::ConvergenceFlags::CONVERGED);
+    Eigen::VectorXd x = solver.return_x();
+    Eigen::VectorXd expect(2);
+    expect << 1.0, 1.0;
+    EXPECT_LT((x - expect).lpNorm<Eigen::Infinity>(), 1e-6);
+    EXPECT_NEAR(solver.return_multipliers()[0], -2.0, 1e-5);
 }
 
 // The no-arg optimize() override reuses whatever is already in
@@ -488,8 +494,8 @@ TEST(NLPSolverTest, JetLifecycleRoundTrip) {
 }
 
 // starting_multipliers() returning a non-finite entry must fail the
-// allFinite() guard in apply_starting_multipliers -- before ever reaching the
-// seeding placeholder throw, and with a distinct message.
+// allFinite() guard in apply_starting_multipliers -- before ever reaching
+// PSIOPT::set_initial_multipliers, and with a distinct message.
 struct NonFiniteSeedProblem : EqOnlyProblem {
     bool starting_multipliers(Eigen::Ref<Eigen::VectorXd> lambda) const override {
         lambda[0] = std::numeric_limits<double>::quiet_NaN();

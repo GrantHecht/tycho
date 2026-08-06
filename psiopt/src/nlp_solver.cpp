@@ -130,15 +130,7 @@ void NLPSolver::apply_starting_multipliers() {
             break;
         }
     }
-    // NOTE: the mapping above is fully computed but not yet applied. PSIOPT
-    // does not expose a seeding entry point for the reduced multiplier space
-    // yet (set_initial_multipliers arrives in the next change in this
-    // series); until then, a problem that asks to seed starting multipliers
-    // gets a clear failure instead of a silently ignored request.
-    throw std::invalid_argument(fmt::format(
-        "{}: starting_multipliers seeding requires the PSIOPT seeding entry (next change in "
-        "this series)",
-        this->problem_->name()));
+    this->optimizer_->set_initial_multipliers(eqm, iqm);
 }
 
 } // namespace tycho::solvers
