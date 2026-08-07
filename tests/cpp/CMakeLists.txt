@@ -197,6 +197,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     # OC test, appended here rather than in the OptimalControl block so the
     # unity batching of every file above stays exactly as it was.
     optimal_control/test_phase_native_var_bounds.cpp # file-local prefix: NativeVarBounds*
+    solvers/test_nlp_problem_cross_check.cpp # file-local prefix: NlpCrossCheck*/nlp_cross_check_*
 )
 
 #-------------------------------------------------------------------------------
