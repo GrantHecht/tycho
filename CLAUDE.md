@@ -54,7 +54,7 @@ include/                Public C++ API headers
                           interp/, builder/)
       astro/            Astrodynamics models
 
-      solvers_glue/     OptimizationProblem's declaration (optimization_problem.h),
+      solvers_vf/       OptimizationProblem's declaration (optimization_problem.h),
                           the VectorFunction-coupled convenience layer over the
                           solver — its implementation lives in src/solvers/
       (the rest of the old solvers/ — the PSIOPT/NLP layer itself — moved
@@ -69,9 +69,10 @@ src/                    C++ source code (private implementation)
   vf/                   tycho_vector_functions.h aggregate + function_domains.cpp
   optimal_control/      tycho_optimal_control.h aggregate + snake_case .cpp files
   solvers/              tycho_solvers.h aggregate + optimization_problem.cpp —
-                          the OptimizationProblem glue that turns VectorFunction
-                          expressions into psiopt constraint/objective functions;
-                          links against psiopt::psiopt (see psiopt/ below)
+                          the OptimizationProblem convenience layer (target
+                          solvers_vf) that turns VectorFunction expressions
+                          into psiopt constraint/objective functions; links
+                          against psiopt::psiopt (see psiopt/ below)
   astro/                tycho_astro.h aggregate + snake_case .cpp files
   integrators/          tycho_integrators.h aggregate (header-only)
   utils/                tycho_utils.h aggregate + private utility .cpp files
@@ -84,6 +85,12 @@ psiopt/                 PSIOPT, as its own CMake project (configures and
                           VectorFunction; the one piece of the old solver
                           surface that does (OptimizationProblem) stays on
                           the Tycho side, above.
+  include/tycho/solvers/  Public, solver-neutral NLP interface: NLPProblem
+                          (nlp_problem.h, the Ipopt-TNLP-shaped problem
+                          contract to subclass) and NLPSolver (nlp_solver.h,
+                          solves an NLPProblem with PSIOPT). C++-only for
+                          now — Python bindings are deferred to the
+                          psiopt+SQP merge.
   include/tycho/detail/
     solvers/            PSIOPT and NLP layer (globalization/ for the
                           globalization mechanisms, linear/ for the sparse-KKT

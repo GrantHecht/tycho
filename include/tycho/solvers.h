@@ -11,7 +11,7 @@
 #include "tycho/detail/solvers/non_linear_program.h"
 #include "tycho/detail/solvers/ipopt_backend.h"
 #include "tycho/detail/solvers/optimization_problem_base.h"
-#include "tycho/detail/solvers_glue/optimization_problem.h"
+#include "tycho/detail/solvers_vf/optimization_problem.h"
 #include "tycho/detail/solvers/psiopt_fwd.h"
 #include "tycho/detail/solvers/psiopt.h"
 #include "tycho/detail/solvers/jet.h"

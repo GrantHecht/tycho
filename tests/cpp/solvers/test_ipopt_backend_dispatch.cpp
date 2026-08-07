@@ -13,7 +13,7 @@
 #include "solver_test_utils.h"
 
 #include "tycho/detail/solvers/ipopt_backend.h"
-#include "tycho/detail/solvers_glue/optimization_problem.h"
+#include "tycho/detail/solvers_vf/optimization_problem.h"
 
 #include <gtest/gtest.h>
 

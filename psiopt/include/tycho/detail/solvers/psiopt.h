@@ -832,6 +832,49 @@ class PSIOPT {
     }
     void disable_late_callback() { this->late_callback_enabled_ = false; }
 
+    // --- Constraint-multiplier seeding ---
+    /// Floor applied to seeded inequality multipliers when they are installed:
+    /// the slack-complementarity update divides by these values, so a seed at
+    /// or below zero would put the very first iterate outside the interior the
+    /// method is defined on.
+    static constexpr double kSeededIqMultFloor = 1.0e-8;
+
+    /// Ceiling applied to every seeded multiplier (both signs for equality
+    /// rows; the upper end for inequality rows, alongside kSeededIqMultFloor's
+    /// lower end). Parity with Ipopt's own seeded-multiplier ceiling
+    /// (warm_start_mult_init_max, default 1e6) and with PSIOPT's own
+    /// bound-multiplier seeding precedent (kBoundMultInitCap = 1e3 in
+    /// push_initial_point_interior, bound_set.h).
+    static constexpr double kSeededMultInitMax = 1.0e6;
+
+    /// Staged constraint-multiplier seeds. Consumed -- moved into run-local
+    /// state and mults_staged_ cleared -- at the very start of the NEXT
+    /// run_phase_sequence() call, before anything in that call (settings
+    /// validation, variable-treatment reconfiguration, ...) gets a chance to
+    /// throw and leave this armed for an unrelated later call.
+    /// validate_staged_multipliers() then rejects a mis-sized or non-finite
+    /// seed immediately once equal_cons_/inequal_cons_/user_equal_cons_ are
+    /// final for the call -- before the entry init_impl/factorization, and
+    /// before any phase runs, on every entry point. Applied at most once
+    /// within the call, to whichever XSL is current when the phase loop
+    /// reaches the first OPT/OPTNO-mode phase in the requested sequence --
+    /// never applied at all when the sequence has no such phase (e.g. a bare
+    /// solve()). An unseeded solve does not touch any of this.
+    Eigen::VectorXd staged_eq_mults_;
+    Eigen::VectorXd staged_iq_mults_;
+    bool mults_staged_ = false;
+
+    void set_initial_multipliers(const Eigen::VectorXd &eq_mults, const Eigen::VectorXd &iq_mults) {
+        this->staged_eq_mults_ = eq_mults;
+        this->staged_iq_mults_ = iq_mults;
+        this->mults_staged_ = true;
+    }
+    void clear_initial_multipliers() {
+        this->staged_eq_mults_.resize(0);
+        this->staged_iq_mults_.resize(0);
+        this->mults_staged_ = false;
+    }
+
     // --- Printing ---
     static void print_header() { fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65); }
 
@@ -1118,6 +1161,29 @@ class PSIOPT {
                              double obj_scale, double MuI, Eigen::Ref<Eigen::VectorXd> xsl);
 
     Eigen::VectorXd init_impl(const Eigen::VectorXd &x, double Mu, bool docompute);
+
+    // Rejects a mis-sized or non-finite staged seed: eq_mults must be sized
+    // to either the problem's user-facing equality row count or the
+    // post-treatment count that additionally counts one internal fixing row
+    // per fixed variable under the MakeConstraint treatment
+    // (NonLinearProgram::user_equal_cons_ vs. equal_cons_ -- see
+    // install_fixed_variable_rows), iq_mults must be sized to inequal_cons_,
+    // and every entry must be finite. Called once, from run_phase_sequence,
+    // right after refresh_nlp_dimensions() would have run (equal_cons_/
+    // inequal_cons_/user_equal_cons_ are final for this call at that point)
+    // -- so a bad seed is rejected before the entry init_impl/factorization,
+    // and before any phase runs and mutates result_, on every entry point.
+    void validate_staged_multipliers(const Eigen::VectorXd &eq_mults,
+                                     const Eigen::VectorXd &iq_mults);
+
+    // Installs an already-validated eq_mults/iq_mults (see
+    // validate_staged_multipliers, always called first) into XSL's
+    // multiplier block, clamping every value to +/-kSeededMultInitMax
+    // (inequality entries additionally floored at kSeededIqMultFloor). Called
+    // from run_phase_sequence, at most once per call -- see the call site
+    // there for which init_impl call it follows.
+    void apply_staged_multipliers(Eigen::VectorXd &XSL, const Eigen::VectorXd &eq_mults,
+                                  const Eigen::VectorXd &iq_mults);
 
     // --- Line search ---
     // The classic merit line search (former ls_impl/ls_lang/ls_l1/ls_auglang and
