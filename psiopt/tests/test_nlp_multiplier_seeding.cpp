@@ -449,7 +449,7 @@ TEST(NLPMultiplierSeedingTest, DecliningProblemClearsStaleStaging) {
     // starting_multipliers() returns false, so this solve never asked to be
     // seeded. If apply_starting_multipliers's early-return path failed to
     // clear the stale staging, this NaN would reach
-    // PSIOPT::apply_staged_multipliers and throw -- so a clean CONVERGED
+    // PSIOPT::validate_staged_multipliers and throw -- so a clean CONVERGED
     // result below is itself proof the stale seed was never applied.
     Eigen::VectorXd stale_eq(1);
     stale_eq << std::numeric_limits<double>::quiet_NaN();

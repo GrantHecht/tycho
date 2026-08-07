@@ -14,8 +14,6 @@
 #include <Eigen/Core>
 #include <Eigen/Sparse>
 
-#include <fmt/format.h>
-
 #include "tycho/detail/solvers/constraint_function.h"
 #include "tycho/detail/solvers/indexing_data.h"
 #include "tycho/detail/solvers/objective_function.h"

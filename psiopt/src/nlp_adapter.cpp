@@ -7,6 +7,8 @@
 #include <cmath>
 #include <limits>
 
+#include <fmt/format.h>
+
 #include "tycho/detail/solvers/non_linear_program.h"
 
 namespace tycho::solvers {

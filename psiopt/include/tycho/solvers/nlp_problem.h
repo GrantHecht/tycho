@@ -65,7 +65,9 @@ class NLPProblem {
     // --- Warm start (the primal guess is a solve argument; multipliers are
     //     optional). Return true and fill lambda to seed the solver's
     //     constraint multipliers; the default leaves the solver's own
-    //     initialization untouched. ---
+    //     initialization untouched. Seeds apply to the first
+    //     optimality-mode phase of a solve sequence; a sequence with no
+    //     such phase (a bare solve()) validates and then discards them. ---
     virtual bool starting_multipliers(Eigen::Ref<Eigen::VectorXd> lambda) const {
         (void)lambda;
         return false;
