@@ -850,14 +850,16 @@ class PSIOPT {
     /// Staged constraint-multiplier seeds. Consumed -- moved into run-local
     /// state and mults_staged_ cleared -- at the very start of the NEXT
     /// run_phase_sequence() call, before anything in that call (settings
-    /// validation, variable-treatment reconfiguration, the seed's own
-    /// size/finiteness checks) gets a chance to throw and leave this armed for
-    /// an unrelated later call. Applied at most once within that call, to
-    /// whichever init_impl() call immediately precedes the first OPT/OPTNO-
-    /// mode phase in the requested sequence (the entry init_impl if that is
-    /// the first phase, an inter-phase re-init otherwise) -- never applied at
-    /// all when the sequence has no OPT/OPTNO phase (e.g. a bare solve()). An
-    /// unseeded solve does not touch any of this.
+    /// validation, variable-treatment reconfiguration, ...) gets a chance to
+    /// throw and leave this armed for an unrelated later call.
+    /// validate_staged_multipliers() then rejects a mis-sized or non-finite
+    /// seed immediately once equal_cons_/inequal_cons_/user_equal_cons_ are
+    /// final for the call -- before the entry init_impl/factorization, and
+    /// before any phase runs, on every entry point. Applied at most once
+    /// within the call, to whichever XSL is current when the phase loop
+    /// reaches the first OPT/OPTNO-mode phase in the requested sequence --
+    /// never applied at all when the sequence has no such phase (e.g. a bare
+    /// solve()). An unseeded solve does not touch any of this.
     Eigen::VectorXd staged_eq_mults_;
     Eigen::VectorXd staged_iq_mults_;
     bool mults_staged_ = false;
@@ -1160,13 +1162,26 @@ class PSIOPT {
 
     Eigen::VectorXd init_impl(const Eigen::VectorXd &x, double Mu, bool docompute);
 
-    // Installs eq_mults/iq_mults into XSL's multiplier block: validates sizes
-    // against the problem's user-facing and post-treatment equality row
-    // counts (see NonLinearProgram::user_equal_cons_) and against
-    // inequal_cons_, rejects a non-finite entry, and clamps every value to
-    // +/-kSeededMultInitMax (inequality entries additionally floored at
-    // kSeededIqMultFloor). Called from run_phase_sequence, at most once per
-    // call -- see the call sites there for which init_impl call it follows.
+    // Rejects a mis-sized or non-finite staged seed: eq_mults must be sized
+    // to either the problem's user-facing equality row count or the
+    // post-treatment count that additionally counts one internal fixing row
+    // per fixed variable under the MakeConstraint treatment
+    // (NonLinearProgram::user_equal_cons_ vs. equal_cons_ -- see
+    // install_fixed_variable_rows), iq_mults must be sized to inequal_cons_,
+    // and every entry must be finite. Called once, from run_phase_sequence,
+    // right after refresh_nlp_dimensions() would have run (equal_cons_/
+    // inequal_cons_/user_equal_cons_ are final for this call at that point)
+    // -- so a bad seed is rejected before the entry init_impl/factorization,
+    // and before any phase runs and mutates result_, on every entry point.
+    void validate_staged_multipliers(const Eigen::VectorXd &eq_mults,
+                                     const Eigen::VectorXd &iq_mults);
+
+    // Installs an already-validated eq_mults/iq_mults (see
+    // validate_staged_multipliers, always called first) into XSL's
+    // multiplier block, clamping every value to +/-kSeededMultInitMax
+    // (inequality entries additionally floored at kSeededIqMultFloor). Called
+    // from run_phase_sequence, at most once per call -- see the call site
+    // there for which init_impl call it follows.
     void apply_staged_multipliers(Eigen::VectorXd &XSL, const Eigen::VectorXd &eq_mults,
                                   const Eigen::VectorXd &iq_mults);
 
