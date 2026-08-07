@@ -191,7 +191,11 @@ TEST(NLPMultiplierSeedingTest, SeedSizeMismatchThrowsAndIsConsumed) {
     // through NLPSolver would itself clear this staging before PSIOPT ever
     // saw it (see DecliningProblemClearsStaleStaging) -- that is the correct
     // behavior for a problem that never asked to be seeded, but it means
-    // this size-mismatch probe has to bypass it.
+    // this size-mismatch probe has to bypass it. The throw now fires from
+    // validate_staged_multipliers, right after variable-treatment
+    // reconfiguration and before the entry init_impl/factorization -- earlier
+    // than the original install-site throw, but still inside this one
+    // optimize() call either way.
     EXPECT_THROW(solver.optimizer_->optimize(x0), std::invalid_argument);
 
     // The bad staging must have been consumed (cleared) on the throw path --
@@ -484,23 +488,71 @@ TEST(NLPMultiplierSeedingTest, NaNSeedThrows) {
     EXPECT_FALSE(solver.optimizer_->mults_staged_);
 }
 
-TEST(NLPMultiplierSeedingTest, OversizedSeedIsCapped) {
-    NLPSolver solver(std::make_shared<SeedEqOnlyProblem>());
-    solver.optimizer_->set_print_level(10);
-    solver.transcribe();
+// A seed of 1e12 into the single equality row -- SeedEqOnlyProblem is
+// exactly quadratic/linear, so a plain "does it still converge" check on the
+// final solution is vacuous: the first Newton step lands exactly on the
+// solution regardless of the seeded multiplier, clamp deleted or not. Making
+// this assertive means observing the CAPPED value directly, the same way
+// SeededSolveOptimizeReachesOptPhase does.
+struct SeededOversizedEqOnlyProblem : SeedEqOnlyProblem {
+    bool starting_multipliers(Eigen::Ref<Eigen::VectorXd> lambda) const override {
+        lambda[0] = 1.0e12;
+        return true;
+    }
+    std::string name() const override { return "SeededOversizedEqOnlyProblem"; }
+};
 
-    Eigen::VectorXd eq(1);
-    eq << 1.0e12;
-    Eigen::VectorXd iq(0);
-    solver.optimizer_->set_initial_multipliers(eq, iq);
+TEST(NLPMultiplierSeedingTest, OversizedSeedIsCapped) {
+    NLPSolver solver(std::make_shared<SeededOversizedEqOnlyProblem>());
+    solver.optimizer_->set_print_level(10);
+
+    double captured_eq_mult = std::numeric_limits<double>::quiet_NaN();
+    solver.optimizer_->set_early_callback(
+        [&](int i, double, Eigen::Ref<Eigen::VectorXd> XSL, double, Eigen::Ref<Eigen::VectorXd>,
+            Eigen::Ref<Eigen::VectorXd>, Eigen::SparseMatrix<double, Eigen::RowMajor> &) -> int {
+            if (i == 0) {
+                captured_eq_mult = XSL[2]; // see SeededSolveOptimizeReachesOptPhase for the layout
+            }
+            return 0;
+        });
 
     Eigen::VectorXd x0 = Eigen::VectorXd::Zero(2);
-    // Direct optimizer_ call -- same reason as NaNSeedThrows above.
-    Eigen::VectorXd x = solver.optimizer_->optimize(x0);
-    ASSERT_EQ(solver.optimizer_->result().converge_flag_, tycho::ConvergenceFlags::CONVERGED);
-    Eigen::VectorXd expect(2);
-    expect << 1.0, 1.0;
-    EXPECT_LT((x - expect).lpNorm<Eigen::Infinity>(), 1e-6);
+    ASSERT_EQ(solver.optimize(x0), tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_DOUBLE_EQ(captured_eq_mult, 1.0e6); // kSeededMultInitMax, not the raw 1e12 seed
+}
+
+// Same idea on the inequality side: SeedLowerBoundProblem (1 primal var, 1
+// slack for the single active lower-bound row, 0 eq rows) puts the iq
+// multiplier at XSL[2] (primal(1)+slack(1)+eq(0)). starting_multipliers()'s
+// LowerBounded-row mapping negates lam (iqm = -lam), so seeding lam=-1e12
+// arrives at PSIOPT as a +1e12 iq seed, which the upper clamp (not the floor
+// -- that only bites negative seeds) must cap.
+struct SeededOversizedLowerBoundProblem : SeedLowerBoundProblem {
+    bool starting_multipliers(Eigen::Ref<Eigen::VectorXd> lambda) const override {
+        lambda[0] = -1.0e12;
+        return true;
+    }
+    std::string name() const override { return "SeededOversizedLowerBoundProblem"; }
+};
+
+TEST(NLPMultiplierSeedingTest, OversizedIqSeedIsCapped) {
+    NLPSolver solver(std::make_shared<SeededOversizedLowerBoundProblem>());
+    solver.optimizer_->set_print_level(10);
+
+    double captured_iq_mult = std::numeric_limits<double>::quiet_NaN();
+    solver.optimizer_->set_early_callback(
+        [&](int i, double, Eigen::Ref<Eigen::VectorXd> XSL, double, Eigen::Ref<Eigen::VectorXd>,
+            Eigen::Ref<Eigen::VectorXd>, Eigen::SparseMatrix<double, Eigen::RowMajor> &) -> int {
+            if (i == 0) {
+                captured_iq_mult = XSL[2];
+            }
+            return 0;
+        });
+
+    Eigen::VectorXd x0(1);
+    x0 << 3.0;
+    ASSERT_EQ(solver.optimize(x0), tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_DOUBLE_EQ(captured_iq_mult, 1.0e6);
 }
 
 // Not in the required list, but directly covers finding 2b (otherwise
