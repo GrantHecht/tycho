@@ -102,11 +102,31 @@ Eigen::VectorXd NLPSolver::return_multipliers() const {
 void NLPSolver::apply_starting_multipliers() {
     Eigen::VectorXd lam = Eigen::VectorXd::Zero(this->core_->m_);
     if (!this->problem_->starting_multipliers(lam)) {
+        // No seed requested for THIS call. Any staging already armed on the
+        // optimizer -- e.g. a direct optimizer_->set_initial_multipliers()
+        // call, or (see the ipopt-backend branch below) a seed this same
+        // problem staged on a previous call that was never consumed -- must
+        // not silently leak into a solve that never asked for it.
+        this->optimizer_->clear_initial_multipliers();
         return;
     }
     if (!lam.allFinite()) {
         throw std::invalid_argument(fmt::format(
             "{}: starting_multipliers returned a non-finite value", this->problem_->name()));
+    }
+    if (this->nlp_solver_ == NLPSolvers::ipopt) {
+        // The ipopt backend's run_nlp_solver path never reaches
+        // PSIOPT::run_phase_sequence (see OptimizationProblemBase::
+        // run_nlp_solver's ipopt branch), so a seed staged here would never
+        // be consumed -- it would sit armed on the optimizer indefinitely and
+        // could then contaminate a LATER psiopt-backend solve that never
+        // asked to be seeded. Fail loudly instead of dropping it silently.
+        this->optimizer_->clear_initial_multipliers();
+        throw std::invalid_argument(
+            fmt::format("{}: starting_multipliers() requested a multiplier seed, but "
+                        "nlp_solver=ipopt does not support seeding (the ipopt backend never "
+                        "reaches PSIOPT's seeding entry)",
+                        this->problem_->name()));
     }
     const auto &rc = this->core_->rows_;
     Eigen::VectorXd eqm = Eigen::VectorXd::Zero(rc.num_eq_);

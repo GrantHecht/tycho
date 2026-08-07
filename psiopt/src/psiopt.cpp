@@ -3178,29 +3178,84 @@ Eigen::VectorXd tycho::solvers::PSIOPT::init_impl(const Eigen::VectorXd &x, doub
     return XSL;
 }
 
-void tycho::solvers::PSIOPT::apply_staged_multipliers(Eigen::VectorXd &XSL) {
-    // Consume the staging even on the throw path: a bad seed must not leak
-    // into an unrelated later solve.
-    this->mults_staged_ = false;
-    if (this->staged_eq_mults_.size() != this->equal_cons_ ||
-        this->staged_iq_mults_.size() != this->inequal_cons_) {
+void tycho::solvers::PSIOPT::apply_staged_multipliers(Eigen::VectorXd &XSL,
+                                                      const Eigen::VectorXd &eq_mults,
+                                                      const Eigen::VectorXd &iq_mults) {
+    // eq_mults is accepted at either of two sizes: the problem's user-facing
+    // equality row count (the common case -- what a caller building on
+    // NLPProblem/starting_multipliers() or hand-transcribing their own rows
+    // sees), or the post-treatment count that additionally counts one
+    // internal fixing row per fixed variable under the MakeConstraint
+    // treatment (NonLinearProgram::user_equal_cons_ vs. equal_cons_ -- see
+    // install_fixed_variable_rows). A seed sized to the user count is
+    // zero-padded across the fixing rows, which occupy the TAIL of the
+    // equality row space; a seed already sized to the post-treatment count is
+    // installed as-is.
+    const int user_eq = this->nlp_->user_equal_cons_;
+    const bool eq_size_ok = eq_mults.size() == user_eq || eq_mults.size() == this->equal_cons_;
+    if (!eq_size_ok || iq_mults.size() != this->inequal_cons_) {
         throw std::invalid_argument(fmt::format(
-            "PSIOPT: seeded multipliers sized ({} eq, {} iq) do not match the problem's ({} eq, "
-            "{} iq) constraint rows",
-            this->staged_eq_mults_.size(), this->staged_iq_mults_.size(), this->equal_cons_,
-            this->inequal_cons_));
+            "PSIOPT: seeded multipliers sized ({} eq, {} iq) do not match the problem's {} user "
+            "equality rows ({} eq once the fixed-variable treatment's internal rows are "
+            "included, {} iq)",
+            eq_mults.size(), iq_mults.size(), user_eq, this->equal_cons_, this->inequal_cons_));
     }
+    if (!eq_mults.allFinite() || !iq_mults.allFinite()) {
+        throw std::invalid_argument("PSIOPT: seeded multipliers contain a non-finite value");
+    }
+
     KKTVector v_xsl = kkt_view(XSL);
     if (this->equal_cons_ > 0) {
-        v_xsl.eq_lmults() = this->staged_eq_mults_;
+        Eigen::VectorXd clamped_eq =
+            eq_mults.cwiseMax(-kSeededMultInitMax).cwiseMin(kSeededMultInitMax);
+        if (eq_mults.size() == this->equal_cons_) {
+            v_xsl.eq_lmults() = clamped_eq;
+        } else {
+            v_xsl.eq_lmults().head(user_eq) = clamped_eq;
+            if (this->equal_cons_ > user_eq) {
+                v_xsl.eq_lmults().tail(this->equal_cons_ - user_eq).setZero();
+            }
+        }
     }
     for (int i = 0; i < this->inequal_cons_; i++) {
-        v_xsl.iq_lmults()[i] = std::max(this->staged_iq_mults_[i], kSeededIqMultFloor);
+        v_xsl.iq_lmults()[i] = std::clamp(iq_mults[i], kSeededIqMultFloor, kSeededMultInitMax);
     }
 }
 
 Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd &x,
                                                            std::initializer_list<PhaseStep> steps) {
+    // Disarm any staged multiplier seed immediately, before anything below --
+    // the nlp_/x-size checks just after this, settings_.validate(), the
+    // variable-treatment reconfiguration, ... -- gets a chance to throw and
+    // leave a stale seed armed for an unrelated later call. The local copies
+    // below live only for the duration of this call; nothing they hold
+    // survives past its return either way, applied or not.
+    bool have_seed = this->mults_staged_;
+    Eigen::VectorXd seed_eq_mults;
+    Eigen::VectorXd seed_iq_mults;
+    // The phase (if any) the seed applies to: the first OPT/OPTNO-mode phase
+    // in the requested sequence, whichever position that is. A solve-only
+    // sequence (bare solve()) has no such phase, so the seed is simply never
+    // applied -- SOE ignores the multiplier block it would have seeded, so
+    // there is nothing meaningful to apply it to.
+    int first_opt_phase_idx = -1;
+    if (have_seed) {
+        seed_eq_mults = std::move(this->staged_eq_mults_);
+        seed_iq_mults = std::move(this->staged_iq_mults_);
+        this->staged_eq_mults_.resize(0);
+        this->staged_iq_mults_.resize(0);
+        this->mults_staged_ = false;
+
+        int idx = 0;
+        for (const auto &step : steps) {
+            if (step.alg_mode_ == AlgorithmModes::OPT || step.alg_mode_ == AlgorithmModes::OPTNO) {
+                first_opt_phase_idx = idx;
+                break;
+            }
+            ++idx;
+        }
+    }
+
     if (!this->nlp_) {
         throw std::runtime_error("PSIOPT::run_phase_sequence: no NLP has been set. "
                                  "Call set_nlp() before optimize/solve.");
@@ -3330,16 +3385,22 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
 
     bool docompute = claim_kkt_analysis();
     Eigen::VectorXd XSL = this->init_impl(x_solver, settings_.init_mu_, docompute);
-    if (this->mults_staged_) {
-        this->apply_staged_multipliers(XSL);
+    if (have_seed && first_opt_phase_idx == 0) {
+        this->apply_staged_multipliers(XSL, seed_eq_mults, seed_iq_mults);
+        have_seed = false;
     }
 
+    int phase_idx = 0;
     auto it = steps.begin();
     auto end = steps.end();
     while (it != end) {
         const auto &step = *it;
         ++it;
         bool is_last = (it == end);
+        // Captured (and phase_idx advanced) before the conditional-skip check
+        // below, so a skipped conditional step still keeps phase_idx aligned
+        // with the position first_opt_phase_idx was computed against.
+        const int current_phase_idx = phase_idx++;
 
         // Conditional steps only run if the previous phase didn't converge
         if (step.conditional_ && this->result_.converge_flag_ == ConvergenceFlags::CONVERGED)
@@ -3448,6 +3509,14 @@ Eigen::VectorXd tycho::solvers::PSIOPT::run_phase_sequence(const Eigen::VectorXd
         // solver's space -- the expansion happens once, at the return below.
         if (!is_last) {
             XSL = this->init_impl(result_.primals_, settings_.init_mu_, false);
+            // Same seed application as the entry init_impl above, for a
+            // sequence whose first OPT/OPTNO phase isn't the first phase
+            // (e.g. solve_optimize(): SOE then OPT) -- the seed reaches
+            // whichever init_impl call actually precedes that phase.
+            if (have_seed && current_phase_idx + 1 == first_opt_phase_idx) {
+                this->apply_staged_multipliers(XSL, seed_eq_mults, seed_iq_mults);
+                have_seed = false;
+            }
         }
     }
 
