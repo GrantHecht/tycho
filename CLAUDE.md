@@ -85,6 +85,12 @@ psiopt/                 PSIOPT, as its own CMake project (configures and
                           VectorFunction; the one piece of the old solver
                           surface that does (OptimizationProblem) stays on
                           the Tycho side, above.
+  include/tycho/solvers/  Public, solver-neutral NLP interface: NLPProblem
+                          (nlp_problem.h, the Ipopt-TNLP-shaped problem
+                          contract to subclass) and NLPSolver (nlp_solver.h,
+                          solves an NLPProblem with PSIOPT). C++-only for
+                          now — Python bindings are deferred to the
+                          psiopt+SQP merge.
   include/tycho/detail/
     solvers/            PSIOPT and NLP layer (globalization/ for the
                           globalization mechanisms, linear/ for the sparse-KKT
