@@ -14,7 +14,7 @@
 // =============================================================================
 
 #include "optimization_problem_bind.h"
-#include "tycho/detail/solvers_glue/optimization_problem.h"
+#include "tycho/detail/solvers_vf/optimization_problem.h"
 
 using namespace tycho;
 using namespace tycho::vf;

@@ -13,7 +13,7 @@
 # the Tycho tree. The one piece of the old solver surface that does need
 # VectorFunction — OptimizationProblem, the convenience layer that turns VF
 # expressions into solver constraint/objective functions — stays on the
-# Tycho side as the `solvers_vf_glue` target.
+# Tycho side as the `solvers_vf` target (the VF-coupled solver surface).
 #
 # Two configurations:
 #

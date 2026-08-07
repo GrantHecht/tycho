@@ -67,20 +67,20 @@ set_property(TARGET integrators_instantiations PROPERTY JOB_POOL_COMPILE heavy_c
 
 
 
-# The solver's VectorFunction glue. OptimizationProblem is the convenience
+# The VF-coupled solver surface. OptimizationProblem is the convenience
 # layer that turns user VF expressions into the solver's abstract constraint
 # and objective functions, so it is the one piece of the old psiopt target that
 # cannot live in the standalone solver library (psiopt/). It sits on top of it
 # instead: everything that used to get these symbols from psiopt links this
 # target, which links psiopt in turn.
-add_library(solvers_vf_glue STATIC
+add_library(solvers_vf STATIC
     solvers/optimization_problem.cpp
 )
-target_include_directories(solvers_vf_glue PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
-target_compile_options(solvers_vf_glue PRIVATE ${COMPILE_FLAGS})
-target_link_libraries(solvers_vf_glue PUBLIC psiopt)
-target_precompile_headers(solvers_vf_glue REUSE_FROM pch)
-set_property(TARGET solvers_vf_glue PROPERTY JOB_POOL_COMPILE heavy_compile)
+target_include_directories(solvers_vf PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
+target_compile_options(solvers_vf PRIVATE ${COMPILE_FLAGS})
+target_link_libraries(solvers_vf PUBLIC psiopt)
+target_precompile_headers(solvers_vf REUSE_FROM pch)
+set_property(TARGET solvers_vf PROPERTY JOB_POOL_COMPILE heavy_compile)
 
 
 add_library(optimalcontrol STATIC
@@ -94,7 +94,7 @@ add_library(optimalcontrol STATIC
 
 target_include_directories(optimalcontrol PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
 target_precompile_headers(optimalcontrol REUSE_FROM pch)
-target_link_libraries(optimalcontrol PRIVATE solvers_vf_glue)
+target_link_libraries(optimalcontrol PRIVATE solvers_vf)
 target_compile_options(optimalcontrol PRIVATE ${COMPILE_FLAGS})
 set_property(TARGET optimalcontrol PROPERTY JOB_POOL_COMPILE heavy_compile)
 
@@ -116,7 +116,7 @@ target_compile_options(astro PRIVATE ${COMPILE_FLAGS})
 # tycho: public INTERFACE target bundling all core static libs.
 # Used by Python bindings, C++ consumers (find_package/FetchContent), and future frontends.
 add_library(tycho INTERFACE)
-target_link_libraries(tycho INTERFACE psiopt utils solvers_vf_glue optimalcontrol vectorfunctions vf_instantiations integrators_instantiations astro)
+target_link_libraries(tycho INTERFACE psiopt utils solvers_vf optimalcontrol vectorfunctions vf_instantiations integrators_instantiations astro)
 # CRITICAL: LINK_LIBS is wrapped in BUILD_INTERFACE to avoid encoding
 # host-specific absolute paths in the export set. ALL libraries in LINK_LIBS
 # (set in root CMakeLists.txt) must be re-found and re-attached in
@@ -202,7 +202,7 @@ target_compile_options(tycho INTERFACE
 #-------------------------------------------------------------------------------
 # Install rules
 
-install(TARGETS tycho psiopt utils solvers_vf_glue optimalcontrol astro vectorfunctions
+install(TARGETS tycho psiopt utils solvers_vf optimalcontrol astro vectorfunctions
         vf_instantiations integrators_instantiations
     EXPORT tychoTargets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
