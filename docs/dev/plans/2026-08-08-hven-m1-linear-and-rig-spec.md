@@ -348,10 +348,32 @@ half; the verdict-consumer half is an M3 test obligation.
 (`mkl_set_num_threads_local` around backend calls — never the global
 env/process setting). On Accelerate: CORRECTED by the consumed-surface
 audit — thread control EXISTS (`BLASSetThreading`, already exercised by
-the IPM engine's Accelerate path); it is process-scoped, not
-per-instance, so the option maps to it with process-scope semantics
-documented per the A.5 honesty discipline (scope difference stated,
-never papered over). The exact mapping is fixed at M2 and verified on
+the IPM engine's Accelerate path).
+
+POST-FREEZE AMENDMENT (2026-08-09; found independently by the hven
+close review's terra round and by Codex's review of this PR; verified
+against `psiopt/include/tycho/detail/solvers/linear/accelerate_utils.h`,
+`accelerate_set_num_threads`): the audit correction's "process-scoped"
+characterization was itself wrong, and the frozen sentence it produced
+here gave hven and its concurrency tests the wrong contract on current
+macOS. The true surface is version-split, with no arbitrary-count
+control on either arm:
+
+- macOS 15+: `BLASSetThreading` — a PER-THREAD, thread-local, BINARY
+  toggle (single- vs multi-threaded; no thread count). Weak-linked
+  (`API_AVAILABLE(macos(15.0))`), so the seam's `__builtin_available`
+  runtime check, not the compile-time `#ifdef`, is the operative guard.
+- Pre-15 fallback: `VECLIB_MAXIMUM_THREADS` — process-global, and
+  effective only before the first BLAS call (cached at that point;
+  later `setenv` is a no-op).
+- Whether either control reaches the SPARSE solver (as opposed to
+  BLAS/LAPACK) is unobserved — no claim is frozen either way.
+
+hven's rig already models this correctly (`kSeamThreadLocalBinary`
+with the seam's own version split, merged in PR #1); the option's
+Accelerate mapping documents the scope-and-granularity difference per
+the A.5 honesty discipline (stated, never papered over). The exact
+mapping is fixed at M2 and verified on
 the Mac leg. Measurement discipline and
 the rig's pinning policy are in B.2. The merged-bench caveat carries:
 concurrent MKL instances spin-wait catastrophically; sweep runners
