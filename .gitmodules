@@ -11,3 +11,6 @@
 	path = dep/pocketfft
 	url = https://github.com/mreineck/pocketfft.git
 	branch = cpp
+[submodule "dep/hven"]
+	path = dep/hven
+	url = https://github.com/GrantHecht/hven.git
