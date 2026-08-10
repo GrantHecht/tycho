@@ -13,4 +13,4 @@
 	branch = cpp
 [submodule "dep/hven"]
 	path = dep/hven
-	url = git@github.com:GrantHecht/hven.git
+	url = https://github.com/GrantHecht/hven.git
