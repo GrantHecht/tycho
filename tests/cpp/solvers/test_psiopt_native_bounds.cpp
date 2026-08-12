@@ -25,20 +25,21 @@
 #include "optimal_control/oc_test_utils.h"
 #include "solver_test_utils.h"
 
-#include "tycho/detail/solvers/barrier_math.h"
-#include "tycho/detail/solvers/bound_set.h"
-#include "tycho/detail/solvers/globalization/acceptance_strategy.h"
-#include "tycho/detail/solvers/globalization/backtracking_line_search.h"
-#include "tycho/detail/solvers/globalization/noop_recovery.h"
-#include "tycho/detail/solvers/globalization/progress_measures.h"
-#include "tycho/detail/solvers/globalization/recovery_chain.h"
-#include "tycho/detail/solvers/globalization/soc.h"
-#include "tycho/detail/solvers/globalization/solver_context.h"
-#include "tycho/detail/solvers/globalization/watchdog.h"
-#include "tycho/detail/solvers/non_linear_program.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/barrier_math.h>
+#include <hven/detail/interior/bound_set.h>
+#include <hven/detail/globalization/acceptance_strategy.h>
+#include <hven/detail/globalization/backtracking_line_search.h>
+#include <hven/detail/globalization/noop_recovery.h>
+#include <hven/detail/globalization/progress_measures.h>
+#include <hven/detail/globalization/recovery_chain.h>
+#include <hven/detail/globalization/soc.h>
+#include <hven/detail/globalization/solver_context.h>
+#include <hven/detail/globalization/watchdog.h>
+#include <hven/drivers/non_linear_program.h>
 #include "tycho/detail/solvers_vf/optimization_problem.h"
-#include "tycho/detail/solvers/psiopt.h"
-#include "tycho/detail/solvers/psiopt_presets.h"
+#include <hven/drivers/psiopt.h>
+#include <hven/detail/drivers/psiopt_presets.h>
 
 #include <gtest/gtest.h>
 
@@ -344,10 +345,10 @@ class NativeBoundsHarness {
         Eigen::VectorXd RHS = Eigen::VectorXd::Zero(dim());
         double val = 0.0;
         solver_->eval_nlp(PSIOPT::AlgorithmModes::OPT, 1.0, XSL, val, GX, RHS,
-                          solver_->kkt_sol_.get_matrix(), 0.1);
+                          solver_->kkt_sol_.matrix(), 0.1);
         Eigen::VectorXd diag(pv());
         for (int i = 0; i < pv(); i++) {
-            diag[i] = solver_->kkt_sol_.get_matrix().coeff(i, i);
+            diag[i] = solver_->kkt_sol_.matrix().coeff(i, i);
         }
         return diag;
     }

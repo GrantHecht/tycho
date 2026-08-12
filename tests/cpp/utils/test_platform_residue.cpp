@@ -14,10 +14,11 @@
 //        silently overflowing int (13! and above) (math_functions.h).
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "tycho/detail/solvers/indexing_data.h"
-#include "tycho/detail/solvers/solver_init.h"
-#include "tycho/detail/utils/get_core_count.h"
-#include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/indexing_data.h>
+#include <hven/detail/drivers/solver_init.h>
+#include <hven/detail/interior/utils/get_core_count.h>
+#include <hven/detail/interior/utils/math_functions.h>
 
 #include <gtest/gtest.h>
 

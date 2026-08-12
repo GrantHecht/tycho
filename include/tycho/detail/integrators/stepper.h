@@ -5,7 +5,8 @@
 #pragma once
 
 #include "tycho/detail/integrators/rk_coeffs.h"
-#include "tycho/detail/utils/memory_management.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/utils/memory_management.h>
 #include <Eigen/Core>
 #include <stdexcept>
 #include <type_traits>

@@ -11,7 +11,8 @@
 
 #include "solver_test_utils.h"
 
-#include "tycho/detail/solvers/psiopt_presets.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/drivers/psiopt_presets.h>
 
 #include <gtest/gtest.h>
 

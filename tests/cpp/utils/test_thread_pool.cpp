@@ -5,7 +5,8 @@
 // work stealing, thread counts, and shutdown behavior.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/utils/thread_pool.h>
 #include "test_utils.h"
 #include <atomic>
 #include <chrono>
@@ -16,11 +17,11 @@
 using TychoTest::ScopedThreadCount;
 
 /// Test-only accessor for ThreadPool::reset() (now private).
-namespace tycho::utils {
+namespace hven::utils {
 struct ThreadPoolTestAccess {
     static void reset(ThreadPool &pool, unsigned n) { pool.reset(n); }
 };
-} // namespace tycho::utils
+} // namespace hven::utils
 using tycho::utils::ThreadPoolTestAccess;
 
 TEST(ThreadPoolTest, ConstructDefault) {

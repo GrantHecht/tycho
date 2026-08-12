@@ -101,6 +101,11 @@ endif()
 set_property(TARGET tycho::tycho APPEND PROPERTY
     INTERFACE_LINK_LIBRARIES Threads::Threads)
 
+# Eigen3 (BUILD_INTERFACE-guarded in the build tree so the target the solver
+# library defines there does not have to be exported; re-established above).
+set_property(TARGET tycho::tycho APPEND PROPERTY
+    INTERFACE_LINK_LIBRARIES Eigen3::Eigen)
+
 # Sparse solver
 if(TYCHO_SPARSE_SOLVER STREQUAL "MKL")
     # Validate MKL was fully found. FindMKL.cmake does not include
@@ -132,9 +137,9 @@ if(TYCHO_SPARSE_SOLVER STREQUAL "MKL")
             INTERFACE_INCLUDE_DIRECTORIES ${MKL_INCLUDE_DIRS})
     endif()
 elseif(TYCHO_SPARSE_SOLVER STREQUAL "AccelerateSparse")
-    # AccelerateSparse: re-found above via find_dependency(). The PUBLIC link on
-    # psiopt in tychoTargets.cmake references this target. Re-attach explicitly
-    # on tycho::tycho as well, for resilience against future link-visibility changes.
+    # AccelerateSparse: re-found above via find_dependency(). Re-attach
+    # explicitly on tycho::tycho, for resilience against future link-visibility
+    # changes.
     if(NOT TARGET AccelerateSparse::AccelerateSparse)
         message(FATAL_ERROR
             "tycho: AccelerateSparse::AccelerateSparse target not found after "

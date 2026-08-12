@@ -7,5 +7,6 @@
 
 // Public detail headers (not pulled in by utils.h directly)
 #include "tycho/detail/utils/lambda_jump_table.h"
-#include "tycho/detail/utils/memory_management.h"
-#include "tycho/detail/utils/tuple_iterator.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/utils/memory_management.h>
+#include <hven/detail/interior/utils/tuple_iterator.h>

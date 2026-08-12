@@ -14,7 +14,8 @@
 #include "tycho/detail/optimal_control/core/interface_types.h"
 #include "tycho/detail/optimal_control/core/optimal_control_flags.h"
 #include "tycho/detail/optimal_control/phase/ode_phase_base.h"
-#include "tycho/detail/solvers/psiopt.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/drivers/psiopt.h>
 #include <fmt/format.h>
 #include <initializer_list>
 #include <memory>

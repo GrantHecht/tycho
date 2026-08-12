@@ -30,10 +30,10 @@ using PhaseRefType = std::variant<int, PhasePtr, std::string>;
 using PhasePack = std::tuple<PhaseRefType, RegionType, VarIndexType, VarIndexType, VarIndexType>;
 
 static void
-build_link_interface(nb::class_<OptimalControlProblemBase, OptimizationProblemBase> &obj);
+build_link_interface(nb::class_<OptimalControlProblemBase, BackendProblemBase> &obj);
 
 void TychoBind<OptimalControlProblemBase>::build(nb::module_ &m) {
-    auto obj = nb::class_<OptimalControlProblemBase, OptimizationProblemBase>(
+    auto obj = nb::class_<OptimalControlProblemBase, BackendProblemBase>(
         m, "OptimalControlProblem",
         R"doc(A multi-phase optimal control problem.
 
@@ -492,7 +492,7 @@ m : MeshErrorAggregation
 }
 
 static void
-build_link_interface(nb::class_<OptimalControlProblemBase, OptimizationProblemBase> &obj) {
+build_link_interface(nb::class_<OptimalControlProblemBase, BackendProblemBase> &obj) {
 
     //////////// equal_cons_////////////////////////////////////////
     {

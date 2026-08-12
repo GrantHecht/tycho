@@ -11,7 +11,8 @@
 //      detector.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "tycho/detail/solvers/globalization/feasibility_stall.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/globalization/feasibility_stall.h>
 
 #include "solver_test_utils.h"
 

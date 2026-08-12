@@ -18,7 +18,8 @@
 
 #include "tycho/detail/optimal_control/transcription/lgl_interp_functions.h"
 #include "tycho/detail/optimal_control/transcription/lgl_interp_table.h"
-#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/typedefs/eigen_types.h>
 #include "tycho/detail/vf/type_erasure/generic_function.h"
 
 namespace tycho::integrators {

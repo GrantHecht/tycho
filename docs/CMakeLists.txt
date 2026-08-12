@@ -69,8 +69,8 @@ file(GLOB_RECURSE _TYCHO_PUBLIC_HEADERS
     CONFIGURE_DEPENDS
     "${PROJECT_SOURCE_DIR}/include/tycho/*.h"
     "${PROJECT_SOURCE_DIR}/include/tycho/*.hpp"
-    "${PROJECT_SOURCE_DIR}/psiopt/include/tycho/*.h"
-    "${PROJECT_SOURCE_DIR}/psiopt/include/tycho/*.hpp")
+    "${TYCHO_HVEN_DIR}/include/hven/*.h"
+    "${TYCHO_HVEN_DIR}/include/hven/*.hpp")
 
 add_custom_command(
     OUTPUT  "${DOXYGEN_OUTPUT_DIR}/xml/index.xml"

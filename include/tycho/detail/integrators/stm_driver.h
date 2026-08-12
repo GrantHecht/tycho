@@ -4,7 +4,8 @@
 
 #pragma once
 
-#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/typedefs/eigen_types.h>
 #include "tycho/detail/vf/type_erasure/generic_function.h"
 #include <Eigen/Core>
 #include <algorithm>

@@ -1,6 +1,7 @@
 #pragma once
 #include "tycho/detail/astro/kepler/stumpff.h"
-#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/typedefs/eigen_types.h>
 #include "tycho/detail/utils/compiler_macros.h"
 #include <Eigen/Geometry>
 #include <cmath>

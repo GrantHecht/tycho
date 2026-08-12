@@ -1,7 +1,8 @@
 #pragma once
 #include "tycho/detail/astro/conversions/kepler_utils.h"
 #include "tycho/detail/astro/kepler/kepler_lcd_iterate.h"
-#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/typedefs/eigen_types.h>
 #include <cmath>
 #include <stdexcept>
 

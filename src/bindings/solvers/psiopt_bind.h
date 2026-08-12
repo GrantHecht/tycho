@@ -17,7 +17,8 @@
 #ifdef TYCHO_PYTHON_BINDINGS
 
 #include "function_registry.h"
-#include "tycho/detail/solvers/psiopt.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/drivers/psiopt.h>
 
 namespace tycho {
 

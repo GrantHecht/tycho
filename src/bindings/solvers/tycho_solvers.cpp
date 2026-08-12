@@ -26,7 +26,7 @@ void solvers_build(FunctionRegistry &reg, nb::module_ &m) {
     auto &sol = reg.getSolversModule();
     ensure_solver_initialized();
     TychoBind<PSIOPT>::build(sol);
-    TychoBind<OptimizationProblemBase>::build(sol);
+    TychoBind<BackendProblemBase>::build(sol);
     TychoBind<Jet>::build(sol);
     TychoBind<OptimizationProblem>::build(sol);
 }

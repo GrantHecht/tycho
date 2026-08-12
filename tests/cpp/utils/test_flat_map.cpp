@@ -5,7 +5,8 @@
 // duplicate rejection, copy/move semantics, iteration.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "tycho/detail/utils/flat_map.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/utils/flat_map.h>
 #include <Eigen/Core>
 #include <gtest/gtest.h>
 #include <string>

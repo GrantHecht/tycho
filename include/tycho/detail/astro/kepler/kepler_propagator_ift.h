@@ -13,7 +13,8 @@
 #include "tycho/detail/astro/kepler/kepler_lcd_iterate.h"
 #include "tycho/detail/astro/kepler/kepler_primal.h"
 #include "tycho/detail/astro/kepler/kepler_residual.h"
-#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/typedefs/eigen_types.h>
 
 #include <cassert>
 #include <cmath>

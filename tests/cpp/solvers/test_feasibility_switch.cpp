@@ -19,13 +19,14 @@
 
 #include "solver_test_utils.h"
 
-#include "tycho/detail/solvers/globalization/classic_adaptive_governor.h"
-#include "tycho/detail/solvers/globalization/feasibility_switch_recovery.h"
-#include "tycho/detail/solvers/globalization/filter_acceptance.h"
-#include "tycho/detail/solvers/globalization/globalization_mechanism.h"
-#include "tycho/detail/solvers/globalization/l1_restoration.h"
-#include "tycho/detail/solvers/globalization/monitored_governor.h"
-#include "tycho/detail/solvers/globalization/proximal_restoration.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/globalization/classic_adaptive_governor.h>
+#include <hven/detail/globalization/feasibility_switch_recovery.h>
+#include <hven/detail/globalization/filter_acceptance.h>
+#include <hven/detail/globalization/globalization_mechanism.h>
+#include <hven/detail/globalization/l1_restoration.h>
+#include <hven/detail/globalization/monitored_governor.h>
+#include <hven/detail/globalization/proximal_restoration.h>
 
 #include <gtest/gtest.h>
 
@@ -751,9 +752,9 @@ class NestedSeamHarness {
         Eigen::VectorXd AGXS = Eigen::VectorXd::Zero(dim());
         double val = 0.0;
         solver_->eval_nlp(PSIOPT::AlgorithmModes::OPTNO, 0.0, XSL, val, GX, AGXS,
-                          solver_->kkt_sol_.get_matrix(), mu);
+                          solver_->kkt_sol_.matrix(), mu);
         const int yrow = pv() + sv();
-        kkt_yy_ = solver_->kkt_sol_.get_matrix().coeff(yrow, yrow);
+        kkt_yy_ = solver_->kkt_sol_.matrix().coeff(yrow, yrow);
         rhs_eq_ = AGXS.segment(pv() + sv(), ec())[0];
     }
 
@@ -771,7 +772,7 @@ class NestedSeamHarness {
         Eigen::VectorXd AGXS = Eigen::VectorXd::Zero(dim());
         double val = 0.0;
         solver_->eval_nlp(PSIOPT::AlgorithmModes::OPTNO, 0.0, XSL, val, GX, AGXS,
-                          solver_->kkt_sol_.get_matrix(), mu);
+                          solver_->kkt_sol_.matrix(), mu);
         return raw;
     }
 
@@ -1004,9 +1005,9 @@ class NestedSeamIneqHarness {
         Eigen::VectorXd AGXS = Eigen::VectorXd::Zero(dim());
         double val = 0.0;
         solver_->eval_nlp(PSIOPT::AlgorithmModes::OPTNO, 0.0, XSL, val, GX, AGXS,
-                          solver_->kkt_sol_.get_matrix(), mu);
+                          solver_->kkt_sol_.matrix(), mu);
         const int zrow = pv() + sv() + ec();
-        kkt_zz_ = solver_->kkt_sol_.get_matrix().coeff(zrow, zrow);
+        kkt_zz_ = solver_->kkt_sol_.matrix().coeff(zrow, zrow);
         rhs_iq_ = AGXS.tail(ic())[0];
     }
 

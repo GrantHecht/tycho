@@ -21,9 +21,10 @@
 #include "tycho/detail/optimal_control/phase/mesh_iterate_info.h"
 #include "tycho/detail/optimal_control/phase/phase_indexer.h"
 #include "tycho/detail/optimal_control/transcription/lgl_interp_table.h"
-#include "tycho/detail/solvers/non_linear_program.h"
-#include "tycho/detail/solvers/optimization_problem_base.h"
-#include "tycho/detail/solvers/psiopt.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/drivers/non_linear_program.h>
+#include "tycho/detail/solvers/nlp_backend.h"
+#include <hven/drivers/psiopt.h>
 #include "tycho/detail/vf/scaling/io_scaled.h"
 #include "tycho/vector_functions.h"
 #include <algorithm>
@@ -44,16 +45,16 @@
 #include <Eigen/Geometry>
 #include <Eigen/Sparse>
 
-#include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/flat_map.h"
-#include "tycho/detail/utils/function_return_type.h"
-#include "tycho/detail/utils/get_core_count.h"
-#include "tycho/detail/utils/math_functions.h"
-#include "tycho/detail/utils/sizing_helpers.h"
-#include "tycho/detail/utils/std_extensions.h"
-#include "tycho/detail/utils/thread_pool.h"
-#include "tycho/detail/utils/type_name.h"
-#include "tycho/detail/utils/type_storage.h"
+#include <hven/detail/interior/typedefs/eigen_types.h>
+#include <hven/detail/interior/utils/flat_map.h>
+#include <hven/detail/interior/utils/function_return_type.h>
+#include <hven/detail/interior/utils/get_core_count.h>
+#include <hven/detail/interior/utils/math_functions.h>
+#include <hven/detail/interior/utils/sizing_helpers.h>
+#include <hven/detail/interior/utils/std_extensions.h>
+#include <hven/detail/interior/utils/thread_pool.h>
+#include <hven/detail/interior/utils/type_name.h>
+#include <hven/detail/interior/utils/type_storage.h>
 
 namespace tycho::oc {
 
@@ -69,7 +70,7 @@ using vf::VectorFunction;
 
 // Solvers types
 using tycho::solvers::NonLinearProgram;
-using tycho::solvers::OptimizationProblemBase;
+using tycho::solvers::BackendProblemBase;
 using tycho::solvers::PSIOPT;
 
 /// @internal
@@ -86,7 +87,7 @@ struct OptimalControlProblemBase;
 /// continuous problem into an NLP and drives PSIOPT to solve or optimize it, and
 /// owns the adaptive-mesh-refinement loop. The typed @ref ODEPhase derives from
 /// this; @ref OptimalControlProblem links multiple phases together.
-struct ODEPhaseBase : ODESize<-1, -1, -1>, OptimizationProblemBase {
+struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
     using VectorXi = Eigen::VectorXi; ///< @brief Convenience alias for an integer vector.
     using MatrixXi = Eigen::MatrixXi; ///< @brief Convenience alias for an integer matrix.
 

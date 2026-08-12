@@ -16,7 +16,8 @@
 
 #include "tycho/detail/optimal_control/core/ode_sizes.h"
 #include "tycho/detail/optimal_control/core/optimal_control_flags.h"
-#include "tycho/detail/solvers/non_linear_program.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/drivers/non_linear_program.h>
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -34,16 +35,16 @@
 #include <Eigen/Geometry>
 #include <Eigen/Sparse>
 
-#include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/flat_map.h"
-#include "tycho/detail/utils/function_return_type.h"
-#include "tycho/detail/utils/get_core_count.h"
-#include "tycho/detail/utils/math_functions.h"
-#include "tycho/detail/utils/sizing_helpers.h"
-#include "tycho/detail/utils/std_extensions.h"
-#include "tycho/detail/utils/thread_pool.h"
-#include "tycho/detail/utils/type_name.h"
-#include "tycho/detail/utils/type_storage.h"
+#include <hven/detail/interior/typedefs/eigen_types.h>
+#include <hven/detail/interior/utils/flat_map.h>
+#include <hven/detail/interior/utils/function_return_type.h>
+#include <hven/detail/interior/utils/get_core_count.h>
+#include <hven/detail/interior/utils/math_functions.h>
+#include <hven/detail/interior/utils/sizing_helpers.h>
+#include <hven/detail/interior/utils/std_extensions.h>
+#include <hven/detail/interior/utils/thread_pool.h>
+#include <hven/detail/interior/utils/type_name.h>
+#include <hven/detail/interior/utils/type_storage.h>
 
 namespace tycho::oc {
 

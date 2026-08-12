@@ -31,24 +31,40 @@
 #include <Eigen/Geometry>
 #include <Eigen/Sparse>
 
-#include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/flat_map.h"
-#include "tycho/detail/utils/function_return_type.h"
-#include "tycho/detail/utils/get_core_count.h"
-#include "tycho/detail/utils/math_functions.h"
-#include "tycho/detail/utils/sizing_helpers.h"
-#include "tycho/detail/utils/std_extensions.h"
-#include "tycho/detail/utils/thread_pool.h"
-#include "tycho/detail/utils/type_name.h"
-#include "tycho/detail/utils/type_storage.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/typedefs/eigen_types.h>
+#include <hven/detail/interior/utils/flat_map.h>
+#include <hven/detail/interior/utils/function_return_type.h>
+#include <hven/detail/interior/utils/get_core_count.h>
+#include <hven/detail/interior/utils/math_functions.h>
+#include <hven/detail/interior/utils/sizing_helpers.h>
+#include <hven/detail/interior/utils/std_extensions.h>
+#include <hven/detail/interior/utils/thread_pool.h>
+#include <hven/detail/interior/utils/type_name.h>
+#include <hven/detail/interior/utils/type_storage.h>
+
+// GenericFunction is the one VectorFunction type the solver library names
+// directly: hven/detail/interior/solver_interface_specs.h declares it and
+// takes it by reference in ConstraintInterface's and ObjectiveInterface's
+// preferred constructors, the ones that store the wrapped function directly
+// instead of erasing it a second time. That declaration is `hven::vf::
+// GenericFunction`, so the definition below has to be that entity or those
+// constructors never deduce and every user function silently takes the
+// double-erasure path. It is therefore declared in hven::vf (definition in
+// vf/type_erasure/generic_function.h) and imported here, so tycho::vf::
+// GenericFunction and every unqualified use of it inside namespace tycho go
+// on naming exactly what they always did.
+namespace hven::vf {
+template <int IR, int OR> struct GenericFunction;
+}
 
 namespace tycho::vf {
+
+using ::hven::vf::GenericFunction;
 
 template <class Derived, int IR, int OR> struct DenseFunctionBase;
 
 template <int IR> struct Arguments;
-
-template <int IR, int OR> struct GenericFunction;
 
 template <int IR> struct GenericConditional;
 

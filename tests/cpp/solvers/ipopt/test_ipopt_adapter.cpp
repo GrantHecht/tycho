@@ -11,7 +11,7 @@
 #include "solver_test_utils.h"
 
 #include "tycho/detail/solvers/ipopt/tnlp_adapter.h"
-#include "tycho/detail/solvers/ipopt_backend.h"
+#include "tycho/detail/solvers/nlp_backend.h"
 #include "tycho/detail/solvers_vf/optimization_problem.h"
 
 #include <gtest/gtest.h>

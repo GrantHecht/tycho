@@ -5,7 +5,8 @@
 // semantics, SBO inline/heap paths, copy/move correctness.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "tycho/detail/utils/type_storage.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/utils/type_storage.h>
 #include <gtest/gtest.h>
 
 using namespace tycho::utils;

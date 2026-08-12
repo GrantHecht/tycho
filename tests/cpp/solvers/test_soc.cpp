@@ -22,12 +22,13 @@
 
 #include "solver_test_utils.h"
 
-#include "tycho/detail/solvers/globalization/backtracking_line_search.h"
-#include "tycho/detail/solvers/globalization/globalization_mechanism.h"
-#include "tycho/detail/solvers/globalization/recovery_chain.h"
-#include "tycho/detail/solvers/globalization/restoration.h"
-#include "tycho/detail/solvers/globalization/soc.h"
-#include "tycho/detail/solvers/iterate_info.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/globalization/backtracking_line_search.h>
+#include <hven/detail/globalization/globalization_mechanism.h>
+#include <hven/detail/globalization/recovery_chain.h>
+#include <hven/detail/globalization/restoration.h>
+#include <hven/detail/globalization/soc.h>
+#include <hven/detail/interior/iterate_info.h>
 
 #include <gtest/gtest.h>
 
@@ -393,17 +394,11 @@ class SocElasticHarness {
         Eigen::SparseMatrix<double, Eigen::RowMajor> kkt(inert_.kkt_dim_, inert_.kkt_dim_);
         kkt.setIdentity();
         kkt.makeCompressed();
-#ifndef USE_ACCELERATE_SPARSE
-        // The PARDISO wrapper leaves its whole iparm_ array zeroed until
-        // set_params() runs, and iparm_[34] (C rather than Fortran indexing) is
-        // one of the entries that call sets — without it MKL reads Eigen's
-        // zero-based CSR arrays as one-based and walks off the front of them.
-        // PSIOPT::set_qp_params calls set_params() before any factorization for
-        // exactly this reason; the Accelerate wrapper carries working defaults
-        // in its members and needs no equivalent.
-        inert_.kkt_solver_.set_params();
-#endif
-        inert_.kkt_solver_.compute(kkt);
+// The factorization owns its assembly buffer, so the matrix is written
+        // through it rather than handed to compute(); backend configuration
+        // travels with the factor's options and needs nothing here.
+        inert_.kkt_solver_.matrix() = kkt;
+        inert_.kkt_solver_.compute();
     }
 
     // A live context over this harness's storage, with the transcribed NLP

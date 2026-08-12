@@ -28,7 +28,7 @@ void TychoBind<OptimizationProblem>::build(nb::module_ &m) {
     using ScalarFunctionalX = OptimizationProblem::ScalarFunctionalX;
     using VectorXi = OptimizationProblem::VectorXi;
 
-    auto obj = nb::class_<OptimizationProblem, OptimizationProblemBase>(m, "OptimizationProblem");
+    auto obj = nb::class_<OptimizationProblem, BackendProblemBase>(m, "OptimizationProblem");
 
     obj.def(nb::init<>());
 

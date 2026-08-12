@@ -13,7 +13,8 @@
 //   - Migrated to tycho:: sub-namespaces (PR #35)
 // =============================================================================
 
-#include "tycho/detail/solvers/optimization_problem_base.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/drivers/optimization_problem_base.h>
 #include "optimization_problem_bind.h"
 
 #include <nanobind/stl/map.h>
@@ -25,21 +26,21 @@ using namespace tycho::solvers;
 using namespace tycho::astro;
 using namespace tycho::utils;
 
-void TychoBind<OptimizationProblemBase>::build(nb::module_ &m) {
-    using JetJobModes = OptimizationProblemBase::JetJobModes;
-    auto obj = nb::class_<OptimizationProblemBase>(m, "OptimizationProblemBase");
-    obj.def_rw("jet_job_mode", &OptimizationProblemBase::jet_job_mode_);
+void TychoBind<BackendProblemBase>::build(nb::module_ &m) {
+    using JetJobModes = BackendProblemBase::JetJobModes;
+    auto obj = nb::class_<BackendProblemBase>(m, "OptimizationProblemBase");
+    obj.def_rw("jet_job_mode", &BackendProblemBase::jet_job_mode_);
     obj.def_prop_rw(
-        "num_partitions", [](const OptimizationProblemBase &self) { return self.num_partitions_; },
-        [](OptimizationProblemBase &self, int n) { self.set_num_partitions(n); },
+        "num_partitions", [](const BackendProblemBase &self) { return self.num_partitions_; },
+        [](BackendProblemBase &self, int n) { self.set_num_partitions(n); },
         R"doc(Number of NLP matrix partitions.
 
 Assignment routes through :meth:`set_num_partitions` and raises
 ``ValueError`` for values < 1. Use ``set_num_partitions(n, qp_threads)`` to
 also set the QP thread count.)doc");
-    obj.def_ro("optimizer", &OptimizationProblemBase::optimizer_);
+    obj.def_ro("optimizer", &BackendProblemBase::optimizer_);
 
-    obj.def_rw("nlp_solver", &OptimizationProblemBase::nlp_solver_,
+    obj.def_rw("nlp_solver", &BackendProblemBase::nlp_solver_,
                R"doc(NLP solver backend for the solve/optimize entry points.
 
 NLPSolvers.psiopt (default) is the built-in solver, byte-identical to
@@ -62,7 +63,7 @@ The built-in solver's own diagnostics (``optimizer.last_obj_val``,
 untouched by an ipopt-backend run -- use ``last_ipopt_result`` as the
 source of truth for diagnostics of the most recent ipopt-backend
 solve.)doc");
-    obj.def_rw("ipopt_options", &OptimizationProblemBase::ipopt_options_,
+    obj.def_rw("ipopt_options", &BackendProblemBase::ipopt_options_,
                R"doc(String key/value options forwarded verbatim to Ipopt (e.g.
 {"linear_solver": "pardisomkl"}). Applied after the matched-tolerance
 baseline, so entries here win. Ignored by the psiopt backend.
@@ -72,30 +73,30 @@ mutation (``prob.ipopt_options["linear_solver"] = "ma57"``) silently has
 no effect. Assign a whole dict instead, or read-modify-write:
 ``opts = prob.ipopt_options; opts["linear_solver"] = "ma57";
 prob.ipopt_options = opts``.)doc");
-    obj.def_ro("last_ipopt_result", &OptimizationProblemBase::last_ipopt_result_,
+    obj.def_ro("last_ipopt_result", &BackendProblemBase::last_ipopt_result_,
                R"doc(Diagnostics of the most recent ipopt-backend run on this problem
 (sentinel values with ran == False before any such run).)doc");
 
     obj.def("set_num_partitions",
-            nb::overload_cast<int, int>(&OptimizationProblemBase::set_num_partitions),
+            nb::overload_cast<int, int>(&BackendProblemBase::set_num_partitions),
             nb::arg("num_partitions"), nb::arg("qp_threads"));
 
     obj.def("set_num_partitions",
-            nb::overload_cast<int>(&OptimizationProblemBase::set_num_partitions));
+            nb::overload_cast<int>(&BackendProblemBase::set_num_partitions));
 
     obj.def("set_jet_job_mode",
-            nb::overload_cast<JetJobModes>(&OptimizationProblemBase::set_jet_job_mode));
+            nb::overload_cast<JetJobModes>(&BackendProblemBase::set_jet_job_mode));
     obj.def("set_jet_job_mode",
-            nb::overload_cast<const std::string &>(&OptimizationProblemBase::set_jet_job_mode));
+            nb::overload_cast<const std::string &>(&BackendProblemBase::set_jet_job_mode));
 
-    obj.def("solve", &OptimizationProblemBase::solve, nb::call_guard<nb::gil_scoped_release>());
-    obj.def("optimize", &OptimizationProblemBase::optimize,
+    obj.def("solve", &BackendProblemBase::solve, nb::call_guard<nb::gil_scoped_release>());
+    obj.def("optimize", &BackendProblemBase::optimize,
             nb::call_guard<nb::gil_scoped_release>());
-    obj.def("solve_optimize", &OptimizationProblemBase::solve_optimize,
+    obj.def("solve_optimize", &BackendProblemBase::solve_optimize,
             nb::call_guard<nb::gil_scoped_release>());
-    obj.def("solve_optimize_solve", &OptimizationProblemBase::solve_optimize_solve,
+    obj.def("solve_optimize_solve", &BackendProblemBase::solve_optimize_solve,
             nb::call_guard<nb::gil_scoped_release>());
-    obj.def("optimize_solve", &OptimizationProblemBase::optimize_solve,
+    obj.def("optimize_solve", &BackendProblemBase::optimize_solve,
             nb::call_guard<nb::gil_scoped_release>());
 
     /// <summary>

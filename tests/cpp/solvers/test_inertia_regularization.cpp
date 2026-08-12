@@ -22,8 +22,9 @@
 
 #include "solver_test_utils.h"
 
-#include "tycho/detail/solvers/barrier_math.h"
-#include "tycho/detail/solvers/globalization/inertia_regularization.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/barrier_math.h>
+#include <hven/detail/globalization/inertia_regularization.h>
 
 #include <gtest/gtest.h>
 

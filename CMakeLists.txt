@@ -41,6 +41,9 @@ set_property(GLOBAL APPEND PROPERTY JOB_POOLS heavy_compile=${TYCHO_HEAVY_COMPIL
 ################## Includes ####################################################
 ################################################################################
 
+# Target names are global in CMake, and hven — added as a subdirectory below —
+# carries its own copies of these two convenience targets. Tycho's are named
+# apart so both projects keep theirs.
 include(cmake/git-submodule-init.cmake)
 include(cmake/git-submodule-update.cmake)
 include(CheckCXXCompilerFlag)
@@ -318,6 +321,51 @@ endif()
 #  include(FindPythonEnv)
 #endif()
 
+################################################################################
+# hven — the NLP solver library (the interior-point engine, the sparse-KKT
+# backends, and the runtime support layer they need). Vendored as a submodule
+# at dep/hven and consumed as a CMake subdirectory, which is the only
+# consumption form it supports today (it has no install/export rules, so
+# find_package(hven) does not exist).
+#
+# It is added HERE, ahead of the Eigen and fmt blocks below, because it brings
+# its own vendored copies of both and publishes them under the standard
+# Eigen3::Eigen / fmt::fmt-header-only names. Both blocks below now yield to an
+# already-defined target rather than defining a second one under a name CMake
+# allows only once. hven's dep/eigen and dep/fmt are pinned to the same commits
+# as tycho's, so which copy supplies the headers is not a behavioral question.
+################################################################################
+set(TYCHO_HVEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dep/hven" CACHE PATH
+    "hven checkout tycho builds against. Defaults to the dep/hven submodule; point it at an external checkout to build tycho against a working copy of hven.")
+
+if(NOT EXISTS "${TYCHO_HVEN_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR
+        "hven not found at ${TYCHO_HVEN_DIR} (no CMakeLists.txt there).\n"
+        "For the bundled submodule, run:\n"
+        "    git submodule update --init --recursive dep/hven\n"
+        "To build against a checkout elsewhere, pass -DTYCHO_HVEN_DIR=/path/to/hven.")
+endif()
+
+if(TYCHO_USE_SYSTEM_EIGEN)
+    message(FATAL_ERROR
+        "TYCHO_USE_SYSTEM_EIGEN=ON is not supported while hven is consumed as a "
+        "subdirectory: hven defines the Eigen3::Eigen target unconditionally from its "
+        "own vendored copy, and find_package(Eigen3) would try to define it a second "
+        "time. Build with the bundled Eigen (-DTYCHO_USE_SYSTEM_EIGEN=OFF).")
+endif()
+
+# hven's own defaults for these match tycho's, but the floating-point mode is a
+# numerics setting and the two halves of one binary must not disagree about it,
+# so tycho's choice is the one that reaches hven. Set as a cache entry before
+# add_subdirectory so hven's own `set(... CACHE ...)` finds it already defined.
+set(HVEN_FP_MODE "${TYCHO_FP_MODE}" CACHE STRING
+    "Floating-point optimization mode for the hven subproject (follows TYCHO_FP_MODE).")
+# hven's test suite is verified by hven's own CI; building it here would add a
+# second GoogleTest to this build for no coverage tycho's gate reads.
+set(HVEN_BUILD_TESTS OFF)
+
+add_subdirectory("${TYCHO_HVEN_DIR}" "${CMAKE_BINARY_DIR}/hven")
+
 # Set up submodule dependencies
 if(TYCHO_USE_SYSTEM_EIGEN)
     find_package(Eigen3 3.4 REQUIRED)
@@ -364,8 +412,12 @@ include_directories(dep/pocketfft)
 # solve-time evaluation). Thread count is exposed via ChebTable::from_values
 # nthreads parameter (default 1). No global compile-time disable needed.
 
-# fmt is used by core libraries (utils) so it must always be available.
-add_subdirectory(dep/fmt)
+# fmt is used by core libraries so it must always be available. hven has
+# already published fmt::fmt-header-only from its own vendored copy (same
+# pinned commit); adding tycho's would try to define that target twice.
+if(NOT TARGET fmt::fmt-header-only)
+    add_subdirectory(dep/fmt)
+endif()
 
 if(ENABLE_PYTHON_BINDINGS)
     find_package(Python ${PYVERSION_EXACT} COMPONENTS Interpreter Development REQUIRED)
@@ -523,10 +575,8 @@ endif()
 ################################################################################
 # Code Directories
 include(GNUInstallDirs)
-# PSIOPT is its own CMake project (it also configures standalone, see
-# psiopt/CMakeLists.txt). It must come before src/, which links its targets
-# and adds its header root to the shared include list.
-add_subdirectory(psiopt)
+# The solver library is added further up, with the rest of the dependencies:
+# it has to precede the Eigen and fmt blocks, not just src/.
 add_subdirectory(src)
 
 # add_subdirectory(extensions)
@@ -568,6 +618,15 @@ include(cmake/clang-format.cmake)
 # Install rules — headers, CMake package config, and Find modules
 
 install(DIRECTORY include/tycho
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h"
+)
+
+# Tycho's public headers include hven's, so the installed include tree is only
+# complete with them alongside. hven itself has no install rules yet, so its
+# static library is not installed and an install-tree consumer cannot link it;
+# that gap closes when hven grows an install/export of its own.
+install(DIRECTORY "${TYCHO_HVEN_DIR}/include/hven"
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     FILES_MATCHING PATTERN "*.h"
 )

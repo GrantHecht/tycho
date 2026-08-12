@@ -14,8 +14,9 @@
 
 #pragma once
 
-#include "tycho/detail/solvers/parsed_io_flags.h"
-#include "tycho/detail/solvers/threading_flags.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/parsed_io_flags.h>
+#include <hven/detail/interior/threading_flags.h>
 
 namespace tycho::vf {
 

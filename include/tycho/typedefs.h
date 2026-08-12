@@ -1,4 +1,5 @@
 #pragma once
 
 // Tycho — Eigen type aliases and SIMD-width detection
-#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/typedefs/eigen_types.h>

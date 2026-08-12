@@ -25,8 +25,9 @@
 
 #include "oc_test_utils.h"
 #include "test_utils.h"
-#include "tycho/detail/solvers/globalization/solver_context.h"
-#include "tycho/detail/solvers/jet.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/globalization/solver_context.h>
+#include <hven/detail/interior/jet.h>
 #include <cmath>
 #include <functional>
 #include <gtest/gtest.h>

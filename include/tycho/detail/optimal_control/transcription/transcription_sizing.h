@@ -14,7 +14,8 @@
 
 #pragma once
 
-#include "tycho/detail/utils/sizing_helpers.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/utils/sizing_helpers.h>
 
 namespace tycho::oc {
 

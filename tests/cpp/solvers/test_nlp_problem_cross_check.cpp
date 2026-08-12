@@ -17,8 +17,9 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "tycho/detail/solvers_vf/optimization_problem.h"
-#include "tycho/solvers/nlp_problem.h"
-#include "tycho/solvers/nlp_solver.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/model/nlp_problem.h>
+#include <hven/model/nlp_solver.h>
 
 #include <gtest/gtest.h>
 

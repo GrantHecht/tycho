@@ -30,18 +30,19 @@
 
 #include "solver_test_utils.h"
 
-#include "tycho/detail/solvers/globalization/acceptance_strategy.h"
-#include "tycho/detail/solvers/globalization/backtracking_line_search.h"
-#include "tycho/detail/solvers/globalization/filter_acceptance.h"
-#include "tycho/detail/solvers/globalization/globalization_mechanism.h"
-#include "tycho/detail/solvers/globalization/l1_restoration.h"
-#include "tycho/detail/solvers/globalization/modern_merit.h"
-#include "tycho/detail/solvers/globalization/monitored_governor.h"
-#include "tycho/detail/solvers/globalization/recovery_chain.h"
-#include "tycho/detail/solvers/globalization/soc.h"
-#include "tycho/detail/solvers/globalization/solver_context.h"
-#include "tycho/detail/solvers/globalization/watchdog.h"
-#include "tycho/detail/solvers/iterate_info.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/globalization/acceptance_strategy.h>
+#include <hven/detail/globalization/backtracking_line_search.h>
+#include <hven/detail/globalization/filter_acceptance.h>
+#include <hven/detail/globalization/globalization_mechanism.h>
+#include <hven/detail/globalization/l1_restoration.h>
+#include <hven/detail/globalization/modern_merit.h>
+#include <hven/detail/globalization/monitored_governor.h>
+#include <hven/detail/globalization/recovery_chain.h>
+#include <hven/detail/globalization/soc.h>
+#include <hven/detail/globalization/solver_context.h>
+#include <hven/detail/globalization/watchdog.h>
+#include <hven/detail/interior/iterate_info.h>
 
 #include <gtest/gtest.h>
 

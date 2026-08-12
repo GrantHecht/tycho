@@ -15,7 +15,8 @@
 // and the solve.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "tycho/detail/solvers/non_linear_program.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/drivers/non_linear_program.h>
 #include "tycho/detail/solvers_vf/optimization_problem.h"
 
 #include <gtest/gtest.h>

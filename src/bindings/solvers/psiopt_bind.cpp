@@ -18,8 +18,9 @@
 // =============================================================================
 
 #include "psiopt_bind.h"
-#include "tycho/detail/solvers/ipopt_backend.h"
-#include "tycho/detail/solvers/psiopt.h"
+#include "tycho/detail/solvers/nlp_backend.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/drivers/psiopt.h>
 
 #include <nanobind/stl/string_view.h>
 

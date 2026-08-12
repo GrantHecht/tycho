@@ -39,10 +39,6 @@
 #                   the wheel path; otherwise used as given.
 #   COMPILE_TIME_TRACE
 #                   ON adds -ftime-trace directory-wide (Clang only).
-#
-# A standalone subproject that includes this module (psiopt/CMakeLists.txt)
-# must set these itself -- see the PSIOPT_STANDALONE block there for the
-# defaults the Tycho root supplies.
 ################################################################################
 
 macro(tycho_compile_options)

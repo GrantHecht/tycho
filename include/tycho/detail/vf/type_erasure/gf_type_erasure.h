@@ -19,8 +19,9 @@
 
 #pragma once
 
-#include "tycho/detail/solvers/sizing_specs.h"
-#include "tycho/detail/solvers/solver_interface_specs.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/sizing_specs.h>
+#include <hven/detail/interior/solver_interface_specs.h>
 #include "tycho/detail/vf/core/dense_function_specs.h"
 
 #include <concepts>
