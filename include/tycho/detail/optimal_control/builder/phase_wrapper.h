@@ -832,7 +832,7 @@ class Phase {
     /// @brief Set the jet (batched) solve job mode.
     /// @param mode  The jet job mode controlling how batched Jacobian/Hessian evaluations
     ///              are dispatched.
-    void set_jet_job_mode(solvers::OptimizationProblemBase::JetJobModes mode) {
+    void set_jet_job_mode(solvers::BackendProblemBase::JetJobModes mode) {
         phase_->set_jet_job_mode(mode);
     }
 

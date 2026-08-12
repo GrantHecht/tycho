@@ -9,11 +9,11 @@ using namespace tycho;
 using TychoTest::make_brach_solver_phase;
 using TychoTest::SolverTest;
 
-// OptimizationProblemBase/OptimizationProblem live in tycho::solvers; this
+// BackendProblemBase/OptimizationProblem live in tycho::solvers; this
 // file previously relied on the TychoTest -> tycho::solvers using-directive
 // leak (fixed in solver_test_utils.h) to see them unqualified.
 using tycho::solvers::OptimizationProblem;
-using tycho::solvers::OptimizationProblemBase;
+using tycho::solvers::BackendProblemBase;
 
 TEST_F(SolverTest, NLPDimensionsConsistency) {
     auto phase = make_brach_solver_phase(16);
@@ -44,12 +44,12 @@ TEST_F(SolverTest, NLPSparsityNonEmpty) {
 TEST(OptimizationProblemDefaults, MatchesBaseInitPartitions) {
     // On a single-threaded host the base defaults collapse to the same 1/1
     // the old override produced — the assertions below would pass either way.
-    if (OptimizationProblemBase::default_num_partitions() <= 1 &&
+    if (BackendProblemBase::default_num_partitions() <= 1 &&
         std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count()) <= 1)
         GTEST_SKIP() << "single-threaded host: defaults indistinguishable from the old override";
 
     OptimizationProblem prob;
-    EXPECT_EQ(prob.num_partitions_, OptimizationProblemBase::default_num_partitions());
+    EXPECT_EQ(prob.num_partitions_, BackendProblemBase::default_num_partitions());
     EXPECT_EQ(prob.optimizer_->settings().qp_threads_,
               std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count()));
 }

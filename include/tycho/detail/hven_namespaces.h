@@ -36,7 +36,41 @@ namespace hven::utils {}
 
 namespace tycho::solvers {
 using namespace ::hven::solvers;
-}
+
+// --- Withheld from the import above ----------------------------------------
+//
+// Two names in hven::solvers mean something different from what the same
+// spelling meant in tycho::solvers before the engine moved out, and an import
+// that let the old spelling keep compiling would rebind it to the new meaning
+// without a word:
+//
+//   OptimizationProblemBase  Tycho's was the backend-aware problem base. hven's
+//                            carries no nlp_solver_, no ipopt_options_, no
+//                            last_ipopt_result_, no Jet-batch backend guard and
+//                            no foreign-solver branch in run_nlp_solver. The
+//                            backend-aware class is now
+//                            tycho::solvers::BackendProblemBase
+//                            (detail/solvers/nlp_backend.h).
+//
+//   NLPSolver                Derives from that base, so it lost the same
+//                            surface, plus the seeding-versus-foreign-backend
+//                            rejection in apply_starting_multipliers. The
+//                            solver-neutral NLP interface is hven's alone now:
+//                            name it hven::solvers::NLPSolver.
+//
+// A using-directive imports all or nothing, so the two are withheld by being
+// declared here instead — as templates, so that EVERY use fails, not only the
+// ones that need a complete type: a pointer, a reference or a smart-pointer
+// member spelled the old way would otherwise still compile. The template
+// parameter's name is the diagnostic; it is what the compiler prints under
+// "use of class template ... requires template arguments".
+//
+// Every other name hven::solvers publishes is either unchanged from the
+// pre-move surface or changed in a way the compiler catches at the use site;
+// see the sweep recorded with this change.
+template <class RenamedToBackendProblemBase = void> struct OptimizationProblemBase;
+template <class SpellItHvenSolversNLPSolver = void> struct NLPSolver;
+} // namespace tycho::solvers
 
 namespace tycho::utils {
 using namespace ::hven::utils;

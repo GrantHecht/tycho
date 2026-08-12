@@ -96,11 +96,30 @@ struct BackendProblemBase : hven::solvers::OptimizationProblemBase {
     /// runs a single NLP solve from the given input (the
     /// feasibility-then-optimize staging has no Ipopt analog).
     ///
-    /// This hides the base's non-virtual member of the same name, which is
-    /// what every tycho call site (ODEPhaseBase / OptimalControlProblemBase
-    /// psipot_call_impl) resolves to, since `this` is always a tycho problem
-    /// there. The base calls its own only from jet_run(), which the override
-    /// above has already restricted to the psiopt backend.
+    /// FRAGILITY, STATED PLAINLY: the base's member of this name is NOT
+    /// virtual, so this one hides it rather than overriding it, and which of
+    /// the two runs is decided by the STATIC type of the object the call is
+    /// made on -- not by what the object actually is.
+    ///
+    /// That is sound for every path tycho owns. ODEPhaseBase::psipot_call_impl
+    /// and OptimalControlProblemBase::psipot_call_impl are the only call sites
+    /// on this side, and in both `this` is statically a class derived from
+    /// BackendProblemBase, so both reach this one. The Jet batch path arrives
+    /// the same way: the base's jet_run() dispatches through the VIRTUAL
+    /// solve()/optimize()/... entry points, which land in those same tycho
+    /// overrides, so a batch element also resolves to this member -- and the
+    /// jet_run() override above has already rejected the Ipopt backend before
+    /// any of that begins, so the batch path only ever takes the psiopt branch
+    /// below anyway.
+    ///
+    /// The base's own member does still run, on objects that are not tycho
+    /// problems: the solver library's NLPSolver derives from the library's base
+    /// directly, never from this one, and its run() calls the base member. That
+    /// is correct -- that surface has no backend selection to make -- and it is
+    /// also why NLPSolver is not reachable through tycho's solver namespace
+    /// (see detail/hven_namespaces.h). The rule to keep: anything that wants
+    /// this dispatch must derive from BackendProblemBase and be seen as such at
+    /// the call site.
     ///
     /// Defined out of line below, after the ipopt_backend::solve declaration it
     /// calls (a member function body defined in the class cannot name a

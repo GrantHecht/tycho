@@ -16,8 +16,8 @@
 // exercises the native variable-bound path identically on both sides.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "tycho/detail/solvers_vf/optimization_problem.h"
 #include "tycho/detail/hven_namespaces.h"
+#include "tycho/detail/solvers_vf/optimization_problem.h"
 #include <hven/model/nlp_problem.h>
 #include <hven/model/nlp_solver.h>
 
@@ -31,9 +31,14 @@
 #include <Eigen/Core>
 
 using tycho::ConstEigenRef;
-using tycho::solvers::NLPProblem;
-using tycho::solvers::NLPSolver;
 using tycho::solvers::OptimizationProblem;
+// The solver-neutral NLP interface belongs to the solver library and carries no
+// backend selection, so it is named where it lives rather than through tycho's
+// solver namespace -- which is exactly the arm of this cross-check: a problem
+// stated directly against the library, against the same problem stated as a
+// VectorFunction expression tree on tycho's side.
+using hven::solvers::NLPProblem;
+using hven::solvers::NLPSolver;
 
 namespace {
 

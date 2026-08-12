@@ -10,18 +10,18 @@ using TychoTest::BrachODE;
 using TychoTest::make_brach_solver_phase;
 using TychoTest::SolverTest;
 
-// Jet/OptimizationProblemBase live in tycho::solvers; this file previously
+// Jet/BackendProblemBase live in tycho::solvers; this file previously
 // relied on the TychoTest -> tycho::solvers using-directive leak (fixed in
 // solver_test_utils.h) to see them unqualified.
 using tycho::solvers::Jet;
-using tycho::solvers::OptimizationProblemBase;
+using tycho::solvers::BackendProblemBase;
 
 TEST_F(SolverTest, JetMapPrebuiltProblems) {
     // Create 3 identical Brachistochrone phases, solve via Jet::map
     std::vector<std::shared_ptr<ODEPhase<BrachODE>>> phases;
     for (int i = 0; i < 3; ++i) {
         auto p = make_brach_solver_phase(16);
-        p->jet_job_mode_ = OptimizationProblemBase::JetJobModes::SolveOptimize;
+        p->jet_job_mode_ = BackendProblemBase::JetJobModes::SolveOptimize;
         phases.push_back(p);
     }
 
@@ -39,7 +39,7 @@ TEST_F(SolverTest, JetMapSingleGenerator) {
     // Single generator function that builds a Brach phase from a segment count
     std::function<std::shared_ptr<ODEPhase<BrachODE>>(int)> gen = [](int n_segs) {
         auto p = make_brach_solver_phase(n_segs);
-        p->jet_job_mode_ = OptimizationProblemBase::JetJobModes::SolveOptimize;
+        p->jet_job_mode_ = BackendProblemBase::JetJobModes::SolveOptimize;
         return p;
     };
 
@@ -63,7 +63,7 @@ TEST_F(SolverTest, JetMapSaturatedPool) {
     std::vector<std::shared_ptr<ODEPhase<BrachODE>>> phases;
     for (int i = 0; i < num_jobs; ++i) {
         auto p = make_brach_solver_phase(16);
-        p->jet_job_mode_ = OptimizationProblemBase::JetJobModes::SolveOptimize;
+        p->jet_job_mode_ = BackendProblemBase::JetJobModes::SolveOptimize;
         phases.push_back(p);
     }
 
@@ -80,12 +80,12 @@ TEST_F(SolverTest, JetMapMultiGenerator) {
     // Two generators: different segment counts
     std::function<std::shared_ptr<ODEPhase<BrachODE>>(int)> gen16 = [](int) {
         auto p = make_brach_solver_phase(16);
-        p->jet_job_mode_ = OptimizationProblemBase::JetJobModes::SolveOptimize;
+        p->jet_job_mode_ = BackendProblemBase::JetJobModes::SolveOptimize;
         return p;
     };
     std::function<std::shared_ptr<ODEPhase<BrachODE>>(int)> gen32 = [](int) {
         auto p = make_brach_solver_phase(32);
-        p->jet_job_mode_ = OptimizationProblemBase::JetJobModes::SolveOptimize;
+        p->jet_job_mode_ = BackendProblemBase::JetJobModes::SolveOptimize;
         return p;
     };
 

@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Backend-neutral NLP solve dispatch (OptimizationProblemBase::nlp_solver_).
+// Backend-neutral NLP solve dispatch (BackendProblemBase::nlp_solver_).
 //
 // Every solve/optimize entry point routes through a single dispatch seam so an
 // alternative NLP solver backend can intercept the transcribed NLP. These tests
@@ -101,7 +101,7 @@ TEST(NlpSolverDispatch, AdaptiveMeshWithIpoptRejected) {
 // exists in every build, so this holds with or without Ipopt linked.
 TEST(NlpSolverDispatch, JetRunWithIpoptBackendRejected) {
     auto prob = build_ipopt_dispatch_nlp();
-    prob->set_jet_job_mode(ts::OptimizationProblemBase::JetJobModes::Optimize);
+    prob->set_jet_job_mode(ts::BackendProblemBase::JetJobModes::Optimize);
     prob->nlp_solver_ = ts::NLPSolvers::ipopt;
     try {
         prob->jet_run();
@@ -117,7 +117,7 @@ TEST(NlpSolverDispatch, JetRunWithIpoptBackendRejected) {
 // entry point itself.
 TEST(NlpSolverDispatch, JetRunWithPsioptBackendRuns) {
     auto prob = build_ipopt_dispatch_nlp();
-    prob->set_jet_job_mode(ts::OptimizationProblemBase::JetJobModes::Optimize);
+    prob->set_jet_job_mode(ts::BackendProblemBase::JetJobModes::Optimize);
     EXPECT_EQ(prob->jet_run(), tycho::ConvergenceFlags::CONVERGED);
 }
 

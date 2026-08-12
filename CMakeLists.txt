@@ -623,9 +623,16 @@ install(DIRECTORY include/tycho
 )
 
 # Tycho's public headers include hven's, so the installed include tree is only
-# complete with them alongside. hven itself has no install rules yet, so its
-# static library is not installed and an install-tree consumer cannot link it;
-# that gap closes when hven grows an install/export of its own.
+# complete with them alongside.
+#
+# KNOWN GAP, and it cannot be closed from this side: hven has no install rules
+# and no export set of its own, so libhven.a is not installed and hven::hven is
+# not in tychoTargets. The installed package therefore carries every header a
+# consumer needs and no solver library to link against them --
+# find_package(tycho) builds but does not link. Copying hven's archive out of
+# its build tree from here would install a target this project does not own and
+# cannot version, which is worse than the gap. It closes when hven grows an
+# install/export, at which point this block should be replaced by that.
 install(DIRECTORY "${TYCHO_HVEN_DIR}/include/hven"
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     FILES_MATCHING PATTERN "*.h"

@@ -61,7 +61,7 @@ auto make_chain_phase(double a, double b, int n_segs, double L) {
     phase.optimizer().set_max_ls_iters(2);
     phase.optimizer().set_print_level(0);
 
-    phase.set_jet_job_mode(solvers::OptimizationProblemBase::JetJobModes::SolveOptimize);
+    phase.set_jet_job_mode(solvers::BackendProblemBase::JetJobModes::SolveOptimize);
 
     return phase;
 }
