@@ -34,23 +34,24 @@
 #include <Eigen/Geometry>
 #include <Eigen/Sparse>
 
-#include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/flat_map.h"
-#include "tycho/detail/utils/function_return_type.h"
-#include "tycho/detail/utils/get_core_count.h"
-#include "tycho/detail/utils/math_functions.h"
-#include "tycho/detail/utils/sizing_helpers.h"
-#include "tycho/detail/utils/std_extensions.h"
-#include "tycho/detail/utils/thread_pool.h"
-#include "tycho/detail/utils/type_name.h"
-#include "tycho/detail/utils/type_storage.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/typedefs/eigen_types.h>
+#include <hven/detail/interior/utils/flat_map.h>
+#include <hven/detail/interior/utils/function_return_type.h>
+#include <hven/detail/interior/utils/get_core_count.h>
+#include <hven/detail/interior/utils/math_functions.h>
+#include <hven/detail/interior/utils/sizing_helpers.h>
+#include <hven/detail/interior/utils/std_extensions.h>
+#include <hven/detail/interior/utils/thread_pool.h>
+#include <hven/detail/interior/utils/type_name.h>
+#include <hven/detail/interior/utils/type_storage.h>
 
 namespace tycho::oc {
 
 // Solvers types
 using tycho::solvers::NonLinearProgram;
-using tycho::solvers::OptimizationProblemBase;
-using tycho::solvers::PSIOPT;
+using tycho::solvers::BackendProblemBase;
+using tycho::solvers::InteriorPointSolver;
 
 // VF types
 using vf::Arguments;
@@ -63,9 +64,9 @@ using vf::StackedOutputs;
 /// Owns a collection of @ref ODEPhase objects and the link constraints,
 /// inequalities, and objectives that couple them (plus a shared link-parameter
 /// vector). It transcribes all phases and links into one shared NLP and drives
-/// PSIOPT to solve or optimize the combined problem, coordinating adaptive mesh
+/// InteriorPointSolver to solve or optimize the combined problem, coordinating adaptive mesh
 /// refinement across phases.
-struct OptimalControlProblemBase : OptimizationProblemBase {
+struct OptimalControlProblemBase : BackendProblemBase {
     using VectorXi = Eigen::VectorXi; ///< @brief Convenience alias for an integer vector.
     using MatrixXi = Eigen::MatrixXi; ///< @brief Convenience alias for an integer matrix.
 
@@ -1738,11 +1739,11 @@ struct OptimalControlProblemBase : OptimizationProblemBase {
         const std::vector<Eigen::VectorXi> &lv, int orows, int &NextCLoc) const;
 
     /// @internal
-    /// @brief Drive PSIOPT for a single solve/optimize pass (no mesh loop).
+    /// @brief Drive InteriorPointSolver for a single solve/optimize pass (no mesh loop).
     /// @param mode  The solve/optimize job mode.
     /// @return The solver convergence flag.
     /// @endinternal
-    tycho::ConvergenceFlags psipot_call_impl(JetJobModes mode);
+    tycho::ConvergenceFlags interior_point_call_impl(JetJobModes mode);
 
     /// @internal
     /// @brief Run the full problem solve, including the multi-phase mesh-refinement loop.

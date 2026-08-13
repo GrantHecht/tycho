@@ -400,7 +400,7 @@ For numeric-array input use the ``(array, mu)`` overload.
 
     // Python contract: propagate_* raises RuntimeError on non-convergence
     // or NaN-poisoned output.  The C++ kernels return a NaN-filled Vector6
-    // (PSIOPT step-rejection semantics), but Python users expect exceptions;
+    // (InteriorPointSolver step-rejection semantics), but Python users expect exceptions;
     // translate at the boundary.  Detection via allFinite() is cheap (6
     // doubles) and avoids exposing the internal KeplerLCDResult::converged
     // flag.  A structured KeplerLCDStatus enum that distinguishes the

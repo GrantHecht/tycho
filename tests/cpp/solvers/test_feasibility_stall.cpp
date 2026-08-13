@@ -11,7 +11,8 @@
 //      detector.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "tycho/detail/solvers/globalization/feasibility_stall.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/globalization/feasibility_stall.h>
 
 #include "solver_test_utils.h"
 
@@ -217,7 +218,7 @@ std::unique_ptr<ts::OptimizationProblem> feas_stall_build_worsening_nlp() {
     prob->optimizer_->set_qp_threads(1);  // as above
     // Pin the two defaults the exact-Newton-map argument above depends on, so
     // a future default flip cannot silently change this fixture's dynamics.
-    prob->optimizer_->settings().soe_ls_mode_ = ts::PSIOPT::LineSearchModes::NOLS;
+    prob->optimizer_->settings().soe_ls_mode_ = ts::InteriorPointSolver::LineSearchModes::NOLS;
     prob->optimizer_->settings().inertia_mode_ = ts::InertiaModes::classic;
     return prob;
 }

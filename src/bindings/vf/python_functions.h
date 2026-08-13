@@ -154,7 +154,7 @@ length ``o_rows``.  Jacobians and Hessians are approximated automatically using
 forward finite differences.
 
 Because the Python GIL must be acquired on every evaluation, ``PyVectorFunction``
-cannot execute in parallel across PSIOPT solver threads — calls are serialized by
+cannot execute in parallel across InteriorPointSolver solver threads — calls are serialized by
 the GIL.  For parallel-safe evaluation, use ``NumbaVectorFunction`` instead.
 
 Parameters
@@ -264,7 +264,7 @@ attribute of a Numba ``@cfunc`` object.
 
 Unlike ``PyVectorFunction``, evaluation does NOT hold the Python GIL, so
 ``NumbaVectorFunction`` instances can safely be evaluated in parallel across
-PSIOPT solver threads once ``thread_safe`` is set to ``True``.  Jacobians and
+InteriorPointSolver solver threads once ``thread_safe`` is set to ``True``.  Jacobians and
 Hessians are approximated automatically using forward finite differences.
 
 Parameters
@@ -328,7 +328,7 @@ hstepsize : float
         obj.def_rw("thread_safe", &NumbaVectorFunction<IRR, ORR>::thread_safe_,
             R"doc(Whether this function is safe to call from multiple threads simultaneously.
 
-Set to ``True`` to allow PSIOPT solver threads to evaluate this function in
+Set to ``True`` to allow InteriorPointSolver solver threads to evaluate this function in
 parallel without acquiring the Python GIL.  The underlying C callback must
 itself be thread-safe (i.e., it must not use shared mutable state).
 Defaults to ``False``.

@@ -14,7 +14,8 @@
 // =============================================================================
 
 #include "bump_allocator_bind.h"
-#include "tycho/detail/utils/memory_management.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/utils/memory_management.h>
 
 using namespace tycho;
 using namespace tycho::vf;

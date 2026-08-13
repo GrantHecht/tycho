@@ -382,7 +382,7 @@ TEST(KeplerIFT_Hessian, AlphaBandRecursionVsTaylor) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Negative-dt FD Jacobian: backward propagation is a routine PSIOPT pattern.
+// Negative-dt FD Jacobian: backward propagation is a routine InteriorPointSolver pattern.
 // The column-6 (∂xf/∂dt) sign is the most likely place a sign bug hides.
 ///////////////////////////////////////////////////////////////////////////////
 TEST(KeplerIFT_Jacobian, NegativeDtLEO) {
@@ -596,7 +596,7 @@ TEST(KeplerIFT_Hessian, SimdUniformElliptic) {
 
 ///////////////////////////////////////////////////////////////////////////////
 // Boundary validation: every IFT entry point routes through the LCD kernel,
-// which now rejects non-finite dt / V0 at construction.  PSIOPT users see
+// which now rejects non-finite dt / V0 at construction.  InteriorPointSolver users see
 // std::invalid_argument (translated to ValueError at the Python boundary)
 // instead of consuming a NaN-poisoned output.  The all-or-nothing NaN-
 // poisoning contract for *internal* non-convergence is preserved

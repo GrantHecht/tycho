@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Proximal primal-dual KKT regularization (PSIOPT inertia_mode_).
+// Proximal primal-dual KKT regularization (InteriorPointSolver inertia_mode_).
 //
 // The proximal_regularization inertia mode bakes a small persistent, decaying
 // primal base shift ρ_k on the Hessian diagonal and an always-on barrier-scaled
@@ -22,8 +22,9 @@
 
 #include "solver_test_utils.h"
 
-#include "tycho/detail/solvers/barrier_math.h"
-#include "tycho/detail/solvers/globalization/inertia_regularization.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/barrier_math.h>
+#include <hven/detail/globalization/inertia_regularization.h>
 
 #include <gtest/gtest.h>
 
@@ -294,7 +295,7 @@ constexpr double kInertiaLargeSigma = 1.0e6;
 } // namespace
 
 // InertiaRegularizationSolve_ClassicDegeneracyLatchTracksSingularity_Test reaches
-// PSIOPT::dc_latched_ (private) via the friend declaration in psiopt.h, which
+// InteriorPointSolver::dc_latched_ (private) via the friend declaration in interior_point_solver.h, which
 // befriends the GLOBAL-scope class ::InertiaRegularizationSolve_..._Test that
 // gtest's TEST() macro generates. TEST() declares its fixture class as a member
 // of whatever namespace textually encloses it -- inside the anonymous namespace

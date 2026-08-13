@@ -15,7 +15,9 @@
 // =============================================================================
 
 #include "jet_bind.h"
-#include "tycho/detail/solvers/jet.h"
+#include "tycho/detail/hven_namespaces.h"
+#include "tycho/detail/solvers/nlp_backend.h"
+#include <hven/detail/interior/jet.h>
 
 using namespace tycho;
 using namespace tycho::vf;
@@ -29,27 +31,27 @@ void TychoBind<Jet>::build(nb::module_ &m) {
 
     obj.def_static(
         "map",
-        [](const std::vector<std::shared_ptr<OptimizationProblemBase>> &optprobs) {
+        [](const std::vector<std::shared_ptr<BackendProblemBase>> &optprobs) {
             return Jet::map(optprobs, true);
         },
         nb::call_guard<nb::gil_scoped_release>());
 
     obj.def_static(
         "map",
-        [](std::function<std::shared_ptr<OptimizationProblemBase>(nb::detail::args_proxy)> genfun,
+        [](std::function<std::shared_ptr<BackendProblemBase>(nb::detail::args_proxy)> genfun,
            const std::vector<nb::args> &args) { return Jet::map(genfun, args, true); },
         nb::call_guard<nb::gil_scoped_release>());
 
     obj.def_static(
         "map",
-        [](const std::vector<std::shared_ptr<OptimizationProblemBase>> &optprobs, bool v) {
+        [](const std::vector<std::shared_ptr<BackendProblemBase>> &optprobs, bool v) {
             return Jet::map(optprobs, v);
         },
         nb::call_guard<nb::gil_scoped_release>());
 
     obj.def_static(
         "map",
-        [](std::function<std::shared_ptr<OptimizationProblemBase>(nb::detail::args_proxy)> genfun,
+        [](std::function<std::shared_ptr<BackendProblemBase>(nb::detail::args_proxy)> genfun,
            const std::vector<nb::args> &args, bool v) { return Jet::map(genfun, args, v); },
         nb::call_guard<nb::gil_scoped_release>());
 }

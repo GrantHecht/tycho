@@ -21,13 +21,13 @@ from _tychopy.solvers import *
 AlgorithmModes = _tychopy.solvers.AlgorithmModes
 BarrierModes = _tychopy.solvers.BarrierModes
 ConvergenceFlags = _tychopy.solvers.ConvergenceFlags
+InteriorPointSolver = _tychopy.solvers.InteriorPointSolver
 Jet = _tychopy.solvers.Jet
 JetJobModes = _tychopy.solvers.JetJobModes
 LineSearchModes = _tychopy.solvers.LineSearchModes
 OptimizationProblem = _tychopy.solvers.OptimizationProblem
 OptimizationProblemBase = _tychopy.solvers.OptimizationProblemBase
 PDStepStrategies = _tychopy.solvers.PDStepStrategies
-PSIOPT = _tychopy.solvers.PSIOPT
 QPOrderingModes = _tychopy.solvers.QPOrderingModes
 QPPivotModes = _tychopy.solvers.QPPivotModes
 

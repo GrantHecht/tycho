@@ -10,7 +10,7 @@
 //   - Analytic Jacobian (codegen CartesianToMEE VF) matches a
 //     central-difference Jacobian on a spread of states.
 //   - Analytic Hessian symmetry and adjoint-gradient consistency on the
-//     same states (catches sign/transpose bugs PSIOPT would otherwise
+//     same states (catches sign/transpose bugs InteriorPointSolver would otherwise
 //     consume silently).
 //
 // Orbit fixtures cover bound prograde (LEO/GEO/Molniya), high-inclination

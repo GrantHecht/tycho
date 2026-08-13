@@ -17,7 +17,7 @@ def _small_problem():
 
 def test_nlp_solver_default_and_roundtrip():
     prob = _small_problem()
-    assert prob.nlp_solver == solvs.NLPSolvers.psiopt
+    assert prob.nlp_solver == solvs.NLPSolvers.interior_point
     prob.nlp_solver = solvs.NLPSolvers.ipopt
     assert prob.nlp_solver == solvs.NLPSolvers.ipopt
 

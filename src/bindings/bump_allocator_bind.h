@@ -17,7 +17,8 @@
 #ifdef TYCHO_PYTHON_BINDINGS
 
 #include "function_registry.h"
-#include "tycho/detail/utils/memory_management.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/utils/memory_management.h>
 
 namespace tycho {
 

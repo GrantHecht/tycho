@@ -55,9 +55,9 @@ Previously observed 2026-07-16: DIVERGING (harness status "diverged"),
 2 iterations, objective ~1e16, byte-identical across a --repeat 2
 determinism check. Console trace: iteration 0 takes a short step
 (alpha_p = alpha_d = 0.25) from the exactly-feasible start; iteration 1's
-step blows the equality-constraint residual up to ~5e15 and PSIOPT
+step blows the equality-constraint residual up to ~5e15 and the interior-point solver
 immediately reports "Solution Diverging." This was a FINDING TO REPORT: on
-this classic textbook example, PSIOPT did not exhibit the "slow/stalled
+this classic textbook example, the interior-point solver did not exhibit the "slow/stalled
 progress near the solution" flavor of the Maratos effect that motivates
 the example in Nocedal-Wright -- instead it diverged outright, in just 2
 iterations, from a start that is already exactly ON the constraint

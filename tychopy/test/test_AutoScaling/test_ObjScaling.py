@@ -73,8 +73,11 @@ class test_ObjScaling(unittest.TestCase):
         phase.add_value_objective("Back", 0, vscale)
 
         phase.set_num_partitions(1, 1)
+        # cnr_mode requires nested-dissection ordering (hven rejects the
+        # MINDEG pairing outright); the test cares about reproducible CNR
+        # runs comparing against autoscaling, not the ordering choice itself.
         phase.optimizer.cnr_mode = True
-        phase.optimizer.set_qp_ordering_mode("MINDEG")
+        phase.optimizer.set_qp_ordering_mode("METIS")
 
         if __name__ != "__main__":
             phase.optimizer.print_level = 3
@@ -99,7 +102,7 @@ class test_ObjScaling(unittest.TestCase):
         phase.set_auto_scaling(True)
         phase.set_num_partitions(1, 1)
         phase.optimizer.cnr_mode = True
-        phase.optimizer.set_qp_ordering_mode("MINDEG")
+        phase.optimizer.set_qp_ordering_mode("METIS")
 
         if __name__ != "__main__":
             phase.optimizer.print_level = 3
@@ -127,7 +130,7 @@ class test_ObjScaling(unittest.TestCase):
 
         phase.set_num_partitions(1, 1)
         phase.optimizer.cnr_mode = True
-        phase.optimizer.set_qp_ordering_mode("MINDEG")
+        phase.optimizer.set_qp_ordering_mode("METIS")
 
         if __name__ != "__main__":
             phase.optimizer.print_level = 3
@@ -155,7 +158,7 @@ class test_ObjScaling(unittest.TestCase):
 
         phase.set_num_partitions(1, 1)
         phase.optimizer.cnr_mode = True
-        phase.optimizer.set_qp_ordering_mode("MINDEG")
+        phase.optimizer.set_qp_ordering_mode("METIS")
 
         if __name__ != "__main__":
             phase.optimizer.print_level = 3
@@ -197,7 +200,7 @@ class test_ObjScaling(unittest.TestCase):
         ocp.set_auto_scaling(True, True)
         ocp.set_num_partitions(1, 1)
         ocp.optimizer.cnr_mode = True
-        ocp.optimizer.set_qp_ordering_mode("MINDEG")
+        ocp.optimizer.set_qp_ordering_mode("METIS")
 
         if __name__ != "__main__":
             ocp.optimizer.print_level = 3

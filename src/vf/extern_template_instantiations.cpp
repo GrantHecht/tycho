@@ -14,14 +14,12 @@ namespace tycho::vf {
 // ---------------------------------------------------------------------------
 template struct ComputableBase<GenericFunction<-1, -1>, -1, -1>;
 template struct DenseFunctionBase<GenericFunction<-1, -1>, -1, -1>;
-template struct GenericFunction<-1, -1>;
 
 // ---------------------------------------------------------------------------
 // GenericFunction<-1, 1>  (dynamic-size scalar function)
 // ---------------------------------------------------------------------------
 template struct ComputableBase<GenericFunction<-1, 1>, -1, 1>;
 template struct DenseFunctionBase<GenericFunction<-1, 1>, -1, 1>;
-template struct GenericFunction<-1, 1>;
 
 // ---------------------------------------------------------------------------
 // Common leaf types — CRTP chain
@@ -52,5 +50,8 @@ template struct GFModel<-1, -1, Constant<-1, -1>>;
 
 template struct GFModelCommon<-1, 1, Constant<-1, 1>>;
 template struct GFModel<-1, 1, Constant<-1, 1>>;
+
+template struct GenericFunction<-1, -1>;
+template struct GenericFunction<-1, 1>;
 
 } // namespace tycho::vf

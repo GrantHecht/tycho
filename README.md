@@ -18,7 +18,7 @@ It uses a custom implementation of vector math formalisms to enable rapid
 implementation of dynamical systems and automatic differentiation. The phase object 
 is the core of the optimal control functionality, and by linking multiple phases 
 together, the user can construct scenarios of arbitrary complexity. A high performance 
-interior-point optimizer (PSIOPT) is included with the library, which enables quick 
+interior-point optimizer (hven's InteriorPointSolver) is included with the library, which enables quick 
 turnaround from concept to solution.
 
 ## Origin

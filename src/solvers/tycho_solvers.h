@@ -15,10 +15,9 @@
 #pragma once
 #include "tycho/solvers.h"
 
-#ifdef USE_ACCELERATE_SPARSE
-#include "tycho/detail/solvers/linear/accelerate_interface.h"
-#else
-#include "mkl.h"
-#endif
+// The sparse linear-algebra backend travels with the solver library now: it
+// resolves Apple Accelerate against Intel MKL behind one interface, so this
+// aggregate names that interface instead of a platform-specific header.
+#include <hven/linear/symmetric_factor.h>
 
 namespace tycho::solvers {} // namespace tycho::solvers

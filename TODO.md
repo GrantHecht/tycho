@@ -75,9 +75,9 @@ The CMake target should compile this file with reduced parallelism (`-j1`)
 to avoid OOM on machines with <16 GB RAM.
 
 **Benchmarks to add:**
-- `BM_PSIOPT_BettsLT_32seg` — fixed mesh, 32 segments
-- `BM_PSIOPT_BettsLT_64seg` — fixed mesh, 64 segments
-- `BM_PSIOPT_BettsLT_MeshRefine` — adaptive mesh starting from 16 segments
+- `BM_InteriorPointSolver_BettsLT_32seg` — fixed mesh, 32 segments
+- `BM_InteriorPointSolver_BettsLT_64seg` — fixed mesh, 64 segments
+- `BM_InteriorPointSolver_BettsLT_MeshRefine` — adaptive mesh starting from 16 segments
   (LGL5, mesh tol 1e-7) — this is the key benchmark that grows the NLP to
   realistic sizes via refinement
 

@@ -18,13 +18,14 @@
 
 #include "function_registry.h"
 #include "tycho/detail/solvers_vf/optimization_problem.h"
-#include "tycho/detail/solvers/optimization_problem_base.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/drivers/optimization_problem_base.h>
 
 namespace tycho {
 
 using namespace tycho::solvers;
 
-template <> struct TychoBind<OptimizationProblemBase> {
+template <> struct TychoBind<BackendProblemBase> {
     static void build(nb::module_ &m);
 };
 

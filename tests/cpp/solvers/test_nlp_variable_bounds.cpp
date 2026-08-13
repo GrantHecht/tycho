@@ -3,19 +3,20 @@
 // clear_variable_bounds, has_variable_bounds, and the x_lower_/x_upper_
 // vectors make_nlp materializes from the staged declarations.
 //
-// The first group hand-builds a NonLinearProgram directly (no PSIOPT, no
+// The first group hand-builds a NonLinearProgram directly (no InteriorPointSolver, no
 // Phase/transcription) with empty objective/constraint lists, so make_nlp
 // only has to run its own bookkeeping over primal variables.
 //
 // The second group covers the fixed-variable treatment: classification of the
 // materialized bounds, the full<->reduced index maps, and end-to-end solves of
 // hand-built QPs where a variable is pinned by equal bounds. Those solves drive
-// a PSIOPT instance directly against the NLP an OptimizationProblem
+// a InteriorPointSolver instance directly against the NLP an OptimizationProblem
 // transcribed, so the bounds can be declared on the NLP between transcription
 // and the solve.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "tycho/detail/solvers/non_linear_program.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/drivers/non_linear_program.h>
 #include "tycho/detail/solvers_vf/optimization_problem.h"
 
 #include <gtest/gtest.h>
@@ -231,7 +232,7 @@ void nlp_var_bounds_add_single_sum_con(tycho::solvers::OptimizationProblem &prob
                        (Eigen::VectorXi(1) << i0).finished());
 }
 
-// Adds the inequality constraint x[i0] <= target. PSIOPT's inequalities are
+// Adds the inequality constraint x[i0] <= target. InteriorPointSolver's inequalities are
 // g(x) <= 0, slack-completed as g(x) + s == 0 with s >= 0.
 void nlp_var_bounds_add_upper_iq_con(tycho::solvers::OptimizationProblem &prob, int i0,
                                      double target) {
@@ -307,7 +308,7 @@ void nlp_var_bounds_add_triple_sum_con(tycho::solvers::OptimizationProblem &prob
 
 // Transcribes the problem and hands back the NLP it built, detached from the
 // OptimizationProblem so bounds can be declared on it and the tests can drive
-// their own PSIOPT against it.
+// their own InteriorPointSolver against it.
 std::shared_ptr<NonLinearProgram>
 nlp_var_bounds_transcribe(tycho::solvers::OptimizationProblem &prob, int num_vars) {
     prob.set_vars(Eigen::VectorXd::Zero(num_vars));
@@ -331,13 +332,13 @@ struct NlpVarBoundsSolveOutcome {
     tycho::ConvergenceFlags flag_ = tycho::ConvergenceFlags::NOTCONVERGED;
 };
 
-// Drives a fresh silent PSIOPT against an NLP. Returns the flag alongside the
+// Drives a fresh silent InteriorPointSolver against an NLP. Returns the flag alongside the
 // solution rather than asserting internally, so every caller can make the
 // convergence check a hard precondition (a reference problem that failed to
 // solve must never be able to masquerade as agreement).
 NlpVarBoundsSolveOutcome nlp_var_bounds_solve(const std::shared_ptr<NonLinearProgram> &nlp,
                                               const Eigen::VectorXd &guess) {
-    tycho::solvers::PSIOPT opt;
+    tycho::solvers::InteriorPointSolver opt;
     opt.set_print_level(3);
     opt.set_nlp(nlp);
     NlpVarBoundsSolveOutcome outcome;
@@ -353,7 +354,7 @@ NlpVarBoundsSolveOutcome nlp_var_bounds_solve_under(const std::shared_ptr<NonLin
                                                     const Eigen::VectorXd &guess,
                                                     FixedVariableTreatments treatment,
                                                     double relax_factor) {
-    tycho::solvers::PSIOPT opt;
+    tycho::solvers::InteriorPointSolver opt;
     opt.set_print_level(3);
     opt.set_fixed_variable_treatment(treatment);
     opt.set_bound_relax_factor(relax_factor);
@@ -1243,7 +1244,7 @@ TEST(NlpVarBoundsReduction, AThrownConfigurationIsNotCommitted) {
     // ... which is what stops a solve from silently running the unreduced
     // problem: the solve re-attempts the configuration and fails loudly.
     {
-        tycho::solvers::PSIOPT opt;
+        tycho::solvers::InteriorPointSolver opt;
         opt.set_print_level(3);
         opt.set_nlp(nlp);
         EXPECT_THROW(opt.optimize(Eigen::VectorXd::Zero(2)), std::invalid_argument);
@@ -1305,7 +1306,7 @@ TEST(NlpVarBoundsReduction, AThrownConfigurationIsNotCommitted) {
     // Still not marked configured, so a solve fails loudly rather than running
     // the unreduced problem.
     {
-        tycho::solvers::PSIOPT opt;
+        tycho::solvers::InteriorPointSolver opt;
         opt.set_print_level(3);
         opt.set_nlp(nlp);
         EXPECT_THROW(opt.optimize(Eigen::VectorXd::Zero(2)), std::invalid_argument);
@@ -1334,7 +1335,7 @@ TEST(NlpVarBoundsReduction, SecondSolveAfterBoundChangeUsesTheNewValue) {
     nlp->set_variable_bound(1, 7.0, 7.0);
     nlp_var_bounds_rebuild(*nlp);
 
-    tycho::solvers::PSIOPT opt;
+    tycho::solvers::InteriorPointSolver opt;
     opt.set_print_level(3);
     opt.set_nlp(nlp);
     Eigen::VectorXd first = opt.optimize(Eigen::VectorXd::Zero(3));

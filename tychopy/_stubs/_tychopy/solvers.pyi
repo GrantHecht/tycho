@@ -1,4 +1,4 @@
-"""SubModule Containing PSIOPT,NLP, and Solver Flags"""
+"""SubModule Containing InteriorPointSolver,NLP, and Solver Flags"""
 
 from collections.abc import Callable, Mapping, Sequence
 import enum
@@ -9,9 +9,9 @@ import numpy
 import _tychopy.vector_functions
 
 
-class PSIOPT:
+class InteriorPointSolver:
     @overload
-    def __init__(self, arg: "tycho::solvers::NonLinearProgram", /) -> None: ...
+    def __init__(self, arg: "hven::solvers::NonLinearProgram", /) -> None: ...
 
     @overload
     def __init__(self) -> None: ...
@@ -690,7 +690,7 @@ class QPPivotModes(enum.Enum):
 
 class FixedVariableTreatments(enum.Enum):
     """
-    Fixed-variable handling selector for PSIOPT.fixed_variable_treatment, corresponding to Ipopt's fixed_variable_treatment option.
+    Fixed-variable handling selector for InteriorPointSolver.fixed_variable_treatment, corresponding to Ipopt's fixed_variable_treatment option.
     """
 
     MakeParameter = 0
@@ -794,7 +794,7 @@ class IpoptRunInfo:
 class NLPSolvers(enum.Enum):
     """NLP solver backend selector for the solve/optimize entry points."""
 
-    psiopt = 0
+    interior_point = 0
     """Built-in interior-point solver (default)."""
 
     ipopt = 1
@@ -871,14 +871,14 @@ class OptimizationProblemBase:
     def num_partitions(self, arg: int, /) -> None: ...
 
     @property
-    def optimizer(self) -> PSIOPT: ...
+    def optimizer(self) -> InteriorPointSolver: ...
 
     @property
     def nlp_solver(self) -> NLPSolvers:
         """
         NLP solver backend for the solve/optimize entry points.
 
-        NLPSolvers.psiopt (default) is the built-in solver, byte-identical to
+        NLPSolvers.interior_point (default) is the built-in solver, byte-identical to
         previous behavior. NLPSolvers.ipopt runs the identical transcribed NLP
         through a linked Ipopt installation; requires a build configured with
         ENABLE_IPOPT (raises RuntimeError otherwise). The ipopt backend always
@@ -894,7 +894,7 @@ class OptimizationProblemBase:
 
         The built-in solver's own diagnostics (``optimizer.last_obj_val``,
         ``optimizer.last_iter_num``, and every other result()-backed property on
-        ``optimizer``) reflect only the most recent PSIOPT run and are left
+        ``optimizer``) reflect only the most recent InteriorPointSolver run and are left
         untouched by an ipopt-backend run -- use ``last_ipopt_result`` as the
         source of truth for diagnostics of the most recent ipopt-backend
         solve.
@@ -908,7 +908,7 @@ class OptimizationProblemBase:
         """
         String key/value options forwarded verbatim to Ipopt (e.g.
         {"linear_solver": "pardisomkl"}). Applied after the matched-tolerance
-        baseline, so entries here win. Ignored by the psiopt backend.
+        baseline, so entries here win. Ignored by the interior-point backend.
 
         Reading this attribute returns a *copy* of the stored map, so in-place
         mutation (``prob.ipopt_options["linear_solver"] = "ma57"``) silently has

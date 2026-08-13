@@ -10,7 +10,8 @@
 #include "tycho/detail/integrators/initial_dt.h"
 #include "tycho/detail/integrators/step_controller.h"
 #include "tycho/detail/integrators/stepper.h"
-#include "tycho/detail/typedefs/eigen_types.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/typedefs/eigen_types.h>
 
 #include <Eigen/Core>
 #include <algorithm>
@@ -512,7 +513,7 @@ template <IVPAlg Alg, class DODE> class ParallelDriver {
                             // OrdinaryDiffEq (EEst == NaN fails EEst <= 1 -> reject)
                             // and the scalar AdaptiveDriver: an over-large step
                             // into a stiff/near-singular region can resolve at
-                            // smaller h, so a multiple-shooting / PSIOPT iterate
+                            // smaller h, so a multiple-shooting / InteriorPointSolver iterate
                             // recovers instead of aborting the whole batch. The
                             // controller cannot derive a growth factor from a
                             // non-finite EEst, so shrink by kNonfiniteStepShrink;

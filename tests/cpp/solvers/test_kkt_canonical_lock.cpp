@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Regression test for the canonical KKT lock-column protocol (PSIOPT 2.3).
+// Regression test for the canonical KKT lock-column protocol (InteriorPointSolver 2.3).
 //
 // Background: a cross-partition data race existed because kkt_fill_hess (the
 // objective Hessian scatter in dense_function_base.h) locked on the OUTER

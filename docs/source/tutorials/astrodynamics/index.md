@@ -5,7 +5,7 @@ Hands-on walkthroughs for Tycho's astrodynamics subsystem. The two tutorials
 in this section cover the core tools you need before tackling real trajectory
 problems: understanding and converting between orbital state representations,
 propagating a two-body orbit analytically, and building a low-thrust
-orbit-transfer trajectory with PSIOPT.
+orbit-transfer trajectory with InteriorPointSolver.
 
 For the concepts behind each representation and when to prefer one over another,
 see {doc}`Astrodynamics in Tycho </explanation/astrodynamics>`. For the complete

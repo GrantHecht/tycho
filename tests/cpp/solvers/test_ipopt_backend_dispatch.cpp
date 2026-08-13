@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Backend-neutral NLP solve dispatch (OptimizationProblemBase::nlp_solver_).
+// Backend-neutral NLP solve dispatch (BackendProblemBase::nlp_solver_).
 //
 // Every solve/optimize entry point routes through a single dispatch seam so an
 // alternative NLP solver backend can intercept the transcribed NLP. These tests
@@ -12,7 +12,7 @@
 
 #include "solver_test_utils.h"
 
-#include "tycho/detail/solvers/ipopt_backend.h"
+#include "tycho/detail/solvers/nlp_backend.h"
 #include "tycho/detail/solvers_vf/optimization_problem.h"
 
 #include <gtest/gtest.h>
@@ -52,9 +52,9 @@ std::unique_ptr<OptimizationProblem> build_ipopt_dispatch_nlp() {
     return prob;
 }
 
-TEST(NlpSolverDispatch, DefaultsToPsiopt) {
+TEST(NlpSolverDispatch, DefaultsToInteriorPoint) {
     auto prob = build_ipopt_dispatch_nlp();
-    EXPECT_EQ(prob->nlp_solver_, ts::NLPSolvers::psiopt);
+    EXPECT_EQ(prob->nlp_solver_, ts::NLPSolvers::interior_point);
     auto flag = prob->optimize();
     EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_NEAR(prob->optimizer_->result().obj_val_, 1.0, 1e-6);
@@ -101,7 +101,7 @@ TEST(NlpSolverDispatch, AdaptiveMeshWithIpoptRejected) {
 // exists in every build, so this holds with or without Ipopt linked.
 TEST(NlpSolverDispatch, JetRunWithIpoptBackendRejected) {
     auto prob = build_ipopt_dispatch_nlp();
-    prob->set_jet_job_mode(ts::OptimizationProblemBase::JetJobModes::Optimize);
+    prob->set_jet_job_mode(ts::BackendProblemBase::JetJobModes::Optimize);
     prob->nlp_solver_ = ts::NLPSolvers::ipopt;
     try {
         prob->jet_run();
@@ -115,9 +115,9 @@ TEST(NlpSolverDispatch, JetRunWithIpoptBackendRejected) {
 // The same batch element with the built-in backend runs to convergence, so the
 // rejection above is attributable to the backend selection and not to the Jet
 // entry point itself.
-TEST(NlpSolverDispatch, JetRunWithPsioptBackendRuns) {
+TEST(NlpSolverDispatch, JetRunWithInteriorPointBackendRuns) {
     auto prob = build_ipopt_dispatch_nlp();
-    prob->set_jet_job_mode(ts::OptimizationProblemBase::JetJobModes::Optimize);
+    prob->set_jet_job_mode(ts::BackendProblemBase::JetJobModes::Optimize);
     EXPECT_EQ(prob->jet_run(), tycho::ConvergenceFlags::CONVERGED);
 }
 

@@ -3,20 +3,20 @@
 //
 // Provides the SolverTest fixture and a Brachistochrone phase builder
 // pre-configured for solver/Jet tests (silent output: print_level is inverted,
-// 0 is full output and 3+ is fully silent -- see PSIOPT::Settings::print_level_).
+// 0 is full output and 3+ is fully silent -- see InteriorPointSolver::Settings::print_level_).
 //
 // This is the VF-heavy half of what used to be a single
 // tests/cpp/solvers/solver_test_utils.h. The other half -- InertSolverContext,
-// which needs only tycho/detail/solvers/globalization/solver_context.h +
-// tycho/detail/solvers/jet.h and no VectorFunction dependency -- moved into
-// the psiopt project (psiopt/tests/solver_test_utils.h) alongside the
+// which needs only hven/detail/globalization/solver_context.h +
+// hven/detail/interior/jet.h and no VectorFunction dependency -- moved into
+// the hven project (hven/tests/interior/solver_test_utils.h) alongside the
 // solver-internal tests that use nothing else.
 //
 // InertSolverContext is kept here too (duplicated, not cross-included from
-// psiopt/tests/): test_feasibility_switch.cpp and test_psiopt_native_bounds.cpp
+// hven/tests/): test_feasibility_switch.cpp and test_interior_point_solver_native_bounds.cpp
 // stayed on the Tycho side (they build real VF phases via make_brach_solver_phase)
-// but also use InertSolverContext directly. A tycho-side test including a
-// psiopt/tests/ header would run the cross-boundary include the split was
+// but also use InertSolverContext directly. A tycho-side test including an
+// hven/tests/ header would run the cross-boundary include the split was
 // meant to avoid in the other direction, so the ~15-line struct is duplicated
 // instead of shared. Keep both copies in sync if SolverContext's shape changes.
 ///////////////////////////////////////////////////////////////////////////////
@@ -25,8 +25,9 @@
 
 #include "oc_test_utils.h"
 #include "test_utils.h"
-#include "tycho/detail/solvers/globalization/solver_context.h"
-#include "tycho/detail/solvers/jet.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/globalization/solver_context.h>
+#include <hven/detail/interior/jet.h>
 #include <cmath>
 #include <functional>
 #include <gtest/gtest.h>
@@ -62,7 +63,7 @@ inline std::shared_ptr<ODEPhase<BrachODE>> make_brach_solver_phase(int n_segs = 
 ///////////////////////////////////////////////////////////////////////////////
 
 struct InertSolverContext {
-    PSIOPT::Settings settings_;
+    InteriorPointSolver::Settings settings_;
     KktSolverType kkt_solver_;
     Eigen::VectorXd scratch_;
     int primal_vars_ = 0;

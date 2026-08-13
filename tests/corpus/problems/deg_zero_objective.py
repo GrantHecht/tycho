@@ -17,7 +17,7 @@ stated "t in [0, 1]" fixed-duration setup.
 
 Perturbation: NO objective is added at all — no
 ``add_integral_objective``, ``add_value_objective``, or any other
-objective term. This is pure feasibility: PSIOPT must only satisfy the
+objective term. This is pure feasibility: the interior-point solver must only satisfy the
 dynamics defects and the boundary conditions, with nothing to minimize.
 
 Any (x, v, u) trajectory satisfying ẋ = v, v̇ = u and the four boundary
@@ -26,7 +26,7 @@ continuum, since u(t) is essentially free subject only to reaching
 x(1) = 1, v(1) = 0 from rest. With no objective, the Lagrangian's
 objective Hessian block is identically zero (only the constraint-Hessian
 contribution to the KKT system survives), which is the "zero objective
-Hessian" pathology named in the Task 2 brief: it exercises PSIOPT's
+Hessian" pathology named in the Task 2 brief: it exercises the interior-point solver's
 perturbation ladder (the mechanism that adds regularization when the
 reduced KKT system would otherwise be singular/indefinite purely from a
 zero cost Hessian) rather than any constraint-side degeneracy.
@@ -34,7 +34,7 @@ zero cost Hessian) rather than any constraint-side degeneracy.
 Observed on defaults 2026-07-16: CONVERGED, 3 iterations, objective 0
 (as expected — there is nothing to minimize). This is a FINDING TO
 REPORT: the zero-objective-Hessian pathology named in the Task 2 brief
-does NOT genuinely manifest as any difficulty here — PSIOPT's
+does NOT genuinely manifest as any difficulty here — the interior-point solver's
 perturbation ladder handles a fully-zero cost Hessian trivially,
 converging in the same handful of iterations as the well-posed baseline
 (feasibility alone is an easy problem for this system). A harder

@@ -35,10 +35,11 @@
 
 #include <fmt/format.h>
 
-#include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/math_functions.h"
-#include "tycho/detail/utils/std_extensions.h"
-#include "tycho/detail/utils/type_name.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/typedefs/eigen_types.h>
+#include <hven/detail/interior/utils/math_functions.h>
+#include <hven/detail/interior/utils/std_extensions.h>
+#include <hven/detail/interior/utils/type_name.h>
 
 namespace tycho::oc {
 

@@ -24,7 +24,7 @@
 // derived class.
 //
 // Also defines implements the constraints function in terms of the compute function. The
-// constraints functions is part of a vector functions interface to the non-linear optimizer PSIOPT.
+// constraints functions is part of a vector functions interface to the non-linear optimizer InteriorPointSolver.
 //
 // Modifications in Tycho (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
@@ -35,7 +35,8 @@
 #pragma once
 #include <concepts>
 
-#include "tycho/detail/solvers/indexing_data.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/indexing_data.h>
 #include "tycho/detail/vf/core/eigen_ref_aliases.h"
 #include "tycho/detail/vf/core/functional_flags.h"
 #include "tycho/detail/vf/core/input_output_size.h"
@@ -56,18 +57,18 @@
 #include <Eigen/Geometry>
 #include <Eigen/Sparse>
 
-#include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/flat_map.h"
-#include "tycho/detail/utils/function_return_type.h"
-#include "tycho/detail/utils/get_core_count.h"
-#include "tycho/detail/utils/math_functions.h"
-#include "tycho/detail/utils/sizing_helpers.h"
-#include "tycho/detail/utils/std_extensions.h"
-#include "tycho/detail/utils/thread_pool.h"
-#include "tycho/detail/utils/type_name.h"
-#include "tycho/detail/utils/type_storage.h"
+#include <hven/detail/interior/typedefs/eigen_types.h>
+#include <hven/detail/interior/utils/flat_map.h>
+#include <hven/detail/interior/utils/function_return_type.h>
+#include <hven/detail/interior/utils/get_core_count.h>
+#include <hven/detail/interior/utils/math_functions.h>
+#include <hven/detail/interior/utils/sizing_helpers.h>
+#include <hven/detail/interior/utils/std_extensions.h>
+#include <hven/detail/interior/utils/thread_pool.h>
+#include <hven/detail/interior/utils/type_name.h>
+#include <hven/detail/interior/utils/type_storage.h>
 
-#include "tycho/detail/utils/memory_management.h"
+#include <hven/detail/interior/utils/memory_management.h>
 
 namespace tycho::vf {
 
@@ -80,7 +81,7 @@ namespace tycho::vf {
 /// @ref is_vectorizable), and implements `compute` in terms of the derived
 /// class's `compute_impl` (the adjoint-gradient entry points route to the
 /// derived class's `compute_adjointgradient`). It also provides the `constraints`
-/// interface by which a VectorFunction is invoked by the PSIOPT optimizer.
+/// interface by which a VectorFunction is invoked by the InteriorPointSolver optimizer.
 ///
 /// @tparam Derived  CRTP derived (user) function type.
 /// @tparam IR       Input rows at compile time (`-1` for dynamic).
@@ -381,7 +382,7 @@ template <class Derived, int IR, int OR> struct ComputableBase : InputOutputSize
 
     //////////////////////////////////////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////
-    /// @brief PSIOPT interface: evaluate this function as a problem constraint.
+    /// @brief InteriorPointSolver interface: evaluate this function as a problem constraint.
     ///
     /// Evaluates the function once per application listed in @p data, scattering
     /// the results into the global constraint vector @p FX. @p X is the full
@@ -466,7 +467,7 @@ template <class Derived, int IR, int OR> struct ComputableBase : InputOutputSize
             Impl, tycho::utils::TempSpec<Input<double>>(this->input_rows(), 1));
     }
 
-    /// @brief PSIOPT interface: evaluate constraint values and their adjoint gradients.
+    /// @brief InteriorPointSolver interface: evaluate constraint values and their adjoint gradients.
     ///
     /// For each application in @p data, gathers the local input and multiplier
     /// vectors from @p X and @p L, evaluates `f(x)` and the adjoint gradient

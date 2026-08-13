@@ -4,7 +4,7 @@
 // Covers:
 //   - ChebTable::eval / eval_jacobian / eval_hessian at 1-D, 2-D, 3-D.
 //   - ChebFunction<-1> N-D hot path:
-//       compute_jacobian_adjointgradient_adjointhessian (the PSIOPT per-iteration
+//       compute_jacobian_adjointgradient_adjointhessian (the InteriorPointSolver per-iteration
 //       call) at 2-D and 3-D, to assess allocation overhead in the N-D Hessian
 //       path (O(D^2) clenshaw_nd calls).
 //
@@ -181,7 +181,7 @@ BENCHMARK(BM_ChebTable3D_Hess);
 
 // ---------------------------------------------------------------------------
 // ChebFunction<-1> N-D hot path (I2 review item):
-// compute_jacobian_adjointgradient_adjointhessian — the PSIOPT per-iteration
+// compute_jacobian_adjointgradient_adjointhessian — the InteriorPointSolver per-iteration
 // call.  Allocates O(D^2) clenshaw_nd work for the Hessian.
 // ---------------------------------------------------------------------------
 static void BM_ChebFunction2D_AdjHess(benchmark::State &state) {

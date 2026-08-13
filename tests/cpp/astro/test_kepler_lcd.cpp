@@ -330,7 +330,7 @@ TEST(KeplerLCDKernelSS, UniformEllipticFourLanesHitsSimdPath) {
 }
 
 TEST(KeplerLCDKernel, NegativeDtRoundtripLEO) {
-    // Backward propagation is a routine PSIOPT call pattern (e.g., shooting
+    // Backward propagation is a routine InteriorPointSolver call pattern (e.g., shooting
     // from a final state).  Ensure +dt then -dt recovers the initial state.
     auto rv0 = classic_to_cartesian<double>(TychoTest::leoClassic(), TychoTest::MU_EARTH);
     const double dt = 300.0;
@@ -679,7 +679,7 @@ TEST(KeplerPropagator, SuperScalarPrimal_W4) {
     // Direct VF compute_impl<> exercise on SuperScalar Scalar (W=4 lanes).
     // Existing SS coverage hits compute_jacobian_impl and the adjoint-
     // Hessian path; this one closes the gap on the primal-only path that
-    // PSIOPT calls during line search.
+    // InteriorPointSolver calls during line search.
     using SS = Eigen::Array<double, 4, 1>;
     KeplerPropagator kp(TychoTest::MU_EARTH);
     auto rv = classic_to_cartesian<double>(TychoTest::leoClassic(), TychoTest::MU_EARTH);

@@ -268,7 +268,7 @@ def test_hessian_emission_is_two_pass_upper_then_copy():
     the lower-triangle copy were interleaved in a single loop. That reads
     ``_hx_(col,row)`` before it has been assigned, so the lower triangle
     ended up zero-filled (masked by ``EIGEN_INITIALIZE_MATRICES_BY_ZERO``
-    and by PSIOPT's upper-only reader). Anyone refactoring
+    and by InteriorPointSolver's upper-only reader). Anyone refactoring
     ``gen_compute_all`` who merges the loops reintroduces the bug.
 
     Assertions on a 3-input toy function:

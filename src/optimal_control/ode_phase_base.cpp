@@ -779,7 +779,16 @@ void tycho::oc::ODEPhaseBase::transcribe_integrals() {
             LGLIntegral<ScalarFunctionalX, cs.value, xv.value, pv.value>{integrand, xvv, pvv};
         integral.enable_vectorization_ = this->enable_vectorization_;
 
-        return ObjectiveInterface(integral);
+        // The ladder below picks one of many LGLIntegral instantiations at
+        // runtime, so the result has to be erased once here. It is erased into
+        // a GenericFunction rather than straight into an ObjectiveInterface
+        // because the two callers below want different interfaces out of the
+        // same ladder: the plain-integral loop makes an objective, the
+        // parameter-integrand loop makes an accumulation CONSTRAINT. A
+        // GenericFunction hands its wrapped LGLIntegral to whichever one asks,
+        // so both end up storing the integral itself -- one virtual dispatch
+        // per solver call on either route.
+        return ScalarFunctionalX(integral);
     };
     auto switch_x = [&](auto cs, int xv, auto pv, const ScalarFunctionalX &integrand, int xvv,
                         int pvv) {
@@ -826,7 +835,7 @@ void tycho::oc::ODEPhaseBase::transcribe_integrals() {
         xtrap.head(xp) = ob.xtu_vars_;
         xtrap[xp] = this->t_var();
 
-        ObjectiveInterface obj;
+        ScalarFunctionalX obj;
         PhaseRegionFlags PhaseReg = PhaseRegionFlags::PairWisePath;
 
         auto func = ob.func_;
@@ -879,7 +888,7 @@ void tycho::oc::ODEPhaseBase::transcribe_integrals() {
         xtrap.head(xp) = ob.xtu_vars_;
         xtrap[xp] = this->t_var();
 
-        ObjectiveInterface obj;
+        ScalarFunctionalX obj;
         PhaseRegionFlags PhaseReg = PhaseRegionFlags::PairWisePath;
 
         auto func = ob.func_;
@@ -916,7 +925,10 @@ void tycho::oc::ODEPhaseBase::transcribe_integrals() {
         ThreadingFlags thread_mode =
             ob.func_.thread_safe() ? ThreadingFlags::ByApplication : ThreadingFlags::MainThread;
 
-        auto AccFunc = Arguments<1>() * -AccScale;
+        // Built in place, so it has no nameable type to register an adapter for:
+        // wrapping it hands the scaling expression itself to the constraint
+        // interface, which is what a registration would have stored anyway.
+        auto AccFunc = ScalarFunctionalX(Arguments<1>() * -AccScale);
 
         int Gindex = this->indexer_.add_accumulation(obj, PhaseReg, xtrap, ob.op_vars_, ob.sp_vars_,
                                                      AccFunc, ob.ext_vars_, thread_mode);
@@ -1750,7 +1762,7 @@ Eigen::VectorXd tycho::oc::ODEPhaseBase::calc_switches() {
     return utils::stdvector_to_eigenvector(switches);
 }
 
-tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::psipot_call_impl(JetJobModes mode) {
+tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::interior_point_call_impl(JetJobModes mode) {
     if (this->do_transcription_)
         this->transcribe();
     VectorXd input = this->make_solver_input();
@@ -1759,7 +1771,7 @@ tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::psipot_call_impl(JetJobModes mo
 
     this->collect_solver_output(output);
 
-    if (this->nlp_solver_ == solvers::NLPSolvers::psiopt) {
+    if (this->nlp_solver_ == solvers::NLPSolvers::interior_point) {
         this->collect_post_opt_info(this->optimizer_->result().eq_cons_, out.eq_lmults_,
                                     this->optimizer_->result().iq_cons_, out.iq_lmults_);
     } else {
@@ -1779,8 +1791,8 @@ tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::phase_call_impl(JetJobModes mod
     // Mesh refinement is driven by the built-in solver's constraint residuals at
     // the solution, which no other backend reports, so the refinement loop is
     // only defined for the built-in solver.
-    if (this->adaptive_mesh_ && this->nlp_solver_ != solvers::NLPSolvers::psiopt) {
-        throw std::invalid_argument("adaptive mesh refinement requires nlp_solver = psiopt");
+    if (this->adaptive_mesh_ && this->nlp_solver_ != solvers::NLPSolvers::interior_point) {
+        throw std::invalid_argument("adaptive mesh refinement requires nlp_solver = interior_point");
     }
 
     if (this->print_mesh_info_ && this->adaptive_mesh_) {
@@ -1795,7 +1807,7 @@ tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::phase_call_impl(JetJobModes mod
 
     Runtimer.start();
 
-    tycho::ConvergenceFlags flag = this->psipot_call_impl(mode);
+    tycho::ConvergenceFlags flag = this->interior_point_call_impl(mode);
 
     JetJobModes nextmode = mode;
     if (this->solve_only_first_) {
@@ -1841,7 +1853,7 @@ tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::phase_call_impl(JetJobModes mod
                         this->mesh_iters_.back().print(0);
                     }
                 }
-                flag = this->psipot_call_impl(nextmode);
+                flag = this->interior_point_call_impl(nextmode);
                 if (flag >= this->mesh_abort_flag_) {
                     if (this->print_mesh_info_) {
                         fmt::print(fmt::fg(fmt::color::red),

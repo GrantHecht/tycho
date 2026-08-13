@@ -1,6 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Unit tests for PSIOPT::apply_preset() -- the five named mechanism configu-
-// rations in detail/solvers/psiopt_presets.h. Covers: the per-preset field
+// Unit tests for InteriorPointSolver::apply_preset() -- the five named mechanism configu-
+// rations in detail/solvers/interior_point_solver_presets.h. Covers: the per-preset field
 // truth table (all nine globalization fields, exact enum values); a
 // deliberate default-drift tripwire pinning `classic` against a fresh
 // default-constructed Settings{}; the unknown-name error (message lists every
@@ -11,7 +11,8 @@
 
 #include "solver_test_utils.h"
 
-#include "tycho/detail/solvers/psiopt_presets.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/drivers/interior_point_solver_presets.h>
 
 #include <gtest/gtest.h>
 
@@ -22,21 +23,21 @@ using namespace tycho;
 using tycho::solvers::AcceptanceStrategies;
 using tycho::solvers::BarrierGovernors;
 using tycho::solvers::InertiaModes;
-using tycho::solvers::kPSIOPTPresets;
+using tycho::solvers::kInteriorPointSolverPresets;
 using tycho::solvers::MeritPenaltyRules;
-using tycho::solvers::PSIOPT;
-using tycho::solvers::PSIOPTPresetFields;
+using tycho::solvers::InteriorPointSolver;
+using tycho::solvers::InteriorPointSolverPresetFields;
 using tycho::solvers::RestorationModes;
 using TychoTest::make_brach_solver_phase;
 using TychoTest::SolverTest;
 
 namespace {
 
-// Field-by-field comparison against an expected PSIOPTPresetFields value.
+// Field-by-field comparison against an expected InteriorPointSolverPresetFields value.
 // File-local name kept unique across tests/cpp/solvers/ (unity build merges
 // these TUs; anonymous namespaces do not isolate across files in the same
 // unity TU) -- prefix "PresetGate" is not used anywhere else in tests/cpp/.
-void PresetGateExpectFieldsMatch(const PSIOPT::Settings &s, const PSIOPTPresetFields &f) {
+void PresetGateExpectFieldsMatch(const InteriorPointSolver::Settings &s, const InteriorPointSolverPresetFields &f) {
     EXPECT_EQ(s.acceptance_strategy_, f.acceptance_strategy_);
     EXPECT_EQ(s.merit_penalty_rule_, f.merit_penalty_rule_);
     EXPECT_EQ(s.barrier_governor_, f.barrier_governor_);
@@ -55,23 +56,23 @@ void PresetGateExpectFieldsMatch(const PSIOPT::Settings &s, const PSIOPTPresetFi
 ///////////////////////////////////////////////////////////////////////////////
 
 TEST_F(SolverTest, PresetGateTableHasExpectedNames) {
-    ASSERT_EQ(kPSIOPTPresets.size(), 5u);
-    EXPECT_EQ(kPSIOPTPresets[0].name_, "classic");
-    EXPECT_EQ(kPSIOPTPresets[1].name_, "filter_l1");
-    EXPECT_EQ(kPSIOPTPresets[2].name_, "soc_recovery_l1");
-    EXPECT_EQ(kPSIOPTPresets[3].name_, "soc_proximal");
-    EXPECT_EQ(kPSIOPTPresets[4].name_, "merit_l1");
+    ASSERT_EQ(kInteriorPointSolverPresets.size(), 5u);
+    EXPECT_EQ(kInteriorPointSolverPresets[0].name_, "classic");
+    EXPECT_EQ(kInteriorPointSolverPresets[1].name_, "filter_l1");
+    EXPECT_EQ(kInteriorPointSolverPresets[2].name_, "soc_recovery_l1");
+    EXPECT_EQ(kInteriorPointSolverPresets[3].name_, "soc_proximal");
+    EXPECT_EQ(kInteriorPointSolverPresets[4].name_, "merit_l1");
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Per-preset field truth table -- exact enum values transcribed from
 // docs/dev/analysis/2026-07-e2-fixes-evidence-refresh.md's evidence tables
-// (see the header's per-entry comments), independent of kPSIOPTPresets so a
+// (see the header's per-entry comments), independent of kInteriorPointSolverPresets so a
 // typo in the header's literal table is caught here too.
 ///////////////////////////////////////////////////////////////////////////////
 
 TEST_F(SolverTest, PresetGateClassicFields) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     opt.apply_preset("classic");
     const auto &s = opt.settings();
     EXPECT_EQ(s.acceptance_strategy_, AcceptanceStrategies::classic_merit);
@@ -86,7 +87,7 @@ TEST_F(SolverTest, PresetGateClassicFields) {
 }
 
 TEST_F(SolverTest, PresetGateFilterL1Fields) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     opt.apply_preset("filter_l1");
     const auto &s = opt.settings();
     EXPECT_EQ(s.acceptance_strategy_, AcceptanceStrategies::filter);
@@ -101,7 +102,7 @@ TEST_F(SolverTest, PresetGateFilterL1Fields) {
 }
 
 TEST_F(SolverTest, PresetGateSocRecoveryL1Fields) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     opt.apply_preset("soc_recovery_l1");
     const auto &s = opt.settings();
     EXPECT_EQ(s.acceptance_strategy_, AcceptanceStrategies::classic_merit);
@@ -116,7 +117,7 @@ TEST_F(SolverTest, PresetGateSocRecoveryL1Fields) {
 }
 
 TEST_F(SolverTest, PresetGateSocProximalFields) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     opt.apply_preset("soc_proximal");
     const auto &s = opt.settings();
     EXPECT_EQ(s.acceptance_strategy_, AcceptanceStrategies::classic_merit);
@@ -131,7 +132,7 @@ TEST_F(SolverTest, PresetGateSocProximalFields) {
 }
 
 TEST_F(SolverTest, PresetGateMeritL1Fields) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     opt.apply_preset("merit_l1");
     const auto &s = opt.settings();
     EXPECT_EQ(s.acceptance_strategy_, AcceptanceStrategies::merit);
@@ -147,7 +148,7 @@ TEST_F(SolverTest, PresetGateMeritL1Fields) {
 
 ///////////////////////////////////////////////////////////////////////////////
 // Default-drift tripwire: `classic` is pinned as literals in
-// psiopt_presets.h (mechanism semantics), not read off Settings{}'s own
+// interior_point_solver_presets.h (mechanism semantics), not read off Settings{}'s own
 // defaults. This test instead compares apply_preset("classic")'s result
 // against a FRESH default-constructed Settings{}. If a future change ever
 // moves one of Settings{}'s own defaults among these nine fields, THIS TEST
@@ -158,11 +159,11 @@ TEST_F(SolverTest, PresetGateMeritL1Fields) {
 ///////////////////////////////////////////////////////////////////////////////
 
 TEST_F(SolverTest, PresetGateClassicMatchesFreshDefaultSettings) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     opt.apply_preset("classic");
 
-    PSIOPT::Settings fresh; // default-constructed -- the drift tripwire target
-    PSIOPTPresetFields fresh_as_fields{
+    InteriorPointSolver::Settings fresh; // default-constructed -- the drift tripwire target
+    InteriorPointSolverPresetFields fresh_as_fields{
         fresh.acceptance_strategy_,
         fresh.merit_penalty_rule_,
         fresh.barrier_governor_,
@@ -181,18 +182,18 @@ TEST_F(SolverTest, PresetGateClassicMatchesFreshDefaultSettings) {
 ///////////////////////////////////////////////////////////////////////////////
 
 TEST_F(SolverTest, PresetGateUnknownNameThrows) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     EXPECT_THROW(opt.apply_preset("not_a_real_preset"), std::invalid_argument);
 }
 
 TEST_F(SolverTest, PresetGateUnknownNameMessageListsEveryValidName) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     try {
         opt.apply_preset("not_a_real_preset");
         FAIL() << "expected apply_preset to throw std::invalid_argument";
     } catch (const std::invalid_argument &e) {
         const std::string msg = e.what();
-        for (const auto &entry : kPSIOPTPresets)
+        for (const auto &entry : kInteriorPointSolverPresets)
             EXPECT_NE(msg.find(entry.name_), std::string::npos)
                 << "error message missing preset name: " << entry.name_;
     }
@@ -203,8 +204,8 @@ TEST_F(SolverTest, PresetGateUnknownNameMessageListsEveryValidName) {
 ///////////////////////////////////////////////////////////////////////////////
 
 TEST_F(SolverTest, PresetGateEveryPresetPassesValidate) {
-    for (const auto &entry : kPSIOPTPresets) {
-        PSIOPT opt;
+    for (const auto &entry : kInteriorPointSolverPresets) {
+        InteriorPointSolver opt;
         opt.apply_preset(entry.name_);
         EXPECT_NO_THROW(opt.settings().validate()) << "preset: " << entry.name_;
     }
@@ -216,8 +217,8 @@ TEST_F(SolverTest, PresetGateEveryPresetPassesValidate) {
 ///////////////////////////////////////////////////////////////////////////////
 
 TEST_F(SolverTest, PresetGateLeavesNonGlobalizationFieldsUntouched) {
-    for (const auto &entry : kPSIOPTPresets) {
-        PSIOPT opt;
+    for (const auto &entry : kInteriorPointSolverPresets) {
+        InteriorPointSolver opt;
         opt.settings().max_iters_ = 4321;
         opt.settings().econ_tol_ = 1.234e-9;
 
@@ -231,11 +232,11 @@ TEST_F(SolverTest, PresetGateLeavesNonGlobalizationFieldsUntouched) {
 ///////////////////////////////////////////////////////////////////////////////
 // Smoke solve: every preset must solve the small Brachistochrone problem to
 // CONVERGED or ACCEPTABLE. set_qp_threads(1) for determinism; print_level(3)
-// for silence (3 = silent -- see PSIOPT::Settings::print_level_).
+// for silence (3 = silent -- see InteriorPointSolver::Settings::print_level_).
 ///////////////////////////////////////////////////////////////////////////////
 
 TEST_F(SolverTest, PresetGateEveryPresetSolvesSmokeProblem) {
-    for (const auto &entry : kPSIOPTPresets) {
+    for (const auto &entry : kInteriorPointSolverPresets) {
         auto phase = make_brach_solver_phase(16);
         phase->optimizer_->set_print_level(3);
         phase->optimizer_->set_qp_threads(1);

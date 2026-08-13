@@ -87,7 +87,16 @@ struct KeplerPhase : ODEPhase<Kepler> {
 
             auto shooter = kprop.eval(Xk1) - kprop.eval(Xk2);
 
-            return tycho::solvers::ConstraintInterface(shooter);
+            // A composed expression has no nameable type to register an
+            // adapter for, so it enters the solver interface wrapped in a
+            // GenericFunction: the wrapper's inner erasure hands the concrete
+            // expression over, which stores exactly what a registration would
+            // have stored, at one virtual dispatch per solver call. The
+            // wrapper itself costs one allocation at problem setup and is off
+            // every hot path. This is the standing route for entry sites whose
+            // function is an expression built in place; a named, reused family
+            // registers instead (see the transcription headers).
+            return tycho::solvers::ConstraintInterface(vf::GenericFunction<-1, -1>(shooter));
         } else {
             return Base::make_shooter();
         }

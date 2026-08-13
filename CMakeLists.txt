@@ -41,6 +41,9 @@ set_property(GLOBAL APPEND PROPERTY JOB_POOLS heavy_compile=${TYCHO_HEAVY_COMPIL
 ################## Includes ####################################################
 ################################################################################
 
+# Target names are global in CMake, and hven — added as a subdirectory below —
+# carries its own copies of these two convenience targets. Tycho's are named
+# apart so both projects keep theirs.
 include(cmake/git-submodule-init.cmake)
 include(cmake/git-submodule-update.cmake)
 include(CheckCXXCompilerFlag)
@@ -318,10 +321,57 @@ endif()
 #  include(FindPythonEnv)
 #endif()
 
+################################################################################
+# hven — the NLP solver library (the interior-point engine, the sparse-KKT
+# backends, and the runtime support layer they need). Vendored as a submodule
+# at dep/hven and consumed here as a CMake subdirectory. hven also carries its
+# own install/export rules (no PROJECT_IS_TOP_LEVEL guard on them), which is
+# what lets `cmake --install` on THIS project's build tree install libhven.a,
+# hven's headers, and hven's package config alongside tycho's own -- see the
+# install rules near the end of this file and cmake/tychoConfig.cmake.in.
+#
+# It is added HERE, ahead of the Eigen and fmt blocks below, because it brings
+# its own vendored copies of both and publishes them under the standard
+# Eigen3::Eigen / fmt::fmt-header-only names. Both blocks below now yield to an
+# already-defined target rather than defining a second one under a name CMake
+# allows only once. hven's dep/eigen and dep/fmt are pinned to the same commits
+# as tycho's, so which copy supplies the headers is not a behavioral question.
+################################################################################
+set(TYCHO_HVEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dep/hven" CACHE PATH
+    "hven checkout tycho builds against. Defaults to the dep/hven submodule; point it at an external checkout to build tycho against a working copy of hven.")
+
+if(NOT EXISTS "${TYCHO_HVEN_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR
+        "hven not found at ${TYCHO_HVEN_DIR} (no CMakeLists.txt there).\n"
+        "For the bundled submodule, run:\n"
+        "    git submodule update --init --recursive dep/hven\n"
+        "To build against a checkout elsewhere, pass -DTYCHO_HVEN_DIR=/path/to/hven.")
+endif()
+
+if(TYCHO_USE_SYSTEM_EIGEN)
+    message(FATAL_ERROR
+        "TYCHO_USE_SYSTEM_EIGEN=ON is not supported while hven is consumed as a "
+        "subdirectory: hven defines the Eigen3::Eigen target unconditionally from its "
+        "own vendored copy, and find_package(Eigen3) would try to define it a second "
+        "time. Build with the bundled Eigen (-DTYCHO_USE_SYSTEM_EIGEN=OFF).")
+endif()
+
+# hven's own defaults for these match tycho's, but the floating-point mode is a
+# numerics setting and the two halves of one binary must not disagree about it,
+# so tycho's choice is the one that reaches hven. Set as a cache entry before
+# add_subdirectory so hven's own `set(... CACHE ...)` finds it already defined.
+set(HVEN_FP_MODE "${TYCHO_FP_MODE}" CACHE STRING
+    "Floating-point optimization mode for the hven subproject (follows TYCHO_FP_MODE).")
+# hven's test suite is verified by hven's own CI; building it here would add a
+# second GoogleTest to this build for no coverage tycho's gate reads.
+set(HVEN_BUILD_TESTS OFF)
+
+add_subdirectory("${TYCHO_HVEN_DIR}" "${CMAKE_BINARY_DIR}/hven")
+
 # Set up submodule dependencies
 if(TYCHO_USE_SYSTEM_EIGEN)
     find_package(Eigen3 3.4 REQUIRED)
-    # Global include so internal targets (pch, psiopt, etc.) see Eigen headers.
+    # Global include so internal targets (pch, hven, etc.) see Eigen headers.
     # Prefer modern target-based approach; fall back to legacy variable.
     if(TARGET Eigen3::Eigen)
         get_target_property(_eigen3_inc Eigen3::Eigen INTERFACE_INCLUDE_DIRECTORIES)
@@ -347,7 +397,7 @@ else()
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dep/eigen>
         )
     endif()
-    # Global include so internal targets (pch, psiopt, etc.) see Eigen headers
+    # Global include so internal targets (pch, hven, etc.) see Eigen headers
     include_directories(dep/eigen)
     message(STATUS "Using bundled Eigen from dep/eigen")
 endif()
@@ -364,8 +414,12 @@ include_directories(dep/pocketfft)
 # solve-time evaluation). Thread count is exposed via ChebTable::from_values
 # nthreads parameter (default 1). No global compile-time disable needed.
 
-# fmt is used by core libraries (utils) so it must always be available.
-add_subdirectory(dep/fmt)
+# fmt is used by core libraries so it must always be available. hven has
+# already published fmt::fmt-header-only from its own vendored copy (same
+# pinned commit); adding tycho's would try to define that target twice.
+if(NOT TARGET fmt::fmt-header-only)
+    add_subdirectory(dep/fmt)
+endif()
 
 if(ENABLE_PYTHON_BINDINGS)
     find_package(Python ${PYVERSION_EXACT} COMPONENTS Interpreter Development REQUIRED)
@@ -417,7 +471,7 @@ endif()
 
 # Binding-specific compile flags: -Os (nanobind best practice) instead of -O3.
 # Computed AFTER all platform flags (OpenMP etc.) are appended to COMPILE_FLAGS.
-# Core libs (psiopt, utils, etc.) use PRIVATE ${COMPILE_FLAGS} so their -O3 does
+# Core libs (solvers_vf, utils, etc.) use PRIVATE ${COMPILE_FLAGS} so their -O3 does
 # not propagate into _tychopy TUs; pch_bindings and _tychopy both use only
 # BINDING_COMPILE_FLAGS, keeping PCH and TU flags in sync.
 if(OPTIMIZE_BINDINGS)
@@ -523,10 +577,8 @@ endif()
 ################################################################################
 # Code Directories
 include(GNUInstallDirs)
-# PSIOPT is its own CMake project (it also configures standalone, see
-# psiopt/CMakeLists.txt). It must come before src/, which links its targets
-# and adds its header root to the shared include list.
-add_subdirectory(psiopt)
+# The solver library is added further up, with the rest of the dependencies:
+# it has to precede the Eigen and fmt blocks, not just src/.
 add_subdirectory(src)
 
 # add_subdirectory(extensions)
@@ -571,6 +623,19 @@ install(DIRECTORY include/tycho
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     FILES_MATCHING PATTERN "*.h"
 )
+
+# Tycho's public headers include hven's, so the installed include tree is only
+# complete with them alongside. hven now carries its own install/export rules
+# (install(TARGETS hven EXPORT hvenTargets ...), install(DIRECTORY include/hven
+# ...), a hvenConfig.cmake) that fire as part of THIS install because hven is
+# add_subdirectory()'d above with no PROJECT_IS_TOP_LEVEL guard on its own
+# install rules -- `cmake --install` on this build tree installs libhven.a,
+# hven's headers, and hven's package config into this same prefix alongside
+# tycho's own, closing what used to be a known gap here (tycho carried every
+# header a find_package(tycho) consumer needed and no solver library to link
+# against them). Nothing to do on this side beyond letting hven's own rules
+# run; see cmake/tychoConfig.cmake.in's find_dependency(hven) for how an
+# install-tree consumer picks up hven::hven.
 
 if(NOT TYCHO_USE_SYSTEM_EIGEN)
     if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dep/eigen/Eigen/Core")
@@ -638,10 +703,20 @@ write_basic_package_version_file(
     COMPATIBILITY SameMajorVersion
 )
 
+# PATH_VARS CMAKE_INSTALL_INCLUDEDIR makes @PACKAGE_CMAKE_INSTALL_INCLUDEDIR@
+# available in tychoConfig.cmake.in, computed relative to the relocated
+# install prefix rather than the hardcoded literal "include" -- a consumer
+# that installs tycho with -DCMAKE_INSTALL_INCLUDEDIR=<something else> still
+# gets a config file whose EXISTS checks point at where the headers actually
+# landed. CMAKE_INSTALL_LIBDIR is also substituted (a plain @VAR@, not a
+# PATH_VAR -- it is used only as a relative-path fragment appended to
+# PACKAGE_PREFIX_DIR when pinning the hven package lookup below, not as a
+# standalone relocatable path in its own right).
 configure_package_config_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/tychoConfig.cmake.in"
     "${CMAKE_CURRENT_BINARY_DIR}/tychoConfig.cmake"
     INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/tycho
+    PATH_VARS CMAKE_INSTALL_INCLUDEDIR
 )
 
 install(EXPORT tychoTargets

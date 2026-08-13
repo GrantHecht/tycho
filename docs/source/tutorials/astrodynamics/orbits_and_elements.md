@@ -304,7 +304,7 @@ True
 ## Next steps
 
 - {doc}`Low-thrust orbit transfer </tutorials/astrodynamics/low_thrust_transfer>` —
-  use MEE dynamics and PSIOPT to design a minimum-fuel orbit transfer.
+  use MEE dynamics and InteriorPointSolver to design a minimum-fuel orbit transfer.
 - {doc}`Astrodynamics in Tycho </explanation/astrodynamics>` — the conceptual
   model behind every component used above.
 - {doc}`Python reference </reference/python/astrodynamics>` — the complete API,

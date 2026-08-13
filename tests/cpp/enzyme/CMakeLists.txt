@@ -80,7 +80,7 @@ add_test(NAME enzyme_compile_fail_non_templated_with_fdiff
         -DTARGET=enzyme_compile_fail_non_templated_with_fdiff
         -DCONFIG=$<CONFIG>
         "-DEXPECTED_REGEX=ProbeNonTemplatedFDiff"
-        -P ${CMAKE_CURRENT_SOURCE_DIR}/compile_fail/run_build_must_fail.cmake)
+        -P ${TYCHO_COMPILE_FAIL_HARNESS})
 
 add_test(NAME enzyme_compile_fail_non_templated_vectorizable
     COMMAND ${CMAKE_COMMAND}
@@ -88,7 +88,7 @@ add_test(NAME enzyme_compile_fail_non_templated_vectorizable
         -DTARGET=enzyme_compile_fail_non_templated_vectorizable
         -DCONFIG=$<CONFIG>
         "-DEXPECTED_REGEX=ProbeNonTemplatedVectorizable"
-        -P ${CMAKE_CURRENT_SOURCE_DIR}/compile_fail/run_build_must_fail.cmake)
+        -P ${TYCHO_COMPILE_FAIL_HARNESS})
 
 add_test(NAME enzyme_compile_fail_non_templated_calls_compute
     COMMAND ${CMAKE_COMMAND}
@@ -96,4 +96,4 @@ add_test(NAME enzyme_compile_fail_non_templated_calls_compute
         -DTARGET=enzyme_compile_fail_non_templated_calls_compute
         -DCONFIG=$<CONFIG>
         "-DEXPECTED_REGEX=ProbeNonTemplatedCallsCompute"
-        -P ${CMAKE_CURRENT_SOURCE_DIR}/compile_fail/run_build_must_fail.cmake)
+        -P ${TYCHO_COMPILE_FAIL_HARNESS})

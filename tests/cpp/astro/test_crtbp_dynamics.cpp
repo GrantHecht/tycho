@@ -51,7 +51,7 @@ TEST_F(CRTBPDynamicsTest, HessianSymmetry) {
     // Locks in the codegen Hessian two-pass emission fix. Before the fix,
     // the lower triangle of _hx_ was read before being written and ended
     // up zero-filled (masked by EIGEN_INITIALIZE_MATRICES_BY_ZERO), and
-    // PSIOPT's upper-triangle-only reader silently never noticed. If
+    // InteriorPointSolver's upper-triangle-only reader silently never noticed. If
     // someone reverts the two-pass split, this test fires immediately at
     // the off-diagonal entries.
     double mu = 0.012150585;

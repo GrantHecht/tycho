@@ -4,7 +4,8 @@
 // Tests factorial and factorial_div from src/Utils/MathFunctions.h.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "tycho/detail/utils/math_functions.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/utils/math_functions.h>
 #include <gtest/gtest.h>
 
 using namespace tycho::utils;

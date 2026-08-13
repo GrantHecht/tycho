@@ -111,7 +111,7 @@ TEST(EvalExceptionRecovery, ThrowingRungIsRejectedNotFatal) {
 // itself (eval_error_log().count_ >= 1 on the LANG rung).
 TEST(EvalExceptionRecovery, ThrowingRungIsRecordedByLangMode) {
     auto prob = build_eval_except_nlp(1);
-    prob->optimizer_->settings().opt_ls_mode_ = PSIOPT::LineSearchModes::LANG;
+    prob->optimizer_->settings().opt_ls_mode_ = InteriorPointSolver::LineSearchModes::LANG;
     try {
         prob->optimize();
         FAIL() << "expected the un-evaluable exhaustion to abort";
@@ -127,7 +127,7 @@ TEST(EvalExceptionRecovery, ThrowingRungIsRecordedByLangMode) {
 // log is wired on the classic L1 rung.
 TEST(EvalExceptionRecovery, ThrowingRungIsRejectedNotFatalL1Mode) {
     auto prob = build_eval_except_nlp(1);
-    prob->optimizer_->settings().opt_ls_mode_ = PSIOPT::LineSearchModes::L1;
+    prob->optimizer_->settings().opt_ls_mode_ = InteriorPointSolver::LineSearchModes::L1;
     auto flag = prob->optimize();
     EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_NEAR(prob->optimizer_->result().obj_val_, 1.0, 1e-6);
@@ -178,7 +178,7 @@ TEST(EvalExceptionRecovery, CommittedPointFailureStaysFatal) {
         // fixture substring inside solver context. Its absence here is what
         // proves this exception propagated UNWRAPPED rather than being
         // caught, counted, and rethrown with context.
-        EXPECT_EQ(msg.find("PSIOPT: line search failed"), std::string::npos) << msg;
+        EXPECT_EQ(msg.find("InteriorPointSolver: line search failed"), std::string::npos) << msg;
     }
 }
 
@@ -242,7 +242,7 @@ TEST(EvalExceptionRecovery, RestorationEscalatesOnUnEvaluableSoftStep) {
     EXPECT_NE(flag, tycho::ConvergenceFlags::DIVERGING);
     EXPECT_GE(prob->optimizer_->result().last_feas_rest_entries_, 1);
     EXPECT_FALSE(prob->optimizer_->result().last_eval_exception_.empty());
-    // The nested-restoration path records through PSIOPT::eval_error_log_
+    // The nested-restoration path records through InteriorPointSolver::eval_error_log_
     // directly (try_soft_feasibility_step), a wiring path distinct from either
     // SolverContext copy — assert it is live.
     EXPECT_GE(prob->optimizer_->eval_error_log().count_, 1);

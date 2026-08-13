@@ -37,7 +37,7 @@ component by the corresponding entry of ``input_scales`` before passing it to
 *func*, and multiplies each output component by the corresponding entry of
 ``output_scales`` after evaluation. Jacobian, adjoint gradient, and adjoint
 Hessian are all transformed consistently. Use this to rescale poorly-conditioned
-dynamics or constraint functions before handing them to PSIOPT.
+dynamics or constraint functions before handing them to InteriorPointSolver.
 )doc");
         obj.def(nb::init<Func, const Eigen::VectorXd &, const Eigen::VectorXd &>(),
                 R"doc(Construct an IO-scaled wrapper around a VectorFunction.

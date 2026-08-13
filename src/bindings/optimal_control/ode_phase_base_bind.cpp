@@ -29,7 +29,7 @@ using StateConstraint = StateFunction<VectorFunctionalX>;
 using StateObjective = StateFunction<ScalarFunctionalX>;
 
 void TychoBind<ODEPhaseBase>::build(nb::module_ &m) {
-    auto obj = nb::class_<ODEPhaseBase, OptimizationProblemBase>(m, "PhaseInterface");
+    auto obj = nb::class_<ODEPhaseBase, BackendProblemBase>(m, "PhaseInterface");
     obj.doc() = R"doc(A single phase of an optimal control problem.
 
 A phase couples an ODE, a discretized trajectory, and the boundary values,
@@ -58,7 +58,7 @@ Notes
 -----
 :meth:`optimize`, :meth:`solve`, and the ``optimizer`` handle are inherited
 from the shared optimization-problem base; ``phase.optimizer`` exposes the
-underlying PSIOPT solver (e.g. ``phase.optimizer.set_print_level(0)``).
+underlying InteriorPointSolver solver (e.g. ``phase.optimizer.set_print_level(0)``).
 
 Examples
 --------

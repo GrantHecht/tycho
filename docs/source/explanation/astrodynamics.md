@@ -151,7 +151,7 @@ acceleration beyond central-body point-mass gravity. In an optimal-control
 problem this is usually the thrust control the optimizer chooses, but it can
 equally carry modeled perturbations (J2, drag, SRP) or their sum. This is exactly
 the ODE form a {doc}`Phase </explanation/direct_collocation>` expects, and each
-model carries analytic Jacobian and Hessian implementations so PSIOPT receives
+model carries analytic Jacobian and Hessian implementations so InteriorPointSolver receives
 exact derivatives.
 
 ### cartesian_dynamics
@@ -255,7 +255,7 @@ phase = ode.phase("LGL3", traj_guess, 30)   # 30 LGL3 segments from an initial g
 
 Once a phase holds a dynamics model, the transcription builds defect constraints
 from it at every node, boundary and path constraints can be attached in whatever
-coordinates are convenient, and PSIOPT solves the resulting NLP — the full
+coordinates are convenient, and InteriorPointSolver solves the resulting NLP — the full
 collocation machinery (mesh refinement, control parameterization, Lagrange
 objectives) is available regardless of the model. A multi-phase trajectory can
 even mix models: a `cartesian_dynamics` thrust arc, a `modified_dynamics` heliocentric

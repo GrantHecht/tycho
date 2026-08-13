@@ -22,7 +22,7 @@
 //
 // Additionally, This class also defines the .compute_jacobian etc. methods in terms of the
 // compute_jacobian_impl methods implemented in derived classes. These methods are then used to
-// implement the dense vector functions interface with psiopt through the constraints_jacobian etc.
+// implement the dense vector functions interface with hven's interior-point solver through the constraints_jacobian etc.
 // methods.
 //
 // Modifications in Tycho (Copyright 2026-present Grant R. Hecht,
@@ -54,7 +54,7 @@ namespace tycho::vf {
 /// `padded`, the coefficient-wise math operators, etc.), the
 /// `compute_jacobian` / `adjointhessian` family of differentiation entry points,
 /// and the `constraints_jacobian` / objective interfaces that connect a function
-/// to the PSIOPT optimizer.
+/// to the InteriorPointSolver optimizer.
 ///
 /// The default @ref INPUT_DOMAIN declares that every input is used; composite
 /// derived classes override it to participate in sparsity-aware Jacobian/Hessian
@@ -1395,7 +1395,7 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
     }
 
     ////
-    /// @brief PSIOPT interface: evaluate constraint values and scatter their Jacobian.
+    /// @brief InteriorPointSolver interface: evaluate constraint values and scatter their Jacobian.
     ///
     /// Called during the solve loop. For each application, evaluates `f(x)` and
     /// `J(x)`, writes values into @p FX, and sums the Jacobian into the global
@@ -1498,7 +1498,7 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
             tycho::utils::TempSpec<Jacobian<double>>(this->output_rows(), this->input_rows()));
     }
 
-    /// @brief PSIOPT interface: constraint values, adjoint gradients, and Jacobian scatter.
+    /// @brief InteriorPointSolver interface: constraint values, adjoint gradients, and Jacobian scatter.
     ///
     /// Like @ref constraints_jacobian, but also gathers the multipliers from
     /// @p L and writes the adjoint gradient into @p AGX for each application.
@@ -1549,7 +1549,7 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
             tycho::utils::TempSpec<Jacobian<double>>(this->output_rows(), this->input_rows()));
     }
 
-    /// @brief PSIOPT interface: values, Jacobian, adjoint gradient, and Hessian scatter.
+    /// @brief InteriorPointSolver interface: values, Jacobian, adjoint gradient, and Hessian scatter.
     ///
     /// Called during the optimize loop. For each application, evaluates `f(x)`,
     /// `J(x)`, the adjoint gradient, and the adjoint Hessian, then scatters both
@@ -1691,7 +1691,7 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     // ---- Scalar objective interface (OR == 1 only) ----
-    /// @brief PSIOPT interface: accumulate this scalar function's objective value.
+    /// @brief InteriorPointSolver interface: accumulate this scalar function's objective value.
     ///
     /// Only available when `OR == 1`. Sums `ObjScale * f(x)` over all
     /// applications into @p Val.
@@ -1715,7 +1715,7 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
         }
     }
 
-    /// @brief PSIOPT interface: accumulate the objective value and its gradient.
+    /// @brief InteriorPointSolver interface: accumulate the objective value and its gradient.
     ///
     /// Only available when `OR == 1`. Sums `ObjScale * f(x)` into @p Val and
     /// scatters `ObjScale * J(x)^T` into the gradient vector @p GX.
@@ -1749,7 +1749,7 @@ struct DenseFunctionBase : ComputableBase<Derived, IR, OR>, DomainHolder<IR> {
         }
     }
 
-    /// @brief PSIOPT interface: accumulate objective value, gradient, and Hessian.
+    /// @brief InteriorPointSolver interface: accumulate objective value, gradient, and Hessian.
     ///
     /// Only available when `OR == 1`. Sums `ObjScale * f(x)` into @p Val,
     /// scatters the gradient into @p GX, and scatters the (objective-scaled)

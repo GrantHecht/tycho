@@ -7,7 +7,8 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "integrator_test_utils.h"
-#include "tycho/detail/utils/thread_pool.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/utils/thread_pool.h>
 #include <gtest/gtest.h>
 
 using namespace tycho;

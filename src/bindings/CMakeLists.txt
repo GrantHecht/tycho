@@ -28,6 +28,11 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     target_compile_options(pch_bindings PRIVATE -Xclang -fno-pch-timestamp)
 endif()
 target_link_libraries(pch_bindings PRIVATE nanobind-static)
+# hven publishes HVEN_DEFAULT_QP_THREADS as a PUBLIC compile definition because
+# two of its public headers read it, so a target that compiles hven headers has
+# to LINK hven, not merely receive its include directory. Build-tree only, like
+# every other link to hven here.
+target_link_libraries(pch_bindings PRIVATE $<BUILD_INTERFACE:hven::hven>)
 
 #-------------------------------------------------------------------------------
 # Heavy binding TUs (>2.5 GB RSS) — compiled in the heavy_compile ninja pool,
@@ -45,6 +50,7 @@ add_library(_tychopy_heavy OBJECT
 )
 target_compile_options(_tychopy_heavy PRIVATE ${BINDING_COMPILE_FLAGS})
 target_link_libraries(_tychopy_heavy PRIVATE nanobind-static)
+target_link_libraries(_tychopy_heavy PRIVATE $<BUILD_INTERFACE:hven::hven>)
 target_compile_definitions(_tychopy_heavy PRIVATE TYCHO_PYTHON_BINDINGS)
 set_target_properties(_tychopy_heavy PROPERTIES DEFINE_SYMBOL "")
 target_include_directories(_tychopy_heavy PRIVATE ${_TYCHO_SRC_INCLUDES} ${_TYCHO_BINDINGS_INCLUDES} ${INCLUDE_DIRS})
@@ -88,7 +94,7 @@ nanobind_add_module(_tychopy
     # Solvers bindings
     solvers/tycho_solvers.cpp
     solvers/optimization_problem_base.cpp
-    solvers/psiopt_bind.cpp
+    solvers/interior_point_solver_bind.cpp
     solvers/optimization_problem_bind.cpp
     solvers/jet_bind.cpp
     # Astro bindings

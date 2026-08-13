@@ -14,7 +14,8 @@
 #include "tycho/detail/optimal_control/core/interface_types.h"
 #include "tycho/detail/optimal_control/core/optimal_control_flags.h"
 #include "tycho/detail/optimal_control/phase/ode_phase_base.h"
-#include "tycho/detail/solvers/psiopt.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/drivers/interior_point_solver.h>
 #include <fmt/format.h>
 #include <initializer_list>
 #include <memory>
@@ -31,7 +32,7 @@ using oc::ScaleType;
 using oc::VarIndexType;
 using vf::GenericFunction;
 // Solvers types
-using tycho::solvers::PSIOPT;
+using tycho::solvers::InteriorPointSolver;
 
 /// @ingroup optimal_control
 /// @brief Builder-API optimal control phase with named-variable overloads.
@@ -819,10 +820,10 @@ class Phase {
     void set_mesh_err_factor(double factor) { phase_->set_mesh_err_factor(factor); }
 
     /// @brief Set the number of solver partitions.
-    /// @param nparts  Number of NLP partitions for the parallel PSIOPT solver.
+    /// @param nparts  Number of NLP partitions for the parallel InteriorPointSolver solver.
     void set_num_partitions(int nparts) { phase_->set_num_partitions(nparts); }
     /// @brief Set the number of solver partitions.
-    /// @param nparts     Number of NLP partitions for the parallel PSIOPT solver.
+    /// @param nparts     Number of NLP partitions for the parallel InteriorPointSolver solver.
     /// @param qp_threads Number of threads used per partition for linear-system solves.
     void set_num_partitions(int nparts, int qp_threads) {
         phase_->set_num_partitions(nparts, qp_threads);
@@ -831,7 +832,7 @@ class Phase {
     /// @brief Set the jet (batched) solve job mode.
     /// @param mode  The jet job mode controlling how batched Jacobian/Hessian evaluations
     ///              are dispatched.
-    void set_jet_job_mode(solvers::OptimizationProblemBase::JetJobModes mode) {
+    void set_jet_job_mode(solvers::BackendProblemBase::JetJobModes mode) {
         phase_->set_jet_job_mode(mode);
     }
 
@@ -1235,19 +1236,19 @@ class Phase {
     // ── Solve / optimize ──────────────────────────────────────────────────────
 
     /// @brief Solve the phase for feasibility (no optimization).
-    /// @return Convergence status from PSIOPT.
+    /// @return Convergence status from InteriorPointSolver.
     tycho::ConvergenceFlags solve() { return phase_->solve(); }
     /// @brief Optimize the phase (minimize the objective subject to constraints).
-    /// @return Convergence status from PSIOPT.
+    /// @return Convergence status from InteriorPointSolver.
     tycho::ConvergenceFlags optimize() { return phase_->optimize(); }
     /// @brief Solve for feasibility, then optimize.
-    /// @return Convergence status from the final PSIOPT call.
+    /// @return Convergence status from the final InteriorPointSolver call.
     tycho::ConvergenceFlags solve_optimize() { return phase_->solve_optimize(); }
     /// @brief Optimize, then solve to tighten feasibility.
-    /// @return Convergence status from the final PSIOPT call.
+    /// @return Convergence status from the final InteriorPointSolver call.
     tycho::ConvergenceFlags optimize_solve() { return phase_->optimize_solve(); }
     /// @brief Solve, optimize, then solve again.
-    /// @return Convergence status from the final PSIOPT call.
+    /// @return Convergence status from the final InteriorPointSolver call.
     tycho::ConvergenceFlags solve_optimize_solve() { return phase_->solve_optimize_solve(); }
 
     // ── Result accessors ──────────────────────────────────────────────────────
@@ -1282,9 +1283,9 @@ class Phase {
     /// @brief Access the wrapped base phase as a shared pointer.
     /// @return Shared pointer to the underlying base phase.
     std::shared_ptr<ODEPhaseBase> base_ptr() { return phase_; }
-    /// @brief Access the underlying PSIOPT optimizer.
+    /// @brief Access the underlying InteriorPointSolver optimizer.
     /// @return Reference to the optimizer.
-    PSIOPT &optimizer() { return *phase_->optimizer_; }
+    InteriorPointSolver &optimizer() { return *phase_->optimizer_; }
     /// @brief Access the variable registry.
     /// @return Const reference to the variable registry.
     const VarRegistry &registry() const { return registry_; }

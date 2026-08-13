@@ -5,7 +5,8 @@
 // accumulation, reset, and duration type queries.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "tycho/detail/utils/timer.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/utils/timer.h>
 #include <chrono>
 #include <gtest/gtest.h>
 #include <thread>

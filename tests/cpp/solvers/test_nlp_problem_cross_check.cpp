@@ -16,9 +16,10 @@
 // exercises the native variable-bound path identically on both sides.
 ///////////////////////////////////////////////////////////////////////////////
 
+#include "tycho/detail/hven_namespaces.h"
 #include "tycho/detail/solvers_vf/optimization_problem.h"
-#include "tycho/solvers/nlp_problem.h"
-#include "tycho/solvers/nlp_solver.h"
+#include <hven/model/nlp_problem.h>
+#include <hven/model/nlp_solver.h>
 
 #include <gtest/gtest.h>
 
@@ -30,9 +31,14 @@
 #include <Eigen/Core>
 
 using tycho::ConstEigenRef;
-using tycho::solvers::NLPProblem;
-using tycho::solvers::NLPSolver;
 using tycho::solvers::OptimizationProblem;
+// The solver-neutral NLP interface belongs to the solver library and carries no
+// backend selection, so it is named where it lives rather than through tycho's
+// solver namespace -- which is exactly the arm of this cross-check: a problem
+// stated directly against the library, against the same problem stated as a
+// VectorFunction expression tree on tycho's side.
+using hven::solvers::NLPProblem;
+using hven::solvers::NLPSolver;
 
 namespace {
 
@@ -93,7 +99,7 @@ struct NlpCrossCheckProblem : NLPProblem {
 // Same problem posed through OptimizationProblem + VectorFunction expressions.
 // The variable bound is declared straight on the NonLinearProgram between
 // transcribe() and the solve (there is no Phase here to route it through) --
-// the same pattern test_psiopt_native_bounds.cpp's restoration harness uses.
+// the same pattern test_interior_point_solver_native_bounds.cpp's restoration harness uses.
 Eigen::VectorXd nlp_cross_check_solve_vf(tycho::ConvergenceFlags &flag_out) {
     using tycho::vf::Arguments;
     using tycho::vf::GenericFunction;

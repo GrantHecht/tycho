@@ -14,5 +14,9 @@ transcription.
 
 See `ODEPhaseBase::record_var_bounds` / `transcribe_var_bounds` in
 `src/optimal_control/ode_phase_base.cpp` for the phase side, and the bound set,
-barrier, and fraction-to-boundary handling in
-`include/tycho/detail/solvers/psiopt.h` for the solver side.
+barrier, and fraction-to-boundary handling in hven's `InteriorPointSolver`
+(`dep/hven/include/hven/drivers/interior_point_solver.h`, with the bound set in
+`dep/hven/include/hven/detail/interior/bound_set.h` and the barrier math in
+`dep/hven/include/hven/detail/interior/barrier_math.h`) for the solver side.
+This logic originally lived in tycho's own `include/tycho/detail/solvers/psiopt.h`
+before the M2 migration moved the engine into hven.

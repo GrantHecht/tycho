@@ -1,6 +1,6 @@
 # How to troubleshoot a failing solve
 
-PSIOPT does not fail in one way. A solve that does not return `CONVERGED`
+InteriorPointSolver does not fail in one way. A solve that does not return `CONVERGED`
 has usually failed for a reason that is visible in the iteration table —
 residuals climbing, step lengths collapsing, a perturbation column that
 never returns to zero — and each of those signatures points at a different
@@ -294,7 +294,7 @@ phase.optimizer.barrier_governor = slv.BarrierGovernors.monitored
 ## What these mechanisms are, briefly
 
 Citations below are transcribed from the source headers under
-`psiopt/include/tycho/detail/solvers/globalization/`, which carry the full
+`hven/detail/globalization/` in the solver library, which carry the full
 rule-by-rule derivations.
 
 **Filter acceptance and the switching skeleton.** The filter stores

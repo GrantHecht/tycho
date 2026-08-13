@@ -20,7 +20,7 @@ free decision variable in this collocation formulation, not automatically
 tied to [0, 1] just because the initial guess spans that range, so t is
 pinned explicitly at Front (t = 0) and Back (t = 1) to match the brief's
 stated "t in [0, 1]" fixed-duration setup (an un-pinned Back time was
-verified, in the sibling module ``deg_dup_equality``, to let PSIOPT
+verified, in the sibling module ``deg_dup_equality``, to let the interior-point solver
 silently rescale the effective transfer duration instead).
 
 Perturbation, and why this replaces an earlier construction: an earlier
@@ -90,13 +90,13 @@ figs, confirming w's inertness and that the shadow-state redundant rows
 did not change the achievable objective). This is a FINDING TO REPORT
 PROMINENTLY, not hidden: like ``deg_dup_equality``, this dynamics-implied
 redundant-row pathology does NOT genuinely manifest as non-convergence —
-PSIOPT's KKT factorization tolerates 65 structurally-redundant interior
+the interior-point solver's KKT factorization tolerates 65 structurally-redundant interior
 rows (an exact rank deficiency of 65 in the constraint Jacobian, at every
 LGL3 node across 32 segments) about as readily as the well-posed
 baseline, converging in the same handful of iterations (3, matching both
 the sibling boundary-duplication module and the well-posed baseline).
 Useful negative result
-for future E2 work: PSIOPT's default Pardiso pivoting/regularization path
+for future E2 work: the interior-point solver's default Pardiso pivoting/regularization path
 appears robust not only to verbatim duplicate rows (``deg_dup_equality``)
 but also to a much larger block of rows that are merely *implied* by
 other constraints rather than copied from them.

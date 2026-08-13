@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Native primal variable-bound machinery in PSIOPT: the barrier kernels, the
+// Native primal variable-bound machinery in InteriorPointSolver: the barrier kernels, the
 // interior push and multiplier seeding, the bound-multiplier Newton direction
 // and its committed update with the kappa_sigma safeguard, and the condensed
 // sigma diagonal's arrival in the assembled KKT.
@@ -11,7 +11,7 @@
 //
 // Tests come in three kinds. Pure kernels are checked against a written-out
 // formula. Single private helpers are driven through NativeBoundsHarness, which
-// PSIOPT befriends (psiopt.h). End-to-end solves go through the public entry
+// InteriorPointSolver befriends (interior_point_solver.h). End-to-end solves go through the public entry
 // point and assert on where they land, what the multipliers say about the
 // active bound, and -- through a late-callback probe -- that no iterate ever
 // left the box on the way there.
@@ -25,20 +25,21 @@
 #include "optimal_control/oc_test_utils.h"
 #include "solver_test_utils.h"
 
-#include "tycho/detail/solvers/barrier_math.h"
-#include "tycho/detail/solvers/bound_set.h"
-#include "tycho/detail/solvers/globalization/acceptance_strategy.h"
-#include "tycho/detail/solvers/globalization/backtracking_line_search.h"
-#include "tycho/detail/solvers/globalization/noop_recovery.h"
-#include "tycho/detail/solvers/globalization/progress_measures.h"
-#include "tycho/detail/solvers/globalization/recovery_chain.h"
-#include "tycho/detail/solvers/globalization/soc.h"
-#include "tycho/detail/solvers/globalization/solver_context.h"
-#include "tycho/detail/solvers/globalization/watchdog.h"
-#include "tycho/detail/solvers/non_linear_program.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/barrier_math.h>
+#include <hven/detail/interior/bound_set.h>
+#include <hven/detail/globalization/acceptance_strategy.h>
+#include <hven/detail/globalization/backtracking_line_search.h>
+#include <hven/detail/globalization/noop_recovery.h>
+#include <hven/detail/globalization/progress_measures.h>
+#include <hven/detail/globalization/recovery_chain.h>
+#include <hven/detail/globalization/soc.h>
+#include <hven/detail/globalization/solver_context.h>
+#include <hven/detail/globalization/watchdog.h>
+#include <hven/drivers/non_linear_program.h>
 #include "tycho/detail/solvers_vf/optimization_problem.h"
-#include "tycho/detail/solvers/psiopt.h"
-#include "tycho/detail/solvers/psiopt_presets.h"
+#include <hven/drivers/interior_point_solver.h>
+#include <hven/detail/drivers/interior_point_solver_presets.h>
 
 #include <gtest/gtest.h>
 
@@ -63,7 +64,7 @@ using tycho::solvers::kFreeModeClipMuCap;
 using tycho::solvers::kKappaD;
 using tycho::solvers::kKappaSigma;
 using tycho::solvers::NonLinearProgram;
-using tycho::solvers::PSIOPT;
+using tycho::solvers::InteriorPointSolver;
 
 namespace {
 
@@ -145,7 +146,7 @@ class NativeBoundsUnusedAcceptance : public tycho::solvers::AcceptanceStrategy {
 class NativeBoundsAcceptingLineSearch : public tycho::solvers::AcceptanceStrategy {
   public:
     bool drives_classic_path() const override { return true; }
-    double classic_line_search(PSIOPT::LineSearchModes, double, double, double, double,
+    double classic_line_search(InteriorPointSolver::LineSearchModes, double, double, double, double,
                                Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &,
                                Eigen::VectorXd &, Eigen::VectorXd &,
                                tycho::solvers::IterateInfo &citer,
@@ -182,7 +183,7 @@ void native_bounds_add_shifted_square(tycho::solvers::OptimizationProblem &prob,
 
 } // namespace
 
-// A live PSIOPT over a small bound-free-by-default problem, with the private
+// A live InteriorPointSolver over a small bound-free-by-default problem, with the private
 // bound surface exposed. The bound set is installed by driving the NLP's own
 // classification and then pointing the solver at the result -- exactly what
 // run_phase_sequence() does on its configuration success path -- so the tests
@@ -202,7 +203,7 @@ class NativeBoundsHarness {
         solver_ = prob_.optimizer_.get();
     }
 
-    PSIOPT &solver() { return *solver_; }
+    InteriorPointSolver &solver() { return *solver_; }
     NonLinearProgram &nlp() { return *prob_.nlp_; }
     int pv() const { return solver_->primal_vars_; }
     int dim() const { return solver_->kkt_dim_; }
@@ -283,12 +284,12 @@ class NativeBoundsHarness {
     void install_bounds(const BoundSet *b) { solver_->bounds_ = b; }
     BoundDualState &duals() { return solver_->bound_duals_; }
 
-    // The same state on a PSIOPT this harness does not own -- a phase's
+    // The same state on a InteriorPointSolver this harness does not own -- a phase's
     // optimizer, or one driving a problem built outside the harness.
-    // NativeBoundsHarness is the file's befriended type (psiopt.h), so every
+    // NativeBoundsHarness is the file's befriended type (interior_point_solver.h), so every
     // test here reaches the private bound state through it rather than each
     // fixture needing its own friendship.
-    static BoundDualState &duals_of(PSIOPT &opt) { return opt.bound_duals_; }
+    static BoundDualState &duals_of(InteriorPointSolver &opt) { return opt.bound_duals_; }
 
     // A SolverContext carrying the bound state, the way alg_impl builds one --
     // what the step-length mechanism reads to find the bound legs.
@@ -301,7 +302,7 @@ class NativeBoundsHarness {
 
     // A SolverContext built the way every non-bound call site builds one, i.e.
     // without naming the two bound members. Constructed here because the members
-    // it reads are private to PSIOPT.
+    // it reads are private to InteriorPointSolver.
     tycho::solvers::SolverContext bare_context() {
         return tycho::solvers::SolverContext{
             &this->nlp(),           solver_->kkt_sol_,    solver_->settings_,
@@ -343,18 +344,18 @@ class NativeBoundsHarness {
         Eigen::VectorXd GX = Eigen::VectorXd::Zero(pv());
         Eigen::VectorXd RHS = Eigen::VectorXd::Zero(dim());
         double val = 0.0;
-        solver_->eval_nlp(PSIOPT::AlgorithmModes::OPT, 1.0, XSL, val, GX, RHS,
-                          solver_->kkt_sol_.get_matrix(), 0.1);
+        solver_->eval_nlp(InteriorPointSolver::AlgorithmModes::OPT, 1.0, XSL, val, GX, RHS,
+                          solver_->kkt_sol_.matrix(), 0.1);
         Eigen::VectorXd diag(pv());
         for (int i = 0; i < pv(); i++) {
-            diag[i] = solver_->kkt_sol_.get_matrix().coeff(i, i);
+            diag[i] = solver_->kkt_sol_.matrix().coeff(i, i);
         }
         return diag;
     }
 
   private:
     tycho::solvers::OptimizationProblem prob_;
-    PSIOPT *solver_ = nullptr;
+    InteriorPointSolver *solver_ = nullptr;
 };
 
 // --- Barrier kernels ------------------------------------------------------
@@ -744,7 +745,7 @@ TEST(NativeBounds, TheClipBarrierParameterFollowsTheBarrierSchedule) {
 // the log of a non-positive number with no diagnostic -- so the range is
 // enforced rather than assumed.
 TEST(NativeBounds, TheIntervalPushIsRangeCheckedByValidate) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     EXPECT_NO_THROW(opt.settings().validate());
 
     opt.settings().bound_interval_push_ = 0.5;
@@ -775,7 +776,7 @@ TEST(NativeBounds, TheIntervalPushIsRangeCheckedByValidate) {
 // is a closed-set enum that still reaches Settings through a mutable reference, so
 // a value outside the set is a reachable input rather than an impossible one.
 TEST(NativeBounds, TheRelaxFactorAndTheTreatmentAreRangeCheckedByValidate) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     EXPECT_NO_THROW(opt.settings().validate());
     EXPECT_EQ(opt.settings().fixed_variable_treatment_, FixedVariableTreatments::MakeParameter);
     EXPECT_DOUBLE_EQ(opt.settings().bound_relax_factor_, tycho::solvers::kDefaultBoundRelaxFactor);
@@ -888,7 +889,7 @@ TEST(NativeBounds, AProblemWithoutBoundsLeavesTheWholeBoundStateEmpty) {
 
 // The invariant every globalization component's bound branch is guarded on: a
 // default-constructed context carries no bound set, so those branches are
-// unreachable unless PSIOPT deliberately installs one.
+// unreachable unless InteriorPointSolver deliberately installs one.
 TEST(NativeBounds, ADefaultedSolverContextCarriesNoBoundState) {
     NativeBoundsHarness h(2);
     h.configure_bounds();
@@ -1123,7 +1124,7 @@ struct NativeBoundsInteriorProbe {
     // here is a non-finite barrier and the end of the solve. It is NOT a
     // statement that the user's declared bound was satisfied, which is a
     // strictly tighter claim this probe does not make.
-    void install(PSIOPT &opt) {
+    void install(InteriorPointSolver &opt) {
         opt.set_late_callback([this](const tycho::solvers::IterateInfo &iter,
                                      tycho::ConstEigenRef<Eigen::VectorXd> xsl,
                                      tycho::ConstEigenRef<Eigen::VectorXd>) {
@@ -1413,7 +1414,7 @@ TEST(NativeBounds, CorrectedDirectionsInheritTheBoundFractionToBoundary) {
         int activations = 0;
 
         const auto action = soc.on_step_rejected(
-            citer, iters, ctx, acceptance, mechanism, PSIOPT::LineSearchModes::AUGLANG,
+            citer, iters, ctx, acceptance, mechanism, InteriorPointSolver::LineSearchModes::AUGLANG,
             /*obj_scale=*/1.0, /*mu=*/0.1, /*prim_obj=*/0.0, /*barr_obj=*/0.0, xsl, dxsl, xsl2, rhs,
             rhs2, alpha, alphap, alphad, soc_steps, resolved_depth, activations);
 
@@ -1476,7 +1477,7 @@ TEST(NativeBounds, WatchdogRevertRestoresTheBoundMultipliersWithTheIterate) {
         double alphad = 1.0;
         int soc_steps = 0;
         return watchdog.on_step_rejected(citer, iters, ctx, acceptance, mechanism,
-                                         PSIOPT::LineSearchModes::AUGLANG, /*obj_scale=*/1.0,
+                                         InteriorPointSolver::LineSearchModes::AUGLANG, /*obj_scale=*/1.0,
                                          /*mu=*/1.0, merit, /*barr_obj=*/0.0, v, v, v, v, v, alpha,
                                          alphap, alphad, soc_steps, resolved_depth, activations);
     };
@@ -1658,7 +1659,7 @@ TEST(NativeBounds, TheInfeasibilityMeasureExcludesTheBoundBarrierAccount) {
         ctx.bounds_ = with_bounds ? h.installed_bounds() : nullptr;
         NativeBoundsCapturingAcceptance acceptance;
         tycho::solvers::IterateInfo citer;
-        mechanism.run_acceptance_backtrack(PSIOPT::LineSearchModes::AUGLANG, /*obj_scale=*/1.0, mu,
+        mechanism.run_acceptance_backtrack(InteriorPointSolver::LineSearchModes::AUGLANG, /*obj_scale=*/1.0, mu,
                                            /*prim_obj=*/0.0, /*barr_obj=*/0.0, xsl, dxsl, xsl2, rhs,
                                            rhs2, acceptance, citer, iters, ctx);
         EXPECT_EQ(acceptance.calls_, 1) << "the ladder did not evaluate exactly one trial";
@@ -1740,14 +1741,14 @@ class NativeBoundsRestorationHarness {
         solver_ = prob_.optimizer_.get();
     }
 
-    PSIOPT &solver() { return *solver_; }
+    InteriorPointSolver &solver() { return *solver_; }
     const NonLinearProgram *nlp() const { return prob_.nlp_.get(); }
     static Eigen::VectorXd guess() { return (Eigen::VectorXd(2) << 0.95, 5.0).finished(); }
     Eigen::VectorXd solve() { return solver_->optimize(this->guess()); }
 
   private:
     tycho::solvers::OptimizationProblem prob_;
-    PSIOPT *solver_ = nullptr;
+    InteriorPointSolver *solver_ = nullptr;
 };
 
 // The shared body of the two restoration-episode tests. The elastic (or
@@ -1914,13 +1915,13 @@ TEST(NativeBounds, TheMeritL1PresetSolvesANativelyBoundedPhase) {
 }
 
 // The five tests above are the whole shipped preset table, and this is what
-// keeps that true: a sixth preset added to kPSIOPTPresets fails here instead of
+// keeps that true: a sixth preset added to kInteriorPointSolverPresets fails here instead of
 // quietly going uncovered by the matrix.
 TEST(NativeBounds, TheMechanismMatrixCoversEveryShippedPreset) {
     const std::vector<std::string> covered = {"classic", "filter_l1", "soc_recovery_l1",
                                               "soc_proximal", "merit_l1"};
-    ASSERT_EQ(tycho::solvers::kPSIOPTPresets.size(), covered.size());
-    for (const auto &entry : tycho::solvers::kPSIOPTPresets) {
+    ASSERT_EQ(tycho::solvers::kInteriorPointSolverPresets.size(), covered.size());
+    for (const auto &entry : tycho::solvers::kInteriorPointSolverPresets) {
         EXPECT_NE(std::find(covered.begin(), covered.end(), std::string(entry.name_)),
                   covered.end())
             << "preset " << entry.name_ << " has no matrix test";

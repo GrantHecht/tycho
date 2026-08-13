@@ -73,7 +73,7 @@ ndarray, shape (2, k), dtype int
     obj.def("is_linear", &Derived::is_linear,
             R"doc(Whether this VectorFunction is known to be linear.
 
-A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
+A linear function has a constant Jacobian and zero Hessian.  InteriorPointSolver uses
 this flag to skip second-derivative computations for linear expressions.
 For type-erased ``GenericFunction`` objects this value is determined at
 construction time and cached; for concrete (statically-typed) functions
@@ -327,7 +327,7 @@ ValueError
 
 All four quantities are computed together, sharing internal buffers, which is
 more efficient than invoking them separately.  This is the entry point used
-by PSIOPT during second-order optimization.
+by InteriorPointSolver during second-order optimization.
 
 Parameters
 ----------

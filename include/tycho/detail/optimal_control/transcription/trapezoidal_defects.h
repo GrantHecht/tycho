@@ -16,6 +16,8 @@
 
 #include "tycho/detail/optimal_control/transcription/transcription_sizing.h"
 #include "tycho/detail/vf/core/vector_function.h"
+#include "tycho/detail/vf/type_erasure/gf_type_erasure.h"
+#include <hven/solver_interface_adapter.h>
 
 #include <cassert>
 
@@ -495,3 +497,16 @@ struct TrapezoidalDefects
 };
 
 } // namespace tycho::oc
+
+// The trapezoidal defect is a plain function object, so a conversion to a
+// solver constraint stores the defect itself — one erasure, one virtual
+// dispatch per solver call. The registration sits beside the definition
+// because that is the only placement no translation unit can miss; see
+// hven/solver_interface_adapter.h for the contract.
+namespace hven::solvers {
+
+template <class DODE>
+struct SolverInterfaceAdapter<tycho::oc::TrapezoidalDefects<DODE>>
+    : ::tycho::solvers::DirectVFAdapter<tycho::oc::TrapezoidalDefects<DODE>> {};
+
+} // namespace hven::solvers

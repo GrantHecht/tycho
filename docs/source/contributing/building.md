@@ -30,8 +30,10 @@ conda install -n tycho -c conda-forge basemap
 
 ## Source checkout
 
-Tycho vendors three submodules (`dep/eigen`, `dep/fmt`, `dep/nanobind`).
-Either clone with `--recurse-submodules`:
+Tycho vendors five submodules (`dep/eigen`, `dep/fmt`, `dep/nanobind`,
+`dep/pocketfft`, `dep/hven`). `dep/hven` — the NLP solver library tycho
+builds on — carries nested submodules of its own, so the checkout must be
+recursive. Either clone with `--recurse-submodules`:
 
 ```bash
 git clone --recurse-submodules https://github.com/GrantHecht/tycho.git
@@ -45,9 +47,9 @@ cd tycho
 git submodule update --init --recursive
 ```
 
-(The CMake helpers under `cmake/git-submodule-*.cmake` will also
-initialize submodules automatically on the first configure if you
-forget.)
+(The `tycho-git-submodule-update` build target runs the recursive
+update for an existing checkout. Configure fails with the exact command
+to run if `dep/hven` is missing.)
 
 ## Configure and build
 

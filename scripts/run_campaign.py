@@ -2,12 +2,12 @@
 """
 run_campaign.py — globalization configuration-sweep campaign driver
 
-Sweeps PSIOPT's globalization knobs across a six-axis configuration space,
+Sweeps the interior-point solver's globalization knobs across a six-axis configuration space,
 driving the ``tests/corpus`` robustness harness (``scripts/run_corpus.py``)
 through every valid combination, and aggregates the results into a
 shortlist of promotion candidates.
 
-Axes (``AXES`` below) and the real ``PSIOPT.Settings`` fields they select:
+Axes (``AXES`` below) and the real ``InteriorPointSolver.Settings`` fields they select:
 
     acceptance_strategy in {0: classic_merit, 1: merit, 2: funnel, 3: filter}
     barrier_governor    in {0: classic_adaptive, 1: monitored}
@@ -25,7 +25,7 @@ recovery-link constants (``kWatchdogShortenedIterTrigger=10``,
 ``ls_extended_iters``'s *enable* value (0 disables it; any positive int
 enables it, per ``Settings::validate()`` and
 ``test_LsExtendedItersRoundTrip`` in
-``tychopy/test/test_Solvers/test_psiopt_globalization_settings.py``). The
+``tychopy/test/test_Solvers/test_interior_point_solver_globalization_settings.py``). The
 enable value used here is instead pinned from that same test file, which
 consistently exercises the "enabled" state at ``ls_extended_iters=2`` across
 every composition test that turns the link on (e.g.
@@ -82,7 +82,7 @@ Subcommands:
                 false) still exposes both repeats' full detail instead of
                 only the higher-indexed one); ``--context NAME=SCORECARD``
                 appends a fixed reference row read from an existing
-                ``run_corpus.py`` JSONL scorecard (e.g. the PSIOPT-defaults
+                ``run_corpus.py`` JSONL scorecard (e.g. the solver-defaults
                 or Ipopt baselines) for side-by-side comparison.
 
 Coercion note (``is_cell_valid``): ``expand_config()`` already returns typed
@@ -91,10 +91,10 @@ from ``run_corpus.py``'s ``_parse_config_args``/``_parse_config_value``
 (those coerce raw "KEY=VALUE" *strings*, not already-typed dict values --
 not applicable here). What IS reused conceptually is the enum-typed-property
 fallback in ``run_corpus.py``'s ``_run_child`` (its nested ``configure``
-closure): PSIOPT's enum-typed properties reject a raw int via ``setattr``
+closure): the interior-point solver's enum-typed properties reject a raw int via ``setattr``
 with ``TypeError`` even for a numerically valid member (confirmed by
 ``test_enum_property_rejects_raw_int_assignment`` in
-``test_psiopt_globalization_settings.py``), so on ``TypeError`` the fallback
+``test_interior_point_solver_globalization_settings.py``), so on ``TypeError`` the fallback
 recovers the property's current enum type and reconstructs it
 (``enum_type(value)``). That closure is not a standalone importable
 function (it is nested inside ``_run_child``), so it is replicated verbatim
@@ -165,7 +165,7 @@ def cell_hash(config: dict) -> str:
 
 
 def expand_config(cell: dict) -> dict:
-    """Map a raw six-axis cell to the real PSIOPT.Settings field names/values.
+    """Map a raw six-axis cell to the real InteriorPointSolver.Settings field names/values.
 
     Five axes pass through under their real setting names unchanged; the
     composite ``recovery`` axis expands to the two real fields it controls.
@@ -232,7 +232,7 @@ def is_cell_complete(
 
 
 def _apply_config(optimizer, config: dict) -> None:
-    """Apply an expand_config()-shaped dict to a PSIOPT optimizer via setattr.
+    """Apply an expand_config()-shaped dict to an interior-point solver optimizer via setattr.
 
     Replicates (does not import -- see the module docstring's "Coercion
     note") the setattr/enum-coercion fallback in scripts/run_corpus.py's
@@ -258,7 +258,7 @@ def _apply_config(optimizer, config: dict) -> None:
 def is_cell_valid(config: dict) -> bool:
     """Probe whether a raw six-axis cell survives Settings::validate().
 
-    Builds the smallest problem that can drive PSIOPT::run_phase_sequence
+    Builds the smallest problem that can drive InteriorPointSolver::run_phase_sequence
     (2 variables, quadratic objective, one equality constraint -- the same
     shape as tychopy/test/test_Solvers/test_nlp_solver_backend.py's
     _small_problem), applies expand_config(config), and calls optimize()
@@ -782,7 +782,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default=[],
         metavar="NAME=SCORECARD",
         help="Append a fixed reference row read from an existing JSONL scorecard file "
-        "(e.g. a PSIOPT-defaults or Ipopt baseline). Repeatable.",
+        "(e.g. a solver-defaults or Ipopt baseline). Repeatable.",
     )
     p_agg.add_argument(
         "--call-shape",

@@ -16,6 +16,8 @@
 
 #include "tycho/detail/optimal_control/transcription/lgl_coeffs.h"
 #include "tycho/detail/vf/core/vector_function.h"
+#include "tycho/detail/vf/type_erasure/gf_type_erasure.h"
+#include <hven/solver_interface_adapter.h>
 
 namespace tycho::oc {
 
@@ -422,3 +424,16 @@ struct LGLControlSpline : LGLControlSplineSize<LGLControlSpline<CSC, USZ, Order>
 };
 
 } // namespace tycho::oc
+
+// The control-spline continuity constraint is a plain function object, so a
+// conversion to a solver constraint stores the constraint itself — one
+// erasure, one virtual dispatch per solver call. The registration sits beside
+// the definition because that is the only placement no translation unit can
+// miss; see hven/solver_interface_adapter.h for the contract.
+namespace hven::solvers {
+
+template <int CSC, int USZ, int Order>
+struct SolverInterfaceAdapter<tycho::oc::LGLControlSpline<CSC, USZ, Order>>
+    : ::tycho::solvers::DirectVFAdapter<tycho::oc::LGLControlSpline<CSC, USZ, Order>> {};
+
+} // namespace hven::solvers

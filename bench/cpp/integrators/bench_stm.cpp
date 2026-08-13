@@ -121,7 +121,7 @@ static void BM_IntegrateSTM2_Serial(benchmark::State &state) {
 BENCHMARK(BM_IntegrateSTM2_Serial);
 
 ///////////////////////////////////////////////////////////////////////////////
-// CentralShootingDefect KKT evaluation -- OC §2.1 ★, the O(segments x PSIOPT
+// CentralShootingDefect KKT evaluation -- OC §2.1 ★, the O(segments x InteriorPointSolver
 // iterations) hot loop: extract_scalar_inputs/extract_scalar_lmults/
 // get_input_states_tfs/get_lmults/compute_all_impl_v each build fresh
 // std::vectors per call (shooting_defects.h). Constructed directly (not via
@@ -169,7 +169,7 @@ static void BM_ShootingDefect_Eval(benchmark::State &state) {
 
     for (auto _ : state) {
         // Hessian accumulation is +=-style (add_hessian_elem); outputs must
-        // start zeroed every call, exactly as PSIOPT's KKT fill does.
+        // start zeroed every call, exactly as InteriorPointSolver's KKT fill does.
         fx.setZero();
         jx.setZero();
         adjgrad.setZero();

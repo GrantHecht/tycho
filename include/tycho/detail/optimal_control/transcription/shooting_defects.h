@@ -15,11 +15,13 @@
 #pragma once
 
 #include "tycho/detail/optimal_control/core/optimal_control_flags.h"
+#include "tycho/detail/vf/type_erasure/gf_type_erasure.h"
 #include "tycho/vector_functions.h"
 #include <algorithm>
 #include <array>
 #include <cassert>
 #include <functional>
+#include <hven/solver_interface_adapter.h>
 #include <iostream>
 #include <numeric>
 #include <stdexcept>
@@ -33,16 +35,17 @@
 #include <Eigen/Geometry>
 #include <Eigen/Sparse>
 
-#include "tycho/detail/typedefs/eigen_types.h"
-#include "tycho/detail/utils/flat_map.h"
-#include "tycho/detail/utils/function_return_type.h"
-#include "tycho/detail/utils/get_core_count.h"
-#include "tycho/detail/utils/math_functions.h"
-#include "tycho/detail/utils/sizing_helpers.h"
-#include "tycho/detail/utils/std_extensions.h"
-#include "tycho/detail/utils/thread_pool.h"
-#include "tycho/detail/utils/type_name.h"
-#include "tycho/detail/utils/type_storage.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/typedefs/eigen_types.h>
+#include <hven/detail/interior/utils/flat_map.h>
+#include <hven/detail/interior/utils/function_return_type.h>
+#include <hven/detail/interior/utils/get_core_count.h>
+#include <hven/detail/interior/utils/math_functions.h>
+#include <hven/detail/interior/utils/sizing_helpers.h>
+#include <hven/detail/interior/utils/std_extensions.h>
+#include <hven/detail/interior/utils/thread_pool.h>
+#include <hven/detail/interior/utils/type_name.h>
+#include <hven/detail/interior/utils/type_storage.h>
 
 namespace tycho::oc {
 
@@ -187,7 +190,7 @@ struct CentralShootingDefect
     /// `compute_impl`/`compute_jacobian_impl`/
     /// `compute_jacobian_adjointgradient_adjointhessian_impl` and the batched
     /// `compute_impl_v`/`compute_jacobian_impl_v`/`compute_all_impl_v` used to
-    /// declare fresh `std::vector`s on every call -- the O(segments x PSIOPT
+    /// declare fresh `std::vector`s on every call -- the O(segments x InteriorPointSolver
     /// iterations) hot path in the transcription layer. These are now
     /// per-instance `mutable` scratch buffers that get `.resize()`d (not
     /// freshly declared) each call: `std::vector::resize()` to an unchanged
@@ -787,3 +790,20 @@ struct CentralShootingDefect
 };
 
 } // namespace tycho::oc
+
+// Both shooting defects are plain function objects, so they are stored as
+// themselves when converted to a solver constraint — one erasure, one virtual
+// dispatch per solver call. The registrations sit beside the definitions
+// because that is the only placement no translation unit can miss; see
+// hven/solver_interface_adapter.h for the contract.
+namespace hven::solvers {
+
+template <class DODE, class Integrator>
+struct SolverInterfaceAdapter<tycho::oc::ShootingDefect<DODE, Integrator>>
+    : ::tycho::solvers::DirectVFAdapter<tycho::oc::ShootingDefect<DODE, Integrator>> {};
+
+template <class DODE, class Integrator>
+struct SolverInterfaceAdapter<tycho::oc::CentralShootingDefect<DODE, Integrator>>
+    : ::tycho::solvers::DirectVFAdapter<tycho::oc::CentralShootingDefect<DODE, Integrator>> {};
+
+} // namespace hven::solvers

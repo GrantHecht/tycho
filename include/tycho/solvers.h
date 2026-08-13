@@ -1,18 +1,19 @@
 #pragma once
 
-// Tycho — PSIOPT optimizer, NLP layer
+// Tycho — NLP solver layer: the solver library's surface plus tycho's own
 
 #include "tycho/vector_functions.h"
 
-#include "tycho/detail/solvers/solver_init.h"
-#include "tycho/detail/solvers/solver_function_base.h"
-#include "tycho/detail/solvers/constraint_function.h"
-#include "tycho/detail/solvers/objective_function.h"
-#include "tycho/detail/solvers/non_linear_program.h"
-#include "tycho/detail/solvers/ipopt_backend.h"
-#include "tycho/detail/solvers/optimization_problem_base.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/drivers/solver_init.h>
+#include <hven/detail/interior/solver_function_base.h>
+#include <hven/detail/interior/constraint_function.h>
+#include <hven/detail/interior/objective_function.h>
+#include <hven/drivers/non_linear_program.h>
+#include <hven/drivers/optimization_problem_base.h>
+#include "tycho/detail/solvers/nlp_backend.h"
 #include "tycho/detail/solvers_vf/optimization_problem.h"
-#include "tycho/detail/solvers/psiopt_fwd.h"
-#include "tycho/detail/solvers/psiopt.h"
-#include "tycho/detail/solvers/jet.h"
-#include "tycho/detail/solvers/iterate_info.h"
+#include <hven/detail/drivers/interior_point_solver_fwd.h>
+#include <hven/drivers/interior_point_solver.h>
+#include <hven/detail/interior/jet.h>
+#include <hven/detail/interior/iterate_info.h>

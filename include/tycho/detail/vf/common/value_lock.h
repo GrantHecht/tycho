@@ -25,7 +25,7 @@ namespace tycho::vf {
 /// `sub_variables()` replaces the corresponding primal variables with fixed
 /// substituted values *before* the constraint is evaluated — the variables
 /// never reach the optimizer, so the constraint residual is identically zero at
-/// every iteration. The Jacobian is the identity so PSIOPT receives a correct
+/// every iteration. The Jacobian is the identity so InteriorPointSolver receives a correct
 /// sparsity pattern.
 ///
 /// `compute_impl` explicitly writes `fx = 0` rather than relying on the caller

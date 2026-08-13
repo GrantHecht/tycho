@@ -422,7 +422,7 @@ void tycho::oc::OptimalControlProblemBase::transcribe(bool showstats, bool showf
     this->do_transcription_ = false;
 }
 
-tycho::ConvergenceFlags tycho::oc::OptimalControlProblemBase::psipot_call_impl(JetJobModes mode) {
+tycho::ConvergenceFlags tycho::oc::OptimalControlProblemBase::interior_point_call_impl(JetJobModes mode) {
 
     this->check_transcriptions();
     if (this->do_transcription_)
@@ -433,7 +433,7 @@ tycho::ConvergenceFlags tycho::oc::OptimalControlProblemBase::psipot_call_impl(J
 
     this->collect_solver_output(Output);
 
-    if (this->nlp_solver_ == solvers::NLPSolvers::psiopt) {
+    if (this->nlp_solver_ == solvers::NLPSolvers::interior_point) {
         this->collect_post_opt_info(this->optimizer_->result().eq_cons_, out.eq_lmults_,
                                     this->optimizer_->result().iq_cons_, out.iq_lmults_);
     } else {
@@ -456,8 +456,8 @@ tycho::ConvergenceFlags tycho::oc::OptimalControlProblemBase::ocp_call_impl(JetJ
     // Mesh refinement is driven by the built-in solver's constraint residuals at
     // the solution, which no other backend reports, so the refinement loop is
     // only defined for the built-in solver.
-    if (this->adaptive_mesh_ && this->nlp_solver_ != solvers::NLPSolvers::psiopt) {
-        throw std::invalid_argument("adaptive mesh refinement requires nlp_solver = psiopt");
+    if (this->adaptive_mesh_ && this->nlp_solver_ != solvers::NLPSolvers::interior_point) {
+        throw std::invalid_argument("adaptive mesh refinement requires nlp_solver = interior_point");
     }
 
     if (this->print_mesh_info_ && this->adaptive_mesh_) {
@@ -471,7 +471,7 @@ tycho::ConvergenceFlags tycho::oc::OptimalControlProblemBase::ocp_call_impl(JetJ
     utils::Timer Runtimer;
     Runtimer.start();
 
-    tycho::ConvergenceFlags flag = this->psipot_call_impl(mode);
+    tycho::ConvergenceFlags flag = this->interior_point_call_impl(mode);
 
     JetJobModes nextmode = mode;
     if (this->solve_only_first_) {
@@ -515,7 +515,7 @@ tycho::ConvergenceFlags tycho::oc::OptimalControlProblemBase::ocp_call_impl(JetJ
                     if (this->print_mesh_info_)
                         this->print_meshs(i);
                 }
-                flag = this->psipot_call_impl(nextmode);
+                flag = this->interior_point_call_impl(nextmode);
                 if (flag >= this->mesh_abort_flag_) {
                     if (this->print_mesh_info_) {
                         fmt::print(fmt::fg(fmt::color::red),

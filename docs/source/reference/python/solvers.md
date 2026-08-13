@@ -2,7 +2,7 @@
 # Solvers
 
 The Python API for Tycho's solver subsystem, exposed through the
-`tychopy.solvers` module: **PSIOPT**, the built-in primal-dual interior-point
+`tychopy.solvers` module: **InteriorPointSolver**, the built-in primal-dual interior-point
 optimizer; the problem containers that own an optimizer instance; and the
 enumerations that configure both. Every symbol below is a thin re-export of a
 nanobind-bound C++ type.
@@ -16,7 +16,7 @@ nanobind-bound C++ type.
 You rarely construct a solver yourself. Every
 {py:class}`~tychopy.optimal_control.PhaseInterface` and
 {py:class}`~tychopy.optimal_control.OptimalControlProblem` derives from
-`OptimizationProblemBase`, which owns a `PSIOPT` instance and exposes it
+`OptimizationProblemBase`, which owns a `InteriorPointSolver` instance and exposes it
 through the read-only `optimizer` property. Configuring a solve means setting
 properties on that instance before calling the container's solve entry point:
 
@@ -26,7 +26,7 @@ phase.optimizer.print_level = 1
 flag = phase.optimize()          # -> ConvergenceFlags
 ```
 
-`PSIOPT()` is default-constructible, but a solver only becomes runnable once a
+`InteriorPointSolver()` is default-constructible, but a solver only becomes runnable once a
 problem hands it a transcribed NLP — so in practice you always configure
 `problem.optimizer` rather than building your own. Calling a solve entry point
 on a solver with no NLP raises `RuntimeError`.
@@ -49,11 +49,11 @@ second.
 
 ### Entry points
 
-The `PSIOPT` methods take an initial primal vector and return the primal
+The `InteriorPointSolver` methods take an initial primal vector and return the primal
 vector at the returned iterate; the container methods take no argument and
 return a {py:class}`~tychopy.solvers.ConvergenceFlags`.
 
-| Container method | `PSIOPT` method | Stages run |
+| Container method | `InteriorPointSolver` method | Stages run |
 | --- | --- | --- |
 | `solve()` | `solve(x)` | Feasibility stage only (the `soe_mode` algorithm) |
 | `optimize()` | `optimize(x)` | Optimization stage only |
@@ -199,7 +199,7 @@ control parameters; the Accelerate path reads only `qp_ordering_mode`,
 | `qp_print` | Enables the sparse solver's own message output. | `False` |
 | `force_qp_analysis` | Re-runs the symbolic analysis phase even when the sparsity pattern has already been analysed. | `False` |
 
-A default-constructed `PSIOPT` reports `qp_threads = 8`; a problem-owned
+A default-constructed `InteriorPointSolver` reports `qp_threads = 8`; a problem-owned
 optimizer is initialized to `min(8, core count)` instead. `qp_threads` is
 distinct from the NLP partition count and from the process-global thread pool
 — see {doc}`How to control parallelism and threading </how_to/threading_model>`.
@@ -520,7 +520,7 @@ selection.
 
 | Property or method | Meaning |
 | --- | --- |
-| `optimizer` | The owned `PSIOPT` instance (read-only). |
+| `optimizer` | The owned `InteriorPointSolver` instance (read-only). |
 | `num_partitions` | Number of NLP matrix partitions. Assignment raises `ValueError` below 1. |
 | `set_num_partitions(n)` / `set_num_partitions(n, qp_threads)` | Sets the partition count, optionally also the linear solver's thread count. |
 | `jet_job_mode` | Which solve entry point `Jet.map` runs for this problem (see `JetJobModes`). |
@@ -540,7 +540,7 @@ or from a factory callable plus an argument sequence; each problem's
 ## Ipopt backend (build-optional)
 
 Builds configured with `ENABLE_IPOPT` can hand the identical transcribed NLP
-to a linked Ipopt installation instead of PSIOPT, which makes cross-solver
+to a linked Ipopt installation instead of InteriorPointSolver, which makes cross-solver
 comparison possible without re-modelling the problem. `ipopt_available()`
 reports whether the running build has that support; selecting
 `nlp_solver = NLPSolvers.ipopt` without it raises `RuntimeError` when the
@@ -548,7 +548,7 @@ solve runs.
 The backend always performs a single NLP solve of the full objective-bearing
 problem, because the feasibility-then-optimize staging modes have no Ipopt
 analog — in particular `solve()`, which runs the feasibility-only stage under
-PSIOPT, minimizes the objective exactly like `optimize()` under this backend.
+InteriorPointSolver, minimizes the objective exactly like `optimize()` under this backend.
 Options in `ipopt_options` are applied after a matched-tolerance baseline, so
 they win; reading the property returns a copy, so in-place mutation has no
 effect and you must assign a whole dict. Batch runs reject this backend
@@ -556,7 +556,7 @@ outright: Ipopt is not reliably re-entrant, so a `Jet` job whose problem
 selects it raises `ValueError` before that job's solve begins — run the Ipopt
 backend one solve at a time. Finally, an Ipopt-backend run leaves every
 `optimizer.last_*` property untouched, since those reflect only the most
-recent PSIOPT run; `last_ipopt_result` is the source of truth for the most
+recent InteriorPointSolver run; `last_ipopt_result` is the source of truth for the most
 recent Ipopt solve.
 
 ```{eval-rst}

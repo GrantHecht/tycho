@@ -14,7 +14,7 @@ This document provides a comprehensive, bottom-up explanation of Tycho's VectorF
 8. [Built-In Function Types](#8-built-in-function-types)
 9. [Expression Composition (Operator Overloads)](#9-expression-composition-operator-overloads)
 10. [Type Erasure: GenericFunction](#10-type-erasure-genericfunction)
-11. [The PSIOPT Solver Interface](#11-the-psiopt-solver-interface)
+11. [The InteriorPointSolver (hven) Interface](#11-the-interiorpointsolver-hven-interface)
 12. [Python API](#12-python-api)
 13. [End-to-End Examples](#13-end-to-end-examples)
 14. [Reference: Complete Class Hierarchy Diagram](#14-reference-complete-class-hierarchy-diagram)
@@ -76,7 +76,7 @@ Every concrete function (e.g., `Segment`, `Scaled`, `Norm`) inherits from `Vecto
 
 ### The OR=1 Scalar-Objective Interface
 
-When a function has scalar output (OR=1), `DenseFunctionBase` exposes objective-specific methods (`objective()`, `objective_gradient()`, `objective_gradient_hessian()`) that the PSIOPT optimizer calls directly. These are not a separate base class; they live on `DenseFunctionBase` itself and carry a C++20 `requires(OR == 1)` constraint, so they are present only when the output is scalar.
+When a function has scalar output (OR=1), `DenseFunctionBase` exposes objective-specific methods (`objective()`, `objective_gradient()`, `objective_gradient_hessian()`) that the InteriorPointSolver (hven) calls directly. These are not a separate base class; they live on `DenseFunctionBase` itself and carry a C++20 `requires(OR == 1)` constraint, so they are present only when the output is scalar.
 
 ```cpp
 // In DenseFunctionBase -- present only for scalar-output functions.
@@ -528,7 +528,7 @@ Higher-accuracy numerical differentiation: `df/dx_i ≈ (f(x + h*e_i) - f(x - h*
 
 ### What the Optimizer Actually Calls
 
-During optimization, PSIOPT calls the "all-in-one" method:
+During optimization, InteriorPointSolver calls the "all-in-one" method:
 
 ```
 compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, adjgrad, adjhess, adjvars)
@@ -940,7 +940,7 @@ The `vf.stack()`, `vf.sum()`, etc. functions also return `GenericFunction`.
 
 ---
 
-## 11. The PSIOPT Solver Interface
+## 11. The InteriorPointSolver (hven) Interface
 
 ### How VectorFunctions Become Constraints
 
@@ -1001,9 +1001,9 @@ KKTFillAll(V, jx, hx, KKTmat, KKTLocations, KKTClashes, KKTLocks, data):
 
 ### The Full Evaluation Chain
 
-During a single PSIOPT iteration:
+During a single InteriorPointSolver iteration:
 
-1. PSIOPT calls `constraints_jacobian_adjointgradient_adjointhessian(X, L, FX, AGX, KKTmat, ...)`
+1. InteriorPointSolver calls `constraints_jacobian_adjointgradient_adjointhessian(X, L, FX, AGX, KKTmat, ...)`
 2. For each of `data.num_appl()` applications:
    a. `gatherInput(X, x, V, data)` -- extract local inputs from global vector
    b. `gatherMult(L, l, V, data)` -- extract local multipliers

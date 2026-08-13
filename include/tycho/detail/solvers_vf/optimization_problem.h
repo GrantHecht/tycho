@@ -23,9 +23,10 @@
 #include <fmt/core.h>
 #include <fmt/format.h>
 
-#include "tycho/detail/solvers/non_linear_program.h"
-#include "tycho/detail/solvers/optimization_problem_base.h"
-#include "tycho/detail/solvers/psiopt.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/drivers/non_linear_program.h>
+#include "tycho/detail/solvers/nlp_backend.h"
+#include <hven/drivers/interior_point_solver.h>
 #include "tycho/vector_functions.h"
 
 namespace tycho::solvers {
@@ -33,7 +34,7 @@ namespace tycho::solvers {
 // Import cross-namespace types used by OptimizationProblem.
 using vf::GenericFunction;
 
-struct OptimizationProblem : OptimizationProblemBase {
+struct OptimizationProblem : BackendProblemBase {
 
     using VectorXi = Eigen::VectorXi;
     using MatrixXi = Eigen::MatrixXi;

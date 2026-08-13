@@ -5,10 +5,11 @@
 // utilities.
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "tycho/detail/utils/function_return_type.h"
-#include "tycho/detail/utils/get_core_count.h"
-#include "tycho/detail/utils/std_extensions.h"
-#include "tycho/detail/utils/type_name.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/utils/function_return_type.h>
+#include <hven/detail/interior/utils/get_core_count.h>
+#include <hven/detail/interior/utils/std_extensions.h>
+#include <hven/detail/interior/utils/type_name.h>
 #include <gtest/gtest.h>
 
 using namespace tycho::utils;

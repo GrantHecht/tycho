@@ -45,7 +45,7 @@ Backend semantics:
   backend (verified in ``tychopy/test/test_Solvers/test_nlp_solver_backend.py``),
   so ``"flag"`` stays uniform across both backends. Objective/iterations come
   from ``prob.last_ipopt_result`` (``optimizer.last_obj_val`` /
-  ``last_iter_num`` reflect only the most recent PSIOPT run and are left
+  ``last_iter_num`` reflect only the most recent interior-point solver run and are left
   untouched by an ipopt-backend solve, per the same docstring) --
   ``configure``/``POST_SOLVE`` are not used on this path.
 """

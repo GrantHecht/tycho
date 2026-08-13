@@ -1,8 +1,8 @@
 // =============================================================================
 // Tycho — Copyright 2026-present Grant R. Hecht. Apache 2.0.
-// End-to-end PSIOPT test exercising the EnzymeAD Jacobian path through a
+// End-to-end InteriorPointSolver test exercising the EnzymeAD Jacobian path through a
 // realistic optimal-control problem (brachistochrone).  Confirms Phase 1's
-// scalar Jacobian implementation is correct enough for PSIOPT to converge
+// scalar Jacobian implementation is correct enough for InteriorPointSolver to converge
 // on a real direct-collocation problem.
 //
 // Mirror of examples/cpp_examples/static/brachistochrone/main.cpp, with the
@@ -84,9 +84,9 @@ TEST(EnzymePhaseE2E, BrachistochroneEnzymeFwdFDiff) {
     const auto status = phase.solve_optimize();
     ASSERT_EQ(static_cast<int>(status),
               static_cast<int>(tycho::ConvergenceFlags::CONVERGED))
-        << "PSIOPT did not reach CONVERGED; status=" << static_cast<int>(status);
+        << "InteriorPointSolver did not reach CONVERGED; status=" << static_cast<int>(status);
     EXPECT_LT(phase.optimizer().result().iter_num_, 50)
-        << "PSIOPT iter count regression (Enzyme Jacobian path)";
+        << "InteriorPointSolver iter count regression (Enzyme Jacobian path)";
 
     const auto result = phase.return_traj();
     const double tf_opt = result.back()[3];
@@ -96,7 +96,7 @@ TEST(EnzymePhaseE2E, BrachistochroneEnzymeFwdFDiff) {
 
 // -----------------------------------------------------------------------------
 // Full Enzyme pipeline: <EnzymeAD, EnzymeAD>.  Same problem, same expected
-// optimal time, but the second-order derivatives PSIOPT consumes also flow
+// optimal time, but the second-order derivatives InteriorPointSolver consumes also flow
 // through Enzyme (Phase 2's nested-AD strategy — FoR is the only cmake-
 // selectable strategy; FoF preserved as archived research in dense_enzyme.h).
 // Convergence here is the integration test that validates Phase 2 across the
@@ -152,10 +152,10 @@ TEST(EnzymePhaseE2E, BrachistochroneFullEnzymePipeline) {
     const auto status = phase.solve_optimize();
     ASSERT_EQ(static_cast<int>(status),
               static_cast<int>(tycho::ConvergenceFlags::CONVERGED))
-        << "PSIOPT did not reach CONVERGED under <EnzymeAD, EnzymeAD>; status="
+        << "InteriorPointSolver did not reach CONVERGED under <EnzymeAD, EnzymeAD>; status="
         << static_cast<int>(status);
     EXPECT_LT(phase.optimizer().result().iter_num_, 50)
-        << "PSIOPT iter count regression (full Enzyme pipeline)";
+        << "InteriorPointSolver iter count regression (full Enzyme pipeline)";
 
     const auto result = phase.return_traj();
     const double tf_opt = result.back()[3];

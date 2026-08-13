@@ -16,7 +16,9 @@
 
 #include "tycho/detail/optimal_control/transcription/lgl_coeffs.h"
 #include "tycho/detail/optimal_control/transcription/transcription_sizing.h"
+#include "tycho/detail/vf/type_erasure/gf_type_erasure.h"
 #include "tycho/vector_functions.h"
+#include <hven/solver_interface_adapter.h>
 
 namespace tycho::oc {
 
@@ -131,3 +133,16 @@ struct LGLIntegral
 };
 
 } // namespace tycho::oc
+
+// The phase integral is a plain function object and the one family here that
+// enters the OBJECTIVE interface; either way it is stored as itself — one
+// erasure, one virtual dispatch per solver call. The registration sits beside
+// the definition because that is the only placement no translation unit can
+// miss; see hven/solver_interface_adapter.h for the contract.
+namespace hven::solvers {
+
+template <class Integrand, int CS, int XV, int PV>
+struct SolverInterfaceAdapter<tycho::oc::LGLIntegral<Integrand, CS, XV, PV>>
+    : ::tycho::solvers::DirectVFAdapter<tycho::oc::LGLIntegral<Integrand, CS, XV, PV>> {};
+
+} // namespace hven::solvers

@@ -14,7 +14,8 @@
 
 #pragma once
 
-#include "tycho/detail/utils/function_return_type.h"
+#include "tycho/detail/hven_namespaces.h"
+#include <hven/detail/interior/utils/function_return_type.h>
 #include "tycho/detail/vf/derivatives/dense_derivatives.h"
 #include "tycho/detail/vf/derivatives/dense_enzyme.h"
 #include "tycho/detail/vf/derivatives/dense_fdiff_cent_array.h"

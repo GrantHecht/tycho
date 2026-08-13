@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-// PSIOPT convergence tests
+// InteriorPointSolver convergence tests
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "solver_test_utils.h"
@@ -52,7 +52,7 @@ TEST_F(SolverTest, PrintLevelZeroConverges) {
 // =============================================================================
 
 TEST_F(SolverTest, ToleranceSetterRejectsInvalid) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     // Negative
     EXPECT_THROW(opt.set_kkt_tol(-1.0), std::invalid_argument);
     // Zero
@@ -74,7 +74,7 @@ TEST_F(SolverTest, ToleranceSetterRejectsInvalid) {
 }
 
 TEST_F(SolverTest, MuSettersRejectInvalid) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     EXPECT_THROW(opt.set_init_mu(0.0), std::invalid_argument);
     EXPECT_THROW(opt.set_init_mu(-1.0), std::invalid_argument);
     EXPECT_NO_THROW(opt.set_init_mu(0.01));
@@ -83,34 +83,34 @@ TEST_F(SolverTest, MuSettersRejectInvalid) {
 }
 
 TEST_F(SolverTest, QpThreadsRejectsInvalid) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     EXPECT_THROW(opt.set_qp_threads(0), std::invalid_argument);
     EXPECT_THROW(opt.set_qp_threads(-1), std::invalid_argument);
     EXPECT_NO_THROW(opt.set_qp_threads(2));
 }
 
 TEST_F(SolverTest, ObjScaleRejectsZero) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     EXPECT_THROW(opt.set_obj_scale(0.0), std::invalid_argument);
     EXPECT_NO_THROW(opt.set_obj_scale(-1.0)); // negative = maximization
     EXPECT_NO_THROW(opt.set_obj_scale(2.0));
 }
 
 TEST_F(SolverTest, BoundFractionRejectsOutOfRange) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     EXPECT_THROW(opt.set_bound_fraction(0.0), std::invalid_argument);
     EXPECT_THROW(opt.set_bound_fraction(1.0), std::invalid_argument);
     EXPECT_NO_THROW(opt.set_bound_fraction(0.5));
 }
 
 TEST_F(SolverTest, AlphaRedRejectsBelowOne) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     EXPECT_THROW(opt.set_alpha_red(1.0), std::invalid_argument);
     EXPECT_NO_THROW(opt.set_alpha_red(2.0));
 }
 
 TEST_F(SolverTest, HpertParamsValidation) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     EXPECT_THROW(opt.set_delta_h(0.0), std::invalid_argument);
     EXPECT_THROW(opt.set_incr_h(1.0), std::invalid_argument);
     EXPECT_THROW(opt.set_decr_h(0.0), std::invalid_argument);
@@ -119,7 +119,7 @@ TEST_F(SolverTest, HpertParamsValidation) {
 }
 
 TEST_F(SolverTest, IntegerSetterValidation) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     EXPECT_THROW(opt.set_max_iters(0), std::invalid_argument);
     EXPECT_THROW(opt.set_max_iters(-1), std::invalid_argument);
     EXPECT_NO_THROW(opt.set_max_iters(100));
@@ -132,7 +132,7 @@ TEST_F(SolverTest, IntegerSetterValidation) {
 }
 
 TEST_F(SolverTest, ObjScaleRejectsNonFinite) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     EXPECT_THROW(opt.set_obj_scale(std::numeric_limits<double>::quiet_NaN()),
                  std::invalid_argument);
     EXPECT_THROW(opt.set_obj_scale(std::numeric_limits<double>::infinity()),
@@ -140,7 +140,7 @@ TEST_F(SolverTest, ObjScaleRejectsNonFinite) {
 }
 
 TEST_F(SolverTest, QpParamSetterValidation) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     EXPECT_THROW(opt.set_qp_pivot_perturb(-1), std::invalid_argument);
     EXPECT_NO_THROW(opt.set_qp_pivot_perturb(0));
     EXPECT_NO_THROW(opt.set_qp_pivot_perturb(13));
@@ -165,7 +165,7 @@ TEST_F(SolverTest, QpParamSetterValidation) {
 }
 
 TEST_F(SolverTest, BoundPushNegSlackResetValidation) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     EXPECT_THROW(opt.set_bound_push(0.0), std::invalid_argument);
     EXPECT_THROW(opt.set_bound_push(-1.0), std::invalid_argument);
     EXPECT_NO_THROW(opt.set_bound_push(1e-4));
@@ -175,7 +175,7 @@ TEST_F(SolverTest, BoundPushNegSlackResetValidation) {
 }
 
 TEST_F(SolverTest, CompositeSetterDelegation) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     opt.set_tols(1e-7, 2e-7, 3e-7, 4e-7);
     EXPECT_DOUBLE_EQ(opt.settings().kkt_tol_, 1e-7);
     EXPECT_DOUBLE_EQ(opt.settings().econ_tol_, 2e-7);
@@ -194,7 +194,7 @@ TEST_F(SolverTest, CompositeSetterDelegation) {
 }
 
 TEST_F(SolverTest, CompositeSetterValidationPropagates) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     EXPECT_THROW(opt.set_tols(-1, 1e-7, 1e-7, 1e-7), std::invalid_argument);
     EXPECT_THROW(opt.set_acc_tols(1e-4, -1, 1e-4, 1e-4), std::invalid_argument);
     EXPECT_THROW(opt.set_all_max_iters(0, 20), std::invalid_argument);
@@ -202,18 +202,18 @@ TEST_F(SolverTest, CompositeSetterValidationPropagates) {
 }
 
 TEST_F(SolverTest, StringToEnumConverters) {
-    EXPECT_EQ(PSIOPT::strto_LineSearchMode("AUGLANG"), PSIOPT::LineSearchModes::AUGLANG);
-    EXPECT_THROW(PSIOPT::strto_LineSearchMode("INVALID"), std::invalid_argument);
-    EXPECT_EQ(PSIOPT::strto_BarrierMode("LOQO"), PSIOPT::BarrierModes::LOQO);
-    EXPECT_THROW(PSIOPT::strto_BarrierMode("NOPE"), std::invalid_argument);
-    EXPECT_EQ(PSIOPT::strto_OrderingMode("METIS"), PSIOPT::QPOrderingModes::METIS);
-    EXPECT_THROW(PSIOPT::strto_OrderingMode("INVALID"), std::invalid_argument);
-    EXPECT_EQ(PSIOPT::strto_BestCriteriaMode("KKT"), PSIOPT::BestCriteriaModes::KKT);
-    EXPECT_THROW(PSIOPT::strto_BestCriteriaMode("INVALID"), std::invalid_argument);
+    EXPECT_EQ(InteriorPointSolver::strto_LineSearchMode("AUGLANG"), InteriorPointSolver::LineSearchModes::AUGLANG);
+    EXPECT_THROW(InteriorPointSolver::strto_LineSearchMode("INVALID"), std::invalid_argument);
+    EXPECT_EQ(InteriorPointSolver::strto_BarrierMode("LOQO"), InteriorPointSolver::BarrierModes::LOQO);
+    EXPECT_THROW(InteriorPointSolver::strto_BarrierMode("NOPE"), std::invalid_argument);
+    EXPECT_EQ(InteriorPointSolver::strto_OrderingMode("METIS"), InteriorPointSolver::QPOrderingModes::METIS);
+    EXPECT_THROW(InteriorPointSolver::strto_OrderingMode("INVALID"), std::invalid_argument);
+    EXPECT_EQ(InteriorPointSolver::strto_BestCriteriaMode("KKT"), InteriorPointSolver::BestCriteriaModes::KKT);
+    EXPECT_THROW(InteriorPointSolver::strto_BestCriteriaMode("INVALID"), std::invalid_argument);
 }
 
 TEST_F(SolverTest, SettingsDefaultsRegression) {
-    PSIOPT::Settings s;
+    InteriorPointSolver::Settings s;
     EXPECT_EQ(s.max_iters_, 500);
     EXPECT_EQ(s.max_ls_iters_, 2);
     EXPECT_EQ(s.max_acc_iters_, 50);
@@ -238,7 +238,7 @@ TEST_F(SolverTest, SettingsDefaultsRegression) {
     EXPECT_EQ(s.restoration_mode_, tycho::solvers::RestorationModes::off);
     EXPECT_EQ(s.max_feas_rest_, 2);
     EXPECT_EQ(s.inertia_mode_, tycho::solvers::InertiaModes::classic);
-    EXPECT_EQ(s.pd_step_strategy_, PSIOPT::PDStepStrategies::PrimSlackEq_Iq);
+    EXPECT_EQ(s.pd_step_strategy_, InteriorPointSolver::PDStepStrategies::PrimSlackEq_Iq);
     EXPECT_EQ(s.max_soc_, 0);           // SOC off
     EXPECT_EQ(s.ls_extended_iters_, 0); // extended backtracking off
     EXPECT_FALSE(s.watchdog_);          // watchdog off
@@ -249,7 +249,7 @@ TEST_F(SolverTest, SettingsDefaultsRegression) {
 // =============================================================================
 
 TEST_F(SolverTest, OptimizeThrowsWithoutNlp) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     Eigen::VectorXd x = Eigen::VectorXd::Zero(10);
     EXPECT_THROW(opt.optimize(x), std::runtime_error);
 }
@@ -366,7 +366,7 @@ TEST_F(SolverTest, ReturnBestPreservesNonFinalIterate) {
     phase->optimizer_->set_print_level(3);
     phase->optimizer_->set_max_iters(3); // force NOTCONVERGED
     phase->optimizer_->settings().return_best_ = true;
-    phase->optimizer_->settings().best_criteria_ = PSIOPT::BestCriteriaModes::ECONS;
+    phase->optimizer_->settings().best_criteria_ = InteriorPointSolver::BestCriteriaModes::ECONS;
 
     auto status = phase->optimize();
     EXPECT_EQ(status, tycho::ConvergenceFlags::NOTCONVERGED);
@@ -404,41 +404,41 @@ TEST_F(SolverTest, DivergenceEarlyExitInPhaseSequence) {
 // =============================================================================
 
 TEST_F(SolverTest, StringModeSetters) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
 
     opt.set_opt_ls_mode("LANG");
-    EXPECT_EQ(opt.settings().opt_ls_mode_, PSIOPT::LineSearchModes::LANG);
+    EXPECT_EQ(opt.settings().opt_ls_mode_, InteriorPointSolver::LineSearchModes::LANG);
     opt.set_opt_ls_mode("AUGLANG");
-    EXPECT_EQ(opt.settings().opt_ls_mode_, PSIOPT::LineSearchModes::AUGLANG);
+    EXPECT_EQ(opt.settings().opt_ls_mode_, InteriorPointSolver::LineSearchModes::AUGLANG);
     opt.set_opt_ls_mode("L1");
-    EXPECT_EQ(opt.settings().opt_ls_mode_, PSIOPT::LineSearchModes::L1);
+    EXPECT_EQ(opt.settings().opt_ls_mode_, InteriorPointSolver::LineSearchModes::L1);
     opt.set_opt_ls_mode("NOLS");
-    EXPECT_EQ(opt.settings().opt_ls_mode_, PSIOPT::LineSearchModes::NOLS);
+    EXPECT_EQ(opt.settings().opt_ls_mode_, InteriorPointSolver::LineSearchModes::NOLS);
 
     opt.set_soe_ls_mode("L1");
-    EXPECT_EQ(opt.settings().soe_ls_mode_, PSIOPT::LineSearchModes::L1);
+    EXPECT_EQ(opt.settings().soe_ls_mode_, InteriorPointSolver::LineSearchModes::L1);
 
     opt.set_opt_bar_mode("PROBE");
-    EXPECT_EQ(opt.settings().opt_bar_mode_, PSIOPT::BarrierModes::PROBE);
+    EXPECT_EQ(opt.settings().opt_bar_mode_, InteriorPointSolver::BarrierModes::PROBE);
     opt.set_opt_bar_mode("LOQO");
-    EXPECT_EQ(opt.settings().opt_bar_mode_, PSIOPT::BarrierModes::LOQO);
+    EXPECT_EQ(opt.settings().opt_bar_mode_, InteriorPointSolver::BarrierModes::LOQO);
 
     opt.set_soe_bar_mode("PROBE");
-    EXPECT_EQ(opt.settings().soe_bar_mode_, PSIOPT::BarrierModes::PROBE);
+    EXPECT_EQ(opt.settings().soe_bar_mode_, InteriorPointSolver::BarrierModes::PROBE);
 
     opt.set_qp_ordering_mode("MINDEG");
-    EXPECT_EQ(opt.settings().qp_ord_, PSIOPT::QPOrderingModes::MINDEG);
+    EXPECT_EQ(opt.settings().qp_ord_, InteriorPointSolver::QPOrderingModes::MINDEG);
     opt.set_qp_ordering_mode("METIS");
-    EXPECT_EQ(opt.settings().qp_ord_, PSIOPT::QPOrderingModes::METIS);
+    EXPECT_EQ(opt.settings().qp_ord_, InteriorPointSolver::QPOrderingModes::METIS);
 
     opt.set_best_criteria("ECons");
-    EXPECT_EQ(opt.settings().best_criteria_, PSIOPT::BestCriteriaModes::ECONS);
+    EXPECT_EQ(opt.settings().best_criteria_, InteriorPointSolver::BestCriteriaModes::ECONS);
     opt.set_best_criteria("ICons");
-    EXPECT_EQ(opt.settings().best_criteria_, PSIOPT::BestCriteriaModes::ICONS);
+    EXPECT_EQ(opt.settings().best_criteria_, InteriorPointSolver::BestCriteriaModes::ICONS);
     opt.set_best_criteria("KKT");
-    EXPECT_EQ(opt.settings().best_criteria_, PSIOPT::BestCriteriaModes::KKT);
+    EXPECT_EQ(opt.settings().best_criteria_, InteriorPointSolver::BestCriteriaModes::KKT);
     opt.set_best_criteria("Obj");
-    EXPECT_EQ(opt.settings().best_criteria_, PSIOPT::BestCriteriaModes::OBJ);
+    EXPECT_EQ(opt.settings().best_criteria_, InteriorPointSolver::BestCriteriaModes::OBJ);
 }
 
 // =============================================================================
@@ -446,7 +446,7 @@ TEST_F(SolverTest, StringModeSetters) {
 // =============================================================================
 
 TEST_F(SolverTest, DivTolsCompositeDelegation) {
-    PSIOPT opt;
+    InteriorPointSolver opt;
     opt.set_div_tols(1e10, 2e10, 3e10, 4e10);
     EXPECT_DOUBLE_EQ(opt.settings().div_kkt_tol_, 1e10);
     EXPECT_DOUBLE_EQ(opt.settings().div_econ_tol_, 2e10);
@@ -482,12 +482,12 @@ TEST_F(SolverTest, MultiplierAndConstraintResultPopulation) {
 // =============================================================================
 
 TEST_F(SolverTest, SettingsValidateAcceptsDefaults) {
-    PSIOPT::Settings s;
+    InteriorPointSolver::Settings s;
     EXPECT_NO_THROW(s.validate());
 }
 
 TEST_F(SolverTest, SettingsValidateCatchesCrossFieldInvariants) {
-    PSIOPT::Settings s;
+    InteriorPointSolver::Settings s;
 
     // min_mu > max_mu
     s.min_mu_ = 200.0;
@@ -555,7 +555,7 @@ TEST_F(SolverTest, SettingsValidateCatchesCrossFieldInvariants) {
 
     // max_refac_ = 0 disables the perturbation ladder outright (the base
     // factorization exhausts immediately on wrong inertia, routed through the
-    // recovery chain as SINGULAR_KKT -- see psiopt.cpp's kkt_exhausted
+    // recovery chain as SINGULAR_KKT -- see interior_point_solver.cpp's kkt_exhausted
     // handling), so it is valid; negative remains invalid.
     s.max_refac_ = 0;
     EXPECT_NO_THROW(s.validate());
