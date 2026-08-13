@@ -703,10 +703,20 @@ write_basic_package_version_file(
     COMPATIBILITY SameMajorVersion
 )
 
+# PATH_VARS CMAKE_INSTALL_INCLUDEDIR makes @PACKAGE_CMAKE_INSTALL_INCLUDEDIR@
+# available in tychoConfig.cmake.in, computed relative to the relocated
+# install prefix rather than the hardcoded literal "include" -- a consumer
+# that installs tycho with -DCMAKE_INSTALL_INCLUDEDIR=<something else> still
+# gets a config file whose EXISTS checks point at where the headers actually
+# landed. CMAKE_INSTALL_LIBDIR is also substituted (a plain @VAR@, not a
+# PATH_VAR -- it is used only as a relative-path fragment appended to
+# PACKAGE_PREFIX_DIR when pinning the hven package lookup below, not as a
+# standalone relocatable path in its own right).
 configure_package_config_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/tychoConfig.cmake.in"
     "${CMAKE_CURRENT_BINARY_DIR}/tychoConfig.cmake"
     INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/tycho
+    PATH_VARS CMAKE_INSTALL_INCLUDEDIR
 )
 
 install(EXPORT tychoTargets

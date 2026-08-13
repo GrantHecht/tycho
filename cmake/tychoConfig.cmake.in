@@ -1,5 +1,14 @@
 @PACKAGE_INIT@
 
+if(TARGET tycho::tycho)
+    # Already configured by an earlier find_package(tycho)/find_dependency
+    # (tycho) in this same CMake run. Everything below, including the
+    # set_property(APPEND ...) reattachment block, already ran once; running
+    # it again would duplicate entries on tycho::tycho's
+    # INTERFACE_LINK_LIBRARIES rather than being a no-op. Nothing left to do.
+    return()
+endif()
+
 include(CMakeFindDependencyMacro)
 
 # Make tycho's Find modules available for find_dependency calls below.
@@ -42,6 +51,13 @@ if(TYCHO_NEEDS_OPENMP)
     endif()
 endif()
 
+# Installed include root, computed via configure_package_config_file's
+# PATH_VARS mechanism rather than hardcoding "include": a consumer that
+# installed tycho with -DCMAKE_INSTALL_INCLUDEDIR=<something else> would
+# otherwise fail every EXISTS check below (and Eigen3::Eigen's reconstructed
+# INTERFACE_INCLUDE_DIRECTORIES) against a path that was never actually used.
+set(_tycho_include_dir "@PACKAGE_CMAKE_INSTALL_INCLUDEDIR@")
+
 # Eigen3 handling
 set(TYCHO_USE_SYSTEM_EIGEN "@TYCHO_USE_SYSTEM_EIGEN@")
 if(TYCHO_USE_SYSTEM_EIGEN)
@@ -49,15 +65,15 @@ if(TYCHO_USE_SYSTEM_EIGEN)
 else()
     # Bundled Eigen headers were installed alongside tycho
     if(NOT TARGET Eigen3::Eigen)
-        if(NOT EXISTS "${PACKAGE_PREFIX_DIR}/include/Eigen/Core")
+        if(NOT EXISTS "${_tycho_include_dir}/Eigen/Core")
             message(FATAL_ERROR
                 "tycho: bundled Eigen headers not found at "
-                "${PACKAGE_PREFIX_DIR}/include/Eigen/. "
+                "${_tycho_include_dir}/Eigen/. "
                 "The tycho installation may be incomplete.")
         endif()
         add_library(Eigen3::Eigen INTERFACE IMPORTED)
         set_target_properties(Eigen3::Eigen PROPERTIES
-            INTERFACE_INCLUDE_DIRECTORIES "${PACKAGE_PREFIX_DIR}/include"
+            INTERFACE_INCLUDE_DIRECTORIES "${_tycho_include_dir}"
         )
     endif()
 endif()
@@ -78,22 +94,22 @@ if(NOT TARGET tycho::tycho)
 endif()
 
 # Validate critical installed headers are present
-if(NOT EXISTS "${PACKAGE_PREFIX_DIR}/include/tycho/tycho.h")
+if(NOT EXISTS "${_tycho_include_dir}/tycho/tycho.h")
     message(FATAL_ERROR
         "tycho: public headers not found at "
-        "${PACKAGE_PREFIX_DIR}/include/tycho/. "
+        "${_tycho_include_dir}/tycho/. "
         "The tycho installation may be incomplete.")
 endif()
-if(NOT EXISTS "${PACKAGE_PREFIX_DIR}/include/fmt/format.h")
+if(NOT EXISTS "${_tycho_include_dir}/fmt/format.h")
     message(FATAL_ERROR
         "tycho: fmt headers not found at "
-        "${PACKAGE_PREFIX_DIR}/include/fmt/. "
+        "${_tycho_include_dir}/fmt/. "
         "The tycho installation may be incomplete.")
 endif()
-if(NOT EXISTS "${PACKAGE_PREFIX_DIR}/include/hven/model/nlp_solver.h")
+if(NOT EXISTS "${_tycho_include_dir}/hven/model/nlp_solver.h")
     message(FATAL_ERROR
         "tycho: hven headers not found at "
-        "${PACKAGE_PREFIX_DIR}/include/hven/. "
+        "${_tycho_include_dir}/hven/. "
         "The tycho installation may be incomplete.")
 endif()
 
@@ -101,15 +117,23 @@ endif()
 # project with no PROJECT_IS_TOP_LEVEL guard on its own install rules, so
 # `cmake --install` on tycho's build tree installs hven's package config
 # (hvenConfig.cmake, hvenTargets.cmake) into this same prefix, next to
-# tycho's own. Re-found via that config rather than hand-reconstructed, the
-# same way an hven consumer would find it standalone; PACKAGE_PREFIX_DIR is
-# appended to CMAKE_PREFIX_PATH so this resolves regardless of whether the
-# caller's own CMAKE_PREFIX_PATH happens to include tycho's install prefix.
-set(_tycho_saved_prefix_path "${CMAKE_PREFIX_PATH}")
-list(APPEND CMAKE_PREFIX_PATH "${PACKAGE_PREFIX_DIR}")
-find_dependency(hven)
-set(CMAKE_PREFIX_PATH "${_tycho_saved_prefix_path}")
-unset(_tycho_saved_prefix_path)
+# tycho's own.
+#
+# Pinned to tycho's own install prefix FIRST (PATHS ... NO_DEFAULT_PATH):
+# an unrestricted find_dependency(hven) searches the caller's entire
+# CMAKE_PREFIX_PATH, so if some OTHER hven package happens to sit earlier on
+# it, this would silently re-export a DIFFERENT build than the one tycho
+# shipped and validated against -- tycho must re-export the archive it
+# actually shipped. Only if tycho's own prefix genuinely lacks a usable hven
+# config (a corrupted/partial install) do we fall back to an unrestricted
+# search, so a consumer who deliberately points CMAKE_PREFIX_PATH at a
+# differently-located hven for some other reason is not dead-ended.
+find_package(hven QUIET CONFIG
+    PATHS "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/cmake/hven"
+    NO_DEFAULT_PATH)
+if(NOT hven_FOUND)
+    find_dependency(hven)
+endif()
 
 if(NOT TARGET hven::hven)
     message(FATAL_ERROR
@@ -124,7 +148,7 @@ endif()
 # CMakeLists.txt) must be re-found and re-attached below. If a new dependency
 # is added to LINK_LIBS, it must also be added here.
 
-# hven (re-found via find_dependency(hven) above)
+# hven (re-found via find_package(hven)/find_dependency(hven) above)
 set_property(TARGET tycho::tycho APPEND PROPERTY
     INTERFACE_LINK_LIBRARIES hven::hven)
 
@@ -155,6 +179,7 @@ if(TYCHO_SPARSE_SOLVER STREQUAL "MKL")
                 "Your MKL installation may be incomplete.")
         endif()
     endforeach()
+    unset(_mkl_lib)
     if(UNIX AND NOT APPLE)
         set_property(TARGET tycho::tycho APPEND PROPERTY
             INTERFACE_LINK_LIBRARIES
@@ -196,5 +221,6 @@ endif()
 # legitimately appends entries the caller needs to keep.
 set(CMAKE_MODULE_PATH "${_tycho_cmake_module_path}")
 unset(_tycho_cmake_module_path)
+unset(_tycho_include_dir)
 
 check_required_components(tycho)
