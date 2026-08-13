@@ -143,10 +143,10 @@ nitpick_ignore_regex = [
     # document as resolvable cross-reference targets. These are auto-generated
     # signature xrefs, not authored links, so they are absorbed by class rather
     # than enumerated. ``ScaleType``/``RegionType``/``VarIndexType`` are
-    # phase-internal index typedefs; ``MeshIterateInfo`` and ``PSIOPT`` are
+    # phase-internal index typedefs; ``MeshIterateInfo`` and ``InteriorPointSolver`` are
     # cross-subsystem types not documented under the OC page's Doxygen subset;
     # a lone ``vf`` is a bare namespace fragment from a return-type signature.
-    ("cpp:identifier", r"(ScaleType|RegionType|VarIndexType|MeshIterateInfo|PSIOPT|vf)"),
+    ("cpp:identifier", r"(ScaleType|RegionType|VarIndexType|MeshIterateInfo|InteriorPointSolver|vf)"),
     # Python: autodoc'ing the compiled tychopy.vector_functions module surfaces
     # the nanobind-bound VF expression types and the NumPy-style docstring prose
     # pseudo-types (``shape (n,)``, ``tuple[numpy.ndarray, ...]``, ``(int, int)``,

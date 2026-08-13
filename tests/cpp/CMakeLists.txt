@@ -166,7 +166,7 @@ set(TYCHO_TEST_HEAVY_SOURCES
     optimal_control/test_state_function_regions.cpp
 
     # Solvers
-    solvers/test_psiopt_convergence.cpp
+    solvers/test_interior_point_solver_convergence.cpp
     solvers/test_solver_interfaces.cpp
     solvers/test_jet_batch.cpp
     solvers/test_nlp_structure.cpp
@@ -189,11 +189,11 @@ set(TYCHO_TEST_HEAVY_SOURCES
     # prefix convention, e.g. ProxResto*, L1Resto*, MonGov*, Filter*, Funnel*
     # -- grep the prefix before reusing it), the same convention documented on
     # the SKIP_UNITY_BUILD_INCLUSION entries below.
-    solvers/test_psiopt_presets.cpp # file-local prefix: PresetGate*
+    solvers/test_interior_point_solver_presets.cpp # file-local prefix: PresetGate*
     solvers/test_nlp_variable_bounds.cpp # file-local prefix: NlpVarBounds*
     # Pulls optimal_control/oc_test_utils.h for the end-to-end phase solves (the
     # brachistochrone builder that header exists to share with solver tests).
-    solvers/test_psiopt_native_bounds.cpp # file-local prefix: NativeBounds*/native_bounds_*
+    solvers/test_interior_point_solver_native_bounds.cpp # file-local prefix: NativeBounds*/native_bounds_*
     # OC test, appended here rather than in the OptimalControl block so the
     # unity batching of every file above stays exactly as it was.
     optimal_control/test_phase_native_var_bounds.cpp # file-local prefix: NativeVarBounds*

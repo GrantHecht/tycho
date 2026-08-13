@@ -51,7 +51,7 @@ phase.add_boundary_value("Back", range(0, 6), Xf)
 phase.optimizer.set_print_level(3)
 phase.add_delta_time_objective(1.0)
 flag = phase.optimize()
-# PSIOPT does not raise on a failed solve; fail the doc build loudly rather than
+# InteriorPointSolver does not raise on a failed solve; fail the doc build loudly rather than
 # silently rendering a non-optimal trajectory on the landing page.
 assert flag == typy.solvers.ConvergenceFlags.CONVERGED, (
     f"landing-page low-thrust solve did not converge: {flag}"

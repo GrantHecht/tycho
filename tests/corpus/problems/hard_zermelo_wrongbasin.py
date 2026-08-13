@@ -45,7 +45,7 @@ varied at the ~1e-3 relative level, even with ``phase.num_partitions``
 forced down to 1 (single-threaded). The DIVERGING trajectory appears to be
 genuinely numerically chaotic near the point of failure (tiny floating-
 point differences in constraint/Jacobian evaluation order compound before
-PSIOPT gives up), not an artifact of parallelism alone. The flag
+the interior-point solver gives up), not an artifact of parallelism alone. The flag
 (DIVERGING) and the overall magnitude of the failure are stable; the exact
 iteration count and objective are not. This is documented here rather than
 fought, per the brief's guidance for the (separately) noisy

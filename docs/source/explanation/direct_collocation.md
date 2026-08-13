@@ -324,15 +324,15 @@ forward link touches only the back nodes of one phase and the front nodes of the
 next — so the combined multi-phase NLP keeps the same banded, locality-preserving
 structure as a single phase, just with a few extra coupling blocks at the seams.
 
-### Solving with PSIOPT
+### Solving with InteriorPointSolver
 
-The transcribed NLP is handed to **PSIOPT**, Tycho's bundled sparse interior-point
+The transcribed NLP is handed to **InteriorPointSolver**, Tycho's bundled sparse interior-point
 nonlinear optimizer. It consumes the decision vector, constraint residuals,
 objective, and their analytic derivatives — all delivered by the assembled
 VectorFunctions — and returns a decision vector that is locally optimal and
 feasible to a requested tolerance.
 
-PSIOPT solves the Karush–Kuhn–Tucker (KKT) conditions by following an
+InteriorPointSolver solves the Karush–Kuhn–Tucker (KKT) conditions by following an
 interior-point path, assembling a sparse KKT linear system at each iteration from
 the Jacobians and adjoint Hessians the VectorFunctions provide, and factoring it
 with a sparse linear solver. The fused value-Jacobian-gradient-Hessian call that
@@ -340,8 +340,8 @@ every VectorFunction supports exists precisely so this inner loop never has to
 reconstruct derivatives numerically. The interior-point internals — barrier
 parameters, line searches, the KKT factorization, convergence flags — are a topic
 of their own. For understanding a phase, the essential contract is:
-**transcription produces a sparse, differentiable NLP; PSIOPT solves it.** A phase
-can run PSIOPT in *solve* mode (drive constraints to feasibility) or *optimize*
+**transcription produces a sparse, differentiable NLP; InteriorPointSolver solves it.** A phase
+can run InteriorPointSolver in *solve* mode (drive constraints to feasibility) or *optimize*
 mode (feasibility plus minimizing the objective). An `OptimalControlProblem`
 exposes the same two modes and runs them on the single combined system, so every
 linked phase converges together rather than in isolation.
@@ -349,7 +349,7 @@ linked phase converges together rather than in isolation.
 ## Where to go next
 
 This page covered the practical pipeline: ODE + phase → collocation mesh and
-defects → sparse NLP → PSIOPT solve → mesh refinement. To go further:
+defects → sparse NLP → InteriorPointSolver solve → mesh refinement. To go further:
 
 - **Tutorial.** For a guided, runnable build of a phase from an ODE through to a
   solved trajectory, start with the

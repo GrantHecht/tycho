@@ -48,7 +48,7 @@ using tycho::solvers::kSocRecommendedMaxCorrections;
 using tycho::solvers::kSocViolationDecrease;
 using tycho::solvers::OptimizationProblem;
 using tycho::solvers::ProgressMeasures;
-using tycho::solvers::PSIOPT;
+using tycho::solvers::InteriorPointSolver;
 using tycho::solvers::RecoveryChain;
 using tycho::solvers::RestorationStrategy;
 using tycho::solvers::soc_run_loop;
@@ -198,7 +198,7 @@ class SocUnusedAcceptance : public AcceptanceStrategy {
 
 class SocUnusedMechanism : public GlobalizationMechanism {
   public:
-    double compute_step(PSIOPT::LineSearchModes, double, double, double, double, Eigen::VectorXd &,
+    double compute_step(InteriorPointSolver::LineSearchModes, double, double, double, double, Eigen::VectorXd &,
                         Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &,
                         AcceptanceStrategy &, double &, double &, IterateInfo &,
                         const std::vector<IterateInfo> &, SolverContext &) override {
@@ -216,7 +216,7 @@ class SocUnusedMechanism : public GlobalizationMechanism {
 // zero (so the constraint block is empty and the KKT solver is never touched)
 // and the given Settings/IterateInfo. Returns the Action and reports the SOC
 // counter through `soc_steps`.
-Action drive_soc(PSIOPT::Settings &settings, IterateInfo &citer, int &soc_steps) {
+Action drive_soc(InteriorPointSolver::Settings &settings, IterateInfo &citer, int &soc_steps) {
     SocUnusedAcceptance acceptance;
     SocUnusedMechanism mechanism;
     InertSolverContext inert;
@@ -228,14 +228,14 @@ Action drive_soc(PSIOPT::Settings &settings, IterateInfo &citer, int &soc_steps)
     int resolved_depth = kRecoveryDepthUnresolved;
     int watchdog_activations = 0;
     return SocRecovery{}.on_step_rejected(
-        citer, iters, ctx, acceptance, mechanism, PSIOPT::LineSearchModes::AUGLANG, 1.0, 1e-3, 0.0,
+        citer, iters, ctx, acceptance, mechanism, InteriorPointSolver::LineSearchModes::AUGLANG, 1.0, 1e-3, 0.0,
         0.0, XSL, DXSL, XSL2, RHS, RHS2, alpha, alphap, alphad, soc_steps, resolved_depth,
         watchdog_activations);
 }
 
 // max_soc_ == 0 (off): decline immediately, no corrections.
 TEST(SocRecoveryGuards, DisabledDeclines) {
-    PSIOPT::Settings settings;
+    InteriorPointSolver::Settings settings;
     settings.max_soc_ = 0;
     IterateInfo citer = soc_make_iter(/*first=*/0, /*theta=*/2.0); // would otherwise trigger
     int soc_steps = 0;
@@ -246,7 +246,7 @@ TEST(SocRecoveryGuards, DisabledDeclines) {
 // Enabled but the rejection does not satisfy the trigger (not the first trial):
 // decline before touching the solve machinery.
 TEST(SocRecoveryGuards, NonTriggeringRejectionDeclines) {
-    PSIOPT::Settings settings;
+    InteriorPointSolver::Settings settings;
     settings.max_soc_ = kSocRecommendedMaxCorrections;
     IterateInfo citer = soc_make_iter(/*first=*/1, /*theta=*/2.0); // not the first trial
     int soc_steps = 0;
@@ -340,7 +340,7 @@ class SocElasticMechanism : public BacktrackingLineSearch {
         BacktrackingLineSearch::max_primal_dual_step(XSL, DXSL, bfrac, alphap, alphad, ctx);
     }
 
-    double run_acceptance_backtrack(PSIOPT::LineSearchModes, double, double, double, double,
+    double run_acceptance_backtrack(InteriorPointSolver::LineSearchModes, double, double, double, double,
                                     Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &,
                                     Eigen::VectorXd &, Eigen::VectorXd &, AcceptanceStrategy &,
                                     IterateInfo &Citer, const std::vector<IterateInfo> &,
@@ -413,7 +413,7 @@ class SocElasticHarness {
     void clear_restoration() { inert_.restoration_ = nullptr; }
 
     SocElasticRestoration &restoration() { return restoration_; }
-    const PSIOPT::Settings &settings() const { return inert_.settings_; }
+    const InteriorPointSolver::Settings &settings() const { return inert_.settings_; }
     Eigen::ComputationInfo factorization_info() { return inert_.kkt_solver_.info(); }
     int kkt_dim() const { return inert_.kkt_dim_; }
 
@@ -462,7 +462,7 @@ SocElasticOutcome run_soc_elastic_correction(SocElasticHarness &h, SocElasticMec
     int watchdog_activations = 0;
 
     const Action action = SocRecovery{}.on_step_rejected(
-        w.citer, w.iters, ctx, acceptance, mechanism, PSIOPT::LineSearchModes::AUGLANG, 1.0, 1e-3,
+        w.citer, w.iters, ctx, acceptance, mechanism, InteriorPointSolver::LineSearchModes::AUGLANG, 1.0, 1e-3,
         0.0, 0.0, w.XSL, w.DXSL, w.XSL2, w.RHS, w.RHS2, w.alpha, w.alphap, w.alphad, soc_steps,
         resolved_depth, watchdog_activations);
     return SocElasticOutcome{action, w.DXSL, w.alphap, w.alphad, mechanism.scale_calls_};
@@ -483,7 +483,7 @@ TEST(SocElasticFractionToBoundary, MainStepPathScalesToTheElasticCaps) {
     w.DXSL << kSocElasticUnscaledPrimalStep, kSocElasticUnscaledEqMultStep;
     SocUnusedAcceptance acceptance;
 
-    mechanism.compute_step(PSIOPT::LineSearchModes::AUGLANG, 1.0, 1e-3, 0.0, 0.0, w.XSL, w.DXSL,
+    mechanism.compute_step(InteriorPointSolver::LineSearchModes::AUGLANG, 1.0, 1e-3, 0.0, 0.0, w.XSL, w.DXSL,
                            w.XSL2, w.RHS, w.RHS2, acceptance, w.alphap, w.alphad, w.citer, w.iters,
                            ctx);
 

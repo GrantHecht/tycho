@@ -16,7 +16,7 @@
 #include "solvers/tycho_solvers.h"
 #include "jet_bind.h"
 #include "optimization_problem_bind.h"
-#include "psiopt_bind.h"
+#include "interior_point_solver_bind.h"
 
 namespace tycho {
 
@@ -25,7 +25,7 @@ using namespace tycho::solvers;
 void solvers_build(FunctionRegistry &reg, nb::module_ &m) {
     auto &sol = reg.getSolversModule();
     ensure_solver_initialized();
-    TychoBind<PSIOPT>::build(sol);
+    TychoBind<InteriorPointSolver>::build(sol);
     TychoBind<BackendProblemBase>::build(sol);
     TychoBind<Jet>::build(sol);
     TychoBind<OptimizationProblem>::build(sol);

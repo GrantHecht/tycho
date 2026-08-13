@@ -61,7 +61,7 @@ using tycho::solvers::IterateInfo;
 using tycho::solvers::ModernMeritAcceptance;
 using tycho::solvers::OptimizationProblem;
 using tycho::solvers::ProgressMeasures;
-using tycho::solvers::PSIOPT;
+using tycho::solvers::InteriorPointSolver;
 using tycho::solvers::RecoveryChain;
 using tycho::solvers::RestorationModes;
 using tycho::solvers::SolverContext;
@@ -110,7 +110,7 @@ class SocGenericClassicSpyAcceptance : public AcceptanceStrategy {
     }
     void reset() override {}
 
-    double classic_line_search(PSIOPT::LineSearchModes, double, double, double, double,
+    double classic_line_search(InteriorPointSolver::LineSearchModes, double, double, double, double,
                                Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &,
                                Eigen::VectorXd &, Eigen::VectorXd &, IterateInfo &Citer,
                                const std::vector<IterateInfo> &) override {
@@ -145,7 +145,7 @@ std::unique_ptr<OptimizationProblem> build_soc_generic_nlp(double start, double 
 
 } // namespace
 
-// Befriended harness (see the SocGenericHarness friend declaration in psiopt.h):
+// Befriended harness (see the SocGenericHarness friend declaration in interior_point_solver.h):
 // a transcribed one-variable, one-inequality NLP (so there is one slack + barrier
 // term) whose private nlp_/kkt_sol_/dims/scratch back a live SolverContext, and
 // whose private acceptance_/recovery_ are reachable for the construction
@@ -176,7 +176,7 @@ class SocGenericHarness {
         solver_->rebuild_globalization_components();
     }
 
-    tycho::solvers::PSIOPT &solver() { return *solver_; }
+    tycho::solvers::InteriorPointSolver &solver() { return *solver_; }
     void rebuild() { solver_->rebuild_globalization_components(); }
     tycho::solvers::RecoveryChain *recovery() { return solver_->recovery_.get(); }
     tycho::solvers::AcceptanceStrategy *acceptance() { return solver_->acceptance_.get(); }
@@ -195,7 +195,7 @@ class SocGenericHarness {
 
   private:
     tycho::solvers::OptimizationProblem prob_;
-    tycho::solvers::PSIOPT *solver_;
+    tycho::solvers::InteriorPointSolver *solver_;
 };
 
 namespace {
@@ -223,7 +223,7 @@ TEST(SocGenericAcceptanceRouting, GenericStrategyReTestGoesThroughStrategySurfac
     const std::vector<IterateInfo> iters;
 
     const double alpha = mechanism.run_acceptance_backtrack(
-        PSIOPT::LineSearchModes::L1, 1.0, 1e-2, 0.0, 0.0, XSL, DXSL, XSL2, RHS, RHS2, acceptance,
+        InteriorPointSolver::LineSearchModes::L1, 1.0, 1e-2, 0.0, 0.0, XSL, DXSL, XSL2, RHS, RHS2, acceptance,
         citer, iters, ctx);
 
     // The corrected/extended re-test verdict came from the generic strategy
@@ -251,7 +251,7 @@ TEST(SocGenericAcceptanceRouting, GenericStrategyReTestGoesThroughStrategySurfac
     IterateInfo citer;
     const std::vector<IterateInfo> iters;
 
-    mechanism.run_acceptance_backtrack(PSIOPT::LineSearchModes::L1, 1.0, 1e-2, 0.0, 0.0, XSL, DXSL,
+    mechanism.run_acceptance_backtrack(InteriorPointSolver::LineSearchModes::L1, 1.0, 1e-2, 0.0, 0.0, XSL, DXSL,
                                        XSL2, RHS, RHS2, acceptance, citer, iters, ctx);
 
     // Every backtrack rung consulted the strategy surface and all rejected.
@@ -272,7 +272,7 @@ TEST(SocGenericAcceptanceRouting, ClassicStrategyReTestForwardsToClassicLineSear
     const std::vector<IterateInfo> iters;
 
     const double alpha = mechanism.run_acceptance_backtrack(
-        PSIOPT::LineSearchModes::L1, 1.0, 1e-2, 0.0, 0.0, XSL, DXSL, XSL2, RHS, RHS2, acceptance,
+        InteriorPointSolver::LineSearchModes::L1, 1.0, 1e-2, 0.0, 0.0, XSL, DXSL, XSL2, RHS, RHS2, acceptance,
         citer, iters, ctx);
 
     EXPECT_EQ(acceptance.classic_calls_, 1);

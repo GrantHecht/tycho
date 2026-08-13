@@ -126,7 +126,7 @@ NB_MODULE(_tychopy, m) {
 
     FunctionRegistry reg(m);     // Must be built first
     VectorFunctionBuild(reg, m); // Must be built second
-    SolversBuild(reg, m);        // Third: PSIOPT shows up better in autocomplete
+    SolversBuild(reg, m);        // Third: InteriorPointSolver shows up better in autocomplete
     OptimalControlBuild(reg, m);
     UtilsBuild(m);
     AstroBuild(reg, m);
@@ -145,7 +145,7 @@ The `FunctionRegistry` constructor creates four submodules:
 |---|---|---|
 | `_tychopy.vector_functions` | `reg.vfmod` | Vector/scalar function types and free functions |
 | `_tychopy.optimal_control` | `reg.ocmod` | ODEs, phases, transcription modes, link functions |
-| `_tychopy.solvers` | `reg.solmod` | PSIOPT, NLP, solver flags |
+| `_tychopy.solvers` | `reg.solmod` | InteriorPointSolver, NLP, solver flags |
 | `_tychopy.extensions` | `reg.extmod` | User-defined extension types |
 
 The `astro` submodule is created inside `astro_build()` rather than in the registry constructor.
@@ -615,7 +615,7 @@ src/bindings/
     lgl_interp_table_bind.cpp     Out-of-line TychoBind<LGLInterpTable>::Build
   solvers/
     jet_bind.h/.cpp               TychoBind<Jet>, JetInvoker partial spec for nb::args
-    psiopt_bind.h/.cpp            TychoBind<PSIOPT>
+    interior_point_solver_bind.h/.cpp  TychoBind<InteriorPointSolver>
     optimization_problem_bind.h/.cpp TychoBind<OptimizationProblem>
     optimization_problem_base.cpp OptimizationProblemBase binding
     tycho_solvers.cpp             SolversBuild() orchestrator
@@ -1000,8 +1000,8 @@ Every file in `src/bindings/` with a one-line description:
 | **solvers/** | |
 | `jet_bind.h` | `TychoBind<Jet>` declaration; `JetInvoker` partial spec for `nb::args` |
 | `jet_bind.cpp` | `TychoBind<Jet>::Build` implementation |
-| `psiopt_bind.h` | `TychoBind<PSIOPT>` declaration |
-| `psiopt_bind.cpp` | `TychoBind<PSIOPT>::Build` implementation |
+| `interior_point_solver_bind.h` | `TychoBind<InteriorPointSolver>` declaration |
+| `interior_point_solver_bind.cpp` | `TychoBind<InteriorPointSolver>::Build` implementation |
 | `optimization_problem_bind.h` | `TychoBind<OptimizationProblem>` declaration |
 | `optimization_problem_bind.cpp` | `TychoBind<OptimizationProblem>::Build` implementation |
 | `optimization_problem_base.cpp` | OptimizationProblemBase binding |

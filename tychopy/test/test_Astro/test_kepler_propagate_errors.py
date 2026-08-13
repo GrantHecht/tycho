@@ -7,7 +7,7 @@ Pins three contracts that the C++ side promises:
    to converge or NaN-poisons its output.  A future regression that drops
    the ``allFinite()`` guard in the binding (or that returns the NaN array
    silently) would reintroduce the silent-failure bug from the pre-820fef6f
-   era; PSIOPT-style step-rejection patterns at the Python boundary depend
+   era; InteriorPointSolver-style step-rejection patterns at the Python boundary depend
    on the exception.
 2. ``propagate_classic`` validates ``mu > 0`` and a finite, non-zero
    semi-major axis at the C++ boundary (raising ``std::invalid_argument``

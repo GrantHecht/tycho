@@ -24,7 +24,7 @@
 #include "tycho/detail/hven_namespaces.h"
 #include <hven/drivers/non_linear_program.h>
 #include "tycho/detail/solvers/nlp_backend.h"
-#include <hven/drivers/psiopt.h>
+#include <hven/drivers/interior_point_solver.h>
 #include "tycho/detail/vf/scaling/io_scaled.h"
 #include "tycho/vector_functions.h"
 #include <algorithm>
@@ -71,7 +71,7 @@ using vf::VectorFunction;
 // Solvers types
 using tycho::solvers::NonLinearProgram;
 using tycho::solvers::BackendProblemBase;
-using tycho::solvers::PSIOPT;
+using tycho::solvers::InteriorPointSolver;
 
 /// @internal
 /// @brief Forward declaration of the multi-phase problem base (friend of @ref ODEPhaseBase).
@@ -84,7 +84,7 @@ struct OptimalControlProblemBase;
 /// An @c ODEPhaseBase carries one ODE's discretized trajectory plus the
 /// boundary values, path/integral constraints, objectives, control mode, mesh,
 /// and scaling that define an optimal control phase. It transcribes the
-/// continuous problem into an NLP and drives PSIOPT to solve or optimize it, and
+/// continuous problem into an NLP and drives InteriorPointSolver to solve or optimize it, and
 /// owns the adaptive-mesh-refinement loop. The typed @ref ODEPhase derives from
 /// this; @ref OptimalControlProblem links multiple phases together.
 struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
@@ -1917,11 +1917,11 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
     }
 
     /// @internal
-    /// @brief Drive PSIOPT for a single solve/optimize pass (no mesh loop).
+    /// @brief Drive InteriorPointSolver for a single solve/optimize pass (no mesh loop).
     /// @param mode  The solve/optimize job mode.
     /// @return The solver convergence flag.
     /// @endinternal
-    tycho::ConvergenceFlags psipot_call_impl(JetJobModes mode);
+    tycho::ConvergenceFlags interior_point_call_impl(JetJobModes mode);
 
     /// @internal
     /// @brief Run the full phase solve, including the adaptive-mesh-refinement loop.

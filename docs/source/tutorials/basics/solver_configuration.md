@@ -1,7 +1,7 @@
 (tutorial-solver-configuration)=
 # Configuring the solver
 
-PSIOPT's stock settings solve most problems, and when they do you should leave
+InteriorPointSolver's stock settings solve most problems, and when they do you should leave
 them alone. This tutorial is about the other case: a problem where the defaults
 stall, and what you do about it. You will take one small, famous NLP from a
 failed solve to a converged one — first by applying a named **configuration
@@ -68,7 +68,7 @@ VectorFunctions. `set_vars` supplies the initial primal vector;
 `add_objective`, `add_equal_con`, and `add_inequal_con` each take a
 VectorFunction plus the list of problem-variable indices that feed it — so
 `[0, 1]` below means "call this two-input function on $x_1$ and $x_2$".
-Inequalities use PSIOPT's $g(x) \le 0$ convention, which is why $x_2 \ge 0$ is
+Inequalities use InteriorPointSolver's $g(x) \le 0$ convention, which is why $x_2 \ge 0$ is
 written $-x_2 \le 0$.
 
 ```{doctest}
@@ -255,7 +255,7 @@ so a typo fails loudly rather than silently leaving the defaults in place:
 
 ```{doctest}
 >>> try:
-...     slv.PSIOPT().apply_preset("robust")
+...     slv.InteriorPointSolver().apply_preset("robust")
 ... except ValueError as err:
 ...     print(type(err).__name__)
 ValueError
@@ -458,7 +458,7 @@ fine. That is why the stock configuration is still the stock configuration.
   the full failure-signature ladder: what each symptom looks like in the
   iteration table, which mechanism answers it, and which diagnostics confirm it
   fired.
-- {doc}`Solvers reference </reference/python/solvers>` — every PSIOPT setting
+- {doc}`Solvers reference </reference/python/solvers>` — every InteriorPointSolver setting
   and its default, the exact nine fields each of the five presets assigns, the
   measured preset behaviour on the corpus and example suite, and the complete
   `last_*` catalog.

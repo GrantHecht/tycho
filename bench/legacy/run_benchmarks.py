@@ -41,7 +41,7 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 def _parse_timing(stdout: str) -> float:
     """Extract the timing float from benchmark stdout.
 
-    Benchmark scripts print a single float to stdout, but PSIOPT may emit
+    Benchmark scripts print a single float to stdout, but InteriorPointSolver may emit
     occasional diagnostic lines (e.g. 'Potential Rank Deficiency Detected!!!')
     that slip through even with PrintLevel=4.  This function scans from the
     end and returns the last line that is purely a floating-point number.

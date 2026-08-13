@@ -648,7 +648,7 @@ inline KeplerLCDResult<Eigen::Array<double, W, 1>> kepler_lcd_iterate(
         throw std::invalid_argument("kepler_lcd_iterate (SS): every lane's V0 must be finite");
 
     // Dispatch to true-SIMD path only when every lane is elliptic with nonzero
-    // dt — the common case for PSIOPT collocation across an elliptic phase.
+    // dt — the common case for InteriorPointSolver collocation across an elliptic phase.
     // Mixed orbit types and dt==0 lanes fall through to the per-lane fallback,
     // which exercises the full scalar dispatch (incl. orbit-type branches and
     // the dt==0 fast path).

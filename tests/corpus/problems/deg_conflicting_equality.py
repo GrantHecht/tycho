@@ -19,7 +19,7 @@ stated "t in [0, 1]" fixed-duration setup.
 Perturbation: the terminal state x(1) is constrained by TWO independent
 ``add_boundary_value`` calls with conflicting targets: x(1) = 1.0 and
 x(1) = CONFLICT_VALUE. This is infeasible by construction (a scalar
-variable cannot equal two different values) and probes whether PSIOPT
+variable cannot equal two different values) and probes whether the interior-point solver
 honestly reports non-convergence rather than silently reporting an
 "acceptable" solution that actually straddles the conflict.
 
@@ -29,7 +29,7 @@ That exact gap was tried FIRST, via a temporary edit run through
 ``conda run -n tycho python scripts/run_corpus.py --filter deg_conflicting``.
 Observed on defaults 2026-07-16 at gap 1.001: ACCEPTABLE, 54 iterations,
 objective 6.0235 — the residual from the conflicting pair lands inside
-PSIOPT's default acceptable-equality-constraint tolerance, exactly the
+the interior-point solver's default acceptable-equality-constraint tolerance, exactly the
 same failure-mode-that-isn't-a-failure documented for ``stub_fails`` in
 tests/corpus/README.md (that module's own earlier revision used the same
 1.001 gap and hit the same ACCEPTABLE band before being widened). The gap
@@ -57,7 +57,7 @@ TIMEOUT = 30
 SOLVE_MODE = "optimize"
 
 # Original brief spec value was 1.001 (a 1e-3 gap against the x(1) = 1.0
-# target); that fell inside PSIOPT's acceptable-equality tolerance and read
+# target); that fell inside the interior-point solver's acceptable-equality tolerance and read
 # as ACCEPTABLE rather than a genuine failure (see docstring above), so the
 # gap was widened here, mirroring the same adjustment Task 1 made to
 # stub_fails for the identical reason.
@@ -93,7 +93,7 @@ def build():
     # Indices are [x, v, t, u]; t is pinned at both ends so the phase is a
     # genuinely fixed-duration (T=1) transfer, matching the brief's "t in
     # [0, 1]" setup (an un-pinned Back time is itself a free decision
-    # variable in this collocation formulation and lets PSIOPT silently
+    # variable in this collocation formulation and lets the interior-point solver silently
     # rescale the effective transfer duration).
     phase.add_boundary_value("Front", range(0, 3), [0.0, 0.0, 0.0])
     phase.add_boundary_value("Back", [1, 2], [0.0, 1.0])

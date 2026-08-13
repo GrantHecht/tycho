@@ -10,7 +10,7 @@
 //   * A non-finite error norm / midpoint in the ADAPTIVE loop is treated as a
 //     rejected step: the driver shrinks h and retries (OrdinaryDiffEq parity —
 //     EEst == NaN fails EEst <= 1). A *transient* singularity resolves at smaller
-//     h and the integration completes (PSIOPT / multiple-shooting recovery); a
+//     h and the integration completes (InteriorPointSolver / multiple-shooting recovery); a
 //     *persistent* singularity (state never moves) reject-shrinks h to underflow
 //     and the zero-progress stall guard throws a bounded, specific diagnostic.
 //
@@ -292,7 +292,7 @@ struct TimeKeyedNaNSHO
 // finiteness check sees the NaN. Under the reject-and-shrink policy this rejects
 // the step and shrinks h, moving every evaluation point off the single trigger
 // time; the integration then completes past t = 0.0225 and never revisits it.
-// This is the transient-singularity recovery the PSIOPT / multiple-shooting use
+// This is the transient-singularity recovery the InteriorPointSolver / multiple-shooting use
 // case needs — the integrator must not throw.
 TEST_F(NanPropagationTest, AdaptiveTransientMidpointNaNRecoversByShrinking) {
     // First step (HW off, def_step 0.1, tf 0.1): h = 0.9 * H/numsteps = 0.045,

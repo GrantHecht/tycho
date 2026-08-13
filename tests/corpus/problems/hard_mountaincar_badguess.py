@@ -23,7 +23,7 @@ advancing linearly -- was tried FIRST. Observed: CONVERGED, 115 iterations
 total (13 + 102 across the two ``solve_optimize`` stages) -- FEWER
 iterations than the parent's own linear-interpolation guess (~118-128),
 i.e. this literal reading does not strain the solver at all; if anything
-it is a slightly easier starting point for PSIOPT than the parent's guess
+it is a slightly easier starting point for the interior-point solver than the parent's guess
 (which drives a sinusoidal control profile that itself needs partially
 undone). Per the brief's "otherwise perturb harder before committing"
 escape hatch, the stationary point was moved to the FAR/target position

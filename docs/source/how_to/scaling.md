@@ -1,6 +1,6 @@
 # How to scale variables and constraints
 
-PSIOPT is an interior-point optimizer, and interior-point methods are sensitive
+InteriorPointSolver is an interior-point optimizer, and interior-point methods are sensitive
 to the *conditioning* of the problem. When a state is measured in meters
 (~10⁷) sitting next to one measured in radians (~1) and a control near unity,
 the KKT system is badly scaled: step lengths shrink, the line search stalls,

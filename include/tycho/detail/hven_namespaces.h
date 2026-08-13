@@ -25,7 +25,7 @@
 
 #pragma once
 
-#include <hven/detail/drivers/psiopt_fwd.h>
+#include <hven/detail/drivers/interior_point_solver_fwd.h>
 #include <hven/detail/interior/typedefs/eigen_types.h>
 
 // Declared so the two directives below stand on their own: a using-directive

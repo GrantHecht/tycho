@@ -24,7 +24,7 @@
 // derived class.
 //
 // Also defines implements the constraints function in terms of the compute function. The
-// constraints functions is part of a vector functions interface to the non-linear optimizer PSIOPT.
+// constraints functions is part of a vector functions interface to the non-linear optimizer InteriorPointSolver.
 //
 // Modifications in Tycho (Copyright 2026-present Grant R. Hecht,
 //   Apache 2.0 — see LICENSE.txt):
@@ -81,7 +81,7 @@ namespace tycho::vf {
 /// @ref is_vectorizable), and implements `compute` in terms of the derived
 /// class's `compute_impl` (the adjoint-gradient entry points route to the
 /// derived class's `compute_adjointgradient`). It also provides the `constraints`
-/// interface by which a VectorFunction is invoked by the PSIOPT optimizer.
+/// interface by which a VectorFunction is invoked by the InteriorPointSolver optimizer.
 ///
 /// @tparam Derived  CRTP derived (user) function type.
 /// @tparam IR       Input rows at compile time (`-1` for dynamic).
@@ -382,7 +382,7 @@ template <class Derived, int IR, int OR> struct ComputableBase : InputOutputSize
 
     //////////////////////////////////////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////
-    /// @brief PSIOPT interface: evaluate this function as a problem constraint.
+    /// @brief InteriorPointSolver interface: evaluate this function as a problem constraint.
     ///
     /// Evaluates the function once per application listed in @p data, scattering
     /// the results into the global constraint vector @p FX. @p X is the full
@@ -467,7 +467,7 @@ template <class Derived, int IR, int OR> struct ComputableBase : InputOutputSize
             Impl, tycho::utils::TempSpec<Input<double>>(this->input_rows(), 1));
     }
 
-    /// @brief PSIOPT interface: evaluate constraint values and their adjoint gradients.
+    /// @brief InteriorPointSolver interface: evaluate constraint values and their adjoint gradients.
     ///
     /// For each application in @p data, gathers the local input and multiplier
     /// vectors from @p X and @p L, evaluates `f(x)` and the adjoint gradient

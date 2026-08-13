@@ -26,7 +26,7 @@
 #include "tycho/detail/hven_namespaces.h"
 #include <hven/drivers/non_linear_program.h>
 #include "tycho/detail/solvers/nlp_backend.h"
-#include <hven/drivers/psiopt.h>
+#include <hven/drivers/interior_point_solver.h>
 #include "tycho/vector_functions.h"
 
 namespace tycho::solvers {

@@ -1,6 +1,6 @@
 # How to troubleshoot a failing solve
 
-PSIOPT does not fail in one way. A solve that does not return `CONVERGED`
+InteriorPointSolver does not fail in one way. A solve that does not return `CONVERGED`
 has usually failed for a reason that is visible in the iteration table —
 residuals climbing, step lengths collapsing, a perturbation column that
 never returns to zero — and each of those signatures points at a different

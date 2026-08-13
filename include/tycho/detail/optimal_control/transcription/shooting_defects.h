@@ -190,7 +190,7 @@ struct CentralShootingDefect
     /// `compute_impl`/`compute_jacobian_impl`/
     /// `compute_jacobian_adjointgradient_adjointhessian_impl` and the batched
     /// `compute_impl_v`/`compute_jacobian_impl_v`/`compute_all_impl_v` used to
-    /// declare fresh `std::vector`s on every call -- the O(segments x PSIOPT
+    /// declare fresh `std::vector`s on every call -- the O(segments x InteriorPointSolver
     /// iterations) hot path in the transcription layer. These are now
     /// per-instance `mutable` scratch buffers that get `.resize()`d (not
     /// freshly declared) each call: `std::vector::resize()` to an unchanged

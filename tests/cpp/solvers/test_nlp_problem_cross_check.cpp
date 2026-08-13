@@ -99,7 +99,7 @@ struct NlpCrossCheckProblem : NLPProblem {
 // Same problem posed through OptimizationProblem + VectorFunction expressions.
 // The variable bound is declared straight on the NonLinearProgram between
 // transcribe() and the solve (there is no Phase here to route it through) --
-// the same pattern test_psiopt_native_bounds.cpp's restoration harness uses.
+// the same pattern test_interior_point_solver_native_bounds.cpp's restoration harness uses.
 Eigen::VectorXd nlp_cross_check_solve_vf(tycho::ConvergenceFlags &flag_out) {
     using tycho::vf::Arguments;
     using tycho::vf::GenericFunction;

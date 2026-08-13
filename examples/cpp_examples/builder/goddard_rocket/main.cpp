@@ -139,7 +139,7 @@ int main() {
     phase3.add_value_objective(PhaseRegionFlags::Back, "h", -1.0);
 
     // Mirror the Python example: enable auto-scaling per phase + at the OCP
-    // level so PSIOPT runs with conditioned KKT regardless of how the
+    // level so InteriorPointSolver runs with conditioned KKT regardless of how the
     // problem was non-dimensionalized. Without this the unscaled solve is
     // sensitive to multi-threaded floating-point ordering and can flake.
     auto units = ode.make_units({{"h", 1.0}, {"v", 1.0}, {"m", 1.0}, {"t", 1.0}});

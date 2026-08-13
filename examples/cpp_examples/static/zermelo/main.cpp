@@ -32,7 +32,7 @@ using namespace tycho::solvers;
 namespace {
 
 // Non-template navigator — takes an already-erased ODE factory output and
-// drives PSIOPT. All four wind models share this single instantiation.
+// drives InteriorPointSolver. All four wind models share this single instantiation.
 std::vector<Eigen::VectorXd>
 navigate(tycho::vf::GenericFunction<-1, -1> erased_ode, const Eigen::VectorXd &A,
          const Eigen::VectorXd &B, double vMax) {

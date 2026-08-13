@@ -4,7 +4,7 @@
 // (vector_functions, type_erasure, integrators) avoid pulling in the full
 // optimal_control umbrella.
 //
-// Note: ode.h transitively includes ode_phase.h → psiopt.h, so ODE-using
+// Note: ode.h transitively includes ode_phase.h -> interior_point_solver.h, so ODE-using
 // TUs still get the OC/solver template chain. The split nonetheless helps
 // bench_utils and bench_kepler which don't include this header at all.
 ///////////////////////////////////////////////////////////////////////////////

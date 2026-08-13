@@ -1,6 +1,6 @@
-"""Coverage for PSIOPT's globalization-knob bindings.
+"""Coverage for InteriorPointSolver's globalization-knob bindings.
 
-Exercises the Python surface for the ten PSIOPT.Settings fields
+Exercises the Python surface for the ten InteriorPointSolver.Settings fields
 (``acceptance_strategy``, ``merit_penalty_rule``, ``max_soc``,
 ``ls_extended_iters``, ``watchdog``, ``barrier_governor``,
 ``never_monotone``, ``restoration_mode``, ``max_feas_rest``,
@@ -39,15 +39,15 @@ diagnostics it populates.
 
 Also regression-tests the "component construction staleness" review
 finding: ``acceptance_``/``mechanism_``/``governor_``/``recovery_`` used to
-be (re)built only inside ``PSIOPT::set_nlp()`` (i.e. only on
+be (re)built only inside ``InteriorPointSolver::set_nlp()`` (i.e. only on
 (re)transcription), so construction-time knobs like
 ``acceptance_strategy`` changed AFTER a first solve were silently ignored
 by a later re-solve that did not retranscribe. See
 ``test_ComponentRebuildTakesEffectWithoutRetranscription`` below.
 
-Finally, covers ``PSIOPT.apply_preset(name)`` (the five named
-configuration presets in ``kPSIOPTPresets``,
-include/tycho/detail/solvers/psiopt_presets.h): each preset name round-
+Finally, covers ``InteriorPointSolver.apply_preset(name)`` (the five named
+configuration presets in ``kInteriorPointSolverPresets``,
+include/tycho/detail/solvers/interior_point_solver_presets.h): each preset name round-
 tripped through representative properties above, every preset validating
 and solving, the unrecognized-name ``ValueError`` naming all five presets,
 and the binding docstring naming all five presets. See
@@ -75,9 +75,9 @@ def DiskCon():
 
 
 def _make_problem():
-    """Smallest available problem that can drive PSIOPT::run_phase_sequence
+    """Smallest available problem that can drive InteriorPointSolver::run_phase_sequence
     (and therefore Settings::validate()) via optimize()/solve(). Mirrors
-    test_psiopt_init_time.py's RosenBrock+disk-constraint problem -- the repo
+    test_interior_point_solver_init_time.py's RosenBrock+disk-constraint problem -- the repo
     has no standalone double-integrator OCP fixture, and this static NLP is
     equally fast and sufficient to reach validate() before any iteration.
     """
@@ -358,7 +358,7 @@ class test_BadRestorationModeValue(unittest.TestCase):
             solvs.RestorationModes(99)
 
     def test_enum_property_rejects_raw_int_assignment(self):
-        opt = solvs.PSIOPT()
+        opt = solvs.InteriorPointSolver()
         with self.assertRaises(TypeError):
             opt.restoration_mode = 7
 
@@ -447,7 +447,7 @@ class test_BarrierGovernorComboGuard(unittest.TestCase):
 class test_MonotoneDiagnostics(unittest.TestCase):
     """SolveResult.last_monotone_switches / last_monotone_iters
     (MonitoredBarrierGovernor::append_diagnostics, collected once per phase
-    in PSIOPT::run_phase_sequence -- see psiopt.h for the sentinel
+    in InteriorPointSolver::run_phase_sequence -- see interior_point_solver.h for the sentinel
     semantics). Sentinel -1/-1 unless barrier_governor is monitored.
     """
 
@@ -471,13 +471,13 @@ class test_FeasRestDiagnostics(unittest.TestCase):
     """SolveResult.last_feas_rest_entries / last_feas_rest_iters
     (ProximalSwitchRestoration::append_diagnostics /
     NestedL1Restoration::append_diagnostics, collected once per phase in
-    PSIOPT::run_phase_sequence -- see psiopt.h for the sentinel semantics).
+    InteriorPointSolver::run_phase_sequence -- see interior_point_solver.h for the sentinel semantics).
     Sentinel -1/-1 unless restoration_mode is proximal_switch or l1_nested
     (no restoration strategy is constructed when it is off); once a
     strategy is constructed, both fields report >= 0 even if restoration
     was never actually entered during the solve. Both concrete strategies
     populate the same pair of fields identically (see the field docstrings
-    in psiopt_bind.cpp for the nested-mode counting note).
+    in interior_point_solver_bind.cpp for the nested-mode counting note).
     """
 
     def test_default_solve_reports_sentinels(self):
@@ -627,7 +627,7 @@ class test_BadInertiaModeValue(unittest.TestCase):
             solvs.InertiaModes(99)
 
     def test_enum_property_rejects_raw_int_assignment(self):
-        opt = solvs.PSIOPT()
+        opt = solvs.InteriorPointSolver()
         with self.assertRaises(TypeError):
             opt.inertia_mode = 7
 
@@ -732,7 +732,7 @@ class test_InertiaModeComboMatrix(unittest.TestCase):
 class test_ProxRegDiagnostics(unittest.TestCase):
     """SolveResult.last_prox_reg_primal / last_prox_reg_dual (written at
     alg_impl phase close from the last FACTORIZED iteration's applied
-    shifts -- see psiopt.h for the sentinel semantics). Sentinel -1.0/-1.0
+    shifts -- see interior_point_solver.h for the sentinel semantics). Sentinel -1.0/-1.0
     unless inertia_mode is proximal_regularization; both fields report
     >= 0.0 once that mode is selected and the solve factorizes at least
     once.
@@ -774,7 +774,7 @@ class test_ProxRegDiagnostics(unittest.TestCase):
 class test_EvalExceptionDiagnostic(unittest.TestCase):
     """SolveResult.last_eval_exception (the message of the most recent
     trial-point evaluation exception absorbed by the acceptance machinery
-    during the most recent solve call -- see psiopt.h for the empty-string
+    during the most recent solve call -- see interior_point_solver.h for the empty-string
     sentinel semantics). Read-only, like every other SolveResult diagnostic
     above.
     """
@@ -816,7 +816,7 @@ class test_BadEnumValues(unittest.TestCase):
         # nanobind's convert path, which rejects non-member values with
         # TypeError (a different path than the ValueError-raising enum
         # constructor above) -- pin both exception types.
-        opt = solvs.PSIOPT()
+        opt = solvs.InteriorPointSolver()
         with self.assertRaises(TypeError):
             opt.acceptance_strategy = 7
         with self.assertRaises(TypeError):
@@ -950,9 +950,9 @@ class test_SolveDiagnostics(unittest.TestCase):
 
 class test_AcceptanceDiagnostics(unittest.TestCase):
     """SolveResult.last_funnel_width / last_filter_size / last_filter_resets
-    (src/solvers/psiopt_globalization.cpp's FunnelAcceptance::
+    (src/solvers/interior_point_solver_globalization.cpp's FunnelAcceptance::
     append_diagnostics / FilterAcceptance::append_diagnostics, collected once
-    per phase in PSIOPT::run_phase_sequence -- see psiopt.h for the sentinel
+    per phase in InteriorPointSolver::run_phase_sequence -- see interior_point_solver.h for the sentinel
     semantics). Each is -1.0/-1/-1 ("not applicable") unless the matching
     acceptance strategy is selected; a solve with that strategy selected
     populates its own field(s) and leaves the other strategy's field(s) at
@@ -1007,8 +1007,8 @@ class test_AcceptanceDiagnostics(unittest.TestCase):
 
 class test_ComponentRebuildTakesEffectWithoutRetranscription(unittest.TestCase):
     """Regression test for the "component construction staleness" review
-    finding on PSIOPT::set_nlp() / PSIOPT::rebuild_globalization_components()
-    (src/solvers/psiopt.cpp): the four globalization components used to be
+    finding on InteriorPointSolver::set_nlp() / InteriorPointSolver::rebuild_globalization_components()
+    (src/solvers/interior_point_solver.cpp): the four globalization components used to be
     constructed only in set_nlp() (which runs only on (re)transcription),
     so a construction-time knob like ``acceptance_strategy`` changed AFTER
     a first solve was silently ignored by a re-solve that did not
@@ -1086,8 +1086,8 @@ class test_ComponentRebuildTakesEffectWithoutRetranscription(unittest.TestCase):
 
 
 class test_ApplyPreset(unittest.TestCase):
-    """PSIOPT.apply_preset(name) (src/solvers/psiopt_settings.cpp, table-driven
-    from kPSIOPTPresets in include/tycho/detail/solvers/psiopt_presets.h).
+    """InteriorPointSolver.apply_preset(name) (src/solvers/interior_point_solver_settings.cpp, table-driven
+    from kInteriorPointSolverPresets in include/tycho/detail/solvers/interior_point_solver_presets.h).
     Round-trips each of the five named presets through the existing
     property surface exercised throughout this file, checks that an
     unrecognized name raises ValueError naming all five valid options, and
@@ -1199,7 +1199,7 @@ class test_ApplyPreset(unittest.TestCase):
             self.assertIn(name, msg)
 
     def test_docstring_names_all_five_presets(self):
-        doc = solvs.PSIOPT.apply_preset.__doc__
+        doc = solvs.InteriorPointSolver.apply_preset.__doc__
         self.assertIsNotNone(doc)
         for name in self.PRESET_NAMES:
             self.assertIn(name, doc)

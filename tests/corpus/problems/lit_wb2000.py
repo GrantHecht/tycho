@@ -56,23 +56,23 @@ Encoding
 Static NLP via ``tychopy.solvers.OptimizationProblem`` (see
 tests/corpus/README.md, "Encoding for the literature tier" -- tychopy DOES
 expose a first-class static-NLP container, so no trivial-dynamics/phase
-workaround is needed for this tier). Inequality constraints use PSIOPT's
+workaround is needed for this tier). Inequality constraints use the interior-point solver's
 ``g(x) <= 0`` convention (verified in doc-legacy/tutorials/PhaseGuide.rst,
 "Inequality Constraints" section), so "x2 >= 0" / "x3 >= 0" are encoded as
 "-x2 <= 0" / "-x3 <= 0".
 
 Note on the "solution": Benson et al. report the reduced form's solution
-as x1 = 1 (i.e., the b-bound is active); PSIOPT is a different codebase
+as x1 = 1 (i.e., the b-bound is active); the interior-point solver is a different codebase
 from LOQO/IPOPT so it is NOT expected to reproduce a specific failure
-mechanism -- the point of this corpus entry is to record whatever PSIOPT
+mechanism -- the point of this corpus entry is to record whatever the interior-point solver
 actually does with today's defaults, not to force a particular flag.
 
 Observed on defaults 2026-07-16: NOTCONVERGED (harness status "failed"),
 500 iterations (hits max_iters), objective -0.968231, byte-identical
-across a --repeat 2 determinism check. PSIOPT plateaus well short of the
+across a --repeat 2 determinism check. The interior-point solver plateaus well short of the
 true optimum (x1* = 1) without diverging outright -- consistent in
 spirit with the "jamming" phenomenon this problem is designed to probe,
-though PSIOPT is a different codebase from LOQO/IPOPT so the precise
+though the interior-point solver is a different codebase from LOQO/IPOPT so the precise
 mechanism is not expected (or claimed) to match theirs.
 """
 
@@ -109,7 +109,7 @@ def build():
     # x1 - x3 - b = 0  (depends on x1, x3 -> indices [0, 2])
     prob.add_equal_con(Args(2)[0] - Args(2)[1] - _B, [0, 2])
 
-    # x2 >= 0, x3 >= 0  ->  -x2 <= 0, -x3 <= 0 (PSIOPT's g(x) <= 0 convention)
+    # x2 >= 0, x3 >= 0  ->  -x2 <= 0, -x3 <= 0 (the interior-point solver's g(x) <= 0 convention)
     prob.add_inequal_con(-Args(1)[0], [1])
     prob.add_inequal_con(-Args(1)[0], [2])
 

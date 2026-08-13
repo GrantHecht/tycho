@@ -193,13 +193,13 @@ TychoTNLP::TychoTNLP(std::shared_ptr<NonLinearProgram> nlp, Eigen::VectorXd x0, 
             "TychoTNLP: NLP has {0} primal variables; at least one is required", primal_vars_));
     }
     if (nlp_->is_reduced()) {
-        // A prior PSIOPT solve with fixed_variable_treatment=MakeParameter left this
+        // A prior InteriorPointSolver solve with fixed_variable_treatment=MakeParameter left this
         // NLP on its reduced variable space (fixed variables eliminated). This
         // adapter sizes over the full space and hands fixed variables to Ipopt as
         // equal bounds, so it cannot consume the reduced layout.
         throw std::invalid_argument(
             "TychoTNLP: this NLP was left on its reduced variable space by a prior "
-            "PSIOPT solve with fixed_variable_treatment=MakeParameter. Solve with the "
+            "InteriorPointSolver solve with fixed_variable_treatment=MakeParameter. Solve with the "
             "ipopt backend on a freshly transcribed problem, or re-transcribe before "
             "switching backends; Ipopt applies its own fixed-variable treatment.");
     }
@@ -705,7 +705,7 @@ BackendProblemBase::NlpSolveOutput solve(BackendProblemBase &prob,
                                  "termination tolerances from the built-in solver's settings");
     }
 
-    const PSIOPT::Settings &settings = prob.optimizer_->settings();
+    const InteriorPointSolver::Settings &settings = prob.optimizer_->settings();
 
     Ipopt::SmartPtr<TychoTNLP> adapter = new TychoTNLP(prob.nlp_, input, settings.obj_scale_);
 

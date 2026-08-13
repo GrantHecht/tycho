@@ -17,17 +17,17 @@ def DiskCon():
     return Args(2).squared_norm() - 2.0
 
 
-class test_PsiOptInitTime(unittest.TestCase):
-    """Regression test for PSIOPT's solver-init one-shot contract
+class test_InteriorPointSolverInitTime(unittest.TestCase):
+    """Regression test for InteriorPointSolver's solver-init one-shot contract
     (CODEBASE_REVIEW.md Sec 1.3, item P7).
 
     ``ensure_solver_initialized()`` (src/solvers/solver_init.cpp) must report
     a nonzero init time only for the process-wide first call that actually
     runs the math-runtime initializer; every subsequent call must report
     ``0.0``, per its documented contract ("Returns ... 0.0 if already
-    initialized"). ``PSIOPT::ensure_solver_initialized`` mirrors that value
-    into ``psiopt.last_solver_init_time`` on every ``solve()``/``optimize()``
-    call (src/solvers/psiopt.cpp:786-795).
+    initialized"). ``InteriorPointSolver::ensure_solver_initialized`` mirrors that value
+    into ``opt.last_solver_init_time`` on every ``solve()``/``optimize()``
+    call (src/solvers/interior_point_solver.cpp:786-795).
 
     The underlying ``std::once_flag`` is process-global, so this test does
     not assume it is the first solver initialization to happen anywhere in

@@ -51,7 +51,7 @@ namespace tycho::oc {
 // Solvers types
 using tycho::solvers::NonLinearProgram;
 using tycho::solvers::BackendProblemBase;
-using tycho::solvers::PSIOPT;
+using tycho::solvers::InteriorPointSolver;
 
 // VF types
 using vf::Arguments;
@@ -64,7 +64,7 @@ using vf::StackedOutputs;
 /// Owns a collection of @ref ODEPhase objects and the link constraints,
 /// inequalities, and objectives that couple them (plus a shared link-parameter
 /// vector). It transcribes all phases and links into one shared NLP and drives
-/// PSIOPT to solve or optimize the combined problem, coordinating adaptive mesh
+/// InteriorPointSolver to solve or optimize the combined problem, coordinating adaptive mesh
 /// refinement across phases.
 struct OptimalControlProblemBase : BackendProblemBase {
     using VectorXi = Eigen::VectorXi; ///< @brief Convenience alias for an integer vector.
@@ -1739,11 +1739,11 @@ struct OptimalControlProblemBase : BackendProblemBase {
         const std::vector<Eigen::VectorXi> &lv, int orows, int &NextCLoc) const;
 
     /// @internal
-    /// @brief Drive PSIOPT for a single solve/optimize pass (no mesh loop).
+    /// @brief Drive InteriorPointSolver for a single solve/optimize pass (no mesh loop).
     /// @param mode  The solve/optimize job mode.
     /// @return The solver convergence flag.
     /// @endinternal
-    tycho::ConvergenceFlags psipot_call_impl(JetJobModes mode);
+    tycho::ConvergenceFlags interior_point_call_impl(JetJobModes mode);
 
     /// @internal
     /// @brief Run the full problem solve, including the multi-phase mesh-refinement loop.

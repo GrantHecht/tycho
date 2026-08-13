@@ -94,7 +94,7 @@ nanobind_add_module(_tychopy
     # Solvers bindings
     solvers/tycho_solvers.cpp
     solvers/optimization_problem_base.cpp
-    solvers/psiopt_bind.cpp
+    solvers/interior_point_solver_bind.cpp
     solvers/optimization_problem_bind.cpp
     solvers/jet_bind.cpp
     # Astro bindings

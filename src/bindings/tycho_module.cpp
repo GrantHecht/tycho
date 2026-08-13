@@ -158,7 +158,7 @@ NB_MODULE(_tychopy, m) {
 
     FunctionRegistry reg(m);        // Must be built first
     vector_functions_build(reg, m); // Must be built second
-    solvers_build(reg, m);          // Builds Third so that PSIOPT shows up better in autocomplete
+    solvers_build(reg, m);          // Builds Third so that InteriorPointSolver shows up better in autocomplete
     optimal_control_build(reg, m);
     utils_build(m);
     astro_build(reg, m);

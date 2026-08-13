@@ -4,7 +4,7 @@
 This tutorial puts together everything from the astrodynamics series and the
 optimal-control series: you will build a low-thrust orbit-raising transfer using
 the MEE dynamics model, set up a {py:class}`~tychopy.optimal_control.PhaseInterface`,
-solve it with PSIOPT, and read the result.
+solve it with InteriorPointSolver, and read the result.
 
 It assumes you have worked through both
 {doc}`Setting up a phase </tutorials/basics/your_first_phase>` (the
@@ -277,7 +277,7 @@ phase.add_delta_time_objective(1.0);
 
 ## 5. Solve
 
-PSIOPT's console output goes directly to the terminal and does not appear here.
+InteriorPointSolver's console output goes directly to the terminal and does not appear here.
 Print levels run from most verbose (`0`, the default — prints the full iteration
 table) through progressively terser `1` and `2` to fully silent (`3`); pass
 `set_print_level(3)` to keep the environment clean:

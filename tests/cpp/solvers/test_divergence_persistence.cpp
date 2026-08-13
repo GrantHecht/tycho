@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Persistence-based divergence classification (PSIOPT converge_check).
+// Persistence-based divergence classification (InteriorPointSolver converge_check).
 //
 // converge_check() no longer aborts the solve the first time a monitored
 // residual crosses its divergence threshold. The per-iterate divergent
@@ -37,25 +37,25 @@ using namespace TychoTest;
 using tycho::solvers::IterateInfo;
 using tycho::solvers::kDivergencePersistIters;
 using tycho::solvers::OptimizationProblem;
-using tycho::solvers::PSIOPT;
+using tycho::solvers::InteriorPointSolver;
 
 // -----------------------------------------------------------------------------
-// Friend harness: reaches PSIOPT's private converge_check() so the trailing-
+// Friend harness: reaches InteriorPointSolver's private converge_check() so the trailing-
 // window logic can be exercised on hand-built iterate histories without solving
 // a real NLP. converge_check() reads only settings_ (divergence tolerances) and
 // the iterate history, so a default-constructed optimizer at default tolerances
 // is a faithful stand-in. Defined in the global namespace to match the
-// `friend class ::DivergencePersistenceHarness` declaration in psiopt.h.
+// `friend class ::DivergencePersistenceHarness` declaration in interior_point_solver.h.
 // -----------------------------------------------------------------------------
 class DivergencePersistenceHarness {
   public:
     tycho::ConvergenceFlags check(std::vector<IterateInfo> &iters) {
         return solver_.converge_check(iters);
     }
-    PSIOPT::Settings &settings() { return solver_.settings_; }
+    InteriorPointSolver::Settings &settings() { return solver_.settings_; }
 
   private:
-    PSIOPT solver_;
+    InteriorPointSolver solver_;
 };
 
 namespace {
@@ -207,7 +207,7 @@ TEST(DivergencePersistence, ThresholdTripHonoredOnEachResidualFamily) {
 
 // Maratos-effect example (Nocedal & Wright, Numerical Optimization 2e, Example
 // 15.4): min 2(x1^2+x2^2-1)-x1 s.t. x1^2+x2^2-1=0, optimum x*=(1,0), obj -1.
-// Started exactly on the constraint manifold at (0,1), PSIOPT's first steps blow
+// Started exactly on the constraint manifold at (0,1), InteriorPointSolver's first steps blow
 // the equality residual up to ~5e15 for a single iteration. Under the former
 // per-iterate abort this killed the solve at iteration two; under persistence
 // the transient is tolerated and the solve reaches the optimum at defaults.

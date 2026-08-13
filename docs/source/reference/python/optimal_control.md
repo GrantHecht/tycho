@@ -53,7 +53,7 @@ trajectory together with its transcription, constraints, and objectives.
 ## Optimal-control problem
 
 A container that links one or more phases (and shared link parameters) into a
-single multi-phase problem solved by PSIOPT.
+single multi-phase problem solved by InteriorPointSolver.
 
 ```{eval-rst}
 .. autoclass:: OptimalControlProblem

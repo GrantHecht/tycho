@@ -26,7 +26,7 @@ Trajectory design and optimal control in C++ and Python
 A high-performance library for general optimal-control problems and space
 trajectory optimization. Problems are defined with composable, self-
 differentiating **VectorFunctions**, transcribed by **direct collocation**, and
-solved with the bundled **PSIOPT** interior-point optimizer.
+solved with the bundled **InteriorPointSolver** interior-point optimizer.
 ```
 
 ::::{div} sd-text-center sd-pt-3 sd-pb-2
@@ -64,7 +64,7 @@ API reference
 A low-thrust spacecraft spiralling from one circular orbit to another in minimum
 time — defined, transcribed, and solved in one short script. Write the dynamics
 as a self-differentiating VectorFunction, transcribe them onto a collocation
-mesh, bound the thrust, pin the orbits, and let PSIOPT do the rest. Exact
+mesh, bound the thrust, pin the orbits, and let InteriorPointSolver do the rest. Exact
 Jacobians and Hessians are generated for you.
 
 ```python
@@ -101,7 +101,7 @@ phase.add_lu_norm_bound("Path", [7, 8, 9], 0.001, 1, 1.0)
 phase.add_boundary_value("Back", range(0, 6), Xf)
 phase.add_delta_time_objective(1.0)
 
-phase.optimize()              # PSIOPT
+phase.optimize()              # InteriorPointSolver
 traj = phase.return_traj()    # time-optimal spiral out to the r=2 orbit
 ```
 
@@ -137,7 +137,7 @@ problems into sparse NLPs, with adaptive mesh refinement to certify the result.
 :::
 
 :::{grid-item}
-{octicon}`zap;1.3em;tycho-feature-icon` **PSIOPT optimizer**
+{octicon}`zap;1.3em;tycho-feature-icon` **InteriorPointSolver optimizer**
 
 A bundled, high-performance sparse interior-point solver built for the large,
 structured nonlinear programs that trajectory optimization produces.

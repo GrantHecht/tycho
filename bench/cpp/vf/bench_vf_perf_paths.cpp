@@ -98,7 +98,7 @@ BENCHMARK(BM_VF_MinMax_Static_N4);
 
 static void BM_VF_MinMax_Generic(benchmark::State &state) {
     // 2-operand min over type-erased GenericFunction<-1,1> operands — the
-    // PSIOPT/Python-binding-relevant shape (generic_function_bind.h:229-230).
+    // InteriorPointSolver/Python-binding-relevant shape (generic_function_bind.h:229-230).
     // Each of the 3 value evals per call chases a GFConcept vtable dispatch
     // rather than a plain inlined template call.
     using GenS = GenericFunction<-1, 1>;
@@ -150,7 +150,7 @@ static void BM_VF_MinMax_Generic_JGH(benchmark::State &state) {
     // re-evaluates the selected branch's full Jacobian/gradient/Hessian).
     // Added beyond the brief's two literal names because the dossier
     // repeatedly flags this exact combination — type-erased operands, full
-    // JGH — as "the waste is worst in the KKT path": PSIOPT's interior-point
+    // JGH — as "the waste is worst in the KKT path": InteriorPointSolver's interior-point
     // loop calls exactly this entry point every iteration whenever min/max
     // appears in a constraint or objective. Cheap to add (same operands as
     // BM_VF_MinMax_Generic_N4, one extra timed call), so no reason to defer.

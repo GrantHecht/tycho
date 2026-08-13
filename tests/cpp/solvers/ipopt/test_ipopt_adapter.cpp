@@ -365,12 +365,12 @@ TEST(IpoptBackend, StructuralShape) {
 
 // Both backends run the identical NLP through the same dispatch seam and land
 // on the same solution.
-TEST(IpoptBackend, ParityWithPsioptOnSmoothProblem) {
-    auto psiopt_prob = build_ipopt_adapter_problem();
-    const auto psiopt_flag = psiopt_prob->optimize();
-    ASSERT_EQ(psiopt_flag, tycho::ConvergenceFlags::CONVERGED);
-    const double psiopt_obj = psiopt_prob->optimizer_->result().obj_val_;
-    const Eigen::VectorXd psiopt_vars = psiopt_prob->return_vars();
+TEST(IpoptBackend, ParityWithInteriorPointOnSmoothProblem) {
+    auto native_prob = build_ipopt_adapter_problem();
+    const auto native_flag = native_prob->optimize();
+    ASSERT_EQ(native_flag, tycho::ConvergenceFlags::CONVERGED);
+    const double native_obj = native_prob->optimizer_->result().obj_val_;
+    const Eigen::VectorXd native_vars = native_prob->return_vars();
 
     auto ipopt_prob = build_ipopt_adapter_problem();
     ipopt_prob->nlp_solver_ = ts::NLPSolvers::ipopt;
@@ -378,27 +378,27 @@ TEST(IpoptBackend, ParityWithPsioptOnSmoothProblem) {
     EXPECT_EQ(ipopt_flag, tycho::ConvergenceFlags::CONVERGED);
 
     const Eigen::VectorXd ipopt_vars = ipopt_prob->return_vars();
-    ASSERT_EQ(ipopt_vars.size(), psiopt_vars.size());
+    ASSERT_EQ(ipopt_vars.size(), native_vars.size());
     for (int i = 0; i < ipopt_vars.size(); ++i) {
-        EXPECT_NEAR(ipopt_vars[i], psiopt_vars[i], 1e-6) << "variable " << i;
+        EXPECT_NEAR(ipopt_vars[i], native_vars[i], 1e-6) << "variable " << i;
     }
 
-    EXPECT_NEAR(psiopt_obj, ipopt_adapter_optimal_objective(), 1e-6);
-    EXPECT_NEAR(ipopt_prob->last_ipopt_result_.objective_, psiopt_obj, 1e-6);
+    EXPECT_NEAR(native_obj, ipopt_adapter_optimal_objective(), 1e-6);
+    EXPECT_NEAR(ipopt_prob->last_ipopt_result_.objective_, native_obj, 1e-6);
 
     // Multiplier direction: eval_h and finalize_solution both document that
     // Ipopt's lambda maps onto (LE, LI) with no sign flip, so the two
     // backends' reported multipliers should agree, not just be equal up to
     // sign. A regression here would silently corrupt phase costates that
     // downstream code reads off active_eq_lmults_/active_iq_lmults_.
-    ASSERT_EQ(ipopt_prob->active_eq_lmults_.size(), psiopt_prob->active_eq_lmults_.size());
+    ASSERT_EQ(ipopt_prob->active_eq_lmults_.size(), native_prob->active_eq_lmults_.size());
     for (int i = 0; i < ipopt_prob->active_eq_lmults_.size(); ++i) {
-        EXPECT_NEAR(ipopt_prob->active_eq_lmults_[i], psiopt_prob->active_eq_lmults_[i], 1e-4)
+        EXPECT_NEAR(ipopt_prob->active_eq_lmults_[i], native_prob->active_eq_lmults_[i], 1e-4)
             << "equality multiplier " << i;
     }
-    ASSERT_EQ(ipopt_prob->active_iq_lmults_.size(), psiopt_prob->active_iq_lmults_.size());
+    ASSERT_EQ(ipopt_prob->active_iq_lmults_.size(), native_prob->active_iq_lmults_.size());
     for (int i = 0; i < ipopt_prob->active_iq_lmults_.size(); ++i) {
-        EXPECT_NEAR(ipopt_prob->active_iq_lmults_[i], psiopt_prob->active_iq_lmults_[i], 1e-4)
+        EXPECT_NEAR(ipopt_prob->active_iq_lmults_[i], native_prob->active_iq_lmults_[i], 1e-4)
             << "inequality multiplier " << i;
     }
 
@@ -410,7 +410,7 @@ TEST(IpoptBackend, ParityWithPsioptOnSmoothProblem) {
     EXPECT_LT(ipopt_prob->last_ipopt_result_.constraint_violation_, 1e-6);
 
     // The built-in solver's run info is untouched by an Ipopt run.
-    EXPECT_FALSE(psiopt_prob->last_ipopt_result_.ran_);
+    EXPECT_FALSE(native_prob->last_ipopt_result_.ran_);
 }
 
 // A collocation phase solves through the same seam, and the solved variables

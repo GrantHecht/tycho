@@ -36,14 +36,14 @@ Encoding
 Static NLP via ``tychopy.solvers.OptimizationProblem`` (see
 tests/corpus/README.md). Following the same pattern as
 deg_zero_objective.py in the degenerate tier, NO ``add_objective`` call is
-made at all -- this is pure feasibility, exercising PSIOPT on a
+made at all -- this is pure feasibility, exercising the interior-point solver on a
 badly-conditioned pair of equality constraints with nothing to minimize.
 
 Observed on defaults 2026-07-16: CONVERGED, 22 iterations, objective 0
 (as expected for a feasibility problem), byte-identical across a
 --repeat 2 determinism check. This is a FINDING TO REPORT: despite the
 ~1e4 scale disparity between the two residuals that makes this problem a
-standard Newton-method scaling stress test, PSIOPT's defaults handle it
+standard Newton-method scaling stress test, the interior-point solver's defaults handle it
 without any difficulty -- no scaling stress genuinely manifests here,
 mirroring the analogous finding for deg_zero_objective.py in the
 degenerate tier (a named pathology that turns out not to bite this

@@ -52,9 +52,9 @@ std::unique_ptr<OptimizationProblem> build_ipopt_dispatch_nlp() {
     return prob;
 }
 
-TEST(NlpSolverDispatch, DefaultsToPsiopt) {
+TEST(NlpSolverDispatch, DefaultsToInteriorPoint) {
     auto prob = build_ipopt_dispatch_nlp();
-    EXPECT_EQ(prob->nlp_solver_, ts::NLPSolvers::psiopt);
+    EXPECT_EQ(prob->nlp_solver_, ts::NLPSolvers::interior_point);
     auto flag = prob->optimize();
     EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_NEAR(prob->optimizer_->result().obj_val_, 1.0, 1e-6);
@@ -115,7 +115,7 @@ TEST(NlpSolverDispatch, JetRunWithIpoptBackendRejected) {
 // The same batch element with the built-in backend runs to convergence, so the
 // rejection above is attributable to the backend selection and not to the Jet
 // entry point itself.
-TEST(NlpSolverDispatch, JetRunWithPsioptBackendRuns) {
+TEST(NlpSolverDispatch, JetRunWithInteriorPointBackendRuns) {
     auto prob = build_ipopt_dispatch_nlp();
     prob->set_jet_job_mode(ts::BackendProblemBase::JetJobModes::Optimize);
     EXPECT_EQ(prob->jet_run(), tycho::ConvergenceFlags::CONVERGED);

@@ -1,10 +1,10 @@
-"""Coverage for the native-bounds Settings surface: PSIOPT's
+"""Coverage for the native-bounds Settings surface: InteriorPointSolver's
 ``fixed_variable_treatment``, ``bound_relax_factor``, and
-``bound_interval_push`` properties (bound onto ``PSIOPT::Settings::
+``bound_interval_push`` properties (bound onto ``InteriorPointSolver::Settings::
 fixed_variable_treatment_`` / ``bound_relax_factor_`` / ``bound_interval_push_``
-in ``include/tycho/detail/solvers/psiopt.h``, validated through
+in ``include/tycho/detail/solvers/interior_point_solver.h``, validated through
 ``set_fixed_variable_treatment`` / ``set_bound_relax_factor`` /
-``set_bound_interval_push`` in ``src/solvers/psiopt_settings.cpp``), the
+``set_bound_interval_push`` in ``src/solvers/interior_point_solver_settings.cpp``), the
 ``FixedVariableTreatments`` enum, and the phase-level variable-bound
 declarations (``add_lu_var_bound``/``add_lower_var_bound``/
 ``add_upper_var_bound``), which are staged onto the solver's variable-bound
@@ -15,7 +15,7 @@ rows.
 Each property round-trips within its documented range and rejects an
 out-of-range value with ``ValueError`` (the validated setter raises
 immediately on assignment, mirroring every other validated Settings field --
-see test_psiopt_globalization_settings.py's ``test_MaxSocRoundTrip`` etc.).
+see test_interior_point_solver_globalization_settings.py's ``test_MaxSocRoundTrip`` etc.).
 """
 
 import numpy as np
@@ -34,12 +34,12 @@ solvs = typy.solvers
 
 
 def test_fixed_variable_treatment_default_is_make_parameter():
-    opt = solvs.PSIOPT()
+    opt = solvs.InteriorPointSolver()
     assert opt.fixed_variable_treatment == solvs.FixedVariableTreatments.MakeParameter
 
 
 def test_fixed_variable_treatment_round_trip():
-    opt = solvs.PSIOPT()
+    opt = solvs.InteriorPointSolver()
     opt.fixed_variable_treatment = solvs.FixedVariableTreatments.MakeConstraint
     assert opt.fixed_variable_treatment == solvs.FixedVariableTreatments.MakeConstraint
     opt.fixed_variable_treatment = solvs.FixedVariableTreatments.RelaxBounds
@@ -60,7 +60,7 @@ def test_fixed_variable_treatment_enum_importable():
 
 
 def test_fixed_variable_treatment_rejects_raw_int_assignment():
-    opt = solvs.PSIOPT()
+    opt = solvs.InteriorPointSolver()
     with pytest.raises(TypeError):
         opt.fixed_variable_treatment = 7
 
@@ -71,12 +71,12 @@ def test_fixed_variable_treatment_invalid_raw_value_rejected():
 
 
 def test_bound_relax_factor_default():
-    opt = solvs.PSIOPT()
+    opt = solvs.InteriorPointSolver()
     assert opt.bound_relax_factor == pytest.approx(1.0e-8)
 
 
 def test_bound_relax_factor_round_trip():
-    opt = solvs.PSIOPT()
+    opt = solvs.InteriorPointSolver()
     opt.bound_relax_factor = 1.0e-4
     assert opt.bound_relax_factor == pytest.approx(1.0e-4)
     # Both ends of the closed range [0, 1e-2] are accepted.
@@ -87,7 +87,7 @@ def test_bound_relax_factor_round_trip():
 
 
 def test_bound_relax_factor_rejects_out_of_range():
-    opt = solvs.PSIOPT()
+    opt = solvs.InteriorPointSolver()
     with pytest.raises(ValueError, match="bound_relax_factor"):
         opt.bound_relax_factor = -1.0e-9
     # Rejected write must not clobber the prior valid (default) value.
@@ -99,12 +99,12 @@ def test_bound_relax_factor_rejects_out_of_range():
 
 
 def test_bound_interval_push_default():
-    opt = solvs.PSIOPT()
+    opt = solvs.InteriorPointSolver()
     assert opt.bound_interval_push == pytest.approx(1.0e-2)
 
 
 def test_bound_interval_push_round_trip():
-    opt = solvs.PSIOPT()
+    opt = solvs.InteriorPointSolver()
     opt.bound_interval_push = 0.25
     assert opt.bound_interval_push == pytest.approx(0.25)
     opt.bound_interval_push = 1.0e-2
@@ -112,7 +112,7 @@ def test_bound_interval_push_round_trip():
 
 
 def test_bound_interval_push_rejects_out_of_range():
-    opt = solvs.PSIOPT()
+    opt = solvs.InteriorPointSolver()
     # The interval is open, so both endpoints (0.0 and 0.5) are rejected too.
     with pytest.raises(ValueError, match="bound_interval_push"):
         opt.bound_interval_push = 0.0

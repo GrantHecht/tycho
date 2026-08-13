@@ -22,7 +22,7 @@ Per ``project_vanderpol_diverges`` (recorded project memory): VanDerPol.py
 diverges (KKT = nan at iteration 0) on the current clang22/MKL2026
 fast-math toolchain and was dropped from the docs example gallery for this
 reason. The divergence is TOOLCHAIN-DEPENDENT, not a property of the
-problem itself or of PSIOPT's algorithm in general — a different
+problem itself or of the interior-point solver's algorithm in general — a different
 clang/MKL/fast-math combination could plausibly not reproduce it. It is
 tracked here specifically because it is a real, currently-reproducible
 failure mode worth having permanent regression coverage for via the
@@ -30,7 +30,7 @@ corpus, regardless of root cause.
 
 Observed on defaults 2026-07-16: DIVERGING (harness status "diverged"),
 1 iteration, objective 0.0, KKT Inf = nan at iteration 0 — i.e. the very
-first KKT residual evaluation is already NaN, so PSIOPT's iteration loop
+first KKT residual evaluation is already NaN, so the interior-point solver's iteration loop
 exits immediately. This is not a "strain" case in the iteration-count
 sense (the strain rule does not apply — the failure is instantaneous by
 construction, not something a slow convergence trace would show), it is

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-run_corpus.py — PSIOPT robustness corpus scoring harness
+run_corpus.py — interior-point solver robustness corpus scoring harness
 
 Runs the problem modules registered in ``tests/corpus/registry.py`` and
-scores each against PSIOPT's convergence flag, subprocess-isolated (one
+scores each against the interior-point solver's convergence flag, subprocess-isolated (one
 child process per problem, per the proven pattern in ``run_examples.py``)
 so a hang or crash in one problem cannot take down the rest of the corpus.
-Never gates: the corpus is *expected* to contain problems today's PSIOPT
+Never gates: the corpus is *expected* to contain problems today's interior-point solver
 struggles with — this script only produces scorecards (JSONL).
 
 This file is also its own subprocess child entry point (``--_child``) —
@@ -29,7 +29,7 @@ Options:
                            comparability with the ipopt backend's
                            single-solve mapping.
     --config KEY=VALUE...  Zero or more KEY=VALUE pairs. On the psiopt
-                           backend these are applied to the PSIOPT optimizer
+                           backend these are applied to the interior-point solver optimizer
                            via setattr() inside the child subprocess,
                            immediately before optimize/solve (values are
                            parsed as int, then float, then left as str, in
@@ -54,7 +54,7 @@ Options:
                            --backend column existed are treated as "psiopt".
 
 See tests/corpus/README.md for the full problem-module contract, the exact
-PSIOPT-ConvergenceFlags -> status mapping, and the JSONL schema.
+ConvergenceFlags -> status mapping, and the JSONL schema.
 """
 
 import argparse
@@ -85,15 +85,15 @@ if str(CORPUS_DIR) not in sys.path:
 
 DEFAULT_OUT = "corpus_results.jsonl"
 
-# ANSI SGR sequences wrap PSIOPT's colored console output; strip them before
+# ANSI SGR sequences wrap the interior-point solver's colored console output; strip them before
 # hunting for the iteration count.
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
-# The bitwise-reproducibility (CBWR) work's proven instrument: PSIOPT prints
+# The bitwise-reproducibility (CBWR) work's proven instrument: the interior-point solver prints
 # " Iterations : N" once per solve when print_level < 2 (the library
 # default).
 _ITER_RE = re.compile(r"Iterations : *([0-9]+)")
 
-# Exhaustive PSIOPT ConvergenceFlags -> harness status mapping. Verified
+# Exhaustive ConvergenceFlags -> harness status mapping. Verified
 # against _tychopy.solvers.ConvergenceFlags (5 members) — see README.md.
 _FLAG_TO_STATUS = {
     "CONVERGED": "converged",
@@ -142,7 +142,7 @@ def _parse_config_args(pairs, verbatim: bool = False) -> dict:
     ``verbatim`` selects the ipopt backend's semantics: every value stays a
     plain string (Ipopt's own option parser does its own type coercion) and
     populates ``problem.ipopt_options`` rather than being setattr()'d onto
-    the PSIOPT optimizer, where values are cast int, then float, then left
+    the interior-point solver optimizer, where values are cast int, then float, then left
     as str (see the psiopt-backend docstring at the top of this file).
     """
     config = {}
@@ -159,11 +159,11 @@ def _parse_config_args(pairs, verbatim: bool = False) -> dict:
 # ---------------------------------------------------------------------------
 #
 # The result is written to a dedicated file rather than printed to stdout.
-# PSIOPT's C++ console output goes through its own (fmt-buffered) stdio
+# The interior-point solver's C++ console output goes through its own (fmt-buffered) stdio
 # stream; when captured through a pipe, that buffer flushes on its own
 # schedule relative to Python's `sys.stdout`, and the two interleave at the
 # byte level rather than the line level (observed: a printed JSON result
-# line landing mid-way through a still-buffered PSIOPT output line). A
+# line landing mid-way through a still-buffered interior-point solver output line). A
 # result *file*, read only after the child process has fully exited, sidesteps
 # that race entirely; the iteration count is still parsed from captured
 # stdout, which is unaffected (the parent only greps it for the regex, it
@@ -332,7 +332,7 @@ def _score_one(
         notes = f"{notes}; unknown convergence flag {flag_name!r}".strip("; ")
 
     if backend == "ipopt":
-        # PSIOPT's own console printer never runs a solve under this
+        # The interior-point solver's own console printer never runs a solve under this
         # backend, so the "Iterations : N" instrument the psiopt path
         # relies on (see the module docstring's "Iteration counting"
         # description in tests/corpus/README.md) has nothing to match;

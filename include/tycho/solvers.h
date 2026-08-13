@@ -13,7 +13,7 @@
 #include <hven/drivers/optimization_problem_base.h>
 #include "tycho/detail/solvers/nlp_backend.h"
 #include "tycho/detail/solvers_vf/optimization_problem.h"
-#include <hven/detail/drivers/psiopt_fwd.h>
-#include <hven/drivers/psiopt.h>
+#include <hven/detail/drivers/interior_point_solver_fwd.h>
+#include <hven/drivers/interior_point_solver.h>
 #include <hven/detail/interior/jet.h>
 #include <hven/detail/interior/iterate_info.h>

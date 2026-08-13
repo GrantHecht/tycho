@@ -2,7 +2,7 @@
 
 ### Overview
 
-The C++ benchmark suite uses [Google Benchmark](https://github.com/google/benchmark) (v1.9.5, fetched automatically via CMake FetchContent). All 46 benchmarks compile into a single executable (`bench_all.exe`) covering every major subsystem: Kepler/Lambert astrodynamics, VectorFunction DSL evaluation, type erasure dispatch, RK integrators, optimal control transcription, PSIOPT solver convergence, and utility primitives (TypeStorage, MemoryManager, ThreadPool).
+The C++ benchmark suite uses [Google Benchmark](https://github.com/google/benchmark) (v1.9.5, fetched automatically via CMake FetchContent). All 46 benchmarks compile into a single executable (`bench_all.exe`) covering every major subsystem: Kepler/Lambert astrodynamics, VectorFunction DSL evaluation, type erasure dispatch, RK integrators, optimal control transcription, InteriorPointSolver solver convergence, and utility primitives (TypeStorage, MemoryManager, ThreadPool).
 
 A local tracking script (`bench/bench_track.sh`) records results keyed by git commit hash and compares runs to detect performance regressions. On Windows the script runs under Git Bash (or WSL).
 
@@ -152,7 +152,7 @@ bench/bench_track.sh compare
 | `type_erasure/bench_type_erasure.cpp` | 6 | GenericFunction VJP dispatch, GFStorage clone |
 | `integrators/bench_integrators.cpp` | 7 | RK stepper throughput (DOPRI54/87, fixed-step, dense output) |
 | `optimal_control/bench_optimal_control.cpp` | 4 | Phase construction + LGL3 transcription |
-| `solvers/bench_solvers.cpp` | 2 | End-to-end PSIOPT convergence |
+| `solvers/bench_solvers.cpp` | 2 | End-to-end InteriorPointSolver convergence |
 | `utils/bench_utils.cpp` | 7 | TypeStorage SBO, MemoryManager, ThreadPool dispatch |
 
 Shared ODE definitions and the `make_brach_phase` helper live in `bench/cpp/bench_phases.h`.

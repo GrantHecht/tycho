@@ -222,7 +222,7 @@ class VectorFunction:
         """
         Whether this VectorFunction is known to be linear.
 
-        A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
+        A linear function has a constant Jacobian and zero Hessian.  InteriorPointSolver uses
         this flag to skip second-derivative computations for linear expressions.
         For type-erased ``GenericFunction`` objects this value is determined at
         construction time and cached; for concrete (statically-typed) functions
@@ -571,7 +571,7 @@ class VectorFunction:
 
         All four quantities are computed together, sharing internal buffers, which is
         more efficient than invoking them separately.  This is the entry point used
-        by PSIOPT during second-order optimization.
+        by InteriorPointSolver during second-order optimization.
 
         Parameters
         ----------
@@ -1383,7 +1383,7 @@ class ScalarFunction:
         """
         Whether this VectorFunction is known to be linear.
 
-        A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
+        A linear function has a constant Jacobian and zero Hessian.  InteriorPointSolver uses
         this flag to skip second-derivative computations for linear expressions.
         For type-erased ``GenericFunction`` objects this value is determined at
         construction time and cached; for concrete (statically-typed) functions
@@ -1732,7 +1732,7 @@ class ScalarFunction:
 
         All four quantities are computed together, sharing internal buffers, which is
         more efficient than invoking them separately.  This is the entry point used
-        by PSIOPT during second-order optimization.
+        by InteriorPointSolver during second-order optimization.
 
         Parameters
         ----------
@@ -2547,7 +2547,7 @@ class Segment:
         """
         Whether this VectorFunction is known to be linear.
 
-        A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
+        A linear function has a constant Jacobian and zero Hessian.  InteriorPointSolver uses
         this flag to skip second-derivative computations for linear expressions.
         For type-erased ``GenericFunction`` objects this value is determined at
         construction time and cached; for concrete (statically-typed) functions
@@ -2745,7 +2745,7 @@ class Segment:
 
         All four quantities are computed together, sharing internal buffers, which is
         more efficient than invoking them separately.  This is the entry point used
-        by PSIOPT during second-order optimization.
+        by InteriorPointSolver during second-order optimization.
 
         Parameters
         ----------
@@ -3502,7 +3502,7 @@ class Element:
         """
         Whether this VectorFunction is known to be linear.
 
-        A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
+        A linear function has a constant Jacobian and zero Hessian.  InteriorPointSolver uses
         this flag to skip second-derivative computations for linear expressions.
         For type-erased ``GenericFunction`` objects this value is determined at
         construction time and cached; for concrete (statically-typed) functions
@@ -3700,7 +3700,7 @@ class Element:
 
         All four quantities are computed together, sharing internal buffers, which is
         more efficient than invoking them separately.  This is the entry point used
-        by PSIOPT during second-order optimization.
+        by InteriorPointSolver during second-order optimization.
 
         Parameters
         ----------
@@ -4575,7 +4575,7 @@ class Arguments:
         """
         Whether this VectorFunction is known to be linear.
 
-        A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
+        A linear function has a constant Jacobian and zero Hessian.  InteriorPointSolver uses
         this flag to skip second-derivative computations for linear expressions.
         For type-erased ``GenericFunction`` objects this value is determined at
         construction time and cached; for concrete (statically-typed) functions
@@ -4773,7 +4773,7 @@ class Arguments:
 
         All four quantities are computed together, sharing internal buffers, which is
         more efficient than invoking them separately.  This is the entry point used
-        by PSIOPT during second-order optimization.
+        by InteriorPointSolver during second-order optimization.
 
         Parameters
         ----------
@@ -5584,7 +5584,7 @@ class Segment2:
         """
         Whether this VectorFunction is known to be linear.
 
-        A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
+        A linear function has a constant Jacobian and zero Hessian.  InteriorPointSolver uses
         this flag to skip second-derivative computations for linear expressions.
         For type-erased ``GenericFunction`` objects this value is determined at
         construction time and cached; for concrete (statically-typed) functions
@@ -5782,7 +5782,7 @@ class Segment2:
 
         All four quantities are computed together, sharing internal buffers, which is
         more efficient than invoking them separately.  This is the entry point used
-        by PSIOPT during second-order optimization.
+        by InteriorPointSolver during second-order optimization.
 
         Parameters
         ----------
@@ -6563,7 +6563,7 @@ class Segment3:
         """
         Whether this VectorFunction is known to be linear.
 
-        A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
+        A linear function has a constant Jacobian and zero Hessian.  InteriorPointSolver uses
         this flag to skip second-derivative computations for linear expressions.
         For type-erased ``GenericFunction`` objects this value is determined at
         construction time and cached; for concrete (statically-typed) functions
@@ -6761,7 +6761,7 @@ class Segment3:
 
         All four quantities are computed together, sharing internal buffers, which is
         more efficient than invoking them separately.  This is the entry point used
-        by PSIOPT during second-order optimization.
+        by InteriorPointSolver during second-order optimization.
 
         Parameters
         ----------
@@ -10525,7 +10525,7 @@ class PyVectorFunction:
     forward finite differences.
 
     Because the Python GIL must be acquired on every evaluation, ``PyVectorFunction``
-    cannot execute in parallel across PSIOPT solver threads — calls are serialized by
+    cannot execute in parallel across InteriorPointSolver solver threads — calls are serialized by
     the GIL.  For parallel-safe evaluation, use ``NumbaVectorFunction`` instead.
 
     Parameters
@@ -10630,7 +10630,7 @@ class PyVectorFunction:
         """
         Whether this VectorFunction is known to be linear.
 
-        A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
+        A linear function has a constant Jacobian and zero Hessian.  InteriorPointSolver uses
         this flag to skip second-derivative computations for linear expressions.
         For type-erased ``GenericFunction`` objects this value is determined at
         construction time and cached; for concrete (statically-typed) functions
@@ -10828,7 +10828,7 @@ class PyVectorFunction:
 
         All four quantities are computed together, sharing internal buffers, which is
         more efficient than invoking them separately.  This is the entry point used
-        by PSIOPT during second-order optimization.
+        by InteriorPointSolver during second-order optimization.
 
         Parameters
         ----------
@@ -10901,7 +10901,7 @@ class PyScalarFunction:
     forward finite differences.
 
     Because the Python GIL must be acquired on every evaluation, ``PyVectorFunction``
-    cannot execute in parallel across PSIOPT solver threads — calls are serialized by
+    cannot execute in parallel across InteriorPointSolver solver threads — calls are serialized by
     the GIL.  For parallel-safe evaluation, use ``NumbaVectorFunction`` instead.
 
     Parameters
@@ -10996,7 +10996,7 @@ class PyScalarFunction:
         """
         Whether this VectorFunction is known to be linear.
 
-        A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
+        A linear function has a constant Jacobian and zero Hessian.  InteriorPointSolver uses
         this flag to skip second-derivative computations for linear expressions.
         For type-erased ``GenericFunction`` objects this value is determined at
         construction time and cached; for concrete (statically-typed) functions
@@ -11194,7 +11194,7 @@ class PyScalarFunction:
 
         All four quantities are computed together, sharing internal buffers, which is
         more efficient than invoking them separately.  This is the entry point used
-        by PSIOPT during second-order optimization.
+        by InteriorPointSolver during second-order optimization.
 
         Parameters
         ----------
@@ -11282,7 +11282,7 @@ class NumbaVectorFunction:
 
     Unlike ``PyVectorFunction``, evaluation does NOT hold the Python GIL, so
     ``NumbaVectorFunction`` instances can safely be evaluated in parallel across
-    PSIOPT solver threads once ``thread_safe`` is set to ``True``.  Jacobians and
+    InteriorPointSolver solver threads once ``thread_safe`` is set to ``True``.  Jacobians and
     Hessians are approximated automatically using forward finite differences.
 
     Parameters
@@ -11341,7 +11341,7 @@ class NumbaVectorFunction:
         """
         Whether this function is safe to call from multiple threads simultaneously.
 
-        Set to ``True`` to allow PSIOPT solver threads to evaluate this function in
+        Set to ``True`` to allow InteriorPointSolver solver threads to evaluate this function in
         parallel without acquiring the Python GIL.  The underlying C callback must
         itself be thread-safe (i.e., it must not use shared mutable state).
         Defaults to ``False``.
@@ -11403,7 +11403,7 @@ class NumbaVectorFunction:
         """
         Whether this VectorFunction is known to be linear.
 
-        A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
+        A linear function has a constant Jacobian and zero Hessian.  InteriorPointSolver uses
         this flag to skip second-derivative computations for linear expressions.
         For type-erased ``GenericFunction`` objects this value is determined at
         construction time and cached; for concrete (statically-typed) functions
@@ -11601,7 +11601,7 @@ class NumbaVectorFunction:
 
         All four quantities are computed together, sharing internal buffers, which is
         more efficient than invoking them separately.  This is the entry point used
-        by PSIOPT during second-order optimization.
+        by InteriorPointSolver during second-order optimization.
 
         Parameters
         ----------
@@ -11662,7 +11662,7 @@ class NumbaScalarFunction:
 
     Unlike ``PyVectorFunction``, evaluation does NOT hold the Python GIL, so
     ``NumbaVectorFunction`` instances can safely be evaluated in parallel across
-    PSIOPT solver threads once ``thread_safe`` is set to ``True``.  Jacobians and
+    InteriorPointSolver solver threads once ``thread_safe`` is set to ``True``.  Jacobians and
     Hessians are approximated automatically using forward finite differences.
 
     Parameters
@@ -11727,7 +11727,7 @@ class NumbaScalarFunction:
         """
         Whether this function is safe to call from multiple threads simultaneously.
 
-        Set to ``True`` to allow PSIOPT solver threads to evaluate this function in
+        Set to ``True`` to allow InteriorPointSolver solver threads to evaluate this function in
         parallel without acquiring the Python GIL.  The underlying C callback must
         itself be thread-safe (i.e., it must not use shared mutable state).
         Defaults to ``False``.
@@ -11789,7 +11789,7 @@ class NumbaScalarFunction:
         """
         Whether this VectorFunction is known to be linear.
 
-        A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
+        A linear function has a constant Jacobian and zero Hessian.  InteriorPointSolver uses
         this flag to skip second-derivative computations for linear expressions.
         For type-erased ``GenericFunction`` objects this value is determined at
         construction time and cached; for concrete (statically-typed) functions
@@ -11987,7 +11987,7 @@ class NumbaScalarFunction:
 
         All four quantities are computed together, sharing internal buffers, which is
         more efficient than invoking them separately.  This is the entry point used
-        by PSIOPT during second-order optimization.
+        by InteriorPointSolver during second-order optimization.
 
         Parameters
         ----------
@@ -12125,7 +12125,7 @@ class ConstantVector:
         """
         Whether this VectorFunction is known to be linear.
 
-        A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
+        A linear function has a constant Jacobian and zero Hessian.  InteriorPointSolver uses
         this flag to skip second-derivative computations for linear expressions.
         For type-erased ``GenericFunction`` objects this value is determined at
         construction time and cached; for concrete (statically-typed) functions
@@ -12323,7 +12323,7 @@ class ConstantVector:
 
         All four quantities are computed together, sharing internal buffers, which is
         more efficient than invoking them separately.  This is the entry point used
-        by PSIOPT during second-order optimization.
+        by InteriorPointSolver during second-order optimization.
 
         Parameters
         ----------
@@ -12447,7 +12447,7 @@ class ConstantScalar:
         """
         Whether this VectorFunction is known to be linear.
 
-        A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
+        A linear function has a constant Jacobian and zero Hessian.  InteriorPointSolver uses
         this flag to skip second-derivative computations for linear expressions.
         For type-erased ``GenericFunction`` objects this value is determined at
         construction time and cached; for concrete (statically-typed) functions
@@ -12645,7 +12645,7 @@ class ConstantScalar:
 
         All four quantities are computed together, sharing internal buffers, which is
         more efficient than invoking them separately.  This is the entry point used
-        by PSIOPT during second-order optimization.
+        by InteriorPointSolver during second-order optimization.
 
         Parameters
         ----------
@@ -12716,7 +12716,7 @@ class IOScaled:
     *func*, and multiplies each output component by the corresponding entry of
     ``output_scales`` after evaluation. Jacobian, adjoint gradient, and adjoint
     Hessian are all transformed consistently. Use this to rescale poorly-conditioned
-    dynamics or constraint functions before handing them to PSIOPT.
+    dynamics or constraint functions before handing them to InteriorPointSolver.
     """
 
     def __init__(self, arg0: VectorFunction, arg1: numpy.ndarray, arg2: numpy.ndarray, /) -> None:
@@ -12802,7 +12802,7 @@ class IOScaled:
         """
         Whether this VectorFunction is known to be linear.
 
-        A linear function has a constant Jacobian and zero Hessian.  PSIOPT uses
+        A linear function has a constant Jacobian and zero Hessian.  InteriorPointSolver uses
         this flag to skip second-derivative computations for linear expressions.
         For type-erased ``GenericFunction`` objects this value is determined at
         construction time and cached; for concrete (statically-typed) functions
@@ -13000,7 +13000,7 @@ class IOScaled:
 
         All four quantities are computed together, sharing internal buffers, which is
         more efficient than invoking them separately.  This is the entry point used
-        by PSIOPT during second-order optimization.
+        by InteriorPointSolver during second-order optimization.
 
         Parameters
         ----------

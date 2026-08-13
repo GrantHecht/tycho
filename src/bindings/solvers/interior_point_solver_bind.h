@@ -18,13 +18,13 @@
 
 #include "function_registry.h"
 #include "tycho/detail/hven_namespaces.h"
-#include <hven/drivers/psiopt.h>
+#include <hven/drivers/interior_point_solver.h>
 
 namespace tycho {
 
 using namespace tycho::solvers;
 
-template <> struct TychoBind<PSIOPT> {
+template <> struct TychoBind<InteriorPointSolver> {
     static void build(nb::module_ &m);
 };
 

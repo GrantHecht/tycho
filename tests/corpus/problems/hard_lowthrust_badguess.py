@@ -22,7 +22,7 @@ initial circular orbit under a fixed steering law for 6.4*pi time units).
 This module instead DEGRADES the guess to the initial circular-orbit state
 copied unchanged across every guess node (no integration, no spiral shape
 at all) with only the time coordinate advancing linearly over the same
-span — i.e. PSIOPT is handed a "trajectory" that just sits at the starting
+span — i.e. the interior-point solver is handed a "trajectory" that just sits at the starting
 orbit forever, giving it no useful information about how to reach the
 target orbit.
 
@@ -33,7 +33,7 @@ three-solve sequence including the power-optimal and mass-optimal
 continuation solves, which this module does not replay — see contract
 note above). Bad-guess (initial-orbit-copied guess): DIVERGING (harness
 status "diverged"), 1 iteration, objective 20.106192982974676 — an
-immediate, maximally fast failure (PSIOPT's very first iteration already
+immediate, maximally fast failure (the interior-point solver's very first iteration already
 diverges), which needs no iteration-count comparison to qualify as a
 genuine failure under the brief's rule (the ≥2x threshold only binds for
 cases that "still converge easily"; this one does not converge at all).

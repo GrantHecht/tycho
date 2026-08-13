@@ -463,7 +463,7 @@ inline void kepler_propagate(const Vector3<Scalar> &R0, const Vector3<Scalar> &V
     auto k = kepler_lcd_iterate(R0, V0, dt, mu);
     // SS reduction is all-or-nothing: when any lane fails to converge,
     // every lane's output is NaN-poisoned, not just the failing lane.
-    // This matches PSIOPT's step-rejection semantics — the whole micro-
+    // This matches InteriorPointSolver's step-rejection semantics — the whole micro-
     // batch is rejected — and avoids the implementation complexity of
     // mixing converged-lane outputs with NaN-poisoned ones.  The same
     // pattern is repeated in kepler_propagate_jacobian and
@@ -605,7 +605,7 @@ inline void kepler_propagate_jacobian(const Vector3<Scalar> &R0, const Vector3<S
     // Post-composition finite-guard.  The LCD kernel can converge to a
     // numerically-degenerate state (e.g. r → 0 producing inf in
     // 1/F_X_total = 1/r) where the IFT-derived xf / jac are non-finite
-    // even though k.converged was true.  PSIOPT step-rejection requires
+    // even though k.converged was true.  InteriorPointSolver step-rejection requires
     // an observable NaN; mirror the all-or-nothing contract above.
     if (!kepler_block_all_finite(xf) || !kepler_block_all_finite(jac)) [[unlikely]] {
         xf.setConstant(kepler_nan_value<Scalar>());
@@ -941,7 +941,7 @@ kepler_propagate_adjoint_hessian(const Vector3<Scalar> &R0, const Vector3<Scalar
     // Post-composition finite-guard — see kepler_propagate_jacobian's
     // analogous block.  The Hessian path adds 1/(2α) factors in the U-α
     // recursion and dot-product contractions that can amplify finite-but-
-    // ill-conditioned IFT inputs to non-finite outputs.  PSIOPT step-
+    // ill-conditioned IFT inputs to non-finite outputs.  InteriorPointSolver step-
     // rejection requires an observable NaN on every output of the call.
     if (!kepler_block_all_finite(xf) || !kepler_block_all_finite(jac) ||
         !kepler_block_all_finite(adjgrad) || !kepler_block_all_finite(adjhess)) [[unlikely]] {

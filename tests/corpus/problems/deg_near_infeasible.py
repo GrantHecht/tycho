@@ -16,7 +16,7 @@ free decision variable in this collocation formulation, not automatically
 tied to [0, 1] just because the initial guess spans that range, so t is
 pinned explicitly at Front (t = 0) and Back (t = 1). This is essential
 here specifically: the 0.25 reachability bound derived below assumes a
-genuinely fixed T = 1 — an un-pinned Back time would let PSIOPT stretch
+genuinely fixed T = 1 — an un-pinned Back time would let the interior-point solver stretch
 the effective transfer duration and make the target reachable after all,
 which would defeat the whole point of this problem (verified empirically
 that this is exactly what happens without the t(1) pin).
@@ -64,7 +64,7 @@ status "failed"), 500 iterations (hits max_iters), objective 0.4844 —
 this lands as a genuine, unambiguous failure straight away (unlike
 ``deg_conflicting_equality``'s 1.001 gap, no widening was needed here; the
 0.2% margin is apparently large enough, at this problem's scale/control-
-bound structure, to clear PSIOPT's acceptable-equality-constraint
+bound structure, to clear the interior-point solver's acceptable-equality-constraint
 tolerance rather than falling inside it). X_TARGET is therefore left at
 the brief's original spec value, 0.2505 — no adjustment was necessary.
 
@@ -90,7 +90,7 @@ _MAX_REACH = 0.25
 
 # Brief spec value: 0.2505 = 0.25 * 1.002 (a 0.2% relative margin beyond
 # the reachability bound). Adjusted here if empirically it lands in
-# PSIOPT's acceptable-tolerance band rather than reading as a genuine
+# the interior-point solver's acceptable-tolerance band rather than reading as a genuine
 # failure — see docstring for the observed result and any adjustment.
 _X_TARGET = 0.2505
 

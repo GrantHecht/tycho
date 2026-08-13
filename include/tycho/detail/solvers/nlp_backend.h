@@ -23,7 +23,7 @@
 
 #include <Eigen/Core>
 
-#include <hven/detail/drivers/psiopt_fwd.h>
+#include <hven/detail/drivers/interior_point_solver_fwd.h>
 #include <hven/drivers/optimization_problem_base.h>
 
 #include "tycho/detail/hven_namespaces.h"
@@ -31,10 +31,10 @@
 namespace tycho::solvers {
 
 /// NLP solver backend selector (BackendProblemBase::nlp_solver_).
-/// psiopt is the built-in interior-point solver (default). ipopt hands the
+/// interior_point is the built-in interior-point solver (default). ipopt hands the
 /// identical transcribed NLP to a linked Ipopt installation for reference
 /// comparison; dispatching it requires a build configured with Ipopt support.
-enum class NLPSolvers { psiopt = 0, ipopt = 1 };
+enum class NLPSolvers { interior_point = 0, ipopt = 1 };
 
 /// Outcome of one Ipopt run on the transcribed NLP. Sentinel values (-1 /
 /// empty / ran_ == false) mean no Ipopt solve has run on this problem object.
@@ -58,16 +58,16 @@ struct IpoptRunInfo {
 struct BackendProblemBase : hven::solvers::OptimizationProblemBase {
     using Base = hven::solvers::OptimizationProblemBase;
 
-    /// NLP solver backend for the solve/optimize entry points. psiopt (default)
+    /// NLP solver backend for the solve/optimize entry points. interior_point (default)
     /// is the built-in path, byte-identical to previous behavior. ipopt runs
     /// the identical transcribed NLP through a linked Ipopt installation
     /// (requires a build with Ipopt support; throws std::runtime_error
     /// otherwise). Not usable in a Jet batch run — see the guard in jet_run().
-    NLPSolvers nlp_solver_ = NLPSolvers::psiopt;
+    NLPSolvers nlp_solver_ = NLPSolvers::interior_point;
 
     /// String key/value options forwarded verbatim to Ipopt (e.g.
     /// {"linear_solver", "pardisomkl"}). Applied after the matched-tolerance
-    /// baseline, so user entries win. Ignored by the psiopt backend.
+    /// baseline, so user entries win. Ignored by the interior-point backend.
     std::map<std::string, std::string> ipopt_options_;
 
     /// Diagnostics of the most recent ipopt-backend run on this problem.
@@ -86,12 +86,12 @@ struct BackendProblemBase : hven::solvers::OptimizationProblemBase {
                 "nlp_solver=ipopt cannot be used in a Jet batch run: Ipopt is not reliably "
                 "re-entrant, so concurrent solves through it are unsupported. Run the ipopt "
                 "backend one solve at a time (solve/optimize on a single problem), or set "
-                "nlp_solver=psiopt for the batch.");
+                "nlp_solver=interior_point for the batch.");
         }
         return Base::jet_run();
     }
 
-    /// Single backend dispatch point for the five solve modes. The psiopt
+    /// Single backend dispatch point for the five solve modes. The interior-point
     /// branch is the base's own dispatch, unchanged; the ipopt branch always
     /// runs a single NLP solve from the given input (the
     /// feasibility-then-optimize staging has no Ipopt analog).
@@ -101,15 +101,15 @@ struct BackendProblemBase : hven::solvers::OptimizationProblemBase {
     /// the two runs is decided by the STATIC type of the object the call is
     /// made on -- not by what the object actually is.
     ///
-    /// That is sound for every path tycho owns. ODEPhaseBase::psipot_call_impl
-    /// and OptimalControlProblemBase::psipot_call_impl are the only call sites
+    /// That is sound for every path tycho owns. ODEPhaseBase::interior_point_call_impl
+    /// and OptimalControlProblemBase::interior_point_call_impl are the only call sites
     /// on this side, and in both `this` is statically a class derived from
     /// BackendProblemBase, so both reach this one. The Jet batch path arrives
     /// the same way: the base's jet_run() dispatches through the VIRTUAL
     /// solve()/optimize()/... entry points, which land in those same tycho
     /// overrides, so a batch element also resolves to this member -- and the
     /// jet_run() override above has already rejected the Ipopt backend before
-    /// any of that begins, so the batch path only ever takes the psiopt branch
+    /// any of that begins, so the batch path only ever takes the interior-point branch
     /// below anyway.
     ///
     /// The base's own member does still run, on objects that are not tycho
@@ -144,10 +144,10 @@ inline BackendProblemBase::NlpSolveOutput
 BackendProblemBase::run_nlp_solver(JetJobModes mode, const Eigen::VectorXd &input) {
     // This site branches on `== NLPSolvers::ipopt`, while the call-impl sites
     // in ode_phase_base.cpp / optimal_control_problem.cpp branch on
-    // `== NLPSolvers::psiopt` (or its negation) to make the same backend
+    // `== NLPSolvers::interior_point` (or its negation) to make the same backend
     // choice. Both predicates are equivalent today (only two backends exist),
     // but if a third backend enumerator is ever added, all of these sites
-    // should be unified on `!= NLPSolvers::psiopt` ("anything that isn't psiopt
+    // should be unified on `!= NLPSolvers::interior_point` ("anything that isn't interior_point
     // uses the generic NLP-solver path") rather than each needing its own added
     // `== <new-backend>` branch.
     if (this->nlp_solver_ == NLPSolvers::ipopt) {

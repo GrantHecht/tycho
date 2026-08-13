@@ -1,4 +1,4 @@
-"""Direct PSIOPT.solve/optimize and single-trajectory integrate* must
+"""Direct InteriorPointSolver.solve/optimize and single-trajectory integrate* must
 release the GIL (CODEBASE_REVIEW 1.1).
 
 Technique: crank sys.setswitchinterval so the interpreter never
@@ -131,7 +131,7 @@ class TestGilRelease(unittest.TestCase):
             with self.subTest(method=name):
                 self.assertTrue(runs_concurrently(fn), name)
 
-    def test_direct_psiopt_family_releases_gil(self):
+    def test_direct_interior_point_family_releases_gil(self):
         def rosen_obj(xy=Args(2)):
             x, y = xy[0], xy[1]
             return (1 - x) ** 2 + 100 * (y - x**2) ** 2

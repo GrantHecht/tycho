@@ -58,7 +58,7 @@ Notes
 -----
 :meth:`optimize`, :meth:`solve`, and the ``optimizer`` handle are inherited
 from the shared optimization-problem base; ``phase.optimizer`` exposes the
-underlying PSIOPT solver (e.g. ``phase.optimizer.set_print_level(0)``).
+underlying InteriorPointSolver solver (e.g. ``phase.optimizer.set_print_level(0)``).
 
 Examples
 --------

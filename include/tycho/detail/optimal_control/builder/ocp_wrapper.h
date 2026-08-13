@@ -19,7 +19,7 @@ namespace tycho {
 
 using oc::OptimalControlProblemBase;
 // Solvers types
-using tycho::solvers::PSIOPT;
+using tycho::solvers::InteriorPointSolver;
 
 /// @ingroup optimal_control
 /// @brief Builder-API multi-phase optimal control problem over @ref Phase wrappers.
@@ -273,9 +273,9 @@ class OptimalControlProblem {
     /// @param qp_threads  Number of QP (linear-solver) threads.
     void set_num_partitions(int n, int qp_threads) { ocp_.set_num_partitions(n, qp_threads); }
 
-    /// @brief Access the underlying PSIOPT optimizer.
+    /// @brief Access the underlying InteriorPointSolver optimizer.
     /// @return Reference to the optimizer.
-    PSIOPT &optimizer() { return *ocp_.optimizer_; }
+    InteriorPointSolver &optimizer() { return *ocp_.optimizer_; }
 
     /// @brief Access the wrapped base problem.
     /// @return Reference to the underlying @ref tycho::oc::OptimalControlProblemBase.

@@ -6,7 +6,7 @@ an optimal-control problem Tycho can solve. Where
 {doc}`your first VectorFunction </tutorials/basics/your_first_vectorfunction>`
 covered *defining* dynamics, this tutorial builds on that foundation: you will
 wrap a VectorFunction in an ODE, build a `Phase`, pin its boundary conditions, add
-an objective, and **solve it with PSIOPT** — Tycho's interior-point optimizer.
+an objective, and **solve it with InteriorPointSolver** — Tycho's interior-point optimizer.
 
 The worked problem is the **brachistochrone**: find the shape of the wire
 down which a bead slides, under gravity, from one point to another in the least
@@ -216,7 +216,7 @@ control angle, and a minimum-arrival-time objective.
 
 ## 5. Solve
 
-PSIOPT prints a detailed iteration log by default. For a clean run we turn its
+InteriorPointSolver prints a detailed iteration log by default. For a clean run we turn its
 console output down via the `optimizer` handle, then call `optimize()`. The call
 returns a convergence flag; we keep it so we can confirm the solve succeeded.
 
@@ -237,7 +237,7 @@ auto flag = phase.optimize();   // or phase.solve_optimize() for a rough guess
 :::
 ::::
 
-`CONVERGED` means PSIOPT satisfied its KKT and feasibility tolerances — the
+`CONVERGED` means InteriorPointSolver satisfied its KKT and feasibility tolerances — the
 trajectory in the phase is now the optimized one.
 
 ## 6. Read the result
@@ -356,7 +356,7 @@ cleanly converged collocation solution.
   collocation mesh seeded from an initial guess.
 - `add_boundary_value`, `add_lu_var_bound`, and `add_delta_time_objective` pin
   the start and end, bound the control, and set the cost.
-- `phase.optimize()` solves with PSIOPT and returns a convergence flag;
+- `phase.optimize()` solves with InteriorPointSolver and returns a convergence flag;
   `return_traj()` returns the optimized trajectory as a list of
   state-and-control rows.
 

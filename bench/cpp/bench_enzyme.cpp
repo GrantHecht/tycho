@@ -3,7 +3,7 @@
 //
 // Phase 1: Jacobian comparisons __enzyme_fwddiff vs FDiffCentArray.
 // Phase 2: Hessian comparisons (full Enzyme path) vs FDiffFwd, plus a
-//          brachistochrone PSIOPT full-solve TTS comparison (acceptance:
+//          brachistochrone InteriorPointSolver full-solve TTS comparison (acceptance:
 //          full-Enzyme TTS ≤ 1.5× FDiff reference TTS — see BM_FullSolve_*
 //          below).
 //
@@ -493,7 +493,7 @@ void BM_Hessian_MEE_Enzyme(benchmark::State& state) {
 }
 
 // -----------------------------------------------------------------------------
-// Phase 2 gate criterion: brachistochrone PSIOPT full-solve TTS comparison.
+// Phase 2 gate criterion: brachistochrone InteriorPointSolver full-solve TTS comparison.
 // Same problem the e2e test runs; benchmarks the entire setup-+-solve cycle.
 // -----------------------------------------------------------------------------
 template <class BrachFunc>
@@ -590,7 +590,7 @@ BENCHMARK(BM_CR3BP_HessianSIMD_Enzyme)->Name("BM_HessianVecSIMD_Enzyme/CR3BP");
 BENCHMARK(BM_MEE_HessianSIMD_Enzyme)->Name("BM_HessianVecSIMD_Enzyme/MEE");
 
 // Phase 2 gate: full-solve TTS for the brachistochrone.  Each iteration
-// builds the phase + solves PSIOPT, so the per-iteration cost includes
+// builds the phase + solves via InteriorPointSolver, so the per-iteration cost includes
 // problem setup as well as the solve itself.
 void BM_Solve_Brach_FDiff(benchmark::State& state) {
     bm_brachistochrone_solve_body<tycho_enzyme_test::BrachFDiff>(state);

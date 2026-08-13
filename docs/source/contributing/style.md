@@ -80,17 +80,17 @@ wrapped in `@internal ... @endinternal`.
 ```cpp
 /// @brief Sparse interior-point optimizer for large-scale NLPs.
 ///
-/// PSIOPT solves problems of the form
+/// InteriorPointSolver solves problems of the form
 /// @f[
 ///   \min_{x} f(x) \quad \text{s.t.}\quad g(x) = 0,\; h(x) \le 0
 /// @f]
 /// using a Mehrotra-style predictor-corrector with Pardiso /
 /// Accelerate-Sparse linear solves.
 ///
-/// @note PSIOPT is **not** thread-safe; one instance per solve.
+/// @note InteriorPointSolver is **not** thread-safe; one instance per solve.
 /// @see  tycho::Phase, tycho::vf::VectorFunction
 /// @ingroup solvers
-class PSIOPT {
+class InteriorPointSolver {
  public:
     /// @brief Set the maximum number of major iterations.
     /// @param n  Iteration cap (must be > 0). Defaults to 500.
@@ -188,14 +188,14 @@ problem — their NumPy-style docstring lives inline in the `.py` file.
 ### Example: nanobind binding
 
 ```cpp
-nb::class_<PSIOPT>(m, "PSIOPT",
+nb::class_<InteriorPointSolver>(m, "InteriorPointSolver",
     R"doc(Sparse interior-point optimizer for large-scale NLPs.
 
     Notes
     -----
-    PSIOPT is **not** thread-safe; use one instance per solve.
+    InteriorPointSolver is **not** thread-safe; use one instance per solve.
     )doc")
-    .def("solve", &PSIOPT::solve, "x0"_a,
+    .def("solve", &InteriorPointSolver::solve, "x0"_a,
          R"doc(Run the optimizer.
 
          Parameters
@@ -216,7 +216,7 @@ nb::class_<PSIOPT>(m, "PSIOPT",
 
          Examples
          --------
-         >>> opt = PSIOPT()
+         >>> opt = InteriorPointSolver()
          >>> opt.set_max_iterations(1000)
          >>> code = opt.solve(x0)
          )doc");

@@ -1762,7 +1762,7 @@ Eigen::VectorXd tycho::oc::ODEPhaseBase::calc_switches() {
     return utils::stdvector_to_eigenvector(switches);
 }
 
-tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::psipot_call_impl(JetJobModes mode) {
+tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::interior_point_call_impl(JetJobModes mode) {
     if (this->do_transcription_)
         this->transcribe();
     VectorXd input = this->make_solver_input();
@@ -1771,7 +1771,7 @@ tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::psipot_call_impl(JetJobModes mo
 
     this->collect_solver_output(output);
 
-    if (this->nlp_solver_ == solvers::NLPSolvers::psiopt) {
+    if (this->nlp_solver_ == solvers::NLPSolvers::interior_point) {
         this->collect_post_opt_info(this->optimizer_->result().eq_cons_, out.eq_lmults_,
                                     this->optimizer_->result().iq_cons_, out.iq_lmults_);
     } else {
@@ -1791,8 +1791,8 @@ tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::phase_call_impl(JetJobModes mod
     // Mesh refinement is driven by the built-in solver's constraint residuals at
     // the solution, which no other backend reports, so the refinement loop is
     // only defined for the built-in solver.
-    if (this->adaptive_mesh_ && this->nlp_solver_ != solvers::NLPSolvers::psiopt) {
-        throw std::invalid_argument("adaptive mesh refinement requires nlp_solver = psiopt");
+    if (this->adaptive_mesh_ && this->nlp_solver_ != solvers::NLPSolvers::interior_point) {
+        throw std::invalid_argument("adaptive mesh refinement requires nlp_solver = interior_point");
     }
 
     if (this->print_mesh_info_ && this->adaptive_mesh_) {
@@ -1807,7 +1807,7 @@ tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::phase_call_impl(JetJobModes mod
 
     Runtimer.start();
 
-    tycho::ConvergenceFlags flag = this->psipot_call_impl(mode);
+    tycho::ConvergenceFlags flag = this->interior_point_call_impl(mode);
 
     JetJobModes nextmode = mode;
     if (this->solve_only_first_) {
@@ -1853,7 +1853,7 @@ tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::phase_call_impl(JetJobModes mod
                         this->mesh_iters_.back().print(0);
                     }
                 }
-                flag = this->psipot_call_impl(nextmode);
+                flag = this->interior_point_call_impl(nextmode);
                 if (flag >= this->mesh_abort_flag_) {
                     if (this->print_mesh_info_) {
                         fmt::print(fmt::fg(fmt::color::red),

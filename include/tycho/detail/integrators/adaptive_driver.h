@@ -423,7 +423,7 @@ template <IVPAlg Alg, class DODE, class Scalar = double> class AdaptiveDriver {
                 // throw. This mirrors OrdinaryDiffEq, where EEst == NaN fails the
                 // `EEst <= 1` accept test and the step is rejected; an over-large
                 // step into a stiff/near-singular region can often be resolved at
-                // smaller h, so a multiple-shooting / PSIOPT iterate recovers
+                // smaller h, so a multiple-shooting / InteriorPointSolver iterate recovers
                 // internally instead of aborting the whole solve. The controller
                 // cannot derive a growth factor from a non-finite EEst, so we
                 // shrink by the fixed kNonfiniteStepShrink. A genuinely

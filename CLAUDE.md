@@ -5,8 +5,9 @@
 Tycho is an independently maintained fork of [ASSET (AlabamaASRL/asset_asrl)](https://github.com/AlabamaASRL/asset_asrl),
 a high-performance C++/Python library for trajectory design and optimal control.
 The core use cases are general optimal control problems (solved via direct collocation)
-and space trajectory optimization. The built-in optimizer is called **PSIOPT**
-(a high-performance interior-point solver).
+and space trajectory optimization. The built-in optimizer is hven's
+**InteriorPointSolver** (a high-performance interior-point solver, part of the
+`hven` NLP solver library tycho consumes as a submodule).
 
 The Python-facing module is `_tychopy` (nanobind extension) imported via the `tychopy` package.
 The top-level C++ namespace is `tycho`.
@@ -106,7 +107,7 @@ dep/                    Vendored submodule dependencies
   nanobind/             nanobind (BSD)
   pocketfft/            pocketfft (BSD-3)
   hven/                 hven (Apache-2.0) — the NLP solver library: the
-                          interior-point engine (PSIOPT), the sparse-KKT
+                          interior-point engine (InteriorPointSolver), the sparse-KKT
                           backends, the solver-neutral NLPProblem/NLPSolver
                           interface, and the runtime support layer they need.
                           Consumed as a CMake subdirectory (target hven::hven);
@@ -143,8 +144,8 @@ notices/                Third-party license notices — DO NOT modify or delete
   This is the central abstraction of the library; treat it with care.
 - **Phase** — the core optimal control object. Multiple phases can be linked together
   for multi-phase trajectory problems.
-- **PSIOPT** — the interior-point nonlinear optimizer, supplied by hven
-  (`dep/hven`) and reached through `tycho::solvers::PSIOPT`.
+- **InteriorPointSolver** — the interior-point nonlinear optimizer, supplied by hven
+  (`dep/hven`) and reached through `tycho::solvers::InteriorPointSolver`.
 - **Collocation** — the transcription method used to convert continuous optimal control
   problems into finite-dimensional NLPs.
 - **Astrodynamics** — the primary application domain, though the library is general.
@@ -452,7 +453,7 @@ SuperScalar Scalar:
   below for the regression context.)*  FoF's only qualitative
   advantage was on MEE-class composites (cos/sin/sqrt/division) where
   FoR-SIMD's inner reverse pass fails Enzyme TypeAnalysis — but no
-  real PSIOPT workload has surfaced that case.  Doubly-batched variant
+  real InteriorPointSolver workload has surfaced that case.  Doubly-batched variant
   proves nested `__enzyme_fwddiff(enzyme_width)` composition works but
   yields only a ~5% speedup over singly-batched (per-call overhead is
   not the dominant cost; body work dominates).  See the heavy archive
@@ -515,7 +516,7 @@ Bench numbers below: 2026-04-28, BW=4, AVX2; reproducible via
   = true`; route trig through `tycho::math::cos/sin`.  Phase 5b Jacobian
   wins per-lane; **Phase 6 Hessian regresses** vs Phase 5a (~12× slower
   on Brach: 1038 ns vs 87 ns) because the SS reverse-mode tape overhead
-  dwarfs the body cost.  Acceptable — PSIOPT vectorizable workloads run
+  dwarfs the body cost.  Acceptable — InteriorPointSolver vectorizable workloads run
   CR3BP/MEE-class bodies, not toy Brach.
 - **Composite trig+sqrt+division VFs** (e.g. MEE-class):
   `is_vectorizable = true` AND inherit from
@@ -684,7 +685,7 @@ Key obligations:
 
 Changes in the following areas require explicit human review before merging:
 
-- **PSIOPT optimizer internals** — algorithmic changes can silently degrade convergence
+- **InteriorPointSolver internals** — algorithmic changes can silently degrade convergence
 - **Intel MKL / Apple Accelerate integration** — redistribution terms and initialization are sensitive
 - **Public API changes** — any Python-facing rename or removal breaks downstream user code
 - **New third-party dependencies** — must add license notice to `notices/` and get approval

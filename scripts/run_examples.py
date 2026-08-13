@@ -121,7 +121,7 @@ RED = "\033[31m"
 YELLOW = "\033[33m"
 RESET = "\033[0m"
 
-# PSIOPT's terminal failure banners (src/solvers/psiopt_print.cpp,
+# The interior-point solver's terminal failure banners (hven's
 # print_exit_stats): printed once per solve, at ConvergenceFlags::DIVERGING,
 # ConvergenceFlags::NOTCONVERGED, or ConvergenceFlags::SINGULAR_KKT. An
 # example that reaches one of these but still exits 0 (e.g. it doesn't check
@@ -296,7 +296,7 @@ def main() -> None:
                     print(f"    {line}")
         print()
 
-    # Report-only: examples whose stdout carried a PSIOPT terminal failure
+    # Report-only: examples whose stdout carried an interior-point-solver terminal failure
     # banner (see FAILURE_BANNERS) despite exiting 0. This does not affect
     # PASS/FAIL above -- it's surfaced so a real "printed failure, exited
     # clean" defect can be told apart from a legitimate mid-script retry

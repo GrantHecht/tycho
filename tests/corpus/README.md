@@ -1,10 +1,10 @@
-# PSIOPT robustness corpus
+# Interior-point solver robustness corpus
 
-A corpus of optimal-control / NLP problems where today's PSIOPT is expected to
+A corpus of optimal-control / NLP problems where today's interior-point solver is expected to
 struggle (poor scaling, redundant/conflicting constraints, cold-started or
 degraded initial guesses, classic literature counterexamples for interior-
 point / SQP methods, ...), plus a scoring harness
-(`scripts/run_corpus.py`) that runs every problem and records how PSIOPT's
+(`scripts/run_corpus.py`) that runs every problem and records how the interior-point solver's
 defaults behave on it.
 
 **The corpus never gates anything.** Problems here are *expected* to fail,
@@ -101,7 +101,7 @@ def POST_SOLVE(prob) -> str:
 - The shared driver (`tests/corpus/driver.py::run`) owns everything the old
   `build_and_solve` tail used to do: calling `configure(prob.optimizer)`
   *immediately before* the solve (this is how `--config KEY=VALUE` reaches
-  PSIOPT -- the harness's `configure` does `setattr(optimizer, key, value)`
+  the interior-point solver -- the harness's `configure` does `setattr(optimizer, key, value)`
   for each pair), dispatching `SOLVE_MODE`, and normalizing the result dict.
   A problem module has no way to opt out of `configure` being called on the
   psiopt backend.
@@ -118,7 +118,7 @@ def POST_SOLVE(prob) -> str:
   `prob.last_ipopt_result.objective` / `.iterations` on the ipopt backend.
 - `build()` (and `POST_SOLVE`, if defined) must be silent w.r.t. side
   effects that would make corpus runs non-reproducible or slow: no
-  plotting, no file writes, no wall-clock reads. (PSIOPT's own console
+  plotting, no file writes, no wall-clock reads. (the interior-point solver's own console
   printing is fine and in fact required on the psiopt backend — see
   "Iteration counting" below.)
 - See "Backend selection" below for what changes (and what a module cannot
@@ -148,11 +148,11 @@ statically):
 it is what `phase.optimize()` / `.solve()` / `.solve_optimize()` /
 `.optimize_solve()` / `.solve_optimize_solve()` return, and also what
 `optimizer.converge_flag` reports after the fact. `phase.optimizer` (a
-`_tychopy.solvers.PSIOPT` instance) also exposes `last_iter_num: int` and
+`_tychopy.solvers.InteriorPointSolver` instance) also exposes `last_iter_num: int` and
 `last_obj_val: float` as read-only properties — this is deliberately the
-entire per-solve surface PSIOPT exposes to Python today (no
+entire per-solve surface the interior-point solver exposes to Python today (no
 feasibility/KKT-residual/factorization data); richer diagnostics may arrive
-with future PSIOPT diagnostics counters, and this schema may grow then.
+with future interior-point solver diagnostics counters, and this schema may grow then.
 
 The harness maps flag name to JSONL `status` exhaustively:
 
@@ -189,7 +189,7 @@ separate child script. Per-problem execution:
    returned dict as JSON to `--_result-file`.
 4. The parent reads that file (if the child exited 0 and it exists), maps
    the flag to a status, and (psiopt backend only) also greps the child's
-   captured stdout for PSIOPT's own iteration-count line (see below) to
+   captured stdout for the interior-point solver's own iteration-count line (see below) to
    populate `iterations`; on the ipopt backend, `iterations` instead comes
    straight from the child's own result dict (`IpoptRunInfo.iterations` via
    the driver — see "Backend selection" below for why the stdout instrument
@@ -199,12 +199,12 @@ separate child script. Per-problem execution:
 
 An earlier revision had the child `print()` its JSON result to stdout
 behind a sentinel prefix, for the parent to `grep` out of the captured
-output. This **does not work**: PSIOPT's C++ console output goes through
+output. This **does not work**: the interior-point solver's C++ console output goes through
 its own buffered stdio stream, and when the whole subprocess's stdout is
 captured through a pipe (not a tty), that buffer flushes on a schedule
 independent of Python's own `sys.stdout` buffer. The two streams interleave
 at the *byte* level, not the *line* level — observed in practice as the
-Python-printed JSON landing in the middle of a still-buffered PSIOPT
+Python-printed JSON landing in the middle of a still-buffered interior-point solver
 output line, corrupting both. Writing the result to a dedicated file next
 to (not through) the child's stdout sidesteps the race entirely: the parent
 only reads that file after the child process has fully exited (so it has
@@ -219,17 +219,17 @@ from the child's returned dict — it is
 `sum(re.findall(r"Iterations : *([0-9]+)", ansi_stripped_stdout))` over the
 child's full captured stdout (ANSI SGR sequences stripped first with
 `\x1b\[[0-9;]*m`). This is the same instrument proven out in earlier
-bitwise-reproducibility (CBWR) work: PSIOPT's console printer emits a line
+bitwise-reproducibility (CBWR) work: the interior-point solver's console printer emits a line
 of the form `" Iterations : N"` once per solve, whenever `print_level < 2`
 (the library default, so problem modules should not raise their print
 level above that unless they want to lose this signal). Summing over all
 matches
 means a problem that calls `optimize()` more than once (e.g. a two-stage
 solve) gets its iteration counts combined. `-1` means no match was found
-(e.g. the child crashed before ever calling into PSIOPT, or print_level was
+(e.g. the child crashed before ever calling into the interior-point solver, or print_level was
 raised too high).
 
-On the **ipopt backend**, PSIOPT's console printer never runs (Ipopt solves
+On the **ipopt backend**, the interior-point solver's console printer never runs (Ipopt solves
 the identical transcribed NLP directly), so this stdout instrument has
 nothing to match. The parent instead trusts the child's own reported
 `iterations` (`driver.py`'s ipopt branch reads it straight from
@@ -252,7 +252,7 @@ inside the child, immediately before the solve (see the problem-module
 contract above). Each `VALUE` is parsed as `int`, then `float`, then left
 as a plain `str` (first cast that doesn't raise wins) — e.g.
 `--config max_iters=200 kkt_tol=1e-8 opt_ls_mode=L1` sets an int, a float,
-and a string respectively. `KEY` must name a *settable* PSIOPT property
+and a string respectively. `KEY` must name a *settable* interior-point solver property
 (see `tychopy/_stubs/_tychopy/solvers.pyi` for the full list — `max_iters`,
 `kkt_tol`, `print_level`, `opt_ls_mode`, ...); `setattr` on a read-only
 property (e.g. `last_iter_num`) raises inside the child, which the parent
@@ -283,7 +283,7 @@ the driver's dispatch after `build()` returns changes:
   orthogonal to what an ipopt-backend solve leaves behind).
   `"objective"`/`"iterations"` come from
   `prob.last_ipopt_result`, not from `optimizer.last_obj_val`/
-  `last_iter_num` (those reflect only the most recent PSIOPT run and are
+  `last_iter_num` (those reflect only the most recent interior-point solver run and are
   left untouched by an ipopt-backend solve).
 
 A problem module cannot select or refuse a backend — that is exclusively
@@ -381,7 +381,7 @@ vector passed to `set_vars`; the expression's input width must equal
 bounds like `x_i >= 0` are encoded as ordinary inequality constraints
 (`-x_i <= 0`).
 
-**Inequality sign convention**: PSIOPT's `add_inequal_con` (both on `Phase`
+**Inequality sign convention**: the interior-point solver's `add_inequal_con` (both on `Phase`
 and on `OptimizationProblem`) requires the constraint function to be
 `<= 0` at a feasible point -- confirmed in
 `doc-legacy/tutorials/PhaseGuide.rst`, "Inequality Constraints" section:

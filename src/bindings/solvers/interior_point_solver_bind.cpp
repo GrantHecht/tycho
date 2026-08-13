@@ -11,16 +11,16 @@
 //   - Binding code extracted from ASSET source and reorganized (PR 2 — binding decoupling)
 //   - Migrated pybind11 -> nanobind (PR 3)
 //   - Migrated to tycho:: sub-namespaces (PR #35)
-//   - PSIOPT refactor (PR #39): Settings/SolveResult structs with def_prop_rw/def_prop_ro,
+//   - InteriorPointSolver refactor (PR #39): Settings/SolveResult structs with def_prop_rw/def_prop_ro,
 //     validated setters, result read-only bindings, dead binding removal
 //   - Native variable bounds: bound_interval_push/bound_relax_factor/
 //     fixed_variable_treatment properties and the FixedVariableTreatments enum
 // =============================================================================
 
-#include "psiopt_bind.h"
+#include "interior_point_solver_bind.h"
 #include "tycho/detail/solvers/nlp_backend.h"
 #include "tycho/detail/hven_namespaces.h"
-#include <hven/drivers/psiopt.h>
+#include <hven/drivers/interior_point_solver.h>
 
 #include <nanobind/stl/string_view.h>
 
@@ -31,12 +31,12 @@ using namespace tycho::solvers;
 using namespace tycho::astro;
 using namespace tycho::utils;
 
-// Helper macros for binding settings fields as read-write properties on PSIOPT.
+// Helper macros for binding settings fields as read-write properties on InteriorPointSolver.
 // These produce lambda-based def_prop_rw that forward through the settings() accessor.
 #define BIND_SETTINGS_RW(obj, pyname, field, ...)                                                  \
     obj.def_prop_rw(                                                                               \
-        pyname, [](const PSIOPT &self) { return self.settings().field; },                          \
-        [](PSIOPT &self, decltype(self.settings().field) v) {                                      \
+        pyname, [](const InteriorPointSolver &self) { return self.settings().field; },                          \
+        [](InteriorPointSolver &self, decltype(self.settings().field) v) {                                      \
             self.settings().field = v;                                                             \
         } __VA_OPT__(, ) __VA_ARGS__)
 
@@ -44,41 +44,41 @@ using namespace tycho::utils;
 // Use for fields that have a corresponding set_* method with validation logic.
 #define BIND_SETTINGS_VALIDATED(obj, pyname, field, setter, ...)                                   \
     obj.def_prop_rw(                                                                               \
-        pyname, [](const PSIOPT &self) { return self.settings().field; },                          \
-        [](PSIOPT &self, decltype(self.settings().field) v) { self.setter(v); } __VA_OPT__(, )     \
+        pyname, [](const InteriorPointSolver &self) { return self.settings().field; },                          \
+        [](InteriorPointSolver &self, decltype(self.settings().field) v) { self.setter(v); } __VA_OPT__(, )     \
             __VA_ARGS__)
 
-// Helper macro for binding result fields as read-only properties on PSIOPT.
+// Helper macro for binding result fields as read-only properties on InteriorPointSolver.
 // These produce lambda-based def_prop_ro that forward through the result() accessor.
 #define BIND_RESULT_RO(obj, pyname, field, ...)                                                    \
-    obj.def_prop_ro(pyname, [](const PSIOPT &self) { return self.result().field; } __VA_OPT__(, )  \
+    obj.def_prop_ro(pyname, [](const InteriorPointSolver &self) { return self.result().field; } __VA_OPT__(, )  \
                                 __VA_ARGS__)
 
-void TychoBind<PSIOPT>::build(nb::module_ &m) {
-    using BarrierModes = PSIOPT::BarrierModes;
-    using LineSearchModes = PSIOPT::LineSearchModes;
-    using QPPivotModes = PSIOPT::QPPivotModes;
-    using PDStepStrategies = PSIOPT::PDStepStrategies;
+void TychoBind<InteriorPointSolver>::build(nb::module_ &m) {
+    using BarrierModes = InteriorPointSolver::BarrierModes;
+    using LineSearchModes = InteriorPointSolver::LineSearchModes;
+    using QPPivotModes = InteriorPointSolver::QPPivotModes;
+    using PDStepStrategies = InteriorPointSolver::PDStepStrategies;
     using ConvergenceFlags = tycho::ConvergenceFlags;
-    using AlgorithmModes = PSIOPT::AlgorithmModes;
-    using QPOrderingModes = PSIOPT::QPOrderingModes;
-    using BestCriteriaModes = PSIOPT::BestCriteriaModes;
-    auto obj = nb::class_<PSIOPT>(m, "PSIOPT");
+    using AlgorithmModes = InteriorPointSolver::AlgorithmModes;
+    using QPOrderingModes = InteriorPointSolver::QPOrderingModes;
+    using BestCriteriaModes = InteriorPointSolver::BestCriteriaModes;
+    auto obj = nb::class_<InteriorPointSolver>(m, "InteriorPointSolver");
     obj.def(nb::init<std::shared_ptr<NonLinearProgram>>());
     obj.def(nb::init<>());
 
-    obj.def("optimize", &PSIOPT::optimize, nb::call_guard<nb::gil_scoped_release>(), "");
-    obj.def("solve_optimize", &PSIOPT::solve_optimize, nb::call_guard<nb::gil_scoped_release>(),
+    obj.def("optimize", &InteriorPointSolver::optimize, nb::call_guard<nb::gil_scoped_release>(), "");
+    obj.def("solve_optimize", &InteriorPointSolver::solve_optimize, nb::call_guard<nb::gil_scoped_release>(),
             "");
-    obj.def("solve", &PSIOPT::solve, nb::call_guard<nb::gil_scoped_release>(), "");
+    obj.def("solve", &InteriorPointSolver::solve, nb::call_guard<nb::gil_scoped_release>(), "");
 
     BIND_SETTINGS_VALIDATED(obj, "max_iters", max_iters_, set_max_iters, "");
     BIND_SETTINGS_VALIDATED(obj, "max_acc_iters", max_acc_iters_, set_max_acc_iters, "");
     BIND_SETTINGS_VALIDATED(obj, "max_ls_iters", max_ls_iters_, set_max_ls_iters, "");
 
-    obj.def("set_max_iters", &PSIOPT::set_max_iters);
-    obj.def("set_max_acc_iters", &PSIOPT::set_max_acc_iters);
-    obj.def("set_max_ls_iters", &PSIOPT::set_max_ls_iters);
+    obj.def("set_max_iters", &InteriorPointSolver::set_max_iters);
+    obj.def("set_max_acc_iters", &InteriorPointSolver::set_max_acc_iters);
+    obj.def("set_max_ls_iters", &InteriorPointSolver::set_max_ls_iters);
 
     BIND_SETTINGS_VALIDATED(
         obj, "max_soc", max_soc_, set_max_soc,
@@ -93,7 +93,7 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
         "extended backtracking entirely.");
 
     BIND_SETTINGS_VALIDATED(obj, "alpha_red", alpha_red_, set_alpha_red, "");
-    obj.def("set_alpha_red", &PSIOPT::set_alpha_red);
+    obj.def("set_alpha_red", &InteriorPointSolver::set_alpha_red);
 
     BIND_SETTINGS_RW(obj, "wide_console", wide_console_);
 
@@ -104,7 +104,7 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     BIND_RESULT_RO(obj, "last_func_time", func_time_, "");
     BIND_RESULT_RO(obj, "last_kkt_time", kkt_time_, "");
     obj.def_prop_ro(
-        "last_misc_time", [](const PSIOPT &self) { return self.result().misc_time(); }, "");
+        "last_misc_time", [](const InteriorPointSolver &self) { return self.result().misc_time(); }, "");
     BIND_RESULT_RO(obj, "last_print_time", print_time_, "");
     BIND_RESULT_RO(obj, "last_solver_init_time", solver_init_time_, "");
     BIND_RESULT_RO(obj, "last_iter_num", iter_num_, "");
@@ -119,7 +119,7 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
                    "solve. Always 0 unless watchdog is enabled.");
     obj.def_prop_ro(
         "last_recovery_depth_histogram",
-        [](const PSIOPT &self) {
+        [](const InteriorPointSolver &self) {
             const auto &h = self.result().recovery_depth_histogram_;
             return std::vector<int>(h.begin(), h.end());
         },
@@ -183,7 +183,7 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
 
     BIND_SETTINGS_VALIDATED(obj, "obj_scale", obj_scale_, set_obj_scale, "");
     BIND_SETTINGS_VALIDATED(obj, "print_level", print_level_, set_print_level, "");
-    obj.def("set_print_level", &PSIOPT::set_print_level);
+    obj.def("set_print_level", &InteriorPointSolver::set_print_level);
 
     BIND_RESULT_RO(obj, "converge_flag", converge_flag_);
 
@@ -192,12 +192,12 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     BIND_SETTINGS_VALIDATED(obj, "eq_con_tol", econ_tol_, set_econ_tol, "");
     BIND_SETTINGS_VALIDATED(obj, "ineq_con_tol", icon_tol_, set_icon_tol, "");
 
-    obj.def("set_kkt_tol", &PSIOPT::set_kkt_tol);
-    obj.def("set_bar_tol", &PSIOPT::set_bar_tol);
-    obj.def("set_eq_con_tol", &PSIOPT::set_econ_tol);
-    obj.def("set_ineq_con_tol", &PSIOPT::set_icon_tol);
+    obj.def("set_kkt_tol", &InteriorPointSolver::set_kkt_tol);
+    obj.def("set_bar_tol", &InteriorPointSolver::set_bar_tol);
+    obj.def("set_eq_con_tol", &InteriorPointSolver::set_econ_tol);
+    obj.def("set_ineq_con_tol", &InteriorPointSolver::set_icon_tol);
 
-    obj.def("set_tols", &PSIOPT::set_tols, nb::arg("kkt_tol") = 1.0e-6,
+    obj.def("set_tols", &InteriorPointSolver::set_tols, nb::arg("kkt_tol") = 1.0e-6,
             nb::arg("eq_con_tol") = 1.0e-6, nb::arg("ineq_con_tol") = 1.0e-6,
             nb::arg("bar_tol") = 1.0e-6);
 
@@ -206,12 +206,12 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     BIND_SETTINGS_VALIDATED(obj, "acc_eq_con_tol", acc_econ_tol_, set_acc_econ_tol, "");
     BIND_SETTINGS_VALIDATED(obj, "acc_ineq_con_tol", acc_icon_tol_, set_acc_icon_tol, "");
 
-    obj.def("set_acc_kkt_tol", &PSIOPT::set_acc_kkt_tol);
-    obj.def("set_acc_bar_tol", &PSIOPT::set_acc_bar_tol);
-    obj.def("set_acc_eq_con_tol", &PSIOPT::set_acc_econ_tol);
-    obj.def("set_acc_ineq_con_tol", &PSIOPT::set_acc_icon_tol);
+    obj.def("set_acc_kkt_tol", &InteriorPointSolver::set_acc_kkt_tol);
+    obj.def("set_acc_bar_tol", &InteriorPointSolver::set_acc_bar_tol);
+    obj.def("set_acc_eq_con_tol", &InteriorPointSolver::set_acc_econ_tol);
+    obj.def("set_acc_ineq_con_tol", &InteriorPointSolver::set_acc_icon_tol);
 
-    obj.def("set_acc_tols", &PSIOPT::set_acc_tols, nb::arg("acc_kkt_tol") = 1.0e-2,
+    obj.def("set_acc_tols", &InteriorPointSolver::set_acc_tols, nb::arg("acc_kkt_tol") = 1.0e-2,
             nb::arg("acc_eq_con_tol") = 1.0e-3, nb::arg("acc_ineq_con_tol") = 1.0e-3,
             nb::arg("acc_bar_tol") = 1.0e-3);
 
@@ -220,15 +220,15 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     BIND_SETTINGS_VALIDATED(obj, "div_eq_con_tol", div_econ_tol_, set_div_econ_tol, "");
     BIND_SETTINGS_VALIDATED(obj, "div_ineq_con_tol", div_icon_tol_, set_div_icon_tol, "");
 
-    obj.def("set_div_kkt_tol", &PSIOPT::set_div_kkt_tol);
-    obj.def("set_div_bar_tol", &PSIOPT::set_div_bar_tol);
-    obj.def("set_div_eq_con_tol", &PSIOPT::set_div_econ_tol);
-    obj.def("set_div_ineq_con_tol", &PSIOPT::set_div_icon_tol);
+    obj.def("set_div_kkt_tol", &InteriorPointSolver::set_div_kkt_tol);
+    obj.def("set_div_bar_tol", &InteriorPointSolver::set_div_bar_tol);
+    obj.def("set_div_eq_con_tol", &InteriorPointSolver::set_div_econ_tol);
+    obj.def("set_div_ineq_con_tol", &InteriorPointSolver::set_div_icon_tol);
 
     BIND_SETTINGS_VALIDATED(obj, "neg_slack_reset", neg_slack_reset_, set_neg_slack_reset, "");
 
     BIND_SETTINGS_VALIDATED(obj, "bound_fraction", bound_fraction_, set_bound_fraction, "");
-    obj.def("set_bound_fraction", &PSIOPT::set_bound_fraction);
+    obj.def("set_bound_fraction", &InteriorPointSolver::set_bound_fraction);
 
     BIND_SETTINGS_VALIDATED(obj, "bound_push", bound_push_, set_bound_push, "");
 
@@ -266,11 +266,11 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     BIND_SETTINGS_VALIDATED(obj, "incr_h", incr_h_, set_incr_h, "");
     BIND_SETTINGS_VALIDATED(obj, "decr_h", decr_h_, set_decr_h, "");
 
-    obj.def("set_delta_h", &PSIOPT::set_delta_h);
-    obj.def("set_incr_h", &PSIOPT::set_incr_h);
-    obj.def("set_decr_h", &PSIOPT::set_decr_h);
+    obj.def("set_delta_h", &InteriorPointSolver::set_delta_h);
+    obj.def("set_incr_h", &InteriorPointSolver::set_incr_h);
+    obj.def("set_decr_h", &InteriorPointSolver::set_decr_h);
 
-    obj.def("set_hpert_params", &PSIOPT::set_hpert_params, nb::arg("delta_h"), nb::arg("incr_h"),
+    obj.def("set_hpert_params", &InteriorPointSolver::set_hpert_params, nb::arg("delta_h"), nb::arg("incr_h"),
             nb::arg("decr_h"));
 
     BIND_SETTINGS_RW(
@@ -305,19 +305,19 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     BIND_SETTINGS_RW(obj, "opt_bar_mode", opt_bar_mode_, "");
     BIND_SETTINGS_RW(obj, "soe_bar_mode", soe_bar_mode_, "");
 
-    obj.def("set_opt_bar_mode", nb::overload_cast<BarrierModes>(&PSIOPT::set_opt_bar_mode));
-    obj.def("set_opt_bar_mode", nb::overload_cast<const std::string &>(&PSIOPT::set_opt_bar_mode));
-    obj.def("set_soe_bar_mode", nb::overload_cast<BarrierModes>(&PSIOPT::set_soe_bar_mode));
-    obj.def("set_soe_bar_mode", nb::overload_cast<const std::string &>(&PSIOPT::set_soe_bar_mode));
+    obj.def("set_opt_bar_mode", nb::overload_cast<BarrierModes>(&InteriorPointSolver::set_opt_bar_mode));
+    obj.def("set_opt_bar_mode", nb::overload_cast<const std::string &>(&InteriorPointSolver::set_opt_bar_mode));
+    obj.def("set_soe_bar_mode", nb::overload_cast<BarrierModes>(&InteriorPointSolver::set_soe_bar_mode));
+    obj.def("set_soe_bar_mode", nb::overload_cast<const std::string &>(&InteriorPointSolver::set_soe_bar_mode));
 
     // --- Line search modes ---
     BIND_SETTINGS_RW(obj, "opt_ls_mode", opt_ls_mode_, "");
     BIND_SETTINGS_RW(obj, "soe_ls_mode", soe_ls_mode_, "");
 
-    obj.def("set_opt_ls_mode", nb::overload_cast<LineSearchModes>(&PSIOPT::set_opt_ls_mode));
-    obj.def("set_opt_ls_mode", nb::overload_cast<const std::string &>(&PSIOPT::set_opt_ls_mode));
-    obj.def("set_soe_ls_mode", nb::overload_cast<LineSearchModes>(&PSIOPT::set_soe_ls_mode));
-    obj.def("set_soe_ls_mode", nb::overload_cast<const std::string &>(&PSIOPT::set_soe_ls_mode));
+    obj.def("set_opt_ls_mode", nb::overload_cast<LineSearchModes>(&InteriorPointSolver::set_opt_ls_mode));
+    obj.def("set_opt_ls_mode", nb::overload_cast<const std::string &>(&InteriorPointSolver::set_opt_ls_mode));
+    obj.def("set_soe_ls_mode", nb::overload_cast<LineSearchModes>(&InteriorPointSolver::set_soe_ls_mode));
+    obj.def("set_soe_ls_mode", nb::overload_cast<const std::string &>(&InteriorPointSolver::set_soe_ls_mode));
 
     // --- Step-acceptance / recovery strategy ---
     BIND_SETTINGS_RW(
@@ -420,17 +420,17 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
     BIND_SETTINGS_RW(obj, "qp_ordering_mode", qp_ord_, "");
 
     obj.def("set_qp_ordering_mode",
-            nb::overload_cast<QPOrderingModes>(&PSIOPT::set_qp_ordering_mode));
+            nb::overload_cast<QPOrderingModes>(&InteriorPointSolver::set_qp_ordering_mode));
     obj.def("set_qp_ordering_mode",
-            nb::overload_cast<const std::string &>(&PSIOPT::set_qp_ordering_mode));
+            nb::overload_cast<const std::string &>(&InteriorPointSolver::set_qp_ordering_mode));
 
 #ifdef USE_ACCELERATE_SPARSE
     BIND_SETTINGS_VALIDATED(obj, "accel_pivot_tolerance", accel_pivot_tolerance_,
                             set_accel_pivot_tolerance);
     BIND_SETTINGS_VALIDATED(obj, "accel_zero_tolerance", accel_zero_tolerance_,
                             set_accel_zero_tolerance);
-    obj.def("set_accel_pivot_tolerance", &PSIOPT::set_accel_pivot_tolerance);
-    obj.def("set_accel_zero_tolerance", &PSIOPT::set_accel_zero_tolerance);
+    obj.def("set_accel_pivot_tolerance", &InteriorPointSolver::set_accel_pivot_tolerance);
+    obj.def("set_accel_zero_tolerance", &InteriorPointSolver::set_accel_zero_tolerance);
 #endif
 
     // --- Output/result ---
@@ -438,23 +438,23 @@ void TychoBind<PSIOPT>::build(nb::module_ &m) {
 
     BIND_SETTINGS_RW(obj, "return_best", return_best_);
     obj.def_prop_rw(
-        "best_criteria", [](const PSIOPT &self) { return self.settings().best_criteria_; },
-        [](PSIOPT &self, nb::object val) {
+        "best_criteria", [](const InteriorPointSolver &self) { return self.settings().best_criteria_; },
+        [](InteriorPointSolver &self, nb::object val) {
             if (nb::isinstance<BestCriteriaModes>(val))
                 self.settings().best_criteria_ = nb::cast<BestCriteriaModes>(val);
             else if (nb::isinstance<nb::str>(val))
                 self.settings().best_criteria_ =
-                    PSIOPT::strto_BestCriteriaMode(nb::cast<std::string>(val));
+                    InteriorPointSolver::strto_BestCriteriaMode(nb::cast<std::string>(val));
             else
                 throw nb::type_error("expected BestCriteriaModes enum or str");
         });
-    obj.def("set_best_criteria", nb::overload_cast<BestCriteriaModes>(&PSIOPT::set_best_criteria));
+    obj.def("set_best_criteria", nb::overload_cast<BestCriteriaModes>(&InteriorPointSolver::set_best_criteria));
     obj.def("set_best_criteria",
-            nb::overload_cast<const std::string &>(&PSIOPT::set_best_criteria));
+            nb::overload_cast<const std::string &>(&InteriorPointSolver::set_best_criteria));
 
     BIND_SETTINGS_RW(obj, "cnr_mode", cnr_mode_, "");
 
-    obj.def("apply_preset", &PSIOPT::apply_preset, nb::arg("name"),
+    obj.def("apply_preset", &InteriorPointSolver::apply_preset, nb::arg("name"),
             R"doc(Apply a named globalization-mechanism configuration.
 
 Assigns exactly nine Settings fields -- acceptance_strategy,
@@ -513,7 +513,7 @@ ValueError
         .value("TwoByTwo", QPPivotModes::TwoByTwo);
     nb::enum_<FixedVariableTreatments>(
         m, "FixedVariableTreatments",
-        "Fixed-variable handling selector for PSIOPT.fixed_variable_treatment, corresponding "
+        "Fixed-variable handling selector for InteriorPointSolver.fixed_variable_treatment, corresponding "
         "to Ipopt's fixed_variable_treatment option.")
         .value("MakeParameter", FixedVariableTreatments::MakeParameter,
                "Eliminates a fixed variable (equal declared lower and upper bound) from the "
@@ -646,7 +646,7 @@ ValueError
 
     nb::enum_<NLPSolvers>(m, "NLPSolvers",
                           "NLP solver backend selector for the solve/optimize entry points.")
-        .value("psiopt", NLPSolvers::psiopt, "Built-in interior-point solver (default).")
+        .value("interior_point", NLPSolvers::interior_point, "Built-in interior-point solver (default).")
         .value("ipopt", NLPSolvers::ipopt,
                "Linked Ipopt on the identical transcribed NLP (requires ENABLE_IPOPT build).");
 

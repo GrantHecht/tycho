@@ -36,7 +36,7 @@ TEST_F(OptimalControlTest, ShootingHessianSparsityHookDispatch) {
 namespace {
 
 // Sparse vs dense KKT have different explicit-zero structure, so Pardiso
-// ordering/pivoting differs; cross-solve agreement is bounded by PSIOPT's
+// ordering/pivoting differs; cross-solve agreement is bounded by InteriorPointSolver's
 // convergence tolerance, not machine epsilon.
 constexpr double kCrossSolveTol = 1e-5;
 

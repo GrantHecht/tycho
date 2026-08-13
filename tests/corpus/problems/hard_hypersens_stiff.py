@@ -43,10 +43,10 @@ coarse starting mesh. To make the "boundary-layer stiffness under-
 resolved" failure mode the brief names actually manifest, adaptive
 refinement itself has to be constrained, not just the starting mesh:
 this module additionally turns adaptive meshing OFF
-(``set_adaptive_mesh(False)``, so ``nsegs=2`` is the mesh PSIOPT actually
+(``set_adaptive_mesh(False)``, so ``nsegs=2`` is the mesh the interior-point solver actually
 solves on, permanently) and tightens both ``eq_con_tol`` (from the
 parent's 1e-7) and ``kkt_tol`` (the parent never sets ``kkt_tol``, so it
-runs at PSIOPT's default of 1e-6) down to 1e-12 (this second change was
+runs at the interior-point solver's default of 1e-6) down to 1e-12 (this second change was
 also empirically necessary -- at the parent's own eq_con_tol=1e-7/
 kkt_tol=1e-6 defaults, the 2-segment fixed mesh "converges" trivially in
 3-4 iterations to a badly wrong objective, e.g. 969.8 vs the true ~1.669,
@@ -56,13 +56,13 @@ still reports CONVERGED -- and does not strain by iteration count either,
 so it would not satisfy the brief's binding rule on its own).
 
 Observed on defaults 2026-07-16: parent (nsegs=10, adaptive mesh on,
-eq_con_tol=1e-7, kkt_tol at PSIOPT's default 1e-6, print_level=1 for
+eq_con_tol=1e-7, kkt_tol at the interior-point solver's default 1e-6, print_level=1 for
 instrumentation): CONVERGED, mesh converged, 30 total iterations (summed
 across mesh-refinement rounds), objective ≈ 1.669 (matching the problem's
 known solution).
 Stiff variant (nsegs=2, adaptive mesh OFF, eq_con_tol/kkt_tol=1e-12):
 ACCEPTABLE (harness status "acceptable" — not a clean CONVERGED), 103
-total iterations (52 + 51 across the two internal PSIOPT calls issued by
+total iterations (52 + 51 across the two internal interior-point solver calls issued by
 ``phase.optimize_solve()``) -- 103 / 30 ≈ 3.4x the parent, clearing the
 ≥2x rule -- AND ``phase.mesh_converged`` is False, AND the objective
 (≈ 969.8) is wildly wrong relative to the true ≈ 1.669. This is recorded

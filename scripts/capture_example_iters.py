@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Capture per-example total PSIOPT iteration counts (CBWR gate instrument).
+"""Capture per-example total interior-point solver iteration counts (CBWR gate instrument).
 
 Runs every example registered in run_examples.py's ALL_EXAMPLES (or the
---start:--end slice of it), sums the "Iterations : N" lines PSIOPT's own
+--start:--end slice of it), sums the "Iterations : N" lines the interior-point solver's own
 console printer emits on each example's captured stdout, and writes one CSV
 row per example: (example, total_iters, status).
 
