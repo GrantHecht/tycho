@@ -394,7 +394,7 @@ class SocElasticHarness {
         Eigen::SparseMatrix<double, Eigen::RowMajor> kkt(inert_.kkt_dim_, inert_.kkt_dim_);
         kkt.setIdentity();
         kkt.makeCompressed();
-// The factorization owns its assembly buffer, so the matrix is written
+        // The factorization owns its assembly buffer, so the matrix is written
         // through it rather than handed to compute(); backend configuration
         // travels with the factor's options and needs nothing here.
         inert_.kkt_solver_.matrix() = kkt;
