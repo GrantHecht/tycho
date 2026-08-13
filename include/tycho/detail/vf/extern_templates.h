@@ -71,13 +71,7 @@ extern template struct GFModel<-1, -1, Constant<-1, -1>>;
 extern template struct GFModelCommon<-1, 1, Constant<-1, 1>>;
 extern template struct GFModel<-1, 1, Constant<-1, 1>>;
 
-} // namespace tycho::vf
-
-// GenericFunction itself is a member of hven::vf, not tycho::vf (the solver
-// library names it there — see vf/core/expression_fwd_declarations.h), and an
-// explicit instantiation has to appear in a namespace enclosing the template
-// it names. The CRTP bases above are tycho::vf templates and stay put.
-namespace hven::vf {
 extern template struct GenericFunction<-1, -1>;
 extern template struct GenericFunction<-1, 1>;
-} // namespace hven::vf
+
+} // namespace tycho::vf

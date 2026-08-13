@@ -51,10 +51,7 @@ template struct GFModel<-1, -1, Constant<-1, -1>>;
 template struct GFModelCommon<-1, 1, Constant<-1, 1>>;
 template struct GFModel<-1, 1, Constant<-1, 1>>;
 
-} // namespace tycho::vf
-
-// See the matching note in include/tycho/detail/vf/extern_templates.h.
-namespace hven::vf {
 template struct GenericFunction<-1, -1>;
 template struct GenericFunction<-1, 1>;
-} // namespace hven::vf
+
+} // namespace tycho::vf

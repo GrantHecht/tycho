@@ -17,6 +17,8 @@
 #include "tycho/detail/optimal_control/transcription/lgl_coeffs.h"
 #include "tycho/detail/optimal_control/transcription/transcription_sizing.h"
 #include "tycho/detail/vf/core/vector_function.h"
+#include "tycho/detail/vf/type_erasure/gf_type_erasure.h"
+#include <hven/solver_interface_adapter.h>
 
 namespace tycho::oc {
 
@@ -614,3 +616,16 @@ struct LGLDefects : VectorFunction<LGLDefects<DODE, CS>,
 };
 
 } // namespace tycho::oc
+
+// The LGL collocation defect is a plain function object, so a conversion to a
+// solver constraint stores the defect itself — one erasure, one virtual
+// dispatch per solver call. The registration sits beside the definition
+// because that is the only placement no translation unit can miss; see
+// hven/solver_interface_adapter.h for the contract.
+namespace hven::solvers {
+
+template <class DODE, int CS>
+struct SolverInterfaceAdapter<tycho::oc::LGLDefects<DODE, CS>>
+    : ::tycho::solvers::DirectVFAdapter<tycho::oc::LGLDefects<DODE, CS>> {};
+
+} // namespace hven::solvers

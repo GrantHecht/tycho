@@ -22,6 +22,11 @@ target_precompile_headers(pch_bench PRIVATE
     ${CMAKE_SOURCE_DIR}/src/vf/tycho_vector_functions.h
 )
 target_include_directories(pch_bench PRIVATE ${TYCHO_INCLUDES} ${INCLUDE_DIRS})
+# hven publishes HVEN_DEFAULT_QP_THREADS as a PUBLIC compile definition because
+# two of its public headers read it, so a target that compiles hven headers has
+# to LINK hven, not merely receive its include directory. Build-tree only, like
+# every other link to hven here.
+target_link_libraries(pch_bench PRIVATE $<BUILD_INTERFACE:hven::hven>)
 target_compile_options(pch_bench PRIVATE ${COMPILE_FLAGS})
 
 add_executable(bench_all

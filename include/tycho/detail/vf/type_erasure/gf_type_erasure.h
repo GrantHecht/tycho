@@ -20,9 +20,12 @@
 #pragma once
 
 #include "tycho/detail/hven_namespaces.h"
+#include "tycho/detail/vf/core/dense_function_specs.h"
+#include "tycho/detail/vf/core/expression_fwd_declarations.h"
+#include "tycho/detail/vf/core/vector_function_concepts.h"
 #include <hven/detail/interior/sizing_specs.h>
 #include <hven/detail/interior/solver_interface_specs.h>
-#include "tycho/detail/vf/core/dense_function_specs.h"
+#include <hven/solver_interface_adapter.h>
 
 #include <concepts>
 #include <memory>
@@ -654,3 +657,97 @@ void GFModelCommon<IR, OR, T>::clone_into_dynamic(GFStorage<-1, -1> &s) const {
 }
 
 } // namespace tycho::vf
+
+// ==========================================================================
+// Section 7: how tycho's functions enter the solver interfaces
+//
+// hven does not infer what to store when a function converts to
+// ConstraintInterface / ObjectiveInterface. It asks
+// hven::solvers::SolverInterfaceAdapter<T>, which the owner of T specializes
+// in the file that defines T (see hven/solver_interface_adapter.h for the
+// contract). Two registrations live here, because both are about the erasure
+// machinery this file owns:
+//
+//   * DirectVFAdapter — the policy every concrete VectorFunction family
+//     registers through, one erasure and one virtual dispatch per solver call.
+//   * GenericFunction's adapter — the one type that must NOT be stored as
+//     itself, since it is already a handle; it hands its wrapped concrete
+//     function over instead, through the pack hooks above.
+// ==========================================================================
+
+namespace tycho::solvers {
+
+/// @internal
+/// @brief Registration policy for a concrete (non-erased) dense VectorFunction.
+///
+/// Register a family by inheriting this in a `SolverInterfaceAdapter`
+/// specialization placed beside the family's definition:
+///
+/// ```cpp
+/// template <class DODE, class Integ>
+/// struct hven::solvers::SolverInterfaceAdapter<tycho::oc::CentralShootingDefect<DODE, Integ>>
+///     : tycho::solvers::DirectVFAdapter<tycho::oc::CentralShootingDefect<DODE, Integ>> {};
+/// ```
+///
+/// The two checks below are what keep a registration from quietly buying a
+/// second virtual dispatch: a type that is not a dense VectorFunction has no
+/// business in these interfaces at all, and an erased handle registered for
+/// direct storage would be erased twice.
+/// @tparam T  The concrete function type being registered.
+/// @endinternal
+template <class T> struct DirectVFAdapter : hven::solvers::DirectFunctionModel<T> {
+    static_assert(tycho::vf::DenseVectorFunction<T>,
+                  "DirectVFAdapter: T is not a dense VectorFunction. Only a dense "
+                  "VectorFunction carries the constraint/objective surface the solver "
+                  "interfaces evaluate through.");
+    static_assert(!tycho::vf::IsGenericVF<T>,
+                  "DirectVFAdapter: T is an erased handle; registering it for direct "
+                  "storage would double-dispatch every solver call. Route it through "
+                  "its pack hook (see GenericFunction's adapter) instead.");
+};
+
+} // namespace tycho::solvers
+
+namespace hven::solvers {
+
+/// @internal
+/// @brief Adapter that hands GenericFunction's wrapped function to the solver
+///        interfaces instead of the wrapper.
+///
+/// GenericFunction is itself type-erased, so storing it whole would put two
+/// vtables between a solver call and the function body. Its inner erasure
+/// emplaces the concrete payload directly instead, which leaves the stored
+/// object — and the dispatch count — identical to having passed the concrete
+/// function in the first place.
+/// @tparam IR  Input-row count.
+/// @tparam OR  Output-row count.
+/// @endinternal
+template <int IR, int OR> struct SolverInterfaceAdapter<tycho::vf::GenericFunction<IR, OR>> {
+    static constexpr bool registered = true;
+    /// @internal @brief The registered handle type. @endinternal
+    using GF = tycho::vf::GenericFunction<IR, OR>;
+
+    /// @internal @brief Emplace the wrapped function into @p ci. @param f Handle. @param ci
+    /// Interface. @endinternal
+    static void install_constraint(const GF &f, ConstraintInterface &ci) {
+        f.func_.get().pack_into_constraint_interface(ci);
+    }
+
+    /// @internal @brief Emplace the wrapped function into @p oi. @param f Handle. @param oi
+    /// Interface. @endinternal
+    static void install_objective(const GF &f, ObjectiveInterface &oi) {
+        // Authored in the body, not as a member constraint: specialization
+        // selection is by class template argument, so an unsatisfied member
+        // constraint here would report as a raw constraint dump rather than
+        // this message. The guard repeats the condition so nothing is
+        // instantiated behind a failed assert.
+        static_assert(OR == 1, "hven objective adapter: only GenericFunction<IR, 1> can enter "
+                               "ObjectiveInterface; this GenericFunction's output size is not "
+                               "statically 1. Convert to a GenericFunction<IR, 1> first.");
+        if constexpr (OR == 1) {
+            f.func_.get().pack_into_objective_interface(oi);
+        }
+    }
+};
+
+} // namespace hven::solvers

@@ -16,6 +16,8 @@
 
 #include "tycho/detail/optimal_control/transcription/lgl_coeffs.h"
 #include "tycho/detail/vf/core/vector_function.h"
+#include "tycho/detail/vf/type_erasure/gf_type_erasure.h"
+#include <hven/solver_interface_adapter.h>
 
 namespace tycho::oc {
 
@@ -306,3 +308,20 @@ template <int CSC> struct LGLMeshSpacing : VectorFunction<LGLMeshSpacing<CSC>, C
 };
 
 } // namespace tycho::oc
+
+// Both mesh-spacing constraints are plain function objects, so a conversion to
+// a solver constraint stores the constraint itself — one erasure, one virtual
+// dispatch per solver call. The registrations sit beside the definitions
+// because that is the only placement no translation unit can miss; see
+// hven/solver_interface_adapter.h for the contract.
+namespace hven::solvers {
+
+template <>
+struct SolverInterfaceAdapter<tycho::oc::SingleMeshSpacing>
+    : ::tycho::solvers::DirectVFAdapter<tycho::oc::SingleMeshSpacing> {};
+
+template <int CSC>
+struct SolverInterfaceAdapter<tycho::oc::LGLMeshSpacing<CSC>>
+    : ::tycho::solvers::DirectVFAdapter<tycho::oc::LGLMeshSpacing<CSC>> {};
+
+} // namespace hven::solvers

@@ -15,11 +15,13 @@
 #pragma once
 
 #include "tycho/detail/optimal_control/core/optimal_control_flags.h"
+#include "tycho/detail/vf/type_erasure/gf_type_erasure.h"
 #include "tycho/vector_functions.h"
 #include <algorithm>
 #include <array>
 #include <cassert>
 #include <functional>
+#include <hven/solver_interface_adapter.h>
 #include <iostream>
 #include <numeric>
 #include <stdexcept>
@@ -788,3 +790,20 @@ struct CentralShootingDefect
 };
 
 } // namespace tycho::oc
+
+// Both shooting defects are plain function objects, so they are stored as
+// themselves when converted to a solver constraint — one erasure, one virtual
+// dispatch per solver call. The registrations sit beside the definitions
+// because that is the only placement no translation unit can miss; see
+// hven/solver_interface_adapter.h for the contract.
+namespace hven::solvers {
+
+template <class DODE, class Integrator>
+struct SolverInterfaceAdapter<tycho::oc::ShootingDefect<DODE, Integrator>>
+    : ::tycho::solvers::DirectVFAdapter<tycho::oc::ShootingDefect<DODE, Integrator>> {};
+
+template <class DODE, class Integrator>
+struct SolverInterfaceAdapter<tycho::oc::CentralShootingDefect<DODE, Integrator>>
+    : ::tycho::solvers::DirectVFAdapter<tycho::oc::CentralShootingDefect<DODE, Integrator>> {};
+
+} // namespace hven::solvers

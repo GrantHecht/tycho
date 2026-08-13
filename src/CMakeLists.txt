@@ -25,6 +25,11 @@ add_library(pch STATIC pch.h pch.cpp)
 target_precompile_headers(pch PRIVATE pch.h
     vf/tycho_vector_functions.h)
 target_include_directories(pch PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
+# hven publishes HVEN_DEFAULT_QP_THREADS as a PUBLIC compile definition because
+# two of its public headers read it, so a target that compiles hven headers has
+# to LINK hven, not merely receive its include directory. Build-tree only, like
+# every other link to hven here.
+target_link_libraries(pch PRIVATE $<BUILD_INTERFACE:hven::hven>)
 target_compile_options(pch PRIVATE ${COMPILE_FLAGS})
 # Omit the embedded timestamp from the generated PCH so ccache can reuse cached
 # object files across PCH regenerations (with sloppiness=pch_defines,time_macros
@@ -50,6 +55,7 @@ target_include_directories(vectorfunctions INTERFACE
 # template duplication. See include/tycho/detail/vf/extern_templates.h.
 add_library(vf_instantiations STATIC vf/extern_template_instantiations.cpp)
 target_include_directories(vf_instantiations PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
+target_link_libraries(vf_instantiations PRIVATE $<BUILD_INTERFACE:hven::hven>)
 target_compile_options(vf_instantiations PRIVATE ${COMPILE_FLAGS})
 target_precompile_headers(vf_instantiations REUSE_FROM pch)
 set_property(TARGET vf_instantiations PROPERTY JOB_POOL_COMPILE heavy_compile)
@@ -61,6 +67,7 @@ add_library(integrators_instantiations STATIC
     integrators/extern_template_instantiations.cpp)
 target_include_directories(integrators_instantiations PRIVATE
     ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
+target_link_libraries(integrators_instantiations PRIVATE $<BUILD_INTERFACE:hven::hven>)
 target_compile_options(integrators_instantiations PRIVATE ${COMPILE_FLAGS})
 target_precompile_headers(integrators_instantiations REUSE_FROM pch)
 set_property(TARGET integrators_instantiations PROPERTY JOB_POOL_COMPILE heavy_compile)
@@ -133,6 +140,7 @@ add_library(astro STATIC
 
 target_precompile_headers(astro REUSE_FROM pch)
 target_include_directories(astro PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
+target_link_libraries(astro PRIVATE $<BUILD_INTERFACE:hven::hven>)
 target_link_libraries(astro PRIVATE optimalcontrol)
 target_compile_options(astro PRIVATE ${COMPILE_FLAGS})
 

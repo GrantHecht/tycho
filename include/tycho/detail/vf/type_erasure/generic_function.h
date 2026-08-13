@@ -29,17 +29,7 @@
 #include <fmt/format.h>
 #include <stdexcept>
 
-// GenericFunction lives in hven::vf rather than tycho::vf because the solver
-// library's constraint/objective interfaces name it there — see the note in
-// vf/core/expression_fwd_declarations.h, which also imports it back into
-// tycho::vf so every spelling of the name in tycho keeps working. The
-// using-directive below is what lets the definition be written exactly as it
-// would be inside tycho::vf: everything it names (VectorFunction,
-// DenseFunctionSpec, GFConcept, GFStorage, ...) is a tycho::vf name, and this
-// namespace holds nothing else that could be shadowed by importing them.
-namespace hven::vf {
-
-using namespace ::tycho::vf;
+namespace tycho::vf {
 
 /// @brief Type-erased VectorFunction holding any compatible function of the same size.
 ///
@@ -404,4 +394,4 @@ template <int IR, int OR> struct GenericFunction : VectorFunction<GenericFunctio
     }
 };
 
-} // namespace hven::vf
+} // namespace tycho::vf
