@@ -371,7 +371,7 @@ add_subdirectory("${TYCHO_HVEN_DIR}" "${CMAKE_BINARY_DIR}/hven")
 # Set up submodule dependencies
 if(TYCHO_USE_SYSTEM_EIGEN)
     find_package(Eigen3 3.4 REQUIRED)
-    # Global include so internal targets (pch, psiopt, etc.) see Eigen headers.
+    # Global include so internal targets (pch, hven, etc.) see Eigen headers.
     # Prefer modern target-based approach; fall back to legacy variable.
     if(TARGET Eigen3::Eigen)
         get_target_property(_eigen3_inc Eigen3::Eigen INTERFACE_INCLUDE_DIRECTORIES)
@@ -397,7 +397,7 @@ else()
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/dep/eigen>
         )
     endif()
-    # Global include so internal targets (pch, psiopt, etc.) see Eigen headers
+    # Global include so internal targets (pch, hven, etc.) see Eigen headers
     include_directories(dep/eigen)
     message(STATUS "Using bundled Eigen from dep/eigen")
 endif()
@@ -471,7 +471,7 @@ endif()
 
 # Binding-specific compile flags: -Os (nanobind best practice) instead of -O3.
 # Computed AFTER all platform flags (OpenMP etc.) are appended to COMPILE_FLAGS.
-# Core libs (psiopt, utils, etc.) use PRIVATE ${COMPILE_FLAGS} so their -O3 does
+# Core libs (solvers_vf, utils, etc.) use PRIVATE ${COMPILE_FLAGS} so their -O3 does
 # not propagate into _tychopy TUs; pch_bindings and _tychopy both use only
 # BINDING_COMPILE_FLAGS, keeping PCH and TU flags in sync.
 if(OPTIMIZE_BINDINGS)
