@@ -90,12 +90,43 @@ if(NOT EXISTS "${PACKAGE_PREFIX_DIR}/include/fmt/format.h")
         "${PACKAGE_PREFIX_DIR}/include/fmt/. "
         "The tycho installation may be incomplete.")
 endif()
+if(NOT EXISTS "${PACKAGE_PREFIX_DIR}/include/hven/model/nlp_solver.h")
+    message(FATAL_ERROR
+        "tycho: hven headers not found at "
+        "${PACKAGE_PREFIX_DIR}/include/hven/. "
+        "The tycho installation may be incomplete.")
+endif()
+
+# hven -- installed alongside tycho. hven is add_subdirectory()'d into this
+# project with no PROJECT_IS_TOP_LEVEL guard on its own install rules, so
+# `cmake --install` on tycho's build tree installs hven's package config
+# (hvenConfig.cmake, hvenTargets.cmake) into this same prefix, next to
+# tycho's own. Re-found via that config rather than hand-reconstructed, the
+# same way an hven consumer would find it standalone; PACKAGE_PREFIX_DIR is
+# appended to CMAKE_PREFIX_PATH so this resolves regardless of whether the
+# caller's own CMAKE_PREFIX_PATH happens to include tycho's install prefix.
+set(_tycho_saved_prefix_path "${CMAKE_PREFIX_PATH}")
+list(APPEND CMAKE_PREFIX_PATH "${PACKAGE_PREFIX_DIR}")
+find_dependency(hven)
+set(CMAKE_PREFIX_PATH "${_tycho_saved_prefix_path}")
+unset(_tycho_saved_prefix_path)
+
+if(NOT TARGET hven::hven)
+    message(FATAL_ERROR
+        "tycho: hven::hven target not found after find_dependency(hven). "
+        "The tycho installation may be incomplete.")
+endif()
+
 # Re-attach transitive link dependencies that were stripped from the export.
 # The tycho target uses BUILD_INTERFACE guards on its link libraries (see
 # src/CMakeLists.txt line 105) to avoid encoding host-specific absolute paths
 # in tychoTargets.cmake. CRITICAL: every library in LINK_LIBS (root
 # CMakeLists.txt) must be re-found and re-attached below. If a new dependency
 # is added to LINK_LIBS, it must also be added here.
+
+# hven (re-found via find_dependency(hven) above)
+set_property(TARGET tycho::tycho APPEND PROPERTY
+    INTERFACE_LINK_LIBRARIES hven::hven)
 
 # Threads
 set_property(TARGET tycho::tycho APPEND PROPERTY

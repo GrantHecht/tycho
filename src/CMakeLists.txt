@@ -107,9 +107,12 @@ endif()
 
 target_include_directories(solvers_vf PRIVATE ${_TYCHO_SRC_INCLUDES} ${INCLUDE_DIRS})
 target_compile_options(solvers_vf PRIVATE ${COMPILE_FLAGS})
-# hven is not in tycho's export set (it has no install rules of its own), so
-# the link is build-tree only -- the same BUILD_INTERFACE guard the rest of the
-# non-exportable link dependencies use.
+# hven has its own install/export (hvenTargets.cmake, a separate export set
+# from tychoTargets), but that target is not part of tychoTargets itself, so
+# the link here stays build-tree only -- the same BUILD_INTERFACE guard the
+# rest of the non-exportable link dependencies use. cmake/tychoConfig.cmake.in
+# re-attaches hven::hven on tycho::tycho for install-tree consumers via its
+# own find_dependency(hven) against hven's installed package config.
 target_link_libraries(solvers_vf PUBLIC $<BUILD_INTERFACE:hven::hven>)
 target_precompile_headers(solvers_vf REUSE_FROM pch)
 set_property(TARGET solvers_vf PROPERTY JOB_POOL_COMPILE heavy_compile)
@@ -150,8 +153,10 @@ target_compile_options(astro PRIVATE ${COMPILE_FLAGS})
 # Used by Python bindings, C++ consumers (find_package/FetchContent), and future frontends.
 add_library(tycho INTERFACE)
 target_link_libraries(tycho INTERFACE solvers_vf optimalcontrol vectorfunctions vf_instantiations integrators_instantiations astro)
-# hven and the Eigen target it publishes are not part of tychoTargets; the
-# installed package config re-establishes Eigen for install-tree consumers.
+# hven and the Eigen target it publishes are not part of tychoTargets (hven
+# has its own, separate export set: hvenTargets); the installed package
+# config re-establishes both -- Eigen3::Eigen via the bundled-headers block
+# above, hven::hven via find_dependency(hven) -- for install-tree consumers.
 target_link_libraries(tycho INTERFACE $<BUILD_INTERFACE:hven::hven>)
 # CRITICAL: LINK_LIBS is wrapped in BUILD_INTERFACE to avoid encoding
 # host-specific absolute paths in the export set. ALL libraries in LINK_LIBS

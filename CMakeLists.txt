@@ -324,9 +324,11 @@ endif()
 ################################################################################
 # hven — the NLP solver library (the interior-point engine, the sparse-KKT
 # backends, and the runtime support layer they need). Vendored as a submodule
-# at dep/hven and consumed as a CMake subdirectory, which is the only
-# consumption form it supports today (it has no install/export rules, so
-# find_package(hven) does not exist).
+# at dep/hven and consumed here as a CMake subdirectory. hven also carries its
+# own install/export rules (no PROJECT_IS_TOP_LEVEL guard on them), which is
+# what lets `cmake --install` on THIS project's build tree install libhven.a,
+# hven's headers, and hven's package config alongside tycho's own -- see the
+# install rules near the end of this file and cmake/tychoConfig.cmake.in.
 #
 # It is added HERE, ahead of the Eigen and fmt blocks below, because it brings
 # its own vendored copies of both and publishes them under the standard
@@ -623,20 +625,17 @@ install(DIRECTORY include/tycho
 )
 
 # Tycho's public headers include hven's, so the installed include tree is only
-# complete with them alongside.
-#
-# KNOWN GAP, and it cannot be closed from this side: hven has no install rules
-# and no export set of its own, so libhven.a is not installed and hven::hven is
-# not in tychoTargets. The installed package therefore carries every header a
-# consumer needs and no solver library to link against them --
-# find_package(tycho) builds but does not link. Copying hven's archive out of
-# its build tree from here would install a target this project does not own and
-# cannot version, which is worse than the gap. It closes when hven grows an
-# install/export, at which point this block should be replaced by that.
-install(DIRECTORY "${TYCHO_HVEN_DIR}/include/hven"
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    FILES_MATCHING PATTERN "*.h"
-)
+# complete with them alongside. hven now carries its own install/export rules
+# (install(TARGETS hven EXPORT hvenTargets ...), install(DIRECTORY include/hven
+# ...), a hvenConfig.cmake) that fire as part of THIS install because hven is
+# add_subdirectory()'d above with no PROJECT_IS_TOP_LEVEL guard on its own
+# install rules -- `cmake --install` on this build tree installs libhven.a,
+# hven's headers, and hven's package config into this same prefix alongside
+# tycho's own, closing what used to be a known gap here (tycho carried every
+# header a find_package(tycho) consumer needed and no solver library to link
+# against them). Nothing to do on this side beyond letting hven's own rules
+# run; see cmake/tychoConfig.cmake.in's find_dependency(hven) for how an
+# install-tree consumer picks up hven::hven.
 
 if(NOT TYCHO_USE_SYSTEM_EIGEN)
     if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dep/eigen/Eigen/Core")
