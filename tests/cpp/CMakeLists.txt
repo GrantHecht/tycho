@@ -474,6 +474,67 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
 endif()
 
 #-------------------------------------------------------------------------------
+# Compile-fail probes
+#
+# A probe is a TU that MUST FAIL to compile.  Each one is an OBJECT library
+# excluded from `all` (so an ordinary build never trips over it) plus a ctest
+# entry that drives `cmake --build` on it through the shared harness below and
+# passes only if the build fails WITH the intended diagnostic and WITHOUT the
+# raw one.  Probes live next to the subsystem they guard; the harness is shared
+# because it knows nothing about any of them.
+#-------------------------------------------------------------------------------
+set(TYCHO_COMPILE_FAIL_HARNESS
+    ${CMAKE_CURRENT_SOURCE_DIR}/compile_fail/run_build_must_fail.cmake)
+if(NOT EXISTS "${TYCHO_COMPILE_FAIL_HARNESS}")
+    # Caught here rather than at test time: a wrong path would otherwise turn
+    # every probe into a silent pass-by-absence only visible when ctest runs.
+    message(FATAL_ERROR
+        "Compile-fail harness not found at ${TYCHO_COMPILE_FAIL_HARNESS}")
+endif()
+
+# The raw diagnostic no seam probe may produce: an ERROR-severity member
+# lookup failure.  That is what instantiating a Model, or an adapter member,
+# behind a failed check looks like -- the authored static_assert fires and the
+# compiler then goes on to report everything the refused type was missing, and
+# a presence-only check would pass anyway.  The severity anchor matters: clang
+# repeats "no member named" inside explanatory NOTES attached to the authored
+# diagnostic, and those are the diagnostic working, not leaking.
+set(_tycho_raw_member_diagnostic "error: no member named")
+
+# Seam probes: what the function-entry adapter refuses, and how loudly.  These
+# are NOT gated on any option -- the guarantees they pin are properties of the
+# default build.
+set(_tycho_seam_probe_gf_dynamic_or_into_objective_regex
+    "hven objective adapter: only GenericFunction<IR, 1>")
+set(_tycho_seam_probe_unregistered_expression_regex
+    "hven constraint adapter: no SolverInterfaceAdapter<T> specialization")
+
+foreach(_probe gf_dynamic_or_into_objective unregistered_expression)
+    add_library(seam_compile_fail_${_probe} OBJECT EXCLUDE_FROM_ALL
+        solvers/compile_fail/${_probe}.cpp)
+    target_compile_options(seam_compile_fail_${_probe} PRIVATE ${COMPILE_FLAGS})
+    target_include_directories(seam_compile_fail_${_probe}
+        PRIVATE ${_TYCHO_TEST_COMMON_INCLUDES})
+    target_link_libraries(seam_compile_fail_${_probe} PRIVATE tycho)
+    set_target_properties(seam_compile_fail_${_probe} PROPERTIES
+        DISABLE_PRECOMPILE_HEADERS ON
+        JOB_POOL_COMPILE heavy_compile)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_compile_options(seam_compile_fail_${_probe}
+            PRIVATE $<$<CONFIG:Release>:-O0>)
+    endif()
+
+    add_test(NAME seam_compile_fail_${_probe}
+        COMMAND ${CMAKE_COMMAND}
+            -DBINARY_DIR=${CMAKE_BINARY_DIR}
+            -DTARGET=seam_compile_fail_${_probe}
+            -DCONFIG=$<CONFIG>
+            "-DEXPECTED_REGEX=${_tycho_seam_probe_${_probe}_regex}"
+            "-DFORBIDDEN_REGEX=${_tycho_raw_member_diagnostic}"
+            -P ${TYCHO_COMPILE_FAIL_HARNESS})
+endforeach()
+
+#-------------------------------------------------------------------------------
 # Enzyme-mode test executable (gated on ENABLE_ENZYME_AD).  Plugin flag is
 # scoped to the target inside tests/cpp/enzyme/CMakeLists.txt; the rest of
 # the build remains plugin-free.

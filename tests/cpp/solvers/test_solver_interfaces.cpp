@@ -3,6 +3,9 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "solver_test_utils.h"
+// Not reachable through the tycho.h umbrella; included directly so the
+// registered family below is named together with its registration.
+#include "tycho/detail/optimal_control/transcription/mesh_spacing_constraints.h"
 #include <gtest/gtest.h>
 #include <typeinfo>
 
@@ -91,10 +94,24 @@ TEST_F(SolverTest, WrappingAComposedExpressionStoresTheExpressionItself) {
     auto expr = args.head<2>() - args.tail<2>();
     using ConcreteExpr = decltype(expr);
 
-    ConstraintInterface ci(GenericFunction<-1, -1>(expr));
+    ConstraintInterface ci{GenericFunction<-1, -1>(expr)};
 
     EXPECT_EQ(typeid(ci.storage_.get()), typeid(ConstraintModel<ConcreteExpr>));
     EXPECT_NE(typeid(ci.storage_.get()), typeid(ConstraintModel<GenericFunction<-1, -1>>));
+}
+
+// The same hatch on the objective side: this is the route the phase-integral
+// ladder takes, where one erasure serves both interfaces.
+TEST_F(SolverTest, WrappingAComposedExpressionStoresTheExpressionItselfAsAnObjective) {
+    auto args = Arguments<4>();
+    auto expr = args.head<2>().squared_norm();
+    using ConcreteExpr = decltype(expr);
+
+    ObjectiveInterface oi{GenericFunction<-1, 1>(expr)};
+
+    EXPECT_EQ(typeid(oi.storage_.get()), typeid(ObjectiveModel<ConcreteExpr>));
+    EXPECT_NE(typeid(oi.storage_.get()), typeid(ObjectiveModel<GenericFunction<-1, 1>>));
+    EXPECT_EQ(oi.output_rows(), 1);
 }
 
 // A registered family goes in directly -- no wrapper, no second erasure.
