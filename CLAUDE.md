@@ -308,25 +308,36 @@ cd build && ninja -j<N> all    # N = 6 on all platforms (4 on RAM-constrained 16
 
 ### ccache and the precompiled header
 
-The build auto-detects ccache. The PCH targets compile with
-`-Xclang -fno-pch-timestamp` (clang only) so that a regenerated-but-identical
-PCH does not force every consumer to recompile — but that benefit only
-materializes with this user-level `~/.config/ccache/ccache.conf`:
+The build auto-detects ccache. `-Xclang -fno-pch-timestamp` (clang only) is a
+**ccache requirement**, not a tuning knob: ccache's manual is explicit that
+using ccache with a clang-produced PCH requires compiling that PCH with this
+flag (clang otherwise embeds a build timestamp in the PCH, which defeats
+ccache's ability to reuse it across builds at all). The PCH targets pass it
+for exactly that reason. That requirement only pays off with this user-level
+`~/.config/ccache/ccache.conf`:
 
 ```ini
 max_size = 40G                          # one full build writes several GiB;
                                         # the 5G default thrashes
 sloppiness = pch_defines,time_macros    # allow caching PCH-consuming compiles
-pch_external_checksum = true            # consumers hash the PCH CONTENT, so a
-                                        # genuinely changed PCH still invalidates
 ```
 
-Without `pch_external_checksum`, ccache refuses PCH-consuming compiles
-entirely (they were ~94% of this tree's uncacheable calls). Note the
-timestamp-free PCH means clang itself no longer rejects a stale PCH whose
-input headers changed only in content+mtime (size changes are still caught) —
-ccache's content checksum is the guard that replaces it, which is why the
-config above is recommended, not merely optional, on clang dev machines.
+`sloppiness = pch_defines,time_macros` is what makes PCH-consuming compiles
+cacheable at all — without it, ccache refuses them outright (they were ~94%
+of this tree's uncacheable calls). Do **not** add `pch_external_checksum`:
+it does not make ccache hash the PCH's content (hashing the PCH is already
+ccache's default behavior) — it tells ccache to hash a `<pch>.sum` sidecar
+file *instead of* the PCH itself, whenever one exists, purely as a
+performance workaround for very large precompiled headers. Nothing in this
+build emits a `.sum` file, so the setting is inert here, and it plays no
+role in gating PCH-consuming compiles — `sloppiness` alone does that. (An
+earlier revision of this doc recommended `pch_external_checksum` under a
+misreading of the manual; the config above is the correction.)
+
+See hven's `docs/build.md` (`dep/hven/docs/build.md`) for the fuller
+treatment of this project's own PCH — same ccache settings, same
+`-fno-pch-timestamp` requirement, plus the byte-identity discipline that
+governs which translation units are allowed to use it.
 
 ### Enzyme AD (experimental)
 

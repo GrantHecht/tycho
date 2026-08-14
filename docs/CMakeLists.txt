@@ -1,5 +1,16 @@
 # docs/CMakeLists.txt — Sphinx + Doxygen site build.
 # Activated when BUILD_SPHINX_DOCS=ON in the root CMakeLists.txt.
+#
+# NOTE: the main Doxygen pass and the Utils-subsystem strict gate
+# (Doxyfile.utils-strict.in) both scope INPUT through ${TYCHO_HVEN_DIR}
+# (root CMakeLists.txt, defaults to dep/hven) in addition to
+# include/tycho/ — the Utils strict gate specifically covers
+# ${TYCHO_HVEN_DIR}/include/hven/detail/interior/utils, since that
+# directory is where the runtime-support code documented under the Utils
+# umbrella now lives. This means a tycho docs build (BUILD_SPHINX_DOCS=ON)
+# can fail on an hven submodule bump alone — an undocumented public symbol
+# or a doc error introduced upstream in hven's utils/ trips the same
+# WARN_AS_ERROR gate as an undocumented tycho symbol would.
 
 set(DOCS_SOURCE_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/source")
 set(DOCS_BUILD_DIR   "${CMAKE_CURRENT_BINARY_DIR}")

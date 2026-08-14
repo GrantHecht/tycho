@@ -14,8 +14,8 @@
 # Invariant enforced, for each of `abs` and `pow` independently: a bare call
 # `abs(` / `pow(` (regex `(?<![\w:.>])abs\(` — i.e. not already qualified by
 # `::`, `.`, or a preceding word character, so `std::abs(`, `x.abs(`,
-# `foo_abs(` are all correctly excluded) found in include/tycho, src, or
-# extensions (*.h, *.cpp) is allowed only if:
+# `foo_abs(` are all correctly excluded) found in include/tycho, src,
+# extensions, or dep/hven's include/src (*.h, *.cpp) is allowed only if:
 #   (a) the containing file also contains a top-level `using std::abs;` /
 #       `using std::pow;` — the sanctioned ADL-guard pattern used throughout
 #       the astro/kepler and root_finder code, or
@@ -48,7 +48,14 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
-SCAN_DIRS=(include/tycho psiopt/include/tycho psiopt/src src extensions)
+# psiopt/ is the frozen carryover tree (dies at M6, see docs/dev/plans/ —
+# it is not where solver development happens anymore) and is deliberately
+# NOT scanned here: the live solver code moved to the dep/hven submodule as
+# of the M2 migration, so scanning psiopt/ instead of dep/hven gave this
+# lint zero coverage of the code that actually changes. Scan dep/hven's own
+# include/ and src/ (its solver + linear-algebra sources) alongside tycho's
+# own active trees.
+SCAN_DIRS=(include/tycho src extensions dep/hven/include dep/hven/src)
 
 # ---------------------------------------------------------------------------
 # Allowlists — exact "path:line" entries. Update the line number if the
@@ -60,8 +67,11 @@ SCAN_DIRS=(include/tycho psiopt/include/tycho psiopt/src src extensions)
 # abs() — function *definitions* named `abs` (the naive regex also matches
 # the declaration itself, not just call sites).
 ABS_ALLOWLIST=(
-    # numext::abs ADL overload for SuperScalar (Eigen::Array<double, W, 1>) packs.
-    "psiopt/include/tycho/detail/typedefs/super_scalar_traits.h:130"
+    # numext::abs ADL overload for SuperScalar (Eigen::Array<double, W, 1>)
+    # packs — hven's copy (this is where the definition now lives; the
+    # psiopt/ copy of the same overload is on the frozen tree this script no
+    # longer scans).
+    "dep/hven/include/hven/detail/interior/typedefs/super_scalar_traits.h:131"
     # VectorFunction `abs(f)` expression-operator definition (builds a CwiseAbs node).
     "include/tycho/detail/vf/operators/math_overloads.h:199"
     # nanobind docstring raw string literal ("...(``abs(self)``)."), not code;

@@ -62,12 +62,38 @@ using namespace ::hven::solvers;
 // declared here instead — as templates, so that EVERY use fails, not only the
 // ones that need a complete type: a pointer, a reference or a smart-pointer
 // member spelled the old way would otherwise still compile. The template
-// parameter's name is the diagnostic; it is what the compiler prints under
-// "use of class template ... requires template arguments".
+// parameter's name is the diagnostic in most forms of use: a reference, a
+// by-value parameter, or a smart-pointer member all print "note: template is
+// declared here" pointing straight at the `template <class
+// RenamedToBackendProblemBase = void> struct ...` line, so the note itself
+// tells the reader what to spell instead. The one exception is a bare
+// pointer (`OptimizationProblemBase *`) — that form fails with "cannot form
+// pointer to deduced class template specialization type" instead, with no
+// "declared here" note and therefore no parameter name in the diagnostic.
+// Every one of these forms still fails to compile, which is the actual
+// tripwire; only the bare-pointer form loses the self-explaining part of it.
 //
 // Every other name hven::solvers publishes is either unchanged from the
-// pre-move surface or changed in a way the compiler catches at the use site;
-// see the sweep recorded with this change.
+// pre-move surface or changed in a way the compiler catches at the use site.
+// The move-time sweep (four differing names between the pre-move surface and
+// hven's) found two more beyond the pair withheld above, both left to import
+// normally because neither is a silent-rebind hazard:
+//
+//   InteriorPointSolver     The class named PSIOPT before the move (that
+//                           spelling is retired, not renamed-and-aliased, so
+//                           old code that wrote `tycho::solvers::PSIOPT`
+//                           already fails as an undeclared identifier rather
+//                           than silently resolving to something new). Its
+//                           kkt_sol_ member's type changed from
+//                           Eigen::PardisoLDLT / AccelerateLDLTTPP to
+//                           KktFactorization, but every member whose meaning
+//                           changed is caught at its own use site.
+//
+//   KktSolverType           An alias (in solver_context.h) whose target type
+//                           changed the same way. The alias always meant
+//                           "whatever type factorizes the KKT system", which
+//                           is still exactly what it means; a use of the old
+//                           target's removed API still fails loudly.
 template <class RenamedToBackendProblemBase = void> struct OptimizationProblemBase;
 template <class SpellItHvenSolversNLPSolver = void> struct NLPSolver;
 } // namespace tycho::solvers
