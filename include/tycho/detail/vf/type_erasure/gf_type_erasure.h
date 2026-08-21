@@ -24,7 +24,7 @@
 #include "tycho/detail/vf/core/expression_fwd_declarations.h"
 #include "tycho/detail/vf/core/vector_function_concepts.h"
 #include <hven/detail/interior/sizing_specs.h>
-#include <hven/detail/interior/solver_interface_specs.h>
+#include <hven/detail/solvers/solver_interface_specs.h>
 #include <hven/solver_interface_adapter.h>
 
 #include <concepts>
