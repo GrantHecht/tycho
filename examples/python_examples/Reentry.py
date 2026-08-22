@@ -244,7 +244,8 @@ if __name__ == "__main__":
 
     phase.add_delta_var_objective("theta", -1.0)
 
-    phase.set_num_partitions(8, 8)
+    phase.set_num_partitions(8)
+    phase.optimizer.qp_threads = 8
 
     phase.optimizer.set_soe_ls_mode("L1")
     phase.optimizer.set_opt_ls_mode("L1")

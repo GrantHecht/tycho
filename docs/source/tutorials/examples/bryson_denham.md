@@ -54,7 +54,8 @@ together with an integral control-effort objective (`add_integral_objective`).
    phase.optimizer.set_opt_ls_mode("L1")
    phase.optimizer.set_kkt_tol(1.0e-10)
    phase.optimizer.set_print_level(3)
-   phase.set_num_partitions(1, 1)
+   phase.set_num_partitions(1)
+   phase.optimizer.qp_threads = 1
    phase.optimize()
 
    TT = np.array(phase.return_traj()).T

@@ -71,7 +71,8 @@ if __name__ == "__main__":
     ## Neccessary for this problem
     phase.optimizer.set_qp_ordering_mode("MINDEG")
     phase.optimizer.print_level = 2
-    phase.set_num_partitions(1, 1)
+    phase.set_num_partitions(1)
+    phase.optimizer.qp_threads = 1
 
     # Enable Adaptive Mesh
     phase.set_adaptive_mesh(True)

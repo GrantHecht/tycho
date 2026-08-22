@@ -863,8 +863,8 @@ class OptimizationProblemBase:
         Number of NLP matrix partitions.
 
         Assignment routes through :meth:`set_num_partitions` and raises
-        ``ValueError`` for values < 1. Use ``set_num_partitions(n, qp_threads)`` to
-        also set the QP thread count.
+        ``ValueError`` for values < 1. The QP thread count is a separate setting:
+        assign ``optimizer.qp_threads``.
         """
 
     @num_partitions.setter
@@ -927,11 +927,12 @@ class OptimizationProblemBase:
         (sentinel values with ran == False before any such run).
         """
 
-    @overload
-    def set_num_partitions(self, num_partitions: int, qp_threads: int) -> None: ...
+    def set_num_partitions(self, num_partitions: int) -> None:
+        """
+        Set the number of NLP matrix partitions (must be >= 1).
 
-    @overload
-    def set_num_partitions(self, arg: int, /) -> None: ...
+        The QP thread count is a separate setting: assign ``optimizer.qp_threads``.
+        """
 
     @overload
     def set_jet_job_mode(self, arg: JetJobModes, /) -> None: ...

@@ -186,7 +186,8 @@ embedded in a VectorFunction, and adaptive mesh refinement
    phase.add_delta_time_objective(1.0)
 
    phase.optimizer.set_print_level(3)
-   phase.set_num_partitions(8, 8)
+   phase.set_num_partitions(8)
+   phase.optimizer.qp_threads = 8
 
    # Adaptive mesh refinement, driven by the integrator-based error estimator.
    phase.set_adaptive_mesh(True)

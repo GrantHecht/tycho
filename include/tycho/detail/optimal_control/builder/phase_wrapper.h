@@ -821,13 +821,10 @@ class Phase {
 
     /// @brief Set the number of solver partitions.
     /// @param nparts  Number of NLP partitions for the parallel InteriorPointSolver solver.
+    ///
+    /// The per-partition linear-system thread count is a separate setting:
+    /// reach it through @ref optimizer as `optimizer().set_qp_threads(t)`.
     void set_num_partitions(int nparts) { phase_->set_num_partitions(nparts); }
-    /// @brief Set the number of solver partitions.
-    /// @param nparts     Number of NLP partitions for the parallel InteriorPointSolver solver.
-    /// @param qp_threads Number of threads used per partition for linear-system solves.
-    void set_num_partitions(int nparts, int qp_threads) {
-        phase_->set_num_partitions(nparts, qp_threads);
-    }
 
     /// @brief Set the jet (batched) solve job mode.
     /// @param mode  The jet job mode controlling how batched Jacobian/Hessian evaluations

@@ -109,7 +109,8 @@ int main() {
 
     phase.add_value_objective(PhaseRegionFlags::Back, "m", -1.0);
 
-    phase.set_num_partitions(8, 8);
+    phase.set_num_partitions(8);
+    phase.optimizer().set_qp_threads(8);
     phase.optimizer().set_opt_ls_mode("AUGLANG");
     phase.optimizer().set_max_ls_iters(2);
     phase.optimizer().set_max_acc_iters(200);

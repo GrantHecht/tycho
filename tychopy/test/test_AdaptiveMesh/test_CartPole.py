@@ -76,7 +76,8 @@ class test_CartPole(unittest.TestCase):
         phase.optimizer.print_level = 3
         phase.optimizer.eq_con_tol = 1.0e-8
         phase.adaptive_mesh = True
-        phase.set_num_partitions(1, 1)
+        phase.set_num_partitions(1)
+        phase.optimizer.qp_threads = 1
         phase.mesh_error_estimator = errest
         phase.print_mesh_info = False
 

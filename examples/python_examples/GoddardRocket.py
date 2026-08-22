@@ -171,7 +171,8 @@ if __name__ == "__main__":
     # Enable autoscaling for ocp and all constituent phases
     ocp.set_auto_scaling(True, True)
 
-    ocp.set_num_partitions(8, 8)
+    ocp.set_num_partitions(8)
+    ocp.optimizer.qp_threads = 8
     ocp.optimize()
 
     ##############################################################################

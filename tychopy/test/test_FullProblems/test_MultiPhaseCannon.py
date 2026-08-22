@@ -149,7 +149,8 @@ class test_MultiPhaseCannon(unittest.TestCase):
         ocp.optimizer.set_opt_ls_mode("L1")
         ocp.optimizer.max_ls_iters = 2
         ocp.optimizer.print_level = 3
-        ocp.set_num_partitions(1, 1)
+        ocp.set_num_partitions(1)
+        ocp.optimizer.qp_threads = 1
         ocp.optimizer.set_qp_ordering_mode("MINDEG")
 
         Flag = ocp.optimize()

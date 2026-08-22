@@ -211,7 +211,8 @@ if __name__ == "__main__":
     phase.add_delta_time_objective(1.0)
 
     phase.optimizer.print_level = 1
-    phase.set_num_partitions(8, 8)
+    phase.set_num_partitions(8)
+    phase.optimizer.qp_threads = 8
 
     ## All error estimates and tolerances are in reference to the scaled ODE system
     phase.set_adaptive_mesh(True)

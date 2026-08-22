@@ -167,8 +167,7 @@ heteroclinic trajectory is `examples/python_examples/Heteroclinic.py`.
 ## Set optimizer NLP partitions
 
 The optimizer's NLP Jacobian can be computed in parallel by splitting the
-collocation defects into partitions, each evaluated on a separate thread. Use
-the single-argument `set_num_partitions` overload:
+collocation defects into partitions, each evaluated on a separate thread:
 
 ::::{tab-set}
 :::{tab-item} Python
@@ -183,29 +182,21 @@ phase.set_num_partitions(4);   // split the NLP into 4 partitions
 :::
 ::::
 
-There is also a two-argument overload `set_num_partitions(n, qp_threads)` that
-simultaneously sets the Pardiso linear-solver thread count. Avoid this overload
-unless you specifically need to pin the Pardiso thread count independent of the
-partition count; the two arguments conflate distinct resources and are easy to
-misuse:
+The partition count and the Pardiso linear-solver thread count are distinct
+resources and are set independently. Set the latter on the optimizer itself,
+and only when you specifically need to pin it:
 
 ::::{tab-set}
 :::{tab-item} Python
 ```python
-# Prefer this:
 phase.set_num_partitions(4)
-
-# Avoid this unless you know exactly what qp_threads controls:
-# phase.set_num_partitions(4, 2)
+phase.optimizer.qp_threads = 2
 ```
 :::
 :::{tab-item} C++
 ```cpp
-// Prefer this:
 phase.set_num_partitions(4);
-
-// Avoid this unless you know exactly what qp_threads controls:
-// phase.set_num_partitions(4, 2);
+phase.optimizer().set_qp_threads(2);
 ```
 :::
 ::::

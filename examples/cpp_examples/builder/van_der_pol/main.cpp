@@ -55,7 +55,8 @@ int main() {
     }
 
     phase.optimizer().set_print_level(0);
-    phase.set_num_partitions(8, 8);
+    phase.set_num_partitions(8);
+    phase.optimizer().set_qp_threads(8);
     // Use individual tol setters so bar_tol keeps its default.
     phase.optimizer().set_kkt_tol(1.0e-8);
     phase.optimizer().set_econ_tol(1.0e-8);

@@ -11,8 +11,8 @@ Parent example: ``examples/python_examples/CartPole.py`` — Kelly (2017)'s
 minimum-effort cart-pole swing-up (LGL5, 64 segments, ``F`` bounded in
 ``[-Fmax, Fmax]`` with the parent's ``Fmax = 20`` N). Solver setup
 (dynamics via mass-matrix inversion, boundary values, x path bound,
-squared-force integral objective, ``set_num_partitions(8, 8)``) is copied
-verbatim from the parent, with only ``Fmax`` changed.
+squared-force integral objective, ``set_num_partitions(8)`` with eight QP
+threads) is copied verbatim from the parent, with only ``Fmax`` changed.
 
 Perturbation: ``Fmax`` tightened toward the minimum feasible value, per
 the brief's instruction to bisect manually and set the bound just inside
@@ -37,7 +37,7 @@ Determinism note: iteration count is exactly reproducible (95 every run
 observed). The objective value showed LSB-level float noise across
 repeats (e.g. 78.54562203020079 vs 78.545622030201 vs 78.54562203020076 —
 differing only at the ~13th significant digit), consistent with the
-parent's own ``set_num_partitions(8, 8)`` threaded evaluation order; this
+parent's own eight-partition threaded evaluation order; this
 is present in the unperturbed parent too, not introduced by the
 perturbation. It is far smaller than the order-sensitivity seen in
 SimpleLowThrust/MountainCar/Zermelo (which changes iteration counts and
@@ -107,6 +107,7 @@ def build():
     phase.add_lu_var_bound("Path", 0, -xmax, xmax)
     phase.add_integral_objective(Args(1)[0] ** 2, [5])
 
-    phase.set_num_partitions(8, 8)
+    phase.set_num_partitions(8)
+    phase.optimizer.qp_threads = 8
 
     return phase

@@ -212,7 +212,8 @@ int main() {
 
     phase.add_value_objective(PhaseRegionFlags::Back, "w", -1.0);
 
-    phase.set_num_partitions(8, 8);
+    phase.set_num_partitions(8);
+    phase.optimizer().set_qp_threads(8);
     phase.optimizer().set_print_level(1);
     phase.optimizer().set_econ_tol(1.0e-9);
 

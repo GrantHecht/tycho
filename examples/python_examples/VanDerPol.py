@@ -63,7 +63,8 @@ if __name__ == "__main__":
     phase.add_integral_objective(Args(3).squared_norm(), [0, 1, 3])
     phase.add_boundary_value("Back", [0, 1, 2], [0.0, 0.0, tf])
     phase.optimizer.print_level = 0
-    phase.set_num_partitions(8, 8)
+    phase.set_num_partitions(8)
+    phase.optimizer.qp_threads = 8
     phase.optimizer.set_tols(1.0e-8, 1.0e-8, 1.0e-8)
 
     phase.optimize()

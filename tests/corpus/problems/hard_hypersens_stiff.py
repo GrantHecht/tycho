@@ -125,7 +125,8 @@ def build():
     phase.optimizer.set_qp_ordering_mode("MINDEG")
     # One level below the parent's print_level=2 -- see docstring Deviation #1.
     phase.optimizer.print_level = 1
-    phase.set_num_partitions(1, 1)
+    phase.set_num_partitions(1)
+    phase.optimizer.qp_threads = 1
 
     # Perturbation: adaptive mesh refinement disabled, so nsegs=2 is the
     # permanent (under-resolved) mesh -- see docstring Deviation #2.

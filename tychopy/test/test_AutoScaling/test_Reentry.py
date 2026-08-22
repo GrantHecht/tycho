@@ -183,7 +183,8 @@ class test_Reentry(unittest.TestCase):
         phase.optimizer.max_ls_iters = 2
         phase.optimizer.max_acc_iters = 100
         phase.optimizer.print_level = 3
-        phase.set_num_partitions(1, 1)
+        phase.set_num_partitions(1)
+        phase.optimizer.qp_threads = 1
         phase.optimizer.cnr_mode = True
         phase.print_mesh_info = False
         phase.set_mesh_tol(mtol)
