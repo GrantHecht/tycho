@@ -17,7 +17,7 @@
 #include "tycho/detail/optimal_control/core/ode_sizes.h"
 #include "tycho/detail/optimal_control/core/optimal_control_flags.h"
 #include "tycho/detail/hven_namespaces.h"
-#include <hven/drivers/non_linear_program.h>
+#include <hven/model/non_linear_program.h>
 #include <algorithm>
 #include <array>
 #include <cassert>

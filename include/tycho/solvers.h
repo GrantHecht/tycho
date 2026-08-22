@@ -9,7 +9,7 @@
 #include <hven/detail/interior/solver_function_base.h>
 #include <hven/detail/interior/constraint_function.h>
 #include <hven/detail/interior/objective_function.h>
-#include <hven/drivers/non_linear_program.h>
+#include <hven/model/non_linear_program.h>
 #include <hven/drivers/optimization_problem_base.h>
 #include "tycho/detail/solvers/nlp_backend.h"
 #include "tycho/detail/solvers_vf/optimization_problem.h"

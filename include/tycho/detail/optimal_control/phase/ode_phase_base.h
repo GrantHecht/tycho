@@ -22,7 +22,7 @@
 #include "tycho/detail/optimal_control/phase/phase_indexer.h"
 #include "tycho/detail/optimal_control/transcription/lgl_interp_table.h"
 #include "tycho/detail/hven_namespaces.h"
-#include <hven/drivers/non_linear_program.h>
+#include <hven/model/non_linear_program.h>
 #include "tycho/detail/solvers/nlp_backend.h"
 #include <hven/drivers/interior_point_solver.h>
 #include "tycho/detail/vf/scaling/io_scaled.h"

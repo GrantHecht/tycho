@@ -24,7 +24,7 @@
 #include <fmt/format.h>
 
 #include "tycho/detail/hven_namespaces.h"
-#include <hven/drivers/non_linear_program.h>
+#include <hven/model/non_linear_program.h>
 #include "tycho/detail/solvers/nlp_backend.h"
 #include <hven/drivers/interior_point_solver.h>
 #include "tycho/vector_functions.h"
