@@ -243,7 +243,8 @@ if __name__ == "__main__":
     phase.add_upper_delta_time_bound(tmax, 1.0)
     phase.add_boundary_value("Back", [0, 2, 3], [htf, vtf, gammatf])
     phase.add_delta_var_objective(1, -1.0)
-    phase.set_num_partitions(8, 8)
+    phase.set_num_partitions(8)
+    phase.optimizer.qp_threads = 8
 
     ## Our IG is bad, so i turn on line search
     phase.optimizer.set_soe_ls_mode("L1")

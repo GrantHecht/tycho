@@ -57,7 +57,7 @@
 // include one another).
 #include <IpTNLP.hpp>
 
-#include <hven/drivers/non_linear_program.h>
+#include <hven/model/non_linear_program.h>
 
 #include "tycho/detail/hven_namespaces.h"
 

@@ -22,7 +22,7 @@
 #include "tycho/detail/optimal_control/phase/phase_indexer.h"
 #include "tycho/detail/optimal_control/transcription/lgl_interp_table.h"
 #include "tycho/detail/hven_namespaces.h"
-#include <hven/drivers/non_linear_program.h>
+#include <hven/model/non_linear_program.h>
 #include "tycho/detail/solvers/nlp_backend.h"
 #include <hven/drivers/interior_point_solver.h>
 #include "tycho/detail/vf/scaling/io_scaled.h"
@@ -1951,7 +1951,10 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
     /// @brief Prepare the phase for a "jet" (batched) solve.
     /// @endinternal
     void jet_initialize() {
-        this->set_num_partitions(1, 1);
+        // See OptimizationProblem::jet_initialize() (solvers_vf/optimization_problem.h)
+        // for why these two calls are separate and ordered this way.
+        this->optimizer_->set_qp_threads(1);
+        this->set_num_partitions(1);
         this->optimizer_->set_print_level(10);
         this->print_mesh_info_ = false;
 

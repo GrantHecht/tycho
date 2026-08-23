@@ -130,7 +130,8 @@ an integrator-with-control initial guess.
    phase2.set_units(units)
    phase3.set_units(units)
    ocp.set_auto_scaling(True, True)
-   ocp.set_num_partitions(8, 8)
+   ocp.set_num_partitions(8)
+   ocp.optimizer.qp_threads = 8
    ocp.optimizer.set_print_level(3)
    ocp.optimize()
 

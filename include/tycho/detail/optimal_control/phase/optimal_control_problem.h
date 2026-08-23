@@ -1642,7 +1642,10 @@ struct OptimalControlProblemBase : BackendProblemBase {
     /// @brief Prepare the problem for a "jet" (batched) solve.
     /// @endinternal
     void jet_initialize() {
-        this->set_num_partitions(1, 1);
+        // See OptimizationProblem::jet_initialize() (solvers_vf/optimization_problem.h)
+        // for why these two calls are separate and ordered this way.
+        this->optimizer_->set_qp_threads(1);
+        this->set_num_partitions(1);
         this->optimizer_->set_print_level(10);
         this->print_mesh_info_ = false;
         this->transcribe();

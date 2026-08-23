@@ -187,9 +187,11 @@ class SocGenericHarness {
 
     tycho::solvers::SolverContext make_ctx() {
         return tycho::solvers::SolverContext{
-            solver_->nlp_.get(),    solver_->kkt_sol_,    solver_->settings_,
-            solver_->primal_vars_,  solver_->slack_vars_, solver_->equal_cons_,
-            solver_->inequal_cons_, solver_->kkt_dim_,    solver_->stli_scratch_,
+            solver_->nlp_.get(),        solver_->kkt_sol_,
+            solver_->settings_,         solver_->primal_vars_,
+            solver_->slack_vars_,       solver_->equal_cons_,
+            solver_->inequal_cons_,     solver_->kkt_dim_,
+            solver_->stli_scratch_,     solver_->declaration_primals_scratch_,
             solver_->restoration_.get()};
     }
 

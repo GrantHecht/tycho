@@ -24,7 +24,7 @@
 #include <fmt/format.h>
 
 #include "tycho/detail/hven_namespaces.h"
-#include <hven/drivers/non_linear_program.h>
+#include <hven/model/non_linear_program.h>
 #include "tycho/detail/solvers/nlp_backend.h"
 #include <hven/drivers/interior_point_solver.h>
 #include "tycho/vector_functions.h"
@@ -147,13 +147,19 @@ struct OptimizationProblem : BackendProblemBase {
     void transcribe();
 
     void jet_initialize() {
-        this->set_num_partitions(1, 1);
+        // Single-partition evaluation on the calling thread, and a single QP
+        // thread: two independent settings, set independently. set_qp_threads
+        // goes first because it validates and can throw.
+        this->optimizer_->set_qp_threads(1);
+        this->set_num_partitions(1);
         this->optimizer_->set_print_level(10);
         this->transcribe();
     }
     void jet_release() {
         this->optimizer_->release();
-        this->set_num_partitions(1, 1);
+        // Same ordering rationale as jet_initialize() above.
+        this->optimizer_->set_qp_threads(1);
+        this->set_num_partitions(1);
         this->optimizer_->set_print_level(0);
         this->nlp_ = std::shared_ptr<NonLinearProgram>();
         this->reset_transcription();

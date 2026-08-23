@@ -100,7 +100,8 @@ class test_BlockControlEndToEnd(unittest.TestCase):
         phase = self._make_cartpole_phase("LGL5", 12)
         phase.set_control_mode("BlockConstant")
         phase.adaptive_mesh = True
-        phase.set_num_partitions(1, 1)
+        phase.set_num_partitions(1)
+        phase.optimizer.qp_threads = 1
         phase.mesh_error_criteria = oc.MeshErrorAggregation.ENDTOEND
         phase.mesh_error_distributor = oc.MeshErrorAggregation.AVG
         phase.mesh_error_estimator = oc.MeshErrorEstimators.DEBOOR

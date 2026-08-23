@@ -209,7 +209,8 @@ if __name__ == "__main__":
     # Minimize the "control effort", the integral of square of applied force
     phase.add_integral_objective(Args(1)[0] ** 2, [5])
 
-    phase.set_num_partitions(8, 8)
+    phase.set_num_partitions(8)
+    phase.optimizer.qp_threads = 8
     phase.optimizer.set_print_level(1)
     phase.optimizer.eq_con_tol = 1.0e-8
 

@@ -522,7 +522,7 @@ selection.
 | --- | --- |
 | `optimizer` | The owned `InteriorPointSolver` instance (read-only). |
 | `num_partitions` | Number of NLP matrix partitions. Assignment raises `ValueError` below 1. |
-| `set_num_partitions(n)` / `set_num_partitions(n, qp_threads)` | Sets the partition count, optionally also the linear solver's thread count. |
+| `set_num_partitions(n)` | Sets the partition count. The linear solver's thread count is set separately, via `optimizer.qp_threads`. |
 | `jet_job_mode` | Which solve entry point `Jet.map` runs for this problem (see `JetJobModes`). |
 | `nlp_solver` | NLP backend for the solve entry points (see below). |
 | `ipopt_options` | String key/value options (a `dict[str, str]`) forwarded verbatim to Ipopt. |

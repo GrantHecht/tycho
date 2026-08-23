@@ -86,7 +86,8 @@ if __name__ == "__main__":
     phase.add_boundary_value("Back", range(0, 6), XF[0:6])
     phase.add_value_objective("Back", 6, -1.0)
 
-    phase.set_num_partitions(8, 8)
+    phase.set_num_partitions(8)
+    phase.optimizer.qp_threads = 8
     phase.optimizer.set_opt_ls_mode("AUGLANG")
     phase.optimizer.set_max_ls_iters(2)
     phase.optimizer.set_max_acc_iters(200)

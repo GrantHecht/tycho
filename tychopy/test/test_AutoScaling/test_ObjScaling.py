@@ -72,7 +72,8 @@ class test_ObjScaling(unittest.TestCase):
         phase.add_integral_objective(ODE.obj() * iscale, [0, 2])
         phase.add_value_objective("Back", 0, vscale)
 
-        phase.set_num_partitions(1, 1)
+        phase.set_num_partitions(1)
+        phase.optimizer.qp_threads = 1
         # cnr_mode requires nested-dissection ordering (hven rejects the
         # MINDEG pairing outright); the test cares about reproducible CNR
         # runs comparing against autoscaling, not the ordering choice itself.
@@ -100,7 +101,8 @@ class test_ObjScaling(unittest.TestCase):
         phase.add_value_objective("Back", 0, vscale)
 
         phase.set_auto_scaling(True)
-        phase.set_num_partitions(1, 1)
+        phase.set_num_partitions(1)
+        phase.optimizer.qp_threads = 1
         phase.optimizer.cnr_mode = True
         phase.optimizer.set_qp_ordering_mode("METIS")
 
@@ -128,7 +130,8 @@ class test_ObjScaling(unittest.TestCase):
 
         phase.set_auto_scaling(True)
 
-        phase.set_num_partitions(1, 1)
+        phase.set_num_partitions(1)
+        phase.optimizer.qp_threads = 1
         phase.optimizer.cnr_mode = True
         phase.optimizer.set_qp_ordering_mode("METIS")
 
@@ -156,7 +159,8 @@ class test_ObjScaling(unittest.TestCase):
 
         phase.set_auto_scaling(True)
 
-        phase.set_num_partitions(1, 1)
+        phase.set_num_partitions(1)
+        phase.optimizer.qp_threads = 1
         phase.optimizer.cnr_mode = True
         phase.optimizer.set_qp_ordering_mode("METIS")
 
@@ -198,7 +202,8 @@ class test_ObjScaling(unittest.TestCase):
         ocp.add_forward_link_equal_con(phase1, phase2, range(0, 3), auto_scale="auto")
 
         ocp.set_auto_scaling(True, True)
-        ocp.set_num_partitions(1, 1)
+        ocp.set_num_partitions(1)
+        ocp.optimizer.qp_threads = 1
         ocp.optimizer.cnr_mode = True
         ocp.optimizer.set_qp_ordering_mode("METIS")
 

@@ -262,7 +262,8 @@ class test_Delta3Launch(unittest.TestCase):
         ocp.optimizer.print_level = 3
         ocp.optimizer.eq_con_tol = 1.0e-8
 
-        ocp.set_num_partitions(1, 1)
+        ocp.set_num_partitions(1)
+        ocp.optimizer.qp_threads = 1
         ocp.set_adaptive_mesh(True, True)
         ocp.max_mesh_iters = 10
         ocp.print_mesh_info = False

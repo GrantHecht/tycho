@@ -267,11 +267,10 @@ class OptimalControlProblem {
     void set_mesh_tol(double t) { ocp_.set_mesh_tol(t); }
     /// @brief Set the number of solver partitions.
     /// @param n  Number of partitions.
+    ///
+    /// The QP (linear-solver) thread count is a separate setting: reach it
+    /// through @ref optimizer as `optimizer().set_qp_threads(t)`.
     void set_num_partitions(int n) { ocp_.set_num_partitions(n); }
-    /// @brief Set the number of solver partitions and QP threads.
-    /// @param n           Number of partitions.
-    /// @param qp_threads  Number of QP (linear-solver) threads.
-    void set_num_partitions(int n, int qp_threads) { ocp_.set_num_partitions(n, qp_threads); }
 
     /// @brief Access the underlying InteriorPointSolver optimizer.
     /// @return Reference to the optimizer.

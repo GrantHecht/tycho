@@ -314,7 +314,8 @@ if __name__ == "__main__":
     phase.add_lower_var_bound("Back", 6, 0.05)
     phase.add_value_objective("Back", 6, -1.0)
 
-    phase.set_num_partitions(8, 8)
+    phase.set_num_partitions(8)
+    phase.optimizer.qp_threads = 8
     phase.optimizer.print_level = 1
     phase.optimizer.set_eq_con_tol(1.0e-9)
 

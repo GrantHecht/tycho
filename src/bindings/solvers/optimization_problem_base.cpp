@@ -36,8 +36,8 @@ void TychoBind<BackendProblemBase>::build(nb::module_ &m) {
         R"doc(Number of NLP matrix partitions.
 
 Assignment routes through :meth:`set_num_partitions` and raises
-``ValueError`` for values < 1. Use ``set_num_partitions(n, qp_threads)`` to
-also set the QP thread count.)doc");
+``ValueError`` for values < 1. The QP thread count is a separate setting:
+assign ``optimizer.qp_threads``.)doc");
     obj.def_ro("optimizer", &BackendProblemBase::optimizer_);
 
     obj.def_rw("nlp_solver", &BackendProblemBase::nlp_solver_,
@@ -77,12 +77,11 @@ prob.ipopt_options = opts``.)doc");
                R"doc(Diagnostics of the most recent ipopt-backend run on this problem
 (sentinel values with ran == False before any such run).)doc");
 
-    obj.def("set_num_partitions",
-            nb::overload_cast<int, int>(&BackendProblemBase::set_num_partitions),
-            nb::arg("num_partitions"), nb::arg("qp_threads"));
+    obj.def("set_num_partitions", &BackendProblemBase::set_num_partitions,
+            nb::arg("num_partitions"),
+            R"doc(Set the number of NLP matrix partitions (must be >= 1).
 
-    obj.def("set_num_partitions",
-            nb::overload_cast<int>(&BackendProblemBase::set_num_partitions));
+The QP thread count is a separate setting: assign ``optimizer.qp_threads``.)doc");
 
     obj.def("set_jet_job_mode",
             nb::overload_cast<JetJobModes>(&BackendProblemBase::set_jet_job_mode));
