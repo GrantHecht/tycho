@@ -305,10 +305,11 @@ class NativeBoundsHarness {
     // it reads are private to InteriorPointSolver.
     tycho::solvers::SolverContext bare_context() {
         return tycho::solvers::SolverContext{
-            &this->nlp(),           solver_->kkt_sol_,    solver_->settings_,
-            solver_->primal_vars_,  solver_->slack_vars_, solver_->equal_cons_,
-            solver_->inequal_cons_, solver_->kkt_dim_,    solver_->stli_scratch_,
-            solver_->declaration_primals_scratch_};
+            &this->nlp(),           solver_->kkt_sol_,
+            solver_->settings_,     solver_->primal_vars_,
+            solver_->slack_vars_,   solver_->equal_cons_,
+            solver_->inequal_cons_, solver_->kkt_dim_,
+            solver_->stli_scratch_, solver_->declaration_primals_scratch_};
     }
 
     void push(Eigen::VectorXd &x, double mu0) { solver_->push_initial_point_interior(x, mu0); }

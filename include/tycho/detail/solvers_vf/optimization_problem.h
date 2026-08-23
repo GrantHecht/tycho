@@ -157,9 +157,7 @@ struct OptimizationProblem : BackendProblemBase {
     }
     void jet_release() {
         this->optimizer_->release();
-        // Single-partition evaluation on the calling thread, and a single QP
-        // thread: two independent settings, set independently. set_qp_threads
-        // goes first because it validates and can throw.
+        // Same ordering rationale as jet_initialize() above.
         this->optimizer_->set_qp_threads(1);
         this->set_num_partitions(1);
         this->optimizer_->set_print_level(0);

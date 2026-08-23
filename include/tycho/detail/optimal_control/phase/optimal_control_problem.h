@@ -1642,9 +1642,8 @@ struct OptimalControlProblemBase : BackendProblemBase {
     /// @brief Prepare the problem for a "jet" (batched) solve.
     /// @endinternal
     void jet_initialize() {
-        // Single-partition evaluation on the calling thread, and a single QP
-        // thread: two independent settings, set independently. set_qp_threads
-        // goes first because it validates and can throw.
+        // See OptimizationProblem::jet_initialize() (solvers_vf/optimization_problem.h)
+        // for why these two calls are separate and ordered this way.
         this->optimizer_->set_qp_threads(1);
         this->set_num_partitions(1);
         this->optimizer_->set_print_level(10);
