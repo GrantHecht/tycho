@@ -57,7 +57,7 @@ void tycho::solvers::OptimizationProblem::transcribe() {
                 ? (numappl > 1 ? ThreadingFlags::ByApplication : ThreadingFlags::RoundRobin)
                 : ThreadingFlags::MainThread;
 
-        this->nlp_->equality_constraints_.back().thread_mode_ = ThreadMode;
+        this->nlp_->equality_constraints_.back().set_thread_mode(ThreadMode);
     }
 
     for (auto &func : this->user_inequalities_) {
@@ -88,7 +88,7 @@ void tycho::solvers::OptimizationProblem::transcribe() {
                 ? (numappl > 1 ? ThreadingFlags::ByApplication : ThreadingFlags::RoundRobin)
                 : ThreadingFlags::MainThread;
 
-        this->nlp_->inequality_constraints_.back().thread_mode_ = ThreadMode;
+        this->nlp_->inequality_constraints_.back().set_thread_mode(ThreadMode);
     }
 
     for (auto &func : this->user_objectives_) {
@@ -111,7 +111,7 @@ void tycho::solvers::OptimizationProblem::transcribe() {
                 ? (numappl > 1 ? ThreadingFlags::ByApplication : ThreadingFlags::RoundRobin)
                 : ThreadingFlags::MainThread;
 
-        this->nlp_->objectives_.back().thread_mode_ = ThreadMode;
+        this->nlp_->objectives_.back().set_thread_mode(ThreadMode);
     }
 
     this->nlp_->make_nlp(numVars, numEqCons, numIqCons);
