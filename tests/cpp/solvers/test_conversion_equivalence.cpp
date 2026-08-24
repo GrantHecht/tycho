@@ -97,6 +97,7 @@
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -140,11 +141,18 @@ constexpr double kConvEquivCrossDoorTol = 1.0e-7;
 // zero, where a bare relative comparison has no scale to work with.
 constexpr double kConvEquivUlpGate = 1.0e-13;
 
-// Doors 2 vs 3 at the SOLVED answer. Looser than the model-surface gate --
-// the solve carries the last-bit differences of every evaluation through its
-// iteration -- and still four orders tighter than the tolerance the solve was
-// asked to reach, so it measures the conversion rather than the convergence.
-constexpr double kConvEquivSolveGate = 1.0e-10;
+// Doors 2 vs 3 at the SOLVED answer. Looser than the model-surface gate,
+// because the solve carries the last-bit difference of every evaluation
+// through its iteration -- and set from what that costs, measured: the two
+// doors' primals differ by about 5e-17 and their multipliers by about 4e-16,
+// so this leaves three to four orders of margin over the observed disagreement
+// while still refusing anything an O(1) transcription slip would produce.
+//
+// It is NOT set from the solver tolerance, which is the same 1e-10 (see
+// kConvEquivSolverTol above) and therefore says nothing about how closely two
+// doors of one problem should track each other. A gate at that value would sit
+// six orders above the measurement and pass almost anything.
+constexpr double kConvEquivSolveGate = 1.0e-12;
 
 // An analytic optimum, where this file knows one in closed form. Held to the
 // same accuracy as the cross-door comparison for the same reason.
@@ -464,10 +472,12 @@ struct ConvEquivEqBoundNative : NlpModel {
     }
     SpMatRM eval_hess(const Vec &, double obj_scale, const Vec &lambda_e,
                       const Vec &) const override {
-        // An empty block is the compact spelling of an all-zero one at the
-        // model surface -- the structure probes call it that way -- so the
-        // read below tolerates it. It is NOT tolerated at the chain surface;
-        // see the boundary pins for the rule and why it differs.
+        // Every caller in this tree hands this model exactly its one equality
+        // multiplier -- the host slices its own head before calling down, and
+        // the direct calls below size their blocks to me(). The length guard
+        // is defensive only; it is not an interpretation of an empty block,
+        // which the boundary pins state is a LENGTH and never a spelling of
+        // "all zero".
         const double le = (lambda_e.size() == 0) ? 0.0 : lambda_e[0];
         const double d = 2.0 * obj_scale + 2.0 * le;
         SpMatRM h(2, 2);
@@ -991,11 +1001,11 @@ TEST(ConversionEquivalence, EqBoundModelSurfacesMatchAcrossTheConversion) {
 }
 
 // Same mathematics, same order, same engine: the two doors land on the same
-// answer to a gate four orders below the tolerance the solve was asked for.
-// That is the measurement -- a conversion that PERTURBED a value rather than
-// preserved it would show up here long before it showed up at solver
-// tolerance, while the last-bit residue two spellings of one expression
-// legitimately carry does not.
+// answer to a gate set three to four orders above their measured disagreement,
+// not to the tolerance the solve was asked for. That is the measurement -- a
+// conversion that PERTURBED a value rather than preserved it would show up
+// here long before it showed up at solver tolerance, while the last-bit
+// residue two spellings of one expression legitimately carry does not.
 TEST(ConversionEquivalence, EqBoundNativeAndTripletDoorsSolveToTheSameNumbers) {
     const Eigen::VectorXd x0 = conv_equiv_eq_bound_start();
     const auto native =
@@ -1109,9 +1119,20 @@ TEST(ConversionEquivalence, EqBoundVfDoorAgreesWithTheOtherTwo) {
     ASSERT_EQ(native.lambda_e_.size(), 1);
     EXPECT_NEAR(native.lambda_e_[0], lambda_e_expected, kConvEquivAnalyticTol);
 
+    // The bound multiplier the convention forces, and its sign. Its VALUE is a
+    // restatement of the line above (z0 is that expression), so the assertion
+    // worth making is the sign: the bound that binds is a LOWER one, and the
+    // convention says a lower bound's multiplier is non-negative.
+    //
+    // A known limit of this suite, deliberate rather than overlooked: z is
+    // computed here from the convention and the reported equality multiplier,
+    // and is not compared against an engine-reported bound multiplier, because
+    // the solve result exposes none. What is pinned is that the convention's
+    // arithmetic closes and its sign is right -- not that the engine agrees on
+    // z. Closing that gap needs the bound duals on the result first, and this
+    // is the natural place for it when they arrive.
     const double z0 = grad0 + native.lambda_e_[0] * je0;
     EXPECT_GT(z0, 0.0) << "the lower bound is active, so its multiplier is non-negative";
-    EXPECT_NEAR(z0, grad0 + lambda_e_expected * je0, kConvEquivAnalyticTol);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1325,15 +1346,6 @@ TEST(ConversionEquivalence, DeclaredRowMultiplierMapCoversEveryRowKind) {
     EXPECT_EQ(declared[3], 3.0 - 4.0);
     EXPECT_EQ(declared[4], 0.0);
 
-    // Empty native blocks are the compact spelling of all-zero at this
-    // surface, so composing them gives the zero declared vector rather than a
-    // refusal. (The adapter host reads its blocks under a different rule --
-    // see the boundary pins.)
-    const Eigen::VectorXd empty_composed =
-        model.compose_user_multipliers(Eigen::VectorXd(0), Eigen::VectorXd(0));
-    EXPECT_TRUE(empty_composed.isZero(0.0));
-    EXPECT_EQ(empty_composed.size(), 5);
-
     // Backward.
     Eigen::VectorXd back_e, back_i;
     model.split_user_multipliers(declared, back_e, back_i);
@@ -1370,6 +1382,31 @@ TEST(ConversionEquivalence, DeclaredRowMultiplierMapCoversEveryRowKind) {
     model.split_user_multipliers(with_free, free_e, free_i);
     conv_equiv_expect_bit_identical(free_i, back_i, "native inequality multipliers");
     EXPECT_EQ(model.compose_user_multipliers(free_e, free_i)[4], 0.0);
+}
+
+// The map takes exactly the row counts it stands for, in both blocks. An empty
+// block is a length, not a compact spelling of "all zero", so composing one
+// over a nonempty row space is a caller error rather than a request for zeros.
+//
+// DISABLED: requires the symmetric empty-refusal (hven fold, post-063f954).
+// At the pin this tree currently consumes, the composition still accepts an
+// empty block over a nonempty row space and returns zeros, so this fails
+// there. Enable in the same change that consumes the fold -- drop the prefix,
+// nothing else.
+TEST(ConversionEquivalence, DISABLED_TheMultiplierMapRefusesABlockThatIsNotItsRowCount) {
+    NlpProblemModel model(std::make_shared<ConvEquivAllKindsProblem>());
+    ASSERT_EQ(model.me(), 1);
+    ASSERT_EQ(model.mi(), 4);
+
+    const Eigen::VectorXd le = (Eigen::VectorXd(1) << 7.0).finished();
+    const Eigen::VectorXd li = (Eigen::VectorXd(4) << 0.25, 0.5, 3.0, 4.0).finished();
+
+    EXPECT_THROW(model.compose_user_multipliers(Eigen::VectorXd(0), li), std::invalid_argument);
+    EXPECT_THROW(model.compose_user_multipliers(le, Eigen::VectorXd(0)), std::invalid_argument);
+    // Zeros over the real row counts is how a caller asks for zero
+    // multipliers, and it still works.
+    EXPECT_NO_THROW(
+        model.compose_user_multipliers(Eigen::VectorXd::Zero(1), Eigen::VectorXd::Zero(4)));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
