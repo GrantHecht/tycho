@@ -4,7 +4,6 @@
 
 #include "tycho/detail/solvers_vf/transcribed_aggregate.h"
 
-#include <algorithm>
 #include <string>
 #include <utility>
 
@@ -215,52 +214,69 @@ void TranscribedAggregate::read_layout() const {
     const int *const laid_cols = host.kkt_coeff_cols_.data();
     const int *const laid_partitions = host.kkt_coeff_part_ids_.data();
 
-    // Every refusal a slot can make, in slot order, before any of the stream is
-    // built -- so a layout this view cannot state leaves the previously
-    // published stream standing, and names the same first offending slot it
-    // always did. The pass doubles as the count of each domain's run, which is
-    // what lets the three runs be filled in one pass instead of one pass each.
-    int hessian_slots = 0;
-    int equality_slots = 0;
-    int inequality_slots = 0;
+    // Every refusal a slot can make, folded into four accumulators so the pass
+    // carries no branch and the compiler can widen it. The fold keeps the sign
+    // bit of every coordinate it saw, and the three running counts are of the
+    // rows below each band edge, which is where the size of each domain's run
+    // comes from: the Hessian run is what sits below the primal edge, the
+    // equality run what sits between the two constraint edges, the inequality
+    // run the rest. A slack row is a row between the primal edge and the
+    // equality edge, so the two lower counts disagreeing is exactly one having
+    // been claimed.
+    int coordinate_signs = 0;
+    int below_primal = 0;
+    int below_equality_base = 0;
+    int below_inequality_base = 0;
     for (int slot = 0; slot < total; slot++) {
         const int row = laid_rows[slot];
         const int col = laid_cols[slot];
-        if (row < 0 || col < 0) {
-            // Only an eliminated coordinate is recorded negative, and this
-            // routine never runs against an eliminated layout (see
-            // refresh_if_relaid). Reaching one here means the layout and the
-            // reduction flag disagree, which would put dropped claims of one
-            // domain into another's run.
-            throw std::invalid_argument(fmt::format(
-                "TranscribedAggregate: claim slot {0} names coordinate ({1}, {2}) in a layout "
-                "that reports no eliminated variables; a negative coordinate is how the layout "
-                "records an elimination, and its domain cannot be told from the row band",
-                slot, row, col));
-        }
-        if (row < primal) {
-            hessian_slots++;
-        } else if (row < equality_base) {
-            throw std::invalid_argument(fmt::format(
-                "TranscribedAggregate: the layout claims KKT row {0}, which is a slack row; the "
-                "claim stream is stated in a space with no slack block",
-                row));
-        } else if (row < inequality_base) {
-            equality_slots++;
-        } else {
-            inequality_slots++;
+        coordinate_signs |= row | col;
+        below_primal += int(row < primal);
+        below_equality_base += int(row < equality_base);
+        below_inequality_base += int(row < inequality_base);
+    }
+
+    if (coordinate_signs < 0 || below_equality_base != below_primal) {
+        // Something the stream cannot state is in the layout. Which slot, and
+        // which of the two, is worth a second walk to say exactly -- and this
+        // walk makes the refusal on the first offending slot in slot order,
+        // which is the one the fold above cannot name.
+        for (int slot = 0; slot < total; slot++) {
+            const int row = laid_rows[slot];
+            const int col = laid_cols[slot];
+            if (row < 0 || col < 0) {
+                // Only an eliminated coordinate is recorded negative, and this
+                // routine never runs against an eliminated layout (see
+                // refresh_if_relaid). Reaching one here means the layout and
+                // the reduction flag disagree, which would put dropped claims
+                // of one domain into another's run.
+                throw std::invalid_argument(fmt::format(
+                    "TranscribedAggregate: claim slot {0} names coordinate ({1}, {2}) in a layout "
+                    "that reports no eliminated variables; a negative coordinate is how the "
+                    "layout records an elimination, and its domain cannot be told from the row "
+                    "band",
+                    slot, row, col));
+            }
+            if (row >= primal && row < equality_base) {
+                throw std::invalid_argument(fmt::format(
+                    "TranscribedAggregate: the layout claims KKT row {0}, which is a slack row; "
+                    "the claim stream is stated in a space with no slack block",
+                    row));
+            }
         }
     }
 
-    const hven::solvers::ClaimBlock hessian{0, hessian_slots};
-    const hven::solvers::ClaimBlock equality{hessian_slots, equality_slots};
-    const hven::solvers::ClaimBlock inequality{hessian_slots + equality_slots, inequality_slots};
+    const hven::solvers::ClaimBlock hessian{0, below_primal};
+    const hven::solvers::ClaimBlock equality{below_primal,
+                                             below_inequality_base - below_equality_base};
+    const hven::solvers::ClaimBlock inequality{below_inequality_base,
+                                               total - below_inequality_base};
 
-    if (hessian_slots + equality_slots + inequality_slots != total) {
+    if (hessian.count_ + equality.count_ + inequality.count_ != total) {
         throw std::invalid_argument(
             fmt::format("TranscribedAggregate: the three domain runs cover {0} of the layout's {1} "
                         "claim slots",
-                        hessian_slots + equality_slots + inequality_slots, total));
+                        hessian.count_ + equality.count_ + inequality.count_, total));
     }
 
     Eigen::VectorXi rows(total);
@@ -270,31 +286,41 @@ void TranscribedAggregate::read_layout() const {
     int *const out_cols = cols.data();
     int *const out_partitions = partitions.data();
 
-    // One pass, three cursors: each domain's run is filled in the slot order the
-    // layout claims in, which is what makes each run the program's own serial
-    // partition-index order.
+    // One pass, three cursors: each domain's run is filled in the slot order
+    // the layout claims in, which is what makes each run the program's own
+    // serial partition-index order.
+    //
+    // Both constraint bands move down by the same amount. The assembled space
+    // has no slack block, so an equality row at primal + slack + r lands at
+    // primal + r and an inequality row at primal + slack + me + r lands at
+    // primal + me + r: in each case the laid row less the slack width.
     int next_hessian = hessian.start_;
     int next_equality = equality.start_;
     int next_inequality = inequality.start_;
+    // Not unrolled. Three cursors, three input arrays and three output arrays
+    // is already more live state than the register file holds; unrolled it
+    // spills all of them and reloads them on every slot, which costs more than
+    // the unrolling saves -- measured at about a sixth of this routine.
+#if defined(__clang__)
+#pragma clang loop unroll(disable)
+#endif
     for (int slot = 0; slot < total; slot++) {
         const int row = laid_rows[slot];
         const int col = laid_cols[slot];
 
         int out_slot = 0;
-        int out_row = row;
-        int out_col = col;
+        int out_row = 0;
+        int out_col = 0;
         if (row < primal) {
             out_slot = next_hessian++;
             // The layout records a Hessian element in whichever order the piece
             // walked it; the claim convention names it on the upper triangle.
-            out_row = std::min(row, col);
-            out_col = std::max(row, col);
-        } else if (row < inequality_base) {
-            out_slot = next_equality++;
-            out_row = primal + (row - equality_base);
+            out_row = row < col ? row : col;
+            out_col = row < col ? col : row;
         } else {
-            out_slot = next_inequality++;
-            out_row = primal + equality_rows + (row - inequality_base);
+            out_slot = row < inequality_base ? next_equality++ : next_inequality++;
+            out_row = row - slack;
+            out_col = col;
         }
 
         out_rows[out_slot] = out_row;
