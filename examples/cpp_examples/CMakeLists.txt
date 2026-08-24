@@ -85,8 +85,10 @@ endforeach()
 # ── CTest registration ──────────────────────────────────────────────────────
 include(CTest)
 
+# multi_spacecraft_opt_builder is registered separately below, with an argument
+# the others do not take.
 foreach(_ex IN LISTS _all_example_targets)
-    if(TARGET ${_ex})
+    if(TARGET ${_ex} AND NOT _ex STREQUAL "multi_spacecraft_opt_builder")
         add_test(NAME cpp_example_${_ex} COMMAND ${_ex})
         set_tests_properties(cpp_example_${_ex} PROPERTIES TIMEOUT 300)
     endif()
@@ -97,19 +99,30 @@ if(TARGET hanging_chain_builder)
     set_tests_properties(cpp_example_hanging_chain_builder PROPERTIES TIMEOUT 600)
 endif()
 
-# multi_spacecraft_opt_builder is run on its own, which REDUCES but does not
-# remove its flakiness -- keeping it here so the residual is cleanly the
-# example's own rather than the scheduler's.
+# multi_spacecraft_opt_builder is the one example whose gate invocation differs
+# from the example itself, and --deterministic is why.
 #
-# The last step of its continuation (ltacc = 0.005) converges only marginally,
-# and the solve is run multi-partition, so the order threads reduce into the
-# KKT assembly varies run to run and the iterate sequence with it. Measured on
-# an idle machine with nothing else running: one failure in eight, the failing
-# run diverging to a final time of ~1712 periods against ~3.3 on a passing one.
-# Pinning the example to a single evaluation partition and a single QP thread
-# makes it deterministic (four for four) at roughly three times the runtime;
-# that is a change to what the example demonstrates and to the gate's cost, so
-# it is recorded for a decision rather than made here.
+# The example runs its solve over several evaluation partitions, so the order in
+# which threads reduce into the KKT assembly varies from run to run and the
+# iterate sequence varies with it. On this problem the last continuation step
+# (ltacc = 0.005) converges marginally enough for that difference to decide the
+# outcome: measured on an idle machine with nothing else running at all, it
+# fails one run in eight, and the failing run diverges -- a final time of ~1712
+# periods against ~3.3 on a passing one -- rather than missing a tolerance.
+# Running it alone does not fix that; the nondeterminism is inside the solve,
+# not in what else the machine is doing, which is why this test carries no
+# RUN_SERIAL property.
+#
+# --deterministic pins the solve to one evaluation partition and one QP thread,
+# leaving nothing to reduce across threads, and it then produces the same
+# arithmetic every run. It costs roughly three times the runtime (~49 s against
+# ~16 s), which is the price of a gate that does not flake.
+#
+# The threaded path is still what the example demonstrates: only this
+# invocation passes the flag, and running the binary by hand gets the demo.
+# The marginal continuation step itself is untouched and still worth a look.
 if(TARGET multi_spacecraft_opt_builder)
-    set_tests_properties(cpp_example_multi_spacecraft_opt_builder PROPERTIES RUN_SERIAL TRUE)
+    add_test(NAME cpp_example_multi_spacecraft_opt_builder
+             COMMAND multi_spacecraft_opt_builder --deterministic)
+    set_tests_properties(cpp_example_multi_spacecraft_opt_builder PROPERTIES TIMEOUT 300)
 endif()
