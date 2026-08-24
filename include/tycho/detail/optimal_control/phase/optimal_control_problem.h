@@ -1451,9 +1451,12 @@ struct OptimalControlProblemBase : BackendProblemBase {
 
     /// @internal
     /// @brief Declare every phase's pieces into the shared declaration.
+    /// @param nlp The program the declaration will be laid on, which each phase
+    ///            indexer reads its constraint rows back out of afterwards.
     /// @param declaration The declaration every phase declares into.
     /// @endinternal
-    void transcribe_phases(tycho::solvers::TranscriptionDeclaration &declaration);
+    void transcribe_phases(std::shared_ptr<NonLinearProgram> nlp,
+                           tycho::solvers::TranscriptionDeclaration &declaration);
 
     /// @internal
     /// @brief Validate that no two phases share a name or pointer.

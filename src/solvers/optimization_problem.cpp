@@ -37,7 +37,12 @@ tycho::solvers::ThreadingFlags transcription_thread_mode(bool thread_safe, int a
 } // namespace
 
 void tycho::solvers::OptimizationProblem::transcribe() {
-    this->nlp_ = std::make_shared<NonLinearProgram>(this->num_partitions_);
+    // Built into locals and committed together at the end. A transcription that
+    // refuses part-way -- a bad index, a bound history that intersects to
+    // nothing -- then leaves the problem on the program it already had, with its
+    // published provider still describing that same program, rather than on a
+    // half-laid new one.
+    auto nlp = std::make_shared<NonLinearProgram>(this->num_partitions_);
 
     int numVars = this->active_variables_.size();
 
@@ -119,8 +124,11 @@ void tycho::solvers::OptimizationProblem::transcribe() {
         declaration.set_variable_bound(bound.index_, bound.lower_, bound.upper_);
     }
 
-    declaration.lay(*this->nlp_, numVars, numEqCons, numIqCons);
-    this->provider_ = std::make_shared<TranscribedAggregate>(this->nlp_);
+    declaration.lay(*nlp, numVars, numEqCons, numIqCons);
+    auto provider = std::make_shared<TranscribedAggregate>(nlp);
+
+    this->nlp_ = std::move(nlp);
+    this->provider_ = std::move(provider);
     this->optimizer_->set_nlp(this->nlp_);
 
     //////DO NOT GET RID OF THIS!!!!!!//

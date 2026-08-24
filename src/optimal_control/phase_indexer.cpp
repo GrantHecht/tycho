@@ -554,26 +554,47 @@ void tycho::oc::PhaseIndexer::print_stats(bool showfuns) const {
     cout << "# InEqualCons:  " << this->num_phase_iq_cons_ << endl << endl;
 
     if (showfuns) {
+        // Wherever the pieces are right now. During a transcription they are in
+        // the declaration, which has not been laid yet; afterwards they are on
+        // the program the declaration was laid on, which is where this printed
+        // from before the declaration existed.
         cout << "Objective Functions" << endl << endl;
         cout << "____________________________________________________________" << endl << endl;
         for (int i = 0; i < this->num_obj_funs_; i++) {
             cout << "************************************************************" << endl << endl;
 
-            this->declaration_->objective(this->start_obj_ + i).print_data();
+            const int index = this->start_obj_ + i;
+            if (this->declaration_ != nullptr) {
+                this->declaration_->objective(index).print_data();
+            } else if (this->nlp_ != nullptr && index < int(this->nlp_->objectives_.size())) {
+                this->nlp_->objectives_[index].print_data();
+            }
         }
         cout << "Equality Constraints" << endl << endl;
         cout << "____________________________________________________________" << endl << endl;
         for (int i = 0; i < this->num_eq_funs_; i++) {
             cout << "************************************************************" << endl << endl;
 
-            this->declaration_->equality(this->start_eq_ + i).print_data();
+            const int index = this->start_eq_ + i;
+            if (this->declaration_ != nullptr) {
+                this->declaration_->equality(index).print_data();
+            } else if (this->nlp_ != nullptr &&
+                       index < int(this->nlp_->equality_constraints_.size())) {
+                this->nlp_->equality_constraints_[index].print_data();
+            }
         }
         cout << "Inequality Constraints" << endl << endl;
         cout << "____________________________________________________________" << endl << endl;
         for (int i = 0; i < this->num_iq_funs_; i++) {
             cout << "************************************************************" << endl << endl;
 
-            this->declaration_->inequality(this->start_iq_ + i).print_data();
+            const int index = this->start_iq_ + i;
+            if (this->declaration_ != nullptr) {
+                this->declaration_->inequality(index).print_data();
+            } else if (this->nlp_ != nullptr &&
+                       index < int(this->nlp_->inequality_constraints_.size())) {
+                this->nlp_->inequality_constraints_[index].print_data();
+            }
         }
     }
 }

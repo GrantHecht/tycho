@@ -181,7 +181,48 @@ class TranscriptionDeclaration {
     /// sum into it, so the total counts that row once per application.
     bool equality_pieces_address_distinct_rows() const;
 
+    /// @brief The equality-row total the declaration boundary would count.
+    /// @throws std::invalid_argument if that total is past what an int states.
+    int equality_piece_rows() const;
+
+    /// @brief Runs every conjunct of the declaration boundary except the
+    ///        equality piece-row sum.
+    ///
+    /// The boundary validates as one call, so the one conjunct that shared rows
+    /// break is stood down by handing it the sum those rows actually produce.
+    /// Every other refusal -- negative dimensions, the partition floor, the
+    /// inequality piece sum, bound indices, NaN bounds, inverted records, empty
+    /// intersections -- is made exactly as it would be on the adopting route.
+    ///
+    /// @throws std::invalid_argument for anything the boundary refuses.
+    void validate_except_equality_row_sum();
+
     hven::solvers::AggregateDeclaration declaration_;
+};
+
+/// @brief Binds a transcription's declaration into a slot for the length of one
+///        transcription, and clears the slot however that transcription ends.
+///
+/// The declaration lives on the stack of the call that lays it, so a slot
+/// naming it must be emptied when that call returns -- including when it returns
+/// by throwing, which is when a bare assignment at the end of the body would be
+/// skipped and the slot left naming storage that is gone.
+class DeclarationBinding {
+  public:
+    /// @param slot the pointer to bind and later clear.
+    /// @param declaration the declaration to name.
+    DeclarationBinding(TranscriptionDeclaration *&slot, TranscriptionDeclaration &declaration)
+        : slot_(slot) {
+        this->slot_ = &declaration;
+    }
+
+    ~DeclarationBinding() { this->slot_ = nullptr; }
+
+    DeclarationBinding(const DeclarationBinding &) = delete;
+    DeclarationBinding &operator=(const DeclarationBinding &) = delete;
+
+  private:
+    TranscriptionDeclaration *&slot_;
 };
 
 } // namespace tycho::solvers

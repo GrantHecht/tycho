@@ -1554,7 +1554,10 @@ void tycho::oc::ODEPhaseBase::transcribe_phase(int vo, int eqo, int iqo,
 }
 
 void tycho::oc::ODEPhaseBase::transcribe(bool showstats, bool showfuns) {
-    this->nlp_ = std::make_shared<NonLinearProgram>(this->num_partitions_);
+    // Built into locals and committed together at the end, so a transcription
+    // that refuses part-way leaves the phase on the program it already had, with
+    // its published provider still describing that same program.
+    auto nlp = std::make_shared<NonLinearProgram>(this->num_partitions_);
 
     this->init_indexing();
 
@@ -1574,7 +1577,11 @@ void tycho::oc::ODEPhaseBase::transcribe(bool showstats, bool showfuns) {
     }
 
     TranscriptionDeclaration declaration(this->num_partitions_);
-    this->transcribe_phase(0, 0, 0, this->nlp_, declaration, 0);
+    // Clears the indexer's view of the declaration however this call ends: the
+    // declaration is a local, and a refusal below must not leave the indexer
+    // naming storage that is gone.
+    tycho::solvers::DeclarationBinding binding(this->indexer_.declaration_, declaration);
+    this->transcribe_phase(0, 0, 0, nlp, declaration, 0);
     if (showstats)
         this->indexer_.print_stats(showfuns);
 
@@ -1587,11 +1594,12 @@ void tycho::oc::ODEPhaseBase::transcribe(bool showstats, bool showfuns) {
                    this->indexer_.num_phase_eq_cons_, this->indexer_.num_phase_vars_);
     }
 
-    declaration.lay(*this->nlp_, this->indexer_.num_phase_vars_,
-                    this->indexer_.num_phase_eq_cons_, this->indexer_.num_phase_iq_cons_);
-    this->indexer_.end_indexing();
-    this->provider_ = std::make_shared<tycho::solvers::TranscribedAggregate>(this->nlp_);
+    declaration.lay(*nlp, this->indexer_.num_phase_vars_, this->indexer_.num_phase_eq_cons_,
+                    this->indexer_.num_phase_iq_cons_);
+    auto provider = std::make_shared<tycho::solvers::TranscribedAggregate>(nlp);
 
+    this->nlp_ = std::move(nlp);
+    this->provider_ = std::move(provider);
     this->optimizer_->set_nlp(this->nlp_);
 }
 
@@ -1602,20 +1610,20 @@ void tycho::oc::ODEPhaseBase::test_partitions(int i, int j, int n) {
     this->init_indexing();
     {
         TranscriptionDeclaration declaration(i);
+        tycho::solvers::DeclarationBinding binding(this->indexer_.declaration_, declaration);
         this->transcribe_phase(0, 0, 0, nlp1, declaration, 0);
         declaration.lay(*nlp1, this->indexer_.num_phase_vars_,
                         this->indexer_.num_phase_eq_cons_, this->indexer_.num_phase_iq_cons_);
-        this->indexer_.end_indexing();
     }
 
     auto nlp2 = std::make_shared<NonLinearProgram>(j);
     this->init_indexing();
     {
         TranscriptionDeclaration declaration(j);
+        tycho::solvers::DeclarationBinding binding(this->indexer_.declaration_, declaration);
         this->transcribe_phase(0, 0, 0, nlp2, declaration, 0);
         declaration.lay(*nlp2, this->indexer_.num_phase_vars_,
                         this->indexer_.num_phase_eq_cons_, this->indexer_.num_phase_iq_cons_);
-        this->indexer_.end_indexing();
     }
 
     Eigen::VectorXd v = this->make_solver_input();
