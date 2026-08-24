@@ -47,5 +47,15 @@ so a mode flip lands in both arms rather than in the difference between them:
 alternating this build against itself over nine rounds put the cell at 322 us on
 both arms, 0.0% apart.
 
+**The consequence for the pre-merge gate, stated rather than left to be
+rediscovered.** This baseline happens to have been captured in the low mode.
+A plain `compare` against it will therefore read anywhere from about 0% to
+about +45% on `BM_Phase_Transcribe_64seg`, depending only on which mode the
+new recording lands in — with nothing behind it. On a gate step whose rule is
+"justify any regressions in the PR description", that cell is the one to expect
+to have to justify, and the justification is this paragraph.
+
 The practical rule: a difference on a transcription cell is not evidence until
-`compare --alternate` reproduces it.
+`compare --alternate` reproduces it. Re-recording the baseline does not fix
+this, because the mode is not a property of the recording that can be pinned —
+three recordings of one binary landed in three different places.

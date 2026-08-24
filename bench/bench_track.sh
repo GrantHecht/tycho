@@ -39,10 +39,24 @@ DEFAULT_THRESHOLD=10.0
 # Chosen well below one busy core: this box's own editors and language servers
 # idle under it, and anything doing real work sits above it.
 IDLE_GATE="${TYCHO_BENCH_IDLE_GATE:-0.6}"
+# Validated here rather than where it is used: it goes into result metadata via
+# jq --argjson, which fails hard on anything jq will not read as a number (".6",
+# a trailing space, an empty string), and that failure would land in the middle
+# of a recording rather than before one.
+case "$IDLE_GATE" in
+    [0-9]|[0-9].[0-9]*|[0-9][0-9]*|[0-9][0-9]*.[0-9]*) ;;
+    *) echo "ERROR: TYCHO_BENCH_IDLE_GATE must be a plain non-negative decimal number (got '${IDLE_GATE}')" >&2
+       exit 1 ;;
+esac
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+# An explicit template, because a bare `mktemp` (and `mktemp -d`) is a usage
+# error on the BSD mktemp macOS ships -- it wants a template or -t.
+make_temp_file() { mktemp "${TMPDIR:-/tmp}/tycho_bench.XXXXXX"; }
+make_temp_dir()  { mktemp -d "${TMPDIR:-/tmp}/tycho_bench.XXXXXX"; }
+
 die()  { echo "ERROR: $*" >&2; exit 1; }
 info() { echo "==> $*"; }
 warn() { echo "WARNING: $*" >&2; }
@@ -59,7 +73,12 @@ read_loadavg() {
     if [[ -r /proc/loadavg ]]; then
         cut -d' ' -f1 /proc/loadavg
     else
-        uptime | sed -e 's/.*[Ll]oad [Aa]verages\{0,1\}: *//' -e 's/,/ /g' | awk '{print $1}'
+        # The first field only, with a trailing list comma stripped and a
+        # comma DECIMAL separator converted rather than deleted -- a blanket
+        # comma-to-space would turn a comma-decimal locale's "0,49" into "0"
+        # and let every load pass the gate.
+        uptime | sed -e 's/.*[Ll]oad [Aa]verages\{0,1\}: *//' |
+            awk '{v=$1; sub(/,$/, "", v); gsub(/,/, ".", v); print v}'
     fi
 }
 
@@ -153,7 +172,7 @@ Build it with: cmake --preset macos-llvm-release -DBUILD_CPP_BENCHMARKS=ON && cd
 
     local outfile="${RESULTS_DIR}/${commit_short}${suffix}.json"
     local tmpfile
-    tmpfile="$(mktemp)"
+    tmpfile="$(make_temp_file)"
     trap "rm -f '$tmpfile'" EXIT
 
     info "Running benchmarks (${reps} repetitions)..."
@@ -212,8 +231,11 @@ Build it with: cmake --preset macos-llvm-release -DBUILD_CPP_BENCHMARKS=ON && cd
 check_recorded_conditions() {
     local file="$1" forced_ok="$2" label load recorded_forced
     label="$(jq -r '.metadata.commit_short' "$file")"
-    load="$(jq -r '.metadata.load_before // "unknown"' "$file")"
-    recorded_forced="$(jq -r '.metadata.forced // "unknown"' "$file")"
+    # has() rather than //: jq's alternative operator treats `false` as absent,
+    # so `.metadata.forced // "unknown"` would report every CLEAN recording as
+    # forced=unknown -- in exactly the message a reader needs to understand.
+    load="$(jq -r 'if (.metadata|has("load_before")) then .metadata.load_before else "unknown" end' "$file")"
+    recorded_forced="$(jq -r 'if (.metadata|has("forced")) then .metadata.forced else "unknown" end' "$file")"
 
     if [[ "$load" == "unknown" ]]; then
         warn "${label}: recorded before the idle gate existed — its box conditions are unknown"
@@ -234,20 +256,40 @@ behind it: re-record it on a quiet box, or pass --force to compare anyway."
 # One alternated measurement round-trip: reps rounds, each running the old
 # binary once and then the new one once. Writes an envelope per arm, in the
 # shape do_compare's reporting half reads.
+# One arm's single repetition. Stdout is the human table, which the JSON output
+# makes redundant, so it goes away; STDERR IS KEPT and surfaced on a nonzero
+# exit -- discarding it turns a wrong flag, a missing shared library or a filter
+# matching nothing into set -e killing the script with no message at all.
+run_alternated_arm() {
+    local bin="$1" out="$2" errfile="$3"
+    shift 3
+    # "$@" is used rather than an array expanded at the call site: bash 3.2
+    # through 4.3 -- which is what macOS ships -- abort under set -u on
+    # "${arr[@]}" when arr is EMPTY, and the filter array usually is.
+    if ! "$bin" --benchmark_repetitions=1 "$@" \
+            --benchmark_out="$out" --benchmark_out_format=json \
+            >/dev/null 2>"$errfile"; then
+        warn "benchmark run failed: $bin"
+        cat "$errfile" >&2
+        return 1
+    fi
+}
+
 run_alternated() {
-    local old_bin="$1" new_bin="$2" reps="$3" out_old="$4" out_new="$5" filter="${6:-}"
-    local workdir filter_arg=()
-    workdir="$(mktemp -d)"
+    local old_bin="$1" new_bin="$2" reps="$3" out_old="$4" out_new="$5" workdir="$6"
+    local filter="${7:-}"
+    local filter_arg=()
     [[ -n "$filter" ]] && filter_arg=(--benchmark_filter="$filter")
 
     info "Alternating ${reps} repetitions: $(basename "$(dirname "$old_bin")")/$(basename "$old_bin") vs current build"
     local i
     for ((i = 1; i <= reps; i++)); do
         info "  round ${i}/${reps}"
-        "$old_bin" --benchmark_repetitions=1 "${filter_arg[@]}" \
-            --benchmark_out="${workdir}/old-${i}.json" --benchmark_out_format=json >/dev/null 2>&1
-        "$new_bin" --benchmark_repetitions=1 "${filter_arg[@]}" \
-            --benchmark_out="${workdir}/new-${i}.json" --benchmark_out_format=json >/dev/null 2>&1
+        # Same empty-array guard at the call site, for the same bash versions.
+        run_alternated_arm "$old_bin" "${workdir}/old-${i}.json" "${workdir}/stderr.txt" \
+            ${filter_arg[@]+"${filter_arg[@]}"}
+        run_alternated_arm "$new_bin" "${workdir}/new-${i}.json" "${workdir}/stderr.txt" \
+            ${filter_arg[@]+"${filter_arg[@]}"}
     done
 
     # Per benchmark, the median over the rounds. Emitted with the aggregate
@@ -298,8 +340,6 @@ run_alternated() {
                 gbench: { benchmarks: $marks[0] }
             }' > "$out"
     done
-
-    rm -rf "$workdir"
 }
 
 do_compare() {
@@ -330,11 +370,15 @@ do_compare() {
         [[ -x "$BENCH_BINARY" ]] || die "bench_all not found at $BENCH_BINARY"
         require_idle_box "compare --alternate" "$forced"
 
-        local alt_old alt_new
-        alt_old="$(mktemp)"
-        alt_new="$(mktemp)"
-        trap "rm -f '$alt_old' '$alt_new'" EXIT
-        run_alternated "$alternate" "$BENCH_BINARY" "$reps" "$alt_old" "$alt_new" "$filter"
+        local alt_old alt_new alt_dir
+        alt_old="$(make_temp_file)"
+        alt_new="$(make_temp_file)"
+        alt_dir="$(make_temp_dir)"
+        # One trap for all three: run_alternated can exit through set -e on a
+        # failed benchmark run, so nothing may rely on reaching the end of it.
+        trap "rm -f '$alt_old' '$alt_new'; rm -rf '$alt_dir'" EXIT
+        run_alternated "$alternate" "$BENCH_BINARY" "$reps" "$alt_old" "$alt_new" "$alt_dir" \
+            "$filter"
         report_comparison "$alt_old" "$alt_new" "$threshold"
         return
     fi
