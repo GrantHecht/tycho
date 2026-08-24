@@ -5,6 +5,7 @@
 #include "tycho/detail/solvers_vf/transcribed_aggregate.h"
 
 #include <algorithm>
+#include <string>
 #include <utility>
 
 #include <fmt/format.h>
@@ -15,7 +16,40 @@ namespace {
 
 /// Which of the three claim domains a laid coordinate belongs to, read off the
 /// row band it sits in.
-enum class ClaimDomainOfSlot { kHessian, kEqualityJacobian, kInequalityJacobian, kDropped };
+enum class ClaimDomainOfSlot { kHessian, kEqualityJacobian, kInequalityJacobian };
+
+/// The request's flags, by name, so a refusal says which shape was asked for
+/// rather than which bit pattern.
+std::string request_shape_name(hven::solvers::EvalRequest request) {
+    using hven::solvers::EvalRequest;
+    struct Flag {
+        EvalRequest bit_;
+        const char *name_;
+    };
+    static constexpr Flag kFlags[] = {
+        {EvalRequest::kObjectiveValue, "objective value"},
+        {EvalRequest::kObjectiveGradient, "objective gradient"},
+        {EvalRequest::kObjectiveHessian, "objective Hessian"},
+        {EvalRequest::kConstraintValues, "constraint values"},
+        {EvalRequest::kConstraintAdjointGradient, "constraint adjoint gradient"},
+        {EvalRequest::kConstraintJacobian, "constraint Jacobian"},
+        {EvalRequest::kConstraintAdjointHessian, "constraint adjoint Hessian"},
+    };
+
+    std::string named;
+    for (const Flag &flag : kFlags) {
+        if (hven::solvers::has_request(request, flag.bit_)) {
+            if (!named.empty()) {
+                named += " + ";
+            }
+            named += flag.name_;
+        }
+    }
+    if (named.empty()) {
+        named = "no output";
+    }
+    return fmt::format("{0} (flags 0x{1:x})", named, static_cast<std::uint32_t>(request));
+}
 
 } // namespace
 
@@ -28,6 +62,26 @@ TranscribedAggregate::TranscribedAggregate(std::shared_ptr<NonLinearProgram> hos
 }
 
 int TranscribedAggregate::negotiate_partition_count(int requested) {
+    // A partition count decides the layout, so adopting one RE-LAYS the program
+    // -- which resets the location table every scatter addresses and unbinds the
+    // destination those offsets described. A consumer that has already analysed
+    // this program holds a table that the re-lay would silently empty, and the
+    // program's own re-analysis runs only when a fixed-variable treatment
+    // reports a change, so the emptied table would survive into the next solve.
+    //
+    // The program says whether such a consumer exists: it publishes the value
+    // array its tables are bound to, and a re-lay clears that. Refused while one
+    // is bound, rather than re-laid underneath it.
+    if (this->host_->bound_kkt_destination() != nullptr) {
+        throw std::invalid_argument(fmt::format(
+            "TranscribedAggregate::negotiate_partition_count: {0} partitions were requested, but "
+            "the program this view publishes is already analysed against a consumer's KKT "
+            "destination, and adopting a count re-lays it -- which would leave that consumer "
+            "addressing an emptied location table. The partition count is declaration data: set "
+            "it on the problem and transcribe again",
+            requested));
+    }
+
     const int adopted = this->host_->negotiate_partition_count(requested);
     this->read_layout();
     return adopted;
@@ -73,41 +127,85 @@ Eigen::Ref<const Eigen::VectorXi> TranscribedAggregate::objective_gradient_claim
     return this->objective_gradient_rows_;
 }
 
+TranscribedAggregate::DeclaredShape TranscribedAggregate::shape_of(const NonLinearProgram &host) {
+    return DeclaredShape{host.primal_vars_,    host.equal_cons_,          host.inequal_cons_,
+                         host.num_partitions_, host.internal_fixed_cons_, host.num_user_kkt_elems_};
+}
+
 void TranscribedAggregate::refresh_if_relaid() const {
-    if (!this->ever_read_ || this->host_->structure_epoch() != this->read_at_epoch_) {
-        this->read_layout();
+    if (this->ever_read_ && this->host_->structure_epoch() == this->read_at_epoch_) {
+        return;
     }
+
+    // A fixed-variable treatment that ELIMINATES variables re-lays the program
+    // in a narrower space: the surviving coordinates are renumbered and the
+    // eliminated ones name no entry at all. None of that is declaration data --
+    // the declaration is the same pieces over the same variables either way --
+    // and this surface is stated in declaration identities, so the stream must
+    // not move with it. The stream read at the last un-eliminated layout IS the
+    // declaration-space answer, and it is kept.
+    if (this->host_->is_reduced()) {
+        if (!this->ever_read_) {
+            throw std::invalid_argument(
+                "TranscribedAggregate: this view was built over a program whose fixed-variable "
+                "treatment has already eliminated variables, so the layout on hand names "
+                "coordinates in a narrower space than the declaration and no declaration-space "
+                "stream has ever been read from it. Build the view from the transcription, before "
+                "a treatment is configured");
+        }
+        const DeclaredShape now = shape_of(*this->host_);
+        if (!(now == this->read_at_shape_)) {
+            throw std::invalid_argument(fmt::format(
+                "TranscribedAggregate: the program was re-laid into a different declared shape "
+                "({0} equality rows, {1} of them internal, {2} claim slots, against {3}/{4}/{5} "
+                "when the stream was read) while a fixed-variable treatment has variables "
+                "eliminated, so the declaration-space stream can be neither kept nor re-read. "
+                "Re-transcribe, or read the stream before configuring a treatment",
+                now.equality_rows_, now.internal_rows_, now.claim_slots_,
+                this->read_at_shape_.equality_rows_, this->read_at_shape_.internal_rows_,
+                this->read_at_shape_.claim_slots_));
+        }
+        // Same declaration, narrower engine space: the published stream stands.
+        this->read_at_epoch_ = this->host_->structure_epoch();
+        return;
+    }
+
+    this->read_layout();
 }
 
 void TranscribedAggregate::read_layout() const {
     const NonLinearProgram &host = *this->host_;
-    const hven::solvers::AggregateDeclaration &declared = host.declaration();
 
-    const int primal = declared.primal_vars_;
-    const int equality_rows = declared.equality_rows_;
-    const int inequality_rows = declared.inequality_rows_;
+    // The program's own dimensions rather than its declaration's. They are the
+    // same three numbers -- the declaration reports what was laid -- and reading
+    // them here keeps a lay from copying all three master piece lists into the
+    // declaration cache for the sake of three integers.
+    const int primal = host.primal_vars_;
+    const int equality_rows = host.equal_cons_;
+    const int inequality_rows = host.inequal_cons_;
     this->kkt_dimension_ = primal + equality_rows + inequality_rows;
 
     // The laid row bands. The program keeps a slack block between the primal
     // block and the constraint rows; the assembled space the claims are stated
-    // in has none, so a constraint row moves down by the slack width and a
-    // primal coordinate moves back into the declared variable space.
-    const int laid_primal = host.reduced_primal_vars();
+    // in has none, so a constraint row moves down by the slack width.
     const int slack = host.slack_vars_;
-    const int equality_base = laid_primal + slack;
-    const int inequality_base = equality_base + host.equal_cons_;
+    const int equality_base = primal + slack;
+    const int inequality_base = equality_base + equality_rows;
 
-    const bool reduced = host.is_reduced();
-
-    auto declared_variable = [&](int laid_index) {
-        return reduced ? host.reduced_to_full_[laid_index] : laid_index;
-    };
-
-    auto domain_of = [&](int row, int col) {
+    auto domain_of = [&](int slot, int row, int col) {
         if (row < 0 || col < 0) {
-            return ClaimDomainOfSlot::kDropped;
+            // Only an eliminated coordinate is recorded negative, and this
+            // routine never runs against an eliminated layout (see
+            // refresh_if_relaid). Reaching one here means the layout and the
+            // reduction flag disagree, which would put dropped claims of one
+            // domain into another's run.
+            throw std::invalid_argument(fmt::format(
+                "TranscribedAggregate: claim slot {0} names coordinate ({1}, {2}) in a layout "
+                "that reports no eliminated variables; a negative coordinate is how the layout "
+                "records an elimination, and its domain cannot be told from the row band",
+                slot, row, col));
         }
-        if (row < laid_primal) {
+        if (row < primal) {
             return ClaimDomainOfSlot::kHessian;
         }
         if (row < equality_base) {
@@ -123,58 +221,46 @@ void TranscribedAggregate::read_layout() const {
     };
 
     const int total = host.num_user_kkt_elems_;
-    this->claim_rows_.resize(total);
-    this->claim_cols_.resize(total);
-    this->claim_partitions_.resize(total);
+    Eigen::VectorXi rows(total);
+    Eigen::VectorXi cols(total);
+    Eigen::VectorXi partitions(total);
 
-    // A dropped claim keeps its (-1, -1) and is grouped with the domain of the
-    // piece list it came out of, which the partition tag alone cannot say. It is
-    // grouped with the Hessian run: every piece list claims Hessian slots, so
-    // that run is the one every dropped claim could have come from.
     int next = 0;
-    auto emit_domain = [&](ClaimDomainOfSlot wanted, bool take_dropped) {
+    auto emit_domain = [&](ClaimDomainOfSlot wanted) {
         const int start = next;
         for (int slot = 0; slot < total; slot++) {
             const int row = host.kkt_coeff_rows_[slot];
             const int col = host.kkt_coeff_cols_[slot];
-            const ClaimDomainOfSlot domain = domain_of(row, col);
-            if (domain == ClaimDomainOfSlot::kDropped) {
-                if (!take_dropped) {
-                    continue;
-                }
-            } else if (domain != wanted) {
+            if (domain_of(slot, row, col) != wanted) {
                 continue;
             }
 
             int out_row = row;
             int out_col = col;
-            if (domain == ClaimDomainOfSlot::kHessian) {
+            if (wanted == ClaimDomainOfSlot::kHessian) {
                 // The layout records a Hessian element in whichever order the
                 // piece walked it; the claim convention names it on the upper
-                // triangle, so both endpoints are mapped and then ordered.
-                const int a = declared_variable(row);
-                const int b = declared_variable(col);
-                out_row = std::min(a, b);
-                out_col = std::max(a, b);
-            } else if (domain == ClaimDomainOfSlot::kEqualityJacobian) {
+                // triangle.
+                out_row = std::min(row, col);
+                out_col = std::max(row, col);
+            } else if (wanted == ClaimDomainOfSlot::kEqualityJacobian) {
                 out_row = primal + (row - equality_base);
-                out_col = declared_variable(col);
-            } else if (domain == ClaimDomainOfSlot::kInequalityJacobian) {
+            } else {
                 out_row = primal + equality_rows + (row - inequality_base);
-                out_col = declared_variable(col);
             }
 
-            this->claim_rows_[next] = out_row;
-            this->claim_cols_[next] = out_col;
-            this->claim_partitions_[next] = host.kkt_coeff_part_ids_[slot];
+            rows[next] = out_row;
+            cols[next] = out_col;
+            partitions[next] = host.kkt_coeff_part_ids_[slot];
             next++;
         }
         return hven::solvers::ClaimBlock{start, next - start};
     };
 
-    this->hessian_ = emit_domain(ClaimDomainOfSlot::kHessian, /*take_dropped=*/true);
-    this->equality_jacobian_ = emit_domain(ClaimDomainOfSlot::kEqualityJacobian, false);
-    this->inequality_jacobian_ = emit_domain(ClaimDomainOfSlot::kInequalityJacobian, false);
+    const hven::solvers::ClaimBlock hessian = emit_domain(ClaimDomainOfSlot::kHessian);
+    const hven::solvers::ClaimBlock equality = emit_domain(ClaimDomainOfSlot::kEqualityJacobian);
+    const hven::solvers::ClaimBlock inequality =
+        emit_domain(ClaimDomainOfSlot::kInequalityJacobian);
 
     if (next != total) {
         throw std::invalid_argument(
@@ -184,13 +270,30 @@ void TranscribedAggregate::read_layout() const {
     }
 
     const int gradient_slots = host.num_pgx_elems_;
-    this->objective_gradient_rows_.resize(gradient_slots);
+    Eigen::VectorXi gradient_rows(gradient_slots);
     for (int slot = 0; slot < gradient_slots; slot++) {
         const int row = host.rhs_coeff_rows_[host.pgx_data_start_ + slot];
-        this->objective_gradient_rows_[slot] = row < 0 ? -1 : declared_variable(row);
+        if (row < 0 || row >= primal) {
+            throw std::invalid_argument(fmt::format(
+                "TranscribedAggregate: objective-gradient claim slot {0} names row {1}, outside "
+                "the {2} declared variables",
+                slot, row, primal));
+        }
+        gradient_rows[slot] = row;
     }
 
+    // Committed together, so a refusal above leaves the previously published
+    // stream standing rather than a half-written one.
+    this->claim_rows_ = std::move(rows);
+    this->claim_cols_ = std::move(cols);
+    this->claim_partitions_ = std::move(partitions);
+    this->objective_gradient_rows_ = std::move(gradient_rows);
+    this->hessian_ = hessian;
+    this->equality_jacobian_ = equality;
+    this->inequality_jacobian_ = inequality;
+
     this->read_at_epoch_ = host.structure_epoch();
+    this->read_at_shape_ = shape_of(host);
     this->ever_read_ = true;
 }
 
@@ -207,7 +310,7 @@ void TranscribedAggregate::assemble_impl(const hven::solvers::CandidatePoint &po
         "array its location tables address, so a fill can only land there. Assemble through that "
         "program, or consume its claim stream and wait on the engine-side path that fills a "
         "foreign destination",
-        static_cast<int>(request)));
+        request_shape_name(request)));
 }
 
 void TranscribedAggregate::evaluate_candidate_values_impl(

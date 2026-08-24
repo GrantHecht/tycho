@@ -59,14 +59,21 @@ namespace tycho::solvers {
 /// this stream therefore maps slots onto coordinates rather than assuming the
 /// map is injective.
 ///
-/// DROPPED CLAIMS. A claim whose coordinate a fixed-variable treatment
-/// eliminated names no entry of the laid system, and the layout records it as
-/// (-1, -1). Those slots are published as they stand: they are part of the
-/// stream, and a filler skips them.
+/// FIXED-VARIABLE TREATMENTS DO NOT MOVE THE STREAM. A treatment that
+/// ELIMINATES variables re-lays the program in a narrower space: the surviving
+/// coordinates are renumbered and an eliminated one names no entry at all. That
+/// is the engine's own reduction, not declaration data -- the declaration is
+/// the same pieces over the same variables whichever treatment is configured --
+/// and this surface is stated in declared identities. So the stream read at the
+/// last un-eliminated layout is what stays published across such a re-lay, and
+/// the claims a consumer reads are the same under every treatment that leaves
+/// the declaration alone. A treatment that CHANGES the declaration (an internal
+/// equality row per fixed variable) does move the stream, and correctly so.
 ///
 /// VIEW VALIDITY. Everything published here describes the program's structures
 /// as last laid. A re-lay replaces them and moves the structure epoch; this
-/// view re-reads the program whenever the epoch it was built against has moved.
+/// view re-reads the program whenever the epoch it was built against has moved,
+/// except across the elimination above, where it keeps what it has.
 ///
 /// CONCURRENCY. The contract's posture applies unchanged -- one operation at a
 /// time, structural mutation included -- and this view adds no thread safety of
@@ -90,9 +97,18 @@ class TranscribedAggregate final : public hven::solvers::ClaimStreamSource {
 
     /// @brief Asks the program to adopt a partition count and returns what it
     ///        adopted.
+    ///
+    /// Adopting a count RE-LAYS the program, which resets the location table
+    /// every scatter addresses. A consumer that has already analysed this
+    /// program holds a table the re-lay would empty, and the program re-analyses
+    /// itself only when a fixed-variable treatment reports a change -- so the
+    /// emptied table would survive into the next solve. While such a consumer is
+    /// bound, this call is refused rather than served.
+    ///
     /// @param requested the partition count the caller wants.
     /// @return the adopted count.
-    /// @throws std::invalid_argument if @p requested is below 1.
+    /// @throws std::invalid_argument if @p requested is below 1, or if the
+    ///         program is already analysed against a consumer's destination.
     int negotiate_partition_count(int requested) override;
 
     /// @brief The program's evaluation thread budget.
@@ -189,6 +205,24 @@ class TranscribedAggregate final : public hven::solvers::ClaimStreamSource {
                                              hven::solvers::CandidateFirstOrder out) override;
 
   private:
+    /// @brief The declared shape a published stream was read at.
+    ///
+    /// What tells a re-lay that changed the DECLARATION from one that only
+    /// changed the engine's own reduction. Compared only on the second kind, to
+    /// decide whether the stream on hand still describes the declaration.
+    struct DeclaredShape {
+        int primal_vars_ = 0;
+        int equality_rows_ = 0;
+        int inequality_rows_ = 0;
+        int partition_count_ = 0;
+        int internal_rows_ = 0;
+        int claim_slots_ = 0;
+
+        friend bool operator==(const DeclaredShape &, const DeclaredShape &) = default;
+    };
+
+    static DeclaredShape shape_of(const NonLinearProgram &host);
+
     /// @brief Re-reads the program's layout if the epoch it was read at moved.
     void refresh_if_relaid() const;
 
@@ -198,6 +232,7 @@ class TranscribedAggregate final : public hven::solvers::ClaimStreamSource {
     std::shared_ptr<NonLinearProgram> host_;
 
     mutable hven::solvers::StructureEpoch read_at_epoch_{};
+    mutable DeclaredShape read_at_shape_{};
     mutable bool ever_read_ = false;
 
     mutable Eigen::VectorXi claim_rows_;
