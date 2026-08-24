@@ -8,7 +8,9 @@
 //
 //   Door 1 (VF)      tycho::solvers::OptimizationProblem: the objective and
 //                    the constraints as VectorFunction expression trees,
-//                    transcribed onto a NonLinearProgram and solved.
+//                    declared -- pieces, thread modes, bounds and partition
+//                    count -- into an AggregateDeclaration, laid out from it,
+//                    and solved.
 //   Door 2 (native)  the same problem hand-authored against the native model
 //                    contract (hven::solvers::NlpModel), carried onto a
 //                    NonLinearProgram by the adapter host and solved.
@@ -549,12 +551,9 @@ ConvEquivAnswer conv_equiv_solve_eq_bound_vf() {
         prob.add_equal_con(GenericFunction<-1, -1>(x0 * x0 + x1 * x1 - 4.0),
                            (Eigen::VectorXi(2) << 0, 1).finished());
     }
+    prob.add_variable_bound(0, kEqBoundX0, kConvEquivInf);
     conv_equiv_configure(*prob.optimizer_);
     prob.transcribe();
-    prob.nlp_->set_variable_bound(0, kEqBoundX0, kConvEquivInf);
-    prob.nlp_->make_nlp(prob.nlp_->primal_vars_, prob.nlp_->user_equal_cons_,
-                        prob.nlp_->inequal_cons_);
-    prob.optimizer_->set_nlp(prob.nlp_);
 
     ConvEquivAnswer a;
     a.x_ = prob.optimizer_->optimize(conv_equiv_eq_bound_start());
@@ -922,13 +921,10 @@ ConvEquivAnswer conv_equiv_solve_fixed_vf(FixedVariableTreatments treatment) {
         auto x1 = args.coeff<1>();
         prob.add_inequal_con(GenericFunction<-1, -1>(x0 - x1 - 0.5), all3);
     }
+    prob.add_variable_bound(2, kFixedX2, kFixedX2);
     conv_equiv_configure(*prob.optimizer_);
     prob.optimizer_->set_fixed_variable_treatment(treatment);
     prob.transcribe();
-    prob.nlp_->set_variable_bound(2, kFixedX2, kFixedX2);
-    prob.nlp_->make_nlp(prob.nlp_->primal_vars_, prob.nlp_->user_equal_cons_,
-                        prob.nlp_->inequal_cons_);
-    prob.optimizer_->set_nlp(prob.nlp_);
 
     ConvEquivAnswer a;
     a.x_ = prob.optimizer_->optimize(conv_equiv_fixed_start());
