@@ -97,11 +97,19 @@ if(TARGET hanging_chain_builder)
     set_tests_properties(cpp_example_hanging_chain_builder PROPERTIES TIMEOUT 600)
 endif()
 
-# multi_spacecraft_opt_builder is run on its own. Its continuation loop tightens
-# the low-thrust accuracy target step by step, and the last step converges only
-# marginally; sharing the machine with the rest of a parallel ctest run has been
-# enough to push that step over into a non-convergent exit while the same
-# example passes every time it is run alone.
+# multi_spacecraft_opt_builder is run on its own, which REDUCES but does not
+# remove its flakiness -- keeping it here so the residual is cleanly the
+# example's own rather than the scheduler's.
+#
+# The last step of its continuation (ltacc = 0.005) converges only marginally,
+# and the solve is run multi-partition, so the order threads reduce into the
+# KKT assembly varies run to run and the iterate sequence with it. Measured on
+# an idle machine with nothing else running: one failure in eight, the failing
+# run diverging to a final time of ~1712 periods against ~3.3 on a passing one.
+# Pinning the example to a single evaluation partition and a single QP thread
+# makes it deterministic (four for four) at roughly three times the runtime;
+# that is a change to what the example demonstrates and to the gate's cost, so
+# it is recorded for a decision rather than made here.
 if(TARGET multi_spacecraft_opt_builder)
     set_tests_properties(cpp_example_multi_spacecraft_opt_builder PROPERTIES RUN_SERIAL TRUE)
 endif()
