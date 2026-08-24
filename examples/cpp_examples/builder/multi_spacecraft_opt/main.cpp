@@ -1,7 +1,8 @@
-#include <tycho/tycho.h>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <string>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -77,11 +78,37 @@ static std::vector<double> linspace(double a, double b, int n) {
 
 static bool run_multi_spacecraft(const std::vector<std::vector<Eigen::VectorXd>> &trajs,
                                  const std::vector<std::vector<Eigen::VectorXd>> &all_istates,
-                                 const Eigen::VectorXd &set_point_ig, double ltacc, int n_segs);
+                                 const Eigen::VectorXd &set_point_ig, double ltacc, int n_segs,
+                                 bool deterministic);
 
-int main() {
+// The solve below is run over several evaluation partitions by default, so the
+// order in which threads reduce into the KKT assembly varies between runs and
+// the iterate sequence varies with it. That is the point of the demo and it is
+// harmless here -- except that this problem's last continuation step converges
+// marginally enough for the difference to decide whether it converges at all.
+//
+// --deterministic pins the solve to one evaluation partition and one QP thread,
+// which makes it reproducible run to run at roughly three times the runtime.
+// The automated test invocation passes it; running the example by hand does
+// not, and gets the threaded demo.
+int main(int argc, char **argv) {
     constexpr int N = 10;
     constexpr int NSegs = 75;
+
+    bool deterministic = false;
+    for (int i = 1; i < argc; ++i) {
+        const std::string arg(argv[i]);
+        if (arg == "--deterministic") {
+            deterministic = true;
+        } else {
+            std::cerr << "MultiSpacecraftOpt: unrecognised argument '" << arg
+                      << "' (accepts --deterministic)\n";
+            return EXIT_FAILURE;
+        }
+    }
+    if (deterministic) {
+        std::cout << "Running with a single evaluation partition and a single QP thread.\n";
+    }
 
     std::cout << "=== Multi-Spacecraft Optimisation (" << N << " spacecraft) ===\n\n";
 
@@ -110,7 +137,7 @@ int main() {
     for (double a : accs) {
         std::cout << "Running continuation at ltacc = " << std::fixed << std::setprecision(4) << a
                   << "\n";
-        if (!run_multi_spacecraft(trajs_ig, all_istates, set_point_ig, a, NSegs)) {
+        if (!run_multi_spacecraft(trajs_ig, all_istates, set_point_ig, a, NSegs, deterministic)) {
             std::cerr << "MultiSpacecraftOpt: continuation at ltacc=" << a << " FAILED\n";
             return EXIT_FAILURE;
         }
@@ -122,7 +149,8 @@ int main() {
 
 static bool run_multi_spacecraft(const std::vector<std::vector<Eigen::VectorXd>> &trajs,
                                  const std::vector<std::vector<Eigen::VectorXd>> &all_istates,
-                                 const Eigen::VectorXd &set_point_ig, double ltacc, int n_segs) {
+                                 const Eigen::VectorXd &set_point_ig, double ltacc, int n_segs,
+                                 bool deterministic) {
     const int N = static_cast<int>(trajs.size());
 
     auto ode = make_lt_ode(1.0, ltacc);
@@ -173,6 +201,13 @@ static bool run_multi_spacecraft(const std::vector<std::vector<Eigen::VectorXd>>
         Eigen::VectorXi dot_vars = Eigen::VectorXi::LinSpaced(6, 0, 5);
         ocp.base().add_link_param_equal_con(GenericFunction<-1, -1>(dot_con), dot_vars,
                                             ScaleModes::AUTO);
+    }
+
+    if (deterministic) {
+        // One partition and one QP thread: with nothing reducing across
+        // threads, the arithmetic is the same on every run.
+        ocp.base().set_num_partitions(1);
+        ocp.optimizer().set_qp_threads(1);
     }
 
     ocp.optimizer().set_opt_ls_mode("L1");
