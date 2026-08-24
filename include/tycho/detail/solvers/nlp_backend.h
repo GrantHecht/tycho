@@ -18,6 +18,7 @@
 #pragma once
 
 #include <map>
+#include <memory>
 #include <stdexcept>
 #include <string>
 
@@ -29,6 +30,12 @@
 #include "tycho/detail/hven_namespaces.h"
 
 namespace tycho::solvers {
+
+/// The transcribed problem published as a claim-stream-bearing provider. Named
+/// here and defined in solvers_vf/transcribed_aggregate.h, so that a problem
+/// can hold one without every consumer of this header seeing the layout it
+/// publishes.
+class TranscribedAggregate;
 
 /// NLP solver backend selector (BackendProblemBase::nlp_solver_).
 /// interior_point is the built-in interior-point solver (default). ipopt hands the
@@ -72,6 +79,12 @@ struct BackendProblemBase : hven::solvers::OptimizationProblemBase {
 
     /// Diagnostics of the most recent ipopt-backend run on this problem.
     IpoptRunInfo last_ipopt_result_;
+
+    /// The transcribed problem published as a claim-stream-bearing provider:
+    /// the declaration this problem was laid from, and the per-slot coordinates
+    /// a consumer needs in order to lay a destination of its own. Replaced by
+    /// every transcription, and null until the first one runs.
+    std::shared_ptr<TranscribedAggregate> provider_;
 
     /// Concurrency guard, checked before jet_initialize() mutates this problem
     /// and before any solve work begins. Jet::map builds each problem inside

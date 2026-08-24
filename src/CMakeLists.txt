@@ -84,6 +84,8 @@ set_property(TARGET integrators_instantiations PROPERTY JOB_POOL_COMPILE heavy_c
 # solver project links this target, which links hven in turn.
 add_library(solvers_vf STATIC
     solvers/optimization_problem.cpp
+    solvers/transcription_declaration.cpp
+    solvers/transcribed_aggregate.cpp
 )
 
 # Alternative NLP solver backend. Exactly one of the two implementations of the

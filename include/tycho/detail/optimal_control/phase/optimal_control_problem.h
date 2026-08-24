@@ -207,6 +207,11 @@ struct OptimalControlProblemBase : BackendProblemBase {
     int start_eq_ = 0;  ///< Index of the first link equality function in the NLP.
     int start_iq_ = 0;  ///< Index of the first link inequality function in the NLP.
 
+    /// The declaration the link pieces are declared into, for the length of one
+    /// transcription. Null outside one: the declaration is a value the
+    /// transcription owns, not state this problem keeps.
+    tycho::solvers::TranscriptionDeclaration *declaration_ = nullptr;
+
     int num_obj_funs_ = 0; ///< Number of link objective functions.
     int num_eq_funs_ = 0;  ///< Number of link equality functions.
     int num_iq_funs_ = 0;  ///< Number of link inequality functions.
@@ -1445,9 +1450,13 @@ struct OptimalControlProblemBase : BackendProblemBase {
     }
 
     /// @internal
-    /// @brief Transcribe all phases into the shared NLP.
+    /// @brief Declare every phase's pieces into the shared declaration.
+    /// @param nlp The program the declaration will be laid on, which each phase
+    ///            indexer reads its constraint rows back out of afterwards.
+    /// @param declaration The declaration every phase declares into.
     /// @endinternal
-    void transcribe_phases();
+    void transcribe_phases(std::shared_ptr<NonLinearProgram> nlp,
+                           tycho::solvers::TranscriptionDeclaration &declaration);
 
     /// @internal
     /// @brief Validate that no two phases share a name or pointer.
@@ -1610,9 +1619,15 @@ struct OptimalControlProblemBase : BackendProblemBase {
     }
 
     /// @internal
-    /// @brief Transcribe all link constraints and objectives into the shared NLP.
+    /// @brief Declare every link constraint and objective into the shared
+    ///        declaration.
+    ///
+    /// A link piece is declared under the by-application policy, which is the
+    /// one a piece carries when nothing else is said about it.
+    ///
+    /// @param declaration The declaration the link pieces are declared into.
     /// @endinternal
-    void transcribe_links();
+    void transcribe_links(tycho::solvers::TranscriptionDeclaration &declaration);
 
     /// @internal
     /// @brief Compute the automatic problem-level scales from the trajectories.
@@ -1659,6 +1674,7 @@ struct OptimalControlProblemBase : BackendProblemBase {
         this->optimizer_->set_print_level(0);
         this->print_mesh_info_ = true;
         this->nlp_ = std::shared_ptr<NonLinearProgram>();
+        this->provider_ = std::shared_ptr<tycho::solvers::TranscribedAggregate>();
         for (auto &phase : this->phases)
             phase->jet_release();
         this->reset_transcription();

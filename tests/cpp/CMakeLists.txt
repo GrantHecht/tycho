@@ -205,6 +205,9 @@ set(TYCHO_TEST_HEAVY_SOURCES
     # (SKIP_UNITY_BUILD_INCLUSION) so iterating on it does not rebuild the
     # whole trailing unity batch.
     solvers/test_conversion_equivalence.cpp # file-local prefix: ConvEquiv*/conv_equiv_*
+    # The transcribed problem as a Level 2 provider. Standalone below, for the
+    # same reason the suite above is.
+    solvers/test_level2_provider.cpp # file-local prefix: Level2Provider*/l2_provider_*
 )
 
 #-------------------------------------------------------------------------------
@@ -380,6 +383,7 @@ set_source_files_properties(
 # suite to one TU.
 set_source_files_properties(
     solvers/test_conversion_equivalence.cpp
+    solvers/test_level2_provider.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
 

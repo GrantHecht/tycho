@@ -14,6 +14,8 @@
 
 #include "tycho/detail/optimal_control/phase/optimal_control_problem.h"
 
+#include "tycho/detail/solvers_vf/transcribed_aggregate.h"
+
 #include "tycho/detail/vf/scaling/auto_scaling_utils.h"
 
 using tycho::solvers::ConstraintFunction;
@@ -117,7 +119,8 @@ std::vector<Eigen::VectorXd> tycho::oc::OptimalControlProblemBase::get_test_inpu
     return test_inputs;
 }
 
-void tycho::oc::OptimalControlProblemBase::transcribe_phases() {
+void tycho::oc::OptimalControlProblemBase::transcribe_phases(
+    std::shared_ptr<NonLinearProgram> nlp, tycho::solvers::TranscriptionDeclaration &declaration) {
 
     if (this->phases.size() > 0) {
 
@@ -131,7 +134,7 @@ void tycho::oc::OptimalControlProblemBase::transcribe_phases() {
             this->num_phase_vars_[i] = this->phases[i]->indexer_.num_phase_vars_;
         }
 
-        this->phases[0]->transcribe_phase(0, 0, 0, this->nlp_, 0);
+        this->phases[0]->transcribe_phase(0, 0, 0, nlp, declaration, 0);
         this->num_phase_eq_cons_[0] = this->phases[0]->indexer_.num_phase_eq_cons_;
         this->num_phase_iq_cons_[0] = this->phases[0]->indexer_.num_phase_iq_cons_;
 
@@ -140,7 +143,7 @@ void tycho::oc::OptimalControlProblemBase::transcribe_phases() {
             int Estart = this->num_phase_eq_cons_.segment(0, i).sum();
             int Istart = this->num_phase_iq_cons_.segment(0, i).sum();
 
-            this->phases[i]->transcribe_phase(Vstart, Estart, Istart, this->nlp_, i);
+            this->phases[i]->transcribe_phase(Vstart, Estart, Istart, nlp, declaration, i);
             this->num_phase_eq_cons_[i] = this->phases[i]->indexer_.num_phase_eq_cons_;
             this->num_phase_iq_cons_[i] = this->phases[i]->indexer_.num_phase_iq_cons_;
         }
@@ -249,7 +252,8 @@ void tycho::oc::OptimalControlProblemBase::check_functions() {
         CheckFunc(obj, f);
 }
 
-void tycho::oc::OptimalControlProblemBase::transcribe_links() {
+void tycho::oc::OptimalControlProblemBase::transcribe_links(
+    tycho::solvers::TranscriptionDeclaration &declaration) {
 
     int NextEq = this->num_phase_eq_cons_.sum();
     int NextIq = this->num_phase_iq_cons_.sum();
@@ -260,9 +264,9 @@ void tycho::oc::OptimalControlProblemBase::transcribe_links() {
         this->link_param_locs_[i] = LinkVarStart + i;
     }
 
-    this->start_obj_ = int(this->nlp_->objectives_.size());
-    this->start_eq_ = int(this->nlp_->equality_constraints_.size());
-    this->start_iq_ = int(this->nlp_->inequality_constraints_.size());
+    this->start_obj_ = declaration.objective_count();
+    this->start_eq_ = declaration.equality_count();
+    this->start_iq_ = declaration.inequality_count();
     this->num_eq_funs_ = 0;
     this->num_iq_funs_ = 0;
     this->num_obj_funs_ = 0;
@@ -282,8 +286,8 @@ void tycho::oc::OptimalControlProblemBase::transcribe_links() {
             Func = IOScaled<decltype(Func)>(Eq.func_, input_scales, output_scales);
         }
 
-        this->nlp_->equality_constraints_.emplace_back(ConstraintFunction(Func, VC[0], VC[1]));
-        Eq.global_index_ = this->nlp_->equality_constraints_.size() - 1;
+        Eq.global_index_ = declaration.add_equality(ConstraintFunction(Func, VC[0], VC[1]),
+                                                    ThreadingFlags::ByApplication);
         this->num_eq_funs_++;
     }
     for (auto &[key, Iq] : this->link_inequalities_) {
@@ -302,8 +306,8 @@ void tycho::oc::OptimalControlProblemBase::transcribe_links() {
             Func = IOScaled<decltype(Func)>(Iq.func_, input_scales, output_scales);
         }
 
-        this->nlp_->inequality_constraints_.emplace_back(ConstraintFunction(Func, VC[0], VC[1]));
-        Iq.global_index_ = this->nlp_->inequality_constraints_.size() - 1;
+        Iq.global_index_ = declaration.add_inequality(ConstraintFunction(Func, VC[0], VC[1]),
+                                                      ThreadingFlags::ByApplication);
         this->num_iq_funs_++;
     }
     for (auto &[key, Ob] : this->link_objectives_) {
@@ -323,8 +327,8 @@ void tycho::oc::OptimalControlProblemBase::transcribe_links() {
             Func = IOScaled<decltype(Func)>(Ob.func_, input_scales, output_scales);
         }
 
-        this->nlp_->objectives_.emplace_back(ObjectiveFunction(Func, VC[0]));
-        Ob.global_index_ = this->nlp_->objectives_.size() - 1;
+        Ob.global_index_ = declaration.add_objective(ObjectiveFunction(Func, VC[0]),
+                                                     ThreadingFlags::ByApplication);
 
         this->num_obj_funs_++;
     }
@@ -390,7 +394,10 @@ void tycho::oc::OptimalControlProblemBase::update_objective_scales(double scale)
 
 void tycho::oc::OptimalControlProblemBase::transcribe(bool showstats, bool showfuns) {
 
-    this->nlp_ = std::make_shared<NonLinearProgram>(this->num_partitions_);
+    // Built into locals and committed together at the end, so a transcription
+    // that refuses part-way leaves the problem on the program it already had,
+    // with its published provider still describing that same program.
+    auto nlp = std::make_shared<NonLinearProgram>(this->num_partitions_);
 
     check_functions();
     if (this->auto_scaling_) {
@@ -407,15 +414,33 @@ void tycho::oc::OptimalControlProblemBase::transcribe(bool showstats, bool showf
         }
     }
 
-    this->transcribe_phases();
-    this->transcribe_links();
+    TranscriptionDeclaration declaration(this->num_partitions_);
+    // Both this problem's view of the declaration and every phase indexer's are
+    // cleared however this call ends: the declaration is a local, and a refusal
+    // below must not leave either naming storage that is gone.
+    tycho::solvers::DeclarationBinding binding(this->declaration_, declaration);
+    struct PhaseIndexerRelease {
+        std::vector<std::shared_ptr<ODEPhaseBase>> *phases_;
+        ~PhaseIndexerRelease() {
+            for (auto &phase : *this->phases_) {
+                phase->indexer_.end_indexing();
+            }
+        }
+    } release{&this->phases};
+
+    this->transcribe_phases(nlp, declaration);
+    this->transcribe_links(declaration);
 
     this->num_prob_vars_ = this->num_phase_vars_.sum() + this->num_link_params_;
     this->num_prob_eq_cons_ = this->num_phase_eq_cons_.sum() + this->num_link_eq_cons_;
     this->num_prob_iq_cons_ = this->num_phase_iq_cons_.sum() + this->num_link_iq_cons_;
     if (showstats)
         this->print_stats(showfuns);
-    this->nlp_->make_nlp(this->num_prob_vars_, this->num_prob_eq_cons_, this->num_prob_iq_cons_);
+    declaration.lay(*nlp, this->num_prob_vars_, this->num_prob_eq_cons_, this->num_prob_iq_cons_);
+    auto provider = std::make_shared<tycho::solvers::TranscribedAggregate>(nlp);
+
+    this->nlp_ = std::move(nlp);
+    this->provider_ = std::move(provider);
     this->optimizer_->set_nlp(this->nlp_);
 
     //////DO NOT GET RID OF THIS!!!!!!//
@@ -578,19 +603,36 @@ void tycho::oc::OptimalControlProblemBase::print_stats(bool showfuns) {
         cout << "____________________________________________________________" << endl << endl;
         for (int i = 0; i < this->num_obj_funs_; i++) {
             cout << "************************************************************" << endl << endl;
-            this->nlp_->objectives_[this->start_obj_ + i].print_data();
+            const int index = this->start_obj_ + i;
+            if (this->declaration_ != nullptr) {
+                this->declaration_->objective(index).print_data();
+            } else if (this->nlp_ != nullptr && index < int(this->nlp_->objectives_.size())) {
+                this->nlp_->objectives_[index].print_data();
+            }
         }
         cout << "Equality Constraints" << endl << endl;
         cout << "____________________________________________________________" << endl << endl;
         for (int i = 0; i < this->num_eq_funs_; i++) {
             cout << "************************************************************" << endl << endl;
-            this->nlp_->equality_constraints_[this->start_eq_ + i].print_data();
+            const int index = this->start_eq_ + i;
+            if (this->declaration_ != nullptr) {
+                this->declaration_->equality(index).print_data();
+            } else if (this->nlp_ != nullptr &&
+                       index < int(this->nlp_->equality_constraints_.size())) {
+                this->nlp_->equality_constraints_[index].print_data();
+            }
         }
         cout << "Inequality Constraints" << endl << endl;
         cout << "____________________________________________________________" << endl << endl;
         for (int i = 0; i < this->num_iq_funs_; i++) {
             cout << "************************************************************" << endl << endl;
-            this->nlp_->inequality_constraints_[this->start_iq_ + i].print_data();
+            const int index = this->start_iq_ + i;
+            if (this->declaration_ != nullptr) {
+                this->declaration_->inequality(index).print_data();
+            } else if (this->nlp_ != nullptr &&
+                       index < int(this->nlp_->inequality_constraints_.size())) {
+                this->nlp_->inequality_constraints_[index].print_data();
+            }
         }
     }
 }

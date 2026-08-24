@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <cmath>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -26,6 +28,7 @@
 #include "tycho/detail/hven_namespaces.h"
 #include <hven/model/non_linear_program.h>
 #include "tycho/detail/solvers/nlp_backend.h"
+#include "tycho/detail/solvers_vf/transcribed_aggregate.h"
 #include <hven/drivers/interior_point_solver.h>
 #include "tycho/vector_functions.h"
 
@@ -67,6 +70,11 @@ struct OptimizationProblem : BackendProblemBase {
     std::vector<FuncIndexHolder<ConstraintInterface>> user_inequalities_;
     std::vector<FuncIndexHolder<ObjectiveInterface>> user_objectives_;
 
+    /// Declared bounds on primal variables, verbatim and in declaration order.
+    /// Repeated records on one index are intersected tightest-wins when the
+    /// problem is laid out.
+    std::vector<hven::solvers::VariableBound> user_var_bounds_;
+
     // Defaults (partitions, QP threads) come from the base ctor's
     // init_partitions(), matching Phase/OCP behavior.
     OptimizationProblem() = default;
@@ -90,6 +98,48 @@ struct OptimizationProblem : BackendProblemBase {
 
     ///////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////////////////////
+
+    /// @brief Declares a bound on one primal variable.
+    ///
+    /// The bound is part of the declared problem, so it travels with the
+    /// transcription rather than being written onto the laid-out program.
+    /// Repeated declarations on one index are intersected tightest-wins; a
+    /// record that bounds neither side narrows nothing and is dropped.
+    ///
+    /// @param index the primal variable the bound applies to.
+    /// @param lower the lower side.
+    /// @param upper the upper side.
+    /// @throws std::invalid_argument if @p index is negative, if either side is
+    ///         NaN, or if the two finite sides are inverted.
+    void add_variable_bound(int index, double lower, double upper) {
+        if (index < 0) {
+            throw std::invalid_argument(fmt::format(
+                "add_variable_bound: variable index {0} is negative", index));
+        }
+        if (std::isnan(lower) || std::isnan(upper)) {
+            throw std::invalid_argument(
+                fmt::format("add_variable_bound: the bound on variable {0} is not a number "
+                            "(lower={1}, upper={2})",
+                            index, lower, upper));
+        }
+        constexpr double kInf = std::numeric_limits<double>::infinity();
+        const bool lower_finite = lower > -kInf && lower < kInf;
+        const bool upper_finite = upper > -kInf && upper < kInf;
+        if (lower_finite && upper_finite && lower > upper) {
+            throw std::invalid_argument(
+                fmt::format("add_variable_bound: the bound on variable {0} is inverted "
+                            "(lower={1} is above upper={2})",
+                            index, lower, upper));
+        }
+        this->reset_transcription();
+        this->user_var_bounds_.push_back(hven::solvers::VariableBound{index, lower, upper});
+    }
+
+    /// @brief Drops every declared variable bound.
+    void clear_variable_bounds() {
+        this->reset_transcription();
+        this->user_var_bounds_.clear();
+    }
 
     void set_vars(const VectorXd &v) { this->active_variables_ = v; }
     VectorXd return_vars() const { return this->active_variables_; }
@@ -162,6 +212,7 @@ struct OptimizationProblem : BackendProblemBase {
         this->set_num_partitions(1);
         this->optimizer_->set_print_level(0);
         this->nlp_ = std::shared_ptr<NonLinearProgram>();
+        this->provider_ = std::shared_ptr<TranscribedAggregate>();
         this->reset_transcription();
     }
 
