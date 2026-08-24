@@ -198,6 +198,10 @@ set(TYCHO_TEST_HEAVY_SOURCES
     # unity batching of every file above stays exactly as it was.
     optimal_control/test_phase_native_var_bounds.cpp # file-local prefix: NativeVarBounds*
     solvers/test_nlp_problem_cross_check.cpp # file-local prefix: NlpCrossCheck*/nlp_cross_check_*
+    # The three-door conversion-equivalence suite. Kept standalone below
+    # (SKIP_UNITY_BUILD_INCLUSION) so iterating on it does not rebuild the
+    # whole trailing unity batch.
+    solvers/test_conversion_equivalence.cpp # file-local prefix: ConvEquiv*/conv_equiv_*
 )
 
 #-------------------------------------------------------------------------------
@@ -364,6 +368,15 @@ set_source_files_properties(
 # notes above).
 set_source_files_properties(
     optimal_control/test_shooting_hessian_sparsity.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)
+
+# test_conversion_equivalence.cpp: keep standalone. It is a large, self-
+# contained TU whose file-local models would otherwise merge into the trailing
+# solver unity batch, and holding it apart keeps the edit-build loop on this
+# suite to one TU.
+set_source_files_properties(
+    solvers/test_conversion_equivalence.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
 
