@@ -44,9 +44,10 @@ IDLE_GATE="${TYCHO_BENCH_IDLE_GATE:-0.6}"
 # a trailing space, an empty string), and that failure would land in the middle
 # of a recording rather than before one.
 case "$IDLE_GATE" in
-    [0-9]|[0-9].[0-9]*|[0-9][0-9]*|[0-9][0-9]*.[0-9]*) ;;
-    *) echo "ERROR: TYCHO_BENCH_IDLE_GATE must be a plain non-negative decimal number (got '${IDLE_GATE}')" >&2
+    ''|.|.*|*.|*[!0-9.]*|*.*.*)
+       echo "ERROR: TYCHO_BENCH_IDLE_GATE must be a plain non-negative decimal number (got '${IDLE_GATE}')" >&2
        exit 1 ;;
+    *) ;;
 esac
 
 # ---------------------------------------------------------------------------
