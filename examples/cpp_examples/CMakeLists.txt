@@ -96,3 +96,12 @@ endforeach()
 if(TARGET hanging_chain_builder)
     set_tests_properties(cpp_example_hanging_chain_builder PROPERTIES TIMEOUT 600)
 endif()
+
+# multi_spacecraft_opt_builder is run on its own. Its continuation loop tightens
+# the low-thrust accuracy target step by step, and the last step converges only
+# marginally; sharing the machine with the rest of a parallel ctest run has been
+# enough to push that step over into a non-convergent exit while the same
+# example passes every time it is run alone.
+if(TARGET multi_spacecraft_opt_builder)
+    set_tests_properties(cpp_example_multi_spacecraft_opt_builder PROPERTIES RUN_SERIAL TRUE)
+endif()
