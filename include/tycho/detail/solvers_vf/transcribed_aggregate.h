@@ -81,10 +81,13 @@ namespace tycho::solvers {
 class TranscribedAggregate final : public hven::solvers::ClaimStreamSource {
   public:
     /// @brief Builds the view over a laid program.
-    /// @param host the program the transcription laid; must be non-null and
-    ///        already laid out.
-    /// @throws std::invalid_argument if @p host is null, or if its layout
-    ///         claims a coordinate this convention cannot restate.
+    /// @param host the program the transcription laid; must be non-null, already
+    ///        laid out, and not yet reduced by a fixed-variable treatment --
+    ///        a view is built from the transcription, which is where the
+    ///        declaration-space stream exists to be read.
+    /// @throws std::invalid_argument if @p host is null, if its treatment has
+    ///         eliminated variables, or if its layout claims a coordinate this
+    ///         convention cannot restate.
     explicit TranscribedAggregate(std::shared_ptr<NonLinearProgram> host);
 
     /// @brief The program this view publishes.
@@ -227,13 +230,21 @@ class TranscribedAggregate final : public hven::solvers::ClaimStreamSource {
     void refresh_if_relaid() const;
 
     /// @brief Reads the program's layout into this view's published arrays.
+    ///
+    /// The one place the declared-space rule is enforced: every entry that reads
+    /// a layout comes through here, and a program whose treatment has eliminated
+    /// variables is refused rather than read in its narrower space.
+    ///
+    /// @throws std::invalid_argument if the program has variables eliminated, if
+    ///         the layout claims a slack row, if it claims a negative coordinate
+    ///         while reporting no elimination, or if the three domain runs do
+    ///         not cover its claim slots.
     void read_layout() const;
 
     std::shared_ptr<NonLinearProgram> host_;
 
     mutable hven::solvers::StructureEpoch read_at_epoch_{};
     mutable DeclaredShape read_at_shape_{};
-    mutable bool ever_read_ = false;
 
     mutable Eigen::VectorXi claim_rows_;
     mutable Eigen::VectorXi claim_cols_;

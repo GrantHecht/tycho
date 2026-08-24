@@ -133,7 +133,7 @@ TranscribedAggregate::DeclaredShape TranscribedAggregate::shape_of(const NonLine
 }
 
 void TranscribedAggregate::refresh_if_relaid() const {
-    if (this->ever_read_ && this->host_->structure_epoch() == this->read_at_epoch_) {
+    if (this->host_->structure_epoch() == this->read_at_epoch_) {
         return;
     }
 
@@ -144,15 +144,11 @@ void TranscribedAggregate::refresh_if_relaid() const {
     // and this surface is stated in declaration identities, so the stream must
     // not move with it. The stream read at the last un-eliminated layout IS the
     // declaration-space answer, and it is kept.
+    //
+    // There is always such a stream to keep: the constructor reads one and
+    // refuses the program outright if it cannot, so no view exists to be
+    // refreshed unless a declaration-space stream was read at construction.
     if (this->host_->is_reduced()) {
-        if (!this->ever_read_) {
-            throw std::invalid_argument(
-                "TranscribedAggregate: this view was built over a program whose fixed-variable "
-                "treatment has already eliminated variables, so the layout on hand names "
-                "coordinates in a narrower space than the declaration and no declaration-space "
-                "stream has ever been read from it. Build the view from the transcription, before "
-                "a treatment is configured");
-        }
         const DeclaredShape now = shape_of(*this->host_);
         if (!(now == this->read_at_shape_)) {
             throw std::invalid_argument(fmt::format(
@@ -175,6 +171,27 @@ void TranscribedAggregate::refresh_if_relaid() const {
 
 void TranscribedAggregate::read_layout() const {
     const NonLinearProgram &host = *this->host_;
+
+    // The single enforcement point of the rule the whole coordinate mapping
+    // below rests on. This routine reads the layout's coordinates and states
+    // them as declared identities, which it may do only while the two spaces
+    // are the same one: a fixed-variable treatment that has eliminated
+    // variables lays a narrower space, in which the surviving coordinates are
+    // renumbered and an eliminated one is recorded as a negative placeholder
+    // that names neither a coordinate nor the domain it came from.
+    //
+    // Checked here rather than at the callers because all three of them reach
+    // this routine -- construction, a partition renegotiation, and a refresh
+    // across a re-lay -- and only the last has a published stream to fall back
+    // on, which it keeps without coming here. The other two have nothing to
+    // keep, so for them the reduced layout is a refusal.
+    if (host.is_reduced()) {
+        throw std::invalid_argument(
+            "TranscribedAggregate: the program's fixed-variable treatment has eliminated "
+            "variables, so the layout on hand names coordinates in a narrower space than the "
+            "declaration, and no declaration-space stream can be read from it. Build the view "
+            "from the transcription, before a treatment is configured");
+    }
 
     // The program's own dimensions rather than its declaration's. They are the
     // same three numbers -- the declaration reports what was laid -- and reading
@@ -294,7 +311,6 @@ void TranscribedAggregate::read_layout() const {
 
     this->read_at_epoch_ = host.structure_epoch();
     this->read_at_shape_ = shape_of(host);
-    this->ever_read_ = true;
 }
 
 void TranscribedAggregate::assemble_impl(const hven::solvers::CandidatePoint &point,
