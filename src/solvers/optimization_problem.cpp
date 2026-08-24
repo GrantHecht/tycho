@@ -14,8 +14,28 @@
 
 #include "tycho/detail/solvers_vf/optimization_problem.h"
 
+#include "tycho/detail/solvers_vf/transcribed_aggregate.h"
+#include "tycho/detail/solvers_vf/transcription_declaration.h"
+
 using tycho::solvers::ConstraintFunction;
 using tycho::solvers::ObjectiveFunction;
+using tycho::solvers::TranscriptionDeclaration;
+
+namespace {
+
+/// The thread assignment policy a user-supplied function is partitioned under.
+/// A function that is not thread safe stays on the calling thread; one that is
+/// goes by application where it has several, and round-robin where it has one.
+tycho::solvers::ThreadingFlags
+transcription_thread_mode(bool thread_safe, int applications) {
+    using tycho::solvers::ThreadingFlags;
+    if (!thread_safe) {
+        return ThreadingFlags::MainThread;
+    }
+    return applications > 1 ? ThreadingFlags::ByApplication : ThreadingFlags::RoundRobin;
+}
+
+} // namespace
 
 void tycho::solvers::OptimizationProblem::transcribe() {
     this->nlp_ = std::make_shared<NonLinearProgram>(this->num_partitions_);
@@ -26,13 +46,15 @@ void tycho::solvers::OptimizationProblem::transcribe() {
         throw std::invalid_argument("No variables provided to OptimizationProblem");
     }
 
+    TranscriptionDeclaration declaration(this->num_partitions_);
+
     int numEqCons = 0;
     int numIqCons = 0;
 
     for (auto &func : this->user_equalities_) {
         int irows = func.func_.input_rows();
         int orows = func.func_.output_rows();
-        int numappl = func.indices_.size();
+        int numappl = int(func.indices_.size());
 
         MatrixXi vindex(irows, numappl);
         MatrixXi cindex(orows, numappl);
@@ -49,21 +71,14 @@ void tycho::solvers::OptimizationProblem::transcribe() {
             }
         }
 
-        this->nlp_->equality_constraints_.emplace_back(
-            ConstraintFunction(func.func_, vindex, cindex));
-
-        ThreadingFlags ThreadMode =
-            func.func_.thread_safe()
-                ? (numappl > 1 ? ThreadingFlags::ByApplication : ThreadingFlags::RoundRobin)
-                : ThreadingFlags::MainThread;
-
-        this->nlp_->equality_constraints_.back().set_thread_mode(ThreadMode);
+        declaration.add_equality(ConstraintFunction(func.func_, vindex, cindex),
+                                 transcription_thread_mode(func.func_.thread_safe(), numappl));
     }
 
     for (auto &func : this->user_inequalities_) {
         int irows = func.func_.input_rows();
         int orows = func.func_.output_rows();
-        int numappl = func.indices_.size();
+        int numappl = int(func.indices_.size());
 
         MatrixXi vindex(irows, numappl);
         MatrixXi cindex(orows, numappl);
@@ -80,20 +95,13 @@ void tycho::solvers::OptimizationProblem::transcribe() {
             }
         }
 
-        this->nlp_->inequality_constraints_.emplace_back(
-            ConstraintFunction(func.func_, vindex, cindex));
-
-        ThreadingFlags ThreadMode =
-            func.func_.thread_safe()
-                ? (numappl > 1 ? ThreadingFlags::ByApplication : ThreadingFlags::RoundRobin)
-                : ThreadingFlags::MainThread;
-
-        this->nlp_->inequality_constraints_.back().set_thread_mode(ThreadMode);
+        declaration.add_inequality(ConstraintFunction(func.func_, vindex, cindex),
+                                   transcription_thread_mode(func.func_.thread_safe(), numappl));
     }
 
     for (auto &func : this->user_objectives_) {
         int irows = func.func_.input_rows();
-        int numappl = func.indices_.size();
+        int numappl = int(func.indices_.size());
 
         MatrixXi vindex(irows, numappl);
 
@@ -104,17 +112,16 @@ void tycho::solvers::OptimizationProblem::transcribe() {
             vindex.col(i) = func.indices_[i];
         }
 
-        this->nlp_->objectives_.emplace_back(ObjectiveFunction(func.func_, vindex));
-
-        ThreadingFlags ThreadMode =
-            func.func_.thread_safe()
-                ? (numappl > 1 ? ThreadingFlags::ByApplication : ThreadingFlags::RoundRobin)
-                : ThreadingFlags::MainThread;
-
-        this->nlp_->objectives_.back().set_thread_mode(ThreadMode);
+        declaration.add_objective(ObjectiveFunction(func.func_, vindex),
+                                  transcription_thread_mode(func.func_.thread_safe(), numappl));
     }
 
-    this->nlp_->make_nlp(numVars, numEqCons, numIqCons);
+    for (const auto &bound : this->user_var_bounds_) {
+        declaration.set_variable_bound(bound.index_, bound.lower_, bound.upper_);
+    }
+
+    declaration.lay(*this->nlp_, numVars, numEqCons, numIqCons);
+    this->provider_ = std::make_shared<TranscribedAggregate>(this->nlp_);
     this->optimizer_->set_nlp(this->nlp_);
 
     //////DO NOT GET RID OF THIS!!!!!!//
