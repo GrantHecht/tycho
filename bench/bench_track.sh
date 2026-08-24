@@ -3,11 +3,29 @@
 # bench_track.sh — Local benchmark tracking for Tycho
 #
 # Usage:
-#   bench/bench_track.sh baseline [--reps N] [--threshold PCT]
-#   bench/bench_track.sh record   [--reps N]
-#   bench/bench_track.sh compare  [--threshold PCT] [commit_a] [commit_b]
+#   bench/bench_track.sh baseline [--reps N] [--force]
+#   bench/bench_track.sh record   [--reps N] [--force]
+#   bench/bench_track.sh compare  [--threshold PCT] [--force] [commit_a] [commit_b]
+#   bench/bench_track.sh compare  --alternate OTHER_BENCH_ALL [--reps N] [--threshold PCT]
 #   bench/bench_track.sh list
 #   bench/bench_track.sh help
+#
+# THE IDLE-BOX GATE. A measurement taken while something else is using the
+# machine is not a measurement of the code, and this suite has benchmarks whose
+# timing is bimodal enough that a busy box can invent a double-digit
+# "regression" out of nothing. Every command that MEASURES therefore refuses to
+# start above a one-minute load average of IDLE_GATE, and every recording
+# carries the load it was taken at, so a later comparison can refuse a pair of
+# files that were not both taken on a quiet box. --force overrides either
+# refusal, and marks the result as forced so it cannot be mistaken later for a
+# clean one.
+#
+# ALTERNATED REPS. Recording arm A to completion and then arm B leaves each arm
+# sitting in whatever thermal and allocator state its own run produced, and a
+# bimodal benchmark can settle into a different mode per arm. `compare
+# --alternate` instead interleaves them -- one repetition of the old binary,
+# one of the new, N times round -- so both arms see the same conditions and a
+# mode flip lands in both rather than in the difference between them.
 ###############################################################################
 set -euo pipefail
 
@@ -16,6 +34,11 @@ BENCH_BINARY="${REPO_DIR}/build/bench/cpp/bench_all"
 RESULTS_DIR="${REPO_DIR}/bench/results"
 DEFAULT_REPS=5
 DEFAULT_THRESHOLD=10.0
+
+# One-minute load average at or above which a measuring command refuses to run.
+# Chosen well below one busy core: this box's own editors and language servers
+# idle under it, and anything doing real work sits above it.
+IDLE_GATE="${TYCHO_BENCH_IDLE_GATE:-0.6}"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -27,6 +50,33 @@ warn() { echo "WARNING: $*" >&2; }
 check_deps() {
     command -v jq  >/dev/null 2>&1 || die "jq not found. Install with: brew install jq"
     command -v git >/dev/null 2>&1 || die "git not found"
+}
+
+# One-minute load average, as a decimal string. Linux reads it from /proc;
+# everything else parses uptime, whose "load average(s):" tail is the one field
+# both BSD and macOS spell the same way.
+read_loadavg() {
+    if [[ -r /proc/loadavg ]]; then
+        cut -d' ' -f1 /proc/loadavg
+    else
+        uptime | sed -e 's/.*[Ll]oad [Aa]verages\{0,1\}: *//' -e 's/,/ /g' | awk '{print $1}'
+    fi
+}
+
+# Refuses to measure on a box that is not idle. $1 names the command for the
+# message; $2 is "true" when --force was given.
+require_idle_box() {
+    local what="$1" forced="$2" load
+    load="$(read_loadavg)"
+    if awk -v l="$load" -v g="$IDLE_GATE" 'BEGIN { exit !(l >= g) }'; then
+        if [[ "$forced" == true ]]; then
+            warn "${what}: load average ${load} is at or above the ${IDLE_GATE} gate — forced"
+        else
+            die "${what}: load average is ${load}, at or above the ${IDLE_GATE} idle gate.
+Wait for the box to go quiet, or pass --force to measure anyway (the result is
+then marked forced and a later compare will refuse it without --force)."
+        fi
+    fi
 }
 
 get_commit_hash() { git -C "$REPO_DIR" rev-parse HEAD; }
@@ -65,6 +115,7 @@ fmt_time() {
 do_record() {
     local reps="$DEFAULT_REPS"
     local make_baseline=false
+    local forced=false
     if [[ "${1:-}" == "--baseline" ]]; then
         make_baseline=true
         shift
@@ -73,13 +124,18 @@ do_record() {
     # Parse flags
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --reps) reps="$2"; shift 2 ;;
-            *)      die "Unknown flag: $1" ;;
+            --reps)  reps="$2"; shift 2 ;;
+            --force) forced=true; shift ;;
+            *)       die "Unknown flag: $1" ;;
         esac
     done
 
     [[ -x "$BENCH_BINARY" ]] || die "bench_all not found at $BENCH_BINARY
 Build it with: cmake --preset macos-llvm-release -DBUILD_CPP_BENCHMARKS=ON && cd build && ninja -j6 bench_all"
+
+    require_idle_box "record" "$forced"
+    local load_before
+    load_before="$(read_loadavg)"
 
     mkdir -p "$RESULTS_DIR"
 
@@ -115,6 +171,11 @@ Build it with: cmake --preset macos-llvm-release -DBUILD_CPP_BENCHMARKS=ON && cd
         --arg branch "$branch" \
         --arg timestamp "$(date -Iseconds)" \
         --argjson dirty "$dirty_flag" \
+        --argjson reps "$reps" \
+        --argjson load_before "$load_before" \
+        --argjson load_after "$(read_loadavg)" \
+        --argjson idle_gate "$IDLE_GATE" \
+        --argjson forced "$forced" \
         --slurpfile gbench "$tmpfile" \
         '{
             metadata: {
@@ -122,7 +183,13 @@ Build it with: cmake --preset macos-llvm-release -DBUILD_CPP_BENCHMARKS=ON && cd
                 commit_short: $commit_short,
                 branch: $branch,
                 timestamp: $timestamp,
-                dirty: $dirty
+                dirty: $dirty,
+                reps: $reps,
+                protocol: "sequential",
+                load_before: $load_before,
+                load_after: $load_after,
+                idle_gate: $idle_gate,
+                forced: $forced
             },
             gbench: $gbench[0]
         }' > "$outfile"
@@ -140,18 +207,137 @@ Build it with: cmake --preset macos-llvm-release -DBUILD_CPP_BENCHMARKS=ON && cd
 # ---------------------------------------------------------------------------
 # compare
 # ---------------------------------------------------------------------------
+# Refuses a stored result that was not taken on a quiet box. A file predating
+# the recorded-load metadata cannot be judged either way, so it warns instead.
+check_recorded_conditions() {
+    local file="$1" forced_ok="$2" label load recorded_forced
+    label="$(jq -r '.metadata.commit_short' "$file")"
+    load="$(jq -r '.metadata.load_before // "unknown"' "$file")"
+    recorded_forced="$(jq -r '.metadata.forced // "unknown"' "$file")"
+
+    if [[ "$load" == "unknown" ]]; then
+        warn "${label}: recorded before the idle gate existed — its box conditions are unknown"
+        return 0
+    fi
+    if [[ "$recorded_forced" == "true" ]] || awk -v l="$load" -v g="$IDLE_GATE" \
+            'BEGIN { exit !(l >= g) }'; then
+        if [[ "$forced_ok" == true ]]; then
+            warn "${label}: recorded at load ${load} (forced=${recorded_forced}) — comparing anyway"
+        else
+            die "${label} was recorded at load average ${load} (forced=${recorded_forced}), at or
+above the ${IDLE_GATE} idle gate. A comparison is only as good as the recordings
+behind it: re-record it on a quiet box, or pass --force to compare anyway."
+        fi
+    fi
+}
+
+# One alternated measurement round-trip: reps rounds, each running the old
+# binary once and then the new one once. Writes an envelope per arm, in the
+# shape do_compare's reporting half reads.
+run_alternated() {
+    local old_bin="$1" new_bin="$2" reps="$3" out_old="$4" out_new="$5" filter="${6:-}"
+    local workdir filter_arg=()
+    workdir="$(mktemp -d)"
+    [[ -n "$filter" ]] && filter_arg=(--benchmark_filter="$filter")
+
+    info "Alternating ${reps} repetitions: $(basename "$(dirname "$old_bin")")/$(basename "$old_bin") vs current build"
+    local i
+    for ((i = 1; i <= reps; i++)); do
+        info "  round ${i}/${reps}"
+        "$old_bin" --benchmark_repetitions=1 "${filter_arg[@]}" \
+            --benchmark_out="${workdir}/old-${i}.json" --benchmark_out_format=json >/dev/null 2>&1
+        "$new_bin" --benchmark_repetitions=1 "${filter_arg[@]}" \
+            --benchmark_out="${workdir}/new-${i}.json" --benchmark_out_format=json >/dev/null 2>&1
+    done
+
+    # Per benchmark, the median over the rounds. Emitted with the aggregate
+    # name the reporting half selects on, so an alternated run and a recorded
+    # one are read by exactly the same code.
+    local median_prog='
+        def to_ns:
+            if .time_unit == "ns" then .real_time
+            elif .time_unit == "us" then .real_time * 1000
+            elif .time_unit == "ms" then .real_time * 1000000
+            elif .time_unit == "s"  then .real_time * 1000000000
+            else .real_time end;
+        def median: sort | (length as $n |
+            if $n % 2 == 1 then .[($n - 1) / 2]
+            else (.[$n / 2 - 1] + .[$n / 2]) / 2 end);
+        [ .[].benchmarks[] | select(.run_type == "iteration" or (.run_type | not)) ]
+        | group_by(.run_name)
+        | map({ run_name: .[0].run_name,
+                name: .[0].run_name,
+                aggregate_name: "median",
+                time_unit: "ns",
+                real_time: (map(to_ns) | median) })'
+
+    local arm
+    for arm in old new; do
+        local out
+        [[ "$arm" == old ]] && out="$out_old" || out="$out_new"
+        jq -n \
+            --arg label "$arm" \
+            --arg timestamp "$(date -Iseconds)" \
+            --argjson reps "$reps" \
+            --argjson load_before "$(read_loadavg)" \
+            --argjson idle_gate "$IDLE_GATE" \
+            --slurpfile marks <(jq -s "$median_prog" "${workdir}/${arm}"-*.json) \
+            '{
+                metadata: {
+                    commit: "alternated",
+                    commit_short: $label,
+                    branch: "alternated",
+                    timestamp: $timestamp,
+                    dirty: false,
+                    reps: $reps,
+                    protocol: "alternated",
+                    load_before: $load_before,
+                    idle_gate: $idle_gate,
+                    forced: false
+                },
+                gbench: { benchmarks: $marks[0] }
+            }' > "$out"
+    done
+
+    rm -rf "$workdir"
+}
+
 do_compare() {
     local threshold="$DEFAULT_THRESHOLD"
+    local reps="$DEFAULT_REPS"
+    local forced=false
+    local alternate=""
+    local filter=""
     local positional=()
 
     # Parse flags
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --threshold) threshold="$2"; shift 2 ;;
+            --reps)      reps="$2"; shift 2 ;;
+            --alternate) alternate="$2"; shift 2 ;;
+            --filter)    filter="$2"; shift 2 ;;
+            --force)     forced=true; shift ;;
             -*)          die "Unknown flag: $1" ;;
             *)           positional+=("$1"); shift ;;
         esac
     done
+
+    if [[ -n "$alternate" ]]; then
+        [[ "${#positional[@]}" -eq 0 ]] ||
+            die "compare --alternate takes no commit arguments: it measures both arms itself"
+        [[ -x "$alternate" ]] || die "not an executable benchmark binary: $alternate"
+        [[ -x "$BENCH_BINARY" ]] || die "bench_all not found at $BENCH_BINARY"
+        require_idle_box "compare --alternate" "$forced"
+
+        local alt_old alt_new
+        alt_old="$(mktemp)"
+        alt_new="$(mktemp)"
+        trap "rm -f '$alt_old' '$alt_new'" EXIT
+        run_alternated "$alternate" "$BENCH_BINARY" "$reps" "$alt_old" "$alt_new" "$filter"
+        report_comparison "$alt_old" "$alt_new" "$threshold"
+        return
+    fi
 
     local file_old file_new
     case "${#positional[@]}" in
@@ -183,6 +369,15 @@ do_compare() {
             die "Too many arguments. Usage: bench_track.sh compare [commit_a] [commit_b]"
             ;;
     esac
+
+    check_recorded_conditions "$file_old" "$forced"
+    check_recorded_conditions "$file_new" "$forced"
+    report_comparison "$file_old" "$file_new" "$threshold"
+}
+
+# The reporting half, shared by the stored-file and alternated paths.
+report_comparison() {
+    local file_old="$1" file_new="$2" threshold="$3"
 
     local label_old label_new
     label_old="$(jq -r '.metadata.commit_short' "$file_old")"
@@ -314,9 +509,10 @@ do_help() {
 bench_track.sh — Local benchmark tracking for Tycho
 
 Commands:
-  baseline [--reps N]                 Record benchmarks and set as baseline
-  record   [--reps N]                 Record benchmarks for current commit
-  compare  [--threshold P] [a] [b]    Compare two result sets
+  baseline [--reps N] [--force]       Record benchmarks and set as baseline
+  record   [--reps N] [--force]       Record benchmarks for current commit
+  compare  [--threshold P] [a] [b]    Compare two stored result sets
+  compare  --alternate BIN [--reps N] Measure both arms alternately and compare
   list                                List all stored results
   help                                Show this message
 
@@ -324,14 +520,34 @@ Compare modes:
   compare                             baseline vs HEAD
   compare <commit>                    <commit> vs HEAD
   compare <commit_a> <commit_b>       <commit_a> vs <commit_b>
+  compare --alternate <bench_all>     that binary vs the current build, run
+                                      one repetition each, alternately, N times
 
 Options:
-  --reps N          Repetitions per benchmark (default: 5)
+  --reps N          Repetitions per benchmark (default: 5). Under --alternate,
+                    the number of alternating rounds.
   --threshold P     Regression threshold percentage (default: 10.0)
+  --filter REGEX    Under --alternate, restrict to matching benchmarks
+  --force           Measure (or compare) despite the idle-box gate
+
+  TYCHO_BENCH_IDLE_GATE in the environment moves the gate (default 0.6), for a
+  box whose quiet load sits somewhere else.
+
+The idle-box gate:
+  A command that measures refuses to start when the one-minute load average is
+  at or above 0.6, and every recording carries the load it was taken at, so a
+  comparison refuses a pair that was not both taken quiet. --force overrides
+  either refusal and marks the recording as forced.
+
+Alternated reps:
+  Recording one arm to completion and then the other lets a bimodal benchmark
+  settle into a different mode per arm, which shows up as a difference between
+  the arms rather than as the noise it is. --alternate interleaves them
+  instead, so both arms see the same conditions.
 
 Exit codes:
   0    Success / no regressions
-  1    Usage error or missing files
+  1    Usage error, missing files, or a refused idle-box gate
   2    Regressions detected above threshold
 
 Examples:
@@ -340,6 +556,7 @@ Examples:
   bench/bench_track.sh compare
   bench/bench_track.sh compare --threshold 5.0
   bench/bench_track.sh compare abc12345 def67890
+  bench/bench_track.sh compare --alternate /path/to/old/build/bench/cpp/bench_all --reps 7
 HELP
 }
 
