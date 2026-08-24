@@ -26,8 +26,7 @@ namespace {
 /// The thread assignment policy a user-supplied function is partitioned under.
 /// A function that is not thread safe stays on the calling thread; one that is
 /// goes by application where it has several, and round-robin where it has one.
-tycho::solvers::ThreadingFlags
-transcription_thread_mode(bool thread_safe, int applications) {
+tycho::solvers::ThreadingFlags transcription_thread_mode(bool thread_safe, int applications) {
     using tycho::solvers::ThreadingFlags;
     if (!thread_safe) {
         return ThreadingFlags::MainThread;

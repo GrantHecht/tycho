@@ -80,8 +80,8 @@ int tycho::oc::PhaseIndexer::add_accumulation(ConstraintInterface eqfun, PhaseRe
         vincin[1].col(i) = vincin_acc[1].col(0);
     }
 
-    int integrand_index = this->declaration_->add_equality(
-        ConstraintFunction(eqfun, vincin[0], vincin[1]), Tmode);
+    int integrand_index =
+        this->declaration_->add_equality(ConstraintFunction(eqfun, vincin[0], vincin[1]), Tmode);
     this->declaration_->equality(integrand_index).index_data_.unique_constraints_ = false;
 
     this->num_phase_eq_cons_ += this->next_phase_eq_con_ - temp;

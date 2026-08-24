@@ -327,8 +327,8 @@ void tycho::oc::OptimalControlProblemBase::transcribe_links(
             Func = IOScaled<decltype(Func)>(Ob.func_, input_scales, output_scales);
         }
 
-        Ob.global_index_ =
-            declaration.add_objective(ObjectiveFunction(Func, VC[0]), ThreadingFlags::ByApplication);
+        Ob.global_index_ = declaration.add_objective(ObjectiveFunction(Func, VC[0]),
+                                                     ThreadingFlags::ByApplication);
 
         this->num_obj_funs_++;
     }
