@@ -189,6 +189,44 @@ struct PinsCountingProblem : NLPProblem {
     std::string name() const override { return "PinsCountingProblem"; }
 };
 
+/// A declared problem with NO constraint rows, for the half of the exact-length
+/// rule that says an empty block is the right length where the row count is
+/// zero. Only its shape matters here; it is never solved.
+struct PinsUnconstrainedProblem : NLPProblem {
+    int num_vars() const override { return 2; }
+    int num_cons() const override { return 0; }
+    int num_jac_nonzeros() const override { return 0; }
+    int num_hess_nonzeros() const override { return 2; }
+
+    void bounds(Eigen::Ref<Eigen::VectorXd> xl, Eigen::Ref<Eigen::VectorXd> xu,
+                Eigen::Ref<Eigen::VectorXd>, Eigen::Ref<Eigen::VectorXd>) const override {
+        xl << -kPinsInf, -kPinsInf;
+        xu << kPinsInf, kPinsInf;
+    }
+    void eval_f(ConstEigenRef<Eigen::VectorXd> x, double &f) const override {
+        f = x[0] * x[0] + x[1] * x[1];
+    }
+    void eval_grad_f(ConstEigenRef<Eigen::VectorXd> x,
+                     Eigen::Ref<Eigen::VectorXd> g) const override {
+        g[0] = 2.0 * x[0];
+        g[1] = 2.0 * x[1];
+    }
+    void eval_g(ConstEigenRef<Eigen::VectorXd>, Eigen::Ref<Eigen::VectorXd>) const override {}
+    void jac_structure(Eigen::Ref<Eigen::VectorXi>, Eigen::Ref<Eigen::VectorXi>) const override {}
+    void hess_structure(Eigen::Ref<Eigen::VectorXi> r,
+                        Eigen::Ref<Eigen::VectorXi> c) const override {
+        r << 0, 1;
+        c << 0, 1;
+    }
+    void eval_jac(ConstEigenRef<Eigen::VectorXd>, Eigen::Ref<Eigen::VectorXd>) const override {}
+    void eval_hess(ConstEigenRef<Eigen::VectorXd>, double obj_factor,
+                   ConstEigenRef<Eigen::VectorXd>, Eigen::Ref<Eigen::VectorXd> v) const override {
+        v[0] = 2.0 * obj_factor;
+        v[1] = 2.0 * obj_factor;
+    }
+    std::string name() const override { return "PinsUnconstrainedProblem"; }
+};
+
 /// One assembly harness: a program laid over a host, plus the destinations an
 /// evaluation writes into, seeded before every call the way a consumer seeds
 /// them.
@@ -311,55 +349,100 @@ TEST(ModelContractPins, AnEvaluationAfterTranscriptionAddsToThoseCounts) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Multiplier block shapes: what an EMPTY block means, and where.
+// Multiplier block shapes.
 //
-// THE RULE, stated in one place because two layers read a block and they read
-// it under different premises:
+// THE RULE, stated in one place because two layers read a block:
 //
-//   At the MODEL surface -- eval_hess on the contract itself, and on the
-//   conversion that implements it -- an empty multiplier block is a legal,
-//   compact spelling of an all-zero block. There is no chain behind the call,
-//   so the length carries no other information, and a caller probing the
-//   structure at zero multipliers should not have to materialize a zero
-//   vector to do it.
+//   The CHAIN surface reads the HEAD of a block AT LEAST AS LONG AS ITS ROWS.
+//   The MODEL surface takes EXACTLY ITS OWN ROWS. An empty block is legal
+//   exactly where zero rows are hosted, on BOTH surfaces, AS THE EXACT
+//   LENGTH -- not as a special case.
 //
-//   At the CHAIN surface -- the host that carries a model onto the solver's
-//   program -- a block SHORTER than the rows the host laid, empty included,
-//   is refused. There the length is a statement about the assembled row
-//   space: the engine hands down a block at least as long as the rows it
-//   laid (it may be longer, since the engine appends rows of its own after
-//   the model's, and the host's are the head), so a short one is a defect in
-//   the chain and reading it as zeros would hide it. An empty block is the
-//   RIGHT length there exactly when the host laid no rows of that kind.
+// Why the two halves differ where they do. The chain surface reads the
+// ENGINE's block, and the engine appends rows of its own after the model's (a
+// fixed variable turned into an equality row) and hands the whole vector down;
+// the host's rows are the ones laid first, so its own block is the head of
+// what arrives, and a longer block is ordinary rather than a defect. The model
+// surface has no chain behind it: there is nothing whose rows could follow its
+// own, so a block that is not exactly its row count is a caller error in
+// either direction.
+//
+// What the rule refuses in both directions is the interpretation of a LENGTH.
+// An empty block is not a compact spelling of "all zero" anywhere -- it is a
+// length, and it is the right one only where the row count it stands for is
+// zero. A caller that wants zero multipliers over a nonempty row space passes
+// zeros.
 //
 // Both host entry points that read a block -- the record the equality piece
 // leaves for the Hessian owner, and the owner's own read -- follow the chain
-// rule, and both are pinned below, each by the site its refusal names.
+// half, and both are pinned below, each by the site its refusal names.
 ///////////////////////////////////////////////////////////////////////////////
 
-TEST(ModelContractPins, TheModelSurfaceReadsAnEmptyMultiplierBlockAsAllZero) {
+// The model surface takes exactly its own rows, in BOTH directions. The long
+// half of that runs against the model surface as it stands.
+TEST(ModelContractPins, TheModelSurfaceRefusesAMultiplierBlockLongerThanItsRows) {
     NlpProblemModel model(std::make_shared<PinsCountingProblem>());
     ASSERT_EQ(model.me(), 1);
     ASSERT_EQ(model.mi(), 1);
 
     const Eigen::VectorXd x = pins_point();
-    const Eigen::VectorXd zero_e = Eigen::VectorXd::Zero(1);
-    const Eigen::VectorXd zero_i = Eigen::VectorXd::Zero(1);
+    const Eigen::VectorXd one_e = (Eigen::VectorXd(1) << 0.5).finished();
+    const Eigen::VectorXd one_i = (Eigen::VectorXd(1) << 0.25).finished();
+    const Eigen::VectorXd long_block = (Eigen::VectorXd(3) << 0.5, 9.0, 9.0).finished();
 
-    const SpMatRM from_zeros = model.eval_hess(x, 1.0, zero_e, zero_i);
-    const SpMatRM from_empty = model.eval_hess(x, 1.0, Eigen::VectorXd(0), Eigen::VectorXd(0));
+    // A length the chain surface reads as "my rows, then the engine's" has no
+    // such reading here: there is no chain behind this call for the extra
+    // entries to belong to.
+    EXPECT_THROW(model.eval_hess(x, 1.0, long_block, one_i), std::invalid_argument);
+    EXPECT_THROW(model.eval_hess(x, 1.0, one_e, long_block), std::invalid_argument);
+    EXPECT_THROW(model.compose_user_multipliers(long_block, one_i), std::invalid_argument);
+    EXPECT_THROW(model.compose_user_multipliers(one_e, long_block), std::invalid_argument);
 
-    ASSERT_EQ(from_zeros.nonZeros(), from_empty.nonZeros());
-    for (int k = 0; k < from_zeros.nonZeros(); k++) {
-        EXPECT_EQ(from_zeros.valuePtr()[k], from_empty.valuePtr()[k]) << "entry " << k;
-    }
+    // Exactly its rows is the shape that works.
+    EXPECT_NO_THROW(model.eval_hess(x, 1.0, one_e, one_i));
+    EXPECT_NO_THROW(model.compose_user_multipliers(one_e, one_i));
+}
 
-    // The composition onto the declared row space reads an empty block the
-    // same way, for the same reason.
+// The empty block as the EXACT length, on the model surface: a model with no
+// rows of a kind takes an empty block for that kind because empty is what its
+// row count is, not because empty is read as zeros.
+TEST(ModelContractPins, TheModelSurfaceTakesAnEmptyBlockAsTheExactLengthWhereItHasNoRows) {
+    NlpProblemModel model(std::make_shared<PinsUnconstrainedProblem>());
+    ASSERT_EQ(model.me(), 0);
+    ASSERT_EQ(model.mi(), 0);
+
+    const Eigen::VectorXd x = pins_point();
+    EXPECT_NO_THROW(model.eval_hess(x, 1.0, Eigen::VectorXd(0), Eigen::VectorXd(0)));
     const Eigen::VectorXd composed =
         model.compose_user_multipliers(Eigen::VectorXd(0), Eigen::VectorXd(0));
-    EXPECT_EQ(composed.size(), 2);
-    EXPECT_TRUE(composed.isZero(0.0));
+    EXPECT_EQ(composed.size(), 0);
+}
+
+// The short half of the model surface's exact-length rule.
+//
+// DISABLED: requires the symmetric empty-refusal (hven fold, post-063f954).
+// At the pin this tree currently consumes, the model surface still accepts an
+// empty block where it has rows and reads it as all-zero, so these assertions
+// fail there. Enable in the same change that consumes the fold -- nothing here
+// needs to be rewritten, only the prefix dropped.
+TEST(ModelContractPins, DISABLED_TheModelSurfaceRefusesAnEmptyBlockWhereItHasRows) {
+    NlpProblemModel model(std::make_shared<PinsCountingProblem>());
+    ASSERT_EQ(model.me(), 1);
+    ASSERT_EQ(model.mi(), 1);
+
+    const Eigen::VectorXd x = pins_point();
+    const Eigen::VectorXd one_e = (Eigen::VectorXd(1) << 0.5).finished();
+    const Eigen::VectorXd one_i = (Eigen::VectorXd(1) << 0.25).finished();
+    const Eigen::VectorXd empty(0);
+
+    // Empty is a length, and it is not this model's. A caller wanting zero
+    // multipliers over these rows passes zeros, which is what the line after
+    // each refusal shows still works.
+    EXPECT_THROW(model.eval_hess(x, 1.0, empty, one_i), std::invalid_argument);
+    EXPECT_THROW(model.eval_hess(x, 1.0, one_e, empty), std::invalid_argument);
+    EXPECT_THROW(model.compose_user_multipliers(empty, one_i), std::invalid_argument);
+    EXPECT_THROW(model.compose_user_multipliers(one_e, empty), std::invalid_argument);
+    EXPECT_NO_THROW(model.eval_hess(x, 1.0, Eigen::VectorXd::Zero(1), Eigen::VectorXd::Zero(1)));
 }
 
 TEST(ModelContractPins, TheChainSurfaceRefusesAnEmptyBlockWhereItHostsRows) {
@@ -485,6 +568,55 @@ TEST(ModelContractPins, AShortMultiplierBlockIsRefusedAtTheFirstReadNotAtTheReco
         EXPECT_NE(message.find("0 equality multipliers"), std::string::npos) << message;
         EXPECT_NE(message.find("hosts 1 equality rows"), std::string::npos) << message;
         EXPECT_NE(message.find("PinsCountingModel"), std::string::npos) << message;
+        EXPECT_NE(message.find("at the piece's first read"), std::string::npos) << message;
+        EXPECT_EQ(message.find("at the record"), std::string::npos) << message;
+        EXPECT_EQ(message.find("at the Hessian owner"), std::string::npos) << message;
+    }
+}
+
+namespace {
+
+/// PinsCountingModel with a second equality row, so that "shorter than the
+/// host's rows" can be something other than empty.
+struct PinsTwoEqualityModel : PinsCountingModel {
+    hven::Index me() const override { return 2; }
+
+    Vec eval_ce(const Vec &x) const override {
+        ce_++;
+        return (Vec(2) << x[0] + x[1] - 1.0, x[0] - 2.0).finished();
+    }
+    SpMatRM eval_jac_e(const Vec &) const override {
+        jac_e_++;
+        SpMatRM j(2, 2);
+        std::vector<Eigen::Triplet<double>> t{{0, 0, 1.0}, {0, 1, 1.0}, {1, 0, 1.0}};
+        j.setFromTriplets(t.begin(), t.end());
+        j.makeCompressed();
+        return j;
+    }
+};
+
+} // namespace
+
+// The companion to the pin above, with a block that is short but NOT empty --
+// the case where catching it late is not merely wrong but an over-read: the
+// fill would index the second row's multiplier out of a one-element block,
+// which does not fault and which the later record's refusal would mask.
+TEST(ModelContractPins, AShortNonEmptyMultiplierBlockIsAlsoRefusedAtTheFirstRead) {
+    auto model = std::make_shared<PinsTwoEqualityModel>();
+    PinsAssembly asm_(model, "PinsTwoEqualityModel");
+    ASSERT_EQ(asm_.core_->num_eq_, 2);
+    ASSERT_EQ(asm_.core_->num_iq_, 1);
+
+    const Eigen::VectorXd x = pins_point();
+    const Eigen::VectorXd short_e = (Eigen::VectorXd(1) << 0.4).finished();
+    const Eigen::VectorXd li = (Eigen::VectorXd(1) << 0.25).finished();
+    try {
+        asm_.eval_kkt(2.0, x, short_e, li);
+        FAIL() << "expected std::invalid_argument";
+    } catch (const std::invalid_argument &e) {
+        const std::string message(e.what());
+        EXPECT_NE(message.find("1 equality multipliers"), std::string::npos) << message;
+        EXPECT_NE(message.find("hosts 2 equality rows"), std::string::npos) << message;
         EXPECT_NE(message.find("at the piece's first read"), std::string::npos) << message;
         EXPECT_EQ(message.find("at the record"), std::string::npos) << message;
         EXPECT_EQ(message.find("at the Hessian owner"), std::string::npos) << message;
