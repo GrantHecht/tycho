@@ -53,6 +53,9 @@ set(TYCHO_TEST_LIGHT_SOURCES
     integrators/test_rk_tableau_consistency.cpp
     vector_functions/test_fd_coeffs.cpp
     solvers/test_kkt_canonical_lock.cpp
+    # Boundary pins for the model contract. Light because it reaches only the
+    # solver library's own headers -- no tycho/tycho.h, no VectorFunction.
+    solvers/test_model_contract_pins.cpp
 )
 
 set(TYCHO_TEST_HEAVY_SOURCES
