@@ -14,10 +14,6 @@ namespace tycho::solvers {
 
 namespace {
 
-/// Which of the three claim domains a laid coordinate belongs to, read off the
-/// row band it sits in.
-enum class ClaimDomainOfSlot { kHessian, kEqualityJacobian, kInequalityJacobian };
-
 /// The request's flags, by name, so a refusal says which shape was asked for
 /// rather than which bit pattern.
 std::string request_shape_name(hven::solvers::EvalRequest request) {
@@ -209,7 +205,27 @@ void TranscribedAggregate::read_layout() const {
     const int equality_base = primal + slack;
     const int inequality_base = equality_base + equality_rows;
 
-    auto domain_of = [&](int slot, int row, int col) {
+    // The layout is read through raw pointers into locals rather than through
+    // the program's members. The classification below writes into the arrays it
+    // is building, and a compiler that cannot rule out aliasing between those
+    // writes and the program's own vectors reloads every bound and every data
+    // pointer on each slot; read once here, it does not have to.
+    const int total = host.num_user_kkt_elems_;
+    const int *const laid_rows = host.kkt_coeff_rows_.data();
+    const int *const laid_cols = host.kkt_coeff_cols_.data();
+    const int *const laid_partitions = host.kkt_coeff_part_ids_.data();
+
+    // Every refusal a slot can make, in slot order, before any of the stream is
+    // built -- so a layout this view cannot state leaves the previously
+    // published stream standing, and names the same first offending slot it
+    // always did. The pass doubles as the count of each domain's run, which is
+    // what lets the three runs be filled in one pass instead of one pass each.
+    int hessian_slots = 0;
+    int equality_slots = 0;
+    int inequality_slots = 0;
+    for (int slot = 0; slot < total; slot++) {
+        const int row = laid_rows[slot];
+        const int col = laid_cols[slot];
         if (row < 0 || col < 0) {
             // Only an eliminated coordinate is recorded negative, and this
             // routine never runs against an eliminated layout (see
@@ -223,80 +239,82 @@ void TranscribedAggregate::read_layout() const {
                 slot, row, col));
         }
         if (row < primal) {
-            return ClaimDomainOfSlot::kHessian;
-        }
-        if (row < equality_base) {
+            hessian_slots++;
+        } else if (row < equality_base) {
             throw std::invalid_argument(fmt::format(
                 "TranscribedAggregate: the layout claims KKT row {0}, which is a slack row; the "
                 "claim stream is stated in a space with no slack block",
                 row));
+        } else if (row < inequality_base) {
+            equality_slots++;
+        } else {
+            inequality_slots++;
         }
-        if (row < inequality_base) {
-            return ClaimDomainOfSlot::kEqualityJacobian;
-        }
-        return ClaimDomainOfSlot::kInequalityJacobian;
-    };
+    }
 
-    const int total = host.num_user_kkt_elems_;
-    Eigen::VectorXi rows(total);
-    Eigen::VectorXi cols(total);
-    Eigen::VectorXi partitions(total);
+    const hven::solvers::ClaimBlock hessian{0, hessian_slots};
+    const hven::solvers::ClaimBlock equality{hessian_slots, equality_slots};
+    const hven::solvers::ClaimBlock inequality{hessian_slots + equality_slots, inequality_slots};
 
-    int next = 0;
-    auto emit_domain = [&](ClaimDomainOfSlot wanted) {
-        const int start = next;
-        for (int slot = 0; slot < total; slot++) {
-            const int row = host.kkt_coeff_rows_[slot];
-            const int col = host.kkt_coeff_cols_[slot];
-            if (domain_of(slot, row, col) != wanted) {
-                continue;
-            }
-
-            int out_row = row;
-            int out_col = col;
-            if (wanted == ClaimDomainOfSlot::kHessian) {
-                // The layout records a Hessian element in whichever order the
-                // piece walked it; the claim convention names it on the upper
-                // triangle.
-                out_row = std::min(row, col);
-                out_col = std::max(row, col);
-            } else if (wanted == ClaimDomainOfSlot::kEqualityJacobian) {
-                out_row = primal + (row - equality_base);
-            } else {
-                out_row = primal + equality_rows + (row - inequality_base);
-            }
-
-            rows[next] = out_row;
-            cols[next] = out_col;
-            partitions[next] = host.kkt_coeff_part_ids_[slot];
-            next++;
-        }
-        return hven::solvers::ClaimBlock{start, next - start};
-    };
-
-    const hven::solvers::ClaimBlock hessian = emit_domain(ClaimDomainOfSlot::kHessian);
-    const hven::solvers::ClaimBlock equality = emit_domain(ClaimDomainOfSlot::kEqualityJacobian);
-    const hven::solvers::ClaimBlock inequality =
-        emit_domain(ClaimDomainOfSlot::kInequalityJacobian);
-
-    if (next != total) {
+    if (hessian_slots + equality_slots + inequality_slots != total) {
         throw std::invalid_argument(
             fmt::format("TranscribedAggregate: the three domain runs cover {0} of the layout's {1} "
                         "claim slots",
-                        next, total));
+                        hessian_slots + equality_slots + inequality_slots, total));
+    }
+
+    Eigen::VectorXi rows(total);
+    Eigen::VectorXi cols(total);
+    Eigen::VectorXi partitions(total);
+    int *const out_rows = rows.data();
+    int *const out_cols = cols.data();
+    int *const out_partitions = partitions.data();
+
+    // One pass, three cursors: each domain's run is filled in the slot order the
+    // layout claims in, which is what makes each run the program's own serial
+    // partition-index order.
+    int next_hessian = hessian.start_;
+    int next_equality = equality.start_;
+    int next_inequality = inequality.start_;
+    for (int slot = 0; slot < total; slot++) {
+        const int row = laid_rows[slot];
+        const int col = laid_cols[slot];
+
+        int out_slot = 0;
+        int out_row = row;
+        int out_col = col;
+        if (row < primal) {
+            out_slot = next_hessian++;
+            // The layout records a Hessian element in whichever order the piece
+            // walked it; the claim convention names it on the upper triangle.
+            out_row = std::min(row, col);
+            out_col = std::max(row, col);
+        } else if (row < inequality_base) {
+            out_slot = next_equality++;
+            out_row = primal + (row - equality_base);
+        } else {
+            out_slot = next_inequality++;
+            out_row = primal + equality_rows + (row - inequality_base);
+        }
+
+        out_rows[out_slot] = out_row;
+        out_cols[out_slot] = out_col;
+        out_partitions[out_slot] = laid_partitions[slot];
     }
 
     const int gradient_slots = host.num_pgx_elems_;
     Eigen::VectorXi gradient_rows(gradient_slots);
+    const int *const laid_gradient_rows = host.rhs_coeff_rows_.data() + host.pgx_data_start_;
+    int *const out_gradient_rows = gradient_rows.data();
     for (int slot = 0; slot < gradient_slots; slot++) {
-        const int row = host.rhs_coeff_rows_[host.pgx_data_start_ + slot];
+        const int row = laid_gradient_rows[slot];
         if (row < 0 || row >= primal) {
             throw std::invalid_argument(fmt::format(
                 "TranscribedAggregate: objective-gradient claim slot {0} names row {1}, outside "
                 "the {2} declared variables",
                 slot, row, primal));
         }
-        gradient_rows[slot] = row;
+        out_gradient_rows[slot] = row;
     }
 
     // Committed together, so a refusal above leaves the previously published
