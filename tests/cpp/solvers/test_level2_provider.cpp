@@ -32,6 +32,7 @@
 #include <memory>
 #include <set>
 #include <stdexcept>
+#include <string>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -138,11 +139,13 @@ void l2_provider_build_wide(OptimizationProblem &prob, int requested_partitions)
     prob.set_num_partitions(requested_partitions);
 }
 
-/// A one-row constraint piece over two variables, applied @p applications times.
-/// Every application writes constraint row @p row, which is what an accumulating
-/// integrand declares and what the declaration boundary's equality row-sum
-/// conjunct cannot describe.
-ConstraintFunction l2_provider_shared_row_piece(int applications, int row) {
+/// A one-row constraint piece over the first two variables, applied
+/// @p applications times, every application writing constraint row @p row.
+///
+/// With one application it is an ordinary piece. With more, every application
+/// sums into the same row -- what an accumulating integrand declares, and what
+/// the declaration boundary's equality row-sum conjunct cannot describe.
+ConstraintFunction l2_provider_row_piece(int applications, int row) {
     Eigen::MatrixXi vindex(2, applications);
     Eigen::MatrixXi cindex(1, applications);
     for (int a = 0; a < applications; a++) {
@@ -596,7 +599,7 @@ TEST(Level2Provider, TheSharedRowRouteStillRefusesTheRestOfTheDeclaration) {
     TranscriptionDeclaration declaration(1);
 
     const int shared =
-        declaration.add_equality(l2_provider_shared_row_piece(3, 0), ThreadingFlags::MainThread);
+        declaration.add_equality(l2_provider_row_piece(3, 0), ThreadingFlags::MainThread);
     declaration.equality(shared).index_data_.unique_constraints_ = false;
 
     // One inequality piece claiming one row, against a declaration that states
@@ -623,7 +626,7 @@ TEST(Level2Provider, TheSharedRowRouteLaysASoundDeclaration) {
     TranscriptionDeclaration declaration(1);
 
     const int shared =
-        declaration.add_equality(l2_provider_shared_row_piece(3, 0), ThreadingFlags::MainThread);
+        declaration.add_equality(l2_provider_row_piece(3, 0), ThreadingFlags::MainThread);
     declaration.equality(shared).index_data_.unique_constraints_ = false;
 
     declaration.lay(*host, 2, 1, 0);
@@ -633,4 +636,128 @@ TEST(Level2Provider, TheSharedRowRouteLaysASoundDeclaration) {
     EXPECT_EQ(host->user_equal_cons_, 1);
     EXPECT_EQ(host->internal_fixed_cons_, 0);
     EXPECT_EQ(host->equality_constraints_.size(), 1u);
+}
+
+// The same route onto a program that is not fresh: one already laid, and
+// carrying an internal fixing row of its own from a treatment configured over
+// it. Replacing the three piece lists leaves that row's bookkeeping describing
+// functions that are gone, and the layout call discards internal rows by that
+// recorded count before it lays -- so a stale count deletes the piece just
+// installed, and a stale row space trips the layout's own invariant.
+//
+// The fresh-host pin above cannot see any of that: on a program straight from
+// its constructor the three counters are already zero, so it passes whether the
+// bookkeeping is reset or not. This one fails if any one of the three resets is
+// dropped.
+TEST(Level2Provider, TheSharedRowRouteLaysOnAHostThatCarriedAnInternalFixingRow) {
+    auto host = std::make_shared<NonLinearProgram>(1);
+
+    // First layout: an ordinary declaration over two variables, one of them
+    // declared fixed, then the treatment that hands a fixed variable an
+    // internal equality row of its own.
+    {
+        TranscriptionDeclaration declaration(1);
+        declaration.add_equality(l2_provider_row_piece(1, 0), ThreadingFlags::MainThread);
+        declaration.set_variable_bound(1, 0.5, 0.5);
+        declaration.lay(*host, 2, 1, 0);
+    }
+    ASSERT_TRUE(host->configure_variable_treatment(
+        hven::solvers::FixedVariableTreatments::MakeConstraint, 0.0));
+    // Exactly one internal row, which is the case that fails silently without
+    // the resets: the discard finds a list long enough to truncate, so it
+    // deletes the piece just installed instead of refusing.
+    ASSERT_EQ(host->internal_fixed_cons_, 1);
+    ASSERT_EQ(host->equality_constraints_.size(), 2u);
+    ASSERT_EQ(host->equal_cons_, 2);
+    ASSERT_EQ(host->user_equal_cons_, 1);
+
+    // Second layout, on that same program, through the shared-row route.
+    TranscriptionDeclaration declaration(1);
+    const int shared =
+        declaration.add_equality(l2_provider_row_piece(3, 0), ThreadingFlags::MainThread);
+    declaration.equality(shared).index_data_.unique_constraints_ = false;
+    declaration.lay(*host, 2, 1, 0);
+
+    // The declared piece is on the program, laid once, and the internal-row
+    // bookkeeping describes the new layout rather than the old one.
+    EXPECT_EQ(host->equality_constraints_.size(), 1u);
+    EXPECT_EQ(host->equal_cons_, 1);
+    EXPECT_EQ(host->user_equal_cons_, 1);
+    EXPECT_EQ(host->internal_fixed_cons_, 0);
+    EXPECT_EQ(host->primal_vars_, 2);
+}
+
+// The view reads a layout's coordinates and states them as DECLARED
+// identities, which it may do only while the two spaces are the same one. A
+// program whose treatment has already eliminated variables lays a narrower
+// space, so a view cannot be built over one: refused at construction, which is
+// the entry with no previously published stream to fall back on.
+//
+// Two shapes of the same case, because they fail differently without the
+// refusal. When the eliminated variable appears in a piece, its claims carry a
+// negative coordinate and the read trips the negative-coordinate refusal on the
+// way through -- so the refusal is only pinned by requiring it to be THIS one,
+// naming the elimination rather than a layout that reports none. When the
+// eliminated variable appears in no piece, nothing is negative and nothing is
+// out of band: the read runs to completion and publishes a stream whose columns
+// name the wrong declared variables, so there the refusal is pinned by there
+// being one at all.
+TEST(Level2Provider, AViewCannotBeBuiltOverAProgramWithVariablesEliminated) {
+    {
+        OptimizationProblem prob;
+        l2_provider_build(prob);
+        // x2 is fixed, and it appears in the objective and the equality row.
+        prob.add_variable_bound(2, 1.25, 1.25);
+        prob.transcribe();
+
+        ASSERT_TRUE(prob.nlp_->configure_variable_treatment(
+            hven::solvers::FixedVariableTreatments::MakeParameter, 0.0));
+        ASSERT_TRUE(prob.nlp_->is_reduced());
+
+        bool refused = false;
+        try {
+            TranscribedAggregate view(prob.nlp_);
+            (void)view;
+        } catch (const std::invalid_argument &refusal) {
+            refused = true;
+            EXPECT_NE(std::string(refusal.what()).find("has eliminated variables"),
+                      std::string::npos)
+                << "the refusal names something other than the elimination: " << refusal.what();
+        }
+        EXPECT_TRUE(refused);
+
+        // The view the transcription built is unaffected: it read its stream
+        // before the treatment ran, and keeps publishing it.
+        EXPECT_GT(prob.provider_->kkt_claim_rows().size(), 0);
+    }
+
+    {
+        // Four variables, of which the fixed one takes part in nothing, so its
+        // elimination leaves no negative coordinate anywhere in the layout --
+        // it only renumbers the variable declared after it.
+        OptimizationProblem prob;
+        prob.set_vars((Eigen::VectorXd(4) << 0.5, 1.5, 1.0, 2.0).finished());
+        const Eigen::VectorXi used = (Eigen::VectorXi(3) << 0, 1, 3).finished();
+        {
+            auto args = Arguments<3>();
+            prob.add_objective(GenericFunction<-1, 1>(args.squared_norm()), used);
+        }
+        {
+            auto args = Arguments<3>();
+            prob.add_equal_con(GenericFunction<-1, -1>(args.squared_norm() - 3.0), used);
+        }
+        prob.add_variable_bound(2, 2.0, 2.0);
+        prob.transcribe();
+
+        ASSERT_TRUE(prob.nlp_->configure_variable_treatment(
+            hven::solvers::FixedVariableTreatments::MakeParameter, 0.0));
+        ASSERT_TRUE(prob.nlp_->is_reduced());
+
+        EXPECT_THROW(
+            {
+                TranscribedAggregate view(prob.nlp_);
+                (void)view;
+            },
+            std::invalid_argument);
+    }
 }
