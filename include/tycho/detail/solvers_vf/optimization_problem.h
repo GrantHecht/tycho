@@ -75,10 +75,6 @@ struct OptimizationProblem : BackendProblemBase {
     /// problem is laid out.
     std::vector<hven::solvers::VariableBound> user_var_bounds_;
 
-    /// The transcribed problem published as a claim-stream-bearing provider.
-    /// Replaced by every transcription; null until the first one runs.
-    std::shared_ptr<TranscribedAggregate> provider_;
-
     // Defaults (partitions, QP threads) come from the base ctor's
     // init_partitions(), matching Phase/OCP behavior.
     OptimizationProblem() = default;

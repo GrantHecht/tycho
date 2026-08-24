@@ -1827,23 +1827,26 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
     /// decision variable is the physical value divided by that variable's scaling
     /// unit, so each bound is divided by the same unit before being staged.
     /// @param np    The shared NLP to stage the bounds into.
+    /// @param declaration The declaration the bound records are added to.
     /// @param pnum  The phase index, for diagnostics.
     /// @throws std::invalid_argument if a recorded index is out of range for its
     ///         region's block, if two declarations intersect to an empty interval,
     ///         or if auto-scaling is on and the variable's unit is not finite and
     ///         positive.
     /// @endinternal
-    void transcribe_var_bounds(std::shared_ptr<NonLinearProgram> np, int pnum);
+    void transcribe_var_bounds(tycho::solvers::TranscriptionDeclaration &declaration, int pnum);
 
     /// @internal
     /// @brief Transcribe this phase's variables and constraints into a shared NLP.
     /// @param vo    Decision-variable offset of this phase.
     /// @param eqo   Equality-constraint-row offset.
     /// @param iqo   Inequality-constraint-row offset.
-    /// @param np    The shared NLP to transcribe into.
+    /// @param np    The shared NLP the declaration will be laid on.
+    /// @param declaration The declaration this phase declares its pieces into.
     /// @param pnum  The phase index, for diagnostics.
     /// @endinternal
-    void transcribe_phase(int vo, int eqo, int iqo, std::shared_ptr<NonLinearProgram> np, int pnum);
+    void transcribe_phase(int vo, int eqo, int iqo, std::shared_ptr<NonLinearProgram> np,
+                          tycho::solvers::TranscriptionDeclaration &declaration, int pnum);
 
     /// @internal
     /// @brief Pack the active trajectory and static params into the solver input vector.
@@ -1970,6 +1973,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
         this->optimizer_->set_print_level(0);
         this->print_mesh_info_ = true;
         this->nlp_ = std::shared_ptr<NonLinearProgram>();
+        this->provider_ = std::shared_ptr<tycho::solvers::TranscribedAggregate>();
         this->reset_transcription();
         this->invalidate_post_opt_info();
     }

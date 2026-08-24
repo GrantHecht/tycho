@@ -14,6 +14,8 @@
 
 #include "tycho/detail/optimal_control/phase/ode_phase_base.h"
 
+#include "tycho/detail/solvers_vf/transcribed_aggregate.h"
+
 #include "tycho/detail/optimal_control/transcription/lgl_control_splines.h"
 #include "tycho/detail/optimal_control/transcription/lgl_integrals.h"
 #include "tycho/detail/optimal_control/transcription/mesh_spacing_constraints.h"
@@ -1382,20 +1384,17 @@ void tycho::oc::ODEPhaseBase::update_objective_scales(double scale) {
     }
 }
 
-void tycho::oc::ODEPhaseBase::transcribe_var_bounds(std::shared_ptr<NonLinearProgram> np,
+void tycho::oc::ODEPhaseBase::transcribe_var_bounds(TranscriptionDeclaration &declaration,
                                                     int pnum) {
     if (this->user_var_bounds_.empty()) {
         return;
     }
 
-    // No clear_variable_bounds() call belongs here. Every path into
-    // transcribe_phase installs a freshly constructed NonLinearProgram first
-    // (ODEPhaseBase::transcribe, ODEPhaseBase::test_partitions, and
-    // OptimalControlProblemBase::transcribe each make_shared one before
-    // transcribing), so `np` never arrives carrying bounds staged by an earlier
-    // transcription. Clearing here would additionally be wrong in the
-    // multi-phase path, where every phase stages into one shared NLP and a
-    // later phase would drop its siblings' bounds.
+    // Nothing is cleared here. Every path into transcribe_phase starts a fresh
+    // declaration, so one never arrives carrying bounds declared by an earlier
+    // transcription. Clearing would additionally be wrong in the multi-phase
+    // path, where every phase declares into one declaration and a later phase
+    // would drop its siblings' bounds.
 
     constexpr double kInf = std::numeric_limits<double>::infinity();
 
@@ -1404,10 +1403,10 @@ void tycho::oc::ODEPhaseBase::transcribe_var_bounds(std::shared_ptr<NonLinearPro
     // staged in: a common positive unit divides out of the lower > upper test, so
     // merging before the division detects exactly the same conflicts while keeping
     // the diagnostic's numbers the ones the caller passed in.
-    // The NLP intersects staged declarations itself, but only at make_nlp time —
+    // The declaration intersects its records itself, but only when it is laid —
     // too late to name the phase and phase-local variable in the message. Merging
-    // here reports the conflict with that context first; the NLP's own check stays
-    // as the backstop. Phases never share an NLP variable index, so merging within
+    // here reports the conflict with that context first; the declaration's own
+    // check stays as the backstop. Phases never share an NLP variable index, so merging within
     // one phase sees every declaration that can conflict.
     std::map<int, std::pair<double, double>> merged;
 
@@ -1520,7 +1519,7 @@ void tycho::oc::ODEPhaseBase::transcribe_var_bounds(std::shared_ptr<NonLinearPro
                 }
 
                 try {
-                    np->set_variable_bound(gidx, scaled_lower, scaled_upper);
+                    declaration.set_variable_bound(gidx, scaled_lower, scaled_upper);
                 } catch (const std::invalid_argument &e) {
                     throw std::invalid_argument(fmt::format(
                         "Variable bound in phase {0:} (region {1:}, phase-local variable index "
@@ -1536,17 +1535,18 @@ void tycho::oc::ODEPhaseBase::transcribe_var_bounds(std::shared_ptr<NonLinearPro
 }
 
 void tycho::oc::ODEPhaseBase::transcribe_phase(int vo, int eqo, int iqo,
-                                               std::shared_ptr<NonLinearProgram> np, int pnum)
+                                               std::shared_ptr<NonLinearProgram> np,
+                                               TranscriptionDeclaration &declaration, int pnum)
 
 {
-    this->indexer_.begin_indexing(np, vo, eqo, iqo);
+    this->indexer_.begin_indexing(np, declaration, vo, eqo, iqo);
 
     this->transcribe_dynamics();
     this->transcribe_axis_funcs();
     this->transcribe_control_funcs();
     this->transcribe_integrals();
     this->transcribe_basic_funcs();
-    this->transcribe_var_bounds(np, pnum);
+    this->transcribe_var_bounds(declaration, pnum);
 
     //////DO NOT GET RID OF THIS!!!!!!//
     this->do_transcription_ = false;
@@ -1573,7 +1573,8 @@ void tycho::oc::ODEPhaseBase::transcribe(bool showstats, bool showfuns) {
         }
     }
 
-    this->transcribe_phase(0, 0, 0, this->nlp_, 0);
+    TranscriptionDeclaration declaration(this->num_partitions_);
+    this->transcribe_phase(0, 0, 0, this->nlp_, declaration, 0);
     if (showstats)
         this->indexer_.print_stats(showfuns);
 
@@ -1586,8 +1587,10 @@ void tycho::oc::ODEPhaseBase::transcribe(bool showstats, bool showfuns) {
                    this->indexer_.num_phase_eq_cons_, this->indexer_.num_phase_vars_);
     }
 
-    this->nlp_->make_nlp(this->indexer_.num_phase_vars_, this->indexer_.num_phase_eq_cons_,
-                         this->indexer_.num_phase_iq_cons_);
+    declaration.lay(*this->nlp_, this->indexer_.num_phase_vars_,
+                    this->indexer_.num_phase_eq_cons_, this->indexer_.num_phase_iq_cons_);
+    this->indexer_.end_indexing();
+    this->provider_ = std::make_shared<tycho::solvers::TranscribedAggregate>(this->nlp_);
 
     this->optimizer_->set_nlp(this->nlp_);
 }
@@ -1597,19 +1600,23 @@ void tycho::oc::ODEPhaseBase::test_partitions(int i, int j, int n) {
 
     auto nlp1 = std::make_shared<NonLinearProgram>(i);
     this->init_indexing();
-    this->transcribe_phase(0, 0, 0, nlp1, 0);
-    if (false)
-        this->indexer_.print_stats(false);
-    nlp1->make_nlp(this->indexer_.num_phase_vars_, this->indexer_.num_phase_eq_cons_,
-                   this->indexer_.num_phase_iq_cons_);
+    {
+        TranscriptionDeclaration declaration(i);
+        this->transcribe_phase(0, 0, 0, nlp1, declaration, 0);
+        declaration.lay(*nlp1, this->indexer_.num_phase_vars_,
+                        this->indexer_.num_phase_eq_cons_, this->indexer_.num_phase_iq_cons_);
+        this->indexer_.end_indexing();
+    }
 
     auto nlp2 = std::make_shared<NonLinearProgram>(j);
     this->init_indexing();
-    this->transcribe_phase(0, 0, 0, nlp2, 0);
-    if (false)
-        this->indexer_.print_stats(false);
-    nlp2->make_nlp(this->indexer_.num_phase_vars_, this->indexer_.num_phase_eq_cons_,
-                   this->indexer_.num_phase_iq_cons_);
+    {
+        TranscriptionDeclaration declaration(j);
+        this->transcribe_phase(0, 0, 0, nlp2, declaration, 0);
+        declaration.lay(*nlp2, this->indexer_.num_phase_vars_,
+                        this->indexer_.num_phase_eq_cons_, this->indexer_.num_phase_iq_cons_);
+        this->indexer_.end_indexing();
+    }
 
     Eigen::VectorXd v = this->make_solver_input();
     NonLinearProgram::nlp_test(v, n, nlp1, nlp2);

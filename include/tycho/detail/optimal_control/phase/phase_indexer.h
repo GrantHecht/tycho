@@ -17,6 +17,7 @@
 #include "tycho/detail/optimal_control/core/ode_sizes.h"
 #include "tycho/detail/optimal_control/core/optimal_control_flags.h"
 #include "tycho/detail/hven_namespaces.h"
+#include "tycho/detail/solvers_vf/transcription_declaration.h"
 #include <hven/model/non_linear_program.h>
 #include <algorithm>
 #include <array>
@@ -52,6 +53,7 @@ namespace tycho::oc {
 using tycho::solvers::ConstraintInterface;
 using tycho::solvers::NonLinearProgram;
 using tycho::solvers::ObjectiveInterface;
+using tycho::solvers::TranscriptionDeclaration;
 
 // VF types
 using vf::ThreadingFlags;
@@ -74,7 +76,12 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
     /// @return The static-parameter count.
     int static_p_vars() const { return this->static_p_vars_; }
 
-    std::shared_ptr<NonLinearProgram> nlp_; ///< The NLP being indexed into.
+    std::shared_ptr<NonLinearProgram> nlp_; ///< The NLP the declaration is laid on.
+
+    /// The declaration this phase declares its pieces into. Set for the length
+    /// of one transcription and null outside it: the declaration is a value the
+    /// transcription fills and hands over, not state the indexer owns.
+    TranscriptionDeclaration *declaration_ = nullptr;
 
     VectorXi ode_first_state_locs_; ///< NLP locations of the first state's variables.
     VectorXi ode_last_state_locs_;  ///< NLP locations of the last state's variables.
@@ -176,14 +183,19 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
         static_param_locs_ += Eigen::VectorXi::Constant(
             this->static_p_vars(), this->num_phase_vars_ - this->static_p_vars());
     }
-    /// @brief Bind to an NLP and offset all variable/constraint locations to its base.
-    /// @param np  The NLP to index into.
-    /// @param n   Decision-variable offset of this phase within the NLP.
-    /// @param ep  Equality-constraint-row offset of this phase.
-    /// @param ip  Inequality-constraint-row offset of this phase.
-    void begin_indexing(std::shared_ptr<NonLinearProgram> np, int n, int ep, int ip) {
+    /// @brief Bind to a declaration and offset all variable/constraint locations
+    ///        to this phase's base.
+    /// @param np    The NLP the declaration will be laid on, which the indexer
+    ///              reads its constraint rows back out of after the layout runs.
+    /// @param decl  The declaration this phase declares its pieces into.
+    /// @param n     Decision-variable offset of this phase within the NLP.
+    /// @param ep    Equality-constraint-row offset of this phase.
+    /// @param ip    Inequality-constraint-row offset of this phase.
+    void begin_indexing(std::shared_ptr<NonLinearProgram> np, TranscriptionDeclaration &decl, int n,
+                        int ep, int ip) {
         assert(!this->indexed_ && "begin_indexing called twice without set_dimensions");
         this->nlp_ = np;
+        this->declaration_ = &decl;
 
         this->num_phase_eq_cons_ = 0;
         this->num_phase_iq_cons_ = 0;
@@ -200,9 +212,9 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
         this->start_eq_cons_ = ep;
         this->start_iq_cons_ = ip;
 
-        this->start_obj_ = this->nlp_->objectives_.size();
-        this->start_eq_ = this->nlp_->equality_constraints_.size();
-        this->start_iq_ = this->nlp_->inequality_constraints_.size();
+        this->start_obj_ = decl.objective_count();
+        this->start_eq_ = decl.equality_count();
+        this->start_iq_ = decl.inequality_count();
 
         this->num_obj_funs_ = 0;
         this->num_eq_funs_ = 0;
@@ -210,6 +222,14 @@ struct PhaseIndexer : ODESize<-1, -1, -1> {
 
         this->indexed_ = true;
     }
+
+    /// @brief Releases the declaration this phase was declaring into.
+    ///
+    /// Called once the declaration has been laid out. The declaration is a
+    /// value the transcription owns for the length of one call, so the indexer
+    /// stops naming it as soon as that call is over; the constraint rows the
+    /// indexer reads back afterwards come from the laid-out NLP instead.
+    void end_indexing() { this->declaration_ = nullptr; }
 
     /// @internal
     /// @brief Register an equality constraint over a phase region with the NLP.
