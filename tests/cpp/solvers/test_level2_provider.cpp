@@ -18,6 +18,10 @@
 #include "tycho/detail/solvers_vf/optimization_problem.h"
 #include "tycho/detail/solvers_vf/transcribed_aggregate.h"
 
+#include "tycho/detail/solvers_vf/transcription_declaration.h"
+
+#include <hven/detail/interior/constraint_function.h>
+#include <hven/detail/interior/objective_function.h>
 #include <hven/model/candidate_point.h>
 #include <hven/model/claim_space.h>
 #include <hven/model/non_linear_program.h>
@@ -28,13 +32,19 @@
 #include <memory>
 #include <set>
 #include <stdexcept>
+#include <tuple>
 #include <utility>
 #include <vector>
 
 #include <Eigen/Core>
 
+using tycho::solvers::ConstraintFunction;
+using tycho::solvers::NonLinearProgram;
+using tycho::solvers::ObjectiveFunction;
 using tycho::solvers::OptimizationProblem;
+using tycho::solvers::ThreadingFlags;
 using tycho::solvers::TranscribedAggregate;
+using tycho::solvers::TranscriptionDeclaration;
 using tycho::vf::Arguments;
 using tycho::vf::GenericFunction;
 
@@ -93,6 +103,56 @@ struct L2ProviderFixture {
 
     TranscribedAggregate &provider() { return *prob_.provider_; }
 };
+
+/// A problem big enough that the layout's element-per-partition floor lets it
+/// adopt more than one partition: 120 applications of an eight-variable
+/// equality constraint, each contributing a dense 8x8 upper-triangle Hessian
+/// plus its Jacobian row, which is thousands of claim slots rather than the
+/// dozen the small fixture has.
+constexpr int kL2ProviderGroups = 120;
+constexpr int kL2ProviderGroupSize = 8;
+
+void l2_provider_build_wide(OptimizationProblem &prob, int requested_partitions) {
+    const int variables = kL2ProviderGroups * kL2ProviderGroupSize;
+    prob.set_vars(Eigen::VectorXd::LinSpaced(variables, 0.1, 1.0));
+
+    std::vector<Eigen::VectorXi> groups;
+    groups.reserve(kL2ProviderGroups);
+    for (int g = 0; g < kL2ProviderGroups; g++) {
+        groups.push_back(Eigen::VectorXi::LinSpaced(kL2ProviderGroupSize, g * kL2ProviderGroupSize,
+                                                    (g + 1) * kL2ProviderGroupSize - 1));
+    }
+
+    {
+        auto args = Arguments<kL2ProviderGroupSize>();
+        prob.add_equal_con(GenericFunction<-1, -1>(args.squared_norm() - 1.0), groups);
+    }
+    {
+        auto args = Arguments<kL2ProviderGroupSize>();
+        prob.add_inequal_con(GenericFunction<-1, -1>(args.squared_norm() - 0.5), groups[0]);
+    }
+    {
+        auto args = Arguments<kL2ProviderGroupSize>();
+        prob.add_objective(GenericFunction<-1, 1>(args.squared_norm()), groups[0]);
+    }
+    prob.set_num_partitions(requested_partitions);
+}
+
+/// A one-row constraint piece over two variables, applied @p applications times.
+/// Every application writes constraint row @p row, which is what an accumulating
+/// integrand declares and what the declaration boundary's equality row-sum
+/// conjunct cannot describe.
+ConstraintFunction l2_provider_shared_row_piece(int applications, int row) {
+    Eigen::MatrixXi vindex(2, applications);
+    Eigen::MatrixXi cindex(1, applications);
+    for (int a = 0; a < applications; a++) {
+        vindex(0, a) = 0;
+        vindex(1, a) = 1;
+        cindex(0, a) = row;
+    }
+    auto args = Arguments<2>();
+    return ConstraintFunction(GenericFunction<-1, -1>(args.squared_norm() - 1.0), vindex, cindex);
+}
 
 } // namespace
 
@@ -230,32 +290,41 @@ TEST(Level2Provider, EveryClaimNamesACoordinateOfItsOwnDomain) {
 // is how overlapping pieces compose, and the layout marks the contested columns
 // so their writers serialize.
 TEST(Level2Provider, EachClaimSlotBelongsToExactlyOnePartitionInIndexOrder) {
-    L2ProviderFixture fixture;
-    TranscribedAggregate &provider = fixture.provider();
+    OptimizationProblem prob;
+    l2_provider_build_wide(prob, 4);
+    prob.transcribe();
+    TranscribedAggregate &provider = *prob.provider_;
 
     const int adopted = provider.declaration().partition_count_;
+    // The pin is about MULTI-partition order, so the fixture has to reach more
+    // than one partition or the body below asserts nothing.
+    ASSERT_GT(adopted, 1);
+
     const Eigen::VectorXi partitions = provider.kkt_claim_partitions();
     ASSERT_EQ(partitions.size(), provider.kkt_claim_rows().size());
 
     const std::vector<hven::solvers::ClaimBlock> runs = {provider.hessian_claims(),
                                                          provider.equality_jacobian_claims(),
                                                          provider.inequality_jacobian_claims()};
+    std::set<int> occupied;
     for (const auto &run : runs) {
         int previous = -1;
-        std::set<int> seen;
         for (int slot = run.start_; slot < run.start_ + run.count_; slot++) {
             const int partition = partitions[slot];
             EXPECT_GE(partition, 0);
             EXPECT_LT(partition, adopted);
-            if (partition != previous) {
-                // A partition's slots within one run are one contiguous stretch,
-                // so a partition index is never revisited after it is left.
-                EXPECT_EQ(seen.count(partition), 0u);
-                seen.insert(partition);
-                previous = partition;
-            }
+            // Partition-INDEX order, asserted as such: the tag never decreases
+            // along a run, so 2, 0, 1 fails here rather than passing a
+            // never-revisited test.
+            EXPECT_GE(partition, previous);
+            previous = partition;
+            occupied.insert(partition);
         }
     }
+
+    // And the spread is real: an all-claims-in-one-partition layout would make
+    // the ordering assertion above vacuous even at an adopted count above one.
+    EXPECT_GT(occupied.size(), 1u);
 }
 
 // The whole point of the declaration being a value: two constructions of the
@@ -380,4 +449,188 @@ TEST(Level2Provider, AnEmptyBoundIntersectionIsRefusedAtTheLayout) {
     prob.add_variable_bound(1, -1.0, 0.0);
     prob.add_variable_bound(1, 1.0, 2.0);
     EXPECT_THROW(prob.transcribe(), std::invalid_argument);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// What a fixed-variable treatment may and may not move.
+///////////////////////////////////////////////////////////////////////////////
+
+// A treatment that ELIMINATES variables re-lays the program in a narrower
+// space. That is the engine's own reduction and not declaration data, so the
+// published stream -- which is stated in DECLARED identities -- must come back
+// unchanged, coordinate for coordinate, and must never carry the negative
+// placeholder the narrower layout records for an eliminated coordinate.
+TEST(Level2Provider, AnEliminatingTreatmentDoesNotMoveTheClaimStream) {
+    OptimizationProblem prob;
+    l2_provider_build(prob);
+    // A variable whose declared bounds coincide is what a treatment acts on.
+    prob.add_variable_bound(2, 1.25, 1.25);
+    prob.transcribe();
+    TranscribedAggregate &provider = *prob.provider_;
+
+    const Eigen::VectorXi rows_before = provider.kkt_claim_rows();
+    const Eigen::VectorXi cols_before = provider.kkt_claim_cols();
+    const Eigen::VectorXi gradient_before = provider.objective_gradient_claim_rows();
+    const auto hessian_before = provider.hessian_claims();
+    const auto equality_before = provider.equality_jacobian_claims();
+    const auto inequality_before = provider.inequality_jacobian_claims();
+    const auto epoch_before = provider.structure_epoch();
+
+    ASSERT_TRUE(prob.nlp_->configure_variable_treatment(
+        hven::solvers::FixedVariableTreatments::MakeParameter, 0.0));
+    ASSERT_TRUE(prob.nlp_->is_reduced());
+    EXPECT_FALSE(provider.structure_epoch() == epoch_before);
+
+    const Eigen::VectorXi rows_after = provider.kkt_claim_rows();
+    const Eigen::VectorXi cols_after = provider.kkt_claim_cols();
+    const Eigen::VectorXi gradient_after = provider.objective_gradient_claim_rows();
+
+    ASSERT_EQ(rows_after.size(), rows_before.size());
+    EXPECT_TRUE(rows_after == rows_before);
+    EXPECT_TRUE(cols_after == cols_before);
+    ASSERT_EQ(gradient_after.size(), gradient_before.size());
+    EXPECT_TRUE(gradient_after == gradient_before);
+
+    EXPECT_EQ(provider.hessian_claims(), hessian_before);
+    EXPECT_EQ(provider.equality_jacobian_claims(), equality_before);
+    EXPECT_EQ(provider.inequality_jacobian_claims(), inequality_before);
+
+    // No eliminated-coordinate placeholder reaches the published stream, so
+    // every slot still names a coordinate of the assembled space and no
+    // dropped Jacobian slot can be counted in the Hessian run.
+    const int dimension = provider.kkt_dimension();
+    for (int slot = 0; slot < rows_after.size(); slot++) {
+        EXPECT_GE(rows_after[slot], 0);
+        EXPECT_LT(rows_after[slot], dimension);
+        EXPECT_GE(cols_after[slot], 0);
+        EXPECT_LT(cols_after[slot], dimension);
+    }
+}
+
+// The companion: a treatment that keeps every variable and one that eliminates
+// them produce the SAME stream from the same declaration. The claim stream is a
+// function of the declaration and the adopted partition count, and the
+// treatment is neither.
+TEST(Level2Provider, TheClaimStreamIsTheSameUnderEveryTreatmentThatKeepsTheDeclaration) {
+    auto stream_under = [](hven::solvers::FixedVariableTreatments treatment, double relax) {
+        auto prob = std::make_shared<OptimizationProblem>();
+        l2_provider_build(*prob);
+        prob->add_variable_bound(2, 1.25, 1.25);
+        prob->transcribe();
+        prob->nlp_->configure_variable_treatment(treatment, relax);
+        Eigen::VectorXi rows = prob->provider_->kkt_claim_rows();
+        Eigen::VectorXi cols = prob->provider_->kkt_claim_cols();
+        return std::make_tuple(prob, rows, cols);
+    };
+
+    auto [eliminated, eliminated_rows, eliminated_cols] =
+        stream_under(hven::solvers::FixedVariableTreatments::MakeParameter, 0.0);
+    auto [relaxed, relaxed_rows, relaxed_cols] =
+        stream_under(hven::solvers::FixedVariableTreatments::RelaxBounds, 1.0e-8);
+
+    ASSERT_TRUE(eliminated->nlp_->is_reduced());
+    ASSERT_FALSE(relaxed->nlp_->is_reduced());
+
+    ASSERT_EQ(eliminated_rows.size(), relaxed_rows.size());
+    EXPECT_TRUE(eliminated_rows == relaxed_rows);
+    EXPECT_TRUE(eliminated_cols == relaxed_cols);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Re-laying under a bound consumer.
+///////////////////////////////////////////////////////////////////////////////
+
+// Adopting a partition count re-lays the program, which empties the location
+// table every scatter addresses and unbinds the destination those offsets
+// described. The program re-analyses itself only when a fixed-variable
+// treatment reports a change, so on a problem with no fixed variable the
+// emptied table would survive into the next solve. Refused while a consumer is
+// bound, and the refusal names the program's own binding as the reason.
+TEST(Level2Provider, NegotiatingIsRefusedWhileAConsumerIsBoundToTheProgram) {
+    L2ProviderFixture fixture;
+    // transcribe() hands the program to the optimizer, whose sparsity analysis
+    // binds its own destination.
+    ASSERT_NE(fixture.prob_.nlp_->bound_kkt_destination(), nullptr);
+    EXPECT_THROW(fixture.provider().negotiate_partition_count(1), std::invalid_argument);
+    EXPECT_THROW(fixture.provider().negotiate_partition_count(4), std::invalid_argument);
+
+    // And the refusal did not re-lay anything on the way out.
+    EXPECT_NE(fixture.prob_.nlp_->bound_kkt_destination(), nullptr);
+}
+
+// The guard is the binding and nothing else: a program no consumer has analysed
+// negotiates normally, and the stream is re-read against the count adopted.
+TEST(Level2Provider, NegotiatingIsServedWhileNoConsumerIsBound) {
+    auto host = std::make_shared<NonLinearProgram>(1);
+    {
+        TranscriptionDeclaration declaration(1);
+        Eigen::MatrixXi vindex(2, 1);
+        vindex << 0, 1;
+        Eigen::MatrixXi cindex(1, 1);
+        cindex << 0;
+        auto args = Arguments<2>();
+        declaration.add_equality(
+            ConstraintFunction(GenericFunction<-1, -1>(args.squared_norm() - 1.0), vindex, cindex),
+            ThreadingFlags::RoundRobin);
+        declaration.lay(*host, 2, 1, 0);
+    }
+    ASSERT_EQ(host->bound_kkt_destination(), nullptr);
+
+    TranscribedAggregate provider(host);
+    EXPECT_EQ(provider.negotiate_partition_count(4), 1);
+    EXPECT_EQ(provider.declaration().partition_count_, 1);
+    EXPECT_GT(provider.kkt_claim_rows().size(), 0);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// What the shared-row layout route still refuses.
+///////////////////////////////////////////////////////////////////////////////
+
+// A declaration whose equality pieces share a constraint row cannot be counted
+// by the declaration boundary's equality row-sum rule, so it is laid by a
+// different entry. That entry stands down THAT conjunct and no other: an
+// inequality row count its pieces do not sum to is still refused, and refused
+// before anything of the program is written.
+TEST(Level2Provider, TheSharedRowRouteStillRefusesTheRestOfTheDeclaration) {
+    auto host = std::make_shared<NonLinearProgram>(1);
+    TranscriptionDeclaration declaration(1);
+
+    const int shared =
+        declaration.add_equality(l2_provider_shared_row_piece(3, 0), ThreadingFlags::MainThread);
+    declaration.equality(shared).index_data_.unique_constraints_ = false;
+
+    // One inequality piece claiming one row, against a declaration that states
+    // two of them.
+    Eigen::MatrixXi vindex(2, 1);
+    vindex << 0, 1;
+    Eigen::MatrixXi cindex(1, 1);
+    cindex << 0;
+    auto args = Arguments<2>();
+    declaration.add_inequality(
+        ConstraintFunction(GenericFunction<-1, -1>(args.squared_norm() - 0.5), vindex, cindex),
+        ThreadingFlags::MainThread);
+
+    EXPECT_THROW(declaration.lay(*host, 2, 1, 2), std::invalid_argument);
+    // Refused before the program was touched.
+    EXPECT_EQ(host->primal_vars_, 0);
+    EXPECT_TRUE(host->equality_constraints_.empty());
+}
+
+// The same route, with a declaration that is otherwise sound: it lays, and the
+// shared row is laid once rather than once per application.
+TEST(Level2Provider, TheSharedRowRouteLaysASoundDeclaration) {
+    auto host = std::make_shared<NonLinearProgram>(1);
+    TranscriptionDeclaration declaration(1);
+
+    const int shared =
+        declaration.add_equality(l2_provider_shared_row_piece(3, 0), ThreadingFlags::MainThread);
+    declaration.equality(shared).index_data_.unique_constraints_ = false;
+
+    declaration.lay(*host, 2, 1, 0);
+
+    EXPECT_EQ(host->primal_vars_, 2);
+    EXPECT_EQ(host->equal_cons_, 1);
+    EXPECT_EQ(host->user_equal_cons_, 1);
+    EXPECT_EQ(host->internal_fixed_cons_, 0);
+    EXPECT_EQ(host->equality_constraints_.size(), 1u);
 }
