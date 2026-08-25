@@ -75,6 +75,23 @@ namespace tycho::solvers {
 /// view re-reads the program whenever the epoch it was built against has moved,
 /// except across the elimination above, where it keeps what it has.
 ///
+/// WHEN THE STREAM IS STATED. Reading the program's layout and stating it in
+/// the claim convention are two steps, and only the first happens at
+/// construction: the laid coordinates are copied, and the copy is turned into
+/// the published stream the first time an accessor asks for it. A transcribed
+/// problem that is only ever solved never asks -- the interior-point engine
+/// evaluates through the program -- so the restatement is not paid for in the
+/// common case, and the surface is unchanged either way.
+///
+/// One consequence is visible: a refusal about the layout's own consistency --
+/// a claimed slack row, a negative coordinate in a layout reporting no
+/// elimination, an objective-gradient row outside the declared variables --
+/// comes from the first accessor rather than from the constructor. All three
+/// say the program's layout disagrees with its own flags, which a sound
+/// program cannot do. The refusal that IS about how this view is built --
+/// building one over a program whose treatment has already eliminated
+/// variables -- stays at construction, where it can still name the mistake.
+///
 /// CONCURRENCY. The contract's posture applies unchanged -- one operation at a
 /// time, structural mutation included -- and this view adds no thread safety of
 /// its own.
@@ -85,9 +102,10 @@ class TranscribedAggregate final : public hven::solvers::ClaimStreamSource {
     ///        laid out, and not yet reduced by a fixed-variable treatment --
     ///        a view is built from the transcription, which is where the
     ///        declaration-space stream exists to be read.
-    /// @throws std::invalid_argument if @p host is null, if its treatment has
-    ///         eliminated variables, or if its layout claims a coordinate this
-    ///         convention cannot restate.
+    /// @throws std::invalid_argument if @p host is null or if its treatment has
+    ///         eliminated variables. A layout that claims a coordinate this
+    ///         convention cannot state is refused by the first accessor
+    ///         instead -- see WHEN THE STREAM IS STATED above.
     explicit TranscribedAggregate(std::shared_ptr<NonLinearProgram> host);
 
     /// @brief The program this view publishes.
@@ -102,16 +120,17 @@ class TranscribedAggregate final : public hven::solvers::ClaimStreamSource {
     ///        adopted.
     ///
     /// Adopting a count RE-LAYS the program, which resets the location table
-    /// every scatter addresses. A consumer that has already analysed this
-    /// program holds a table the re-lay would empty, and the program re-analyses
-    /// itself only when a fixed-variable treatment reports a change -- so the
-    /// emptied table would survive into the next solve. While such a consumer is
-    /// bound, this call is refused rather than served.
+    /// every scatter addresses. A consumer bound to the program's KKT
+    /// destination is re-analysed against the new layout on its next solve.
     ///
     /// @param requested the partition count the caller wants.
     /// @return the adopted count.
     /// @throws std::invalid_argument if @p requested is below 1, or if the
-    ///         program is already analysed against a consumer's destination.
+    ///         program's fixed-variable treatment has eliminated variables --
+    ///         negotiating would re-lay the program into a shape this
+    ///         declaration-space view cannot state, so the refusal is raised
+    ///         before the host is touched. Negotiate partitions before
+    ///         configuring a fixed-variable treatment, or re-transcribe.
     int negotiate_partition_count(int requested) override;
 
     /// @brief The program's evaluation thread budget.
@@ -226,25 +245,82 @@ class TranscribedAggregate final : public hven::solvers::ClaimStreamSource {
 
     static DeclaredShape shape_of(const NonLinearProgram &host);
 
+    /// @brief The program's laid coordinates, copied out while they still name
+    ///        declared identities, and the dimensions the restatement needs.
+    ///
+    /// WHY THERE IS A COPY AT ALL. The published stream is a permutation of
+    /// these arrays, and it is built on FIRST ACCESS rather than at lay:
+    /// nothing on tycho's own solve path reads the stream -- the interior-point
+    /// engine evaluates through the program -- so in every workflow the library
+    /// runs today the restatement is a pass over the whole layout that nobody
+    /// looks at. Deferring it is only safe while the layout it would be built
+    /// from still exists, and a fixed-variable treatment that eliminates
+    /// variables re-lays the program in a narrower space in which the
+    /// declaration-space coordinates are simply gone. So they are taken here,
+    /// at the point the surface promises to have read them, and the
+    /// restatement waits for someone to ask.
+    ///
+    /// The four runs share one buffer, allocated without zero-filling and then
+    /// overwritten in full, so a snapshot is one allocation and four copies of
+    /// memory the layout has just written.
+    ///
+    /// DELETABLE. This exists only because the stream is restated into arrays
+    /// of this class's own. The path that lets a consumer read the program's
+    /// coordinates in place removes the reason for it, and with it this struct,
+    /// the two routines below that use it, and the freshness flag beside them.
+    struct LaidSnapshot {
+        std::unique_ptr<int[]> data_;
+        int slots_ = 0;
+        int gradient_slots_ = 0;
+        int primal_ = 0;
+        int slack_ = 0;
+        int equality_rows_ = 0;
+
+        const int *rows() const { return this->data_.get(); }
+        const int *cols() const { return this->data_.get() + this->slots_; }
+        const int *partitions() const { return this->data_.get() + 2 * this->slots_; }
+        const int *gradient_rows() const { return this->data_.get() + 3 * this->slots_; }
+    };
+
+    /// @brief Brings the published stream up to date with the program's layout.
+    ///
+    /// What every accessor calls, and the only thing they do besides returning
+    /// what it left: re-read the layout if the program was re-laid, then state
+    /// it as the claim stream if that has not been done yet.
+    void publish() const;
+
     /// @brief Re-reads the program's layout if the epoch it was read at moved.
     void refresh_if_relaid() const;
 
-    /// @brief Reads the program's layout into this view's published arrays.
+    /// @brief Copies the program's laid coordinates out, without restating them.
     ///
-    /// The one place the declared-space rule is enforced: every entry that reads
-    /// a layout comes through here, and a program whose treatment has eliminated
-    /// variables is refused rather than read in its narrower space.
+    /// The one place the declared-space rule is enforced: every entry that
+    /// takes a layout comes through here, and a program whose treatment has
+    /// eliminated variables is refused rather than copied in its narrower
+    /// space. The refusals that are about the layout's own consistency are made
+    /// where the coordinates are read, in materialize_stream().
     ///
-    /// @throws std::invalid_argument if the program has variables eliminated, if
-    ///         the layout claims a slack row, if it claims a negative coordinate
-    ///         while reporting no elimination, or if the three domain runs do
-    ///         not cover its claim slots.
-    void read_layout() const;
+    /// @throws std::invalid_argument if the program has variables eliminated.
+    void snapshot_layout() const;
+
+    /// @brief States the snapshot as the published claim stream, once.
+    ///
+    /// Does nothing if the stream on hand was built from the snapshot on hand.
+    ///
+    /// @throws std::invalid_argument if the layout claims a slack row, if it
+    ///         claims a negative coordinate while reporting no elimination, if
+    ///         an objective-gradient slot names a row outside the declared
+    ///         variables, or if the three domain runs do not cover its claim
+    ///         slots.
+    void materialize_stream() const;
 
     std::shared_ptr<NonLinearProgram> host_;
 
     mutable hven::solvers::StructureEpoch read_at_epoch_{};
     mutable DeclaredShape read_at_shape_{};
+
+    mutable LaidSnapshot laid_;
+    mutable bool stream_current_ = false;
 
     mutable Eigen::VectorXi claim_rows_;
     mutable Eigen::VectorXi claim_cols_;

@@ -6,7 +6,8 @@
 #   bench/bench_track.sh baseline [--reps N] [--force]
 #   bench/bench_track.sh record   [--reps N] [--force]
 #   bench/bench_track.sh compare  [--threshold PCT] [--force] [commit_a] [commit_b]
-#   bench/bench_track.sh compare  --alternate OTHER_BENCH_ALL [--reps N] [--threshold PCT]
+#   bench/bench_track.sh compare  --alternate OTHER_BENCH_ALL [--reps N] [--inner-reps N]
+#                                 [--threshold PCT] [--filter REGEX]
 #   bench/bench_track.sh list
 #   bench/bench_track.sh help
 #
@@ -23,9 +24,19 @@
 # ALTERNATED REPS. Recording arm A to completion and then arm B leaves each arm
 # sitting in whatever thermal and allocator state its own run produced, and a
 # bimodal benchmark can settle into a different mode per arm. `compare
-# --alternate` instead interleaves them -- one repetition of the old binary,
-# one of the new, N times round -- so both arms see the same conditions and a
-# mode flip lands in both rather than in the difference between them.
+# --alternate` instead interleaves them -- one run of the old binary, one of
+# the new, N rounds -- so both arms see the same conditions and a mode flip
+# lands in both rather than in the difference between them.
+#
+# MEDIANS OF MEDIANS. Each of those runs is itself --inner-reps repetitions of
+# the benchmark, reduced by Google Benchmark to that run's median, and the N
+# rounds are then reduced to the median of those. The two levels answer two
+# different noises: the inner one is the per-iteration scatter a single process
+# sees, the outer one is whatever differs BETWEEN processes -- address-space
+# layout, allocator state, where the box's other work happened to land. A
+# single level of either cannot separate them, which is why the manual protocol
+# these sessions have been running by hand used both, and why this mode is that
+# protocol rather than a plain repetition count.
 ###############################################################################
 set -euo pipefail
 
@@ -34,6 +45,11 @@ BENCH_BINARY="${REPO_DIR}/build/bench/cpp/bench_all"
 RESULTS_DIR="${REPO_DIR}/bench/results"
 DEFAULT_REPS=5
 DEFAULT_THRESHOLD=10.0
+# Repetitions inside one alternated arm run, reduced to that run's median. Seven
+# is what the manual protocol used: enough for a median to ignore a single stray
+# iteration, short enough that a round-trip stays under a minute on the cells
+# that matter.
+DEFAULT_INNER_REPS=7
 
 # One-minute load average at or above which a measuring command refuses to run.
 # Chosen well below one busy core: this box's own editors and language servers
@@ -61,6 +77,19 @@ make_temp_dir()  { mktemp -d "${TMPDIR:-/tmp}/tycho_bench.XXXXXX"; }
 die()  { echo "ERROR: $*" >&2; exit 1; }
 info() { echo "==> $*"; }
 warn() { echo "WARNING: $*" >&2; }
+
+# A repetition count reaches both a benchmark flag and `jq --argjson`, and
+# neither says anything useful about "3x" or an empty string -- the first runs
+# zero repetitions and the second aborts mid-recording. Checked where it is
+# given instead. Written as a case glob rather than [[ =~ ]] because bash 3.2,
+# which macOS ships, quotes the right-hand side of =~ differently.
+require_count() {
+    local what="$1" value="$2"
+    case "$value" in
+        ''|*[!0-9]*) die "${what} must be a positive whole number (got '${value}')" ;;
+    esac
+    [[ "$value" -ge 1 ]] || die "${what} must be at least 1 (got '${value}')"
+}
 
 check_deps() {
     command -v jq  >/dev/null 2>&1 || die "jq not found. Install with: brew install jq"
@@ -153,6 +182,7 @@ do_record() {
     [[ -x "$BENCH_BINARY" ]] || die "bench_all not found at $BENCH_BINARY
 Build it with: cmake --preset macos-llvm-release -DBUILD_CPP_BENCHMARKS=ON && cd build && ninja -j6 bench_all"
 
+    require_count "--reps" "$reps"
     require_idle_box "record" "$forced"
     local load_before
     load_before="$(read_loadavg)"
@@ -254,20 +284,25 @@ behind it: re-record it on a quiet box, or pass --force to compare anyway."
     fi
 }
 
-# One alternated measurement round-trip: reps rounds, each running the old
-# binary once and then the new one once. Writes an envelope per arm, in the
-# shape do_compare's reporting half reads.
-# One arm's single repetition. Stdout is the human table, which the JSON output
-# makes redundant, so it goes away; STDERR IS KEPT and surfaced on a nonzero
-# exit -- discarding it turns a wrong flag, a missing shared library or a filter
-# matching nothing into set -e killing the script with no message at all.
+# One arm's run: `inner` repetitions of the benchmark in one process, reduced by
+# Google Benchmark itself to that run's aggregates. Stdout is the human table,
+# which the JSON output makes redundant, so it goes away; STDERR IS KEPT and
+# surfaced on a nonzero exit -- discarding it turns a wrong flag, a missing
+# shared library or a filter matching nothing into set -e killing the script
+# with no message at all.
+#
+# At one repetition Google Benchmark reports no aggregates at all, so the
+# aggregates-only flag would empty the run; the reduction below reads either
+# shape, and this is where the two are told apart.
 run_alternated_arm() {
-    local bin="$1" out="$2" errfile="$3"
-    shift 3
+    local bin="$1" out="$2" errfile="$3" inner="$4"
+    shift 4
+    local inner_args=(--benchmark_repetitions="$inner")
+    [[ "$inner" -gt 1 ]] && inner_args+=(--benchmark_report_aggregates_only=true)
     # "$@" is used rather than an array expanded at the call site: bash 3.2
     # through 4.3 -- which is what macOS ships -- abort under set -u on
     # "${arr[@]}" when arr is EMPTY, and the filter array usually is.
-    if ! "$bin" --benchmark_repetitions=1 "$@" \
+    if ! "$bin" "${inner_args[@]}" "$@" \
             --benchmark_out="$out" --benchmark_out_format=json \
             >/dev/null 2>"$errfile"; then
         warn "benchmark run failed: $bin"
@@ -276,26 +311,37 @@ run_alternated_arm() {
     fi
 }
 
+# One alternated measurement: `reps` rounds, each running the old binary once
+# and then the new one once, every run `inner` repetitions deep. Writes an
+# envelope per arm, in the shape do_compare's reporting half reads.
 run_alternated() {
-    local old_bin="$1" new_bin="$2" reps="$3" out_old="$4" out_new="$5" workdir="$6"
-    local filter="${7:-}"
+    local old_bin="$1" new_bin="$2" reps="$3" inner="$4"
+    local out_old="$5" out_new="$6" workdir="$7"
+    local filter="${8:-}"
     local filter_arg=()
     [[ -n "$filter" ]] && filter_arg=(--benchmark_filter="$filter")
 
-    info "Alternating ${reps} repetitions: $(basename "$(dirname "$old_bin")")/$(basename "$old_bin") vs current build"
+    info "Alternating ${reps} rounds of ${inner} repetitions: $(basename "$(dirname "$old_bin")")/$(basename "$old_bin") vs current build"
     local i
     for ((i = 1; i <= reps; i++)); do
         info "  round ${i}/${reps}"
         # Same empty-array guard at the call site, for the same bash versions.
         run_alternated_arm "$old_bin" "${workdir}/old-${i}.json" "${workdir}/stderr.txt" \
-            ${filter_arg[@]+"${filter_arg[@]}"}
+            "$inner" ${filter_arg[@]+"${filter_arg[@]}"}
         run_alternated_arm "$new_bin" "${workdir}/new-${i}.json" "${workdir}/stderr.txt" \
-            ${filter_arg[@]+"${filter_arg[@]}"}
+            "$inner" ${filter_arg[@]+"${filter_arg[@]}"}
     done
 
-    # Per benchmark, the median over the rounds. Emitted with the aggregate
-    # name the reporting half selects on, so an alternated run and a recorded
-    # one are read by exactly the same code.
+    # Per benchmark, the median over the rounds of each round's own median.
+    # Emitted with the aggregate name the reporting half selects on, so an
+    # alternated run and a recorded one are read by exactly the same code.
+    #
+    # The selector takes one number per run either way: the run's median
+    # aggregate when the run reported aggregates, and the single iteration when
+    # --inner-reps 1 left it with none. Anything else a run carries -- the mean,
+    # the standard deviation, the individual iterations behind an aggregate --
+    # would otherwise be folded into the median as if it were another
+    # measurement.
     local median_prog='
         def to_ns:
             if .time_unit == "ns" then .real_time
@@ -306,7 +352,9 @@ run_alternated() {
         def median: sort | (length as $n |
             if $n % 2 == 1 then .[($n - 1) / 2]
             else (.[$n / 2 - 1] + .[$n / 2]) / 2 end);
-        [ .[].benchmarks[] | select(.run_type == "iteration" or (.run_type | not)) ]
+        [ .[].benchmarks[]
+          | select(if (.aggregate_name | length) > 0 then .aggregate_name == "median"
+                   else (.run_type == "iteration" or (.run_type | not)) end) ]
         | group_by(.run_name)
         | map({ run_name: .[0].run_name,
                 name: .[0].run_name,
@@ -322,6 +370,7 @@ run_alternated() {
             --arg label "$arm" \
             --arg timestamp "$(date -Iseconds)" \
             --argjson reps "$reps" \
+            --argjson inner_reps "$inner" \
             --argjson load_before "$(read_loadavg)" \
             --argjson idle_gate "$IDLE_GATE" \
             --slurpfile marks <(jq -s "$median_prog" "${workdir}/${arm}"-*.json) \
@@ -333,6 +382,7 @@ run_alternated() {
                     timestamp: $timestamp,
                     dirty: false,
                     reps: $reps,
+                    inner_reps: $inner_reps,
                     protocol: "alternated",
                     load_before: $load_before,
                     idle_gate: $idle_gate,
@@ -346,6 +396,7 @@ run_alternated() {
 do_compare() {
     local threshold="$DEFAULT_THRESHOLD"
     local reps="$DEFAULT_REPS"
+    local inner_reps="$DEFAULT_INNER_REPS"
     local forced=false
     local alternate=""
     local filter=""
@@ -354,13 +405,14 @@ do_compare() {
     # Parse flags
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --threshold) threshold="$2"; shift 2 ;;
-            --reps)      reps="$2"; shift 2 ;;
-            --alternate) alternate="$2"; shift 2 ;;
-            --filter)    filter="$2"; shift 2 ;;
-            --force)     forced=true; shift ;;
-            -*)          die "Unknown flag: $1" ;;
-            *)           positional+=("$1"); shift ;;
+            --threshold)  threshold="$2"; shift 2 ;;
+            --reps)       reps="$2"; shift 2 ;;
+            --inner-reps) inner_reps="$2"; shift 2 ;;
+            --alternate)  alternate="$2"; shift 2 ;;
+            --filter)     filter="$2"; shift 2 ;;
+            --force)      forced=true; shift ;;
+            -*)           die "Unknown flag: $1" ;;
+            *)            positional+=("$1"); shift ;;
         esac
     done
 
@@ -369,6 +421,8 @@ do_compare() {
             die "compare --alternate takes no commit arguments: it measures both arms itself"
         [[ -x "$alternate" ]] || die "not an executable benchmark binary: $alternate"
         [[ -x "$BENCH_BINARY" ]] || die "bench_all not found at $BENCH_BINARY"
+        require_count "--reps" "$reps"
+        require_count "--inner-reps" "$inner_reps"
         require_idle_box "compare --alternate" "$forced"
 
         local alt_old alt_new alt_dir
@@ -378,8 +432,8 @@ do_compare() {
         # One trap for all three: run_alternated can exit through set -e on a
         # failed benchmark run, so nothing may rely on reaching the end of it.
         trap "rm -f '$alt_old' '$alt_new'; rm -rf '$alt_dir'" EXIT
-        run_alternated "$alternate" "$BENCH_BINARY" "$reps" "$alt_old" "$alt_new" "$alt_dir" \
-            "$filter"
+        run_alternated "$alternate" "$BENCH_BINARY" "$reps" "$inner_reps" \
+            "$alt_old" "$alt_new" "$alt_dir" "$filter"
         report_comparison "$alt_old" "$alt_new" "$threshold"
         return
     fi
@@ -557,7 +611,8 @@ Commands:
   baseline [--reps N] [--force]       Record benchmarks and set as baseline
   record   [--reps N] [--force]       Record benchmarks for current commit
   compare  [--threshold P] [a] [b]    Compare two stored result sets
-  compare  --alternate BIN [--reps N] Measure both arms alternately and compare
+  compare  --alternate BIN [--reps N] [--inner-reps N]
+                                      Measure both arms alternately and compare
   list                                List all stored results
   help                                Show this message
 
@@ -566,11 +621,16 @@ Compare modes:
   compare <commit>                    <commit> vs HEAD
   compare <commit_a> <commit_b>       <commit_a> vs <commit_b>
   compare --alternate <bench_all>     that binary vs the current build, run
-                                      one repetition each, alternately, N times
+                                      alternately for N rounds, each round one
+                                      run of each arm at --inner-reps
+                                      repetitions
 
 Options:
   --reps N          Repetitions per benchmark (default: 5). Under --alternate,
-                    the number of alternating rounds.
+                    the number of alternating rounds (default: 5).
+  --inner-reps N    Under --alternate, repetitions inside one arm's run
+                    (default: 7). Each run is reduced to its own median, and
+                    the rounds to the median of those.
   --threshold P     Regression threshold percentage (default: 10.0)
   --filter REGEX    Under --alternate, restrict to matching benchmarks
   --force           Measure (or compare) despite the idle-box gate
@@ -590,6 +650,13 @@ Alternated reps:
   the arms rather than as the noise it is. --alternate interleaves them
   instead, so both arms see the same conditions.
 
+  The measurement has two levels. Inside one run, --inner-reps repetitions are
+  reduced to that run's median, which handles the per-iteration scatter a
+  single process sees. Across rounds, those medians are reduced to a median of
+  medians, which handles what differs BETWEEN processes -- address-space
+  layout, allocator state, where the box's other work landed. Deltas of a few
+  percent need both; one level of either cannot tell them apart.
+
 Exit codes:
   0    Success / no regressions
   1    Usage error, missing files, or a refused idle-box gate
@@ -601,7 +668,9 @@ Examples:
   bench/bench_track.sh compare
   bench/bench_track.sh compare --threshold 5.0
   bench/bench_track.sh compare abc12345 def67890
-  bench/bench_track.sh compare --alternate /path/to/old/build/bench/cpp/bench_all --reps 7
+  bench/bench_track.sh compare --alternate /path/to/old/build/bench/cpp/bench_all --reps 3
+  bench/bench_track.sh compare --alternate ../build-main/bench/cpp/bench_all \
+      --reps 3 --inner-reps 7 --filter 'Transcribe' --threshold 2.0
 HELP
 }
 

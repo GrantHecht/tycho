@@ -154,11 +154,16 @@ class TranscriptionDeclaration {
     /// @param primal_vars the declared primal-variable count.
     /// @param equality_rows the declared equality-row count.
     /// @param inequality_rows the declared inequality-row count.
-    /// @throws std::invalid_argument through the declaration's own validation --
-    ///         a non-positive partition count, negative dimensions, piece row
-    ///         counts that do not sum to the declared row counts, an
-    ///         out-of-range bound index, a NaN bound, an inverted record or an
-    ///         empty bound intersection.
+    /// @throws std::invalid_argument if an equality piece reports a negative
+    ///         output-row or application count; if the equality pieces share
+    ///         rows (an accumulating integrand's shape) and their claimed row
+    ///         total is less than @p equality_rows or past what a declaration
+    ///         can state -- the difference is what this call declares as the
+    ///         equality block's shared-row overcount; or through the
+    ///         declaration's own validation -- a non-positive partition count,
+    ///         negative dimensions, an inequality piece row count that does
+    ///         not sum to @p inequality_rows, an out-of-range bound index, a
+    ///         NaN bound, an inverted record or an empty bound intersection.
     void lay(NonLinearProgram &host, int primal_vars, int equality_rows, int inequality_rows);
 
   private:
@@ -171,31 +176,16 @@ class TranscriptionDeclaration {
         }
     }
 
-    /// @brief True when every equality piece addresses rows no other equality
-    ///        piece addresses.
-    ///
-    /// The declaration boundary counts an equality piece's rows as its output
-    /// rows times its application count, and requires the total to be the
-    /// declared equality-row count. An accumulating integrand breaks that
-    /// arithmetic on purpose: it declares one row and several pieces that all
-    /// sum into it, so the total counts that row once per application.
-    bool equality_pieces_address_distinct_rows() const;
-
-    /// @brief The equality-row total the declaration boundary would count.
-    /// @throws std::invalid_argument if that total is past what an int states.
+    /// @brief The equality-row total the declaration's pieces claim: their
+    ///        output rows times their application count, summed, each product
+    ///        computed in 64-bit arithmetic from the piece's own dimensions.
+    ///        An accumulating integrand's pieces sum this past the declared
+    ///        equality-row count, since several of them claim the same row;
+    ///        the difference is what lay() declares as the shared-row
+    ///        overcount when that sharing is present.
+    /// @throws std::invalid_argument if a piece reports a negative dimension,
+    ///         or if the total is outside [0, INT_MAX].
     int equality_piece_rows() const;
-
-    /// @brief Runs every conjunct of the declaration boundary except the
-    ///        equality piece-row sum.
-    ///
-    /// The boundary validates as one call, so the one conjunct that shared rows
-    /// break is stood down by handing it the sum those rows actually produce.
-    /// Every other refusal -- negative dimensions, the partition floor, the
-    /// inequality piece sum, bound indices, NaN bounds, inverted records, empty
-    /// intersections -- is made exactly as it would be on the adopting route.
-    ///
-    /// @throws std::invalid_argument for anything the boundary refuses.
-    void validate_except_equality_row_sum();
 
     hven::solvers::AggregateDeclaration declaration_;
 };

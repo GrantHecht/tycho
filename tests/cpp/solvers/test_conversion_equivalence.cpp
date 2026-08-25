@@ -1383,13 +1383,7 @@ TEST(ConversionEquivalence, DeclaredRowMultiplierMapCoversEveryRowKind) {
 // The map takes exactly the row counts it stands for, in both blocks. An empty
 // block is a length, not a compact spelling of "all zero", so composing one
 // over a nonempty row space is a caller error rather than a request for zeros.
-//
-// DISABLED: requires the symmetric empty-refusal (hven fold, post-063f954).
-// At the pin this tree currently consumes, the composition still accepts an
-// empty block over a nonempty row space and returns zeros, so this fails
-// there. Enable in the same change that consumes the fold -- drop the prefix,
-// nothing else.
-TEST(ConversionEquivalence, DISABLED_TheMultiplierMapRefusesABlockThatIsNotItsRowCount) {
+TEST(ConversionEquivalence, TheMultiplierMapRefusesABlockThatIsNotItsRowCount) {
     NlpProblemModel model(std::make_shared<ConvEquivAllKindsProblem>());
     ASSERT_EQ(model.me(), 1);
     ASSERT_EQ(model.mi(), 4);
@@ -1491,9 +1485,10 @@ TEST(ConversionEquivalence, FixedVariableMakeConstraintAppendsItsRowAfterTheUser
     door.optimizer_->set_fixed_variable_treatment(FixedVariableTreatments::MakeConstraint);
     ASSERT_EQ(door.run_optimize(x0), tycho::ConvergenceFlags::CONVERGED);
 
-    // The program records which treatment ran, so a reader of the solved
-    // problem can tell which system produced the numbers below.
-    EXPECT_EQ(door.nlp_->variable_treatment_, FixedVariableTreatments::MakeConstraint);
+    // The solve result records which treatment actually ran, so a reader of
+    // the completed solve can tell which system produced the numbers below.
+    EXPECT_EQ(door.optimizer_->result().fixed_variable_treatment_,
+              FixedVariableTreatments::MakeConstraint);
     EXPECT_FALSE(door.nlp_->is_reduced());
     EXPECT_EQ(door.nlp_->reduced_primal_vars(), 3);
     EXPECT_EQ(door.nlp_->user_equal_cons_, 1);
@@ -1544,7 +1539,8 @@ TEST(ConversionEquivalence, FixedVariableRelaxBoundsKeepsTheDeclaredShape) {
     door.optimizer_->set_fixed_variable_treatment(FixedVariableTreatments::RelaxBounds);
     ASSERT_EQ(door.run_optimize(x0), tycho::ConvergenceFlags::CONVERGED);
 
-    EXPECT_EQ(door.nlp_->variable_treatment_, FixedVariableTreatments::RelaxBounds);
+    EXPECT_EQ(door.optimizer_->result().fixed_variable_treatment_,
+              FixedVariableTreatments::RelaxBounds);
     EXPECT_FALSE(door.nlp_->is_reduced());
     EXPECT_EQ(door.nlp_->reduced_primal_vars(), 3);
     EXPECT_EQ(door.nlp_->equal_cons_, door.nlp_->user_equal_cons_);

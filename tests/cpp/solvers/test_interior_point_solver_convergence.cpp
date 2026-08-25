@@ -92,7 +92,7 @@ TEST_F(SolverTest, QpThreadsRejectsInvalid) {
 TEST_F(SolverTest, ObjScaleRejectsZero) {
     InteriorPointSolver opt;
     EXPECT_THROW(opt.set_obj_scale(0.0), std::invalid_argument);
-    EXPECT_NO_THROW(opt.set_obj_scale(-1.0)); // negative = maximization
+    EXPECT_THROW(opt.set_obj_scale(-1.0), std::invalid_argument); // negative flips dual signs
     EXPECT_NO_THROW(opt.set_obj_scale(2.0));
 }
 

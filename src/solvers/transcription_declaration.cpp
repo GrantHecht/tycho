@@ -4,59 +4,44 @@
 
 #include "tycho/detail/solvers_vf/transcription_declaration.h"
 
+#include <cstdint>
+
 namespace tycho::solvers {
 
-bool TranscriptionDeclaration::equality_pieces_address_distinct_rows() const {
-    for (const auto &piece : this->declaration_.equality_constraints_) {
-        if (!piece.index_data_.unique_constraints_) {
-            return false;
-        }
+namespace {
+
+/// One piece's claimed row count, computed from its own dimensions in 64-bit
+/// arithmetic. ConstraintFunction::num_con_eles() multiplies output rows by
+/// application count in `int`, which is not safe to accumulate from here: a
+/// piece with a large output-row count or application count can overflow
+/// that product before this function ever sees the result.
+/// @throws std::invalid_argument if either dimension is negative.
+std::int64_t claimed_rows(const ConstraintFunction &piece) {
+    const std::int64_t output_rows = piece.function_.output_rows();
+    const std::int64_t applications = piece.index_data_.num_appl();
+    if (output_rows < 0 || applications < 0) {
+        throw std::invalid_argument(fmt::format(
+            "TranscriptionDeclaration: an equality piece reports {0} output rows over {1} "
+            "applications; neither may be negative",
+            output_rows, applications));
     }
-    return true;
+    return output_rows * applications;
 }
+
+} // namespace
 
 int TranscriptionDeclaration::equality_piece_rows() const {
-    long long rows = 0;
+    std::int64_t rows = 0;
     for (const auto &piece : this->declaration_.equality_constraints_) {
-        rows += piece.num_con_eles();
+        rows += claimed_rows(piece);
     }
-    if (rows > std::numeric_limits<int>::max()) {
+    if (rows < 0 || rows > static_cast<std::int64_t>(std::numeric_limits<int>::max())) {
         throw std::invalid_argument(
             fmt::format("TranscriptionDeclaration: the equality pieces claim {0} rows in total, "
-                        "past the {1} a declaration can state",
+                        "outside the [0, {1}] a declaration can state",
                         rows, std::numeric_limits<int>::max()));
     }
-    return int(rows);
-}
-
-void TranscriptionDeclaration::validate_except_equality_row_sum() {
-    // The declared counts in their own right. The substitution below hands the
-    // boundary a different equality-row count, so the declared one is checked
-    // here instead of there.
-    if (this->declaration_.equality_rows_ < 0) {
-        throw std::invalid_argument(
-            fmt::format("TranscriptionDeclaration: the equality-row count is {0}, which is not a "
-                        "count",
-                        this->declaration_.equality_rows_));
-    }
-
-    // Everything else the declaration boundary refuses -- negative dimensions,
-    // the partition floor, the INEQUALITY piece sum, bound indices, NaN bounds,
-    // inverted records and empty intersections -- runs unchanged. Only the
-    // equality piece sum is stood down, and only by handing the boundary the sum
-    // the shared rows actually produce, so that one conjunct passes and no other
-    // is skipped. The declaration is this object's own and is restored before the
-    // call returns, including on the refusal path.
-    AggregateDeclaration &declaration = this->declaration_;
-    const int declared_equality_rows = declaration.equality_rows_;
-    declaration.equality_rows_ = this->equality_piece_rows();
-    try {
-        declaration.validate();
-    } catch (...) {
-        declaration.equality_rows_ = declared_equality_rows;
-        throw;
-    }
-    declaration.equality_rows_ = declared_equality_rows;
+    return static_cast<int>(rows);
 }
 
 void TranscriptionDeclaration::lay(NonLinearProgram &host, int primal_vars, int equality_rows,
@@ -70,50 +55,39 @@ void TranscriptionDeclaration::lay(NonLinearProgram &host, int primal_vars, int 
     // declaration asks for has run.
     this->declaration_.fixing_rows_ = 0;
 
-    if (this->equality_pieces_address_distinct_rows()) {
-        host.adopt_declaration(std::move(this->declaration_));
-        return;
+    // An accumulating integrand marks its pieces as sharing rows (see
+    // PhaseIndexer::add_accumulation, which clears unique_constraints_ on both
+    // the accumulator piece and the integrand piece it feeds), and only those
+    // pieces' claimed row total can run past the declared equality-row count.
+    // A transcription that declares no such piece has an equality piece sum
+    // that must equal the declared row count exactly, so its overcount is
+    // fixed at zero rather than computed as a difference -- that keeps hven's
+    // piece-sum conjunct (claimed == declared + overcount) a live check
+    // against a drifting piece list for every transcription but the
+    // accumulating-integrand one, instead of a tautology for all of them.
+    bool shares_rows = false;
+    for (const auto &piece : this->declaration_.equality_constraints_) {
+        shares_rows = shares_rows || !piece.index_data_.unique_constraints_;
     }
 
-    // An accumulating integrand declares several pieces that all sum into one
-    // equality row. The declaration boundary counts each of those pieces' rows
-    // separately, so the piece total exceeds the row space and the boundary
-    // refuses a declaration that describes a perfectly ordinary problem. Until
-    // that boundary accounts for pieces sharing constraint rows, such a
-    // declaration is installed on the program and laid from its own dimensions.
-    //
-    // The declaration is still the value that carries the transcription: the
-    // same pieces, carrying the same thread modes, the same bound records in the
-    // same order, and the same partition count. Only the entry differs, and the
-    // steps below are the adopting entry's own, with the fixing-row lift and
-    // re-append that a transcription-time declaration has no rows for.
-    //
-    // Every refusal the boundary can make is still made, and made FIRST, before
-    // anything of the program is written: only the one conjunct the shared rows
-    // break is stood down.
-    this->validate_except_equality_row_sum();
-
-    host.objectives_ = std::move(this->declaration_.objectives_);
-    host.equality_constraints_ = std::move(this->declaration_.equality_constraints_);
-    host.inequality_constraints_ = std::move(this->declaration_.inequality_constraints_);
-
-    // The adopting entry's own resets, for the same reason it makes them: the
-    // three lists have just been replaced wholesale, so whatever internal fixing
-    // rows the previous layout counted went with them. The layout call below
-    // discards internal rows by that count before it lays, and a stale count
-    // would truncate the equality list that was just installed. True of a freshly
-    // constructed program by construction; written down rather than assumed.
-    host.internal_fixed_cons_ = 0;
-    host.user_equal_cons_ = 0;
-    host.equal_cons_ = 0;
-
-    host.clear_variable_bounds();
-    for (const auto &bound : this->declaration_.variable_bounds_) {
-        host.set_variable_bound(bound.index_, bound.lower_, bound.upper_);
+    if (shares_rows) {
+        const std::int64_t claimed = this->equality_piece_rows();
+        const std::int64_t overcount = claimed - static_cast<std::int64_t>(equality_rows);
+        if (overcount < 0 ||
+            overcount > static_cast<std::int64_t>(std::numeric_limits<int>::max())) {
+            throw std::invalid_argument(fmt::format(
+                "TranscriptionDeclaration: the equality pieces claim {0} rows in total, but the "
+                "declaration states {1} equality rows; a shared-row overcount is how far the "
+                "piece sum runs past the declared row count, and it cannot be negative or past "
+                "what a declaration can state",
+                claimed, equality_rows));
+        }
+        this->declaration_.equality_shared_row_overcount_ = static_cast<int>(overcount);
+    } else {
+        this->declaration_.equality_shared_row_overcount_ = 0;
     }
 
-    host.num_partitions_ = this->declaration_.partition_count_;
-    host.make_nlp(primal_vars, equality_rows, inequality_rows);
+    host.adopt_declaration(std::move(this->declaration_));
 }
 
 } // namespace tycho::solvers
