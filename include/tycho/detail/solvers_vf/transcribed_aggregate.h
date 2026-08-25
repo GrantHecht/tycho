@@ -125,7 +125,12 @@ class TranscribedAggregate final : public hven::solvers::ClaimStreamSource {
     ///
     /// @param requested the partition count the caller wants.
     /// @return the adopted count.
-    /// @throws std::invalid_argument if @p requested is below 1.
+    /// @throws std::invalid_argument if @p requested is below 1, or if the
+    ///         program's fixed-variable treatment has eliminated variables --
+    ///         negotiating would re-lay the program into a shape this
+    ///         declaration-space view cannot state, so the refusal is raised
+    ///         before the host is touched. Negotiate partitions before
+    ///         configuring a fixed-variable treatment, or re-transcribe.
     int negotiate_partition_count(int requested) override;
 
     /// @brief The program's evaluation thread budget.

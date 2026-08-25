@@ -59,6 +59,21 @@ TranscribedAggregate::TranscribedAggregate(std::shared_ptr<NonLinearProgram> hos
 }
 
 int TranscribedAggregate::negotiate_partition_count(int requested) {
+    // This view states coordinates in declaration space. Negotiating a
+    // partition count changes the declared shape, so under an eliminating
+    // fixed-variable treatment the resulting stream can be neither kept (the
+    // shape differs from what was read) nor re-read (the reduced layout names
+    // a narrower space than the declaration). Refused before the host is
+    // touched, so a refused call leaves the program's partition count,
+    // structure epoch, and solver binding exactly as they were.
+    if (this->host_->is_reduced()) {
+        throw std::invalid_argument(
+            "TranscribedAggregate: the program's fixed-variable treatment has eliminated "
+            "variables, so negotiating a partition count would re-lay it into a shape this "
+            "declaration-space view cannot state. Negotiate partitions before configuring a "
+            "fixed-variable treatment, or re-transcribe");
+    }
+
     const int adopted = this->host_->negotiate_partition_count(requested);
     this->snapshot_layout();
     return adopted;

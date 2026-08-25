@@ -763,8 +763,36 @@ TEST(Level2Provider, NegotiatingWhileAConsumerIsBoundReanalysesOnTheNextSolve) {
     EXPECT_NE(fixture.prob_.nlp_->bound_kkt_destination(), nullptr);
 }
 
-// The guard is the binding and nothing else: a program no consumer has analysed
-// negotiates normally, and the stream is re-read against the count adopted.
+// A fixed-variable treatment that ELIMINATES variables (MakeParameter) leaves
+// the host reduced. Re-laying a reduced host into a different declared shape
+// is exactly what negotiating a partition count would do, and this view
+// states coordinates in declaration space, so the reduced case is refused
+// rather than served -- and refused BEFORE the host is touched. A refused
+// call must leave the host exactly as it found it: the same partition count,
+// the same structure epoch, and the same solver binding, not those three
+// moved and then a throw on top of the moved state.
+TEST(Level2Provider, NegotiatingAReducedHostIsRefusedBeforeTheHostIsTouched) {
+    OptimizationProblem prob;
+    l2_provider_build(prob);
+    prob.add_variable_bound(2, 1.25, 1.25);
+    prob.transcribe();
+
+    ASSERT_EQ(prob.solve_optimize(), tycho::ConvergenceFlags::CONVERGED);
+    ASSERT_TRUE(prob.nlp_->is_reduced());
+    ASSERT_NE(prob.nlp_->bound_kkt_destination(), nullptr);
+
+    const int partitions_before = prob.nlp_->num_partitions_;
+    const auto epoch_before = prob.nlp_->structure_epoch();
+
+    EXPECT_THROW(prob.provider_->negotiate_partition_count(4), std::invalid_argument);
+
+    EXPECT_EQ(prob.nlp_->num_partitions_, partitions_before);
+    EXPECT_TRUE(prob.nlp_->structure_epoch() == epoch_before);
+    EXPECT_NE(prob.nlp_->bound_kkt_destination(), nullptr);
+}
+
+// A program no consumer has analysed negotiates normally, and the stream is
+// re-read against the count adopted.
 TEST(Level2Provider, NegotiatingIsServedWhileNoConsumerIsBound) {
     auto host = std::make_shared<NonLinearProgram>(1);
     {
@@ -932,6 +960,25 @@ TEST(Level2Provider, ASharedRowDeclarationDeclaresItsOvercountAndLays) {
     EXPECT_NO_THROW(host->declaration().validate());
 }
 
+// The shared-row overcount is a subtraction of a declared row count from a
+// claimed row total, and that declared row count is a caller-supplied
+// parameter with no lower bound of its own. An extreme value must still
+// refuse cleanly rather than overflow on the way to the refusal.
+TEST(Level2Provider, ASharedRowDeclarationWithAnExtremeEqualityRowCountRefusesRatherThanOverflows) {
+    auto host = std::make_shared<NonLinearProgram>(1);
+    TranscriptionDeclaration declaration(1);
+
+    const int shared =
+        declaration.add_equality(l2_provider_row_piece(3, 0), ThreadingFlags::MainThread);
+    declaration.equality(shared).index_data_.unique_constraints_ = false;
+
+    EXPECT_THROW(declaration.lay(*host, 2, std::numeric_limits<int>::min(), 0),
+                 std::invalid_argument);
+    // Refused before the program was touched.
+    EXPECT_EQ(host->primal_vars_, 0);
+    EXPECT_TRUE(host->equality_constraints_.empty());
+}
+
 // The same shape onto a program that is not fresh: one already laid, and
 // carrying an internal fixing row of its own from a treatment configured over
 // it. Replacing the three piece lists leaves that row's bookkeeping describing
@@ -1071,6 +1118,8 @@ TEST(Level2Provider, ANoSharedRowProblemDeclaresAZeroOvercount) {
     EXPECT_NO_THROW(fixture.provider().declaration().validate());
 }
 
+namespace {
+
 /// Builds a small HangingChain-shaped phase: a one-state, one-control chain
 /// ODE under LGL5 collocation with an integral parameter function that
 /// accumulates the chain's arc length into one static-parameter row across
@@ -1113,16 +1162,21 @@ std::shared_ptr<tycho::oc::ODEPhaseBase> l2_provider_build_hanging_chain_phase(i
     return phase_ptr;
 }
 
-// The reproducer: four segments feeding one accumulator row claim that row
-// four times where the declaration states it once, so the excess -- the
-// shared-row overcount -- is four. Before this change, TranscriptionDeclaration
-// worked around the conjunct this shape breaks rather than declaring the
-// excess; now it declares it, and the declaration validates.
-TEST(Level2Provider, TheHangingChainAccumulationDeclaresItsSharedRowOvercount) {
-    auto phase = l2_provider_build_hanging_chain_phase(4);
-    ASSERT_NE(phase->provider_, nullptr);
+} // namespace
 
-    const auto &declaration = phase->provider_->declaration();
-    EXPECT_EQ(declaration.equality_shared_row_overcount_, 4);
-    EXPECT_NO_THROW(declaration.validate());
+// Every segment feeds the same accumulator row, so the equality pieces'
+// claimed row total runs num_segments past the declared row count, and the
+// declaration states that excess as its shared-row overcount. Checked at two
+// different segment counts so the assertion pins the mechanism -- the
+// overcount tracks the segment count -- rather than one construction
+// parameter's particular value.
+TEST(Level2Provider, TheHangingChainAccumulationDeclaresItsSharedRowOvercount) {
+    for (const int num_segments : {4, 7}) {
+        auto phase = l2_provider_build_hanging_chain_phase(num_segments);
+        ASSERT_NE(phase->provider_, nullptr);
+
+        const auto &declaration = phase->provider_->declaration();
+        EXPECT_EQ(declaration.equality_shared_row_overcount_, num_segments);
+        EXPECT_NO_THROW(declaration.validate());
+    }
 }
