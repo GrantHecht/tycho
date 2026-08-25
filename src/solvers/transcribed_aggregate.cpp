@@ -4,6 +4,8 @@
 
 #include "tycho/detail/solvers_vf/transcribed_aggregate.h"
 
+#include <cstddef>
+#include <cstring>
 #include <string>
 #include <utility>
 
@@ -53,7 +55,7 @@ TranscribedAggregate::TranscribedAggregate(std::shared_ptr<NonLinearProgram> hos
     if (this->host_ == nullptr) {
         throw std::invalid_argument("TranscribedAggregate: the program handle must not be null");
     }
-    this->read_layout();
+    this->snapshot_layout();
 }
 
 int TranscribedAggregate::negotiate_partition_count(int requested) {
@@ -78,53 +80,58 @@ int TranscribedAggregate::negotiate_partition_count(int requested) {
     }
 
     const int adopted = this->host_->negotiate_partition_count(requested);
-    this->read_layout();
+    this->snapshot_layout();
     return adopted;
 }
 
 int TranscribedAggregate::kkt_dimension() const {
-    this->refresh_if_relaid();
+    this->publish();
     return this->kkt_dimension_;
 }
 
 Eigen::Ref<const Eigen::VectorXi> TranscribedAggregate::kkt_claim_rows() const {
-    this->refresh_if_relaid();
+    this->publish();
     return this->claim_rows_;
 }
 
 Eigen::Ref<const Eigen::VectorXi> TranscribedAggregate::kkt_claim_cols() const {
-    this->refresh_if_relaid();
+    this->publish();
     return this->claim_cols_;
 }
 
 Eigen::Ref<const Eigen::VectorXi> TranscribedAggregate::kkt_claim_partitions() const {
-    this->refresh_if_relaid();
+    this->publish();
     return this->claim_partitions_;
 }
 
 hven::solvers::ClaimBlock TranscribedAggregate::hessian_claims() const {
-    this->refresh_if_relaid();
+    this->publish();
     return this->hessian_;
 }
 
 hven::solvers::ClaimBlock TranscribedAggregate::equality_jacobian_claims() const {
-    this->refresh_if_relaid();
+    this->publish();
     return this->equality_jacobian_;
 }
 
 hven::solvers::ClaimBlock TranscribedAggregate::inequality_jacobian_claims() const {
-    this->refresh_if_relaid();
+    this->publish();
     return this->inequality_jacobian_;
 }
 
 Eigen::Ref<const Eigen::VectorXi> TranscribedAggregate::objective_gradient_claim_rows() const {
-    this->refresh_if_relaid();
+    this->publish();
     return this->objective_gradient_rows_;
 }
 
 TranscribedAggregate::DeclaredShape TranscribedAggregate::shape_of(const NonLinearProgram &host) {
     return DeclaredShape{host.primal_vars_,    host.equal_cons_,          host.inequal_cons_,
                          host.num_partitions_, host.internal_fixed_cons_, host.num_user_kkt_elems_};
+}
+
+void TranscribedAggregate::publish() const {
+    this->refresh_if_relaid();
+    this->materialize_stream();
 }
 
 void TranscribedAggregate::refresh_if_relaid() const {
@@ -137,12 +144,14 @@ void TranscribedAggregate::refresh_if_relaid() const {
     // eliminated ones name no entry at all. None of that is declaration data --
     // the declaration is the same pieces over the same variables either way --
     // and this surface is stated in declaration identities, so the stream must
-    // not move with it. The stream read at the last un-eliminated layout IS the
+    // not move with it. The layout read at the last un-eliminated lay IS the
     // declaration-space answer, and it is kept.
     //
-    // There is always such a stream to keep: the constructor reads one and
+    // There is always such a layout to keep: the constructor copies one and
     // refuses the program outright if it cannot, so no view exists to be
-    // refreshed unless a declaration-space stream was read at construction.
+    // refreshed unless a declaration-space layout was taken at construction.
+    // Whether the stream has been stated from it yet does not matter here --
+    // the snapshot is what the statement is made from, and it survives.
     if (this->host_->is_reduced()) {
         const DeclaredShape now = shape_of(*this->host_);
         if (!(now == this->read_at_shape_)) {
@@ -156,30 +165,31 @@ void TranscribedAggregate::refresh_if_relaid() const {
                 this->read_at_shape_.equality_rows_, this->read_at_shape_.internal_rows_,
                 this->read_at_shape_.claim_slots_));
         }
-        // Same declaration, narrower engine space: the published stream stands.
+        // Same declaration, narrower engine space: the snapshot stands, and so
+        // does anything already stated from it.
         this->read_at_epoch_ = this->host_->structure_epoch();
         return;
     }
 
-    this->read_layout();
+    this->snapshot_layout();
 }
 
-void TranscribedAggregate::read_layout() const {
+void TranscribedAggregate::snapshot_layout() const {
     const NonLinearProgram &host = *this->host_;
 
     // The single enforcement point of the rule the whole coordinate mapping
-    // below rests on. This routine reads the layout's coordinates and states
-    // them as declared identities, which it may do only while the two spaces
-    // are the same one: a fixed-variable treatment that has eliminated
-    // variables lays a narrower space, in which the surviving coordinates are
-    // renumbered and an eliminated one is recorded as a negative placeholder
-    // that names neither a coordinate nor the domain it came from.
+    // rests on. This view states a layout's coordinates as declared identities,
+    // which it may do only while the two spaces are the same one: a
+    // fixed-variable treatment that has eliminated variables lays a narrower
+    // space, in which the surviving coordinates are renumbered and an
+    // eliminated one is recorded as a negative placeholder that names neither a
+    // coordinate nor the domain it came from.
     //
     // Checked here rather than at the callers because all three of them reach
     // this routine -- construction, a partition renegotiation, and a refresh
-    // across a re-lay -- and only the last has a published stream to fall back
-    // on, which it keeps without coming here. The other two have nothing to
-    // keep, so for them the reduced layout is a refusal.
+    // across a re-lay -- and only the last has a layout to fall back on, which
+    // it keeps without coming here. The other two have nothing to keep, so for
+    // them the reduced layout is a refusal.
     if (host.is_reduced()) {
         throw std::invalid_argument(
             "TranscribedAggregate: the program's fixed-variable treatment has eliminated "
@@ -197,22 +207,72 @@ void TranscribedAggregate::read_layout() const {
     const int inequality_rows = host.inequal_cons_;
     this->kkt_dimension_ = primal + equality_rows + inequality_rows;
 
-    // The laid row bands. The program keeps a slack block between the primal
-    // block and the constraint rows; the assembled space the claims are stated
-    // in has none, so a constraint row moves down by the slack width.
-    const int slack = host.slack_vars_;
-    const int equality_base = primal + slack;
-    const int inequality_base = equality_base + equality_rows;
-
-    // The layout is read through raw pointers into locals rather than through
-    // the program's members. The classification below writes into the arrays it
-    // is building, and a compiler that cannot rule out aliasing between those
-    // writes and the program's own vectors reloads every bound and every data
-    // pointer on each slot; read once here, it does not have to.
     const int total = host.num_user_kkt_elems_;
-    const int *const laid_rows = host.kkt_coeff_rows_.data();
-    const int *const laid_cols = host.kkt_coeff_cols_.data();
-    const int *const laid_partitions = host.kkt_coeff_part_ids_.data();
+    const int gradient_slots = host.num_pgx_elems_;
+
+    LaidSnapshot snapshot;
+    snapshot.slots_ = total;
+    snapshot.gradient_slots_ = gradient_slots;
+    snapshot.primal_ = primal;
+    // The program keeps a slack block between the primal block and the
+    // constraint rows; the assembled space the claims are stated in has none,
+    // so the restatement needs the width to move a constraint row down by.
+    snapshot.slack_ = host.slack_vars_;
+    snapshot.equality_rows_ = equality_rows;
+
+    // One allocation for all four runs, and no zero-fill: every word is
+    // overwritten by the copies below, and the project builds with Eigen's
+    // initialise-by-zero on, so an Eigen vector here would memset the whole
+    // buffer first.
+    const std::size_t slots = static_cast<std::size_t>(total);
+    const std::size_t words = 3 * slots + static_cast<std::size_t>(gradient_slots);
+    snapshot.data_ = std::make_unique_for_overwrite<int[]>(words);
+
+    int *const buffer = snapshot.data_.get();
+    if (total > 0) {
+        const std::size_t bytes = slots * sizeof(int);
+        std::memcpy(buffer, host.kkt_coeff_rows_.data(), bytes);
+        std::memcpy(buffer + total, host.kkt_coeff_cols_.data(), bytes);
+        std::memcpy(buffer + 2 * total, host.kkt_coeff_part_ids_.data(), bytes);
+    }
+    if (gradient_slots > 0) {
+        std::memcpy(buffer + 3 * total, host.rhs_coeff_rows_.data() + host.pgx_data_start_,
+                    static_cast<std::size_t>(gradient_slots) * sizeof(int));
+    }
+
+    this->laid_ = std::move(snapshot);
+    // What was published, if anything was, describes the layout this one
+    // replaces. Marked stale rather than restated: the next reader states it,
+    // and in every workflow tycho runs today there is no next reader.
+    this->stream_current_ = false;
+
+    this->read_at_epoch_ = host.structure_epoch();
+    this->read_at_shape_ = shape_of(host);
+}
+
+void TranscribedAggregate::materialize_stream() const {
+    if (this->stream_current_) {
+        return;
+    }
+
+    const LaidSnapshot &laid = this->laid_;
+
+    // The laid row bands. A constraint row moves down by the slack width, which
+    // is what the assembled space having no slack block amounts to.
+    const int primal = laid.primal_;
+    const int slack = laid.slack_;
+    const int equality_base = primal + slack;
+    const int inequality_base = equality_base + laid.equality_rows_;
+
+    // The snapshot is read through raw pointers into locals rather than through
+    // its members. The classification below writes into the arrays it is
+    // building, and a compiler that cannot rule out aliasing between those
+    // writes and the snapshot reloads every bound and every data pointer on
+    // each slot; read once here, it does not have to.
+    const int total = laid.slots_;
+    const int *const laid_rows = laid.rows();
+    const int *const laid_cols = laid.cols();
+    const int *const laid_partitions = laid.partitions();
 
     // Every refusal a slot can make, folded into four accumulators so the pass
     // carries no branch and the compiler can widen it. The fold keeps the sign
@@ -246,10 +306,10 @@ void TranscribedAggregate::read_layout() const {
             const int col = laid_cols[slot];
             if (row < 0 || col < 0) {
                 // Only an eliminated coordinate is recorded negative, and this
-                // routine never runs against an eliminated layout (see
-                // refresh_if_relaid). Reaching one here means the layout and
-                // the reduction flag disagree, which would put dropped claims
-                // of one domain into another's run.
+                // snapshot was never taken from an eliminated layout (see
+                // snapshot_layout). Reaching one here means the layout and the
+                // reduction flag disagreed, which would put dropped claims of
+                // one domain into another's run.
                 throw std::invalid_argument(fmt::format(
                     "TranscribedAggregate: claim slot {0} names coordinate ({1}, {2}) in a layout "
                     "that reports no eliminated variables; a negative coordinate is how the "
@@ -328,9 +388,9 @@ void TranscribedAggregate::read_layout() const {
         out_partitions[out_slot] = laid_partitions[slot];
     }
 
-    const int gradient_slots = host.num_pgx_elems_;
+    const int gradient_slots = laid.gradient_slots_;
     Eigen::VectorXi gradient_rows(gradient_slots);
-    const int *const laid_gradient_rows = host.rhs_coeff_rows_.data() + host.pgx_data_start_;
+    const int *const laid_gradient_rows = laid.gradient_rows();
     int *const out_gradient_rows = gradient_rows.data();
     for (int slot = 0; slot < gradient_slots; slot++) {
         const int row = laid_gradient_rows[slot];
@@ -343,8 +403,10 @@ void TranscribedAggregate::read_layout() const {
         out_gradient_rows[slot] = row;
     }
 
-    // Committed together, so a refusal above leaves the previously published
-    // stream standing rather than a half-written one.
+    // Committed together, and the stream marked current only once they are all
+    // in place, so a refusal above leaves the view stale rather than half
+    // written -- and the next reader is refused in the same terms rather than
+    // handed a partial stream.
     this->claim_rows_ = std::move(rows);
     this->claim_cols_ = std::move(cols);
     this->claim_partitions_ = std::move(partitions);
@@ -353,8 +415,7 @@ void TranscribedAggregate::read_layout() const {
     this->equality_jacobian_ = equality;
     this->inequality_jacobian_ = inequality;
 
-    this->read_at_epoch_ = host.structure_epoch();
-    this->read_at_shape_ = shape_of(host);
+    this->stream_current_ = true;
 }
 
 void TranscribedAggregate::assemble_impl(const hven::solvers::CandidatePoint &point,
