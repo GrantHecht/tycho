@@ -419,13 +419,7 @@ TEST(ModelContractPins, TheModelSurfaceTakesAnEmptyBlockAsTheExactLengthWhereItH
 }
 
 // The short half of the model surface's exact-length rule.
-//
-// DISABLED: requires the symmetric empty-refusal (hven fold, post-063f954).
-// At the pin this tree currently consumes, the model surface still accepts an
-// empty block where it has rows and reads it as all-zero, so these assertions
-// fail there. Enable in the same change that consumes the fold -- nothing here
-// needs to be rewritten, only the prefix dropped.
-TEST(ModelContractPins, DISABLED_TheModelSurfaceRefusesAnEmptyBlockWhereItHasRows) {
+TEST(ModelContractPins, TheModelSurfaceRefusesAnEmptyBlockWhereItHasRows) {
     NlpProblemModel model(std::make_shared<PinsCountingProblem>());
     ASSERT_EQ(model.me(), 1);
     ASSERT_EQ(model.mi(), 1);

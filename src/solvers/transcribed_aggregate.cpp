@@ -59,26 +59,6 @@ TranscribedAggregate::TranscribedAggregate(std::shared_ptr<NonLinearProgram> hos
 }
 
 int TranscribedAggregate::negotiate_partition_count(int requested) {
-    // A partition count decides the layout, so adopting one RE-LAYS the program
-    // -- which resets the location table every scatter addresses and unbinds the
-    // destination those offsets described. A consumer that has already analysed
-    // this program holds a table that the re-lay would silently empty, and the
-    // program's own re-analysis runs only when a fixed-variable treatment
-    // reports a change, so the emptied table would survive into the next solve.
-    //
-    // The program says whether such a consumer exists: it publishes the value
-    // array its tables are bound to, and a re-lay clears that. Refused while one
-    // is bound, rather than re-laid underneath it.
-    if (this->host_->bound_kkt_destination() != nullptr) {
-        throw std::invalid_argument(fmt::format(
-            "TranscribedAggregate::negotiate_partition_count: {0} partitions were requested, but "
-            "the program this view publishes is already analysed against a consumer's KKT "
-            "destination, and adopting a count re-lays it -- which would leave that consumer "
-            "addressing an emptied location table. The partition count is declaration data: set "
-            "it on the problem and transcribe again",
-            requested));
-    }
-
     const int adopted = this->host_->negotiate_partition_count(requested);
     this->snapshot_layout();
     return adopted;

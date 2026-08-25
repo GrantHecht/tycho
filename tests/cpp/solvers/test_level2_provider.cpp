@@ -26,6 +26,12 @@
 #include <hven/model/claim_space.h>
 #include <hven/model/non_linear_program.h>
 
+// The HangingChain-shaped reproducer below (Level2Provider,
+// TheHangingChainAccumulationDeclaresItsSharedRowOvercount) needs the ODE
+// builder and phase machinery to reach TranscriptionDeclaration::lay() through
+// an integral-parameter accumulation, which is the shape that shares rows.
+#include <tycho/tycho.h>
+
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -734,19 +740,26 @@ TEST(Level2Provider, TheClaimStreamIsTheSameUnderEveryTreatmentThatKeepsTheDecla
 
 // Adopting a partition count re-lays the program, which empties the location
 // table every scatter addresses and unbinds the destination those offsets
-// described. The program re-analyses itself only when a fixed-variable
-// treatment reports a change, so on a problem with no fixed variable the
-// emptied table would survive into the next solve. Refused while a consumer is
-// bound, and the refusal names the program's own binding as the reason.
-TEST(Level2Provider, NegotiatingIsRefusedWhileAConsumerIsBoundToTheProgram) {
+// described. The solver's own analysis is gated on the program's structure
+// epoch, not on whether a fixed-variable treatment reports a change, so a
+// re-lay while a consumer is bound is served rather than refused: the bound
+// destination is cleared here, and the next solve sees the moved epoch and
+// re-analyses against the new layout before using it.
+TEST(Level2Provider, NegotiatingWhileAConsumerIsBoundReanalysesOnTheNextSolve) {
     L2ProviderFixture fixture;
     // transcribe() hands the program to the optimizer, whose sparsity analysis
     // binds its own destination.
     ASSERT_NE(fixture.prob_.nlp_->bound_kkt_destination(), nullptr);
-    EXPECT_THROW(fixture.provider().negotiate_partition_count(1), std::invalid_argument);
-    EXPECT_THROW(fixture.provider().negotiate_partition_count(4), std::invalid_argument);
 
-    // And the refusal did not re-lay anything on the way out.
+    EXPECT_NO_THROW(fixture.provider().negotiate_partition_count(1));
+    EXPECT_NO_THROW(fixture.provider().negotiate_partition_count(4));
+
+    // The re-lay cleared the binding rather than leaving it dangling against
+    // the old layout.
+    EXPECT_EQ(fixture.prob_.nlp_->bound_kkt_destination(), nullptr);
+
+    // The next solve re-analyses against the new layout and converges.
+    EXPECT_EQ(fixture.prob_.solve_optimize(), tycho::ConvergenceFlags::CONVERGED);
     EXPECT_NE(fixture.prob_.nlp_->bound_kkt_destination(), nullptr);
 }
 
@@ -860,15 +873,17 @@ TEST(Level2Provider, ARereadAfterARelayReflectsTheFreshLayoutNotAFreedSnapshot) 
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// What the shared-row layout route still refuses.
+// A declaration whose equality pieces share a constraint row.
 ///////////////////////////////////////////////////////////////////////////////
 
-// A declaration whose equality pieces share a constraint row cannot be counted
-// by the declaration boundary's equality row-sum rule, so it is laid by a
-// different entry. That entry stands down THAT conjunct and no other: an
-// inequality row count its pieces do not sum to is still refused, and refused
-// before anything of the program is written.
-TEST(Level2Provider, TheSharedRowRouteStillRefusesTheRestOfTheDeclaration) {
+// An accumulating integrand deliberately sums several pieces into one row, so
+// the equality pieces' claimed row total runs past the declared count. The
+// layout states that excess as the declaration's own shared-row overcount
+// rather than working around the boundary's row-sum conjunct, and every other
+// conjunct still runs exactly as it would without a shared row: an inequality
+// row count its pieces do not sum to is still refused, and refused before
+// anything of the program is written.
+TEST(Level2Provider, ASharedRowDeclarationStillRefusesTheRestOfTheDeclaration) {
     auto host = std::make_shared<NonLinearProgram>(1);
     TranscriptionDeclaration declaration(1);
 
@@ -893,9 +908,11 @@ TEST(Level2Provider, TheSharedRowRouteStillRefusesTheRestOfTheDeclaration) {
     EXPECT_TRUE(host->equality_constraints_.empty());
 }
 
-// The same route, with a declaration that is otherwise sound: it lays, and the
-// shared row is laid once rather than once per application.
-TEST(Level2Provider, TheSharedRowRouteLaysASoundDeclaration) {
+// A declaration that is otherwise sound lays: the shared row is laid once
+// rather than once per application, and the emitted declaration's overcount is
+// exactly what three applications over one row claim past that one row --
+// two.
+TEST(Level2Provider, ASharedRowDeclarationDeclaresItsOvercountAndLays) {
     auto host = std::make_shared<NonLinearProgram>(1);
     TranscriptionDeclaration declaration(1);
 
@@ -910,9 +927,12 @@ TEST(Level2Provider, TheSharedRowRouteLaysASoundDeclaration) {
     EXPECT_EQ(host->user_equal_cons_, 1);
     EXPECT_EQ(host->internal_fixed_cons_, 0);
     EXPECT_EQ(host->equality_constraints_.size(), 1u);
+
+    EXPECT_EQ(host->declaration().equality_shared_row_overcount_, 2);
+    EXPECT_NO_THROW(host->declaration().validate());
 }
 
-// The same route onto a program that is not fresh: one already laid, and
+// The same shape onto a program that is not fresh: one already laid, and
 // carrying an internal fixing row of its own from a treatment configured over
 // it. Replacing the three piece lists leaves that row's bookkeeping describing
 // functions that are gone, and the layout call discards internal rows by that
@@ -923,7 +943,7 @@ TEST(Level2Provider, TheSharedRowRouteLaysASoundDeclaration) {
 // its constructor the three counters are already zero, so it passes whether the
 // bookkeeping is reset or not. This one fails if any one of the three resets is
 // dropped.
-TEST(Level2Provider, TheSharedRowRouteLaysOnAHostThatCarriedAnInternalFixingRow) {
+TEST(Level2Provider, ASharedRowDeclarationLaysOnAHostThatCarriedAnInternalFixingRow) {
     auto host = std::make_shared<NonLinearProgram>(1);
 
     // First layout: an ordinary declaration over two variables, one of them
@@ -945,7 +965,8 @@ TEST(Level2Provider, TheSharedRowRouteLaysOnAHostThatCarriedAnInternalFixingRow)
     ASSERT_EQ(host->equal_cons_, 2);
     ASSERT_EQ(host->user_equal_cons_, 1);
 
-    // Second layout, on that same program, through the shared-row route.
+    // Second layout, on that same program, over a declaration whose pieces
+    // share a row.
     TranscriptionDeclaration declaration(1);
     const int shared =
         declaration.add_equality(l2_provider_row_piece(3, 0), ThreadingFlags::MainThread);
@@ -959,6 +980,7 @@ TEST(Level2Provider, TheSharedRowRouteLaysOnAHostThatCarriedAnInternalFixingRow)
     EXPECT_EQ(host->user_equal_cons_, 1);
     EXPECT_EQ(host->internal_fixed_cons_, 0);
     EXPECT_EQ(host->primal_vars_, 2);
+    EXPECT_EQ(host->declaration().equality_shared_row_overcount_, 2);
 }
 
 // The view reads a layout's coordinates and states them as DECLARED
@@ -1034,4 +1056,73 @@ TEST(Level2Provider, AViewCannotBeBuiltOverAProgramWithVariablesEliminated) {
             },
             std::invalid_argument);
     }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Declared shared-row overcounts.
+///////////////////////////////////////////////////////////////////////////////
+
+// A problem whose equality pieces address disjoint rows declares no excess:
+// the piece-row sum already equals the declared row count, so the shared-row
+// overcount is zero, exactly as it was before the field existed.
+TEST(Level2Provider, ANoSharedRowProblemDeclaresAZeroOvercount) {
+    L2ProviderFixture fixture;
+    EXPECT_EQ(fixture.provider().declaration().equality_shared_row_overcount_, 0);
+    EXPECT_NO_THROW(fixture.provider().declaration().validate());
+}
+
+/// Builds a small HangingChain-shaped phase: a one-state, one-control chain
+/// ODE under LGL5 collocation with an integral parameter function that
+/// accumulates the chain's arc length into one static-parameter row across
+/// every segment. The accumulator piece and every segment's integrand piece
+/// all write that same row, which is what shares a constraint row: the
+/// equality pieces' claimed row total runs past the declared equality-row
+/// count by one row per segment.
+std::shared_ptr<tycho::oc::ODEPhaseBase> l2_provider_build_hanging_chain_phase(int num_segments) {
+    auto ode = tycho::ODEBuilder(1, 1)
+                   .define([](auto &args) { return args.u_var(0); })
+                   .var_names({{"x", 0}, {"t", 1}, {"u", 2}})
+                   .build();
+
+    constexpr double a = 1.0;
+    constexpr double b = 3.0;
+    constexpr double L = 4.0;
+
+    std::vector<Eigen::VectorXd> traj_ig;
+    traj_ig.reserve(std::size_t(num_segments) + 1);
+    for (int i = 0; i <= num_segments; i++) {
+        const double s = static_cast<double>(i) / num_segments;
+        Eigen::VectorXd pt(3);
+        pt << a + (b - a) * s, s, (b - a);
+        traj_ig.push_back(pt);
+    }
+
+    auto phase = ode.phase(tycho::TranscriptionModes::LGL5, traj_ig, num_segments);
+
+    Eigen::VectorXd sp(1);
+    sp[0] = L;
+    phase.set_static_params(sp);
+
+    auto len_args = Arguments<1>();
+    auto lu = len_args.coeff<0>();
+    auto length_expr = sqrt(1.0 + lu * lu);
+    phase.add_integral_param_function(GenericFunction<-1, 1>(length_expr), {"u"}, 0);
+
+    auto phase_ptr = phase.base_ptr();
+    phase_ptr->transcribe();
+    return phase_ptr;
+}
+
+// The reproducer: four segments feeding one accumulator row claim that row
+// four times where the declaration states it once, so the excess -- the
+// shared-row overcount -- is four. Before this change, TranscriptionDeclaration
+// worked around the conjunct this shape breaks rather than declaring the
+// excess; now it declares it, and the declaration validates.
+TEST(Level2Provider, TheHangingChainAccumulationDeclaresItsSharedRowOvercount) {
+    auto phase = l2_provider_build_hanging_chain_phase(4);
+    ASSERT_NE(phase->provider_, nullptr);
+
+    const auto &declaration = phase->provider_->declaration();
+    EXPECT_EQ(declaration.equality_shared_row_overcount_, 4);
+    EXPECT_NO_THROW(declaration.validate());
 }

@@ -120,16 +120,12 @@ class TranscribedAggregate final : public hven::solvers::ClaimStreamSource {
     ///        adopted.
     ///
     /// Adopting a count RE-LAYS the program, which resets the location table
-    /// every scatter addresses. A consumer that has already analysed this
-    /// program holds a table the re-lay would empty, and the program re-analyses
-    /// itself only when a fixed-variable treatment reports a change -- so the
-    /// emptied table would survive into the next solve. While such a consumer is
-    /// bound, this call is refused rather than served.
+    /// every scatter addresses. A consumer bound to the program's KKT
+    /// destination is re-analysed against the new layout on its next solve.
     ///
     /// @param requested the partition count the caller wants.
     /// @return the adopted count.
-    /// @throws std::invalid_argument if @p requested is below 1, or if the
-    ///         program is already analysed against a consumer's destination.
+    /// @throws std::invalid_argument if @p requested is below 1.
     int negotiate_partition_count(int requested) override;
 
     /// @brief The program's evaluation thread budget.
