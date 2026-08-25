@@ -28,6 +28,8 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <set>
@@ -155,6 +157,128 @@ ConstraintFunction l2_provider_row_piece(int applications, int row) {
     }
     auto args = Arguments<2>();
     return ConstraintFunction(GenericFunction<-1, -1>(args.squared_norm() - 1.0), vindex, cindex);
+}
+
+/// A way to corrupt a laid program so its own arrays disagree with its own
+/// flags -- a claimed slack row, a negative coordinate where nothing is
+/// eliminated, or a gradient row outside the declared variables -- none of
+/// which a sound layout can produce, and none of which is reachable through
+/// any public entry of the transcription or the treatment. What every one of
+/// these tests uses is the same pattern the shared-row tests already use to
+/// exercise a program's internals directly: writing through the program's own
+/// (public) members after a legitimate lay, rather than through any API that
+/// would refuse the write. The corruptor returns the exact message the first
+/// accessor is expected to refuse with.
+struct L2ProviderLayoutViolation {
+    std::string name_;
+    std::function<std::string(NonLinearProgram &)> corrupt_;
+};
+
+std::vector<L2ProviderLayoutViolation> l2_provider_layout_violations() {
+    return {
+        {"a claimed slack row",
+         [](NonLinearProgram &host) {
+             // A row between the primal block and the equality block is a slack
+             // row; the assembled space the claim stream is stated in has no
+             // slack block, so no sound layout claims one.
+             host.kkt_coeff_rows_[0] = host.primal_vars_;
+             return "TranscribedAggregate: the layout claims KKT row " +
+                    std::to_string(host.primal_vars_) +
+                    ", which is a slack row; the claim stream is stated in a space with no "
+                    "slack block";
+         }},
+        {"a negative coordinate where nothing is eliminated",
+         [](NonLinearProgram &host) {
+             // A negative row is how a REDUCED layout records an eliminated
+             // coordinate. This layout reports no elimination at all, so one
+             // here is the layout and the reduction flag disagreeing.
+             const int col = host.kkt_coeff_cols_[0];
+             host.kkt_coeff_rows_[0] = -1;
+             return "TranscribedAggregate: claim slot 0 names coordinate (-1, " +
+                    std::to_string(col) +
+                    ") in a layout that reports no eliminated variables; a negative "
+                    "coordinate is how the layout records an elimination, and its domain "
+                    "cannot be told from the row band";
+         }},
+        {"a gradient row outside the declared variables",
+         [](NonLinearProgram &host) {
+             host.rhs_coeff_rows_[host.pgx_data_start_] = host.primal_vars_;
+             return "TranscribedAggregate: objective-gradient claim slot 0 names row " +
+                    std::to_string(host.primal_vars_) + ", outside the " +
+                    std::to_string(host.primal_vars_) + " declared variables";
+         }},
+    };
+}
+
+/// A transcribed, un-bound problem with one violation from the list above
+/// applied to it, and its expected first-access refusal.
+struct L2ProviderCorruptedFixture {
+    OptimizationProblem prob_;
+    std::string expected_message_;
+
+    explicit L2ProviderCorruptedFixture(const L2ProviderLayoutViolation &violation) {
+        l2_provider_build(prob_);
+        prob_.transcribe();
+        NonLinearProgram &host = *prob_.nlp_;
+        this->expected_message_ = violation.corrupt_(host);
+    }
+};
+
+/// Every accessor that publishes the claim stream, named for a failure
+/// message, and how to call it while discarding what it returns. This is the
+/// accessor set the claim-stream contract publishes -- every one of them
+/// funnels through the same publish() -> materialize_stream() path.
+std::vector<std::pair<std::string, std::function<void(TranscribedAggregate &)>>>
+l2_provider_stream_accessors() {
+    return {
+        {"kkt_dimension", [](TranscribedAggregate &p) { static_cast<void>(p.kkt_dimension()); }},
+        {"kkt_claim_rows",
+         [](TranscribedAggregate &p) { static_cast<void>(p.kkt_claim_rows()); }},
+        {"kkt_claim_cols",
+         [](TranscribedAggregate &p) { static_cast<void>(p.kkt_claim_cols()); }},
+        {"kkt_claim_partitions",
+         [](TranscribedAggregate &p) { static_cast<void>(p.kkt_claim_partitions()); }},
+        {"hessian_claims", [](TranscribedAggregate &p) { static_cast<void>(p.hessian_claims()); }},
+        {"equality_jacobian_claims",
+         [](TranscribedAggregate &p) { static_cast<void>(p.equality_jacobian_claims()); }},
+        {"inequality_jacobian_claims",
+         [](TranscribedAggregate &p) { static_cast<void>(p.inequality_jacobian_claims()); }},
+        {"objective_gradient_claim_rows",
+         [](TranscribedAggregate &p) { static_cast<void>(p.objective_gradient_claim_rows()); }},
+    };
+}
+
+constexpr int kL2ProviderRelayApplications = 600;
+
+/// A declaration wide enough to adopt more than one partition (the layout
+/// floor is 1000 claim slots per partition; this lays roughly 26,000), on a
+/// host no consumer has bound -- so it can be renegotiated after the fact.
+/// Every application addresses its own row and its own group of variables, so
+/// the declaration lays through the ordinary adopting route.
+std::shared_ptr<NonLinearProgram> l2_provider_relay_host(int requested_partitions) {
+    auto host = std::make_shared<NonLinearProgram>(requested_partitions);
+    TranscriptionDeclaration declaration(requested_partitions);
+
+    Eigen::MatrixXi vindex(kL2ProviderGroupSize, kL2ProviderRelayApplications);
+    Eigen::MatrixXi cindex(1, kL2ProviderRelayApplications);
+    for (int a = 0; a < kL2ProviderRelayApplications; a++) {
+        for (int g = 0; g < kL2ProviderGroupSize; g++) {
+            vindex(g, a) = a * kL2ProviderGroupSize + g;
+        }
+        cindex(0, a) = a;
+    }
+    auto args = Arguments<kL2ProviderGroupSize>();
+    // Several applications of one piece: the same policy the transcription
+    // itself picks in that case (see transcription_thread_mode in
+    // optimization_problem.cpp), which is what spreads the applications across
+    // partitions rather than serializing them onto one.
+    declaration.add_equality(
+        ConstraintFunction(GenericFunction<-1, -1>(args.squared_norm() - 1.0), vindex, cindex),
+        ThreadingFlags::ByApplication);
+
+    declaration.lay(*host, kL2ProviderGroupSize * kL2ProviderRelayApplications,
+                    kL2ProviderRelayApplications, 0);
+    return host;
 }
 
 } // namespace
@@ -376,6 +500,71 @@ TEST(Level2Provider, TheObjectiveGradientClaimsNameDeclaredVariables) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// The claim stream is stated lazily, on first access.
+///////////////////////////////////////////////////////////////////////////////
+
+// Reading a layout's coordinates and stating them as the claim stream are two
+// separate steps: the first happens at construction, the second the first
+// time an accessor asks. A refusal about the LAYOUT'S OWN CONSISTENCY -- a
+// claimed slack row, a negative coordinate in a layout reporting no
+// elimination, a gradient row outside the declared variables -- belongs to the
+// second step, so it fires there and not at construction, even though the
+// corrupted data was already on hand when the object was built.
+TEST(Level2Provider, AnInternalConsistencyRefusalFiresOnFirstAccessNotAtConstruction) {
+    for (const auto &violation : l2_provider_layout_violations()) {
+        SCOPED_TRACE(violation.name_);
+        L2ProviderCorruptedFixture fixture(violation);
+
+        // Construction copies the corrupted layout out without restating it, so
+        // it succeeds -- this inconsistency is not one construction checks.
+        ASSERT_NO_THROW({
+            TranscribedAggregate probe(fixture.prob_.nlp_);
+            static_cast<void>(probe);
+        });
+
+        // The first accessor restates the copy, and that is where the refusal
+        // fires, in exactly the words materialize_stream throws it in.
+        TranscribedAggregate view(fixture.prob_.nlp_);
+        bool refused = false;
+        try {
+            view.kkt_claim_rows();
+        } catch (const std::invalid_argument &refusal) {
+            refused = true;
+            EXPECT_EQ(std::string(refusal.what()), fixture.expected_message_);
+        }
+        EXPECT_TRUE(refused);
+    }
+}
+
+// The refusal is the same no matter which accessor happens to trigger the
+// first access: kkt_dimension, both claim-coordinate accessors, the
+// partition map, all three domain-block accessors and the objective-gradient
+// accessor all funnel through the one publish() -> materialize_stream() path,
+// so an inconsistent layout is refused in the same words regardless of which
+// one a consumer calls first.
+TEST(Level2Provider, TheFirstAccessRefusalIsIdenticalFromEveryAccessor) {
+    const auto accessors = l2_provider_stream_accessors();
+    for (const auto &violation : l2_provider_layout_violations()) {
+        SCOPED_TRACE(violation.name_);
+        for (const auto &[accessor_name, call] : accessors) {
+            SCOPED_TRACE(accessor_name);
+
+            L2ProviderCorruptedFixture fixture(violation);
+            TranscribedAggregate view(fixture.prob_.nlp_);
+
+            bool refused = false;
+            try {
+                call(view);
+            } catch (const std::invalid_argument &refusal) {
+                refused = true;
+                EXPECT_EQ(std::string(refusal.what()), fixture.expected_message_);
+            }
+            EXPECT_TRUE(refused);
+        }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // What the provider evaluates, and what it refuses.
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -583,6 +772,91 @@ TEST(Level2Provider, NegotiatingIsServedWhileNoConsumerIsBound) {
     EXPECT_EQ(provider.negotiate_partition_count(4), 1);
     EXPECT_EQ(provider.declaration().partition_count_, 1);
     EXPECT_GT(provider.kkt_claim_rows().size(), 0);
+}
+
+// The claim stream is stated on first access and, once stated, the snapshot it
+// was built from is released -- so a read that materializes it is followed by
+// nothing that could serve a second read from the same snapshot. Re-laying
+// afterward (on the branch that takes a fresh snapshot rather than keeping one,
+// i.e. a program with no variables eliminated) has to install that fresh
+// snapshot correctly behind the freed one, and a second read has to come from
+// it: the fresh layout, not stale data left over from the read the release
+// already discarded.
+TEST(Level2Provider, ARereadAfterARelayReflectsTheFreshLayoutNotAFreedSnapshot) {
+    auto host = l2_provider_relay_host(1);
+    ASSERT_EQ(host->num_partitions_, 1);
+
+    TranscribedAggregate provider(host);
+    const auto epoch_before = provider.structure_epoch();
+
+    // First read: materializes the stream (and, since the buffer-release fix,
+    // frees the snapshot it was built from). At one adopted partition, every
+    // claim belongs to partition 0.
+    const Eigen::VectorXi rows_before = provider.kkt_claim_rows();
+    const Eigen::VectorXi cols_before = provider.kkt_claim_cols();
+    const Eigen::VectorXi partitions_before = provider.kkt_claim_partitions();
+    ASSERT_GT(rows_before.size(), 0);
+    for (int slot = 0; slot < partitions_before.size(); slot++) {
+        EXPECT_EQ(partitions_before[slot], 0);
+    }
+
+    // Re-lay, on the branch that takes a fresh snapshot: negotiating a
+    // partition count always re-lays the program, moving the structure epoch.
+    const int adopted = provider.negotiate_partition_count(4);
+    ASSERT_GT(adopted, 1);
+    EXPECT_FALSE(provider.structure_epoch() == epoch_before);
+
+    // Second read: has to come from the fresh snapshot the re-lay took, not
+    // from the buffer the first read already freed.
+    const Eigen::VectorXi rows_after = provider.kkt_claim_rows();
+    const Eigen::VectorXi cols_after = provider.kkt_claim_cols();
+    const Eigen::VectorXi partitions_after = provider.kkt_claim_partitions();
+    ASSERT_EQ(rows_after.size(), rows_before.size());
+    ASSERT_EQ(partitions_after.size(), partitions_before.size());
+
+    // Same coordinates as a set -- the declaration did not change, only the
+    // adopted partition count did -- compared sorted, since the re-lay is free
+    // to reorder slots by the new partition assignment.
+    std::vector<std::pair<int, int>> coords_before;
+    std::vector<std::pair<int, int>> coords_after;
+    coords_before.reserve(static_cast<std::size_t>(rows_before.size()));
+    coords_after.reserve(static_cast<std::size_t>(rows_after.size()));
+    for (int slot = 0; slot < rows_before.size(); slot++) {
+        coords_before.emplace_back(rows_before[slot], cols_before[slot]);
+        coords_after.emplace_back(rows_after[slot], cols_after[slot]);
+    }
+    std::sort(coords_before.begin(), coords_before.end());
+    std::sort(coords_after.begin(), coords_after.end());
+    EXPECT_EQ(coords_before, coords_after);
+
+    // And the fresh layout is genuinely spread across more than one partition,
+    // in partition-index order within each domain run -- which a stale read of
+    // the freed first buffer (all partition 0) could not have produced.
+    const std::vector<hven::solvers::ClaimBlock> runs = {provider.hessian_claims(),
+                                                         provider.equality_jacobian_claims(),
+                                                         provider.inequality_jacobian_claims()};
+    std::set<int> occupied;
+    for (const auto &run : runs) {
+        int previous = -1;
+        for (int slot = run.start_; slot < run.start_ + run.count_; slot++) {
+            const int partition = partitions_after[slot];
+            EXPECT_GE(partition, 0);
+            EXPECT_LT(partition, adopted);
+            EXPECT_GE(partition, previous);
+            previous = partition;
+            occupied.insert(partition);
+        }
+    }
+    EXPECT_GT(occupied.size(), 1u);
+
+    // No coordinate is garbage left over from a freed buffer.
+    const int dimension = provider.kkt_dimension();
+    for (int slot = 0; slot < rows_after.size(); slot++) {
+        EXPECT_GE(rows_after[slot], 0);
+        EXPECT_LT(rows_after[slot], dimension);
+        EXPECT_GE(cols_after[slot], 0);
+        EXPECT_LT(cols_after[slot], dimension);
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
