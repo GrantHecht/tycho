@@ -415,6 +415,12 @@ void TranscribedAggregate::materialize_stream() const {
     this->equality_jacobian_ = equality;
     this->inequality_jacobian_ = inequality;
 
+    // The snapshot buffer is provably dead from here on: nothing reads
+    // laid_.data_ again until a re-lay calls snapshot_layout(), which installs
+    // a fresh buffer before anything could observe this one gone. Releasing it
+    // here means a consumer that actually reads the stream holds one copy of
+    // the layout, not two, for the rest of this snapshot's lifetime.
+    this->laid_.data_.reset();
     this->stream_current_ = true;
 }
 
