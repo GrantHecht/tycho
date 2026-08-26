@@ -28,6 +28,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
@@ -112,6 +113,18 @@ class SqpModelAdapter final : public hven::solvers::NlpModel {
   public:
     SqpModelAdapter(std::shared_ptr<NonLinearProgram> nlp, Eigen::VectorXd start_point);
 
+    // analyze_sparsity() rebinds NLP-global state (kkt_locations_/
+    // analyzed_kkt_values_/analyzed_kkt_matrix_ on the SHARED NonLinearProgram)
+    // to point at this adapter's own kkt_ buffer, which is about to be
+    // destroyed. The destructor restores exactly what the constructor
+    // captured before rebinding it, so a caller reusing nlp_ with another
+    // consumer afterward (an already-configured InteriorPointSolver that
+    // skips its own set_nlp(), or a second SqpModelAdapter) sees the state it
+    // would have seen had this adapter never run, rather than a pointer
+    // comparison that can never match again. See the constructor's own note
+    // for why restoring is chosen over bumping the structure epoch.
+    ~SqpModelAdapter() override { restore_nlp_kkt_binding(); }
+
     Eigen::Index n() const override { return static_cast<Eigen::Index>(primal_vars_); }
     Eigen::Index me() const override { return static_cast<Eigen::Index>(equal_cons_); }
     Eigen::Index mi() const override { return static_cast<Eigen::Index>(inequal_cons_); }
@@ -156,6 +169,7 @@ class SqpModelAdapter final : public hven::solvers::NlpModel {
     void refresh_point(const Eigen::VectorXd &x) const;
     void refresh_jac(const Eigen::VectorXd &x) const;
     void prepare_kkt_assembly() const;
+    void restore_nlp_kkt_binding() const;
 
     std::shared_ptr<NonLinearProgram> nlp_;
     Eigen::VectorXd start_point_;
@@ -164,6 +178,14 @@ class SqpModelAdapter final : public hven::solvers::NlpModel {
     int slack_vars_ = 0;
     int equal_cons_ = 0;
     int inequal_cons_ = 0;
+
+    // NLP-global KKT-location state as it stood before this adapter's
+    // constructor called analyze_sparsity() -- captured so it can be put
+    // back. See restore_nlp_kkt_binding() and the destructor above.
+    Eigen::VectorXi saved_kkt_locations_;
+    const double *saved_analyzed_kkt_values_ = nullptr;
+    Eigen::SparseMatrix<double, Eigen::RowMajor> *saved_analyzed_kkt_matrix_ = nullptr;
+    bool kkt_binding_saved_ = false;
 
     mutable Eigen::SparseMatrix<double, Eigen::RowMajor> kkt_;
     // The values in these are refreshed from kkt_ inside const methods
@@ -208,6 +230,24 @@ SqpModelAdapter::SqpModelAdapter(std::shared_ptr<NonLinearProgram> nlp, Eigen::V
             "engines; the SQP engine applies variable bounds directly, never through a "
             "fixed-variable treatment.");
     }
+    if (nlp_->internal_fixed_constraints() > 0) {
+        // A prior InteriorPointSolver solve with fixed_variable_treatment=
+        // MakeConstraint installed one internal equality row per fixed
+        // variable, appended at the tail of the user's own equality rows
+        // (non_linear_program.h's internal-fixing-row note). Reading
+        // nlp_->equal_cons_ raw, as this adapter does, would hand those rows
+        // to SQP as ordinary user equalities -- redundant with the same
+        // variables' bounds this adapter ALSO hands through lower()/upper()
+        // (a LICQ hazard for the QP subproblem), and it would widen
+        // out.eq_lmults_ past the user-row width every declared-space
+        // consumer (PhaseResult, the IPM's own export) expects.
+        throw std::invalid_argument(
+            "SqpModelAdapter: this NLP carries internal fixing rows from a prior "
+            "InteriorPointSolver solve with fixed_variable_treatment=MakeConstraint "
+            "(NonLinearProgram::internal_fixed_constraints() > 0). Solve with the SQP engine "
+            "on a freshly transcribed problem, or re-transcribe before switching engines; the "
+            "SQP engine applies variable bounds directly and needs no internal fixing rows.");
+    }
 
     primal_vars_ = nlp_->primal_vars_;
     slack_vars_ = nlp_->slack_vars_;
@@ -234,67 +274,128 @@ SqpModelAdapter::SqpModelAdapter(std::shared_ptr<NonLinearProgram> nlp, Eigen::V
     lower_ = nlp_->x_lower_;
     upper_ = nlp_->x_upper_;
 
+    // analyze_sparsity() is not a read: it rebinds kkt_locations_/
+    // analyzed_kkt_values_/analyzed_kkt_matrix_ on the SHARED nlp_ to this
+    // adapter's own kkt_ buffer (non_linear_program.cpp's analyze_sparsity),
+    // without bumping structure_epoch() -- so another consumer of this same
+    // nlp_ (an InteriorPointSolver that skips set_nlp(), or a second
+    // SqpModelAdapter) would otherwise see stale state once this adapter is
+    // destroyed and kkt_ goes with it. Capture what was there first, so the
+    // destructor (and the catch below, for a throw during construction after
+    // this point -- a constructor's own destructor never runs on a throw from
+    // its own body) can put it back.
+    //
+    // Bumping the structure epoch instead -- the other contract-shaped fix --
+    // is not available here: NlpAggregate::bump_structure_epoch() is
+    // `protected`, reachable only from NonLinearProgram's own member
+    // functions, not from an external adapter like this one. Restoring the
+    // saved fields (all three are public data members) is therefore the only
+    // externally reachable way to undo the rebind, and it is exact: it
+    // reproduces whatever state nlp_ carried before THIS adapter touched it,
+    // whatever that was.
+    saved_kkt_locations_ = nlp_->kkt_locations_;
+    saved_analyzed_kkt_values_ = nlp_->analyzed_kkt_values_;
+    saved_analyzed_kkt_matrix_ = nlp_->analyzed_kkt_matrix_;
+    kkt_binding_saved_ = true;
+
     kkt_.resize(nlp_->kkt_dim_, nlp_->kkt_dim_);
     nlp_->analyze_sparsity(kkt_);
 
-    const int cons_start = primal_vars_ + slack_vars_;
-    std::vector<AdapterCoord> hess_coords, jac_e_coords, jac_i_coords;
+    try {
+        const int cons_start = primal_vars_ + slack_vars_;
+        std::vector<AdapterCoord> hess_coords, jac_e_coords, jac_i_coords;
 
-    const auto *outer = kkt_.outerIndexPtr();
-    const auto *inner = kkt_.innerIndexPtr();
-    for (int r = 0; r < kkt_.outerSize(); ++r) {
-        for (int k = outer[r]; k < outer[r + 1]; ++k) {
-            const int c = static_cast<int>(inner[k]);
-            const int lo = std::min(r, c);
-            const int hi = std::max(r, c);
+        const auto *outer = kkt_.outerIndexPtr();
+        const auto *inner = kkt_.innerIndexPtr();
+        for (int r = 0; r < kkt_.outerSize(); ++r) {
+            for (int k = outer[r]; k < outer[r + 1]; ++k) {
+                const int c = static_cast<int>(inner[k]);
+                const int lo = std::min(r, c);
+                const int hi = std::max(r, c);
 
-            if (hi < primal_vars_) {
-                // Hessian of the Lagrangian, both endpoints primal. lo <= hi
-                // always, so (row=lo, col=hi) is the upper triangle NlpModel
-                // wants -- no reorientation needed, unlike TychoTNLP's lower
-                // triangle for Ipopt.
-                hess_coords.push_back({lo, hi, static_cast<std::size_t>(k)});
-            } else if (lo < primal_vars_ && hi >= cons_start) {
-                // Constraint Jacobian: one primal endpoint, one constraint-row
-                // endpoint. Constraint rows run [equalities; inequalities]
-                // immediately after the slack block.
-                const int cons_idx = hi - cons_start;
-                if (cons_idx < equal_cons_) {
-                    jac_e_coords.push_back({cons_idx, lo, static_cast<std::size_t>(k)});
-                } else {
-                    jac_i_coords.push_back(
-                        {cons_idx - equal_cons_, lo, static_cast<std::size_t>(k)});
+                if (hi < primal_vars_) {
+                    // Hessian of the Lagrangian, both endpoints primal. lo <=
+                    // hi always, so (row=lo, col=hi) is the upper triangle
+                    // NlpModel wants -- no reorientation needed, unlike
+                    // TychoTNLP's lower triangle for Ipopt.
+                    hess_coords.push_back({lo, hi, static_cast<std::size_t>(k)});
+                } else if (lo < primal_vars_ && hi >= cons_start) {
+                    // Constraint Jacobian: one primal endpoint, one
+                    // constraint-row endpoint. Constraint rows run
+                    // [equalities; inequalities] immediately after the slack
+                    // block.
+                    const int cons_idx = hi - cons_start;
+                    if (cons_idx < equal_cons_) {
+                        jac_e_coords.push_back({cons_idx, lo, static_cast<std::size_t>(k)});
+                    } else {
+                        jac_i_coords.push_back(
+                            {cons_idx - equal_cons_, lo, static_cast<std::size_t>(k)});
+                    }
                 }
+                // Everything else is solver bookkeeping (slack Jacobian,
+                // slack Hessian diagonal, constraint-row pivots) with no
+                // counterpart in the NlpModel contract.
             }
-            // Everything else is solver bookkeeping (slack Jacobian, slack
-            // Hessian diagonal, constraint-row pivots) with no counterpart in
-            // the NlpModel contract.
         }
+
+        hess_ = build_sparse_pattern(hess_coords, primal_vars_, primal_vars_);
+        jac_e_ = build_sparse_pattern(jac_e_coords, equal_cons_, primal_vars_);
+        jac_i_ = build_sparse_pattern(jac_i_coords, inequal_cons_, primal_vars_);
+
+        zero_le_ = Eigen::VectorXd::Zero(equal_cons_);
+        zero_li_ = Eigen::VectorXd::Zero(inequal_cons_);
+        pgx_scratch_.setZero(primal_vars_);
+        agx_scratch_.setZero(primal_vars_);
+        fxe_scratch_.setZero(equal_cons_);
+        fxi_scratch_.setZero(inequal_cons_);
+    } catch (...) {
+        // A throw here unwinds out of the constructor, so this object is
+        // never considered constructed and its destructor never runs -- the
+        // restore has to happen here instead, on this one path, before
+        // rethrowing.
+        restore_nlp_kkt_binding();
+        throw;
     }
+}
 
-    hess_ = build_sparse_pattern(hess_coords, primal_vars_, primal_vars_);
-    jac_e_ = build_sparse_pattern(jac_e_coords, equal_cons_, primal_vars_);
-    jac_i_ = build_sparse_pattern(jac_i_coords, inequal_cons_, primal_vars_);
-
-    zero_le_ = Eigen::VectorXd::Zero(equal_cons_);
-    zero_li_ = Eigen::VectorXd::Zero(inequal_cons_);
-    pgx_scratch_.setZero(primal_vars_);
-    agx_scratch_.setZero(primal_vars_);
-    fxe_scratch_.setZero(equal_cons_);
-    fxi_scratch_.setZero(inequal_cons_);
+void SqpModelAdapter::restore_nlp_kkt_binding() const {
+    if (!kkt_binding_saved_ || !nlp_) {
+        return;
+    }
+    nlp_->kkt_locations_ = saved_kkt_locations_;
+    nlp_->analyzed_kkt_values_ = saved_analyzed_kkt_values_;
+    nlp_->analyzed_kkt_matrix_ = saved_analyzed_kkt_matrix_;
 }
 
 void SqpModelAdapter::prepare_kkt_assembly() const {
     std::fill_n(kkt_.valuePtr(), kkt_.nonZeros(), 0.0);
+    // fill_rhs accumulates (target[loc] += source[i]; non_linear_program.h),
+    // it does not assign -- so these four must be zeroed on every assembly,
+    // not only once at construction, or they drift unboundedly across a
+    // solve's repeated eval_soe/eval_kkt calls. TychoTNLP::prepare_kkt_assembly
+    // does the same four lines for the same reason.
+    pgx_scratch_.setZero();
+    agx_scratch_.setZero();
+    fxe_scratch_.setZero();
+    fxi_scratch_.setZero();
     nlp_->set_primal_diags(0.0);
     nlp_->set_e_pivots(0.0);
     nlp_->set_i_pivots(0.0);
 }
 
 void SqpModelAdapter::refresh_point(const Eigen::VectorXd &x) const {
+    if (x.size() != primal_vars_) {
+        throw std::invalid_argument(fmt::format(
+            "SqpModelAdapter: x has {0} entries, expected {1} (n)", x.size(), primal_vars_));
+    }
     if (point_valid_ && x_cache_.size() == x.size() && x_cache_ == x) {
         return;
     }
+    // Cleared BEFORE the evaluation, not after: if eval_ogc throws (an
+    // un-evaluable trial point is a live path), this adapter must not be left
+    // looking valid at the new x with zeroed/partial caches -- a later call at
+    // that same x would then return the garbage without re-evaluating.
+    point_valid_ = false;
     x_cache_ = x;
     grad_cache_.setZero(primal_vars_);
     ce_cache_.setZero(equal_cons_);
@@ -309,9 +410,16 @@ void SqpModelAdapter::refresh_point(const Eigen::VectorXd &x) const {
 }
 
 void SqpModelAdapter::refresh_jac(const Eigen::VectorXd &x) const {
+    if (x.size() != primal_vars_) {
+        throw std::invalid_argument(fmt::format(
+            "SqpModelAdapter: x has {0} entries, expected {1} (n)", x.size(), primal_vars_));
+    }
     if (jac_valid_ && jac_x_cache_.size() == x.size() && jac_x_cache_ == x) {
         return;
     }
+    // Same cache-validity discipline as refresh_point: cleared before the
+    // evaluation that can throw, set only after it returns.
+    jac_valid_ = false;
     jac_x_cache_ = x;
     prepare_kkt_assembly();
     double val = 0.0;
@@ -336,6 +444,11 @@ void SqpModelAdapter::refresh_jac(const Eigen::VectorXd &x) const {
 Eigen::SparseMatrix<double, Eigen::RowMajor>
 SqpModelAdapter::eval_hess(const Eigen::VectorXd &x, double obj_scale,
                            const Eigen::VectorXd &lambda_e, const Eigen::VectorXd &lambda_i) const {
+    if (x.size() != primal_vars_) {
+        throw std::invalid_argument(
+            fmt::format("SqpModelAdapter::eval_hess: x has {0} entries, expected {1} (n)", x.size(),
+                        primal_vars_));
+    }
     if (lambda_e.size() != equal_cons_) {
         throw std::invalid_argument(
             fmt::format("SqpModelAdapter::eval_hess: lambda_e has {0} entries, expected {1} (me)",
@@ -475,7 +588,23 @@ void fill_ipm_stage(StageOutput &out, InteriorPointSolver &engine, Mode mode,
             "subproblem, not the original NLP; obj_val_ remains the true objective.";
     }
 
-    out.warm_ = engine.export_warm_start();
+    // export_warm_start() throws std::logic_error when no solve has completed
+    // on this instance -- and the engine's own capture is documented as
+    // defensive but not fatal: a failed internal-consistency check SKIPS the
+    // capture and clears the marker precisely so a solve can still return
+    // (interior_point_solver.cpp's capture_completed_warm_start). Calling this
+    // unconditionally would re-introduce exactly the failure hven avoids: a
+    // defect in this side product would throw away an otherwise-good
+    // StageOutput the caller was about to receive.
+    try {
+        out.warm_ = engine.export_warm_start();
+    } catch (const std::logic_error &) {
+        report.engine_notes_["warm_export"] =
+            "no warm start captured: export_warm_start() reports nothing completed on this "
+            "instance (either no solve returned, or the engine's own defensive "
+            "internal-consistency check skipped the capture); warm_ is left at its default "
+            "(empty) value.";
+    }
 }
 
 void fill_sqp_stage(StageOutput &out, SqpSolver &engine, Mode mode,
@@ -505,15 +634,35 @@ void fill_sqp_stage(StageOutput &out, SqpSolver &engine, Mode mode,
     report.iterations_ = static_cast<int>(sol.counters.major_iters);
     report.objective_ = sol.f;
     report.wall_time_s_ = sol.wall_seconds;
-    report.kkt_residual_ = sol.kkt_residual;
 
-    report.engine_details_["stationarity"] = sol.stationarity;
+    // kkt_residual_ maps to stationarity, not the driver's own combined
+    // sol.kkt_residual (= max(stationarity, feasibility), sqp_types.h): the
+    // IPM writes kkt_inf_ into this same field, and kkt_inf_ is documented as
+    // stationarity ALONE (inf-norm dual infeasibility), not a combined
+    // quantity. Writing the combined scalar here would make one field name
+    // two different things depending on which engine filled it -- a later
+    // comparison against a stationarity tolerance would silently read a
+    // feasibility term on one engine and not the other. The combined scalar
+    // is still available, under its own name.
+    report.kkt_residual_ = sol.stationarity;
+    report.engine_details_["kkt_residual_combined"] = sol.kkt_residual;
+
+    // hven's cross-engine contract: NaN means UNMEASURED, never "zero
+    // residual" (interior_point_solver.h's terminal-KKT-residual note, which
+    // states this is the same convention SqpSolution's four columns carry).
+    // SQP reports one combined feasibility scalar rather than a
+    // declared-space eq/iq split, so eq_violation_/iq_violation_ have no SQP
+    // measurement to report at all -- NaN, not the 0.0 default, which would
+    // read as a converged-to-machine-precision residual.
+    report.eq_violation_ = std::numeric_limits<double>::quiet_NaN();
+    report.iq_violation_ = std::numeric_limits<double>::quiet_NaN();
+
     report.engine_details_["feasibility"] = sol.feasibility;
     report.engine_details_["complementarity"] = sol.complementarity;
     report.engine_notes_["residuals"] =
         "SQP reports one combined feasibility scalar (engine_details_[\"feasibility\"]), not "
-        "separate eq_violation_/iq_violation_ or eq_cons_/iq_cons_ vectors; those fields are "
-        "left at their default here.";
+        "separate eq_violation_/iq_violation_ or eq_cons_/iq_cons_ vectors -- those two fields "
+        "are set to NaN (unmeasured) rather than left at their 0.0 default.";
 
     if (sol.counters.restoration_iters > 0) {
         report.engine_details_["restoration_iters"] =
@@ -561,13 +710,36 @@ void fill_sqp_stage(StageOutput &out, SqpSolver &engine, Mode mode,
         out.eq_lmults_ = sol.lambda_e;
         out.iq_lmults_ = sol.lambda_i;
         out.bound_lmults_ = sol.z;
-        out.warm_ = driver.export_warm_start();
+        // Same defensive-but-not-fatal capture contract as the IPM's
+        // export_warm_start() (sqp_driver.h): a failed internal-consistency
+        // check skips the capture rather than throwing through a converged
+        // solve, but only up to the point where export_warm_start() itself
+        // still refuses "nothing to export" via std::logic_error. Guard it
+        // here so that refusal cannot destroy an otherwise-good StageOutput.
+        try {
+            out.warm_ = driver.export_warm_start();
+        } catch (const std::logic_error &) {
+            report.engine_notes_["warm_export"] =
+                "no warm start captured: export_warm_start() reports nothing completed on "
+                "this instance; warm_ is left at its default (empty) value.";
+        }
     }
 }
 
 void fill_ipopt_stage(StageOutput &out, IpoptSolver &engine, Mode mode,
                       const std::shared_ptr<NonLinearProgram> &nlp, const Eigen::VectorXd &x0,
                       const hven::solvers::WarmStartData *warm) {
+    if (mode == Mode::Feasible) {
+        // ipopt_backend::solve ignores its mode parameter outright -- every
+        // mode runs the one NLP solve -- so silently mapping Mode::Feasible
+        // onto it would hand back a full optimality solve labelled as a
+        // feasibility stage, with nothing in flag_/the annex/the notes saying
+        // so. Refuse by name instead, the same shape as the SQP engine's
+        // refusal, checked first, before nlp/x0 are touched.
+        throw std::invalid_argument(
+            "the Ipopt backend has no feasibility-only mode; use the interior-point engine "
+            "for mode=Feasible");
+    }
     if (!nlp) {
         throw std::invalid_argument("run_engine_stage: NonLinearProgram pointer must not be null");
     }
@@ -583,11 +755,12 @@ void fill_ipopt_stage(StageOutput &out, IpoptSolver &engine, Mode mode,
     Eigen::VectorXd start =
         (warm != nullptr && warm->primal_.size() == x0.size()) ? warm->primal_ : x0;
 
-    const BackendProblemBase::JetJobModes backend_mode =
-        (mode == Mode::Optimal) ? BackendProblemBase::JetJobModes::Optimize
-                                : BackendProblemBase::JetJobModes::Solve;
-
-    BackendProblemBase::NlpSolveOutput result = ipopt_backend::solve(shim, backend_mode, start);
+    // mode == Mode::Optimal here, unconditionally: Mode::Feasible already
+    // refused above, before this point, and Mode has no third value.
+    // ipopt_backend::solve ignores this parameter regardless (its own
+    // (void)mode), but Optimize is the honest label for the one solve it runs.
+    BackendProblemBase::NlpSolveOutput result =
+        ipopt_backend::solve(shim, BackendProblemBase::JetJobModes::Optimize, start);
 
     out.flag_ = result.flag_;
     out.primal_ = result.variables_;
@@ -603,13 +776,23 @@ void fill_ipopt_stage(StageOutput &out, IpoptSolver &engine, Mode mode,
     report.iterations_ = info.iterations_;
     report.objective_ = info.objective_;
     report.wall_time_s_ = info.wall_time_s_;
+    // hven's cross-engine contract: NaN means UNMEASURED, never "zero
+    // residual" (interior_point_solver.h's terminal-KKT-residual note). This
+    // adapter has no stationarity measurement at all, and only one combined
+    // constraint_violation rather than a declared-space eq/iq split, so all
+    // three ride NaN rather than the StageResult default of 0.0, which would
+    // read as a converged-to-machine-precision residual.
+    report.kkt_residual_ = std::numeric_limits<double>::quiet_NaN();
+    report.eq_violation_ = std::numeric_limits<double>::quiet_NaN();
+    report.iq_violation_ = std::numeric_limits<double>::quiet_NaN();
     report.engine_details_["constraint_violation"] = info.constraint_violation_;
     report.engine_notes_["status"] = info.status_;
     report.engine_notes_["normalized"] = info.normalized_;
     report.engine_notes_["residuals"] =
-        "Ipopt reports one combined constraint_violation (engine_details_), not separate "
-        "eq_violation_/iq_violation_ or eq_cons_/iq_cons_ vectors, and no bound multipliers; "
-        "those fields are left at their default here.";
+        "Ipopt reports one combined constraint_violation (engine_details_) and no "
+        "stationarity measurement at all, so kkt_residual_/eq_violation_/iq_violation_ are "
+        "set to NaN (unmeasured) rather than left at their 0.0 default; eq_cons_/iq_cons_ and "
+        "bound multipliers are also unavailable and left empty.";
     report.engine_notes_["tolerance_baseline"] =
         "Ipopt's matched-tolerance baseline (tol, constr_viol_tol, acceptable_tol, "
         "acceptable_constr_viol_tol, max_iter) is read from a default-constructed "
