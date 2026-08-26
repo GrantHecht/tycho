@@ -113,7 +113,7 @@ std::unique_ptr<OptimizationProblem> solve_pipeline_build_make_constraint_nlp() 
 // Used only by PhaseResultIsSnapshotNotView below, to prove
 // fill_phase_results() copied its slices out rather than aliasing back into
 // this phase's own mutable state.
-struct PhaseResultSnapshotTestPhase : ODEPhase<TychoTest::LinearODE> {
+struct SolvePipelinePhaseResultSnapshotPhase : ODEPhase<TychoTest::LinearODE> {
     using ODEPhase<TychoTest::LinearODE>::ODEPhase;
     void clobber_eq_lmults_for_test() {
         this->active_eq_lmults_ =
@@ -121,11 +121,11 @@ struct PhaseResultSnapshotTestPhase : ODEPhase<TychoTest::LinearODE> {
     }
 };
 
-// Builds a PhaseResultSnapshotTestPhase with the exact same linear-dynamics
+// Builds a SolvePipelinePhaseResultSnapshotPhase with the exact same linear-dynamics
 // setup as TychoTest::make_linear_phase() (x0=0, v0=1, t in [0, 1], 2
 // defects) -- duplicated rather than reused because make_linear_phase()
 // returns the plain ODEPhase<LinearODE> type, not this test-local subclass.
-std::shared_ptr<PhaseResultSnapshotTestPhase> make_snapshot_test_phase() {
+std::shared_ptr<SolvePipelinePhaseResultSnapshotPhase> solve_pipeline_make_snapshot_phase() {
     constexpr double x0 = 0.0, v0 = 1.0, t0 = 0.0, tf = 1.0;
     constexpr int n_pts = 5;
 
@@ -142,7 +142,8 @@ std::shared_ptr<PhaseResultSnapshotTestPhase> make_snapshot_test_phase() {
     }
 
     TychoTest::LinearODE ode;
-    auto phase = std::make_shared<PhaseResultSnapshotTestPhase>(ode, TranscriptionModes::LGL3, traj,
+    auto phase =
+        std::make_shared<SolvePipelinePhaseResultSnapshotPhase>(ode, TranscriptionModes::LGL3, traj,
                                                                 /*nsegs=*/2);
 
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(3, 0, 2);
@@ -595,7 +596,7 @@ TEST(SolvePipeline, AdaptiveMeshRefinesThroughNewSolvePipeline) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Per-phase result slices (M5 solve-API): fill_phase_results() on
+// Per-phase result slices: fill_phase_results() on
 // ODEPhaseBase (one PhaseResult, index 0, spanning the whole declared
 // problem) and OptimalControlProblemBase (one per phase, index-keyed,
 // reusing the OCP's own per-phase offset bookkeeping), plus the snapshot
@@ -632,17 +633,67 @@ TEST(SolvePipeline, SinglePhaseSolveHasExactlyOnePhaseResult) {
 }
 
 TEST(SolvePipeline, MultiPhaseSlicesTileTheWholeSpace) {
-    // Two independent LinearODE phases, no link constraints/params -- so the
-    // two phases own the ENTIRETY of the transcribed problem and their
-    // slices must tile it exactly.
+    // A genuinely heterogeneous 2-phase OCP: different mesh sizes (so the
+    // two phases' ranges differ in WIDTH, not just position -- a same-size
+    // pair cannot catch an offset bug that slices both phases from 0), a
+    // real objective (delta time, from make_brach_phase), the control's
+    // native box turned into an inequality-constraint pair at every path
+    // node (control_bound_as_inequality=true), plus one more deterministic
+    // inequality and one more deterministic variable bound per phase.
+    //
+    // The inequality is a hard pin (two rows forming an equality) on the
+    // Front control, at an arbitrary constant strictly inside the outer
+    // [-0.1, 2.0] box -- a pin away from the true unconstrained optimum
+    // forces a genuinely nonzero multiplier there (the same mechanism
+    // solve_pipeline_build_make_constraint_nlp above already relies on).
+    //
+    // The bound is the SAME pin mechanism applied at the Back control
+    // instead, via a fixed (lower==upper) native variable bound -- but the
+    // default MakeParameter fixed-variable treatment ELIMINATES a fixed
+    // variable from the reduced problem entirely (non_linear_program.h),
+    // which zero-fills its bound multiplier by construction regardless of
+    // how "away from the optimum" the pin is. RelaxBounds keeps it a
+    // genuine two-sided bounded variable instead, so its z is real; the
+    // solving ENGINE's own settings are what matter here (not either
+    // phase's own optimizer_, which the EngineRef-based solve() below never
+    // touches).
+    //
+    // Together this guarantees eq_lmults_/iq_lmults_/bound_lmults_ are all
+    // nonzero and phase-distinct, rather than vacuously all-zero.
+    auto phase0 =
+        TychoTest::make_brach_phase(/*n_pts=*/50, /*n_defects=*/6, TranscriptionModes::LGL3,
+                                    /*control_bound_as_inequality=*/true);
+    auto phase1 =
+        TychoTest::make_brach_phase(/*n_pts=*/50, /*n_defects=*/8, TranscriptionModes::LGL3,
+                                    /*control_bound_as_inequality=*/true);
+
+    Eigen::VectorXi theta_idx(1);
+    theta_idx << 4;
+    {
+        auto args = Arguments<1>();
+        auto theta = args.coeff<0>();
+        phase0->add_inequal_con(PhaseRegionFlags::Front, StackedOutputs{1.5 - theta, theta - 1.5},
+                                theta_idx, ScaleModes::AUTO);
+    }
+    {
+        auto args = Arguments<1>();
+        auto theta = args.coeff<0>();
+        phase1->add_inequal_con(PhaseRegionFlags::Front, StackedOutputs{1.0 - theta, theta - 1.0},
+                                theta_idx, ScaleModes::AUTO);
+    }
+    phase0->add_lu_var_bound(PhaseRegionFlags::Back, 4, 0.8, 0.8);
+    phase1->add_lu_var_bound(PhaseRegionFlags::Back, 4, 0.3, 0.3);
+
     OptimalControlProblemBase ocp;
-    ocp.add_phase(TychoTest::make_linear_phase());
-    ocp.add_phase(TychoTest::make_linear_phase());
+    ocp.add_phase(phase0);
+    ocp.add_phase(phase1);
     ocp.optimizer_->set_print_level(0);
 
     InteriorPointSolver ipm;
+    ipm.settings().fixed_variable_treatment_ = FixedVariableTreatments::RelaxBounds;
     EngineRef ref = &ipm;
     SolveResult result = ocp.solve(ref);
+    EXPECT_TRUE(result.converged());
 
     ASSERT_EQ(result.phases_.size(), 2u);
     const PhaseResult &p0 = result.phases_[0];
@@ -651,7 +702,10 @@ TEST(SolvePipeline, MultiPhaseSlicesTileTheWholeSpace) {
     EXPECT_EQ(p0.index_, 0);
     EXPECT_EQ(p1.index_, 1);
 
-    // Ranges are disjoint and cover the whole declared space exactly.
+    // Ranges are disjoint and cover the whole declared space exactly. The
+    // two phases have different mesh sizes, so this also pins that the
+    // offsets track each phase's OWN width, not a shared/guessed one.
+    EXPECT_NE(p0.var_count_, p1.var_count_);
     EXPECT_EQ(p0.var_start_, 0);
     EXPECT_EQ(p1.var_start_, p0.var_count_);
     EXPECT_EQ(p0.var_count_ + p1.var_count_, result.warm_.primal_.size());
@@ -664,30 +718,44 @@ TEST(SolvePipeline, MultiPhaseSlicesTileTheWholeSpace) {
     EXPECT_EQ(p1.iq_start_, p0.iq_count_);
     EXPECT_EQ(p0.iq_count_ + p1.iq_count_, result.warm_.iq_lmults_.size());
 
-    // Concatenating the slices reproduces the full declared-space vectors
-    // exactly.
+    // Guard on the fixture itself: none of the three declared-space blocks
+    // is vacuously all-zero. A zero vector would make the concatenation
+    // checks below pass under any slicing bug, including "both phases slice
+    // from offset 0" -- the exact failure mode this test exists to catch.
     ASSERT_GT(result.warm_.eq_lmults_.size(), 0);
+    ASSERT_GT(result.warm_.iq_lmults_.size(), 0);
+    ASSERT_GT(result.warm_.bound_lmults_.size(), 0);
+    EXPECT_FALSE((result.warm_.eq_lmults_.array() == 0.0).all());
+    EXPECT_FALSE((result.warm_.iq_lmults_.array() == 0.0).all());
+    EXPECT_FALSE((result.warm_.bound_lmults_.array() == 0.0).all());
+
+    // Each phase's OWN slice carries genuine nonzero content too -- not just
+    // the union of the two.
+    EXPECT_FALSE((p0.eq_lmults_.array() == 0.0).all());
+    EXPECT_FALSE((p1.eq_lmults_.array() == 0.0).all());
+    EXPECT_FALSE((p0.iq_lmults_.array() == 0.0).all());
+    EXPECT_FALSE((p1.iq_lmults_.array() == 0.0).all());
+    EXPECT_FALSE((p0.bound_lmults_.array() == 0.0).all());
+    EXPECT_FALSE((p1.bound_lmults_.array() == 0.0).all());
+
+    // Concatenating the slices reproduces the full declared-space vectors
+    // exactly, unconditionally on all three blocks (each is non-empty per
+    // the fixture guard above).
     Eigen::VectorXd eq_cat(result.warm_.eq_lmults_.size());
     eq_cat << p0.eq_lmults_, p1.eq_lmults_;
     EXPECT_TRUE((eq_cat.array() == result.warm_.eq_lmults_.array()).all());
 
-    if (result.warm_.iq_lmults_.size() > 0) {
-        Eigen::VectorXd iq_cat(result.warm_.iq_lmults_.size());
-        iq_cat << p0.iq_lmults_, p1.iq_lmults_;
-        EXPECT_TRUE((iq_cat.array() == result.warm_.iq_lmults_.array()).all());
-    } else {
-        EXPECT_EQ(p0.iq_lmults_.size(), 0);
-        EXPECT_EQ(p1.iq_lmults_.size(), 0);
-    }
+    Eigen::VectorXd iq_cat(result.warm_.iq_lmults_.size());
+    iq_cat << p0.iq_lmults_, p1.iq_lmults_;
+    EXPECT_TRUE((iq_cat.array() == result.warm_.iq_lmults_.array()).all());
 
-    ASSERT_GT(result.warm_.bound_lmults_.size(), 0);
     Eigen::VectorXd bound_cat(result.warm_.bound_lmults_.size());
     bound_cat << p0.bound_lmults_, p1.bound_lmults_;
     EXPECT_TRUE((bound_cat.array() == result.warm_.bound_lmults_.array()).all());
 }
 
 TEST(SolvePipeline, PhaseResultIsSnapshotNotView) {
-    auto phase = make_snapshot_test_phase();
+    auto phase = solve_pipeline_make_snapshot_phase();
     phase->optimizer_->set_print_level(0);
 
     InteriorPointSolver ipm;

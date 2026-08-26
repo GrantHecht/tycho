@@ -1974,23 +1974,35 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
 
     /// @brief solve() hook: a single Phase IS the whole declared problem, so
     ///        this appends exactly one @ref PhaseResult (index 0), spanning
-    ///        the full declared space. The slices are copied out of
-    ///        `r.warm_` -- the final stage's own declared-space export,
-    ///        already sized to the full primal/equality/inequality spaces by
-    ///        the time solve() calls this hook -- so every field is a value
-    ///        snapshot, never a view into this phase's own post-solve state.
+    ///        the full declared space. Ranges come from this phase's own
+    ///        `indexer_` (the declared-space counts `transcribe_phase` hands
+    ///        to `declaration.lay()`), never from `r.warm_`'s block sizes --
+    ///        those describe whatever the deciding engine happened to
+    ///        export, not the declaration. The multiplier slices are then
+    ///        copied out of `r.warm_` when it is big enough to hold them, so
+    ///        every field is a value snapshot, never a view into this
+    ///        phase's own post-solve state; when the deciding stage's engine
+    ///        exported no warm payload (or a short one -- run_engine_stage
+    ///        documents this as possible), the corresponding slice is left
+    ///        empty rather than reading past the export's own size.
     void fill_phase_results(SolveResult &r) const override {
         PhaseResult pr;
         pr.index_ = 0;
         pr.var_start_ = 0;
-        pr.var_count_ = static_cast<int>(r.warm_.primal_.size());
+        pr.var_count_ = this->indexer_.num_phase_vars_;
         pr.eq_start_ = 0;
-        pr.eq_count_ = static_cast<int>(r.warm_.eq_lmults_.size());
+        pr.eq_count_ = this->indexer_.num_phase_eq_cons_;
         pr.iq_start_ = 0;
-        pr.iq_count_ = static_cast<int>(r.warm_.iq_lmults_.size());
-        pr.eq_lmults_ = r.warm_.eq_lmults_;
-        pr.iq_lmults_ = r.warm_.iq_lmults_;
-        pr.bound_lmults_ = r.warm_.bound_lmults_;
+        pr.iq_count_ = this->indexer_.num_phase_iq_cons_;
+        if (r.warm_.eq_lmults_.size() >= pr.eq_start_ + pr.eq_count_) {
+            pr.eq_lmults_ = r.warm_.eq_lmults_.segment(pr.eq_start_, pr.eq_count_);
+        }
+        if (r.warm_.iq_lmults_.size() >= pr.iq_start_ + pr.iq_count_) {
+            pr.iq_lmults_ = r.warm_.iq_lmults_.segment(pr.iq_start_, pr.iq_count_);
+        }
+        if (r.warm_.bound_lmults_.size() >= pr.var_start_ + pr.var_count_) {
+            pr.bound_lmults_ = r.warm_.bound_lmults_.segment(pr.var_start_, pr.var_count_);
+        }
         r.phases_.push_back(std::move(pr));
     }
 
