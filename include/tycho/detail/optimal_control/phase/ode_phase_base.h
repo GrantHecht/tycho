@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "tycho/detail/hven_namespaces.h"
 #include "tycho/detail/optimal_control/core/interface_types.h"
 #include "tycho/detail/optimal_control/core/ode_sizes.h"
 #include "tycho/detail/optimal_control/core/optimal_control_flags.h"
@@ -21,16 +22,15 @@
 #include "tycho/detail/optimal_control/phase/mesh_iterate_info.h"
 #include "tycho/detail/optimal_control/phase/phase_indexer.h"
 #include "tycho/detail/optimal_control/transcription/lgl_interp_table.h"
-#include "tycho/detail/hven_namespaces.h"
-#include <hven/model/non_linear_program.h>
 #include "tycho/detail/solvers/nlp_backend.h"
-#include <hven/drivers/interior_point_solver.h>
 #include "tycho/detail/vf/scaling/io_scaled.h"
 #include "tycho/vector_functions.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <functional>
+#include <hven/drivers/interior_point_solver.h>
+#include <hven/model/non_linear_program.h>
 #include <iostream>
 #include <numeric>
 #include <stdexcept>
@@ -69,9 +69,14 @@ using vf::VectorExpression;
 using vf::VectorFunction;
 
 // Solvers types
-using tycho::solvers::NonLinearProgram;
 using tycho::solvers::BackendProblemBase;
+using tycho::solvers::EngineRef;
 using tycho::solvers::InteriorPointSolver;
+using tycho::solvers::Mode;
+using tycho::solvers::NonLinearProgram;
+using tycho::solvers::SolveOptions;
+using tycho::solvers::SolveResult;
+using tycho::solvers::StageOutput;
 
 /// @internal
 /// @brief Forward declaration of the multi-phase problem base (friend of @ref ODEPhaseBase).
@@ -211,12 +216,12 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
 
     double mesh_tol_ = 1.0e-6; ///< Target mesh-error tolerance.
 
-    MeshErrorEstimators mesh_error_estimator_ = MeshErrorEstimators::DEBOOR; ///< Mesh-error
-                                                                             ///< estimator.
-    MeshErrorAggregation mesh_error_criteria_ = MeshErrorAggregation::MAX; ///< Convergence
-                                                                          ///< aggregation.
+    MeshErrorEstimators mesh_error_estimator_ = MeshErrorEstimators::DEBOOR;  ///< Mesh-error
+                                                                              ///< estimator.
+    MeshErrorAggregation mesh_error_criteria_ = MeshErrorAggregation::MAX;    ///< Convergence
+                                                                              ///< aggregation.
     MeshErrorAggregation mesh_error_distributor_ = MeshErrorAggregation::AVG; ///< Distribution
-                                                                             ///< aggregation.
+                                                                              ///< aggregation.
     tycho::ConvergenceFlags mesh_abort_flag_ =
         tycho::ConvergenceFlags::DIVERGING; ///< Solver flag that aborts the mesh loop.
 
@@ -1712,10 +1717,10 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
         case PhaseRegionFlags::NodalPath: {
             int isize = func.xtu_vars_.size() + func.op_vars_.size() + func.sp_vars_.size();
             if (irows != isize) {
-                throw std::invalid_argument(fmt::format(
-                    "Input size of {0:} (IRows = {1:}) does not match that implied by "
-                    "indexing parameters (IRows = {2:}).",
-                    ftype, irows, isize));
+                throw std::invalid_argument(
+                    fmt::format("Input size of {0:} (IRows = {1:}) does not match that implied by "
+                                "indexing parameters (IRows = {2:}).",
+                                ftype, irows, isize));
             }
             break;
         }
@@ -1724,10 +1729,10 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
         case PhaseRegionFlags::PairWisePath: {
             int isize = func.xtu_vars_.size() * 2 + func.op_vars_.size() + func.sp_vars_.size();
             if (irows != isize) {
-                throw std::invalid_argument(fmt::format(
-                    "Input size of {0:} (IRows = {1:}) does not match that implied by "
-                    "indexing parameters (IRows = {2:}).",
-                    ftype, irows, isize));
+                throw std::invalid_argument(
+                    fmt::format("Input size of {0:} (IRows = {1:}) does not match that implied by "
+                                "indexing parameters (IRows = {2:}).",
+                                ftype, irows, isize));
             }
             break;
         }
@@ -1933,6 +1938,47 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
     /// @endinternal
     tycho::ConvergenceFlags phase_call_impl(JetJobModes mode);
 
+    // -------------------------------------------------------------------
+    // M5 solve() hooks (nlp_backend.h). The old surface above
+    // (solve()/optimize()/.../phase_call_impl) is untouched and stays
+    // primary for this class; these are the override set the new
+    // BackendProblemBase::solve() pipeline dispatches through.
+    // -------------------------------------------------------------------
+
+    /// @brief M5 solve() hook: transcribe if needed.
+    void prepare_solve() override {
+        if (this->do_transcription_)
+            this->transcribe();
+    }
+
+    /// @brief M5 solve() hook: the packed decision-variable vector
+    ///        (make_solver_input(), same input interior_point_call_impl seeds
+    ///        the engine with).
+    Eigen::VectorXd initial_primal() const override { return this->make_solver_input(); }
+
+    /// @brief M5 solve() hook: write a stage's output back the same way
+    ///        interior_point_call_impl does -- full post-opt residuals when
+    ///        the engine reported them (StageOutput::eq_cons_/iq_cons_
+    ///        non-empty; today only the interior-point engine does), else
+    ///        multipliers only.
+    void accept_stage(const StageOutput &out) override {
+        this->collect_solver_output(out.primal_);
+        if (out.eq_cons_.size() > 0 || out.iq_cons_.size() > 0) {
+            this->collect_post_opt_info(out.eq_cons_, out.eq_lmults_, out.iq_cons_, out.iq_lmults_);
+        } else {
+            this->collect_solver_multipliers(out.eq_lmults_, out.iq_lmults_);
+            this->invalidate_post_opt_info();
+        }
+    }
+
+    /// @brief M5 solve() hook: mirrors the old adaptive_mesh_ gate.
+    bool adaptive_mesh_enabled() const override { return this->adaptive_mesh_; }
+
+    /// @brief M5 solve() hook: the adaptive-mesh loop, reshaped from
+    ///        phase_call_impl/interior_point_call_impl onto run_engine_stage.
+    ///        Defined in ode_phase_base.cpp.
+    tycho::ConvergenceFlags run_adaptive_mesh(EngineRef engine, Mode mode, SolveResult &r) override;
+
   public:
     /// @brief Transcribe the phase into its NLP, optionally printing diagnostics.
     /// @param showstats  Whether to print problem-size statistics.
@@ -1986,9 +2032,7 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
     tycho::ConvergenceFlags optimize() { return phase_call_impl(JetJobModes::Optimize); }
     /// @brief Solve for feasibility, then optimize.
     /// @return The solver convergence flag.
-    tycho::ConvergenceFlags solve_optimize() {
-        return phase_call_impl(JetJobModes::SolveOptimize);
-    }
+    tycho::ConvergenceFlags solve_optimize() { return phase_call_impl(JetJobModes::SolveOptimize); }
     /// @brief Solve, optimize, then solve again to tighten feasibility.
     /// @return The solver convergence flag.
     tycho::ConvergenceFlags solve_optimize_solve() {
@@ -1996,9 +2040,11 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
     }
     /// @brief Optimize, then solve to tighten feasibility.
     /// @return The solver convergence flag.
-    tycho::ConvergenceFlags optimize_solve() {
-        return phase_call_impl(JetJobModes::OptimizeSolve);
-    }
+    tycho::ConvergenceFlags optimize_solve() { return phase_call_impl(JetJobModes::OptimizeSolve); }
+
+    // BackendProblemBase's new solve(EngineRef, SolveOptions) overload (M5)
+    // is otherwise hidden by the 0-arg solve() override above.
+    using BackendProblemBase::solve;
 
     /////////////////////////////////////////////////////////////////
 

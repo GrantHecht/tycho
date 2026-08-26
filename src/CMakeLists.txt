@@ -88,6 +88,7 @@ add_library(solvers_vf STATIC
     solvers/transcription_declaration.cpp
     solvers/transcribed_aggregate.cpp
     solvers/engines.cpp
+    solvers/solve_pipeline.cpp
 )
 
 # Alternative NLP solver backend. Exactly one of the two implementations of the

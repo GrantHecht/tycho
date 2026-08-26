@@ -29,6 +29,8 @@ using tycho::solvers::IpoptSolver;
 using tycho::solvers::Mode;
 using tycho::solvers::NonLinearProgram;
 using tycho::solvers::OptimizationProblem;
+using tycho::solvers::SolveOptions;
+using tycho::solvers::SolveResult;
 using tycho::solvers::SqpSolver;
 using tycho::solvers::StageOutput;
 
@@ -249,4 +251,226 @@ TEST(SolvePipeline, SqpOptimalActiveInequalityConverges) {
     ASSERT_EQ(out.iq_lmults_.size(), 1);
     EXPECT_NEAR(out.iq_lmults_[0], 4.0, 1e-3);
     EXPECT_GE(out.iq_lmults_[0], 0.0);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// The staged solve() pipeline on BackendProblemBase (M5 Task 4): the refusal
+// matrix, presolve/main/polish stage sequencing, the warm-start stamp
+// pre-check, the per-engine concurrency latch, and last_result() caching.
+// Exercised entirely against the VF problem (OptimizationProblem) --
+// Phase/OCP get the same hooks, but their own ctest slices (run through the
+// OLD, untouched surface) are the coverage for those two.
+///////////////////////////////////////////////////////////////////////////////
+
+TEST(SolvePipeline, RefusalMatrixNamesBothParts) {
+    auto prob = solve_pipeline_build_tiny_nlp();
+    InteriorPointSolver main_engine;
+    InteriorPointSolver polish_engine;
+    EngineRef main_ref = &main_engine;
+    EngineRef polish_ref = &polish_engine;
+
+    // Row 1: polish= paired with mode=Feasible.
+    {
+        SolveOptions opts;
+        opts.mode = Mode::Feasible;
+        opts.polish = &polish_ref;
+        try {
+            prob->solve(main_ref, opts);
+            FAIL() << "expected std::invalid_argument";
+        } catch (const std::invalid_argument &e) {
+            EXPECT_STREQ(e.what(),
+                         "polish= is an optimality refinement; it cannot follow mode=Feasible");
+        }
+    }
+    // Row 2a: presolve=true paired with mode=Feasible.
+    {
+        SolveOptions opts;
+        opts.mode = Mode::Feasible;
+        opts.presolve = true;
+        try {
+            prob->solve(main_ref, opts);
+            FAIL() << "expected std::invalid_argument";
+        } catch (const std::invalid_argument &e) {
+            EXPECT_STREQ(e.what(),
+                         "presolve= runs a feasibility stage; mode=Feasible already is one");
+        }
+    }
+    // Row 2b: presolve_engine= (without presolve=true) paired with
+    // mode=Feasible -- the same refusal, not the "implies presolve" path.
+    {
+        SolveOptions opts;
+        opts.mode = Mode::Feasible;
+        opts.presolve_engine = &polish_ref;
+        try {
+            prob->solve(main_ref, opts);
+            FAIL() << "expected std::invalid_argument";
+        } catch (const std::invalid_argument &e) {
+            EXPECT_STREQ(e.what(),
+                         "presolve= runs a feasibility stage; mode=Feasible already is one");
+        }
+    }
+}
+
+TEST(SolvePipeline, StagesRunInOrderAndAllReport) {
+    auto prob = solve_pipeline_build_tiny_nlp();
+    InteriorPointSolver main_engine;
+    InteriorPointSolver polish_engine;
+    EngineRef main_ref = &main_engine;
+    EngineRef polish_ref = &polish_engine;
+
+    SolveOptions opts;
+    opts.mode = Mode::Optimal;
+    opts.presolve = true;
+    opts.polish = &polish_ref;
+
+    SolveResult result = prob->solve(main_ref, opts);
+
+    ASSERT_EQ(result.stages_.size(), 3u);
+    EXPECT_EQ(result.stages_[0].role_, "presolve");
+    EXPECT_EQ(result.stages_[1].role_, "main");
+    EXPECT_EQ(result.stages_[2].role_, "polish");
+    EXPECT_TRUE(result.converged());
+    EXPECT_NEAR(prob->active_variables_[0], 1.0, 1e-6);
+}
+
+TEST(SolvePipeline, NonConvergenceIsAValueNotAThrow) {
+    // The active-inequality fixture: an interior-point method needs several
+    // barrier-continuation iterations to drive complementarity down even on
+    // a tiny problem, so capping at one iteration reliably leaves it short.
+    auto prob = solve_pipeline_build_inequality_nlp();
+    InteriorPointSolver ipm;
+    ipm.settings().max_iters_ = 1;
+    EngineRef ref = &ipm;
+
+    SolveResult result;
+    ASSERT_NO_THROW(result = prob->solve(ref));
+    EXPECT_EQ(result.flag_, tycho::ConvergenceFlags::NOTCONVERGED);
+    ASSERT_FALSE(result.stages_.empty());
+    EXPECT_FALSE(result.converged());
+}
+
+TEST(SolvePipeline, WarmStampMismatchRefusesNamingBothKeys) {
+    // prob A: one variable, one equality row.
+    auto prob_a = solve_pipeline_build_tiny_nlp();
+    InteriorPointSolver engine_a;
+    EngineRef ref_a = &engine_a;
+    SolveResult result_a = prob_a->solve(ref_a);
+    ASSERT_TRUE(result_a.converged());
+
+    // prob B: one variable, one INEQUALITY row -- a differently-shaped
+    // declaration, so its DeclarationKey differs from prob A's.
+    auto prob_b = solve_pipeline_build_inequality_nlp();
+    InteriorPointSolver engine_b;
+    EngineRef ref_b = &engine_b;
+
+    SolveOptions opts;
+    opts.warm = &result_a.warm_;
+
+    try {
+        prob_b->solve(ref_b, opts);
+        FAIL() << "expected std::invalid_argument";
+    } catch (const std::invalid_argument &e) {
+        const std::string what = e.what();
+        EXPECT_NE(what.find("does not match"), std::string::npos);
+        // Names both keys: two distinct "digest=" occurrences.
+        const std::size_t first = what.find("digest=");
+        ASSERT_NE(first, std::string::npos);
+        const std::size_t second = what.find("digest=", first + 1);
+        EXPECT_NE(second, std::string::npos);
+    }
+}
+
+TEST(SolvePipeline, WarmSeededSolveMatchesStagedEngineRun) {
+    // Source run: an ordinary solve, whose exported warm currency seeds the
+    // comparison below.
+    auto prob_source = solve_pipeline_build_tiny_nlp();
+    InteriorPointSolver source_engine;
+    EngineRef source_ref = &source_engine;
+    SolveResult source_result = prob_source->solve(source_ref);
+    ASSERT_TRUE(source_result.converged());
+
+    // Pipeline path: a fresh problem/engine pair, warm-seeded through
+    // solve()'s opts.warm.
+    auto prob_pipeline = solve_pipeline_build_tiny_nlp();
+    prob_pipeline->transcribe();
+    InteriorPointSolver pipeline_engine;
+    EngineRef pipeline_ref = &pipeline_engine;
+    SolveOptions opts;
+    opts.warm = &source_result.warm_;
+    SolveResult pipeline_result = prob_pipeline->solve(pipeline_ref, opts);
+
+    // Manual path: a fresh problem/engine pair, driven directly through
+    // stage_warm_start + optimize -- the same two calls
+    // run_engine_stage/fill_ipm_stage makes internally.
+    auto prob_manual = solve_pipeline_build_tiny_nlp();
+    prob_manual->transcribe();
+    InteriorPointSolver manual_engine;
+    manual_engine.set_nlp(prob_manual->nlp_);
+    manual_engine.stage_warm_start(source_result.warm_);
+    const Eigen::VectorXd x0 = prob_manual->active_variables_;
+    const Eigen::VectorXd manual_primal = manual_engine.optimize(x0);
+
+    ASSERT_EQ(pipeline_result.stages_.size(), 1u);
+    EXPECT_EQ(pipeline_result.flag_, manual_engine.result().converge_flag_);
+    EXPECT_NEAR(pipeline_result.stages_.back().objective_, manual_engine.result().obj_val_, 1e-12);
+    ASSERT_EQ(prob_pipeline->active_variables_.size(), manual_primal.size());
+    for (int i = 0; i < manual_primal.size(); ++i) {
+        EXPECT_NEAR(prob_pipeline->active_variables_[i], manual_primal[i], 1e-12);
+    }
+}
+
+TEST(SolvePipeline, ConcurrentEngineUseRefuses) {
+    // A reentrant solve() call on the SAME engine, made from inside the
+    // outer call's own accept_stage() hook -- deterministic and
+    // single-threaded, unlike a real concurrent-thread race, but it exercises
+    // exactly what the latch defends against: the same engine identity
+    // inside two overlapping solve() calls at once (the outer call's
+    // latches are still held; it has not returned yet).
+    class ReentrantProblem : public OptimizationProblem {
+      public:
+        EngineRef *reentry_engine_ = nullptr;
+
+      protected:
+        void accept_stage(const StageOutput &out) override {
+            OptimizationProblem::accept_stage(out);
+            if (this->reentry_engine_ != nullptr) {
+                EngineRef *saved = this->reentry_engine_;
+                this->reentry_engine_ = nullptr;
+                EXPECT_THROW(this->solve(*saved), std::invalid_argument);
+            }
+        }
+    };
+
+    using tycho::vf::Arguments;
+    using tycho::vf::GenericFunction;
+
+    ReentrantProblem prob;
+    prob.set_vars(Eigen::VectorXd::Constant(1, 0.0));
+    {
+        auto args = Arguments<1>();
+        auto x = args.coeff<0>();
+        prob.add_objective(GenericFunction<-1, 1>(x * x), (Eigen::VectorXi(1) << 0).finished());
+        prob.add_equal_con(GenericFunction<-1, -1>(x - 1.0), (Eigen::VectorXi(1) << 0).finished());
+    }
+
+    InteriorPointSolver ipm;
+    EngineRef ref = &ipm;
+    prob.reentry_engine_ = &ref;
+
+    SolveResult result = prob.solve(ref);
+    EXPECT_TRUE(result.converged());
+}
+
+TEST(SolvePipeline, LastResultCachesTheReturn) {
+    auto prob = solve_pipeline_build_tiny_nlp();
+    EXPECT_THROW(prob->last_result(), std::logic_error);
+
+    InteriorPointSolver ipm;
+    EngineRef ref = &ipm;
+    SolveResult result = prob->solve(ref);
+
+    const SolveResult &cached = prob->last_result();
+    EXPECT_EQ(cached.flag_, result.flag_);
+    ASSERT_EQ(cached.stages_.size(), result.stages_.size());
+    EXPECT_EQ(cached.stages_.back().objective_, result.stages_.back().objective_);
 }

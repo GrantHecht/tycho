@@ -36,8 +36,15 @@
 #include <hven/warmstart/warm_start_data.h>
 
 #include "tycho/detail/hven_namespaces.h"
-#include "tycho/detail/solvers/nlp_backend.h"
 #include "tycho/detail/solvers/solve_types.h"
+
+// Deliberately NOT including nlp_backend.h: BackendProblemBase's new solve()
+// pipeline (M5 Task 4) needs EngineRef/StageOutput from THIS header, so the
+// dependency runs nlp_backend.h -> engines.h. Including it back here would
+// make the pair circular; nothing declared in this header actually needs
+// BackendProblemBase (a stray include from before that pipeline existed), so
+// dropping it here is what breaks the cycle. Translation units that need both
+// (e.g. engines.cpp's IpoptShimProblem) include nlp_backend.h directly.
 
 namespace tycho::solvers {
 

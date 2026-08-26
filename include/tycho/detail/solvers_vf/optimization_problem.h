@@ -26,11 +26,11 @@
 #include <fmt/format.h>
 
 #include "tycho/detail/hven_namespaces.h"
-#include <hven/model/non_linear_program.h>
 #include "tycho/detail/solvers/nlp_backend.h"
 #include "tycho/detail/solvers_vf/transcribed_aggregate.h"
-#include <hven/drivers/interior_point_solver.h>
 #include "tycho/vector_functions.h"
+#include <hven/drivers/interior_point_solver.h>
+#include <hven/model/non_linear_program.h>
 
 namespace tycho::solvers {
 
@@ -88,10 +88,10 @@ struct OptimizationProblem : BackendProblemBase {
         for (auto &index : func.indices_) {
             int isize = index.size();
             if (irows != isize) {
-                throw std::invalid_argument(fmt::format(
-                    "Input size of {0:} (IRows = {1:}) does not match that implied by "
-                    "indexing parameters (IRows = {2:}).",
-                    ftype, irows, isize));
+                throw std::invalid_argument(
+                    fmt::format("Input size of {0:} (IRows = {1:}) does not match that implied by "
+                                "indexing parameters (IRows = {2:}).",
+                                ftype, irows, isize));
             }
         }
     }
@@ -113,8 +113,8 @@ struct OptimizationProblem : BackendProblemBase {
     ///         NaN, or if the two finite sides are inverted.
     void add_variable_bound(int index, double lower, double upper) {
         if (index < 0) {
-            throw std::invalid_argument(fmt::format(
-                "add_variable_bound: variable index {0} is negative", index));
+            throw std::invalid_argument(
+                fmt::format("add_variable_bound: variable index {0} is negative", index));
         }
         if (std::isnan(lower) || std::isnan(upper)) {
             throw std::invalid_argument(
@@ -264,6 +264,30 @@ struct OptimizationProblem : BackendProblemBase {
         this->active_eq_lmults_ = out.eq_lmults_;
         this->active_iq_lmults_ = out.iq_lmults_;
         return out.flag_;
+    }
+
+    // BackendProblemBase's new solve(EngineRef, SolveOptions) overload (M5)
+    // is otherwise hidden by the 0-arg solve() override above.
+    using BackendProblemBase::solve;
+
+  protected:
+    /// @brief M5 solve() hook: transcribe if needed (make_nlp + set_nlp
+    ///        wiring already lives inside transcribe()).
+    void prepare_solve() override {
+        if (this->do_transcription_)
+            this->transcribe();
+    }
+
+    /// @brief M5 solve() hook: the active variables vector, as
+    ///        solve()/optimize() etc. above already seed run_nlp_solver with.
+    Eigen::VectorXd initial_primal() const override { return this->active_variables_; }
+
+    /// @brief M5 solve() hook: write the stage's primal/multipliers back,
+    ///        the same fields solve()/optimize() etc. above write.
+    void accept_stage(const StageOutput &out) override {
+        this->active_variables_ = out.primal_;
+        this->active_eq_lmults_ = out.eq_lmults_;
+        this->active_iq_lmults_ = out.iq_lmults_;
     }
 };
 

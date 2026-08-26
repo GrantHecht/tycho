@@ -13,9 +13,9 @@
 //   - Migrated to tycho:: sub-namespaces (PR #35)
 // =============================================================================
 
+#include "optimization_problem_bind.h"
 #include "tycho/detail/hven_namespaces.h"
 #include <hven/drivers/optimization_problem_base.h>
-#include "optimization_problem_bind.h"
 
 #include <nanobind/stl/map.h>
 
@@ -88,9 +88,13 @@ The QP thread count is a separate setting: assign ``optimizer.qp_threads``.)doc"
     obj.def("set_jet_job_mode",
             nb::overload_cast<const std::string &>(&BackendProblemBase::set_jet_job_mode));
 
-    obj.def("solve", &BackendProblemBase::solve, nb::call_guard<nb::gil_scoped_release>());
-    obj.def("optimize", &BackendProblemBase::optimize,
+    // BackendProblemBase::solve now has a second overload (the M5 engine-
+    // driven staged solve, EngineRef + SolveOptions -- not yet exposed to
+    // Python), so the member-pointer expression needs disambiguating the
+    // same way set_jet_job_mode's two overloads are just below.
+    obj.def("solve", nb::overload_cast<>(&BackendProblemBase::solve),
             nb::call_guard<nb::gil_scoped_release>());
+    obj.def("optimize", &BackendProblemBase::optimize, nb::call_guard<nb::gil_scoped_release>());
     obj.def("solve_optimize", &BackendProblemBase::solve_optimize,
             nb::call_guard<nb::gil_scoped_release>());
     obj.def("solve_optimize_solve", &BackendProblemBase::solve_optimize_solve,

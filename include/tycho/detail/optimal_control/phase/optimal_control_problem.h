@@ -49,9 +49,14 @@
 namespace tycho::oc {
 
 // Solvers types
-using tycho::solvers::NonLinearProgram;
 using tycho::solvers::BackendProblemBase;
+using tycho::solvers::EngineRef;
 using tycho::solvers::InteriorPointSolver;
+using tycho::solvers::Mode;
+using tycho::solvers::NonLinearProgram;
+using tycho::solvers::SolveOptions;
+using tycho::solvers::SolveResult;
+using tycho::solvers::StageOutput;
 
 // VF types
 using vf::Arguments;
@@ -509,8 +514,8 @@ struct OptimalControlProblemBase : BackendProblemBase {
         if (ith < 0)
             ith = (int(this->phases.size()) + ith);
         if (ith < 0 || ith >= int(this->phases.size()))
-            throw std::invalid_argument(fmt::format(
-                "phase: index {} out of range for {} phases", ith, this->phases.size()));
+            throw std::invalid_argument(fmt::format("phase: index {} out of range for {} phases",
+                                                    ith, this->phases.size()));
         return this->phases[ith];
     }
 
@@ -1771,6 +1776,51 @@ struct OptimalControlProblemBase : BackendProblemBase {
     /// @endinternal
     tycho::ConvergenceFlags ocp_call_impl(JetJobModes mode);
 
+    // -------------------------------------------------------------------
+    // M5 solve() hooks (nlp_backend.h). The old surface above
+    // (solve()/optimize()/.../ocp_call_impl) is untouched and stays primary
+    // for this class; these are the override set the new
+    // BackendProblemBase::solve() pipeline dispatches through.
+    // -------------------------------------------------------------------
+
+    /// @brief M5 solve() hook: mirrors interior_point_call_impl's own
+    ///        transcription gate.
+    void prepare_solve() override {
+        this->check_transcriptions();
+        if (this->do_transcription_)
+            this->transcribe();
+    }
+
+    /// @brief M5 solve() hook: the packed multi-phase decision-variable
+    ///        vector (make_solver_input()).
+    Eigen::VectorXd initial_primal() const override { return this->make_solver_input(); }
+
+    /// @brief M5 solve() hook: write a stage's output back across every
+    ///        phase, the same way interior_point_call_impl does -- full
+    ///        post-opt residuals when the engine reported them
+    ///        (StageOutput::eq_cons_/iq_cons_ non-empty), else multipliers
+    ///        only, invalidated on this problem and every phase.
+    void accept_stage(const StageOutput &out) override {
+        this->collect_solver_output(out.primal_);
+        if (out.eq_cons_.size() > 0 || out.iq_cons_.size() > 0) {
+            this->collect_post_opt_info(out.eq_cons_, out.eq_lmults_, out.iq_cons_, out.iq_lmults_);
+        } else {
+            this->collect_solver_multipliers(out.eq_lmults_, out.iq_lmults_);
+            this->invalidate_post_opt_info();
+            for (auto phase : this->phases) {
+                phase->invalidate_post_opt_info();
+            }
+        }
+    }
+
+    /// @brief M5 solve() hook: mirrors the old adaptive_mesh_ gate.
+    bool adaptive_mesh_enabled() const override { return this->adaptive_mesh_; }
+
+    /// @brief M5 solve() hook: the multi-phase adaptive-mesh loop, reshaped
+    ///        from ocp_call_impl/interior_point_call_impl onto
+    ///        run_engine_stage. Defined in optimal_control_problem.cpp.
+    tycho::ConvergenceFlags run_adaptive_mesh(EngineRef engine, Mode mode, SolveResult &r) override;
+
     /// @internal
     /// @brief Assemble the full problem decision vector from all phases and link params.
     /// @return The packed decision-variable vector (scaled if auto-scaling is on).
@@ -1894,6 +1944,10 @@ struct OptimalControlProblemBase : BackendProblemBase {
     /// @brief Optimize, then solve to tighten feasibility.
     /// @return The solver convergence flag.
     tycho::ConvergenceFlags optimize_solve() { return ocp_call_impl(JetJobModes::OptimizeSolve); }
+
+    // BackendProblemBase's new solve(EngineRef, SolveOptions) overload (M5)
+    // is otherwise hidden by the 0-arg solve() override above.
+    using BackendProblemBase::solve;
 
     /// @brief Print the problem-size statistics.
     /// @param showfuns  Whether to also print per-function details.

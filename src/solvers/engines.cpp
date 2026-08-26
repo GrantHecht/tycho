@@ -25,6 +25,11 @@
 
 #include "tycho/detail/solvers/engines.h"
 
+// engines.h no longer includes this (see its own comment on the point): the
+// IpoptShimProblem shim below derives from BackendProblemBase, so this
+// translation unit needs it directly.
+#include "tycho/detail/solvers/nlp_backend.h"
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -494,6 +499,11 @@ class IpoptShimProblem final : public BackendProblemBase {
     ConvergenceFlags optimize_solve() override { refuse("optimize_solve"); }
     void jet_initialize() override { refuse("jet_initialize"); }
     void jet_release() override { refuse("jet_release"); }
+
+  protected:
+    void prepare_solve() override { refuse("prepare_solve"); }
+    Eigen::VectorXd initial_primal() const override { refuse("initial_primal"); }
+    void accept_stage(const StageOutput &) override { refuse("accept_stage"); }
 
   private:
     [[noreturn]] static ConvergenceFlags refuse(const char *what) {

@@ -121,9 +121,8 @@ int tycho::oc::ODEPhaseBase::add_periodicity_con(VarIndexType args, ScaleType sc
 int tycho::oc::ODEPhaseBase::add_lu_var_bound(RegionType reg, VarIndexType var, double lowerbound,
                                               double upperbound) {
     if (lowerbound > upperbound) {
-        throw std::invalid_argument(
-            fmt::format("Lower-bound({0:.3e}) greater than Upper-bound({1:.3e})", lowerbound,
-                        upperbound));
+        throw std::invalid_argument(fmt::format(
+            "Lower-bound({0:.3e}) greater than Upper-bound({1:.3e})", lowerbound, upperbound));
     }
     return this->record_var_bounds(reg, var, lowerbound, upperbound);
 }
@@ -189,9 +188,8 @@ int tycho::oc::ODEPhaseBase::add_lu_func_bound(RegionType reg, ScalarFunctionalX
                                                ScaleType scale_t) {
 
     if (lowerbound > upperbound) {
-        throw std::invalid_argument(
-            fmt::format("Lower-bound({0:.3e}) greater than Upper-bound({1:.3e})", lowerbound,
-                        upperbound));
+        throw std::invalid_argument(fmt::format(
+            "Lower-bound({0:.3e}) greater than Upper-bound({1:.3e})", lowerbound, upperbound));
     }
     check_lbscale(lbscale);
     check_ubscale(ubscale);
@@ -231,9 +229,8 @@ int tycho::oc::ODEPhaseBase::add_lu_norm_bound(RegionType reg, VarIndexType xtup
                                                double lowerbound, double upperbound, double lbscale,
                                                double ubscale, ScaleType scale_t) {
     if (lowerbound > upperbound) {
-        throw std::invalid_argument(
-            fmt::format("Lower-bound({0:.3e}) greater than Upper-bound({1:.3e})", lowerbound,
-                        upperbound));
+        throw std::invalid_argument(fmt::format(
+            "Lower-bound({0:.3e}) greater than Upper-bound({1:.3e})", lowerbound, upperbound));
     }
     check_lbscale(lbscale);
     check_ubscale(ubscale);
@@ -265,9 +262,8 @@ int tycho::oc::ODEPhaseBase::add_lu_squared_norm_bound(RegionType reg, VarIndexT
                                                        double lbscale, double ubscale,
                                                        ScaleType scale_t) {
     if (lowerbound > upperbound) {
-        throw std::invalid_argument(
-            fmt::format("Lower-bound({0:.3e}) greater than Upper-bound({1:.3e})", lowerbound,
-                        upperbound));
+        throw std::invalid_argument(fmt::format(
+            "Lower-bound({0:.3e}) greater than Upper-bound({1:.3e})", lowerbound, upperbound));
     }
     check_lbscale(lbscale);
     check_ubscale(ubscale);
@@ -549,16 +545,16 @@ void tycho::oc::ODEPhaseBase::set_traj(const std::vector<Eigen::VectorXd> &mesh,
     }
     int msize = mesh[0].size();
     if (msize != this->table_.xtu_vars_) {
-        throw std::invalid_argument(fmt::format(
-            "User Input Error in function set_traj for ODE:{0}. Dimension of Input "
-            "States({1}) does not match expected dimensions of the ODE({2})",
-            this->table_.ode_.name(), msize, this->table_.xtu_vars_));
+        throw std::invalid_argument(
+            fmt::format("User Input Error in function set_traj for ODE:{0}. Dimension of Input "
+                        "States({1}) does not match expected dimensions of the ODE({2})",
+                        this->table_.ode_.name(), msize, this->table_.xtu_vars_));
     }
     if ((DBS.size() - 1) != DPB.size()) {
-        throw std::invalid_argument(fmt::format(
-            "User Input Error in function set_traj for ODE:{0}. Size of Defect Bin "
-            "Spacing({1}) not consistent with size of Defects Per Bin({2})",
-            this->table_.ode_.name(), DBS.size(), DPB.size()));
+        throw std::invalid_argument(
+            fmt::format("User Input Error in function set_traj for ODE:{0}. Size of Defect Bin "
+                        "Spacing({1}) not consistent with size of Defects Per Bin({2})",
+                        this->table_.ode_.name(), DBS.size(), DPB.size()));
     }
     for (auto &X : mesh) {
         if (X.hasNaN()) {
@@ -634,10 +630,10 @@ void tycho::oc::ODEPhaseBase::set_traj(const std::vector<Eigen::VectorXd> &mesh)
     }
     int msize = mesh[0].size();
     if (msize != this->table_.xtu_vars_) {
-        throw std::invalid_argument(fmt::format(
-            "User Input Error in function set_traj for ODE:{0}. Dimension of Input "
-            "States({1}) does not match expected dimensions of the ODE({2})",
-            this->table_.ode_.name(), msize, this->table_.xtu_vars_));
+        throw std::invalid_argument(
+            fmt::format("User Input Error in function set_traj for ODE:{0}. Dimension of Input "
+                        "States({1}) does not match expected dimensions of the ODE({2})",
+                        this->table_.ode_.name(), msize, this->table_.xtu_vars_));
     }
     for (auto &X : mesh) {
         if (X.hasNaN()) {
@@ -1119,10 +1115,10 @@ void tycho::oc::ODEPhaseBase::check_functions(int pnum) {
     auto CheckFun = [&](const std::string &type, auto &func) {
         if (func.xtu_vars_.size() > 0) {
             if (func.xtu_vars_.maxCoeff() >= this->xtu_p_vars() || func.xtu_vars_.minCoeff() < 0) {
-                throw std::invalid_argument(fmt::format(
-                    "{0:} function state variable indices out of bounds in phase {1:}; "
-                    "function storage index {2:}, name {3:}",
-                    type, pnum, func.storage_index_, func.func_.name()));
+                throw std::invalid_argument(
+                    fmt::format("{0:} function state variable indices out of bounds in phase {1:}; "
+                                "function storage index {2:}, name {3:}",
+                                type, pnum, func.storage_index_, func.func_.name()));
             }
         }
         if (func.op_vars_.size() > 0) {
@@ -1612,8 +1608,8 @@ void tycho::oc::ODEPhaseBase::test_partitions(int i, int j, int n) {
         TranscriptionDeclaration declaration(i);
         tycho::solvers::DeclarationBinding binding(this->indexer_.declaration_, declaration);
         this->transcribe_phase(0, 0, 0, nlp1, declaration, 0);
-        declaration.lay(*nlp1, this->indexer_.num_phase_vars_,
-                        this->indexer_.num_phase_eq_cons_, this->indexer_.num_phase_iq_cons_);
+        declaration.lay(*nlp1, this->indexer_.num_phase_vars_, this->indexer_.num_phase_eq_cons_,
+                        this->indexer_.num_phase_iq_cons_);
     }
 
     auto nlp2 = std::make_shared<NonLinearProgram>(j);
@@ -1622,8 +1618,8 @@ void tycho::oc::ODEPhaseBase::test_partitions(int i, int j, int n) {
         TranscriptionDeclaration declaration(j);
         tycho::solvers::DeclarationBinding binding(this->indexer_.declaration_, declaration);
         this->transcribe_phase(0, 0, 0, nlp2, declaration, 0);
-        declaration.lay(*nlp2, this->indexer_.num_phase_vars_,
-                        this->indexer_.num_phase_eq_cons_, this->indexer_.num_phase_iq_cons_);
+        declaration.lay(*nlp2, this->indexer_.num_phase_vars_, this->indexer_.num_phase_eq_cons_,
+                        this->indexer_.num_phase_iq_cons_);
     }
 
     Eigen::VectorXd v = this->make_solver_input();
@@ -1807,7 +1803,8 @@ tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::phase_call_impl(JetJobModes mod
     // the solution, which no other backend reports, so the refinement loop is
     // only defined for the built-in solver.
     if (this->adaptive_mesh_ && this->nlp_solver_ != solvers::NLPSolvers::interior_point) {
-        throw std::invalid_argument("adaptive mesh refinement requires nlp_solver = interior_point");
+        throw std::invalid_argument(
+            "adaptive mesh refinement requires nlp_solver = interior_point");
     }
 
     if (this->print_mesh_info_ && this->adaptive_mesh_) {
@@ -1882,6 +1879,136 @@ tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::phase_call_impl(JetJobModes mod
 
     if (this->print_mesh_info_ && this->adaptive_mesh_) {
 
+        Runtimer.stop();
+        double tseconds = double(Runtimer.count<std::chrono::microseconds>()) / 1000000;
+        fmt::print("Total Time:");
+        if (tseconds > 0.5) {
+            fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.4f} s\n", tseconds);
+        } else {
+            fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.2f} ms\n", tseconds * 1000);
+        }
+
+        fmt::print(fmt::fg(fmt::color::dim_gray), "Finished ");
+        fmt::print(": ");
+        fmt::print(fmt::fg(fmt::color::royal_blue), "Adaptive Mesh Refinement");
+        fmt::print("\n");
+        fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65);
+    }
+
+    return flag;
+}
+
+tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::run_adaptive_mesh(EngineRef engine, Mode mode,
+                                                                   SolveResult &r) {
+    // Reshapes phase_call_impl's mesh loop above onto run_engine_stage: every
+    // engine call becomes one StageResult appended to r.stages_, and mesh
+    // error estimation now requires exactly "the engine reports residuals"
+    // (StageOutput::eq_cons_/iq_cons_ non-empty) rather than hard-requiring
+    // nlp_solver_ == interior_point. active_solve_options_ is set by
+    // BackendProblemBase::solve() for the duration of this call.
+    const tycho::solvers::SolveOptions *opts = this->active_solve_options_;
+    const bool do_presolve = opts != nullptr && opts->presolve;
+    EngineRef presolve_engine =
+        (opts != nullptr && opts->presolve_engine != nullptr) ? *opts->presolve_engine : engine;
+    const hven::solvers::WarmStartData *first_stage_warm = opts != nullptr ? opts->warm : nullptr;
+
+    auto run_one = [&](EngineRef eng, Mode m, const char *role,
+                       const hven::solvers::WarmStartData *warm) -> tycho::solvers::StageOutput {
+        tycho::solvers::StageOutput out =
+            tycho::solvers::run_engine_stage(eng, m, this->nlp_, this->initial_primal(), warm);
+        this->accept_stage(out);
+        tycho::solvers::StageResult report = out.report_;
+        report.role_ = role;
+        r.stages_.push_back(std::move(report));
+        return out;
+    };
+
+    auto require_residuals = [](const tycho::solvers::StageOutput &out, EngineRef eng) {
+        if (out.eq_cons_.size() == 0 && out.iq_cons_.size() == 0) {
+            throw std::invalid_argument(fmt::format(
+                "adaptive mesh refinement requires an engine that reports constraint residuals; "
+                "{0} does not report them",
+                tycho::solvers::engine_name(eng)));
+        }
+    };
+
+    if (this->print_mesh_info_) {
+        fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65);
+        fmt::print(fmt::fg(fmt::color::dim_gray), "Beginning");
+        fmt::print(": ");
+        fmt::print(fmt::fg(fmt::color::royal_blue), "Adaptive Mesh Refinement");
+        fmt::print("\n");
+    }
+
+    utils::Timer Runtimer;
+    Runtimer.start();
+
+    if (do_presolve) {
+        tycho::solvers::StageOutput pre =
+            run_one(presolve_engine, Mode::Feasible, "presolve", first_stage_warm);
+        first_stage_warm = nullptr;
+        require_residuals(pre, presolve_engine);
+    }
+
+    tycho::solvers::StageOutput main_out = run_one(engine, mode, "main", first_stage_warm);
+    require_residuals(main_out, engine);
+    tycho::ConvergenceFlags flag = main_out.flag_;
+    r.warm_ = main_out.warm_;
+
+    if (flag >= this->mesh_abort_flag_) {
+        if (this->print_mesh_info_) {
+            fmt::print(fmt::fg(fmt::color::red), "Mesh Iteration 0 Failed to Solve: Aborting\n");
+        }
+    } else {
+        init_mesh_refinement();
+        for (int i = 0; i < this->max_mesh_iters_; i++) {
+            if (check_mesh() && !((i == 0) && this->force_one_mesh_iter_)) {
+                if (this->print_mesh_info_) {
+                    MeshIterateInfo::print_header(i);
+                    this->mesh_iters_.back().print(0);
+                    fmt::print(fmt::fg(fmt::color::lime_green), "Mesh Converged\n");
+                }
+                break;
+            } else if (i == this->max_mesh_iters_ - 1) {
+                if (this->print_mesh_info_) {
+                    MeshIterateInfo::print_header(i);
+                    this->mesh_iters_.back().print(0);
+                    fmt::print(fmt::fg(fmt::color::red), "Mesh Not Converged\n");
+                }
+                break;
+            } else {
+                update_mesh();
+                if (this->print_mesh_info_) {
+                    MeshIterateInfo::print_header(i);
+                    this->mesh_iters_.back().print(0);
+                }
+            }
+
+            // solve_only_first_ keeps its old name and its false-meaning:
+            // when false, the presolve stage repeats on every mesh
+            // iteration rather than running only before iteration 0.
+            if (do_presolve && !this->solve_only_first_) {
+                tycho::solvers::StageOutput pre_i =
+                    run_one(presolve_engine, Mode::Feasible, "presolve", nullptr);
+                require_residuals(pre_i, presolve_engine);
+            }
+
+            main_out = run_one(engine, mode, "main", nullptr);
+            require_residuals(main_out, engine);
+            flag = main_out.flag_;
+            r.warm_ = main_out.warm_;
+
+            if (flag >= this->mesh_abort_flag_) {
+                if (this->print_mesh_info_) {
+                    fmt::print(fmt::fg(fmt::color::red),
+                               "Mesh Iteration {0:} Failed to Solve: Aborting\n", i + 1);
+                }
+                break;
+            }
+        }
+    }
+
+    if (this->print_mesh_info_) {
         Runtimer.stop();
         double tseconds = double(Runtimer.count<std::chrono::microseconds>()) / 1000000;
         fmt::print("Total Time:");

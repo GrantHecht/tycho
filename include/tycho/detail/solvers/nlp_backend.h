@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <map>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
@@ -47,6 +48,7 @@
 #include <hven/model/non_linear_program.h>
 
 #include "tycho/detail/hven_namespaces.h"
+#include "tycho/detail/solvers/engines.h"
 
 namespace tycho::solvers {
 
@@ -73,6 +75,23 @@ struct IpoptRunInfo {
     double objective_ = 0.0;
     double constraint_violation_ = -1.0;
     double wall_time_s_ = -1.0;
+};
+
+/// @brief Options for the engine-driven staged solve() (M5): which mode the
+///        main stage runs, whether a feasibility presolve stage precedes it
+///        and on which engine, whether an optimality polish stage follows it
+///        and on which engine, and the warm-start currency (if any) that
+///        seeds the first stage that runs.
+///
+/// Verbatim per the M5 solve-API spec: every field name and default here is
+/// binding.
+struct SolveOptions {
+    Mode mode = Mode::Optimal;
+    bool presolve = false; ///< true: run a Feasible stage first with the main engine.
+    EngineRef *presolve_engine =
+        nullptr;                 ///< overrides the presolve stage's engine (implies presolve).
+    EngineRef *polish = nullptr; ///< second engine after the main stage.
+    const hven::solvers::WarmStartData *warm = nullptr; ///< seeds the first stage.
 };
 
 /// Every tycho optimization problem — OptimizationProblem, ODEPhaseBase and
@@ -159,6 +178,123 @@ struct BackendProblemBase {
     /// ConvergenceFlags::CONVERGED.
     virtual ConvergenceFlags optimize_solve() = 0;
 
+    // -------------------------------------------------------------------
+    // M5 engine-driven staged solve(). Coexists with the five mode methods
+    // above -- neither surface displaces the other. Implemented once, in
+    // solve_pipeline.cpp, dispatching through the protected hooks below;
+    // each concrete problem type (OptimizationProblem, ODEPhaseBase,
+    // OptimalControlProblemBase) supplies its own override set. A derived
+    // class that declares its own `solve()` (all three do, overriding the
+    // 0-arg mode method above) hides every base overload of that name unless
+    // it re-exposes them with `using BackendProblemBase::solve;` -- each of
+    // the three does so.
+    // -------------------------------------------------------------------
+
+    /// @brief Runs a staged solve against `engine`: an optional Feasible
+    ///        presolve stage, the main stage (`opts.mode`), and an optional
+    ///        Optimal polish stage, in that order. Every stage that runs
+    ///        appends its StageResult to the returned SolveResult in run
+    ///        order and runs to completion regardless of an earlier stage's
+    ///        flag -- a non-convergent stage is a value in that stage's
+    ///        report, not a thrown exception.
+    ///
+    /// Refused before any stage runs (`std::invalid_argument`, in this
+    /// order): `opts.polish` paired with `opts.mode == Mode::Feasible`;
+    /// `opts.presolve`/`opts.presolve_engine` paired with
+    /// `opts.mode == Mode::Feasible`; `opts.presolve_engine` set with
+    /// `engine`, `opts.presolve_engine` (if set) or `opts.polish` (if set)
+    /// already inside another solve() call (a per-engine concurrency latch --
+    /// engines serve solves sequentially, never concurrently). A
+    /// `opts.presolve_engine` with `opts.presolve == false` is not a
+    /// refusal: it implies `presolve = true`.
+    ///
+    /// `opts.warm`, when set, seeds the primal/dual state of whichever stage
+    /// runs FIRST (presolve if requested, else main) after a stamp check:
+    /// its `DeclarationKey` must match the current transcription's, or the
+    /// call refuses naming both keys' digests. A `Mode::Optimal` polish
+    /// stage is always warm-seeded, from the main stage's own
+    /// `StageOutput::warm_` export, independent of `opts.warm`.
+    ///
+    /// `prepare_solve()` (transcribe-if-needed) runs before the stamp check,
+    /// so the check compares against the transcription this call will
+    /// actually solve.
+    ///
+    /// @throws std::invalid_argument per the refusal matrix above, or
+    ///         whatever `run_engine_stage` itself throws for a malformed
+    ///         problem, a stale reduced-space NLP, or an engine-specific
+    ///         mode refusal (e.g. SQP/Ipopt + Mode::Feasible).
+    SolveResult solve(EngineRef engine, const SolveOptions &opts = SolveOptions{});
+
+    /// @brief The most recently completed solve()'s result, as a value
+    ///        copy -- reading it twice, or after the problem has since been
+    ///        re-transcribed or re-solved differently, still returns the
+    ///        snapshot taken at that solve() call.
+    /// @throws std::logic_error if no solve() has completed on this
+    ///         instance yet.
+    const SolveResult &last_result() const;
+
+  protected:
+    /// @brief Transcribes the problem if needed and wires nlp_/provider_/
+    ///        (and any per-type solver state) for the solve() call about to
+    ///        run. One override per concrete problem type.
+    virtual void prepare_solve() = 0;
+
+    /// @brief The full decision-variable vector solve() seeds the first
+    ///        stage's starting point with -- the active trajectory/static
+    ///        parameters flattened (Phase/OCP) or the active variables
+    ///        vector (a bare VF problem), read AFTER prepare_solve() has run.
+    virtual Eigen::VectorXd initial_primal() const = 0;
+
+    /// @brief Writes one finished stage's primal/dual output back onto the
+    ///        problem (and its post-optimality constraint info, when the
+    ///        engine reported residuals), so the next stage's
+    ///        initial_primal() reflects it.
+    virtual void accept_stage(const StageOutput &out) = 0;
+
+    /// @brief Slices `r.phases_` from the just-finished solve; `r` already
+    ///        carries `r.stages_`/`r.flag_`/`r.warm_`/`r.structure_key_`.
+    ///        Base: no-op, `r.phases_` stays empty -- a later task gives
+    ///        Phase/OCP the real per-phase slicing.
+    virtual void fill_phase_results(SolveResult &r) const { (void)r; }
+
+    /// @brief Whether this problem type runs an adaptive-mesh loop inside
+    ///        the main stage. Base: false (a bare VF problem never does).
+    virtual bool adaptive_mesh_enabled() const { return false; }
+
+    /// @brief Runs the main stage as an adaptive-mesh loop: `active_
+    ///        solve_options_->presolve` (if set) runs a Feasible stage
+    ///        before mesh iteration 0 only, unless the override's own
+    ///        `solve_only_first_`-shaped knob says to repeat it every
+    ///        iteration; every iteration's optimality run (`mode`) is one
+    ///        `run_engine_stage` call. The override appends one StageResult
+    ///        per internal engine call to `r.stages_`, in run order, and
+    ///        sets `r.warm_` to the LAST main-mode stage's export (the seed
+    ///        solve() hands a polish stage). Only called when
+    ///        `adaptive_mesh_enabled()` is true; Phase and OCP each reshape
+    ///        their own mesh loop onto `run_engine_stage` here. The base
+    ///        body is unreachable through solve() (it never calls this
+    ///        when `adaptive_mesh_enabled()` is false) and throws if
+    ///        reached some other way.
+    /// @throws std::invalid_argument if `engine` (or, when a presolve stage
+    ///         runs, the presolve engine) reports no constraint residuals --
+    ///         mesh error estimation has nothing to measure from -- naming
+    ///         the engine.
+    virtual tycho::ConvergenceFlags run_adaptive_mesh(EngineRef engine, Mode mode, SolveResult &r);
+
+    /// @brief The options of the solve() call presently dispatching on this
+    ///        instance, or null outside of one. Set for the duration of the
+    ///        run_adaptive_mesh() call above so an override can read
+    ///        presolve/presolve_engine/warm without widening that method's
+    ///        own fixed signature; never persists past the solve() call that
+    ///        set it.
+    const SolveOptions *active_solve_options_ = nullptr;
+
+  private:
+    /// @brief Value cache backing last_result(); unset until the first
+    ///        solve() call completes.
+    std::optional<SolveResult> last_result_cache_;
+
+  public:
     /// Compute default partition count from the global thread budget.
     /// Over-partitions by 4x so the work-stealing pool can smooth out
     /// unequal partition costs.
