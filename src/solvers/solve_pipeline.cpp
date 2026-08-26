@@ -2,7 +2,7 @@
 // Tycho (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 // =============================================================================
 //
-// The M5 staged solve() pipeline on BackendProblemBase: the refusal matrix,
+// The staged solve() pipeline on BackendProblemBase: the refusal matrix,
 // the per-engine concurrency latch, the warm-start stamp pre-check, and the
 // presolve/main/polish stage sequence -- coded once here, for every concrete
 // problem type (OptimizationProblem, ODEPhaseBase, OptimalControlProblemBase),
@@ -42,6 +42,7 @@
 
 #include <fmt/format.h>
 
+#include <hven/detail/interior/utils/timer.h>
 #include <hven/model/structure_identity.h>
 
 namespace tycho::solvers {
@@ -181,13 +182,24 @@ SolveResult BackendProblemBase::solve(EngineRef engine, const SolveOptions &opts
 
     if (this->adaptive_mesh_enabled()) {
         this->active_solve_options_ = &opts;
+        tycho::ConvergenceFlags amr_flag;
         try {
-            this->run_adaptive_mesh(engine, opts.mode, result);
+            amr_flag = this->run_adaptive_mesh(engine, opts.mode, result);
         } catch (...) {
             this->active_solve_options_ = nullptr;
             throw;
         }
         this->active_solve_options_ = nullptr;
+        // run_adaptive_mesh is documented as returning the deciding stage's
+        // flag -- the one it just appended to result.stages_. Cross-check
+        // that agreement rather than silently trusting one of the two: a
+        // future override that lets them drift apart should fail loudly,
+        // not silently pick whichever this call happened to read.
+        if (result.stages_.empty() || amr_flag != result.stages_.back().flag_) {
+            throw std::logic_error(
+                "run_adaptive_mesh: returned flag disagrees with the last appended stage's "
+                "flag_ (or appended no stage at all) -- these must stay in agreement");
+        }
     } else {
         if (opts.presolve) {
             EngineRef presolve_engine =
@@ -240,6 +252,133 @@ tycho::ConvergenceFlags BackendProblemBase::run_adaptive_mesh(EngineRef, Mode, S
     throw std::logic_error(
         "run_adaptive_mesh: unreachable on a problem type with adaptive_mesh_enabled() == "
         "false");
+}
+
+tycho::ConvergenceFlags BackendProblemBase::run_amr_loop(EngineRef engine, Mode mode,
+                                                         SolveResult &r,
+                                                         tycho::ConvergenceFlags mesh_abort_flag,
+                                                         int max_mesh_iters, bool solve_only_first,
+                                                         bool print_mesh_info,
+                                                         const AmrLoopHooks &hooks) {
+    const SolveOptions *opts = this->active_solve_options_;
+    const bool do_presolve = opts != nullptr && opts->presolve;
+    EngineRef presolve_engine =
+        (opts != nullptr && opts->presolve_engine != nullptr) ? *opts->presolve_engine : engine;
+    const hven::solvers::WarmStartData *first_stage_warm = opts != nullptr ? opts->warm : nullptr;
+
+    // Every engine call re-transcribes first: a mesh update
+    // (update_mesh()/update_meshs()) invalidates the current transcription
+    // via reset_transcription(), exactly as the old per-type
+    // interior_point_call_impl's own two-statement transcription gate did on
+    // every mesh-loop call -- prepare_solve() IS that gate, reused verbatim.
+    auto run_one = [&](EngineRef eng, Mode m, const char *role,
+                       const hven::solvers::WarmStartData *warm,
+                       bool require_residual_report) -> StageOutput {
+        this->prepare_solve();
+        StageOutput out = run_engine_stage(eng, m, this->nlp_, this->initial_primal(), warm);
+        if (require_residual_report && out.eq_cons_.size() == 0 && out.iq_cons_.size() == 0) {
+            // Refused before accept_stage() runs, so a misuse path never
+            // leaves the host half-mutated.
+            throw std::invalid_argument(fmt::format(
+                "adaptive mesh refinement requires an engine that reports constraint residuals; "
+                "{0} does not report them",
+                engine_name(eng)));
+        }
+        this->accept_stage(out);
+        append_stage(r, out, role);
+        return out;
+    };
+
+    if (print_mesh_info) {
+        fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65);
+        fmt::print(fmt::fg(fmt::color::dim_gray), "Beginning");
+        fmt::print(": ");
+        fmt::print(fmt::fg(fmt::color::royal_blue), "Adaptive Mesh Refinement");
+        fmt::print("\n");
+    }
+
+    tycho::utils::Timer amr_timer;
+    amr_timer.start();
+
+    if (do_presolve) {
+        // The presolve stage is never the one mesh error estimation reads
+        // from (the main stage always runs after it and owns the post-opt
+        // info), so it is not held to the residual-report requirement -- an
+        // SQP/Ipopt presolve feeding an interior-point main stage under
+        // adaptive mesh is a legal composition.
+        run_one(presolve_engine, Mode::Feasible, "presolve", first_stage_warm, false);
+        first_stage_warm = nullptr;
+    }
+
+    StageOutput main_out = run_one(engine, mode, "main", first_stage_warm, true);
+    tycho::ConvergenceFlags flag = main_out.flag_;
+    r.warm_ = main_out.warm_;
+
+    if (flag >= mesh_abort_flag) {
+        if (print_mesh_info) {
+            fmt::print(fmt::fg(fmt::color::red), "Mesh Iteration 0 Failed to Solve: Aborting\n");
+        }
+    } else {
+        hooks.init_mesh();
+        for (int i = 0; i < max_mesh_iters; i++) {
+            if (hooks.mesh_converged(i)) {
+                if (print_mesh_info) {
+                    hooks.print_iteration(i);
+                    fmt::print(fmt::fg(fmt::color::lime_green), "{}\n", hooks.converged_message);
+                }
+                break;
+            } else if (i == max_mesh_iters - 1) {
+                if (print_mesh_info) {
+                    hooks.print_iteration(i);
+                    fmt::print(fmt::fg(fmt::color::red), "{}\n", hooks.not_converged_message);
+                }
+                break;
+            } else {
+                hooks.update_mesh();
+                if (print_mesh_info) {
+                    hooks.print_iteration(i);
+                }
+            }
+
+            // solve_only_first keeps its old name and its false-meaning: when
+            // false, the presolve stage repeats on every mesh iteration
+            // rather than running only before iteration 0.
+            if (do_presolve && !solve_only_first) {
+                run_one(presolve_engine, Mode::Feasible, "presolve", nullptr, false);
+            }
+
+            main_out = run_one(engine, mode, "main", nullptr, true);
+            flag = main_out.flag_;
+            r.warm_ = main_out.warm_;
+
+            if (flag >= mesh_abort_flag) {
+                if (print_mesh_info) {
+                    fmt::print(fmt::fg(fmt::color::red),
+                               "Mesh Iteration {0:} Failed to Solve: Aborting\n", i + 1);
+                }
+                break;
+            }
+        }
+    }
+
+    if (print_mesh_info) {
+        amr_timer.stop();
+        double tseconds = double(amr_timer.count<std::chrono::microseconds>()) / 1000000;
+        fmt::print("Total Time:");
+        if (tseconds > 0.5) {
+            fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.4f} s\n", tseconds);
+        } else {
+            fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.2f} ms\n", tseconds * 1000);
+        }
+
+        fmt::print(fmt::fg(fmt::color::dim_gray), "Finished ");
+        fmt::print(": ");
+        fmt::print(fmt::fg(fmt::color::royal_blue), "Adaptive Mesh Refinement");
+        fmt::print("\n");
+        fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65);
+    }
+
+    return flag;
 }
 
 } // namespace tycho::solvers

@@ -10,6 +10,12 @@
 #include "tycho/detail/solvers/engines.h"
 #include "tycho/detail/solvers_vf/optimization_problem.h"
 
+// oc_test_utils.h (tests/cpp/optimal_control/) supplies make_brach_phase(),
+// reused here (rather than duplicated) for the one AMR-through-solve() case
+// below -- it needs a real Phase with a real mesh, which a bare VF problem
+// cannot stand in for.
+#include "oc_test_utils.h"
+
 #include <tycho/vector_functions.h>
 
 #include <gtest/gtest.h>
@@ -473,4 +479,64 @@ TEST(SolvePipeline, LastResultCachesTheReturn) {
     EXPECT_EQ(cached.flag_, result.flag_);
     ASSERT_EQ(cached.stages_.size(), result.stages_.size());
     EXPECT_EQ(cached.stages_.back().objective_, result.stages_.back().objective_);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Adaptive mesh refinement driven through the NEW solve() surface.
+//
+// Every other case above is a bare VF problem (OptimizationProblem), which
+// never enables adaptive_mesh_enabled() -- run_adaptive_mesh() and the
+// shared BackendProblemBase::run_amr_loop() it delegates to are otherwise
+// verified by compilation only. This drives a real Phase, with a real mesh,
+// through solve(engine, opts), and pins the one property a missing
+// per-iteration re-transcription would break: the TRANSCRIBED problem's own
+// dimension must grow along with the mesh, not stay frozen at the coarse
+// start while num_defects_/active_traj_ silently move on without it.
+///////////////////////////////////////////////////////////////////////////////
+
+TEST(SolvePipeline, AdaptiveMeshRefinesThroughNewSolvePipeline) {
+    // Coarse start (8 segments) + a tight mesh tolerance: the same
+    // combination test_mesh_refinement.cpp's MeshRefinementIterates uses to
+    // force at least one real refinement within a handful of iterations.
+    auto phase = TychoTest::make_brach_phase(50, 8);
+    phase->optimizer_->set_print_level(0);
+    phase->print_mesh_info_ = false;
+    phase->set_adaptive_mesh(true);
+    phase->set_mesh_tol(1e-7);
+    phase->set_max_mesh_iters(4);
+
+    phase->transcribe();
+    ASSERT_TRUE(phase->nlp_);
+    const int coarse_primal_vars = phase->nlp_->primal_vars_;
+
+    InteriorPointSolver ipm;
+    EngineRef ref = &ipm;
+    SolveOptions opts;
+    opts.presolve = true; // mirrors the old solve_optimize() shape this mesh loop used
+
+    SolveResult result = phase->solve(ref, opts);
+
+    EXPECT_TRUE(result.converged());
+
+    // The mesh loop actually iterated past iteration 0: a presolve stage,
+    // then one main stage per mesh iteration (solve_only_first_ defaults
+    // true, so presolve does not repeat).
+    ASSERT_GE(result.stages_.size(), 3u);
+    EXPECT_EQ(result.stages_.front().role_, "presolve");
+    for (std::size_t i = 1; i < result.stages_.size(); ++i) {
+        EXPECT_EQ(result.stages_[i].role_, "main");
+    }
+    // result.flag_ is the last appended stage's flag (also exercises the
+    // pipeline's own cross-check between run_adaptive_mesh's return value
+    // and result.stages_.back().flag_).
+    EXPECT_EQ(result.flag_, result.stages_.back().flag_);
+
+    // The property a missing per-iteration re-transcription breaks: the
+    // TRANSCRIBED problem's dimension must have moved with the refined
+    // mesh, not stayed pinned at the coarse start. Pre-fix, run_adaptive_mesh
+    // never re-ran prepare_solve() between mesh iterations, so this would
+    // still read coarse_primal_vars unchanged even though the mesh itself
+    // (num_defects_/active_traj_) had already grown underneath it.
+    ASSERT_TRUE(phase->nlp_);
+    EXPECT_NE(phase->nlp_->primal_vars_, coarse_primal_vars);
 }

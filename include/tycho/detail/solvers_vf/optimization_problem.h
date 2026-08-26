@@ -266,23 +266,23 @@ struct OptimizationProblem : BackendProblemBase {
         return out.flag_;
     }
 
-    // BackendProblemBase's new solve(EngineRef, SolveOptions) overload (M5)
+    // BackendProblemBase's new solve(EngineRef, SolveOptions) overload
     // is otherwise hidden by the 0-arg solve() override above.
     using BackendProblemBase::solve;
 
   protected:
-    /// @brief M5 solve() hook: transcribe if needed (make_nlp + set_nlp
+    /// @brief solve() hook: transcribe if needed (make_nlp + set_nlp
     ///        wiring already lives inside transcribe()).
     void prepare_solve() override {
         if (this->do_transcription_)
             this->transcribe();
     }
 
-    /// @brief M5 solve() hook: the active variables vector, as
+    /// @brief solve() hook: the active variables vector, as
     ///        solve()/optimize() etc. above already seed run_nlp_solver with.
     Eigen::VectorXd initial_primal() const override { return this->active_variables_; }
 
-    /// @brief M5 solve() hook: write the stage's primal/multipliers back,
+    /// @brief solve() hook: write the stage's primal/multipliers back,
     ///        the same fields solve()/optimize() etc. above write.
     void accept_stage(const StageOutput &out) override {
         this->active_variables_ = out.primal_;

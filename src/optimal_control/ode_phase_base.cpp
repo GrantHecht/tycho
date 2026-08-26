@@ -1900,130 +1900,23 @@ tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::phase_call_impl(JetJobModes mod
 
 tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::run_adaptive_mesh(EngineRef engine, Mode mode,
                                                                    SolveResult &r) {
-    // Reshapes phase_call_impl's mesh loop above onto run_engine_stage: every
-    // engine call becomes one StageResult appended to r.stages_, and mesh
-    // error estimation now requires exactly "the engine reports residuals"
-    // (StageOutput::eq_cons_/iq_cons_ non-empty) rather than hard-requiring
-    // nlp_solver_ == interior_point. active_solve_options_ is set by
-    // BackendProblemBase::solve() for the duration of this call.
-    const tycho::solvers::SolveOptions *opts = this->active_solve_options_;
-    const bool do_presolve = opts != nullptr && opts->presolve;
-    EngineRef presolve_engine =
-        (opts != nullptr && opts->presolve_engine != nullptr) ? *opts->presolve_engine : engine;
-    const hven::solvers::WarmStartData *first_stage_warm = opts != nullptr ? opts->warm : nullptr;
-
-    auto run_one = [&](EngineRef eng, Mode m, const char *role,
-                       const hven::solvers::WarmStartData *warm) -> tycho::solvers::StageOutput {
-        tycho::solvers::StageOutput out =
-            tycho::solvers::run_engine_stage(eng, m, this->nlp_, this->initial_primal(), warm);
-        this->accept_stage(out);
-        tycho::solvers::StageResult report = out.report_;
-        report.role_ = role;
-        r.stages_.push_back(std::move(report));
-        return out;
+    // The mesh-loop mechanics (stage bookkeeping, the re-transcription gate,
+    // the residual-report check, warm seeding, the banner/timer) live once in
+    // BackendProblemBase::run_amr_loop(); only the mesh-representation-
+    // specific pieces are supplied here.
+    BackendProblemBase::AmrLoopHooks hooks;
+    hooks.init_mesh = [this]() { this->init_mesh_refinement(); };
+    hooks.mesh_converged = [this](int i) {
+        return this->check_mesh() && !((i == 0) && this->force_one_mesh_iter_);
     };
-
-    auto require_residuals = [](const tycho::solvers::StageOutput &out, EngineRef eng) {
-        if (out.eq_cons_.size() == 0 && out.iq_cons_.size() == 0) {
-            throw std::invalid_argument(fmt::format(
-                "adaptive mesh refinement requires an engine that reports constraint residuals; "
-                "{0} does not report them",
-                tycho::solvers::engine_name(eng)));
-        }
+    hooks.update_mesh = [this]() { this->update_mesh(); };
+    hooks.print_iteration = [this](int iter) {
+        MeshIterateInfo::print_header(iter);
+        this->mesh_iters_.back().print(0);
     };
+    hooks.converged_message = "Mesh Converged";
+    hooks.not_converged_message = "Mesh Not Converged";
 
-    if (this->print_mesh_info_) {
-        fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65);
-        fmt::print(fmt::fg(fmt::color::dim_gray), "Beginning");
-        fmt::print(": ");
-        fmt::print(fmt::fg(fmt::color::royal_blue), "Adaptive Mesh Refinement");
-        fmt::print("\n");
-    }
-
-    utils::Timer Runtimer;
-    Runtimer.start();
-
-    if (do_presolve) {
-        tycho::solvers::StageOutput pre =
-            run_one(presolve_engine, Mode::Feasible, "presolve", first_stage_warm);
-        first_stage_warm = nullptr;
-        require_residuals(pre, presolve_engine);
-    }
-
-    tycho::solvers::StageOutput main_out = run_one(engine, mode, "main", first_stage_warm);
-    require_residuals(main_out, engine);
-    tycho::ConvergenceFlags flag = main_out.flag_;
-    r.warm_ = main_out.warm_;
-
-    if (flag >= this->mesh_abort_flag_) {
-        if (this->print_mesh_info_) {
-            fmt::print(fmt::fg(fmt::color::red), "Mesh Iteration 0 Failed to Solve: Aborting\n");
-        }
-    } else {
-        init_mesh_refinement();
-        for (int i = 0; i < this->max_mesh_iters_; i++) {
-            if (check_mesh() && !((i == 0) && this->force_one_mesh_iter_)) {
-                if (this->print_mesh_info_) {
-                    MeshIterateInfo::print_header(i);
-                    this->mesh_iters_.back().print(0);
-                    fmt::print(fmt::fg(fmt::color::lime_green), "Mesh Converged\n");
-                }
-                break;
-            } else if (i == this->max_mesh_iters_ - 1) {
-                if (this->print_mesh_info_) {
-                    MeshIterateInfo::print_header(i);
-                    this->mesh_iters_.back().print(0);
-                    fmt::print(fmt::fg(fmt::color::red), "Mesh Not Converged\n");
-                }
-                break;
-            } else {
-                update_mesh();
-                if (this->print_mesh_info_) {
-                    MeshIterateInfo::print_header(i);
-                    this->mesh_iters_.back().print(0);
-                }
-            }
-
-            // solve_only_first_ keeps its old name and its false-meaning:
-            // when false, the presolve stage repeats on every mesh
-            // iteration rather than running only before iteration 0.
-            if (do_presolve && !this->solve_only_first_) {
-                tycho::solvers::StageOutput pre_i =
-                    run_one(presolve_engine, Mode::Feasible, "presolve", nullptr);
-                require_residuals(pre_i, presolve_engine);
-            }
-
-            main_out = run_one(engine, mode, "main", nullptr);
-            require_residuals(main_out, engine);
-            flag = main_out.flag_;
-            r.warm_ = main_out.warm_;
-
-            if (flag >= this->mesh_abort_flag_) {
-                if (this->print_mesh_info_) {
-                    fmt::print(fmt::fg(fmt::color::red),
-                               "Mesh Iteration {0:} Failed to Solve: Aborting\n", i + 1);
-                }
-                break;
-            }
-        }
-    }
-
-    if (this->print_mesh_info_) {
-        Runtimer.stop();
-        double tseconds = double(Runtimer.count<std::chrono::microseconds>()) / 1000000;
-        fmt::print("Total Time:");
-        if (tseconds > 0.5) {
-            fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.4f} s\n", tseconds);
-        } else {
-            fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.2f} ms\n", tseconds * 1000);
-        }
-
-        fmt::print(fmt::fg(fmt::color::dim_gray), "Finished ");
-        fmt::print(": ");
-        fmt::print(fmt::fg(fmt::color::royal_blue), "Adaptive Mesh Refinement");
-        fmt::print("\n");
-        fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65);
-    }
-
-    return flag;
+    return this->run_amr_loop(engine, mode, r, this->mesh_abort_flag_, this->max_mesh_iters_,
+                              this->solve_only_first_, this->print_mesh_info_, hooks);
 }

@@ -1777,13 +1777,13 @@ struct OptimalControlProblemBase : BackendProblemBase {
     tycho::ConvergenceFlags ocp_call_impl(JetJobModes mode);
 
     // -------------------------------------------------------------------
-    // M5 solve() hooks (nlp_backend.h). The old surface above
+    // solve() hooks (nlp_backend.h). The old surface above
     // (solve()/optimize()/.../ocp_call_impl) is untouched and stays primary
     // for this class; these are the override set the new
     // BackendProblemBase::solve() pipeline dispatches through.
     // -------------------------------------------------------------------
 
-    /// @brief M5 solve() hook: mirrors interior_point_call_impl's own
+    /// @brief solve() hook: mirrors interior_point_call_impl's own
     ///        transcription gate.
     void prepare_solve() override {
         this->check_transcriptions();
@@ -1791,11 +1791,11 @@ struct OptimalControlProblemBase : BackendProblemBase {
             this->transcribe();
     }
 
-    /// @brief M5 solve() hook: the packed multi-phase decision-variable
+    /// @brief solve() hook: the packed multi-phase decision-variable
     ///        vector (make_solver_input()).
     Eigen::VectorXd initial_primal() const override { return this->make_solver_input(); }
 
-    /// @brief M5 solve() hook: write a stage's output back across every
+    /// @brief solve() hook: write a stage's output back across every
     ///        phase, the same way interior_point_call_impl does -- full
     ///        post-opt residuals when the engine reported them
     ///        (StageOutput::eq_cons_/iq_cons_ non-empty), else multipliers
@@ -1813,10 +1813,10 @@ struct OptimalControlProblemBase : BackendProblemBase {
         }
     }
 
-    /// @brief M5 solve() hook: mirrors the old adaptive_mesh_ gate.
+    /// @brief solve() hook: mirrors the old adaptive_mesh_ gate.
     bool adaptive_mesh_enabled() const override { return this->adaptive_mesh_; }
 
-    /// @brief M5 solve() hook: the multi-phase adaptive-mesh loop, reshaped
+    /// @brief solve() hook: the multi-phase adaptive-mesh loop, reshaped
     ///        from ocp_call_impl/interior_point_call_impl onto
     ///        run_engine_stage. Defined in optimal_control_problem.cpp.
     tycho::ConvergenceFlags run_adaptive_mesh(EngineRef engine, Mode mode, SolveResult &r) override;
@@ -1945,7 +1945,7 @@ struct OptimalControlProblemBase : BackendProblemBase {
     /// @return The solver convergence flag.
     tycho::ConvergenceFlags optimize_solve() { return ocp_call_impl(JetJobModes::OptimizeSolve); }
 
-    // BackendProblemBase's new solve(EngineRef, SolveOptions) overload (M5)
+    // BackendProblemBase's new solve(EngineRef, SolveOptions) overload
     // is otherwise hidden by the 0-arg solve() override above.
     using BackendProblemBase::solve;
 

@@ -31,6 +31,7 @@
 #pragma once
 
 #include <algorithm>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -77,13 +78,13 @@ struct IpoptRunInfo {
     double wall_time_s_ = -1.0;
 };
 
-/// @brief Options for the engine-driven staged solve() (M5): which mode the
+/// @brief Options for the engine-driven staged solve(): which mode the
 ///        main stage runs, whether a feasibility presolve stage precedes it
 ///        and on which engine, whether an optimality polish stage follows it
 ///        and on which engine, and the warm-start currency (if any) that
 ///        seeds the first stage that runs.
 ///
-/// Verbatim per the M5 solve-API spec: every field name and default here is
+/// Verbatim per the solve-API spec: every field name and default here is
 /// binding.
 struct SolveOptions {
     Mode mode = Mode::Optimal;
@@ -179,7 +180,7 @@ struct BackendProblemBase {
     virtual ConvergenceFlags optimize_solve() = 0;
 
     // -------------------------------------------------------------------
-    // M5 engine-driven staged solve(). Coexists with the five mode methods
+    // The engine-driven staged solve(). Coexists with the five mode methods
     // above -- neither surface displaces the other. Implemented once, in
     // solve_pipeline.cpp, dispatching through the protected hooks below;
     // each concrete problem type (OptimizationProblem, ODEPhaseBase,
@@ -271,15 +272,56 @@ struct BackendProblemBase {
     ///        sets `r.warm_` to the LAST main-mode stage's export (the seed
     ///        solve() hands a polish stage). Only called when
     ///        `adaptive_mesh_enabled()` is true; Phase and OCP each reshape
-    ///        their own mesh loop onto `run_engine_stage` here. The base
-    ///        body is unreachable through solve() (it never calls this
-    ///        when `adaptive_mesh_enabled()` is false) and throws if
-    ///        reached some other way.
-    /// @throws std::invalid_argument if `engine` (or, when a presolve stage
-    ///         runs, the presolve engine) reports no constraint residuals --
-    ///         mesh error estimation has nothing to measure from -- naming
-    ///         the engine.
+    ///        their own mesh loop by calling run_amr_loop() below with their
+    ///        mesh-specific callbacks. The base body is unreachable through
+    ///        solve() (it never calls this when `adaptive_mesh_enabled()` is
+    ///        false) and throws if reached some other way.
+    /// @throws std::invalid_argument if the MAIN stage's engine reports no
+    ///         constraint residuals -- mesh error estimation has nothing to
+    ///         measure from -- naming the engine. The presolve stage (if
+    ///         any) is not held to this: it is never the stage mesh error
+    ///         estimation reads from, so an engine without residual
+    ///         reporting is a legal presolve even under adaptive mesh.
     virtual tycho::ConvergenceFlags run_adaptive_mesh(EngineRef engine, Mode mode, SolveResult &r);
+
+    /// @brief The mesh-representation-specific callbacks run_amr_loop()
+    ///        needs from a concrete adaptive-mesh problem type. Everything
+    ///        that is NOT mesh-representation-specific -- stage bookkeeping,
+    ///        the re-transcription gate, the residual-report check, warm
+    ///        seeding, the banner/timer -- lives once in run_amr_loop()
+    ///        itself, so the two overrides (Phase, OCP) cannot drift apart
+    ///        on those parts.
+    struct AmrLoopHooks {
+        std::function<void()> init_mesh;             ///< init_mesh_refinement() / init_meshs().
+        std::function<bool(int iter)> mesh_converged; ///< check_mesh()-shaped test for `iter`.
+        std::function<void()> update_mesh;            ///< update_mesh() / update_meshs(...).
+        std::function<void(int iter)> print_iteration; ///< per-iteration mesh-state print.
+        const char *converged_message = "";           ///< e.g. "Mesh Converged".
+        const char *not_converged_message = "";       ///< e.g. "Mesh Not Converged".
+    };
+
+    /// @brief Shared adaptive-mesh loop body: presolve (optional, before
+    ///        mesh iteration 0, repeated every iteration when
+    ///        `solve_only_first` is false) then one main-mode
+    ///        `run_engine_stage` call per mesh iteration, re-transcribing
+    ///        (`prepare_solve()`) before every stage -- a mesh iteration
+    ///        invalidates the prior transcription (`reset_transcription()`),
+    ///        exactly as the old per-type `interior_point_call_impl` did at
+    ///        its own entry on every call. Only the MAIN stage is required
+    ///        to report residuals; a misuse refusal is raised before
+    ///        `accept_stage()` runs, so it never leaves the host
+    ///        half-mutated. `hooks` supplies the mesh-representation-specific
+    ///        pieces; `mesh_abort_flag`/`max_mesh_iters`/`solve_only_first`/
+    ///        `print_mesh_info` are the calling type's own settings, read by
+    ///        the override and passed through unchanged.
+    /// @return The deciding stage's convergence flag -- always
+    ///         `r.stages_.back().flag_` on return.
+    /// @throws std::invalid_argument if the main stage's engine reports no
+    ///         constraint residuals, naming the engine.
+    tycho::ConvergenceFlags run_amr_loop(EngineRef engine, Mode mode, SolveResult &r,
+                                         tycho::ConvergenceFlags mesh_abort_flag,
+                                         int max_mesh_iters, bool solve_only_first,
+                                         bool print_mesh_info, const AmrLoopHooks &hooks);
 
     /// @brief The options of the solve() call presently dispatching on this
     ///        instance, or null outside of one. Set for the duration of the
