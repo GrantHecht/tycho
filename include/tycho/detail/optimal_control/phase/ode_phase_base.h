@@ -74,6 +74,7 @@ using tycho::solvers::EngineRef;
 using tycho::solvers::InteriorPointSolver;
 using tycho::solvers::Mode;
 using tycho::solvers::NonLinearProgram;
+using tycho::solvers::PhaseResult;
 using tycho::solvers::SolveOptions;
 using tycho::solvers::SolveResult;
 using tycho::solvers::StageOutput;
@@ -1969,6 +1970,28 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
             this->collect_solver_multipliers(out.eq_lmults_, out.iq_lmults_);
             this->invalidate_post_opt_info();
         }
+    }
+
+    /// @brief solve() hook: a single Phase IS the whole declared problem, so
+    ///        this appends exactly one @ref PhaseResult (index 0), spanning
+    ///        the full declared space. The slices are copied out of
+    ///        `r.warm_` -- the final stage's own declared-space export,
+    ///        already sized to the full primal/equality/inequality spaces by
+    ///        the time solve() calls this hook -- so every field is a value
+    ///        snapshot, never a view into this phase's own post-solve state.
+    void fill_phase_results(SolveResult &r) const override {
+        PhaseResult pr;
+        pr.index_ = 0;
+        pr.var_start_ = 0;
+        pr.var_count_ = static_cast<int>(r.warm_.primal_.size());
+        pr.eq_start_ = 0;
+        pr.eq_count_ = static_cast<int>(r.warm_.eq_lmults_.size());
+        pr.iq_start_ = 0;
+        pr.iq_count_ = static_cast<int>(r.warm_.iq_lmults_.size());
+        pr.eq_lmults_ = r.warm_.eq_lmults_;
+        pr.iq_lmults_ = r.warm_.iq_lmults_;
+        pr.bound_lmults_ = r.warm_.bound_lmults_;
+        r.phases_.push_back(std::move(pr));
     }
 
     /// @brief solve() hook: mirrors the old adaptive_mesh_ gate.

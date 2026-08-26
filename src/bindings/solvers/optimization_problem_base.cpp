@@ -88,7 +88,7 @@ The QP thread count is a separate setting: assign ``optimizer.qp_threads``.)doc"
     obj.def("set_jet_job_mode",
             nb::overload_cast<const std::string &>(&BackendProblemBase::set_jet_job_mode));
 
-    // BackendProblemBase::solve now has a second overload (the M5 engine-
+    // BackendProblemBase::solve now has a second overload (the engine-
     // driven staged solve, EngineRef + SolveOptions -- not yet exposed to
     // Python), so the member-pointer expression needs disambiguating the
     // same way set_jet_job_mode's two overloads are just below.

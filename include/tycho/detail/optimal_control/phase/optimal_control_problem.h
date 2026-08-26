@@ -54,6 +54,7 @@ using tycho::solvers::EngineRef;
 using tycho::solvers::InteriorPointSolver;
 using tycho::solvers::Mode;
 using tycho::solvers::NonLinearProgram;
+using tycho::solvers::PhaseResult;
 using tycho::solvers::SolveOptions;
 using tycho::solvers::SolveResult;
 using tycho::solvers::StageOutput;
@@ -1810,6 +1811,35 @@ struct OptimalControlProblemBase : BackendProblemBase {
             for (auto phase : this->phases) {
                 phase->invalidate_post_opt_info();
             }
+        }
+    }
+
+    /// @brief solve() hook: one @ref PhaseResult per phase, index-keyed the
+    ///        same way `this->phases` is, reusing the SAME per-phase offset
+    ///        bookkeeping (`num_phase_vars_`/`num_phase_eq_cons_`/
+    ///        `num_phase_iq_cons_`) that `collect_solver_output`/
+    ///        `collect_solver_multipliers` above already split the full
+    ///        primal/dual vectors by -- never re-derived independently. Each
+    ///        phase's slice is copied out of `r.warm_` (the final stage's
+    ///        own declared-space export), so every field is a value
+    ///        snapshot, never a view into any phase's post-solve state. Link
+    ///        rows/params (if any) are deliberately excluded -- they belong
+    ///        to no single phase.
+    void fill_phase_results(SolveResult &r) const override {
+        r.phases_.reserve(r.phases_.size() + this->phases.size());
+        for (int i = 0; i < this->phases.size(); i++) {
+            PhaseResult pr;
+            pr.index_ = i;
+            pr.var_start_ = (i > 0) ? this->num_phase_vars_.segment(0, i).sum() : 0;
+            pr.var_count_ = this->num_phase_vars_[i];
+            pr.eq_start_ = (i > 0) ? this->num_phase_eq_cons_.segment(0, i).sum() : 0;
+            pr.eq_count_ = this->num_phase_eq_cons_[i];
+            pr.iq_start_ = (i > 0) ? this->num_phase_iq_cons_.segment(0, i).sum() : 0;
+            pr.iq_count_ = this->num_phase_iq_cons_[i];
+            pr.eq_lmults_ = r.warm_.eq_lmults_.segment(pr.eq_start_, pr.eq_count_);
+            pr.iq_lmults_ = r.warm_.iq_lmults_.segment(pr.iq_start_, pr.iq_count_);
+            pr.bound_lmults_ = r.warm_.bound_lmults_.segment(pr.var_start_, pr.var_count_);
+            r.phases_.push_back(std::move(pr));
         }
     }
 
