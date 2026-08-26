@@ -5,6 +5,7 @@
 #include "tycho/vector_functions.h"
 
 #include "tycho/detail/hven_namespaces.h"
+#include "tycho/detail/solvers/solve_types.h"
 #include <hven/detail/drivers/solver_init.h>
 #include <hven/detail/interior/solver_function_base.h>
 #include <hven/detail/interior/constraint_function.h>

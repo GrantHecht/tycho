@@ -56,6 +56,10 @@ set(TYCHO_TEST_LIGHT_SOURCES
     # Boundary pins for the model contract. Light because it reaches only the
     # solver library's own headers -- no tycho/tycho.h, no VectorFunction.
     solvers/test_model_contract_pins.cpp
+    # The solve-call value types (Mode/StageResult/PhaseResult/SolveResult).
+    # Light for the same reason: only solve_types.h and the solver library's
+    # own warm-start header, no tycho/tycho.h, no VectorFunction.
+    solvers/test_solve_types.cpp
 )
 
 set(TYCHO_TEST_HEAVY_SOURCES

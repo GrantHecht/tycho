@@ -83,6 +83,7 @@ set_property(TARGET integrators_instantiations PROPERTY JOB_POOL_COMPILE heavy_c
 # a foreign solver. Everything that used to get these symbols from the in-tree
 # solver project links this target, which links hven in turn.
 add_library(solvers_vf STATIC
+    solvers/solve_types.cpp
     solvers/optimization_problem.cpp
     solvers/transcription_declaration.cpp
     solvers/transcribed_aggregate.cpp
