@@ -7,7 +7,10 @@
 #include "tycho/detail/solvers/solve_types.h"
 #include <hven/warmstart/warm_start_data.h>
 
+#include <cstddef>
 #include <cstring>
+#include <functional>
+#include <string_view>
 #include <tuple>
 
 #include <nanobind/stl/map.h>
@@ -37,6 +40,30 @@ std::vector<std::byte> byte_vector_from_bytes(const nb::bytes &b) {
     return v;
 }
 
+// A boost::hash_combine-shaped mixer, used to build __hash__ for the value
+// types below from the same fields their __eq__ compares (or, for
+// WarmStartData, the cheap documented subset -- see its class docstring).
+std::size_t hash_combine(std::size_t seed, std::size_t v) {
+    return seed ^ (v + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2));
+}
+
+std::size_t hash_warm_extension(const WarmExtension &self) {
+    std::size_t h = std::hash<std::string>{}(self.tag_);
+    std::string_view payload_view(reinterpret_cast<const char *>(self.payload_.data()),
+                                  self.payload_.size());
+    return hash_combine(h, std::hash<std::string_view>{}(payload_view));
+}
+
+std::size_t hash_warm_start_data(const WarmStartData &self) {
+    std::size_t h = static_cast<std::size_t>(self.structure_key_.digest());
+    h = hash_combine(h, static_cast<std::size_t>(self.primal_.size()));
+    h = hash_combine(h, static_cast<std::size_t>(self.eq_lmults_.size()));
+    h = hash_combine(h, static_cast<std::size_t>(self.iq_lmults_.size()));
+    h = hash_combine(h, static_cast<std::size_t>(self.bound_lmults_.size()));
+    h = hash_combine(h, static_cast<std::size_t>(self.extensions_.size()));
+    return h;
+}
+
 } // namespace
 
 void TychoBind<SolveResult>::build(nb::module_ &m) {
@@ -60,7 +87,10 @@ void TychoBind<SolveResult>::build(nb::module_ &m) {
         .def("digest", &DeclarationKey::digest,
              "The two conjuncts folded into one value, for diagnostics. Comparing folded "
              "digests is weaker than comparing keys -- prefer ==.")
-        .def("__eq__", [](const DeclarationKey &a, const DeclarationKey &b) { return a == b; })
+        .def(
+            "__eq__", [](const DeclarationKey &a, const DeclarationKey &b) { return a == b; },
+            nb::is_operator())
+        .def("__hash__", [](const DeclarationKey &self) { return self.digest(); })
         .def("__getstate__",
              [](const DeclarationKey &self) {
                  return std::make_tuple(self.declaration_digest_, self.bound_digest_);
@@ -90,7 +120,10 @@ void TychoBind<SolveResult>::build(nb::module_ &m) {
             [](WarmExtension &self, nb::bytes payload) {
                 self.payload_ = byte_vector_from_bytes(payload);
             })
-        .def("__eq__", [](const WarmExtension &a, const WarmExtension &b) { return a == b; })
+        .def(
+            "__eq__", [](const WarmExtension &a, const WarmExtension &b) { return a == b; },
+            nb::is_operator())
+        .def("__hash__", &hash_warm_extension)
         .def("__getstate__",
              [](const WarmExtension &self) {
                  return std::make_tuple(self.tag_, bytes_from_byte_vector(self.payload_));
@@ -119,7 +152,15 @@ void TychoBind<SolveResult>::build(nb::module_ &m) {
         .def_rw("bound_lmults", &WarmStartData::bound_lmults_)
         .def_rw("structure_key", &WarmStartData::structure_key_)
         .def_rw("extensions", &WarmStartData::extensions_)
-        .def("__eq__", [](const WarmStartData &a, const WarmStartData &b) { return a == b; })
+        .def(
+            "__eq__", [](const WarmStartData &a, const WarmStartData &b) { return a == b; },
+            nb::is_operator())
+        .def("__hash__", &hash_warm_start_data,
+             "Hashes a cheap, stable subset consistent with == -- the declaration-identity "
+             "stamp's digest plus the four block sizes -- not the full primal/dual/extension "
+             "content. Two equal WarmStartData values always hash equal; two unequal values "
+             "sharing that subset (e.g. differing only in payload values) hash equal too, "
+             "which is a legal (if collision-prone) hash under Python's contract.")
         .def("__getstate__",
              [](const WarmStartData &self) {
                  auto bytes = hven::solvers::serialize(self);

@@ -905,6 +905,8 @@ class DeclarationKey:
 
     def __eq__(self, arg: DeclarationKey, /) -> bool: ...
 
+    def __hash__(self) -> int: ...
+
     def __getstate__(self) -> tuple[int, int]: ...
 
     def __setstate__(self, arg: tuple[int, int], /) -> None: ...
@@ -929,6 +931,8 @@ class WarmExtension:
     def payload(self, arg: bytes, /) -> None: ...
 
     def __eq__(self, arg: WarmExtension, /) -> bool: ...
+
+    def __hash__(self) -> int: ...
 
     def __getstate__(self) -> tuple[str, bytes]: ...
 
@@ -978,6 +982,11 @@ class WarmStartData:
     def extensions(self, arg: Sequence[WarmExtension], /) -> None: ...
 
     def __eq__(self, arg: WarmStartData, /) -> bool: ...
+
+    def __hash__(self) -> int:
+        """
+        Hashes a cheap, stable subset consistent with == -- the declaration-identity stamp's digest plus the four block sizes -- not the full primal/dual/extension content. Two equal WarmStartData values always hash equal; two unequal values sharing that subset (e.g. differing only in payload values) hash equal too, which is a legal (if collision-prone) hash under Python's contract.
+        """
 
     def __getstate__(self) -> bytes: ...
 
@@ -1412,7 +1421,7 @@ class OptimizationProblemBase:
     def solve(self) -> ConvergenceFlags: ...
 
     @overload
-    def solve(self, engine: object, mode: object = 'optimal', presolve: object = False, polish: object | None = None, warm: object | None = None) -> SolveResult:
+    def solve(self, engine: object, mode: object = 'optimal', presolve: object | None = False, polish: object | None = None, warm: object | None = None) -> SolveResult:
         """
         Run the engine-driven staged solve: an optional Feasible presolve
         stage, the main stage (``mode``), and an optional Optimal polish stage,
@@ -1425,10 +1434,11 @@ class OptimizationProblemBase:
         mode : Mode | str, optional
             ``Mode.Optimal``/``"optimal"`` (default) or ``Mode.Feasible``/
             ``"feasible"``.
-        presolve : bool | InteriorPointSolver | SqpSolver | IpoptSolver, optional
-            ``False`` (default): no presolve stage. ``True``: run a Feasible
-            presolve stage on ``engine`` itself. An engine instance: run the
-            presolve stage on that engine instead (implies presolve).
+        presolve : bool | InteriorPointSolver | SqpSolver | IpoptSolver | None, optional
+            ``False`` (default) or ``None``: no presolve stage (``None`` is the
+            same as ``False``). ``True``: run a Feasible presolve stage on
+            ``engine`` itself. An engine instance: run the presolve stage on
+            that engine instead (implies presolve).
         polish : InteriorPointSolver | SqpSolver | IpoptSolver | None, optional
             When given, run an Optimal polish stage on this engine after the
             main stage.
@@ -1448,11 +1458,10 @@ class OptimizationProblemBase:
         ------
         ValueError
             Per the refusal matrix (mode/presolve/polish combinations, a stale
-            warm stamp, an engine already solving), or whatever the dispatched
-            engine itself raises for a malformed problem.
-        TypeError
-            If ``engine``/``presolve``/``polish``/``warm`` is not one of the
-            types listed above.
+            warm stamp, an engine already solving), if ``engine``/``presolve``/
+            ``polish``/``mode``/``warm`` is not one of the types listed above,
+            or whatever the dispatched engine itself raises for a malformed
+            problem.
         """
 
     def optimize(self) -> ConvergenceFlags: ...

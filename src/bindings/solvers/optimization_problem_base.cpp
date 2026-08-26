@@ -154,7 +154,10 @@ The QP thread count is a separate setting: assign ``optimizer.qp_threads``.)doc"
             opts.mode = mode_from_pyobject(mode);
 
             EngineRef presolve_engine_storage{};
-            if (nb::isinstance<nb::bool_>(presolve)) {
+            if (presolve.is_none()) {
+                // R-11: None aliases False, symmetric with polish=None.
+                opts.presolve = false;
+            } else if (nb::isinstance<nb::bool_>(presolve)) {
                 opts.presolve = nb::cast<bool>(presolve);
             } else {
                 presolve_engine_storage = engine_ref_from_pyobject(presolve, "presolve");
@@ -191,7 +194,7 @@ The QP thread count is a separate setting: assign ``optimizer.qp_threads``.)doc"
             }
             return result;
         },
-        nb::arg("engine"), nb::arg("mode") = "optimal", nb::arg("presolve") = false,
+        nb::arg("engine"), nb::arg("mode") = "optimal", nb::arg("presolve").none() = false,
         nb::arg("polish") = nb::none(), nb::arg("warm") = nb::none(),
         R"doc(Run the engine-driven staged solve: an optional Feasible presolve
 stage, the main stage (``mode``), and an optional Optimal polish stage,
@@ -204,10 +207,11 @@ engine : InteriorPointSolver | SqpSolver | IpoptSolver
 mode : Mode | str, optional
     ``Mode.Optimal``/``"optimal"`` (default) or ``Mode.Feasible``/
     ``"feasible"``.
-presolve : bool | InteriorPointSolver | SqpSolver | IpoptSolver, optional
-    ``False`` (default): no presolve stage. ``True``: run a Feasible
-    presolve stage on ``engine`` itself. An engine instance: run the
-    presolve stage on that engine instead (implies presolve).
+presolve : bool | InteriorPointSolver | SqpSolver | IpoptSolver | None, optional
+    ``False`` (default) or ``None``: no presolve stage (``None`` is the
+    same as ``False``). ``True``: run a Feasible presolve stage on
+    ``engine`` itself. An engine instance: run the presolve stage on
+    that engine instead (implies presolve).
 polish : InteriorPointSolver | SqpSolver | IpoptSolver | None, optional
     When given, run an Optimal polish stage on this engine after the
     main stage.
@@ -227,11 +231,10 @@ Raises
 ------
 ValueError
     Per the refusal matrix (mode/presolve/polish combinations, a stale
-    warm stamp, an engine already solving), or whatever the dispatched
-    engine itself raises for a malformed problem.
-TypeError
-    If ``engine``/``presolve``/``polish``/``warm`` is not one of the
-    types listed above.
+    warm stamp, an engine already solving), if ``engine``/``presolve``/
+    ``polish``/``mode``/``warm`` is not one of the types listed above,
+    or whatever the dispatched engine itself raises for a malformed
+    problem.
 )doc");
 
     obj.def("optimize", &BackendProblemBase::optimize, nb::call_guard<nb::gil_scoped_release>());

@@ -124,6 +124,40 @@ def test_result_presolve_and_main_stage_roles():
 
 
 # ---------------------------------------------------------------------------
+# presolve=/polish=/warm= accepted paths, and the legacy no-arg solve().
+# ---------------------------------------------------------------------------
+
+
+def test_legacy_no_arg_solve_still_returns_flag():
+    prob = _small_problem()
+    prob.optimizer.print_level = 0
+    flag = prob.solve()
+    assert flag == solvs.ConvergenceFlags.CONVERGED
+    assert isinstance(flag, solvs.ConvergenceFlags)
+
+
+def test_solve_presolve_none_aliases_false():
+    r = _small_problem().solve(_quiet_ipm(), presolve=None)
+    assert [s.role for s in r.stages] == ["main"]
+
+
+def test_presolve_engine_instance_runs_two_stages():
+    r = _small_problem().solve(_quiet_ipm(), presolve=_quiet_ipm())
+    assert [s.role for s in r.stages] == ["presolve", "main"]
+
+
+def test_polish_engine_instance_runs_polish_stage():
+    r = _small_problem().solve(_quiet_ipm(), polish=_quiet_ipm())
+    assert [s.role for s in r.stages] == ["main", "polish"]
+
+
+def test_warm_accepts_solve_result_and_warm_start_data():
+    r1 = _small_problem().solve(_quiet_ipm())
+    assert bool(_small_problem().solve(_quiet_ipm(), warm=r1))
+    assert bool(_small_problem().solve(_quiet_ipm(), warm=r1.warm))
+
+
+# ---------------------------------------------------------------------------
 # Pickling.
 # ---------------------------------------------------------------------------
 
@@ -161,6 +195,25 @@ def test_declaration_key_pickle_roundtrip():
     r = _small_problem().solve(_quiet_ipm())
     key2 = pickle.loads(pickle.dumps(r.structure_key))
     assert key2 == r.structure_key
+
+
+def test_warm_start_data_setstate_rejects_garbage():
+    # __setstate__ is a placement-new-style constructor: it only runs on a
+    # freshly allocated, not-yet-initialized instance (exactly what
+    # cls.__new__(cls) gives pickle -- __new__(cls) bypasses __init__, so
+    # the instance stays uninitialized until __setstate__ runs on it).
+    w = solvs.WarmStartData.__new__(solvs.WarmStartData)
+    with pytest.raises(ValueError):
+        w.__setstate__(b"not-a-warm-start-payload")
+
+
+def test_warm_start_data_unpickle_rejects_truncated_payload():
+    warm = _small_problem().solve(_quiet_ipm()).warm
+    good_bytes = warm.__getstate__()
+    truncated = good_bytes[: len(good_bytes) // 2]
+    w2 = solvs.WarmStartData.__new__(solvs.WarmStartData)
+    with pytest.raises(ValueError):
+        w2.__setstate__(truncated)
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +257,21 @@ def test_sqp_kwargs_constructor_sets_fields():
     assert sqp.kkt_tol == pytest.approx(1e-8)
     assert sqp.max_iter == 42
     assert sqp.enable_soc is False
+
+
+def test_ipm_bad_kwarg_value_type_raises_type_error_naming_it():
+    with pytest.raises(TypeError, match="max_iters"):
+        solvs.IPM(max_iters="not-an-int")
+
+
+def test_ipm_bad_preset_value_type_raises_type_error():
+    with pytest.raises(TypeError, match="preset"):
+        solvs.IPM(preset=3)
+
+
+def test_sqp_bad_kwarg_value_type_raises_type_error_naming_it():
+    with pytest.raises(TypeError, match="max_iter"):
+        solvs.SqpSolver(max_iter="not-an-int")
 
 
 if __name__ == "__main__":

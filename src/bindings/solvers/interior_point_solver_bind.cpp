@@ -190,7 +190,15 @@ void TychoBind<InteriorPointSolver>::build(nb::module_ &m) {
         [](InteriorPointSolver *self, nb::kwargs kwargs) {
             new (self) InteriorPointSolver();
             if (kwargs.contains("preset")) {
-                self->apply_preset(nb::cast<std::string>(kwargs["preset"]));
+                try {
+                    self->apply_preset(nb::cast<std::string>(kwargs["preset"]));
+                } catch (const nb::cast_error &) {
+                    throw nb::type_error(
+                        fmt::format("InteriorPointSolver: keyword argument 'preset' got a value of "
+                                    "type {} that could not be converted to str",
+                                    nb::cast<std::string>(nb::str(kwargs["preset"].type())))
+                            .c_str());
+                }
             }
             const auto &table = ipm_kwarg_table();
             for (auto item : kwargs) {
@@ -204,7 +212,15 @@ void TychoBind<InteriorPointSolver>::build(nb::module_ &m) {
                         fmt::format("InteriorPointSolver: unrecognized keyword argument '{}'", name)
                             .c_str());
                 }
-                it->second(*self, item.second);
+                try {
+                    it->second(*self, item.second);
+                } catch (const nb::cast_error &) {
+                    throw nb::type_error(
+                        fmt::format("InteriorPointSolver: keyword argument '{}' got a value of "
+                                    "type {} that could not be converted",
+                                    name, nb::cast<std::string>(nb::str(item.second.type())))
+                            .c_str());
+                }
             }
         },
         R"doc(Construct an InteriorPointSolver, optionally overriding settings by name.

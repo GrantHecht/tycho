@@ -87,7 +87,15 @@ void TychoBind<SqpSolver>::build(nb::module_ &m) {
                     throw nb::type_error(
                         fmt::format("SqpSolver: unrecognized keyword argument '{}'", name).c_str());
                 }
-                it->second(*self, item.second);
+                try {
+                    it->second(*self, item.second);
+                } catch (const nb::cast_error &) {
+                    throw nb::type_error(
+                        fmt::format("SqpSolver: keyword argument '{}' got a value of type {} "
+                                    "that could not be converted",
+                                    name, nb::cast<std::string>(nb::str(item.second.type())))
+                            .c_str());
+                }
             }
         },
         R"doc(Construct an SqpSolver, optionally overriding SqpOptions fields by name.
