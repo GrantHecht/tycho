@@ -212,9 +212,11 @@ struct BackendProblemBase {
     /// `opts.warm`, when set, seeds the primal/dual state of whichever stage
     /// runs FIRST (presolve if requested, else main) after a stamp check:
     /// its `DeclarationKey` must match the current transcription's, or the
-    /// call refuses naming both keys' digests. A `Mode::Optimal` polish
-    /// stage is always warm-seeded, from the main stage's own
-    /// `StageOutput::warm_` export, independent of `opts.warm`.
+    /// call refuses naming both keys' digests. Every stage after the first is
+    /// a uniform value chain: a presolve stage's own `StageOutput::warm_`
+    /// export seeds the main stage that follows it, and the main stage's own
+    /// export seeds a `Mode::Optimal` polish stage that follows that --
+    /// independent of `opts.warm`, which only ever seeds the first stage.
     ///
     /// `prepare_solve()` (transcribe-if-needed) runs before the stamp check,
     /// so the check compares against the transcription this call will
@@ -292,12 +294,12 @@ struct BackendProblemBase {
     ///        itself, so the two overrides (Phase, OCP) cannot drift apart
     ///        on those parts.
     struct AmrLoopHooks {
-        std::function<void()> init_mesh;             ///< init_mesh_refinement() / init_meshs().
-        std::function<bool(int iter)> mesh_converged; ///< check_mesh()-shaped test for `iter`.
-        std::function<void()> update_mesh;            ///< update_mesh() / update_meshs(...).
+        std::function<void()> init_mesh;               ///< init_mesh_refinement() / init_meshs().
+        std::function<bool(int iter)> mesh_converged;  ///< check_mesh()-shaped test for `iter`.
+        std::function<void()> update_mesh;             ///< update_mesh() / update_meshs(...).
         std::function<void(int iter)> print_iteration; ///< per-iteration mesh-state print.
-        const char *converged_message = "";           ///< e.g. "Mesh Converged".
-        const char *not_converged_message = "";       ///< e.g. "Mesh Not Converged".
+        const char *converged_message = "";            ///< e.g. "Mesh Converged".
+        const char *not_converged_message = "";        ///< e.g. "Mesh Not Converged".
     };
 
     /// @brief Shared adaptive-mesh loop body: presolve (optional, before

@@ -18,13 +18,19 @@
 // regardless of an earlier stage's flag: a non-convergent stage is a value in
 // that stage's report, never a thrown exception.
 //
-// WARM SEEDING. opts.warm, when set, seeds only whichever stage runs FIRST
-// (presolve if requested, else main) -- a one-shot value, exactly as
-// run_engine_stage/stage_warm_start already document. The polish stage is
-// always warm-seeded, independent of opts.warm, from the main stage's own
-// StageOutput::warm_ export (the adaptive-mesh override sets this on
-// SolveResult::warm_ itself, since it runs several internal main-mode
-// stages and only the LAST one's export is the right seed).
+// WARM SEEDING is a uniform chain: the caller's opts.warm, when set, seeds
+// only whichever stage runs FIRST (presolve if requested, else main) -- a
+// one-shot value, exactly as run_engine_stage/stage_warm_start already
+// document. EVERY stage after the first is seeded by its immediate
+// predecessor's own StageOutput::warm_ export -- a presolve stage's export
+// seeds the main stage that follows it, and the main stage's export seeds a
+// polish stage that follows that, independent of opts.warm. This applies
+// inside the adaptive-mesh loop too: the pre-loop presolve's export seeds
+// mesh iteration 0's main stage, and (when solve_only_first is false and the
+// presolve repeats every iteration) each iteration's own presolve export
+// seeds that same iteration's main stage. The adaptive-mesh override still
+// sets SolveResult::warm_ itself from whichever main-mode stage ran LAST,
+// since that is the one a polish stage after the loop should seed from.
 
 #include "tycho/detail/solvers/nlp_backend.h"
 
@@ -201,14 +207,21 @@ SolveResult BackendProblemBase::solve(EngineRef engine, const SolveOptions &opts
                 "flag_ (or appended no stage at all) -- these must stay in agreement");
         }
     } else {
+        // Holds the presolve stage's own warm export alive long enough to
+        // seed the main stage below -- part of the uniform value chain
+        // (top-of-file WARM SEEDING note): each stage after the first is
+        // seeded by its immediate predecessor's export, not by opts.warm
+        // again.
+        hven::solvers::WarmStartData presolve_warm;
         if (opts.presolve) {
             EngineRef presolve_engine =
                 opts.presolve_engine != nullptr ? *opts.presolve_engine : engine;
             StageOutput out = run_engine_stage(presolve_engine, Mode::Feasible, this->nlp_,
                                                this->initial_primal(), first_stage_warm);
-            first_stage_warm = nullptr;
             this->accept_stage(out);
             append_stage(result, out, "presolve");
+            presolve_warm = std::move(out.warm_);
+            first_stage_warm = &presolve_warm;
         }
 
         StageOutput main_out = run_engine_stage(engine, opts.mode, this->nlp_,
@@ -254,12 +267,9 @@ tycho::ConvergenceFlags BackendProblemBase::run_adaptive_mesh(EngineRef, Mode, S
         "false");
 }
 
-tycho::ConvergenceFlags BackendProblemBase::run_amr_loop(EngineRef engine, Mode mode,
-                                                         SolveResult &r,
-                                                         tycho::ConvergenceFlags mesh_abort_flag,
-                                                         int max_mesh_iters, bool solve_only_first,
-                                                         bool print_mesh_info,
-                                                         const AmrLoopHooks &hooks) {
+tycho::ConvergenceFlags BackendProblemBase::run_amr_loop(
+    EngineRef engine, Mode mode, SolveResult &r, tycho::ConvergenceFlags mesh_abort_flag,
+    int max_mesh_iters, bool solve_only_first, bool print_mesh_info, const AmrLoopHooks &hooks) {
     const SolveOptions *opts = this->active_solve_options_;
     const bool do_presolve = opts != nullptr && opts->presolve;
     EngineRef presolve_engine =
@@ -300,14 +310,23 @@ tycho::ConvergenceFlags BackendProblemBase::run_amr_loop(EngineRef engine, Mode 
     tycho::utils::Timer amr_timer;
     amr_timer.start();
 
+    // Holds the most recent presolve stage's warm export -- reused as the
+    // backing storage for both the pre-loop presolve below and each
+    // per-iteration presolve inside the loop (do_presolve && !solve_only_first),
+    // since only one of those exports is ever pending at a time. Part of the
+    // same uniform value chain described at the top of this file: a
+    // presolve's export seeds the main stage that immediately follows it.
+    hven::solvers::WarmStartData presolve_warm;
     if (do_presolve) {
         // The presolve stage is never the one mesh error estimation reads
         // from (the main stage always runs after it and owns the post-opt
         // info), so it is not held to the residual-report requirement -- an
         // SQP/Ipopt presolve feeding an interior-point main stage under
         // adaptive mesh is a legal composition.
-        run_one(presolve_engine, Mode::Feasible, "presolve", first_stage_warm, false);
-        first_stage_warm = nullptr;
+        StageOutput presolve_out =
+            run_one(presolve_engine, Mode::Feasible, "presolve", first_stage_warm, false);
+        presolve_warm = std::move(presolve_out.warm_);
+        first_stage_warm = &presolve_warm;
     }
 
     StageOutput main_out = run_one(engine, mode, "main", first_stage_warm, true);
@@ -342,12 +361,19 @@ tycho::ConvergenceFlags BackendProblemBase::run_amr_loop(EngineRef engine, Mode 
 
             // solve_only_first keeps its old name and its false-meaning: when
             // false, the presolve stage repeats on every mesh iteration
-            // rather than running only before iteration 0.
+            // rather than running only before iteration 0. Each repeat's own
+            // export re-seeds THIS iteration's main stage -- the same
+            // predecessor-seeds-successor chain as the pre-loop presolve
+            // above, not the stale export from a previous iteration.
+            const hven::solvers::WarmStartData *iter_main_warm = nullptr;
             if (do_presolve && !solve_only_first) {
-                run_one(presolve_engine, Mode::Feasible, "presolve", nullptr, false);
+                StageOutput presolve_out =
+                    run_one(presolve_engine, Mode::Feasible, "presolve", nullptr, false);
+                presolve_warm = std::move(presolve_out.warm_);
+                iter_main_warm = &presolve_warm;
             }
 
-            main_out = run_one(engine, mode, "main", nullptr, true);
+            main_out = run_one(engine, mode, "main", iter_main_warm, true);
             flag = main_out.flag_;
             r.warm_ = main_out.warm_;
 
