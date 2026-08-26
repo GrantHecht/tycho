@@ -16,6 +16,26 @@ class InteriorPointSolver:
     @overload
     def __init__(self) -> None: ...
 
+    @overload
+    def __init__(self, **kwargs) -> None:
+        """
+        Construct an InteriorPointSolver, optionally overriding settings by name.
+
+        Every settings property below is also accepted as a keyword argument
+        here (e.g. ``InteriorPointSolver(max_iters=500, kkt_tol=1e-9)``).
+        ``preset`` (a name accepted by :meth:`apply_preset`) is applied FIRST,
+        before any other keyword argument override, so
+        ``InteriorPointSolver(preset="soc_recovery_l1", max_soc=6)`` starts from
+        the preset and then raises max_soc past what the preset itself sets.
+        Validated properties keep their validation (raise ValueError exactly as
+        the corresponding ``set_*`` method / property assignment would).
+
+        Raises
+        ------
+        TypeError
+            If an unrecognized keyword argument is given, naming it.
+        """
+
     def optimize(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
 
     def solve_optimize(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
@@ -850,6 +870,454 @@ class BestCriteriaModes(enum.Enum):
 
     OBJ = 3
 
+class Mode(enum.Enum):
+    """
+    Which objective a solve() call pursued: drive to optimality, or only to feasibility.
+    """
+
+    Optimal = 0
+
+    Feasible = 1
+
+class DeclarationKey:
+    """
+    The declared problem's identity stamp a WarmStartData was taken under. Engine-independent and treatment-independent by construction -- see hven's structure_identity.h for the exact coverage.
+    """
+
+    def __init__(self) -> None: ...
+
+    @property
+    def declaration_digest(self) -> int: ...
+
+    @declaration_digest.setter
+    def declaration_digest(self, arg: int, /) -> None: ...
+
+    @property
+    def bound_digest(self) -> int: ...
+
+    @bound_digest.setter
+    def bound_digest(self, arg: int, /) -> None: ...
+
+    def digest(self) -> int:
+        """
+        The two conjuncts folded into one value, for diagnostics. Comparing folded digests is weaker than comparing keys -- prefer ==.
+        """
+
+    def __eq__(self, arg: DeclarationKey, /) -> bool: ...
+
+    def __getstate__(self) -> tuple[int, int]: ...
+
+    def __setstate__(self, arg: tuple[int, int], /) -> None: ...
+
+class WarmExtension:
+    """
+    One opaque engine extension carried by a WarmStartData: a tag naming the producer and meaning, and payload bytes only that producer interprets.
+    """
+
+    def __init__(self, tag: str, payload: bytes) -> None: ...
+
+    @property
+    def tag(self) -> str: ...
+
+    @tag.setter
+    def tag(self, arg: str, /) -> None: ...
+
+    @property
+    def payload(self) -> bytes: ...
+
+    @payload.setter
+    def payload(self, arg: bytes, /) -> None: ...
+
+    def __eq__(self, arg: WarmExtension, /) -> bool: ...
+
+    def __getstate__(self) -> tuple[str, bytes]: ...
+
+    def __setstate__(self, arg: tuple[str, bytes], /) -> None: ...
+
+class WarmStartData:
+    """
+    The engine-neutral warm-start currency: a declared-space primal/dual core, the declaration-identity stamp it was taken under, and opaque engine extensions. Value-semantic and comparable; nothing here interprets an extension's bytes.
+    """
+
+    def __init__(self) -> None: ...
+
+    @property
+    def primal(self) -> numpy.ndarray: ...
+
+    @primal.setter
+    def primal(self, arg: numpy.ndarray, /) -> None: ...
+
+    @property
+    def eq_lmults(self) -> numpy.ndarray: ...
+
+    @eq_lmults.setter
+    def eq_lmults(self, arg: numpy.ndarray, /) -> None: ...
+
+    @property
+    def iq_lmults(self) -> numpy.ndarray: ...
+
+    @iq_lmults.setter
+    def iq_lmults(self, arg: numpy.ndarray, /) -> None: ...
+
+    @property
+    def bound_lmults(self) -> numpy.ndarray: ...
+
+    @bound_lmults.setter
+    def bound_lmults(self, arg: numpy.ndarray, /) -> None: ...
+
+    @property
+    def structure_key(self) -> DeclarationKey: ...
+
+    @structure_key.setter
+    def structure_key(self, arg: DeclarationKey, /) -> None: ...
+
+    @property
+    def extensions(self) -> list[WarmExtension]: ...
+
+    @extensions.setter
+    def extensions(self, arg: Sequence[WarmExtension], /) -> None: ...
+
+    def __eq__(self, arg: WarmStartData, /) -> bool: ...
+
+    def __getstate__(self) -> bytes: ...
+
+    def __setstate__(self, arg: bytes, /) -> None: ...
+
+class StageResult:
+    """
+    One solver stage's outcome: which stage it was, which engine ran it, and the numbers that describe how it finished.
+    """
+
+    def __init__(self) -> None: ...
+
+    @property
+    def role(self) -> str:
+        """"presolve" | "main" | "polish"."""
+
+    @property
+    def engine_name(self) -> str:
+        """Engine class name, e.g. "InteriorPointSolver"."""
+
+    @property
+    def flag(self) -> ConvergenceFlags: ...
+
+    @property
+    def iterations(self) -> int: ...
+
+    @property
+    def objective(self) -> float:
+        """Caller's scale."""
+
+    @property
+    def kkt_residual(self) -> float: ...
+
+    @property
+    def eq_violation(self) -> float:
+        """Max-norm."""
+
+    @property
+    def iq_violation(self) -> float:
+        """Max-norm."""
+
+    @property
+    def wall_time_s(self) -> float: ...
+
+    @property
+    def engine_details(self) -> dict[str, float]:
+        """Engine-specific numeric annex, as a plain dict."""
+
+    @property
+    def engine_notes(self) -> dict[str, str]:
+        """Engine-specific string annex, as a plain dict."""
+
+    def __getstate__(self) -> tuple[str, str, ConvergenceFlags, int, float, float, float, float, float, dict[str, float], dict[str, str]]: ...
+
+    def __setstate__(self, arg: tuple[str, str, ConvergenceFlags, int, float, float, float, float, float, Mapping[str, float], Mapping[str, str]], /) -> None: ...
+
+class PhaseResult:
+    """
+    One OCP phase's slice of a solve, keyed the same way as the OCP itself (index == 0 for a single Phase, no OCP). Every field is a snapshot taken at solve time.
+    """
+
+    def __init__(self) -> None: ...
+
+    @property
+    def index(self) -> int: ...
+
+    @property
+    def var_start(self) -> int: ...
+
+    @property
+    def var_count(self) -> int: ...
+
+    @property
+    def eq_start(self) -> int: ...
+
+    @property
+    def eq_count(self) -> int: ...
+
+    @property
+    def iq_start(self) -> int: ...
+
+    @property
+    def iq_count(self) -> int: ...
+
+    @property
+    def eq_lmults(self) -> numpy.ndarray: ...
+
+    @property
+    def iq_lmults(self) -> numpy.ndarray: ...
+
+    @property
+    def bound_lmults(self) -> numpy.ndarray:
+        """Declared-space signed z = zL - zU slice."""
+
+    def __getstate__(self) -> tuple[int, int, int, int, int, int, int, numpy.ndarray, numpy.ndarray, numpy.ndarray]: ...
+
+    def __setstate__(self, arg: tuple[int, int, int, int, int, int, int, numpy.ndarray, numpy.ndarray, numpy.ndarray], /) -> None: ...
+
+class SolveResult:
+    """
+    What a solve() call hands back: the deciding convergence flag, every stage that ran, every OCP phase's slice (empty for a bare VF problem), and the declared-space warm-start currency taken from the final deciding stage.
+    """
+
+    def __init__(self) -> None: ...
+
+    @property
+    def flag(self) -> ConvergenceFlags: ...
+
+    @property
+    def stages(self) -> list[StageResult]:
+        """Run order: presolve?, main, polish?. A fresh copy on every access."""
+
+    @property
+    def phases(self) -> list[PhaseResult]:
+        """
+        Index-keyed like the OCP; empty for a bare VF problem. A fresh copy on every access.
+        """
+
+    @property
+    def warm(self) -> WarmStartData:
+        """
+        Declared-space warm-start payload from the final deciding stage. A fresh copy on every access.
+        """
+
+    @property
+    def structure_key(self) -> DeclarationKey:
+        """The declaration-identity stamp warm was taken under."""
+
+    def converged(self) -> bool:
+        """
+        True for CONVERGED or ACCEPTABLE -- ACCEPTABLE is convergence to the acceptable tolerance ladder, still a caller-usable answer.
+        """
+
+    def __bool__(self) -> bool: ...
+
+    def objective(self) -> float: ...
+
+    def iterations(self) -> int: ...
+
+    def __getstate__(self) -> tuple[ConvergenceFlags, list[StageResult], list[PhaseResult], WarmStartData, DeclarationKey]: ...
+
+    def __setstate__(self, arg: tuple[ConvergenceFlags, Sequence[StageResult], Sequence[PhaseResult], WarmStartData, DeclarationKey], /) -> None: ...
+
+class SqpSolver:
+    @overload
+    def __init__(self) -> None: ...
+
+    @overload
+    def __init__(self, **kwargs) -> None:
+        """
+        Construct an SqpSolver, optionally overriding SqpOptions fields by name.
+
+        Every plain-value SqpOptions field is accepted as a keyword argument
+        (kkt_tol, feas_tol, max_iter, tr_init, tr_max, tr_min, enable_soc,
+        adaptive_mu, start_level, warm_full_step, budget_mode,
+        elastic_ladder_early_exit, crash_basis, qp_mode, ssn_prox_carry,
+        ssn_certify_from_face, ssn_sigma_rule, ssn_hint_rule,
+        ssn_infeasibility_rule). The QP sub-options (``qp``) and the
+        globalization-strategy factory (``make_strategy``) are not kwargs-
+        exposed; use the property/attribute defaults for those.
+
+        Raises
+        ------
+        TypeError
+            If an unrecognized keyword argument is given, naming it.
+        """
+
+    @property
+    def kkt_tol(self) -> float: ...
+
+    @kkt_tol.setter
+    def kkt_tol(self, arg: float, /) -> None: ...
+
+    @property
+    def feas_tol(self) -> float: ...
+
+    @feas_tol.setter
+    def feas_tol(self, arg: float, /) -> None: ...
+
+    @property
+    def max_iter(self) -> int: ...
+
+    @max_iter.setter
+    def max_iter(self, arg: int, /) -> None: ...
+
+    @property
+    def tr_init(self) -> float: ...
+
+    @tr_init.setter
+    def tr_init(self, arg: float, /) -> None: ...
+
+    @property
+    def tr_max(self) -> float: ...
+
+    @tr_max.setter
+    def tr_max(self, arg: float, /) -> None: ...
+
+    @property
+    def tr_min(self) -> float: ...
+
+    @tr_min.setter
+    def tr_min(self, arg: float, /) -> None: ...
+
+    @property
+    def enable_soc(self) -> bool: ...
+
+    @enable_soc.setter
+    def enable_soc(self, arg: bool, /) -> None: ...
+
+    @property
+    def adaptive_mu(self) -> bool: ...
+
+    @adaptive_mu.setter
+    def adaptive_mu(self, arg: bool, /) -> None: ...
+
+    @property
+    def start_level(self) -> StartLevel: ...
+
+    @start_level.setter
+    def start_level(self, arg: StartLevel, /) -> None: ...
+
+    @property
+    def warm_full_step(self) -> bool: ...
+
+    @warm_full_step.setter
+    def warm_full_step(self, arg: bool, /) -> None: ...
+
+    @property
+    def budget_mode(self) -> bool: ...
+
+    @budget_mode.setter
+    def budget_mode(self, arg: bool, /) -> None: ...
+
+    @property
+    def elastic_ladder_early_exit(self) -> bool: ...
+
+    @elastic_ladder_early_exit.setter
+    def elastic_ladder_early_exit(self, arg: bool, /) -> None: ...
+
+    @property
+    def crash_basis(self) -> bool: ...
+
+    @crash_basis.setter
+    def crash_basis(self, arg: bool, /) -> None: ...
+
+    @property
+    def qp_mode(self) -> QpMode: ...
+
+    @qp_mode.setter
+    def qp_mode(self, arg: QpMode, /) -> None: ...
+
+    @property
+    def ssn_prox_carry(self) -> bool: ...
+
+    @ssn_prox_carry.setter
+    def ssn_prox_carry(self, arg: bool, /) -> None: ...
+
+    @property
+    def ssn_certify_from_face(self) -> bool: ...
+
+    @ssn_certify_from_face.setter
+    def ssn_certify_from_face(self, arg: bool, /) -> None: ...
+
+    @property
+    def ssn_sigma_rule(self) -> SsnSigmaRule: ...
+
+    @ssn_sigma_rule.setter
+    def ssn_sigma_rule(self, arg: SsnSigmaRule, /) -> None: ...
+
+    @property
+    def ssn_hint_rule(self) -> SsnHintRule: ...
+
+    @ssn_hint_rule.setter
+    def ssn_hint_rule(self, arg: SsnHintRule, /) -> None: ...
+
+    @property
+    def ssn_infeasibility_rule(self) -> SsnInfeasibilityRule: ...
+
+    @ssn_infeasibility_rule.setter
+    def ssn_infeasibility_rule(self, arg: SsnInfeasibilityRule, /) -> None: ...
+
+class StartLevel(enum.Enum):
+    """
+    How much of a previous solve's state a caller intends to feed into the next one -- kCold ignores it, kSeeded trusts values but not provenance, kWarm additionally trusts the globalization state, kHot additionally reuses a factorization.
+    """
+
+    kCold = 0
+
+    kSeeded = 1
+
+    kWarm = 2
+
+    kHot = 3
+
+class QpMode(enum.Enum):
+    """Which QP subproblem solver the SQP driver dispatches to."""
+
+    kWalk = 0
+
+    kSsn = 1
+
+class SsnSigmaRule(enum.Enum):
+    """How the SSN proximal/Levenberg-Marquardt shift sigma is sized."""
+
+    kLadder = 0
+
+    kResidualArmed = 1
+
+    kResidualAlways = 2
+
+class SsnHintRule(enum.Enum):
+    """What protects the SSN hinted first step."""
+
+    kIterationZeroFree = 0
+
+    kWatchdog = 1
+
+class SsnInfeasibilityRule(enum.Enum):
+    """What turns an SSN infeasibility suspicion into an exit."""
+
+    kSymptoms = 0
+
+    kFarkasGated = 1
+
+class IpoptSolver:
+    """
+    Ipopt as a peer engine handle. Constructible only when the backend is compiled in (ENABLE_IPOPT); otherwise raises RuntimeError.
+    """
+
+    def __init__(self) -> None: ...
+
+    @property
+    def options(self) -> dict[str, str]:
+        """
+        String key/value options forwarded verbatim to Ipopt. Reading this attribute returns a copy; assign a whole dict to change it.
+        """
+
+    @options.setter
+    def options(self, arg: Mapping[str, str], /) -> None: ...
+
 class OptimizationProblemBase:
     @property
     def jet_job_mode(self) -> JetJobModes: ...
@@ -940,7 +1408,52 @@ class OptimizationProblemBase:
     @overload
     def set_jet_job_mode(self, arg: str, /) -> None: ...
 
+    @overload
     def solve(self) -> ConvergenceFlags: ...
+
+    @overload
+    def solve(self, engine: object, mode: object = 'optimal', presolve: object = False, polish: object | None = None, warm: object | None = None) -> SolveResult:
+        """
+        Run the engine-driven staged solve: an optional Feasible presolve
+        stage, the main stage (``mode``), and an optional Optimal polish stage,
+        in that order.
+
+        Parameters
+        ----------
+        engine : InteriorPointSolver | SqpSolver | IpoptSolver
+            The main-stage engine.
+        mode : Mode | str, optional
+            ``Mode.Optimal``/``"optimal"`` (default) or ``Mode.Feasible``/
+            ``"feasible"``.
+        presolve : bool | InteriorPointSolver | SqpSolver | IpoptSolver, optional
+            ``False`` (default): no presolve stage. ``True``: run a Feasible
+            presolve stage on ``engine`` itself. An engine instance: run the
+            presolve stage on that engine instead (implies presolve).
+        polish : InteriorPointSolver | SqpSolver | IpoptSolver | None, optional
+            When given, run an Optimal polish stage on this engine after the
+            main stage.
+        warm : SolveResult | WarmStartData | None, optional
+            Declared-space warm-start currency seeding the first stage that
+            runs. Its declaration-identity stamp must match the current
+            transcription's, or the call raises ValueError naming both.
+
+        Returns
+        -------
+        SolveResult
+            The deciding convergence flag, every stage that ran, every OCP
+            phase's slice, and the warm-start currency from the final deciding
+            stage.
+
+        Raises
+        ------
+        ValueError
+            Per the refusal matrix (mode/presolve/polish combinations, a stale
+            warm stamp, an engine already solving), or whatever the dispatched
+            engine itself raises for a malformed problem.
+        TypeError
+            If ``engine``/``presolve``/``polish``/``warm`` is not one of the
+            types listed above.
+        """
 
     def optimize(self) -> ConvergenceFlags: ...
 
