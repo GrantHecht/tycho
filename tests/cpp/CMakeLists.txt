@@ -212,6 +212,9 @@ set(TYCHO_TEST_HEAVY_SOURCES
     # The transcribed problem as a Level 2 provider. Standalone below, for the
     # same reason the suite above is.
     solvers/test_level2_provider.cpp # file-local prefix: Level2Provider*/l2_provider_*
+    # The engine handle layer (EngineRef naming, SqpSolver's feasibility-mode
+    # refusal, IpoptSolver's absent-build refusal, clone_prototype).
+    solvers/test_solve_pipeline.cpp # file-local prefix: SolvePipeline*/solve_pipeline_*
 )
 
 #-------------------------------------------------------------------------------
