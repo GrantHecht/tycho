@@ -554,24 +554,20 @@ if __name__ == "__main__":
     phase.set_mesh_tol(1.0e-7)
 
     # This is a bang-bang low-thrust problem (the control is norm-constrained
-    # to the unit sphere via an equality path constraint), exactly the shape
-    # where an SQP polish stage after the IPM main solve measurably tightens
-    # the KKT residual at near-constant cost.
-    sqp = solvs.SQP()
-
+    # to the unit sphere via an equality path constraint), the shape an SQP
+    # polish stage is expected to help on. Measured (with the last "main"
+    # stage correctly identified -- adaptive mesh refinement appends one
+    # "main" stage per mesh iteration, so stages[0] is the first, coarsest
+    # iteration, not the one the polish stage actually continues from): the
+    # IPM main stage already lands at ~3e-16 (essentially machine epsilon for
+    # this problem), past what an SQP polish stage's own convergence test can
+    # improve on (it measured ~2.4e-11 here) -- kept plain rather than
+    # showcasing a polish stage that doesn't help.
     t0 = time.perf_counter()
-    result = phase.solve(ipm, polish=sqp)
+    result = phase.solve(ipm)
     if not result:
         result = phase.solve(ipm, mode="feasible", warm=result)
     elapsed = time.perf_counter() - t0
-
-    main_kkt = result.stages[0].kkt_residual
-    polish_kkt = result.stages[-1].kkt_residual
-    print(
-        "KKT residual -- main (IPM): {:.3e}, polish (SQP): {:.3e}".format(
-            main_kkt, polish_kkt
-        )
-    )
 
     Traj = phase.return_traj()
 
