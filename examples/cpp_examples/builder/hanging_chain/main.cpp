@@ -76,6 +76,16 @@ int main() {
     constexpr int n_jobs = 100;
 
     tycho::solvers::InteriorPointSolver ipm;
+    // Restored from the pre-M5 per-phase optimizer() configuration (parity
+    // with the Python twin and the pre-M5 example): line-search mode/max
+    // iters are real engine settings, not jet-path artifacts. print_level
+    // stays at its class default (0) here deliberately -- ClonedEngine
+    // (solve_pipeline.cpp) forces any InteriorPointSolver clone still at
+    // that default to a silent print_level for a jet run, so this ends up
+    // quiet exactly like the pre-M5 jet path's forced print_level_ = 10 did,
+    // without this example having to know that constant.
+    ipm.set_opt_ls_mode("L1");
+    ipm.set_max_ls_iters(2);
 
     std::vector<std::shared_ptr<ODEPhaseBase>> jobs;
     jobs.reserve(n_jobs);

@@ -187,12 +187,16 @@ ValueError
     // identical to solve()'s above (same helpers, same presolve=None/bool/
     // engine and polish=engine/None shapes) -- the difference is what
     // happens to the result: set_jet_job() copies opts.presolve_engine/
-    // opts.polish's pointee into storage THIS problem instance owns (see
-    // BackendProblemBase::set_jet_job's own doc comment), so the local
-    // presolve_engine_storage/polish_engine_storage below are safe to let go
-    // out of scope at the end of this call -- unlike solve(), nothing here
-    // needs to survive past this call for the deferred jet_run() to see the
-    // right engine.
+    // opts.polish/opts.warm's pointee into storage THIS problem instance
+    // owns (see BackendProblemBase::set_jet_job's own doc comment), so the
+    // local presolve_engine_storage/polish_engine_storage below are safe to
+    // let go out of scope at the end of this call -- unlike solve(), nothing
+    // here needs to survive past this call for the deferred jet_run() to see
+    // the right engine/payload. set_jet_job() also runs the refusal-matrix
+    // predicates eagerly (the ones that do not need engine/NLP state), so a
+    // malformed mode=Feasible + presolve=/polish= combination raises here,
+    // at the call that staged it, rather than later from inside a pool
+    // worker.
     obj.def(
         "set_jet_job",
         [](BackendProblemBase &self, nb::object prototype, nb::object mode, nb::object presolve,
@@ -253,9 +257,17 @@ ValueError
         R"doc(Stage a batched (Jet) solve on this problem.
 
 jet_run() -- which ``Jet.map`` calls on each pool-worker job -- clones
-``prototype`` and runs the staged options against the clone;
-``prototype`` itself is never run, so several problems in one
-``Jet.map`` batch can safely share it.
+``prototype``, and any staged ``presolve``/``polish`` engine, and runs
+the staged options against the clones; none of the staged engines is
+ever run itself, so several problems in one ``Jet.map`` batch can
+safely share any of them.
+
+Every ``InteriorPointSolver`` clone jet_run() makes is pinned to
+``qp_threads=1`` (the shared thread pool already parallelizes across
+jobs) and forced to a silent ``print_level`` UNLESS the staged engine
+had already moved it off the class default of 0 -- so a batch is quiet
+by default, and you opt into per-job console output by setting
+``print_level`` explicitly on whichever engine you stage.
 
 Parameters
 ----------
@@ -267,22 +279,24 @@ mode : Mode | str, optional
     ``"feasible"``.
 presolve : bool | InteriorPointSolver | SqpSolver | IpoptSolver | None, optional
     ``False`` (default) or ``None``: no presolve stage. ``True``: run a
-    Feasible presolve stage on ``prototype`` itself (also cloned per
-    jet_run() call). An engine instance: run the presolve stage on a
-    clone of that engine instead (implies presolve); kept alive the
-    same way as ``prototype``.
+    Feasible presolve stage on a clone of ``prototype``. An engine
+    instance: run the presolve stage on a clone of that engine instead
+    (implies presolve); kept alive the same way as ``prototype``.
 polish : InteriorPointSolver | SqpSolver | IpoptSolver | None, optional
     When given, run an Optimal polish stage (on a clone) after the main
     stage. Kept alive the same way as ``presolve``.
 warm : SolveResult | WarmStartData | None, optional
     Declared-space warm-start currency seeding the first stage that
-    runs on every jet_run() call. Kept alive the same way as
-    ``prototype``.
+    runs on every jet_run() call. The payload is copied into this
+    problem's own storage at staging time, so (unlike ``prototype``/
+    ``presolve``/``polish``) the source object need not be kept alive
+    at all past this call.
 
 Raises
 ------
 ValueError
-    If ``prototype``/``presolve``/``polish``/``mode``/``warm`` is not
-    one of the types listed above.
+    If ``mode=Feasible`` is combined with ``presolve``/``polish``
+    (checked eagerly, at this call), or if ``prototype``/``presolve``/
+    ``polish``/``mode``/``warm`` is not one of the types listed above.
 )doc");
 }

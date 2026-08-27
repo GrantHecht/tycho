@@ -166,6 +166,62 @@ const hven::solvers::WarmStartData *warm_or_null(const hven::solvers::WarmStartD
     return w.primal_.size() > 0 ? &w : nullptr;
 }
 
+/// @brief Owns one per-jet-call engine clone (clone_prototype()) and exposes
+///        an EngineRef into it. jet_run() constructs one of these for the
+///        prototype and, if staged, one each for opts.presolve_engine/
+///        opts.polish -- so every engine a batched call names gets its own
+///        independent clone rather than sharing one across pool workers.
+///
+///        Every InteriorPointSolver clone made this way gets two jet-
+///        specific defaults applied on top of whatever clone_prototype()
+///        copied from the source: `qp_threads_` pinned to 1 (the shared
+///        thread pool already parallelizes across jobs; hven's own
+///        per-worker MKL pin -- jet.h's MklLocalPinGuard -- does not survive
+///        into the engine call, since InteriorPointSolver re-applies
+///        `qp_threads_` at every solve entry) and `print_level_` forced to a
+///        silent value UNLESS the source engine had already moved it off
+///        the class default of 0 -- restoring the pre-M5 jet path's forced
+///        silence while still letting a caller opt into per-job console
+///        output by setting `print_level` explicitly before staging.
+class ClonedEngine {
+  public:
+    explicit ClonedEngine(EngineRef source) {
+        std::visit(
+            [this](auto *p) {
+                using T = std::decay_t<decltype(*p)>;
+                if constexpr (std::is_same_v<T, InteriorPointSolver>) {
+                    auto clone = clone_prototype(*p);
+                    clone->set_qp_threads(1);
+                    if (clone->settings().print_level_ == 0) {
+                        clone->set_print_level(10);
+                    }
+                    this->storage_ = std::move(clone);
+                } else {
+                    this->storage_ = clone_prototype(*p);
+                }
+            },
+            source);
+    }
+
+    /// @return An EngineRef into this clone. Valid for as long as this
+    ///         ClonedEngine instance is alive.
+    EngineRef ref() {
+        return std::visit(
+            [](auto &v) -> EngineRef {
+                using V = std::decay_t<decltype(v)>;
+                if constexpr (std::is_same_v<V, std::unique_ptr<InteriorPointSolver>>) {
+                    return EngineRef{v.get()};
+                } else {
+                    return EngineRef{&v};
+                }
+            },
+            this->storage_);
+    }
+
+  private:
+    std::variant<std::unique_ptr<InteriorPointSolver>, SqpSolver, IpoptSolver> storage_;
+};
+
 } // namespace
 
 SolveResult BackendProblemBase::solve(EngineRef engine, const SolveOptions &opts_in) {
@@ -296,27 +352,37 @@ ConvergenceFlags BackendProblemBase::jet_run() {
 
     this->jet_initialize();
 
-    // Clone the staged prototype so this call solves against its own fresh
-    // engine instance -- the prototype itself is never touched, so several
-    // jet_run() calls sharing one prototype (Jet::map's pool workers) never
-    // contend on its per-engine concurrency latch. InteriorPointSolver's
-    // clone_prototype() overload returns by unique_ptr (see that function's
-    // own doc comment for why); SqpSolver/IpoptSolver's return by value --
-    // the `if constexpr` below picks the right shape for whichever
-    // alternative the staged EngineRef holds.
     SolveResult result;
     try {
-        result = std::visit(
-            [&](auto *proto) -> SolveResult {
-                using EngineT = std::decay_t<decltype(*proto)>;
-                auto clone = clone_prototype(*proto);
-                if constexpr (std::is_same_v<EngineT, InteriorPointSolver>) {
-                    return this->solve(EngineRef{clone.get()}, *this->jet_solve_options_);
-                } else {
-                    return this->solve(EngineRef{&clone}, *this->jet_solve_options_);
-                }
-            },
-            *this->jet_prototype_);
+        // Clone every engine this call names -- the prototype, and (if
+        // staged) the presolve/polish auxiliary engines -- into per-call
+        // instances, so N pool workers sharing one prototype/presolve/polish
+        // engine across a Jet::map batch never contend on any of their
+        // concurrency latches. ClonedEngine additionally applies jet-
+        // specific defaults (qp_threads pin, forced-silent print_level) to
+        // every InteriorPointSolver clone it makes -- see its own doc
+        // comment.
+        ClonedEngine main_clone(*this->jet_prototype_);
+
+        SolveOptions opts = *this->jet_solve_options_;
+
+        std::optional<ClonedEngine> presolve_clone;
+        EngineRef presolve_ref{};
+        if (opts.presolve_engine != nullptr) {
+            presolve_clone.emplace(*opts.presolve_engine);
+            presolve_ref = presolve_clone->ref();
+            opts.presolve_engine = &presolve_ref;
+        }
+
+        std::optional<ClonedEngine> polish_clone;
+        EngineRef polish_ref{};
+        if (opts.polish != nullptr) {
+            polish_clone.emplace(*opts.polish);
+            polish_ref = polish_clone->ref();
+            opts.polish = &polish_ref;
+        }
+
+        result = this->solve(main_clone.ref(), opts);
     } catch (...) {
         this->jet_release();
         throw;

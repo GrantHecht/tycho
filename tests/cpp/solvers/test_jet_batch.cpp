@@ -3,10 +3,11 @@
 //
 // jet_run() -- the entry point Jet::map dispatches to on each pool worker --
 // clones the prototype engine set_jet_job() staged (via clone_prototype()),
-// solves the clone with the staged SolveOptions, and returns the deciding
-// stage's flag; last_result() reflects the call afterward. A problem that
-// never had set_jet_job() called on it refuses with std::logic_error, naming
-// the missing call -- Jet::map's own plumbing (single problem list, single
+// plus any staged presolve/polish auxiliary engine, solves the clones with
+// the staged SolveOptions, and returns the deciding stage's flag;
+// last_result() reflects the call afterward. A problem that never had
+// set_jet_job() called on it refuses with std::logic_error, naming the
+// missing call -- Jet::map's own plumbing (single problem list, single
 // generator, a pool-saturating job count, multiple generators dispatched by
 // index) still runs every job and correctly propagates the first job's
 // exception to the caller (hven::Jet::map's own future-draining behavior),
@@ -14,7 +15,8 @@
 // *RefusesWithNoJobStaged tests below exercise that plumbing without staging
 // a job. JetRunUsesAClonedEnginePerProblem below is the real-dispatch case:
 // a staged prototype never runs itself, only its settings are cloned into
-// each per-job engine.
+// each per-job engine, and the staged SolveOptions (not just the shared
+// engine's settings) reach each clone.
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "solver_test_utils.h"
@@ -96,8 +98,15 @@ TEST_F(SolverTest, JetRunUsesAClonedEnginePerProblem) {
     quiet_ipm(prototype);
     prototype.settings().max_iters_ = 1;
 
+    // phase1 stages the default (main-stage-only) options; phase2 stages
+    // presolve=true, so its clone runs a Feasible stage ahead of the main
+    // one. Different options per problem also pins that each problem's
+    // clone is independently configured/solved rather than one clone's
+    // result being shared across both -- not just settings-propagation from
+    // one shared prototype, which the max_iters_ marker alone already
+    // covers.
     phase1->set_jet_job(prototype, SolveOptions{});
-    phase2->set_jet_job(prototype, SolveOptions{});
+    phase2->set_jet_job(prototype, SolveOptions{.presolve = true});
 
     std::vector<std::shared_ptr<BackendProblemBase>> jobs = {phase1, phase2};
     auto results = Jet::map(jobs, false);
@@ -112,8 +121,23 @@ TEST_F(SolverTest, JetRunUsesAClonedEnginePerProblem) {
         ASSERT_TRUE(r);
         const SolveResult &sr = r->last_result();
         ASSERT_FALSE(sr.stages_.empty());
-        // Marker visible in the stage report: the engine that actually ran
-        // was capped at the prototype's max_iters_ = 1.
-        EXPECT_LE(sr.stages_.back().iterations_, 1);
+        // Marker visible in every stage report: every engine that actually
+        // ran was capped at the prototype's max_iters_ = 1.
+        for (const auto &stage : sr.stages_) {
+            EXPECT_LE(stage.iterations_, 1);
+        }
     }
+
+    // phase1 (no presolve staged) ran exactly the main stage; phase2
+    // (presolve=true staged) ran a presolve stage ahead of it -- the staged
+    // SolveOptions, not just the shared engine settings, reached jet_run()'s
+    // clone.
+    const SolveResult &result1 = results[0]->last_result();
+    ASSERT_EQ(result1.stages_.size(), 1u);
+    EXPECT_EQ(result1.stages_[0].role_, "main");
+
+    const SolveResult &result2 = results[1]->last_result();
+    ASSERT_EQ(result2.stages_.size(), 2u);
+    EXPECT_EQ(result2.stages_[0].role_, "presolve");
+    EXPECT_EQ(result2.stages_[1].role_, "main");
 }

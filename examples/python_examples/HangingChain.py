@@ -80,7 +80,12 @@ def Job(a, b, n, L):
     ipm = solvs.InteriorPointSolver()
     ipm.set_opt_ls_mode("L1")
     ipm.set_max_ls_iters(2)
-    ipm.print_level = 1
+    # print_level = 1 is no longer inert here: pre-M5, the jet path forced
+    # print_level to a silent value regardless of what was set here, but the
+    # M5 jet path only auto-silences an engine still at the class default
+    # (0) -- an explicit non-default value like the old "1" is honored and
+    # would flood the console across 100 jobs. Use a silent level explicitly.
+    ipm.print_level = 3
 
     # Stage the batched (Jet) solve: presolve=True reproduces the retired
     # JetJobModes.SolveOptimize meaning -- a Feasible stage first, then the
