@@ -1662,22 +1662,21 @@ struct OptimalControlProblemBase : BackendProblemBase {
     /// @internal
     /// @brief Prepare the problem for a "jet" (batched) solve.
     /// @endinternal
-    void jet_initialize() {
-        // See OptimizationProblem::jet_initialize() (solvers_vf/optimization_problem.h)
-        // for why these two calls are separate and ordered this way.
-        this->optimizer_->set_qp_threads(1);
+    void jet_initialize() override {
+        // Single-partition evaluation on the calling thread. The engine-level
+        // settings (QP thread count, print level) that this used to force
+        // onto the problem's own owned optimizer no longer apply here --
+        // there is no owned optimizer; the caller configures whichever
+        // engine it hands to solve() directly.
         this->set_num_partitions(1);
-        this->optimizer_->set_print_level(10);
         this->print_mesh_info_ = false;
         this->transcribe();
     }
     /// @internal
     /// @brief Tear down jet-solve state and restore the default configuration.
     /// @endinternal
-    void jet_release() {
-        this->optimizer_->release();
+    void jet_release() override {
         this->init_partitions();
-        this->optimizer_->set_print_level(0);
         this->print_mesh_info_ = true;
         this->nlp_ = std::shared_ptr<NonLinearProgram>();
         this->provider_ = std::shared_ptr<tycho::solvers::TranscribedAggregate>();
@@ -1763,29 +1762,13 @@ struct OptimalControlProblemBase : BackendProblemBase {
         const std::vector<Eigen::VectorXi> &opv, const std::vector<Eigen::VectorXi> &spv,
         const std::vector<Eigen::VectorXi> &lv, int orows, int &NextCLoc) const;
 
-    /// @internal
-    /// @brief Drive InteriorPointSolver for a single solve/optimize pass (no mesh loop).
-    /// @param mode  The solve/optimize job mode.
-    /// @return The solver convergence flag.
-    /// @endinternal
-    tycho::ConvergenceFlags interior_point_call_impl(JetJobModes mode);
-
-    /// @internal
-    /// @brief Run the full problem solve, including the multi-phase mesh-refinement loop.
-    /// @param mode  The solve/optimize job mode.
-    /// @return The solver convergence flag.
-    /// @endinternal
-    tycho::ConvergenceFlags ocp_call_impl(JetJobModes mode);
-
     // -------------------------------------------------------------------
-    // solve() hooks (nlp_backend.h). The old surface above
-    // (solve()/optimize()/.../ocp_call_impl) is untouched and stays primary
-    // for this class; these are the override set the new
-    // BackendProblemBase::solve() pipeline dispatches through.
+    // solve() hooks (nlp_backend.h): the override set
+    // BackendProblemBase::solve() dispatches through.
     // -------------------------------------------------------------------
 
-    /// @brief solve() hook: mirrors interior_point_call_impl's own
-    ///        transcription gate.
+    /// @brief solve() hook: transcribes if needed, after checking every
+    ///        phase's own transcription currency.
     void prepare_solve() override {
         this->check_transcriptions();
         if (this->do_transcription_)
@@ -1797,8 +1780,7 @@ struct OptimalControlProblemBase : BackendProblemBase {
     Eigen::VectorXd initial_primal() const override { return this->make_solver_input(); }
 
     /// @brief solve() hook: write a stage's output back across every
-    ///        phase, the same way interior_point_call_impl does -- full
-    ///        post-opt residuals when the engine reported them
+    ///        phase -- full post-opt residuals when the engine reported them
     ///        (StageOutput::eq_cons_/iq_cons_ non-empty), else multipliers
     ///        only, invalidated on this problem and every phase.
     void accept_stage(const StageOutput &out) override {
@@ -1861,8 +1843,7 @@ struct OptimalControlProblemBase : BackendProblemBase {
     /// @brief solve() hook: mirrors the old adaptive_mesh_ gate.
     bool adaptive_mesh_enabled() const override { return this->adaptive_mesh_; }
 
-    /// @brief solve() hook: the multi-phase adaptive-mesh loop, reshaped
-    ///        from ocp_call_impl/interior_point_call_impl onto
+    /// @brief solve() hook: the multi-phase adaptive-mesh loop, built on
     ///        run_engine_stage. Defined in optimal_control_problem.cpp.
     tycho::ConvergenceFlags run_adaptive_mesh(EngineRef engine, Mode mode, SolveResult &r) override;
 
@@ -1972,27 +1953,10 @@ struct OptimalControlProblemBase : BackendProblemBase {
     }
 
   public:
-    /// @brief Solve the multi-phase problem for feasibility (no optimization).
-    /// @return The solver convergence flag.
-    tycho::ConvergenceFlags solve() { return ocp_call_impl(JetJobModes::Solve); }
-    /// @brief Optimize the multi-phase problem (minimize the objective subject to constraints).
-    /// @return The solver convergence flag.
-    tycho::ConvergenceFlags optimize() { return ocp_call_impl(JetJobModes::Optimize); }
-    /// @brief Solve for feasibility, then optimize.
-    /// @return The solver convergence flag.
-    tycho::ConvergenceFlags solve_optimize() { return ocp_call_impl(JetJobModes::SolveOptimize); }
-    /// @brief Solve, optimize, then solve again to tighten feasibility.
-    /// @return The solver convergence flag.
-    tycho::ConvergenceFlags solve_optimize_solve() {
-        return ocp_call_impl(JetJobModes::SolveOptimizeSolve);
-    }
-    /// @brief Optimize, then solve to tighten feasibility.
-    /// @return The solver convergence flag.
-    tycho::ConvergenceFlags optimize_solve() { return ocp_call_impl(JetJobModes::OptimizeSolve); }
-
-    // BackendProblemBase's new solve(EngineRef, SolveOptions) overload
-    // is otherwise hidden by the 0-arg solve() override above.
-    using BackendProblemBase::solve;
+    // BackendProblemBase's new solve(EngineRef, SolveOptions) overload is
+    // the only solve() this class has -- OptimalControlProblemBase declares
+    // no 0-arg override of its own, so nothing here hides it and no
+    // using-declaration is needed.
 
     /// @brief Print the problem-size statistics.
     /// @param showfuns  Whether to also print per-function details.

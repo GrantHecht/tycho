@@ -2,35 +2,37 @@
 // Tycho (Copyright 2026-present Grant R. Hecht, Apache 2.0 — see LICENSE.txt)
 // =============================================================================
 //
-// Selection of the NLP solver backend a problem is dispatched to.
+// The tycho-side problem base every optimization problem type derives from,
+// plus the Ipopt backend entry points the engine seam (engines.h/engines.cpp)
+// dispatches a Mode::Optimal stage to when the caller's engine is an
+// IpoptSolver.
 //
-// The solver library tycho builds on carries no interface to a foreign solver:
-// its problem base runs the built-in interior-point solver and nothing else.
-// The selector, the options forwarded to a foreign solver, the diagnostics of
-// the last foreign run, and the dispatch that routes a solve to it therefore
-// live on tycho's side of the boundary — here.
+// Backend selection is no longer a property stored on the problem: it is
+// simply which engine (InteriorPointSolver, SqpSolver, or IpoptSolver) the
+// caller passes to solve() (BackendProblemBase::solve(EngineRef,
+// SolveOptions), declared below; the engine-level dispatch itself lives in
+// engines.h/engines.cpp). This header carries only what every problem type
+// needs regardless of backend: the transcribed NLP handle, the partitioned-
+// evaluation settings, and the solve()/last_result() surface.
 //
-// This header deliberately contains no Ipopt includes and no Ipopt types, so it
-// is safe to include in every build regardless of how the project was
-// configured. The Ipopt dependency is confined to the translation unit that
-// implements the backend.
+// This header deliberately contains no Ipopt includes and no Ipopt types
+// beyond the plain-data IpoptRunInfo/IpoptSolveOutput below, so it is safe to
+// include in every build regardless of how the project was configured. The
+// Ipopt dependency itself is confined to the translation unit that implements
+// ipopt_backend::solve.
 //
-// BackendProblemBase owns the NLP/solver handles and the partitioned-evaluation
+// BackendProblemBase owns the NLP handle and the partitioned-evaluation
 // settings directly rather than inheriting them from hven's
-// OptimizationProblemBase. hven's base pairs those handles with a NON-VIRTUAL
-// run_nlp_solver(), and tycho needs to intercept that exact entry point to add
-// backend selection; a derived class cannot override a non-virtual member, only
-// hide it, and which of the two ran would then depend on the STATIC type of the
-// object a call is made through rather than on what the object actually is.
-// Owning the members locally turns that into one member with an internal
-// branch instead of two members in a hide relationship. hven's own base
-// (dep/hven/include/hven/drivers/optimization_problem_base.h) is unchanged and
-// still used as-is by anything on the solver-library side of the boundary
-// (e.g. NLPSolver).
+// OptimizationProblemBase: hven's own base
+// (dep/hven/include/hven/drivers/optimization_problem_base.h) is unchanged
+// and still used as-is by anything on the solver-library side of the
+// boundary (e.g. NLPSolver), but it also owns an InteriorPointSolver instance
+// and a non-virtual run_nlp_solver() that dispatches through it -- neither of
+// which fits a problem type that may solve through any of several engines,
+// none of which it owns.
 
 #pragma once
 
-#include <algorithm>
 #include <functional>
 #include <map>
 #include <memory>
@@ -43,7 +45,6 @@
 #include <fmt/format.h>
 
 #include <hven/detail/drivers/interior_point_solver_fwd.h>
-#include <hven/detail/interior/utils/get_core_count.h>
 #include <hven/detail/interior/utils/thread_pool.h>
 #include <hven/drivers/interior_point_solver.h>
 #include <hven/model/non_linear_program.h>
@@ -59,14 +60,9 @@ namespace tycho::solvers {
 /// publishes.
 class TranscribedAggregate;
 
-/// NLP solver backend selector (BackendProblemBase::nlp_solver_).
-/// interior_point is the built-in interior-point solver (default). ipopt hands the
-/// identical transcribed NLP to a linked Ipopt installation for reference
-/// comparison; dispatching it requires a build configured with Ipopt support.
-enum class NLPSolvers { interior_point = 0, ipopt = 1 };
-
-/// Outcome of one Ipopt run on the transcribed NLP. Sentinel values (-1 /
-/// empty / ran_ == false) mean no Ipopt solve has run on this problem object.
+/// Outcome of one Ipopt run on a transcribed NLP. Sentinel values (-1 /
+/// empty / ran_ == false) mean the run never completed (an early abort or an
+/// exception before finalize_solution).
 struct IpoptRunInfo {
     bool ran_ = false;
     std::string status_ = "";     ///< Raw Ipopt ApplicationReturnStatus name.
@@ -76,6 +72,16 @@ struct IpoptRunInfo {
     double objective_ = 0.0;
     double constraint_violation_ = -1.0;
     double wall_time_s_ = -1.0;
+};
+
+/// Everything one ipopt_backend::solve() call reports: the primal/dual point
+/// Ipopt returned, and the diagnostics of that run.
+struct IpoptSolveOutput {
+    Eigen::VectorXd variables_;
+    Eigen::VectorXd eq_lmults_;
+    Eigen::VectorXd iq_lmults_;
+    ConvergenceFlags flag_ = ConvergenceFlags::NOTCONVERGED;
+    IpoptRunInfo info_;
 };
 
 /// @brief Options for the engine-driven staged solve(): which mode the
@@ -103,49 +109,11 @@ struct SolveOptions {
 /// name keeps the two apart at every unqualified use site.
 struct BackendProblemBase {
 
-    /// @brief Which solve-mode entry point jet_run() dispatches to.
-    enum class JetJobModes {
-        NotSet,
-        /// Parsed by strto_jet_job_mode, but dispatched by nothing: both
-        /// jet_run() and run_nlp_solver() reject it with
-        /// std::invalid_argument.
-        DoNothing,
-        /// @brief Dispatches solve().
-        Solve,
-        /// @brief Dispatches optimize().
-        Optimize,
-        /// @brief Dispatches solve_optimize().
-        SolveOptimize,
-        /// @brief Dispatches solve_optimize_solve().
-        SolveOptimizeSolve,
-        /// @brief Dispatches optimize_solve().
-        OptimizeSolve
-    };
-
     /// @brief Number of evaluation partitions the NLP is split over.
     int num_partitions_ = 1;
-    /// @brief The mode jet_run() dispatches on.
-    JetJobModes jet_job_mode_ = JetJobModes::NotSet;
 
     /// @brief The problem's program (built by the derived class's make_nlp()).
     std::shared_ptr<NonLinearProgram> nlp_;
-    /// @brief The shared interior-point solver instance.
-    std::shared_ptr<InteriorPointSolver> optimizer_;
-
-    /// NLP solver backend for the solve/optimize entry points. interior_point (default)
-    /// is the built-in path, byte-identical to previous behavior. ipopt runs
-    /// the identical transcribed NLP through a linked Ipopt installation
-    /// (requires a build with Ipopt support; throws std::runtime_error
-    /// otherwise). Not usable in a Jet batch run — see the guard in jet_run().
-    NLPSolvers nlp_solver_ = NLPSolvers::interior_point;
-
-    /// String key/value options forwarded verbatim to Ipopt (e.g.
-    /// {"linear_solver", "pardisomkl"}). Applied after the matched-tolerance
-    /// baseline, so user entries win. Ignored by the interior-point backend.
-    std::map<std::string, std::string> ipopt_options_;
-
-    /// Diagnostics of the most recent ipopt-backend run on this problem.
-    IpoptRunInfo last_ipopt_result_;
 
     /// The transcribed problem published as a claim-stream-bearing provider:
     /// the declaration this problem was laid from, and the per-slot coordinates
@@ -155,40 +123,18 @@ struct BackendProblemBase {
 
     virtual ~BackendProblemBase() = default;
 
-    /// @brief Constructs the solver and applies the default partitioning.
-    BackendProblemBase() {
-        this->optimizer_ = std::make_shared<InteriorPointSolver>();
-        this->init_partitions();
-    }
-
-    /// Runs the feasibility (SOE-mode) phase sequence for the derived
-    /// problem's NLP.
-    virtual ConvergenceFlags solve() = 0;
-    /// Runs the optimality (OPT-mode) phase sequence for the derived
-    /// problem's NLP.
-    virtual ConvergenceFlags optimize() = 0;
-    /// Runs the SOE-mode phase sequence, then the OPT-mode one. Both always
-    /// run.
-    virtual ConvergenceFlags solve_optimize() = 0;
-    /// Runs SOE, then OPT, then SOE again. The trailing SOE phase is
-    /// conditional: it is skipped when OPT reported
-    /// ConvergenceFlags::CONVERGED.
-    virtual ConvergenceFlags solve_optimize_solve() = 0;
-    /// Runs the OPT-mode phase sequence, then the SOE-mode one. The trailing
-    /// SOE phase is conditional: it is skipped when OPT reported
-    /// ConvergenceFlags::CONVERGED.
-    virtual ConvergenceFlags optimize_solve() = 0;
+    /// @brief Constructs the problem and applies the default partitioning.
+    BackendProblemBase() { this->init_partitions(); }
 
     // -------------------------------------------------------------------
-    // The engine-driven staged solve(). Coexists with the five mode methods
-    // above -- neither surface displaces the other. Implemented once, in
+    // The engine-driven staged solve(). Implemented once, in
     // solve_pipeline.cpp, dispatching through the protected hooks below;
     // each concrete problem type (OptimizationProblem, ODEPhaseBase,
     // OptimalControlProblemBase) supplies its own override set. A derived
-    // class that declares its own `solve()` (all three do, overriding the
-    // 0-arg mode method above) hides every base overload of that name unless
-    // it re-exposes them with `using BackendProblemBase::solve;` -- each of
-    // the three does so.
+    // class that declares its own `solve()` hides this overload of that
+    // name unless it re-exposes it with `using BackendProblemBase::solve;`
+    // -- none of the three currently declares a 0-arg `solve()` of its own,
+    // so none needs to.
     // -------------------------------------------------------------------
 
     /// @brief Runs a staged solve against `engine`: an optional Feasible
@@ -232,6 +178,23 @@ struct BackendProblemBase {
     ///         mode refusal (e.g. SQP/Ipopt + Mode::Feasible).
     SolveResult solve(EngineRef engine, const SolveOptions &opts = SolveOptions{});
 
+    /// @brief Convenience overloads: the same call, taking a concrete engine
+    ///        by lvalue reference instead of an already-formed EngineRef, so
+    ///        a caller can write `problem.solve(ipm, opts)` directly. Each
+    ///        forwards to the EngineRef overload above via `&e`; EngineRef
+    ///        itself is unchanged (still a non-owning pointer variant) --
+    ///        these exist purely so the caller does not have to spell that
+    ///        `&` out at every call site.
+    SolveResult solve(InteriorPointSolver &e, const SolveOptions &opts = SolveOptions{}) {
+        return this->solve(EngineRef{&e}, opts);
+    }
+    SolveResult solve(SqpSolver &e, const SolveOptions &opts = SolveOptions{}) {
+        return this->solve(EngineRef{&e}, opts);
+    }
+    SolveResult solve(IpoptSolver &e, const SolveOptions &opts = SolveOptions{}) {
+        return this->solve(EngineRef{&e}, opts);
+    }
+
     /// @brief The most recently completed solve()'s result, as a value
     ///        copy -- reading it twice, or after the problem has since been
     ///        re-transcribed or re-solved differently, still returns the
@@ -260,8 +223,10 @@ struct BackendProblemBase {
 
     /// @brief Slices `r.phases_` from the just-finished solve; `r` already
     ///        carries `r.stages_`/`r.flag_`/`r.warm_`/`r.structure_key_`.
-    ///        Base: no-op, `r.phases_` stays empty -- a later task gives
-    ///        Phase/OCP the real per-phase slicing.
+    ///        Base: no-op, `r.phases_` stays empty -- a bare VF problem
+    ///        (OptimizationProblem) has no phases and keeps this no-op;
+    ///        ODEPhaseBase and OptimalControlProblemBase each override it
+    ///        with their own real per-phase slicing.
     virtual void fill_phase_results(SolveResult &r) const { (void)r; }
 
     /// @brief Whether this problem type runs an adaptive-mesh loop inside
@@ -356,20 +321,17 @@ struct BackendProblemBase {
     }
 
     /// Applies the default partitioning: num_partitions_ from
-    /// default_num_partitions(), and the solver's QP thread count capped at
-    /// the physical core count.
-    virtual void init_partitions() {
-        this->num_partitions_ = default_num_partitions();
-        this->optimizer_->set_qp_threads(
-            std::min(HVEN_DEFAULT_QP_THREADS, hven::utils::get_core_count()));
-    }
+    /// default_num_partitions(). QP thread count is a separate, per-engine
+    /// setting now (there is no problem-owned optimizer to apply it to) --
+    /// set it on whichever InteriorPointSolver engine is passed to solve().
+    virtual void init_partitions() { this->num_partitions_ = default_num_partitions(); }
 
     /// @brief Sets the number of evaluation partitions the problem is split over.
     /// @param num_partitions Partition count; must be positive.
     ///
-    /// Partition count and QP thread count are independent settings and are set
-    /// independently: the solver's own QP thread count is
-    /// `optimizer_->set_qp_threads(n)`.
+    /// Partition count and QP thread count are independent settings: the
+    /// latter is set on whichever InteriorPointSolver engine is passed to
+    /// solve() (`engine.set_qp_threads(n)`).
     ///
     /// @throws std::invalid_argument if `num_partitions < 1`.
     virtual void set_num_partitions(int num_partitions) {
@@ -380,140 +342,27 @@ struct BackendProblemBase {
     }
 
     /// Prepares the problem for inline (non-partitioned) evaluation inside
-    /// jet_run(); must leave num_partitions_ == 1.
+    /// a batched (Jet) solve; must leave num_partitions_ == 1.
     virtual void jet_initialize() = 0;
 
     /// @brief Releases whatever jet_initialize() acquired.
     virtual void jet_release() = 0;
 
-    /// Runs the configured job mode between jet_initialize()/jet_release(),
-    /// returning the dispatched mode's convergence flag.
+    /// @brief Interim placeholder for the batched (Jet) solve entry point.
     ///
-    /// Concurrency guard, checked before jet_initialize() mutates this problem
-    /// and before any solve work begins. Jet::map builds each problem inside
-    /// its worker job, so this entry point is the first place the selected
-    /// backend is observable; rejecting here means no batch element ever
-    /// reaches an Ipopt solve. Ipopt is not reliably re-entrant, so running
-    /// several of its solves concurrently is unsupported rather than merely
-    /// untested.
+    /// The mode-sequence surface jet_run() used to dispatch through
+    /// (JetJobModes/jet_job_mode_) is retired along with the five mode
+    /// methods; the batched entry point is staged through set_jet_job
+    /// instead, landing in a follow-up task. Until then this always throws,
+    /// naming what replaces it, so Jet::map keeps compiling against this
+    /// entry point without silently running a stale job description.
     ///
-    /// IMPORTANT: jet_run() is called from Jet::map() on pool worker threads.
-    /// If jet_initialize() did NOT set num_partitions_=1, the NLP eval methods
-    /// would call parallel_sequence/parallel_task from a pool worker,
-    /// triggering the nested-dispatch guard (std::logic_error).
-    /// jet_initialize() MUST set num_partitions_=1 so NLP eval methods run
-    /// inline.
-    ///
-    /// @throws std::invalid_argument if nlp_solver_ is ipopt, or if
-    /// jet_job_mode_ is NotSet or otherwise unrecognized.
+    /// @throws std::logic_error unconditionally.
     ConvergenceFlags jet_run() {
-        if (this->nlp_solver_ == NLPSolvers::ipopt) {
-            throw std::invalid_argument(
-                "nlp_solver=ipopt cannot be used in a Jet batch run: Ipopt is not reliably "
-                "re-entrant, so concurrent solves through it are unsupported. Run the ipopt "
-                "backend one solve at a time (solve/optimize on a single problem), or set "
-                "nlp_solver=interior_point for the batch.");
-        }
-
-        this->jet_initialize();
-
-        ConvergenceFlags flag;
-
-        switch (this->jet_job_mode_) {
-        case JetJobModes::Solve: {
-            flag = this->solve();
-            break;
-        }
-        case JetJobModes::Optimize: {
-            flag = this->optimize();
-            break;
-        }
-        case JetJobModes::SolveOptimize: {
-            flag = this->solve_optimize();
-            break;
-        }
-        case JetJobModes::SolveOptimizeSolve: {
-            flag = this->solve_optimize_solve();
-            break;
-        }
-        case JetJobModes::OptimizeSolve: {
-            flag = this->optimize_solve();
-            break;
-        }
-        case JetJobModes::NotSet: {
-            throw ::std::invalid_argument("jet_job_mode_ not set");
-        }
-        default:
-            throw std::invalid_argument("Unrecognized jet_job_mode");
-        }
-
-        this->jet_release();
-        return flag;
-    }
-
-    /// Uniform output of one solve: the updated variable vector, the
-    /// constraint multipliers, and the convergence flag.
-    struct NlpSolveOutput {
-        /// @brief Updated variable vector from the solve.
-        Eigen::VectorXd variables_;
-        /// @brief Equality-constraint multipliers from the final result.
-        Eigen::VectorXd eq_lmults_;
-        /// @brief Inequality-constraint multipliers from the final result.
-        Eigen::VectorXd iq_lmults_;
-        /// @brief Convergence flag from the final result.
-        ConvergenceFlags flag_ = ConvergenceFlags::NOTCONVERGED;
-    };
-
-    /// Single backend dispatch point for the five solve modes, mapping each
-    /// onto the matching InteriorPointSolver entry point and collecting the
-    /// uniform result above (interior-point branch), or running a single
-    /// Ipopt solve on the transcribed NLP (ipopt branch — the
-    /// feasibility-then-optimize staging has no Ipopt analog).
-    ///
-    /// Defined out of line below, after the ipopt_backend::solve declaration it
-    /// calls (a member function body defined in the class cannot name a
-    /// namespace-scope function declared later in the file).
-    ///
-    /// @throws std::invalid_argument if `mode` is NotSet, DoNothing, or any
-    /// other value with no entry point.
-    NlpSolveOutput run_nlp_solver(JetJobModes mode, const Eigen::VectorXd &input);
-
-    /// Parses a job-mode name into its enum value. Accepted spellings:
-    /// "solve"/"Solve", "optimize"/"Optimize",
-    /// "solve_optimize"/"SolveOptimize"/"Solve_Optimize",
-    /// "solve_optimize_solve"/"SolveOptimizeSolve"/"Solve_Optimize_Solve",
-    /// "optimize_solve"/"OptimizeSolve"/"Optimize_Solve",
-    /// "DoNothing"/"do_nothing"/"Do_Nothing".
-    ///
-    /// @throws std::invalid_argument on any other spelling.
-    static JetJobModes strto_jet_job_mode(const std::string &str) {
-
-        if (str == "solve" || str == "Solve")
-            return JetJobModes::Solve;
-        else if (str == "optimize" || str == "Optimize")
-            return JetJobModes::Optimize;
-        else if (str == "solve_optimize" || str == "SolveOptimize" || str == "Solve_Optimize")
-            return JetJobModes::SolveOptimize;
-        else if (str == "solve_optimize_solve" || str == "SolveOptimizeSolve" ||
-                 str == "Solve_Optimize_Solve")
-            return JetJobModes::SolveOptimizeSolve;
-        else if (str == "optimize_solve" || str == "OptimizeSolve" || str == "Optimize_Solve")
-            return JetJobModes::OptimizeSolve;
-        else if (str == "DoNothing" || str == "do_nothing" || str == "Do_Nothing")
-            return JetJobModes::DoNothing;
-        else {
-            auto msg = fmt::format("Unrecognized jet_job_mode: {0}\n", str);
-            throw std::invalid_argument(msg);
-        }
-    }
-
-    /// @brief Sets the mode jet_run() dispatches on (enum overload).
-    void set_jet_job_mode(JetJobModes m) { this->jet_job_mode_ = m; }
-
-    /// Sets the mode jet_run() dispatches on, parsing the same spellings
-    /// strto_jet_job_mode accepts.
-    void set_jet_job_mode(const std::string &str) {
-        this->set_jet_job_mode(strto_jet_job_mode(str));
+        throw std::logic_error(
+            "jet_run(): the retired mode-sequence surface (jet_job_mode_/JetJobModes) that "
+            "used to drive this is gone; jets are staged via set_jet_job(), not yet landed on "
+            "this branch");
     }
 };
 
@@ -522,52 +371,23 @@ namespace ipopt_backend {
 /// True when this build was configured with Ipopt support linked in.
 bool available();
 
-/// Run Ipopt on the problem's transcribed NLP. A real implementation is linked
-/// only in builds configured with Ipopt support; the stub throws
-/// std::runtime_error.
-BackendProblemBase::NlpSolveOutput
-solve(BackendProblemBase &prob, BackendProblemBase::JetJobModes mode, const Eigen::VectorXd &input);
+/// Run Ipopt on `nlp` from starting point `x0`. `ipopt_options` are string
+/// key/value options forwarded verbatim to Ipopt (e.g.
+/// {"linear_solver", "pardisomkl"}), applied after the matched-tolerance
+/// baseline so they win. `tolerance_baseline` supplies that baseline (tol,
+/// constr_viol_tol, acceptable_tol, acceptable_constr_viol_tol, max_iter,
+/// obj_scale) -- an IpoptSolver engine carries no tolerance settings of its
+/// own, so the caller decides what baseline to match (the engine seam in
+/// engines.cpp matches a default-constructed InteriorPointSolver::Settings).
+///
+/// A real implementation is linked only in builds configured with Ipopt
+/// support; the stub throws std::runtime_error.
+///
+/// @throws std::runtime_error if `nlp` is null, or (stub build) unconditionally.
+IpoptSolveOutput solve(const std::shared_ptr<NonLinearProgram> &nlp, const Eigen::VectorXd &x0,
+                       const std::map<std::string, std::string> &ipopt_options,
+                       const InteriorPointSolver::Settings &tolerance_baseline);
 
 } // namespace ipopt_backend
-
-inline BackendProblemBase::NlpSolveOutput
-BackendProblemBase::run_nlp_solver(JetJobModes mode, const Eigen::VectorXd &input) {
-    // This site branches on `== NLPSolvers::ipopt`, while the call-impl sites
-    // in ode_phase_base.cpp / optimal_control_problem.cpp branch on
-    // `== NLPSolvers::interior_point` (or its negation) to make the same backend
-    // choice. Both predicates are equivalent today (only two backends exist),
-    // but if a third backend enumerator is ever added, all of these sites
-    // should be unified on `!= NLPSolvers::interior_point` ("anything that isn't interior_point
-    // uses the generic NLP-solver path") rather than each needing its own added
-    // `== <new-backend>` branch.
-    if (this->nlp_solver_ == NLPSolvers::ipopt) {
-        return ipopt_backend::solve(*this, mode, input);
-    }
-
-    NlpSolveOutput out;
-    switch (mode) {
-    case JetJobModes::Solve:
-        out.variables_ = this->optimizer_->solve(input);
-        break;
-    case JetJobModes::Optimize:
-        out.variables_ = this->optimizer_->optimize(input);
-        break;
-    case JetJobModes::SolveOptimize:
-        out.variables_ = this->optimizer_->solve_optimize(input);
-        break;
-    case JetJobModes::SolveOptimizeSolve:
-        out.variables_ = this->optimizer_->solve_optimize_solve(input);
-        break;
-    case JetJobModes::OptimizeSolve:
-        out.variables_ = this->optimizer_->optimize_solve(input);
-        break;
-    default:
-        throw std::invalid_argument("Unrecognized NLP solve mode");
-    }
-    out.eq_lmults_ = this->optimizer_->result().eq_lmults_;
-    out.iq_lmults_ = this->optimizer_->result().iq_lmults_;
-    out.flag_ = this->optimizer_->result().converge_flag_;
-    return out;
-}
 
 } // namespace tycho::solvers

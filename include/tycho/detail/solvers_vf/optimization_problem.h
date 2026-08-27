@@ -196,79 +196,33 @@ struct OptimizationProblem : BackendProblemBase {
 
     void transcribe();
 
-    void jet_initialize() {
-        // Single-partition evaluation on the calling thread, and a single QP
-        // thread: two independent settings, set independently. set_qp_threads
-        // goes first because it validates and can throw.
-        this->optimizer_->set_qp_threads(1);
+    /// @internal
+    /// @brief Prepare the problem for a "jet" (batched) solve.
+    ///
+    /// Single-partition evaluation on the calling thread. The engine-level
+    /// settings (QP thread count, print level) that jet_initialize() used to
+    /// force onto the problem's own owned optimizer no longer apply here --
+    /// there is no owned optimizer; the caller configures whichever engine
+    /// it hands to solve() directly.
+    /// @endinternal
+    void jet_initialize() override {
         this->set_num_partitions(1);
-        this->optimizer_->set_print_level(10);
         this->transcribe();
     }
-    void jet_release() {
-        this->optimizer_->release();
-        // Same ordering rationale as jet_initialize() above.
-        this->optimizer_->set_qp_threads(1);
+    /// @internal
+    /// @brief Tear down jet-solve state and restore the default configuration.
+    /// @endinternal
+    void jet_release() override {
         this->set_num_partitions(1);
-        this->optimizer_->set_print_level(0);
         this->nlp_ = std::shared_ptr<NonLinearProgram>();
         this->provider_ = std::shared_ptr<TranscribedAggregate>();
         this->reset_transcription();
     }
 
-    tycho::ConvergenceFlags solve() {
-        if (this->do_transcription_)
-            this->transcribe();
-        auto out = this->run_nlp_solver(JetJobModes::Solve, this->active_variables_);
-        this->active_variables_ = out.variables_;
-        this->active_eq_lmults_ = out.eq_lmults_;
-        this->active_iq_lmults_ = out.iq_lmults_;
-        return out.flag_;
-    }
-
-    tycho::ConvergenceFlags optimize() {
-        if (this->do_transcription_)
-            this->transcribe();
-        auto out = this->run_nlp_solver(JetJobModes::Optimize, this->active_variables_);
-        this->active_variables_ = out.variables_;
-        this->active_eq_lmults_ = out.eq_lmults_;
-        this->active_iq_lmults_ = out.iq_lmults_;
-        return out.flag_;
-    }
-
-    tycho::ConvergenceFlags solve_optimize() {
-        if (this->do_transcription_)
-            this->transcribe();
-        auto out = this->run_nlp_solver(JetJobModes::SolveOptimize, this->active_variables_);
-        this->active_variables_ = out.variables_;
-        this->active_eq_lmults_ = out.eq_lmults_;
-        this->active_iq_lmults_ = out.iq_lmults_;
-        return out.flag_;
-    }
-
-    tycho::ConvergenceFlags solve_optimize_solve() {
-        if (this->do_transcription_)
-            this->transcribe();
-        auto out = this->run_nlp_solver(JetJobModes::SolveOptimizeSolve, this->active_variables_);
-        this->active_variables_ = out.variables_;
-        this->active_eq_lmults_ = out.eq_lmults_;
-        this->active_iq_lmults_ = out.iq_lmults_;
-        return out.flag_;
-    }
-
-    tycho::ConvergenceFlags optimize_solve() {
-        if (this->do_transcription_)
-            this->transcribe();
-        auto out = this->run_nlp_solver(JetJobModes::OptimizeSolve, this->active_variables_);
-        this->active_variables_ = out.variables_;
-        this->active_eq_lmults_ = out.eq_lmults_;
-        this->active_iq_lmults_ = out.iq_lmults_;
-        return out.flag_;
-    }
-
-    // BackendProblemBase's new solve(EngineRef, SolveOptions) overload
-    // is otherwise hidden by the 0-arg solve() override above.
-    using BackendProblemBase::solve;
+    // BackendProblemBase's new solve(EngineRef, SolveOptions) overload is
+    // the only solve() this class has -- OptimizationProblem declares no
+    // 0-arg override of its own, so nothing here hides it and no
+    // using-declaration is needed.
 
   protected:
     /// @brief solve() hook: transcribe if needed (make_nlp + set_nlp
@@ -278,12 +232,10 @@ struct OptimizationProblem : BackendProblemBase {
             this->transcribe();
     }
 
-    /// @brief solve() hook: the active variables vector, as
-    ///        solve()/optimize() etc. above already seed run_nlp_solver with.
+    /// @brief solve() hook: the active variables vector.
     Eigen::VectorXd initial_primal() const override { return this->active_variables_; }
 
-    /// @brief solve() hook: write the stage's primal/multipliers back,
-    ///        the same fields solve()/optimize() etc. above write.
+    /// @brief solve() hook: write the stage's primal/multipliers back.
     void accept_stage(const StageOutput &out) override {
         this->active_variables_ = out.primal_;
         this->active_eq_lmults_ = out.eq_lmults_;

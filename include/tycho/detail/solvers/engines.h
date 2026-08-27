@@ -127,9 +127,10 @@ StageOutput run_engine_stage(EngineRef engine, Mode mode,
 /// not just slow but ill-formed -- named return value optimization does not
 /// exempt a function from needing an accessible move (or copy) constructor
 /// for the "as-if" call the standard requires, elided or not. heap
-/// allocation is already how every owner in this codebase holds one
-/// (BackendProblemBase::optimizer_ is `shared_ptr<InteriorPointSolver>`), so
-/// this keeps the same ownership shape rather than fighting it.
+/// allocation is already how every long-lived owner in this codebase holds
+/// one (e.g. a `shared_ptr<InteriorPointSolver>` engine handle a caller
+/// keeps around across solve() calls), so this keeps the same ownership
+/// shape rather than fighting it.
 std::unique_ptr<InteriorPointSolver> clone_prototype(const InteriorPointSolver &e);
 SqpSolver clone_prototype(const SqpSolver &e);
 IpoptSolver clone_prototype(const IpoptSolver &e);

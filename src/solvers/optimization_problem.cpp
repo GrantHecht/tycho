@@ -129,7 +129,6 @@ void tycho::solvers::OptimizationProblem::transcribe() {
 
     this->nlp_ = std::move(nlp);
     this->provider_ = std::move(provider);
-    this->optimizer_->set_nlp(this->nlp_);
 
     //////DO NOT GET RID OF THIS!!!!!!//
     this->do_transcription_ = false;

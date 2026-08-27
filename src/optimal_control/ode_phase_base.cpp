@@ -1596,7 +1596,6 @@ void tycho::oc::ODEPhaseBase::transcribe(bool showstats, bool showfuns) {
 
     this->nlp_ = std::move(nlp);
     this->provider_ = std::move(provider);
-    this->optimizer_->set_nlp(this->nlp_);
 }
 
 void tycho::oc::ODEPhaseBase::test_partitions(int i, int j, int n) {
@@ -1771,131 +1770,6 @@ Eigen::VectorXd tycho::oc::ODEPhaseBase::calc_switches() {
     }
 
     return utils::stdvector_to_eigenvector(switches);
-}
-
-tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::interior_point_call_impl(JetJobModes mode) {
-    if (this->do_transcription_)
-        this->transcribe();
-    VectorXd input = this->make_solver_input();
-    auto out = this->run_nlp_solver(mode, input);
-    VectorXd output = out.variables_;
-
-    this->collect_solver_output(output);
-
-    if (this->nlp_solver_ == solvers::NLPSolvers::interior_point) {
-        this->collect_post_opt_info(this->optimizer_->result().eq_cons_, out.eq_lmults_,
-                                    this->optimizer_->result().iq_cons_, out.iq_lmults_);
-    } else {
-        // Constraint residuals at the solution are an artifact of the built-in
-        // solver's KKT bookkeeping and have no counterpart from another
-        // backend, so the post-solve constraint data is marked unavailable and
-        // only the multipliers are stored.
-        this->collect_solver_multipliers(out.eq_lmults_, out.iq_lmults_);
-        this->invalidate_post_opt_info();
-    }
-
-    return out.flag_;
-}
-
-tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::phase_call_impl(JetJobModes mode) {
-
-    // Mesh refinement is driven by the built-in solver's constraint residuals at
-    // the solution, which no other backend reports, so the refinement loop is
-    // only defined for the built-in solver.
-    if (this->adaptive_mesh_ && this->nlp_solver_ != solvers::NLPSolvers::interior_point) {
-        throw std::invalid_argument(
-            "adaptive mesh refinement requires nlp_solver = interior_point");
-    }
-
-    if (this->print_mesh_info_ && this->adaptive_mesh_) {
-        fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65);
-        fmt::print(fmt::fg(fmt::color::dim_gray), "Beginning");
-        fmt::print(": ");
-        fmt::print(fmt::fg(fmt::color::royal_blue), "Adaptive Mesh Refinement");
-        fmt::print("\n");
-    }
-
-    utils::Timer Runtimer;
-
-    Runtimer.start();
-
-    tycho::ConvergenceFlags flag = this->interior_point_call_impl(mode);
-
-    JetJobModes nextmode = mode;
-    if (this->solve_only_first_) {
-        switch (mode) {
-        case JetJobModes::SolveOptimize:
-            nextmode = JetJobModes::Optimize;
-            break;
-        case JetJobModes::SolveOptimizeSolve:
-            nextmode = JetJobModes::OptimizeSolve;
-            break;
-        default:
-            break;
-        }
-    }
-
-    if (this->adaptive_mesh_) {
-        if (flag >= this->mesh_abort_flag_) {
-            if (this->print_mesh_info_) {
-                fmt::print(fmt::fg(fmt::color::red),
-                           "Mesh Iteration 0 Failed to Solve: Aborting\n");
-            }
-        } else {
-            init_mesh_refinement();
-            for (int i = 0; i < this->max_mesh_iters_; i++) {
-                if (check_mesh() && !((i == 0) && this->force_one_mesh_iter_)) {
-                    if (this->print_mesh_info_) {
-                        MeshIterateInfo::print_header(i);
-                        this->mesh_iters_.back().print(0);
-                        fmt::print(fmt::fg(fmt::color::lime_green), "Mesh Converged\n");
-                    }
-                    break;
-                } else if (i == this->max_mesh_iters_ - 1) {
-                    if (this->print_mesh_info_) {
-                        MeshIterateInfo::print_header(i);
-                        this->mesh_iters_.back().print(0);
-                        fmt::print(fmt::fg(fmt::color::red), "Mesh Not Converged\n");
-                    }
-                    break;
-                } else {
-                    update_mesh();
-                    if (this->print_mesh_info_) {
-                        MeshIterateInfo::print_header(i);
-                        this->mesh_iters_.back().print(0);
-                    }
-                }
-                flag = this->interior_point_call_impl(nextmode);
-                if (flag >= this->mesh_abort_flag_) {
-                    if (this->print_mesh_info_) {
-                        fmt::print(fmt::fg(fmt::color::red),
-                                   "Mesh Iteration {0:} Failed to Solve: Aborting\n", i + 1);
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
-    if (this->print_mesh_info_ && this->adaptive_mesh_) {
-
-        Runtimer.stop();
-        double tseconds = double(Runtimer.count<std::chrono::microseconds>()) / 1000000;
-        fmt::print("Total Time:");
-        if (tseconds > 0.5) {
-            fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.4f} s\n", tseconds);
-        } else {
-            fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.2f} ms\n", tseconds * 1000);
-        }
-
-        fmt::print(fmt::fg(fmt::color::dim_gray), "Finished ");
-        fmt::print(": ");
-        fmt::print(fmt::fg(fmt::color::royal_blue), "Adaptive Mesh Refinement");
-        fmt::print("\n");
-        fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65);
-    }
-
-    return flag;
 }
 
 tycho::ConvergenceFlags tycho::oc::ODEPhaseBase::run_adaptive_mesh(EngineRef engine, Mode mode,

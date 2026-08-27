@@ -1925,25 +1925,9 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
         this->active_iq_lmults_ = IM;
     }
 
-    /// @internal
-    /// @brief Drive InteriorPointSolver for a single solve/optimize pass (no mesh loop).
-    /// @param mode  The solve/optimize job mode.
-    /// @return The solver convergence flag.
-    /// @endinternal
-    tycho::ConvergenceFlags interior_point_call_impl(JetJobModes mode);
-
-    /// @internal
-    /// @brief Run the full phase solve, including the adaptive-mesh-refinement loop.
-    /// @param mode  The solve/optimize job mode.
-    /// @return The solver convergence flag.
-    /// @endinternal
-    tycho::ConvergenceFlags phase_call_impl(JetJobModes mode);
-
     // -------------------------------------------------------------------
-    // solve() hooks (nlp_backend.h). The old surface above
-    // (solve()/optimize()/.../phase_call_impl) is untouched and stays
-    // primary for this class; these are the override set the new
-    // BackendProblemBase::solve() pipeline dispatches through.
+    // solve() hooks (nlp_backend.h): the override set
+    // BackendProblemBase::solve() dispatches through.
     // -------------------------------------------------------------------
 
     /// @brief solve() hook: transcribe if needed.
@@ -2034,12 +2018,13 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
     /// @internal
     /// @brief Prepare the phase for a "jet" (batched) solve.
     /// @endinternal
-    void jet_initialize() {
-        // See OptimizationProblem::jet_initialize() (solvers_vf/optimization_problem.h)
-        // for why these two calls are separate and ordered this way.
-        this->optimizer_->set_qp_threads(1);
+    void jet_initialize() override {
+        // Single-partition evaluation on the calling thread. The engine-level
+        // settings (QP thread count, print level) that this used to force
+        // onto the phase's own owned optimizer no longer apply here -- there
+        // is no owned optimizer; the caller configures whichever engine it
+        // hands to solve() directly.
         this->set_num_partitions(1);
-        this->optimizer_->set_print_level(10);
         this->print_mesh_info_ = false;
 
         this->transcribe();
@@ -2047,11 +2032,9 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
     /// @internal
     /// @brief Tear down jet-solve state and restore the default phase configuration.
     /// @endinternal
-    void jet_release() {
+    void jet_release() override {
         this->indexer_ = PhaseIndexer();
-        this->optimizer_->release();
         this->init_partitions();
-        this->optimizer_->set_print_level(0);
         this->print_mesh_info_ = true;
         this->nlp_ = std::shared_ptr<NonLinearProgram>();
         this->provider_ = std::shared_ptr<tycho::solvers::TranscribedAggregate>();
@@ -2059,27 +2042,10 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
         this->invalidate_post_opt_info();
     }
 
-    /// @brief Solve the phase for feasibility (satisfy constraints, no optimization).
-    /// @return The solver convergence flag.
-    tycho::ConvergenceFlags solve() { return phase_call_impl(JetJobModes::Solve); }
-    /// @brief Optimize the phase (minimize the objective subject to the constraints).
-    /// @return The solver convergence flag.
-    tycho::ConvergenceFlags optimize() { return phase_call_impl(JetJobModes::Optimize); }
-    /// @brief Solve for feasibility, then optimize.
-    /// @return The solver convergence flag.
-    tycho::ConvergenceFlags solve_optimize() { return phase_call_impl(JetJobModes::SolveOptimize); }
-    /// @brief Solve, optimize, then solve again to tighten feasibility.
-    /// @return The solver convergence flag.
-    tycho::ConvergenceFlags solve_optimize_solve() {
-        return phase_call_impl(JetJobModes::SolveOptimizeSolve);
-    }
-    /// @brief Optimize, then solve to tighten feasibility.
-    /// @return The solver convergence flag.
-    tycho::ConvergenceFlags optimize_solve() { return phase_call_impl(JetJobModes::OptimizeSolve); }
-
-    // BackendProblemBase's new solve(EngineRef, SolveOptions) overload
-    // is otherwise hidden by the 0-arg solve() override above.
-    using BackendProblemBase::solve;
+    // BackendProblemBase's new solve(EngineRef, SolveOptions) overload is
+    // the only solve() this class has -- ODEPhaseBase declares no 0-arg
+    // override of its own, so nothing here hides it and no
+    // using-declaration is needed.
 
     /////////////////////////////////////////////////////////////////
 

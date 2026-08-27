@@ -10,13 +10,13 @@
 
 #pragma once
 
+#include "tycho/detail/hven_namespaces.h"
 #include "tycho/detail/optimal_control/builder/var_registry.h"
 #include "tycho/detail/optimal_control/core/interface_types.h"
 #include "tycho/detail/optimal_control/core/optimal_control_flags.h"
 #include "tycho/detail/optimal_control/phase/ode_phase_base.h"
-#include "tycho/detail/hven_namespaces.h"
-#include <hven/drivers/interior_point_solver.h>
 #include <fmt/format.h>
+#include <hven/drivers/interior_point_solver.h>
 #include <initializer_list>
 #include <memory>
 #include <string>
@@ -822,16 +822,9 @@ class Phase {
     /// @brief Set the number of solver partitions.
     /// @param nparts  Number of NLP partitions for the parallel InteriorPointSolver solver.
     ///
-    /// The per-partition linear-system thread count is a separate setting:
-    /// reach it through @ref optimizer as `optimizer().set_qp_threads(t)`.
+    /// The per-partition linear-system thread count is a separate setting,
+    /// set on whichever InteriorPointSolver engine is passed to solve().
     void set_num_partitions(int nparts) { phase_->set_num_partitions(nparts); }
-
-    /// @brief Set the jet (batched) solve job mode.
-    /// @param mode  The jet job mode controlling how batched Jacobian/Hessian evaluations
-    ///              are dispatched.
-    void set_jet_job_mode(solvers::BackendProblemBase::JetJobModes mode) {
-        phase_->set_jet_job_mode(mode);
-    }
 
     /// @brief Set the variable scaling units.
     /// @param units  Per-variable scaling units for the XtUP block; size must match
@@ -1232,21 +1225,31 @@ class Phase {
 
     // ── Solve / optimize ──────────────────────────────────────────────────────
 
-    /// @brief Solve the phase for feasibility (no optimization).
-    /// @return Convergence status from InteriorPointSolver.
-    tycho::ConvergenceFlags solve() { return phase_->solve(); }
-    /// @brief Optimize the phase (minimize the objective subject to constraints).
-    /// @return Convergence status from InteriorPointSolver.
-    tycho::ConvergenceFlags optimize() { return phase_->optimize(); }
-    /// @brief Solve for feasibility, then optimize.
-    /// @return Convergence status from the final InteriorPointSolver call.
-    tycho::ConvergenceFlags solve_optimize() { return phase_->solve_optimize(); }
-    /// @brief Optimize, then solve to tighten feasibility.
-    /// @return Convergence status from the final InteriorPointSolver call.
-    tycho::ConvergenceFlags optimize_solve() { return phase_->optimize_solve(); }
-    /// @brief Solve, optimize, then solve again.
-    /// @return Convergence status from the final InteriorPointSolver call.
-    tycho::ConvergenceFlags solve_optimize_solve() { return phase_->solve_optimize_solve(); }
+    /// @brief Run the engine-driven staged solve on the wrapped phase.
+    /// @param engine The main-stage engine (InteriorPointSolver, SqpSolver, or IpoptSolver).
+    /// @param opts   Mode/presolve/polish/warm options; see @ref
+    ///               tycho::solvers::BackendProblemBase::solve.
+    /// @return The staged solve's result.
+    tycho::solvers::SolveResult solve(tycho::solvers::EngineRef engine,
+                                      const tycho::solvers::SolveOptions &opts = {}) {
+        return phase_->solve(engine, opts);
+    }
+
+    /// @brief Convenience overloads: the same call, taking a concrete engine
+    ///        by lvalue reference so a caller can write `phase.solve(ipm,
+    ///        opts)` directly instead of forming an EngineRef.
+    tycho::solvers::SolveResult solve(InteriorPointSolver &e,
+                                      const tycho::solvers::SolveOptions &opts = {}) {
+        return phase_->solve(e, opts);
+    }
+    tycho::solvers::SolveResult solve(tycho::solvers::SqpSolver &e,
+                                      const tycho::solvers::SolveOptions &opts = {}) {
+        return phase_->solve(e, opts);
+    }
+    tycho::solvers::SolveResult solve(tycho::solvers::IpoptSolver &e,
+                                      const tycho::solvers::SolveOptions &opts = {}) {
+        return phase_->solve(e, opts);
+    }
 
     // ── Result accessors ──────────────────────────────────────────────────────
 
@@ -1280,9 +1283,6 @@ class Phase {
     /// @brief Access the wrapped base phase as a shared pointer.
     /// @return Shared pointer to the underlying base phase.
     std::shared_ptr<ODEPhaseBase> base_ptr() { return phase_; }
-    /// @brief Access the underlying InteriorPointSolver optimizer.
-    /// @return Reference to the optimizer.
-    InteriorPointSolver &optimizer() { return *phase_->optimizer_; }
     /// @brief Access the variable registry.
     /// @return Const reference to the variable registry.
     const VarRegistry &registry() const { return registry_; }

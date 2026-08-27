@@ -25,9 +25,9 @@
 
 #include "tycho/detail/solvers/engines.h"
 
-// engines.h no longer includes this (see its own comment on the point): the
-// IpoptShimProblem shim below derives from BackendProblemBase, so this
-// translation unit needs it directly.
+// engines.h no longer includes this (see its own comment on the point): this
+// translation unit needs IpoptRunInfo/IpoptSolveOutput/ipopt_backend::solve
+// from it directly.
 #include "tycho/detail/solvers/nlp_backend.h"
 
 #include <algorithm>
@@ -483,38 +483,6 @@ SqpModelAdapter::eval_hess(const Eigen::VectorXd &x, double obj_scale,
 }
 
 // -----------------------------------------------------------------------------
-// A minimal BackendProblemBase carrying just what ipopt_backend::solve reads
-// (nlp_, optimizer_ for the matched-tolerance baseline, ipopt_options_) and
-// writes (last_ipopt_result_). The five mode virtuals and the two jet hooks
-// are never reached through this path -- ipopt_backend::solve does not call
-// any of them -- so they throw rather than silently doing something wrong.
-// -----------------------------------------------------------------------------
-
-class IpoptShimProblem final : public BackendProblemBase {
-  public:
-    ConvergenceFlags solve() override { refuse("solve"); }
-    ConvergenceFlags optimize() override { refuse("optimize"); }
-    ConvergenceFlags solve_optimize() override { refuse("solve_optimize"); }
-    ConvergenceFlags solve_optimize_solve() override { refuse("solve_optimize_solve"); }
-    ConvergenceFlags optimize_solve() override { refuse("optimize_solve"); }
-    void jet_initialize() override { refuse("jet_initialize"); }
-    void jet_release() override { refuse("jet_release"); }
-
-  protected:
-    void prepare_solve() override { refuse("prepare_solve"); }
-    Eigen::VectorXd initial_primal() const override { refuse("initial_primal"); }
-    void accept_stage(const StageOutput &) override { refuse("accept_stage"); }
-
-  private:
-    [[noreturn]] static ConvergenceFlags refuse(const char *what) {
-        throw std::logic_error(
-            fmt::format("IpoptShimProblem::{0}: not reachable through the engine-seam Ipopt "
-                        "stage, which calls ipopt_backend::solve directly",
-                        what));
-    }
-};
-
-// -----------------------------------------------------------------------------
 // Per-engine stage runners.
 // -----------------------------------------------------------------------------
 
@@ -754,10 +722,6 @@ void fill_ipopt_stage(StageOutput &out, IpoptSolver &engine, Mode mode,
         throw std::invalid_argument("run_engine_stage: NonLinearProgram pointer must not be null");
     }
 
-    IpoptShimProblem shim;
-    shim.nlp_ = nlp;
-    shim.ipopt_options_ = engine.options();
-
     // Core-only warm: the Ipopt path has no staging surface of its own, so a
     // warm currency's primal block seeds the starting point directly, exactly
     // as an explicit x0 would. Sizes are trusted here; a mismatch surfaces as
@@ -765,12 +729,13 @@ void fill_ipopt_stage(StageOutput &out, IpoptSolver &engine, Mode mode,
     Eigen::VectorXd start =
         (warm != nullptr && warm->primal_.size() == x0.size()) ? warm->primal_ : x0;
 
-    // mode == Mode::Optimal here, unconditionally: Mode::Feasible already
-    // refused above, before this point, and Mode has no third value.
-    // ipopt_backend::solve ignores this parameter regardless (its own
-    // (void)mode), but Optimize is the honest label for the one solve it runs.
-    BackendProblemBase::NlpSolveOutput result =
-        ipopt_backend::solve(shim, BackendProblemBase::JetJobModes::Optimize, start);
+    // The IpoptSolver engine handle carries only string options, no
+    // termination tolerances of its own (unlike InteriorPointSolver), so a
+    // default-constructed InteriorPointSolver::Settings supplies the
+    // matched-tolerance baseline ipopt_backend::solve applies before
+    // engine.options() (which can override it).
+    IpoptSolveOutput result =
+        ipopt_backend::solve(nlp, start, engine.options(), InteriorPointSolver::Settings{});
 
     out.flag_ = result.flag_;
     out.primal_ = result.variables_;
@@ -779,7 +744,7 @@ void fill_ipopt_stage(StageOutput &out, IpoptSolver &engine, Mode mode,
     // bound_lmults_, eq_cons_, iq_cons_ intentionally left empty: this adapter
     // does not surface bound multipliers or residual vectors from Ipopt.
 
-    const IpoptRunInfo &info = shim.last_ipopt_result_;
+    const IpoptRunInfo &info = result.info_;
     StageResult &report = out.report_;
     report.engine_name_ = IpoptSolver::name();
     report.flag_ = result.flag_;

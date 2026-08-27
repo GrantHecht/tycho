@@ -17,9 +17,8 @@
 #ifdef TYCHO_PYTHON_BINDINGS
 
 #include "function_registry.h"
-#include "tycho/detail/solvers_vf/optimization_problem.h"
 #include "tycho/detail/hven_namespaces.h"
-#include <hven/drivers/optimization_problem_base.h>
+#include "tycho/detail/solvers_vf/optimization_problem.h"
 
 namespace tycho {
 

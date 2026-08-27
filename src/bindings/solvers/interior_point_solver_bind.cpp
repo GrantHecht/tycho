@@ -831,13 +831,6 @@ ValueError
         .def_ro("constraint_violation", &IpoptRunInfo::constraint_violation_)
         .def_ro("wall_time_s", &IpoptRunInfo::wall_time_s_);
 
-    nb::enum_<NLPSolvers>(m, "NLPSolvers",
-                          "NLP solver backend selector for the solve/optimize entry points.")
-        .value("interior_point", NLPSolvers::interior_point,
-               "Built-in interior-point solver (default).")
-        .value("ipopt", NLPSolvers::ipopt,
-               "Linked Ipopt on the identical transcribed NLP (requires ENABLE_IPOPT build).");
-
     m.def("ipopt_available", &ipopt_backend::available,
           "True when this build was configured with ENABLE_IPOPT.");
 

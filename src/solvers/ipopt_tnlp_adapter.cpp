@@ -688,26 +688,15 @@ namespace ipopt_backend {
 
 bool available() { return true; }
 
-BackendProblemBase::NlpSolveOutput solve(BackendProblemBase &prob,
-                                         BackendProblemBase::JetJobModes mode,
-                                         const Eigen::VectorXd &input) {
-    // The staged feasibility/optimality modes are an artifact of the built-in
-    // solver's phase sequencing and have no Ipopt analog: every mode runs the
-    // one NLP solve from the given starting point.
-    (void)mode;
-
-    if (!prob.nlp_) {
-        throw std::runtime_error("no transcribed NLP on this problem; transcribe before "
-                                 "dispatching a solve to the ipopt backend");
-    }
-    if (!prob.optimizer_) {
-        throw std::runtime_error("no optimizer on this problem; the ipopt backend reads its "
-                                 "termination tolerances from the built-in solver's settings");
+IpoptSolveOutput solve(const std::shared_ptr<NonLinearProgram> &nlp, const Eigen::VectorXd &x0,
+                       const std::map<std::string, std::string> &ipopt_options,
+                       const InteriorPointSolver::Settings &tolerance_baseline) {
+    if (!nlp) {
+        throw std::runtime_error(
+            "no transcribed NLP; transcribe before dispatching a solve to the ipopt backend");
     }
 
-    const InteriorPointSolver::Settings &settings = prob.optimizer_->settings();
-
-    Ipopt::SmartPtr<TychoTNLP> adapter = new TychoTNLP(prob.nlp_, input, settings.obj_scale_);
+    Ipopt::SmartPtr<TychoTNLP> adapter = new TychoTNLP(nlp, x0, tolerance_baseline.obj_scale_);
 
     Ipopt::SmartPtr<Ipopt::IpoptApplication> app = IpoptApplicationFactory();
     Ipopt::SmartPtr<Ipopt::OptionsList> options = app->Options();
@@ -728,26 +717,27 @@ BackendProblemBase::NlpSolveOutput solve(BackendProblemBase &prob,
         }
     };
 
-    set_baseline_numeric("tol", settings.kkt_tol_);
-    set_baseline_numeric("constr_viol_tol", std::max(settings.econ_tol_, settings.icon_tol_));
-    set_baseline_numeric("acceptable_tol", settings.acc_kkt_tol_);
-    set_baseline_numeric("acceptable_constr_viol_tol",
-                         std::max(settings.acc_econ_tol_, settings.acc_icon_tol_));
-    set_baseline_integer("max_iter", settings.max_iters_);
+    set_baseline_numeric("tol", tolerance_baseline.kkt_tol_);
+    set_baseline_numeric("constr_viol_tol",
+                         std::max(tolerance_baseline.econ_tol_, tolerance_baseline.icon_tol_));
+    set_baseline_numeric("acceptable_tol", tolerance_baseline.acc_kkt_tol_);
+    set_baseline_numeric("acceptable_constr_viol_tol", std::max(tolerance_baseline.acc_econ_tol_,
+                                                                tolerance_baseline.acc_icon_tol_));
+    set_baseline_integer("max_iter", tolerance_baseline.max_iters_);
     set_baseline_integer("print_level", 0);
     // Banner suppression is an advanced Ipopt option; a build that does not
     // register it simply prints its banner.
     (void)options->SetStringValue("sb", "yes", true, true);
 
-    for (const auto &[key, value] : prob.ipopt_options_) {
+    for (const auto &[key, value] : ipopt_options) {
         apply_user_option(*app, key, value);
     }
 
     const Ipopt::ApplicationReturnStatus init_status = app->Initialize();
     if (init_status != Ipopt::Solve_Succeeded) {
         throw std::runtime_error(
-            fmt::format("Ipopt initialization failed ({0}); check the options set through "
-                        "ipopt_options_",
+            fmt::format("Ipopt initialization failed ({0}); check the options passed via "
+                        "IpoptSolver::options()",
                         application_status_name(init_status)));
     }
 
@@ -788,13 +778,12 @@ BackendProblemBase::NlpSolveOutput solve(BackendProblemBase &prob,
         info.constraint_violation_ = adapter->constraint_violation(adapter->solution());
     }
 
-    prob.last_ipopt_result_ = info;
-
-    BackendProblemBase::NlpSolveOutput out;
+    IpoptSolveOutput out;
     out.variables_ = adapter->solution();
     out.eq_lmults_ = adapter->eq_lmults();
     out.iq_lmults_ = adapter->iq_lmults();
     out.flag_ = flag;
+    out.info_ = info;
     return out;
 }
 
