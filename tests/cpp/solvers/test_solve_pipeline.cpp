@@ -63,6 +63,31 @@ std::unique_ptr<OptimizationProblem> solve_pipeline_build_tiny_nlp() {
     return prob;
 }
 
+// A single-variable equality NLP that genuinely diverges under Mode::Feasible:
+// exp(x) - 5 = 0, started at x = 1000. exp(1000) overflows to +inf in double
+// precision, so the very first iterate's constraint residual (and the KKT
+// infeasibility measure built from it) is already non-finite -- hven's own
+// divergence check (`!std::isfinite(...)`) fires immediately, and the
+// diverging iterate's primal/multiplier blocks captured into the completed
+// warm-start payload are themselves non-finite. Needed only by
+// DivergingPresolveDoesNotThrowOnMainStageHandoff below, to reach that
+// payload through the real solve() pipeline rather than fabricating a
+// WarmStartData by hand (warm_or_null is file-local to
+// solve_pipeline.cpp).
+std::unique_ptr<OptimizationProblem> solve_pipeline_build_diverging_nlp() {
+    using tycho::vf::Arguments;
+    using tycho::vf::GenericFunction;
+    auto prob = std::make_unique<OptimizationProblem>();
+    prob->set_vars(Eigen::VectorXd::Constant(1, 1000.0));
+    {
+        auto args = Arguments<1>();
+        auto x = args.coeff<0>();
+        prob->add_equal_con(GenericFunction<-1, -1>(x.exp() - 5.0),
+                            (Eigen::VectorXi(1) << 0).finished());
+    }
+    return prob;
+}
+
 // An active-inequality NLP: min x^2 s.t. 2 - x <= 0 (i.e. x >= 2), optimum
 // x = 2, objective 4, lambda_i = 4 (grad f + Ji^T lambda_i - z = 0 at a free
 // variable: 2x + (-1)*lambda_i = 0 => lambda_i = 2x = 4). Exercises the half
@@ -392,6 +417,36 @@ TEST(SolvePipeline, StagesRunInOrderAndAllReport) {
     EXPECT_EQ(result.stages_[2].role_, "polish");
     EXPECT_TRUE(result.converged());
     EXPECT_NEAR(prob->active_variables_[0], 1.0, 1e-6);
+}
+
+// Regression test (review finding I-1): a presolve stage that genuinely
+// diverges must not crash the hand-off to the main stage. Before the fix,
+// warm_or_null() only checked the exported payload's primal_ for
+// non-emptiness, so a diverged presolve's non-finite bound_lmults_ (and
+// primal_) were staged onto the main stage's engine via stage_warm_start(),
+// which throws std::invalid_argument out of hven's own block validation
+// (InteriorPointSolver::validate_warm_start_blocks) -- turning a value the
+// pipeline's own contract promises ("a non-convergent stage is a value ...
+// never a thrown exception") into an uncaught exception instead. With the
+// fix, a non-finite export is treated exactly like an empty one: the main
+// stage runs unseeded and reports its own flag as a value.
+TEST(SolvePipeline, DivergingPresolveDoesNotThrowOnMainStageHandoff) {
+    auto prob = solve_pipeline_build_diverging_nlp();
+    InteriorPointSolver ipm;
+    EngineRef ref = &ipm;
+
+    SolveOptions opts;
+    opts.mode = Mode::Optimal;
+    opts.presolve = true;
+
+    SolveResult result;
+    ASSERT_NO_THROW(result = prob->solve(ref, opts));
+
+    ASSERT_EQ(result.stages_.size(), 2u);
+    EXPECT_EQ(result.stages_[0].role_, "presolve");
+    EXPECT_EQ(result.stages_[0].flag_, tycho::ConvergenceFlags::DIVERGING);
+    EXPECT_EQ(result.stages_[1].role_, "main");
+    EXPECT_FALSE(result.converged());
 }
 
 TEST(SolvePipeline, NonConvergenceIsAValueNotAThrow) {

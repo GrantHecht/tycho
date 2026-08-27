@@ -15,10 +15,11 @@ import json
 import os
 import subprocess
 import sys
-import types
 from pathlib import Path
 
 import pytest
+
+import tychopy.solvers as solvs
 
 # This file lives at <repo>/tychopy/test/test_corpus_smoke.py, so
 # parents[2] is the repo root when it runs in place. Some harnesses copy the
@@ -117,11 +118,12 @@ def test_harness_end_to_end_fast_problems(tmp_path):
 
 
 class _FakeResult:
-    """Stand-in for SolveResult: a truthy/falsy convergence flag plus the
-    ``.flag.name`` the driver reads."""
+    """Stand-in for SolveResult: a real ConvergenceFlags member (so
+    ``result.flag != solvs.ConvergenceFlags.CONVERGED`` compares correctly,
+    not just ``.flag.name``) plus a truthy/falsy convergence bit."""
 
     def __init__(self, flag_name, converged):
-        self.flag = types.SimpleNamespace(name=flag_name)
+        self.flag = getattr(solvs.ConvergenceFlags, flag_name)
         self._converged = converged
 
     def __bool__(self):
@@ -151,15 +153,16 @@ class _CallShapeProbeModule:
 
 
 def test_driver_default_call_shape_runs_module_solve_call():
-    # presolve=True is run as its own unconditional Feasible-mode solve()
-    # call, not forwarded to solve()'s own presolve= argument -- see
-    # driver._dispatch_psiopt_solve's docstring for why.
+    # presolve=True forwards straight through to solve()'s own presolve=
+    # argument as a single call -- the pipeline itself now tolerates a
+    # diverging presolve stage (src/solvers/solve_pipeline.cpp's
+    # warm_or_null), so the driver no longer needs to route around it with
+    # two separate calls.
     prob = _CallShapeProbeProblem()
     _CallShapeProbeModule._prob = prob
     result = driver.run(_CallShapeProbeModule, lambda engine: None)
     assert prob.calls == [
-        {"mode": "feasible", "presolve": False, "polish": None, "warm": None},
-        {"mode": "optimal", "presolve": False, "polish": None, "warm": None},
+        {"mode": "optimal", "presolve": True, "polish": None, "warm": None},
     ]
     assert result["call_shape"] == "module"
 
@@ -179,8 +182,9 @@ def test_driver_optimize_call_shape_overrides_solve_call():
 class _FallbackProbeProblem:
     """Stub problem whose first solve() reports NOTCONVERGED and second
     (the feasible_fallback retry) reports CONVERGED -- exercises the
-    driver's conditional chain for the old optimize_solve()/
-    solve_optimize_solve() combo methods."""
+    driver's conditional chain for the retired optimize_solve()/
+    solve_optimize_solve() combo methods' trailing conditional Solve
+    phase."""
 
     def __init__(self):
         self.calls = []
@@ -202,7 +206,7 @@ class _FallbackProbeModule:
         return _FallbackProbeModule._prob
 
 
-def test_driver_feasible_fallback_retries_with_warm_start_on_non_convergence():
+def test_driver_feasible_fallback_retries_on_non_convergence():
     prob = _FallbackProbeProblem()
     _FallbackProbeModule._prob = prob
     result = driver.run(_FallbackProbeModule, lambda engine: None)
@@ -214,8 +218,58 @@ def test_driver_feasible_fallback_retries_with_warm_start_on_non_convergence():
         "polish": None,
         "warm": None,
     }
+    # No warm= on the retry: the retired combo method passed no warm
+    # payload between its phases either, relying on in-place primal
+    # continuation -- see driver._dispatch_psiopt_solve's docstring (I-3).
+    assert prob.calls[1] == {
+        "mode": "feasible",
+        "presolve": False,
+        "polish": None,
+        "warm": None,
+    }
+    assert result["flag"] == "CONVERGED"
+
+
+class _AcceptableProbeProblem:
+    """Stub problem whose first solve() reports ACCEPTABLE (a converged --
+    ``bool(result) is True`` -- but not exactly CONVERGED flag) and second
+    (the feasible_fallback retry) reports CONVERGED. Regression case for
+    review finding I-2: the retired ``optimize_solve()``'s own
+    conditional-phase gate skipped the trailing Solve phase only on an
+    EXACT CONVERGED (``psiopt/src/psiopt.cpp``), so a merely-ACCEPTABLE
+    main stage must still trigger the fallback -- the ``not result``/
+    ``converged()`` idiom (which treats ACCEPTABLE as already "done") gets
+    this wrong; ``result.flag != ConvergenceFlags.CONVERGED`` gets it
+    right."""
+
+    def __init__(self):
+        self.calls = []
+
+    def solve(self, engine, mode="optimal", presolve=False, polish=None, warm=None):
+        self.calls.append(
+            {"mode": mode, "presolve": presolve, "polish": polish, "warm": warm}
+        )
+        if len(self.calls) == 1:
+            return _FakeResult("ACCEPTABLE", converged=True)
+        return _FakeResult("CONVERGED", converged=True)
+
+
+class _AcceptableProbeModule:
+    SOLVE_CALL = {"mode": "optimal", "feasible_fallback": True}
+    NOTES = ""
+
+    @staticmethod
+    def build():
+        return _AcceptableProbeModule._prob
+
+
+def test_driver_feasible_fallback_retries_on_acceptable_not_just_notconverged():
+    prob = _AcceptableProbeProblem()
+    _AcceptableProbeModule._prob = prob
+    result = driver.run(_AcceptableProbeModule, lambda engine: None)
+
+    assert len(prob.calls) == 2  # the ACCEPTABLE main stage still triggers the retry
     assert prob.calls[1]["mode"] == "feasible"
-    assert prob.calls[1]["warm"] is not None  # warm-started off the first result
     assert result["flag"] == "CONVERGED"
 
 

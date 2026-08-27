@@ -32,13 +32,14 @@
 // sets SolveResult::warm_ itself from whichever main-mode stage ran LAST,
 // since that is the one a polish stage after the loop should seed from.
 //
-// A predecessor's export only seeds the next stage when it is non-empty
-// (warm_or_null() below): an empty export means the predecessor's own
-// engine call captured nothing to hand forward (e.g. a defensive internal
-// check inside the engine skipped the capture; engines.cpp's
-// fill_ipm_stage documents this as non-fatal), and the stage it would have
-// seeded simply runs unseeded instead of failing on a block-size mismatch
-// against an empty payload.
+// A predecessor's export only seeds the next stage when it is non-empty AND
+// every block is finite (warm_or_null() below): an empty export means the
+// predecessor's own engine call captured nothing to hand forward (e.g. a
+// defensive internal check inside the engine skipped the capture; engines.cpp's
+// fill_ipm_stage documents this as non-fatal), and a non-finite value means
+// the predecessor genuinely diverged rather than exporting a usable point;
+// either way, the stage it would have seeded simply runs unseeded instead of
+// failing on a block-size mismatch or a downstream non-finite-value check.
 
 #include "tycho/detail/solvers/nlp_backend.h"
 
@@ -152,18 +153,37 @@ void append_stage(SolveResult &r, const StageOutput &out, const char *role) {
 }
 
 /// @brief `w` as a warm-start pointer to seed the next stage with, or null
-///        when `w` is empty. An empty `primal_` means the stage that
-///        produced `w` exported nothing -- engines.cpp's `fill_ipm_stage`
-///        documents this as a defensive, non-fatal outcome (e.g. the
-///        engine's own internal-consistency check skipped the capture) --
-///        and seeding an empty payload unconditionally would turn that into
-///        a hard `std::invalid_argument` out of the next stage's own
-///        block-size check instead of the "run unseeded" outcome the
-///        pipeline intends. Mirrors the size guard `fill_ipopt_stage`
-///        already applies to a warm payload before using it as a starting
-///        point.
+///        when `w` is empty or carries a non-finite value in any block. An
+///        empty `primal_` means the stage that produced `w` exported
+///        nothing -- engines.cpp's `fill_ipm_stage` documents this as a
+///        defensive, non-fatal outcome (e.g. the engine's own
+///        internal-consistency check skipped the capture) -- and seeding an
+///        empty payload unconditionally would turn that into a hard
+///        `std::invalid_argument` out of the next stage's own block-size
+///        check instead of the "run unseeded" outcome the pipeline intends.
+///        Mirrors the size guard `fill_ipopt_stage` already applies to a
+///        warm payload before using it as a starting point.
+///
+///        The finite check exists because a stage that ran to a genuine
+///        DIVERGING result can still export a non-empty payload -- e.g. a
+///        presolve stage that diverges can leave non-finite bound
+///        multipliers in its own `StageOutput::warm_` -- and staging that
+///        payload as the next stage's seed reaches
+///        `InteriorPointSolver::stage_warm_start`'s own block validation,
+///        which throws `std::invalid_argument` rather than reporting a
+///        flag. That contradicts the pipeline's own contract (top-of-file:
+///        "runs to completion regardless of an earlier stage's flag; a
+///        non-convergent stage is a value ... never a thrown exception"),
+///        so a payload with any non-finite entry is treated exactly like an
+///        empty one: the next stage runs unseeded, from whatever primal the
+///        problem itself already holds, instead of raising at the hand-off.
 const hven::solvers::WarmStartData *warm_or_null(const hven::solvers::WarmStartData &w) {
-    return w.primal_.size() > 0 ? &w : nullptr;
+    if (w.primal_.size() == 0) {
+        return nullptr;
+    }
+    const bool all_finite = w.primal_.allFinite() && w.eq_lmults_.allFinite() &&
+                            w.iq_lmults_.allFinite() && w.bound_lmults_.allFinite();
+    return all_finite ? &w : nullptr;
 }
 
 /// @brief Owns one per-jet-call engine clone (clone_prototype()) and exposes
@@ -180,9 +200,9 @@ const hven::solvers::WarmStartData *warm_or_null(const hven::solvers::WarmStartD
 ///        into the engine call, since InteriorPointSolver re-applies
 ///        `qp_threads_` at every solve entry) and `print_level_` forced to a
 ///        silent value UNLESS the source engine had already moved it off
-///        the class default of 0 -- restoring the pre-M5 jet path's forced
-///        silence while still letting a caller opt into per-job console
-///        output by setting `print_level` explicitly before staging.
+///        the class default of 0 -- so a batched call is quiet by default
+///        while still letting a caller opt into per-job console output by
+///        setting `print_level` explicitly before staging.
 class ClonedEngine {
   public:
     explicit ClonedEngine(EngineRef source) {

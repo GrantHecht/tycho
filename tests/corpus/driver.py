@@ -26,24 +26,24 @@ precedence the earlier code had (build()'s inline tweaks, then the harness's
 ``configure(prob.optimizer)`` applied on top).
 
 ``SOLVE_CALL`` is a plain kwargs dict for ``prob.solve(engine, **SOLVE_CALL)``
-(e.g. ``dict(mode="optimal")`` or ``dict(mode="optimal", presolve=True)``),
-plus two reserved keys the driver itself consumes and never forwards
-verbatim to a single ``solve()`` call -- see ``_dispatch_psiopt_solve``
-below for exactly how each is expressed as sequential ``solve()`` calls:
+(e.g. ``dict(mode="optimal")`` or ``dict(mode="optimal", presolve=True)``);
+``presolve``/``polish``/``warm`` forward straight through to ``solve()``,
+unchanged. ``feasible_fallback`` is the one reserved key the driver itself
+consumes and never forwards to ``solve()`` -- see ``_dispatch_psiopt_solve``
+below:
 
-- ``presolve`` (bool, default False) -- an unconditional Feasible stage
-  before the main call, mirroring the retired ``solve_optimize()`` /
-  ``solve_optimize_solve()`` combo methods' leading Solve phase. Run as its
-  own ``solve(engine, mode="feasible")`` call rather than forwarded to
-  ``solve()``'s own ``presolve=`` argument -- see
-  ``_dispatch_psiopt_solve``'s docstring for why.
-- ``feasible_fallback`` (bool, default False) -- if the main call above
-  does not converge, run a further solve with ``mode="feasible"`` and
-  ``warm=<main-call result>``, mirroring the retired ``optimize_solve()`` /
-  ``solve_optimize_solve()`` combo methods' trailing *conditional* Solve
-  phase (a Feasible attempt only runs when the preceding Optimal attempt
-  didn't converge) -- see ``examples/python_examples/HyperSens.py`` for
-  the same pattern used directly by a caller.
+- ``feasible_fallback`` (bool, default False) -- if the main call's flag is
+  not exactly CONVERGED, run a further ``solve(engine, mode="feasible")``,
+  mirroring the retired ``optimize_solve()`` / ``solve_optimize_solve()``
+  combo methods' trailing *conditional* Solve phase (``psiopt/src/
+  psiopt.cpp``: the phase's own ``conditional_`` flag gates on an exact
+  ``converge_flag_ == ConvergenceFlags::CONVERGED``, so a merely-ACCEPTABLE
+  main stage still ran it) -- see ``examples/python_examples/HyperSens.py``
+  for the same fallback pattern used directly by a caller (that example
+  uses the plain ``not result`` idiom instead, which is the correct choice
+  for a hand-written caller; this driver is a fidelity harness reproducing
+  the retired vocabulary's exact gate, so it matches that gate precisely
+  instead).
 
   The old five-name ``SOLVE_MODE`` vocabulary maps onto this convention as:
 
@@ -98,33 +98,35 @@ import tychopy.solvers as solvs
 def _dispatch_psiopt_solve(prob, engine, solve_call):
     """Run one problem's psiopt-backend solve per its SOLVE_CALL.
 
-    Expresses the old combo-method chain shapes (``solve_optimize`` /
-    ``optimize_solve`` / ``solve_optimize_solve``) as explicit sequential
-    ``solve()`` calls on the same engine -- see the module docstring's
-    ``SOLVE_CALL`` section for the exact mapping.
+    Expresses the old combo-method chain shapes' trailing *conditional*
+    Solve phase (``optimize_solve`` / ``solve_optimize_solve``) as an
+    explicit second call -- see the module docstring's ``SOLVE_CALL``
+    section for the exact mapping. ``presolve``/``polish``/``warm`` forward
+    straight to ``solve()`` unchanged: the presolve-stage-diverges hand-off
+    (a diverging presolve's non-finite export reaching the main stage's
+    warm-start validation and raising instead of reporting a flag) is now
+    fixed at the pipeline level (``src/solvers/solve_pipeline.cpp``'s
+    ``warm_or_null`` treats a non-finite export the same as an empty one),
+    so this driver no longer needs to route around it.
 
-    ``presolve=True`` is handled as its own unconditional ``solve(engine,
-    mode="feasible")`` call BEFORE the main call, rather than being
-    forwarded to ``solve()``'s own ``presolve=`` convenience path: that
-    path hands the presolve stage's ending point to the main stage through
-    the public, validated ``WarmStartData`` channel, which raises if that
-    point includes a non-finite value -- exactly what a corpus problem's
-    presolve stage can legitimately produce while genuinely diverging
-    (observed on ``hard_zermelo_wrongbasin``). Running the presolve stage
-    as its own ``solve()`` call instead relies on the same in-place primal
-    continuation the retired ``run_phase_sequence({SOE, OPT})`` used (see
-    the frozen ``psiopt/src/psiopt.cpp``), which tolerates it: a
-    ``solve()`` call with no explicit ``warm=`` picks up wherever the
-    problem's own active variables already sit, the same continuity a
-    bare re-solve without retranscription always had.
+    ``feasible_fallback`` retries with ``mode="feasible"`` only when the
+    main call's flag is not exactly CONVERGED -- mirroring the retired
+    ``optimize_solve()``'s own conditional-phase gate (an ACCEPTABLE main
+    stage still ran the trailing Solve phase under the old vocabulary; see
+    the module docstring). No ``warm=`` is passed on the retry: the retired
+    combo method passed no warm payload between its phases either, relying
+    on the same in-place primal continuation a presolve stage relies on
+    (see ``solve_pipeline.cpp``'s own WARM SEEDING note) -- and passing the
+    main stage's own (possibly non-convergent, possibly non-finite) export
+    through the caller-supplied ``warm=`` argument would reach hven's block
+    validation directly, a path ``warm_or_null``'s stage-to-stage guard
+    does not cover.
     """
     call = dict(solve_call)
     feasible_fallback = call.pop("feasible_fallback", False)
-    if call.pop("presolve", False):
-        prob.solve(engine, mode="feasible")
     result = prob.solve(engine, **call)
-    if feasible_fallback and not result:
-        result = prob.solve(engine, mode="feasible", warm=result)
+    if feasible_fallback and result.flag != solvs.ConvergenceFlags.CONVERGED:
+        result = prob.solve(engine, mode="feasible")
     return result
 
 

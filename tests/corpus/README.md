@@ -284,7 +284,8 @@ then records as `status: "error"`.
 On the **ipopt backend**, each `VALUE` stays a plain string (no int/float
 casting — Ipopt's own option parser does its own type coercion) and the
 whole `{KEY: VALUE}` mapping populates the `IpoptSolver` engine's `.options`
-dict verbatim (e.g. `--config linear_solver=pardisomkl tol=1e-8`).
+dict verbatim (e.g. `--config linear_solver=pardisomkl tol=1e-8`), applied
+after the Ipopt adapter's matched-tolerance baseline so these entries win.
 
 ## Backend selection
 
