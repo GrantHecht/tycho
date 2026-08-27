@@ -352,10 +352,11 @@ def Form1():
     phase.add_lower_norm_bound("Path", [0, 1, 2], 2 * Srad, 1.0)
     phase.add_equal_con("Back", RendCon(Udvec), range(0, 20))
     phase.add_delta_time_objective(1.0)
-    phase.optimizer.set_bound_fraction(0.995)
-    phase.optimizer.set_print_level(1)
+    ipm = solvs.IPM()
+    ipm.set_bound_fraction(0.995)
+    ipm.set_print_level(1)
 
-    phase.optimize()
+    phase.solve(ipm)
 
     Traj = phase.return_traj()
 
@@ -412,10 +413,11 @@ def Form2():
     phase.add_equal_con("Last", RendCon2(Udvec, TargetTab), range(0, 14))
     phase.add_upper_delta_time_bound(SimTime)
     phase.add_delta_time_objective(1.0)
-    phase.optimizer.set_bound_fraction(0.995)
+    ipm = solvs.IPM()
+    ipm.set_bound_fraction(0.995)
 
-    phase.optimizer.set_print_level(1)
-    phase.optimize()
+    ipm.set_print_level(1)
+    phase.solve(ipm)
 
     Traj = phase.return_traj()
 

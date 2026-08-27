@@ -25,6 +25,7 @@ from tychopy.astro.astro_models import CR3BP
 # Setup
 oc = typy.optimal_control
 vf = typy.vector_functions
+solvs = typy.solvers
 
 phaseRegs = oc.PhaseRegionFlags
 tModes = oc.TranscriptionModes
@@ -76,8 +77,9 @@ def solvePeriodic(ig, tf, ode, odeItg, fixInit=[0, 1, 2]):
 
     # 4: Solve
     tol = 1e-12
-    odePhase.optimizer.set_eq_con_tol(tol)  # Equality constraint tolerance
-    odePhase.solve()
+    ipm = solvs.IPM()
+    ipm.set_eq_con_tol(tol)  # Equality constraint tolerance
+    odePhase.solve(ipm, mode="feasible")
 
     # 5: Get solution and return
     trajSol = odePhase.return_traj()

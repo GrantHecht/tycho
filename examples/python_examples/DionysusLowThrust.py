@@ -24,6 +24,7 @@ from tychopy.astro.frame_plot import TBPlot, colpal
 ##############################################################################
 vf = typy.vector_functions
 oc = typy.optimal_control
+solvs = typy.solvers
 Args = vf.Arguments
 
 """
@@ -87,15 +88,16 @@ if __name__ == "__main__":
     phase.add_value_objective("Back", 6, -1.0)
 
     phase.set_num_partitions(8)
-    phase.optimizer.qp_threads = 8
-    phase.optimizer.set_opt_ls_mode("AUGLANG")
-    phase.optimizer.set_max_ls_iters(2)
-    phase.optimizer.set_max_acc_iters(200)
-    phase.optimizer.set_bound_fraction(0.997)
-    phase.optimizer.set_print_level(1)
-    phase.optimizer.set_delta_h(1.0e-6)
-    phase.optimizer.set_eq_con_tol(1.0e-9)
-    phase.optimize()
+    ipm = solvs.IPM()
+    ipm.qp_threads = 8
+    ipm.set_opt_ls_mode("AUGLANG")
+    ipm.set_max_ls_iters(2)
+    ipm.set_max_acc_iters(200)
+    ipm.set_bound_fraction(0.997)
+    ipm.set_print_level(1)
+    ipm.set_delta_h(1.0e-6)
+    ipm.set_eq_con_tol(1.0e-9)
+    phase.solve(ipm)
 
     ConvTraj = phase.return_traj()
 

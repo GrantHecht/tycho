@@ -32,6 +32,7 @@ mpl.rcParams.update(params)
 ## Setup
 oc = typy.optimal_control
 vf = typy.vector_functions
+solvs = typy.solvers
 
 phaseRegs = oc.PhaseRegionFlags
 tModes = oc.TranscriptionModes
@@ -131,9 +132,10 @@ def navigate(A, B, vM=1, wF=uniformWind):
     phase.add_delta_time_objective(1.0)
 
     # 5. Optimize
-    phase.optimizer.set_eq_con_tol(tol)
-    phase.optimizer.set_kkt_tol(tol)
-    phase.solve_optimize()
+    ipm = solvs.IPM()
+    ipm.set_eq_con_tol(tol)
+    ipm.set_kkt_tol(tol)
+    phase.solve(ipm, presolve=True)
 
     return phase.return_traj()
 

@@ -20,6 +20,7 @@ import tychopy as typy
 ################################################################################
 vf = typy.vector_functions
 oc = typy.optimal_control
+solvs = typy.solvers
 Args = vf.Arguments
 
 ###############################################################################
@@ -58,12 +59,20 @@ if __name__ == "__main__":
     phase.add_upper_var_bound("Path", 0, 1 / 9)
     phase.add_integral_objective((Args(1)[0] ** 2) / 2, [3])
     phase.add_boundary_value("Back", range(0, 3), [0, -1, 1])
-    phase.optimizer.set_opt_ls_mode("L1")
-    phase.optimizer.set_kkt_tol(1.0e-10)
-    phase.optimizer.set_print_level(0)
+
+    ipm = solvs.IPM()
+    ipm.set_opt_ls_mode("L1")
+    ipm.set_kkt_tol(1.0e-10)
+    ipm.set_print_level(0)
     phase.set_num_partitions(1)
-    phase.optimizer.qp_threads = 1
-    phase.optimize()
+    ipm.qp_threads = 1
+
+    # Bryson-Denham has an active state-path bound (x <= 1/9), the shape an
+    # SQP polish stage is expected to help on. Measured: the tight kkt_tol
+    # above already drives the IPM main stage to ~1e-14, past what an SQP
+    # polish stage can improve on (it measured ~1e-7 here) -- so this example
+    # is kept plain rather than showcasing a polish stage that doesn't help.
+    phase.solve(ipm)
 
     Traj = phase.return_traj()
 

@@ -19,6 +19,7 @@ import tychopy as typy
 
 vf = typy.vector_functions
 oc = typy.optimal_control
+solvs = typy.solvers
 Args = vf.Arguments
 ODEArgs = oc.ODEArguments
 
@@ -77,7 +78,9 @@ if __name__ == "__main__":
     phase.add_lu_var_bound("Path", 4, -0.1, 2.00)
     phase.add_boundary_value("Back", [0, 1], [xf, yf])
     phase.add_delta_time_objective(1.0)
-    phase.optimize()
+
+    ipm = solvs.IPM()
+    phase.solve(ipm)
 
     Traj = phase.return_traj()
 

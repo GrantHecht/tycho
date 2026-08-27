@@ -27,6 +27,7 @@ from MinimumTimeToClimbTables import (
 
 import tychopy as typy
 import tychopy.optimal_control as oc
+import tychopy.solvers as solvs
 import tychopy.vector_functions as vf
 from tychopy.optimal_control.mesh_error_plots import PhaseMeshErrorPlot, sns
 from tychopy.vector_functions import Arguments as Args
@@ -210,15 +211,16 @@ if __name__ == "__main__":
     phase.add_boundary_value("Last", ["h", "v", "fpa"], [htf, vtf, fpatf])
     phase.add_delta_time_objective(1.0)
 
-    phase.optimizer.print_level = 1
+    ipm = solvs.IPM()
+    ipm.print_level = 1
     phase.set_num_partitions(8)
-    phase.optimizer.qp_threads = 8
+    ipm.qp_threads = 8
 
     ## All error estimates and tolerances are in reference to the scaled ODE system
     phase.set_adaptive_mesh(True)
     phase.set_mesh_error_estimator(oc.MeshErrorEstimators.INTEGRATOR)
     phase.set_mesh_tol(1.0e-7)
-    phase.optimize()
+    phase.solve(ipm)
 
     Traj = phase.return_traj()
 

@@ -21,6 +21,7 @@ import tychopy as typy
 
 vf = typy.vector_functions
 oc = typy.optimal_control
+solvs = typy.solvers
 Args = vf.Arguments
 
 """
@@ -168,9 +169,10 @@ if __name__ == "__main__":
     phase.add_lu_var_bound("Path", 3, -1, 1)
     phase.add_delta_time_objective(0.01)  # Scale to Be order 1
 
-    phase.optimizer.set_opt_ls_mode("L1")
-    phase.optimizer.set_print_level(1)
-    phase.solve_optimize()
+    ipm = solvs.IPM()
+    ipm.set_opt_ls_mode("L1")
+    ipm.set_print_level(1)
+    phase.solve(ipm, presolve=True)
 
     Traj = phase.return_traj()
 

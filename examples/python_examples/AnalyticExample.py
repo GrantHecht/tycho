@@ -19,6 +19,7 @@ import tychopy as typy
 
 vf = typy.vector_functions
 oc = typy.optimal_control
+solvs = typy.solvers
 Args = vf.Arguments
 
 """
@@ -67,7 +68,9 @@ if __name__ == "__main__":
     phase.add_boundary_value("Front", [0, 1], [x0, t0])
     phase.add_boundary_value("Back", [1], [tf])
     phase.add_integral_objective(ODE.obj(), [0, 2])
-    phase.optimize()
+
+    ipm = solvs.IPM()
+    phase.solve(ipm)
 
     Traj = phase.return_traj()
     CTraj = phase.return_costate_traj()

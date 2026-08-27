@@ -19,6 +19,7 @@ import tychopy as typy
 
 vf = typy.vector_functions
 oc = typy.optimal_control
+solvs = typy.solvers
 Args = vf.Arguments
 Tmodes = oc.TranscriptionModes
 PhaseRegs = oc.PhaseRegionFlags
@@ -127,8 +128,9 @@ phase.add_lu_var_bound("Path", 6, -np.pi / 6, np.pi / 6)
 phase.add_inequal_con("Path", ObstacleConstraint(xobs, yobs, obsrad, m), [0, 1])
 phase.add_boundary_value("Back", [0, 1], [xf, yf])
 phase.add_delta_time_objective(1.0)
-phase.optimizer.set_tols(1.0e-9, 1.0e-9, 1.0e-9)
-phase.optimize()
+ipm = solvs.IPM()
+ipm.set_tols(1.0e-9, 1.0e-9, 1.0e-9)
+phase.solve(ipm)
 
 
 TrajF = phase.return_traj()

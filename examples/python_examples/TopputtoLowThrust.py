@@ -19,6 +19,7 @@ import tychopy as typy
 
 vf = typy.vector_functions
 oc = typy.optimal_control
+solvs = typy.solvers
 Args = vf.Arguments
 
 """
@@ -158,15 +159,18 @@ if __name__ == "__main__":
 
     phase.add_boundary_value("Back", [0, 2, 3], [RF, 0, VF])
 
-    phase.optimizer.set_print_level(1)
-    phase.optimizer.set_max_acc_iters(500)
-    phase.optimizer.set_max_iters(1000)
-    phase.optimizer.set_bound_fraction(0.995)
-    phase.optimizer.delta_h = 1.0e-5
+    ipm = solvs.IPM()
+    ipm.set_print_level(1)
+    ipm.set_max_acc_iters(500)
+    ipm.set_max_iters(1000)
+    ipm.set_bound_fraction(0.995)
+    ipm.delta_h = 1.0e-5
 
     # Scale to be order 1 based on initial guess
     phase.add_delta_time_objective(1 / 100)
-    phase.solve_optimize_solve()
+    result = phase.solve(ipm, presolve=True)
+    if not result:
+        phase.solve(ipm, mode="feasible", warm=result)
 
     TimeOptimal = phase.return_traj()
 
@@ -178,9 +182,13 @@ if __name__ == "__main__":
 
     ## This problem likes to grind, could probabably
     # be improved by making integral a state variable
-    phase.optimize_solve()
+    result = phase.solve(ipm)
+    if not result:
+        result = phase.solve(ipm, mode="feasible", warm=result)
     phase.refine_traj_manual(800)
-    phase.optimize_solve()
+    result = phase.solve(ipm)
+    if not result:
+        phase.solve(ipm, mode="feasible", warm=result)
     MassOptimal = phase.return_traj()
 
     Plot(TimeOptimal, MassOptimal)

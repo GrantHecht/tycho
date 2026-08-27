@@ -17,6 +17,7 @@ import numpy as np
 
 import tychopy as typy
 import tychopy.optimal_control as oc
+import tychopy.solvers as solvs
 import tychopy.vector_functions as vf
 from tychopy.vector_functions import Arguments as Args
 
@@ -209,7 +210,8 @@ if __name__ == "__main__":
     # Enforce continuity in ODEParams
     ocp.add_param_link_equal_con(aphase, dphase, "ODEParams", "rad")
 
-    ocp.optimize()
+    ipm = solvs.IPM()
+    ocp.solve(ipm)
 
     Ascent = aphase.return_traj()
     Descent = dphase.return_traj()

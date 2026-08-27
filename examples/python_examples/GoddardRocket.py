@@ -17,6 +17,7 @@ import numpy as np
 
 import tychopy as typy
 import tychopy.optimal_control as oc
+import tychopy.solvers as solvs
 import tychopy.vector_functions as vf
 from tychopy.vector_functions import Arguments as Args
 
@@ -120,7 +121,7 @@ if __name__ == "__main__":
     phase.add_lu_var_bound("Path", "u", 0.0, 1.0)
     phase.add_value_objective("Back", "h", -1.0)
     phase.add_boundary_value("Back", ["v", "m"], [0, mf])
-    phase.optimize()
+    phase.solve(solvs.IPM())
     Traj = phase.return_traj()
     ###############################################################################
 
@@ -172,8 +173,23 @@ if __name__ == "__main__":
     ocp.set_auto_scaling(True, True)
 
     ocp.set_num_partitions(8)
-    ocp.optimizer.qp_threads = 8
-    ocp.optimize()
+    ipm = solvs.IPM()
+    ipm.qp_threads = 8
+
+    # This multi-phase formulation confines the throttle to a bang-bang /
+    # singular arc via phase2's PathCon equality constraint, so an SQP
+    # polish stage after the IPM main solve measurably tightens the KKT
+    # residual at near-constant cost.
+    sqp = solvs.SQP()
+    result = ocp.solve(ipm, polish=sqp)
+
+    main_kkt = result.stages[0].kkt_residual
+    polish_kkt = result.stages[-1].kkt_residual
+    print(
+        "KKT residual -- main (IPM): {:.3e}, polish (SQP): {:.3e}".format(
+            main_kkt, polish_kkt
+        )
+    )
 
     ##############################################################################
 

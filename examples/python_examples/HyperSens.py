@@ -20,6 +20,7 @@ from tychopy.optimal_control.mesh_error_plots import PhaseMeshErrorPlot
 
 vf = typy.vector_functions
 oc = typy.optimal_control
+solvs = typy.solvers
 Args = vf.Arguments
 
 
@@ -66,13 +67,14 @@ if __name__ == "__main__":
     phase.add_lu_var_bound("Path", 0, -50, 50)
     phase.add_lu_var_bound("Path", 2, -50, 50)
     # Enable line searches
-    phase.optimizer.set_opt_ls_mode("L1")
-    phase.optimizer.set_soe_ls_mode("L1")
+    ipm = solvs.IPM()
+    ipm.set_opt_ls_mode("L1")
+    ipm.set_soe_ls_mode("L1")
     ## Neccessary for this problem
-    phase.optimizer.set_qp_ordering_mode("MINDEG")
-    phase.optimizer.print_level = 2
+    ipm.set_qp_ordering_mode("MINDEG")
+    ipm.print_level = 2
     phase.set_num_partitions(1)
-    phase.optimizer.qp_threads = 1
+    ipm.qp_threads = 1
 
     # Enable Adaptive Mesh
     phase.set_adaptive_mesh(True)
@@ -81,11 +83,14 @@ if __name__ == "__main__":
     ## Set Max number of mesh iterations:
     phase.set_max_mesh_iters(10)  # default = 10
     ## Make sure to set optimizer Econtol to be the same as or smaller than MeshTol
-    phase.optimizer.set_eq_con_tol(1.0e-7)
+    ipm.set_eq_con_tol(1.0e-7)
 
-    flag = phase.optimize_solve()  # Recommended to run with post solve enabled
+    # Recommended to run with a feasible fallback enabled
+    result = phase.solve(ipm)
+    if not result:
+        result = phase.solve(ipm, mode="feasible", warm=result)
 
-    if phase.mesh_converged and flag == 0:
+    if phase.mesh_converged and bool(result):
         print("Success")
     else:
         print("Failure")
