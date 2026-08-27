@@ -461,6 +461,7 @@ TEST_F(SolverTest, ForcedEntryOnFeasibleProblemEntersExitsAndConverges) {
     // objective (x -> 1).
     auto prob = feas_switch_build_nlp(/*start=*/0.0, /*a=*/1.0, /*inconsistent=*/false, /*b=*/0.0);
     tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     ipm.settings().restoration_mode_ = RestorationModes::proximal_switch;
     ipm.set_max_ls_iters(0);
     ipm.set_max_iters(50);
@@ -488,6 +489,7 @@ TEST_F(SolverTest, ForcedEntryUnderFilterAcceptanceStillConverges) {
     // symptom this test would catch.
     auto prob = feas_switch_build_nlp(/*start=*/0.0, /*a=*/1.0, /*inconsistent=*/false, /*b=*/0.0);
     tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     using tycho::solvers::AcceptanceStrategies;
     using tycho::solvers::BarrierGovernors;
     ipm.settings().restoration_mode_ = RestorationModes::proximal_switch;
@@ -509,6 +511,7 @@ TEST_F(SolverTest, ForcedEntryOnInfeasibleProblemDoesNotFalselyConverge) {
     // convergence as a solve of the true problem.
     auto prob = feas_switch_build_nlp(/*start=*/0.0, /*a=*/1.0, /*inconsistent=*/true, /*b=*/-1.0);
     tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     ipm.settings().restoration_mode_ = RestorationModes::proximal_switch;
     ipm.set_max_ls_iters(0);
     ipm.set_max_iters(40);
@@ -531,6 +534,7 @@ TEST_F(SolverTest, BudgetZeroRefusesAllEntries) {
     // FeasibilitySwitchRecovery never switches even on an infeasible start.
     auto prob = feas_switch_build_nlp(/*start=*/0.0, /*a=*/1.0, /*inconsistent=*/true, /*b=*/-1.0);
     tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     ipm.settings().restoration_mode_ = RestorationModes::proximal_switch;
     ipm.settings().max_feas_rest_ = 0;
     ipm.set_max_ls_iters(0);

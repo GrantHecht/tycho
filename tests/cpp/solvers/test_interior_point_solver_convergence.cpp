@@ -13,6 +13,7 @@ using TychoTest::SolverTest;
 TEST_F(SolverTest, BrachistochroneEndToEnd) {
     auto phase = make_brach_solver_phase(32);
     tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     auto status = phase->solve(&ipm, {.presolve = true}).flag_;
     EXPECT_EQ(status, tycho::ConvergenceFlags::CONVERGED);
 
@@ -24,6 +25,7 @@ TEST_F(SolverTest, BrachistochroneEndToEnd) {
 TEST_F(SolverTest, BrachistochroneSolveOnly) {
     auto phase = make_brach_solver_phase(16);
     tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     // solve() only finds feasibility
     auto status = phase->solve(&ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
     // Should converge (feasible) -- Brachistochrone is well-posed.
@@ -372,6 +374,7 @@ TEST_F(SolverTest, BrachistochroneSolveOptimizeSolve) {
 TEST_F(SolverTest, ResultAccessorPopulatedAfterSolve) {
     auto phase = make_brach_solver_phase(32);
     tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     auto status = phase->solve(&ipm, {.presolve = true}).flag_;
     EXPECT_EQ(status, tycho::ConvergenceFlags::CONVERGED);
 

@@ -369,6 +369,7 @@ TEST(InertiaRegularizationSolve, ClassicDegeneracyLatchTracksSingularity) {
 TEST(InertiaRegularizationSolve, ActiveBoundCurvatureNeverTripsSingularitySignal) {
     auto prob = build_inertia_active_bound_nlp(/*lower=*/0.0, /*upper=*/1.0);
     tycho::solvers::InteriorPointSolver opt;
+    opt.set_print_level(3);
     opt.settings().inertia_mode_ = InertiaModes::classic;
     const auto flag = prob->solve(&opt).flag_;
 
@@ -411,6 +412,7 @@ TEST(InertiaRegularizationSolve, ActiveBoundCurvatureNeverTripsSingularitySignal
 TEST(InertiaRegularizationSolve, NarrowBoxCurvatureNeverTripsSingularitySignal) {
     auto prob = build_inertia_active_bound_nlp(/*lower=*/0.99, /*upper=*/1.0);
     tycho::solvers::InteriorPointSolver opt;
+    opt.set_print_level(3);
     opt.settings().inertia_mode_ = InertiaModes::classic;
     const auto flag = prob->solve(&opt).flag_;
 
