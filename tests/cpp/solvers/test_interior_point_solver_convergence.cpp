@@ -304,22 +304,54 @@ TEST_F(SolverTest, ConditionalStepSkippedOnConvergence) {
     ASSERT_EQ(status_opt, tycho::ConvergenceFlags::CONVERGED);
     int opt_iters = ipm_opt.result().iter_num_;
 
-    // optimize_solve: the solve step is conditional, so if optimize converges,
-    // the total iteration count should equal optimize-only.
-    auto phase_os = make_brach_solver_phase(32);
-    tycho::solvers::InteriorPointSolver ipm_os;
-    ipm_os.set_print_level(3);
-    ipm_os.set_qp_threads(1);
-    phase_os->set_num_partitions(1);
-    auto status_os = phase_os->solve(&ipm_os).flag_;
-    if (status_os != tycho::ConvergenceFlags::CONVERGED) {
-        status_os = phase_os->solve(&ipm_os, {.mode = tycho::solvers::Mode::Feasible}).flag_;
+    // The caller-side conditional retry that replaced the retired
+    // optimize_solve() (see BrachistochroneOptimizeSolve above: a trailing
+    // Feasible-mode solve, run only if the first call did not already
+    // converge) must actually SKIP that trailing call once the first call
+    // converges -- pinned here via an explicit second_call_ran flag rather
+    // than an `if` whose branch this scenario alone can never prove was
+    // live. The other branch (below) proves the flag is not just always
+    // false by construction: it forces the first call short of convergence
+    // and asserts the retry actually runs there.
+    auto phase_skip = make_brach_solver_phase(32);
+    tycho::solvers::InteriorPointSolver ipm_skip;
+    ipm_skip.set_print_level(3);
+    ipm_skip.set_qp_threads(1);
+    phase_skip->set_num_partitions(1);
+    auto status_skip = phase_skip->solve(&ipm_skip).flag_;
+    ASSERT_EQ(status_skip, tycho::ConvergenceFlags::CONVERGED);
+    bool second_call_ran = false;
+    if (status_skip != tycho::ConvergenceFlags::CONVERGED) {
+        second_call_ran = true;
+        status_skip = phase_skip->solve(&ipm_skip, {.mode = tycho::solvers::Mode::Feasible}).flag_;
     }
-    EXPECT_LE(status_os, tycho::ConvergenceFlags::ACCEPTABLE);
-    int os_iters = ipm_os.result().iter_num_;
+    EXPECT_FALSE(second_call_ran)
+        << "the conditional retry must be skipped once the first call already converged";
+    int skip_iters = ipm_skip.result().iter_num_;
+    EXPECT_EQ(skip_iters, opt_iters)
+        << "iteration count must match the optimize-only reference when the "
+           "conditional retry is (correctly) skipped";
 
-    EXPECT_EQ(os_iters, opt_iters)
-        << "optimize_solve should skip the conditional solve when optimize converges";
+    // Now force the first call short of convergence, so the same conditional
+    // structure takes its OTHER branch: the retry must actually run.
+    auto phase_retry = make_brach_solver_phase(32);
+    tycho::solvers::InteriorPointSolver ipm_retry;
+    ipm_retry.set_print_level(3);
+    ipm_retry.set_qp_threads(1);
+    ipm_retry.set_max_iters(3); // force NOTCONVERGED on the first call
+    phase_retry->set_num_partitions(1);
+    auto status_retry = phase_retry->solve(&ipm_retry).flag_;
+    ASSERT_NE(status_retry, tycho::ConvergenceFlags::CONVERGED);
+    bool retry_second_call_ran = false;
+    if (status_retry != tycho::ConvergenceFlags::CONVERGED) {
+        retry_second_call_ran = true;
+        ipm_retry.set_max_iters(200); // the retry gets a real budget, unlike the starved first call
+        status_retry =
+            phase_retry->solve(&ipm_retry, {.mode = tycho::solvers::Mode::Feasible}).flag_;
+    }
+    EXPECT_TRUE(retry_second_call_ran)
+        << "the conditional retry must actually run once the first call failed to converge";
+    EXPECT_LE(status_retry, tycho::ConvergenceFlags::ACCEPTABLE);
 }
 
 TEST_F(SolverTest, BrachistochroneSolveOptimizeSolve) {

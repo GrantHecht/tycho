@@ -4,10 +4,10 @@
 // This file used to pin the new solve() surface bit-identical to the five
 // retired mode methods (solve/optimize/solve_optimize/solve_optimize_solve/
 // optimize_solve), back when both surfaces were live on BackendProblemBase.
-// M5 task 8 deletes the five methods and the problem-owned optimizer_ they
-// dispatched through, so the "old arm" half of every row below is gone; what
-// survives is what it was already proving on the NEW side alone --
-// determinism.
+// The M5 solve-API rework deletes the five methods and the problem-owned
+// optimizer_ they dispatched through, so the "old arm" half of every row
+// below is gone; what survives is what it was already proving on the NEW
+// side alone -- determinism.
 //
 // DIRECT ROWS (mode=Optimal, mode=Feasible) pin BIT-IDENTITY between two
 // independently built problem/engine pairs run through the identical
@@ -680,6 +680,7 @@ TEST(SolveEquivalence, ComposedSolveOptimize_BrachPhase) {
 
     auto new_phase_b = solve_equivalence_build_brach_phase();
     solve_equivalence_make_deterministic(*new_phase_b);
+    const Eigen::VectorXd initial_primal = solve_equivalence_flatten(new_phase_b->return_traj());
     InteriorPointSolver ipm_b;
     solve_equivalence_make_engine_deterministic(ipm_b);
     EngineRef ref_b = &ipm_b;
@@ -695,6 +696,14 @@ TEST(SolveEquivalence, ComposedSolveOptimize_BrachPhase) {
     SolveResult r_c = new_phase_c->solve(ref_c, opts);
     const SolveEquivalencePhaseSnapshot new_snap_c =
         solve_equivalence_snapshot(*new_phase_c, r_c.stages_.back().objective_);
+
+    // Not vacuously green: the presolve+main chain must actually converge,
+    // and the solution must have genuinely moved off the initial guess --
+    // the same anchor the Direct* rows above pin, just against the
+    // presolve-then-optimal chain instead of a single stage.
+    EXPECT_EQ(tycho::ConvergenceFlags::CONVERGED, r_b.flag_);
+    EXPECT_GT((solve_equivalence_flatten(new_phase_b->return_traj()) - initial_primal).norm(),
+              1e-3);
 
     // Two-run determinism of the new surface.
     EXPECT_EQ(r_b.flag_, r_c.flag_);

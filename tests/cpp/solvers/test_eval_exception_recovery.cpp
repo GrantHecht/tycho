@@ -87,6 +87,7 @@ std::unique_ptr<OptimizationProblem> build_eval_except_nlp(int throw_budget) {
 TEST(EvalExceptionRecovery, ThrowingRungIsRejectedNotFatal) {
     auto prob = build_eval_except_nlp(1);
     tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     auto flag = prob->solve(&ipm).flag_;
     EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_NEAR(ipm.result().obj_val_, 1.0, 1e-6);
@@ -112,6 +113,7 @@ TEST(EvalExceptionRecovery, ThrowingRungIsRejectedNotFatal) {
 TEST(EvalExceptionRecovery, ThrowingRungIsRecordedByLangMode) {
     auto prob = build_eval_except_nlp(1);
     tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     ipm.settings().opt_ls_mode_ = InteriorPointSolver::LineSearchModes::LANG;
     try {
         prob->solve(&ipm);
@@ -129,6 +131,7 @@ TEST(EvalExceptionRecovery, ThrowingRungIsRecordedByLangMode) {
 TEST(EvalExceptionRecovery, ThrowingRungIsRejectedNotFatalL1Mode) {
     auto prob = build_eval_except_nlp(1);
     tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     ipm.settings().opt_ls_mode_ = InteriorPointSolver::LineSearchModes::L1;
     auto flag = prob->solve(&ipm).flag_;
     EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
@@ -143,6 +146,7 @@ TEST(EvalExceptionRecovery, ThrowingRungIsRejectedNotFatalL1Mode) {
 TEST(EvalExceptionRecovery, ThrowingRungIsRejectedNotFatalGenericAcceptance) {
     auto prob = build_eval_except_nlp(1);
     tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     ipm.settings().acceptance_strategy_ = ts::AcceptanceStrategies::merit;
     auto flag = prob->solve(&ipm).flag_;
     EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
@@ -193,6 +197,7 @@ TEST(EvalExceptionRecovery, CommittedPointFailureStaysFatal) {
 TEST(EvalExceptionRecovery, ExhaustionWithoutRestorationRethrowsWithContext) {
     auto prob = build_eval_except_nlp(1 << 20); // effectively unlimited throws
     tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     try {
         prob->solve(&ipm);
         FAIL() << "expected optimize() to throw";
@@ -211,6 +216,7 @@ TEST(EvalExceptionRecovery, ExhaustionWithoutRestorationRethrowsWithContext) {
 TEST(EvalExceptionRecovery, ExhaustionAtAcceptableIterateExitsGracefully) {
     auto prob = build_eval_except_nlp(1 << 20); // effectively unlimited throws
     tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     auto &acc_settings = ipm.settings();
     acc_settings.acc_kkt_tol_ = 1e10;
     acc_settings.acc_econ_tol_ = 1e10;
@@ -242,6 +248,7 @@ TEST(EvalExceptionRecovery, RestorationEscalatesOnUnEvaluableSoftStep) {
     // which has no recovery path left and legitimately aborts.
     auto prob = build_eval_except_nlp(4);
     tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     ipm.settings().restoration_mode_ = ts::RestorationModes::l1_nested;
     auto flag = prob->solve(&ipm).flag_;
     // Graceful completion is the bar; convergence is a bonus. "Graceful" still
@@ -261,12 +268,14 @@ TEST(EvalExceptionRecovery, RestorationEscalatesOnUnEvaluableSoftStep) {
 TEST(EvalExceptionRecovery, DiagnosticsResetBetweenSolves) {
     auto clean = build_eval_except_nlp(0);
     tycho::solvers::InteriorPointSolver ipm_clean;
+    ipm_clean.set_print_level(3);
     auto flag = clean->solve(&ipm_clean).flag_;
     EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_TRUE(ipm_clean.result().last_eval_exception_.empty());
 
     auto rescued = build_eval_except_nlp(1);
     tycho::solvers::InteriorPointSolver ipm_rescued;
+    ipm_rescued.set_print_level(3);
     auto flag2 = rescued->solve(&ipm_rescued).flag_;
     EXPECT_EQ(flag2, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_FALSE(ipm_rescued.result().last_eval_exception_.empty());

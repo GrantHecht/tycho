@@ -367,6 +367,7 @@ TEST(IpoptBackend, StructuralShape) {
 TEST(IpoptBackend, ParityWithInteriorPointOnSmoothProblem) {
     auto native_prob = build_ipopt_adapter_problem();
     ts::InteriorPointSolver native_ipm;
+    native_ipm.set_print_level(3);
     const auto native_flag = native_prob->solve(&native_ipm).flag_;
     ASSERT_EQ(native_flag, tycho::ConvergenceFlags::CONVERGED);
     const double native_obj = native_ipm.result().obj_val_;

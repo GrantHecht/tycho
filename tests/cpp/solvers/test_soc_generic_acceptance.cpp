@@ -317,6 +317,7 @@ TEST(SocGenericAcceptanceRouting, FilterPlusSocBuildsChainedRecoveryOverSocAndFi
 TEST(SocGenericAcceptanceIntegration, FilterMonitoredWithSocSolves) {
     auto prob = build_soc_generic_nlp(/*start=*/0.0, /*a=*/1.0);
     tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     ipm.settings().acceptance_strategy_ = AcceptanceStrategies::filter;
     ipm.settings().barrier_governor_ = BarrierGovernors::monitored;
     ipm.settings().max_soc_ = 4;
@@ -331,6 +332,7 @@ TEST(SocGenericAcceptanceIntegration, FilterMonitoredWithSocSolves) {
 TEST(SocGenericAcceptanceIntegration, MeritWithSocAndExtendedBacktrackSolves) {
     auto prob = build_soc_generic_nlp(/*start=*/0.0, /*a=*/1.0);
     tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     ipm.settings().acceptance_strategy_ = AcceptanceStrategies::merit;
     ipm.settings().max_soc_ = 4;
     ipm.settings().ls_extended_iters_ = 2;
@@ -358,6 +360,7 @@ TEST(SocGenericAcceptanceIntegration, MeritWithSocAndExtendedBacktrackSolves) {
 TEST(SocGenericAcceptanceIntegration, SocRescuePreemptsRestorationOnFeasibleProblem) {
     auto prob = build_soc_generic_nlp(/*start=*/0.0, /*a=*/1.0);
     tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     ipm.settings().acceptance_strategy_ = AcceptanceStrategies::merit;
     ipm.settings().restoration_mode_ = RestorationModes::l1_nested;
     ipm.settings().max_soc_ = 4;
@@ -378,6 +381,7 @@ TEST(SocGenericAcceptanceIntegration, SocRescuePreemptsRestorationOnFeasibleProb
 TEST(SocGenericAcceptanceIntegration, L1NestedRestorationWithSocComposesInPhase) {
     auto prob = build_soc_generic_nlp(/*start=*/0.0, /*a=*/1.0);
     tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     {
         using tycho::vf::Arguments;
         using tycho::vf::GenericFunction;

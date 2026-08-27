@@ -218,6 +218,7 @@ std::unique_ptr<ts::OptimizationProblem> feas_stall_build_worsening_nlp() {
 TEST_F(SolverTest, FeasStallStageDispatchesProximalRestoration) {
     auto prob = feas_stall_build_worsening_nlp();
     ts::InteriorPointSolver ipm;
+    quiet_ipm(ipm);
     // Pin the two defaults the exact-Newton-map argument in
     // feas_stall_build_worsening_nlp()'s own comment depends on, so a future
     // default flip cannot silently change this fixture's dynamics.
@@ -241,6 +242,7 @@ TEST_F(SolverTest, FeasStallStageDispatchesProximalRestoration) {
 TEST_F(SolverTest, FeasStallDispatchUnderFilterAcceptanceHandshakes) {
     auto prob = feas_stall_build_worsening_nlp();
     ts::InteriorPointSolver ipm;
+    quiet_ipm(ipm);
     // Pin the two defaults the exact-Newton-map argument in
     // feas_stall_build_worsening_nlp()'s own comment depends on, so a future
     // default flip cannot silently change this fixture's dynamics.
@@ -274,6 +276,7 @@ TEST_F(SolverTest, FeasStallDispatchUnderFilterAcceptanceHandshakes) {
 TEST_F(SolverTest, FeasStallStageStopsBurningAfterBudgetExhaustion) {
     auto prob = feas_stall_build_worsening_nlp();
     ts::InteriorPointSolver ipm;
+    quiet_ipm(ipm);
     // Pin the two defaults the exact-Newton-map argument in
     // feas_stall_build_worsening_nlp()'s own comment depends on, so a future
     // default flip cannot silently change this fixture's dynamics.
@@ -295,6 +298,7 @@ TEST_F(SolverTest, FeasStallStageStopsBurningAfterBudgetExhaustion) {
 TEST_F(SolverTest, FeasStallStageDispatchesNestedRestoration) {
     auto prob = feas_stall_build_worsening_nlp();
     ts::InteriorPointSolver ipm;
+    quiet_ipm(ipm);
     // Pin the two defaults the exact-Newton-map argument in
     // feas_stall_build_worsening_nlp()'s own comment depends on, so a future
     // default flip cannot silently change this fixture's dynamics.
@@ -317,6 +321,7 @@ TEST_F(SolverTest, FeasStallStageDispatchesNestedRestoration) {
 TEST_F(SolverTest, FeasStallPlateauedStageNeverDispatches) {
     auto prob = feas_stall_build_nlp(/*inconsistent=*/true);
     ts::InteriorPointSolver ipm;
+    quiet_ipm(ipm);
     ipm.set_qp_threads(1); // single-threaded factorization: removes run-to-run drift
     ipm.settings().restoration_mode_ = ts::RestorationModes::l1_nested;
     ipm.set_max_iters(200);
@@ -332,6 +337,7 @@ TEST_F(SolverTest, FeasStallPlateauedStageNeverDispatches) {
 TEST_F(SolverTest, FeasStallStageOffModeKeepsSentinels) {
     auto prob = feas_stall_build_nlp(/*inconsistent=*/true);
     ts::InteriorPointSolver ipm;
+    quiet_ipm(ipm);
     ipm.set_qp_threads(1); // single-threaded factorization: removes run-to-run drift
     ipm.set_max_iters(200);
     prob->solve(&ipm, {.mode = ts::Mode::Feasible});
@@ -345,6 +351,7 @@ TEST_F(SolverTest, FeasStallStageOffModeKeepsSentinels) {
 TEST_F(SolverTest, FeasStallHealthyStageNeverDispatches) {
     auto prob = feas_stall_build_nlp(/*inconsistent=*/false);
     ts::InteriorPointSolver ipm;
+    quiet_ipm(ipm);
     ipm.set_qp_threads(1); // single-threaded factorization: removes run-to-run drift
     ipm.settings().restoration_mode_ = ts::RestorationModes::proximal_switch;
     ipm.set_max_iters(200);

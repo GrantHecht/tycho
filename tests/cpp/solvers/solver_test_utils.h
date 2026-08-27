@@ -53,10 +53,17 @@ inline std::shared_ptr<ODEPhase<BrachODE>> make_brach_solver_phase(int n_segs = 
     auto phase = make_brach_phase(n_segs * 3 + 1, n_segs);
     // print_level used to be preset here on the phase's own owned optimizer;
     // there is no such owned instance any more (solve() takes an engine the
-    // caller constructs). Callers that want quiet output set print_level on
-    // their own InteriorPointSolver before passing it to solve().
+    // caller constructs). Callers that want quiet output call quiet_ipm()
+    // (below) on their own InteriorPointSolver before passing it to solve().
     return phase;
 }
+
+/// @brief Silences an InteriorPointSolver's console output (print_level_ = 3,
+///        fully silent -- 0, the default, is full output). Mirrors what
+///        make_brach_solver_phase() used to preset automatically on its own
+///        owned optimizer, back when the phase owned one; callers now
+///        construct their own engine and opt into silence explicitly.
+inline void quiet_ipm(InteriorPointSolver &ipm) { ipm.set_print_level(3); }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Helper: an inert (all-zero-by-default) owning SolverContext for

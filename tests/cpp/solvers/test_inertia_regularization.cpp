@@ -148,6 +148,7 @@ std::unique_ptr<OptimizationProblem> build_inertia_duplicated_equality_nlp() {
 TEST(InertiaRegularizationSolve, ProximalRegularizationConvergesOnRankDeficientKkt) {
     auto prob = build_inertia_duplicated_equality_nlp();
     tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     ipm.settings().inertia_mode_ = InertiaModes::proximal_regularization;
     ipm.set_max_iters(100);
     auto flag = prob->solve(&ipm).flag_;
@@ -174,6 +175,7 @@ TEST(InertiaRegularizationSolve, ProximalRegularizationConvergesOnRankDeficientK
 TEST(InertiaRegularizationSolve, ClassicConvergesOnRankDeficientKkt) {
     auto prob = build_inertia_duplicated_equality_nlp();
     tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     ipm.settings().inertia_mode_ = InertiaModes::classic;
     ipm.set_max_iters(100);
     auto flag = prob->solve(&ipm).flag_;
@@ -317,6 +319,7 @@ constexpr double kInertiaLargeSigma = 1.0e6;
 TEST(InertiaRegularizationSolve, ClassicDegeneracyLatchTracksSingularity) {
     auto degen = build_inertia_duplicated_equality_nlp();
     tycho::solvers::InteriorPointSolver ipm_degen;
+    ipm_degen.set_print_level(3);
     ipm_degen.settings().inertia_mode_ = InertiaModes::classic;
     ipm_degen.set_max_iters(100);
     (void)degen->solve(&ipm_degen);
@@ -336,6 +339,7 @@ TEST(InertiaRegularizationSolve, ClassicDegeneracyLatchTracksSingularity) {
 
     auto healthy = build_inertia_wellcond_nlp();
     tycho::solvers::InteriorPointSolver ipm_healthy;
+    ipm_healthy.set_print_level(3);
     ipm_healthy.settings().inertia_mode_ = InertiaModes::classic;
     (void)healthy->solve(&ipm_healthy);
     EXPECT_FALSE(ipm_healthy.dc_latched_)
@@ -438,6 +442,7 @@ namespace {
 TEST(InertiaRegularizationSolve, WellConditionedParityAcrossModes) {
     auto prob_classic = build_inertia_wellcond_nlp();
     tycho::solvers::InteriorPointSolver ipm_classic;
+    ipm_classic.set_print_level(3);
     ipm_classic.settings().inertia_mode_ = InertiaModes::classic;
     auto flag_classic = prob_classic->solve(&ipm_classic).flag_;
     ASSERT_EQ(flag_classic, tycho::ConvergenceFlags::CONVERGED);
@@ -445,6 +450,7 @@ TEST(InertiaRegularizationSolve, WellConditionedParityAcrossModes) {
 
     auto prob_prox = build_inertia_wellcond_nlp();
     tycho::solvers::InteriorPointSolver ipm_prox;
+    ipm_prox.set_print_level(3);
     ipm_prox.settings().inertia_mode_ = InertiaModes::proximal_regularization;
     auto flag_prox = prob_prox->solve(&ipm_prox).flag_;
     ASSERT_EQ(flag_prox, tycho::ConvergenceFlags::CONVERGED);

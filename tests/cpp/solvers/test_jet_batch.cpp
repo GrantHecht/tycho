@@ -1,18 +1,18 @@
 ///////////////////////////////////////////////////////////////////////////////
 // Jet batch runner tests
 //
-// M5 task 8 interim: jet_run() -- the mode-sequence-driven entry point
+// M5 solve-API interim: jet_run() -- the mode-sequence-driven entry point
 // Jet::map dispatches to on each pool worker -- is a placeholder that
 // unconditionally throws std::logic_error (the jet_job_mode_/JetJobModes
 // surface it used to switch on is retired along with the five mode methods;
 // batched solves are staged through set_jet_job() instead, landing in a
-// follow-up task). Until that lands, these tests pin the interim contract:
+// follow-up change). Until that lands, these tests pin the interim contract:
 // Jet::map's own plumbing (single problem list, single generator, a
 // pool-saturating job count, multiple generators dispatched by index) still
 // runs every job and correctly propagates the first job's exception to the
 // caller (hven::Jet::map's own future-draining behavior), rather than
 // hanging or losing the failure. The pre-M5 convergence assertions these
-// tests used to make are restored once Task 9 lands real batched dispatch.
+// tests used to make are restored once real batched dispatch lands.
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "solver_test_utils.h"
