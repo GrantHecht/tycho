@@ -219,8 +219,10 @@ static bool run_multi_spacecraft(const std::vector<std::vector<Eigen::VectorXd>>
     ipm.set_max_ls_iters(1);
 
     // For each angular spread, substitute new front states, re-transcribe
-    // every 8 iterates to keep the problem well conditioned, then
-    // solve+optimize (first iterate) or optimize-with-solve-optimize-fallback.
+    // every 8 iterates to keep the problem well conditioned, then run a
+    // Feasible-mode solve (first iterate only) followed by an Optimal-mode
+    // solve, falling back to a Feasible presolve + Optimal pair if that
+    // doesn't converge.
     tycho::ConvergenceFlags flag = tycho::ConvergenceFlags::CONVERGED;
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(7, 0, 6);
     for (size_t j = 0; j < all_istates.size(); ++j) {

@@ -240,7 +240,7 @@ int main() {
               << std::flush;
     auto flag_coarse = phase.solve(&ipm, {.presolve = true}).flag_;
     if (flag_coarse > tycho::ConvergenceFlags::ACCEPTABLE) {
-        std::cerr << "ParallelParking (builder): coarse solve_optimize FAILED\n";
+        std::cerr << "ParallelParking (builder): coarse solve FAILED\n";
         return EXIT_FAILURE;
     }
 

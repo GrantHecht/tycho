@@ -168,13 +168,26 @@ int main() {
     ipm.set_opt_ls_mode("L1");
     ipm.set_print_level(1);
 
-    const auto status = ocp.solve(&ipm).flag_;
+    // This multi-phase formulation confines the throttle to a bang-bang /
+    // singular arc via phase2's path constraint, so an SQP polish stage
+    // after the IPM main solve measurably tightens the KKT residual at
+    // near-constant cost.
+    tycho::solvers::SqpSolver sqp;
+    tycho::solvers::EngineRef polish_ref = &sqp;
+    const auto result = ocp.solve(&ipm, {.polish = &polish_ref});
+    const auto status = result.flag_;
 
     if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "GoddardRocket (builder): FAILED (status " << static_cast<int>(status)
                   << ")\n";
         return 1;
     }
+
+    const double main_kkt = result.stages_.front().kkt_residual_;
+    const double polish_kkt = result.stages_.back().kkt_residual_;
+    std::cout << std::scientific << std::setprecision(3);
+    std::cout << "  KKT residual -- main (IPM): " << main_kkt << ", polish (SQP): " << polish_kkt
+              << "\n";
 
     auto traj1 = phase1.return_traj();
     auto traj2 = phase2.return_traj();

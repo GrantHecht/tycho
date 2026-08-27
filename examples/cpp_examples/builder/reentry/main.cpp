@@ -160,7 +160,7 @@ int main() {
     std::cout << "Reentry: solve (unconstrained)...\n" << std::flush;
     auto flag1 = phase.solve(&ipm, {.presolve = true}).flag_;
     if (flag1 > tycho::ConvergenceFlags::ACCEPTABLE) {
-        std::cerr << "Reentry (builder): initial solve_optimize FAILED\n";
+        std::cerr << "Reentry (builder): initial solve FAILED\n";
         return EXIT_FAILURE;
     }
 

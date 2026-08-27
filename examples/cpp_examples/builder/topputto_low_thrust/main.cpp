@@ -76,15 +76,14 @@ int main() {
     std::cout << "=== Time-optimal transfer ===\n";
     phase.add_delta_time_objective(1.0 / 100.0);
     {
-        // solve_optimize_solve equivalence: a presolve+main call (SOE then
-        // OPT), then (conditionally, skipped when OPT reported CONVERGED) a
-        // trailing Feasible-mode SOE run.
+        // Feasible presolve, then an Optimal-mode solve; if that doesn't
+        // fully converge, fall back to a further Feasible-mode solve.
         auto flag = phase.solve(&ipm, {.presolve = true}).flag_;
         if (flag != tycho::ConvergenceFlags::CONVERGED) {
             flag = phase.solve(&ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
         }
         if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
-            std::cerr << "TopputtoLowThrust: time-optimal solve_optimize_solve failed (status "
+            std::cerr << "TopputtoLowThrust: time-optimal solve failed (status "
                       << static_cast<int>(flag) << ")\n";
             return EXIT_FAILURE;
         }
@@ -108,14 +107,14 @@ int main() {
     }
 
     {
-        // optimize_solve equivalence: OPT, then (conditionally, skipped
-        // when OPT reported CONVERGED) a trailing Feasible-mode SOE run.
+        // Optimal-mode solve; if it doesn't fully converge, fall back to a
+        // Feasible-mode solve.
         auto flag = phase.solve(&ipm).flag_;
         if (flag != tycho::ConvergenceFlags::CONVERGED) {
             flag = phase.solve(&ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
         }
         if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
-            std::cerr << "TopputtoLowThrust: fuel-optimal initial optimize_solve failed (status "
+            std::cerr << "TopputtoLowThrust: fuel-optimal initial solve failed (status "
                       << static_cast<int>(flag) << ")\n";
             return EXIT_FAILURE;
         }
@@ -127,7 +126,7 @@ int main() {
             flag = phase.solve(&ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
         }
         if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
-            std::cerr << "TopputtoLowThrust: fuel-optimal refined optimize_solve failed (status "
+            std::cerr << "TopputtoLowThrust: fuel-optimal refined solve failed (status "
                       << static_cast<int>(flag) << ")\n";
             return EXIT_FAILURE;
         }

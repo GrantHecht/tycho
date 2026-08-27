@@ -216,8 +216,8 @@ int main() {
 
     std::cout << "=== Betts Low Thrust: LEO-to-MEO with J2/J3/J4 zonal gravity ===\n\n";
 
-    // optimize_solve equivalence: OPT, then (conditionally, skipped when OPT
-    // reported CONVERGED) a trailing Feasible-mode SOE run.
+    // Optimal-mode solve; if it doesn't fully converge, fall back to a
+    // Feasible-mode solve.
     auto flag = phase.solve(&ipm).flag_;
     if (flag != tycho::ConvergenceFlags::CONVERGED) {
         flag = phase.solve(&ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;

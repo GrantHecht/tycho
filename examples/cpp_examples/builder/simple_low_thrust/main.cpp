@@ -76,7 +76,7 @@ int main() {
     phase.add_delta_time_objective(1.0);
     auto flag_time = phase.solve(&ipm, {.presolve = true}).flag_;
     if (flag_time > tycho::ConvergenceFlags::ACCEPTABLE) {
-        std::cerr << "SimpleLowThrust: time-optimal solve_optimize failed\n";
+        std::cerr << "SimpleLowThrust: time-optimal solve failed\n";
         return EXIT_FAILURE;
     }
 

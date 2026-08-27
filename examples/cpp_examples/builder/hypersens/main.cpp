@@ -75,8 +75,8 @@ int main() {
               << ") ...\n"
               << std::flush;
 
-    // optimize_solve equivalence: OPT, then (conditionally, skipped when OPT
-    // reported CONVERGED) a trailing Feasible-mode SOE run.
+    // Optimal-mode solve; if it doesn't fully converge, fall back to a
+    // Feasible-mode solve.
     auto flag = phase.solve(&ipm).flag_;
     if (flag != tycho::ConvergenceFlags::CONVERGED) {
         flag = phase.solve(&ipm, {.mode = Mode::Feasible}).flag_;
