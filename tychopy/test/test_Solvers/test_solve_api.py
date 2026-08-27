@@ -170,28 +170,62 @@ def _circle_problem(target, radius):
     return prob
 
 
-def test_warm_chain_continuation_both_solves_converge():
-    """A cold solve, a modest perturbation of the declared problem's own
-    values (not its shape), and a re-solve warm-started off the cold solve's
-    own SolveResult -- the OrbitContinuation shape: `warm=r1` accepted and
+def test_warm_chain_continuation_both_solves_converge(record_property):
+    """Two warm-chain legs off one cold solve, both accepted and
     stamp-matched (test_stale_warm_stamp_refused above is this same check's
-    negative), so the only hard gate here is that both solves converge.
+    negative):
 
-    Iteration counts are RECORDED, not asserted: a >1-partition IPM solve's
-    iteration count is not guaranteed reproducible across runs (the
-    nondeterminism carve-out this whole suite already assumes elsewhere), so
-    "warm-started converges in fewer iterations than cold" is evidence a
-    human can read off the captured output, never a hard gate that could
-    flake on exactly the runs it is meant to demonstrate."""
+    UNPERTURBED leg -- re-solve the SAME declared problem (same target,
+    same radius) with warm=r1. This is the hard, deterministic proof that
+    the warm payload is genuinely applied rather than silently dropped to a
+    cold start: on this 2-variable, 1-equality-row problem there is no
+    barrier state and no partition nondeterminism, so nothing else could
+    explain a strictly-fewer-iterations result -- measured, 1 warm iteration
+    vs 5 cold. That strict inequality is asserted; a warm start that was
+    silently ignored would instead reproduce the 5-iteration cold count
+    exactly.
+
+    PERTURBED leg -- re-solve a MODESTLY PERTURBED instance (radius moved by
+    0.05) with warm=r1. Convergence is the only hard gate here, per the
+    brief's non-gating evidence carve-out: measured, this leg takes
+    dramatically MORE iterations than cold (24 warm vs 5 cold at the same
+    perturbed radius), not fewer. The cause is not barrier state -- this
+    fixture declares no variable bounds and no inequality rows, so there is
+    no barrier term to seed, and the solver log confirms mu/Bar Obj/Bar Inf
+    stay pinned at their initial values for every iteration of both solves.
+    It is that the warm primal is r1's converged point on the
+    PRE-perturbation circle, which sits off the perturbed one, and the line
+    search pins at a small step (alpha ~= 0.25) for many consecutive
+    iterations creeping back onto the curved equality constraint from
+    there -- a real, occasionally counter-productive consequence of
+    warm-starting a primal point near a curved constraint, not a defect in
+    the warm-start plumbing. Both iteration counts are RECORDED, via
+    record_property (so they survive pytest's default output capture on a
+    passing test, unlike a bare print), rather than asserted: the direction
+    of this effect is a property of this fixture's constraint curvature, not
+    a guarantee the warm-start path owes a caller in general."""
     r1 = _circle_problem([1.0, 2.0], 2.0).solve(_quiet_ipm())
     assert bool(r1)
+
+    r_unperturbed = _circle_problem([1.0, 2.0], 2.0).solve(_quiet_ipm(), warm=r1)
+    assert r_unperturbed.iterations() < r1.iterations(), (
+        f"warm-started re-solve of the SAME declared problem took "
+        f"{r_unperturbed.iterations()} iterations, not fewer than the cold "
+        f"solve's {r1.iterations()} -- the warm payload may not have been "
+        f"applied (cold={r1.iterations()}, warm_unperturbed="
+        f"{r_unperturbed.iterations()})"
+    )
 
     r2 = _circle_problem([1.0, 2.0], 2.05).solve(_quiet_ipm(), warm=r1)
     assert bool(r2)
 
-    print(
-        f"OrbitContinuation-shaped warm chain: cold solve {r1.iterations()} iters, "
-        f"warm-started re-solve {r2.iterations()} iters"
+    record_property(
+        "warm_chain_iterations",
+        {
+            "cold": r1.iterations(),
+            "warm_unperturbed": r_unperturbed.iterations(),
+            "warm_perturbed": r2.iterations(),
+        },
     )
 
 

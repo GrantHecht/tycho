@@ -882,11 +882,29 @@ TEST(SolvePipeline, PhaseResultIsSnapshotNotView) {
 ///////////////////////////////////////////////////////////////////////////////
 
 TEST(SolvePipeline, CrossoverPolishRunsSqpFromIpmWarm) {
+    // First, confirm the claim the rest of this test relies on: a main-only
+    // export of this fixture genuinely carries the "hven.ipm.polish.v1"
+    // extension. Without this check the test below would pass identically
+    // even if the export carried no extension at all -- the SQP polish
+    // stage would just silently take the core-only ingest path instead of
+    // the crossover, and still converge.
+    {
+        auto probe_phase = TychoTest::make_brach_phase(50, 8);
+        probe_phase->print_mesh_info_ = false;
+        InteriorPointSolver probe_ipm;
+        probe_ipm.set_print_level(0);
+        EngineRef probe_ref = &probe_ipm;
+        SolveResult probe_result = probe_phase->solve(probe_ref);
+        ASSERT_TRUE(probe_result.converged());
+        EXPECT_NE(hven::solvers::find_ipm_polish(probe_result.warm_), nullptr);
+    }
+
     // The brach fixture, solved to completion by the interior-point engine,
     // then polished by a real SQP solve seeded from the main stage's own
     // export -- which, since the main engine is InteriorPointSolver, carries
     // the "hven.ipm.polish.v1" extension automatically
-    // (capture_completed_warm_start attaches it on every completed solve).
+    // (capture_completed_warm_start attaches it on every completed solve),
+    // confirmed by the probe above.
     auto phase = TychoTest::make_brach_phase(50, 8);
     phase->print_mesh_info_ = false;
 
@@ -923,9 +941,10 @@ TEST(SolvePipeline, CoreOnlyWarmCrossesEngines) {
     ASSERT_TRUE(source_result.converged());
 
     // Strip the extension list down to the core-only shape every producer
-    // that is NOT this project's interior-point engine emits (the R3
-    // capability downgrade) -- the four core blocks and the stamp are
-    // untouched, only the extension is gone.
+    // that is NOT this project's interior-point engine emits -- the
+    // capability downgrade the currency's own unknown-tag rule defines (a
+    // reader that does not know a tag skips it) -- leaving the four core
+    // blocks and the stamp untouched, only the extension gone.
     hven::solvers::WarmStartData core_only = source_result.warm_;
     ASSERT_FALSE(core_only.extensions_.empty());
     core_only.extensions_.clear();
@@ -990,7 +1009,8 @@ TEST(SolvePipeline, ForeignExtensionSkippedSilently) {
     opts.warm = &tagged;
 
     // Handed to the IPM: no throw, and the solve converges. The unknown tag
-    // is simply not looked at -- R3's capability downgrade, not an error.
+    // is simply not looked at -- the currency's own rule for a tag no
+    // reader knows: skip it silently, not an error.
     SolveResult result;
     ASSERT_NO_THROW(result = prob_target->solve(ref, opts));
     EXPECT_TRUE(result.converged());
@@ -1031,12 +1051,19 @@ TEST(SolvePipeline, MalformedKnownTagRefusesAtStaging) {
     const Eigen::VectorXd x0 = Eigen::VectorXd::Constant(1, 0.0);
 
     // Staging refuses -- naming the tag -- rather than silently treating the
-    // corrupted payload as an unrecognized extension.
+    // corrupted payload as an unrecognized extension. The message must also
+    // name the STAGING call itself (SqpDriver::stage_warm_start's own
+    // "SqpDriver::stage_warm_start:" prefix): a solve-entry refusal would
+    // also throw std::invalid_argument naming the tag (the payload is
+    // decoded a second time inside to_sqp_warm_start at solve entry), so the
+    // tag alone cannot distinguish "refused at staging" from "refused at
+    // solve entry" -- only the entry-point marker in the message can.
     try {
         tycho::solvers::run_engine_stage(sqp_ref, Mode::Optimal, prob_target->nlp_, x0, &corrupted);
         FAIL() << "expected std::invalid_argument";
     } catch (const std::invalid_argument &e) {
         const std::string what = e.what();
         EXPECT_NE(what.find(std::string(hven::solvers::kIpmPolishTag)), std::string::npos);
+        EXPECT_NE(what.find("stage_warm_start"), std::string::npos);
     }
 }
