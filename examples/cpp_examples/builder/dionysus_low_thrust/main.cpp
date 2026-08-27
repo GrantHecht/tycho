@@ -1,22 +1,22 @@
 // Source: Junkins et al., AIAA J. Guidance (2019).
 
-#include <tycho/tycho.h>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
 using namespace tycho::vf;
 using namespace tycho::oc;
 
-static constexpr double Isp_dim = 3000.0;   // s
-static constexpr double Tmag_dim = 0.32;    // N
-static constexpr double mass_dim = 4000.0;  // kg
-static constexpr double g0 = 9.80665;       // m/s^2
+static constexpr double Isp_dim = 3000.0;  // s
+static constexpr double Tmag_dim = 0.32;   // N
+static constexpr double mass_dim = 4000.0; // kg
+static constexpr double g0 = 9.80665;      // m/s^2
 
 // Non-dimensionalisation using AU and sun parameters
-static constexpr double AU = 1.49597870691e11;   // m
+static constexpr double AU = 1.49597870691e11;    // m
 static constexpr double MuSun = 1.32712440018e20; // m^3/s^2
 static constexpr double day = 86400.0;            // s
 
@@ -41,9 +41,9 @@ static const double mdot_nd = Thrust / (Isp * gs);
 
 int main() {
     auto args = ODEArguments(7, 3, 0);
-    auto MEEs = args.head<6>();        // [p, f, g, h, k, L]
-    auto m = args.coeff(6);            // mass (non-dim, m/Mstar)
-    auto u_vec = args.segment<3>(8);   // RTN direction; ||u|| = 1 via path bound
+    auto MEEs = args.head<6>();      // [p, f, g, h, k, L]
+    auto m = args.coeff(6);          // mass (non-dim, m/Mstar)
+    auto u_vec = args.segment<3>(8); // RTN direction; ||u|| = 1 via path bound
 
     // Mass-state formulation: a_nd = T_nd / m_nd, no gs factor (the
     // weight-state formulation would carry one — keeping the two consistent
@@ -61,16 +61,11 @@ int main() {
 
     auto ode_expr = StackedOutputs{Xdot, mdot};
 
-    auto ode = ODE(ode_expr, 7, 3)
-                   .var_names({{"p", 0},
-                               {"f", 1},
-                               {"g", 2},
-                               {"h", 3},
-                               {"k", 4},
-                               {"L", 5},
-                               {"m", 6},
-                               {"t", 7}})
-                   .var_group("u", 8, 3);
+    auto ode =
+        ODE(ode_expr, 7, 3)
+            .var_names(
+                {{"p", 0}, {"f", 1}, {"g", 2}, {"h", 3}, {"k", 4}, {"L", 5}, {"m", 6}, {"t", 7}})
+            .var_group("u", 8, 3);
 
     // From Junkins paper
     Eigen::VectorXd X0_mee(6), XF_mee(6);
@@ -110,17 +105,18 @@ int main() {
     phase.add_value_objective(PhaseRegionFlags::Back, "m", -1.0);
 
     phase.set_num_partitions(8);
-    phase.optimizer().set_qp_threads(8);
-    phase.optimizer().set_opt_ls_mode("AUGLANG");
-    phase.optimizer().set_max_ls_iters(2);
-    phase.optimizer().set_max_acc_iters(200);
-    phase.optimizer().set_bound_fraction(0.997);
-    phase.optimizer().set_print_level(1);
-    phase.optimizer().set_delta_h(1.0e-6);
-    phase.optimizer().set_econ_tol(1.0e-9);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_qp_threads(8);
+    ipm.set_opt_ls_mode("AUGLANG");
+    ipm.set_max_ls_iters(2);
+    ipm.set_max_acc_iters(200);
+    ipm.set_bound_fraction(0.997);
+    ipm.set_print_level(1);
+    ipm.set_delta_h(1.0e-6);
+    ipm.set_econ_tol(1.0e-9);
 
     std::cout << "=== Dionysus Low Thrust: Earth-to-Asteroid Mass-Optimal Transfer ===\n";
-    auto flag = phase.optimize();
+    auto flag = phase.solve(&ipm).flag_;
 
     auto traj = phase.return_traj();
     double final_mass_nd = traj.back()[6];
@@ -144,7 +140,7 @@ int main() {
         std::cout << "\nDionysusLowThrust: PASSED\n";
         return EXIT_SUCCESS;
     }
-    std::cerr << "\nDionysusLowThrust: FAILED (final_mass=" << final_mass_kg
-              << " kg, expected " << kPythonFinalMassKg << " kg)\n";
+    std::cerr << "\nDionysusLowThrust: FAILED (final_mass=" << final_mass_kg << " kg, expected "
+              << kPythonFinalMassKg << " kg)\n";
     return EXIT_FAILURE;
 }

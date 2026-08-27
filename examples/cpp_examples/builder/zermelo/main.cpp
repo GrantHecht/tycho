@@ -1,7 +1,7 @@
-#include <tycho/tycho.h>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -12,8 +12,8 @@ using namespace tycho::solvers;
 using namespace tycho::astro;
 using namespace tycho::utils;
 
-std::vector<Eigen::VectorXd> navigate(ODE &ode, const Eigen::VectorXd &A,
-                                      const Eigen::VectorXd &B, double vMax) {
+std::vector<Eigen::VectorXd> navigate(ODE &ode, const Eigen::VectorXd &A, const Eigen::VectorXd &B,
+                                      double vMax) {
     constexpr int nSeg = 250;
     constexpr double tol = 1e-12;
 
@@ -42,10 +42,11 @@ std::vector<Eigen::VectorXd> navigate(ODE &ode, const Eigen::VectorXd &A,
 
     phase.add_delta_time_objective(1.0);
 
-    phase.optimizer().set_econ_tol(tol);
-    phase.optimizer().set_kkt_tol(tol);
+    InteriorPointSolver ipm;
+    ipm.set_econ_tol(tol);
+    ipm.set_kkt_tol(tol);
 
-    const auto status = phase.solve_optimize();
+    const auto status = phase.solve(&ipm, {.presolve = true}).flag_;
     if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "  FAILED: navigation did not converge (status " << static_cast<int>(status)
                   << ")\n";
@@ -131,7 +132,8 @@ int main() {
         bool ok = std::abs(jac(0, 1) - (-0.0787)) < 0.01;
         std::cout << "ODE Jacobian dy column: " << jac(0, 1) << " " << jac(1, 1)
                   << (ok ? "  OK" : "  BUG") << "\n\n";
-        if (!ok) ++failures;
+        if (!ok)
+            ++failures;
     }
 
     Eigen::VectorXd A(2), B(2);

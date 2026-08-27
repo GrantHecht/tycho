@@ -1,7 +1,7 @@
-#include <tycho/tycho.h>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -10,7 +10,7 @@ using namespace tycho::oc;
 
 static constexpr double MuEarth = 3.986004418e14; // m^3/s^2
 static constexpr double MuMoon = 4.9048695e12;    // m^3/s^2
-static constexpr double LD = 384400000.0;          // m (Earth-Moon distance)
+static constexpr double LD = 384400000.0;         // m (Earth-Moon distance)
 
 static const double mu = MuMoon / (MuEarth + MuMoon);
 
@@ -54,8 +54,9 @@ std::vector<Eigen::VectorXd> solve_periodic(const ODE &ode, const Eigen::VectorX
     phase.add_boundary_value(PhaseRegionFlags::Back, 3, 0.0);
     phase.add_boundary_value(PhaseRegionFlags::Back, 5, 0.0);
 
-    phase.optimizer().set_econ_tol(1e-12);
-    auto flag = phase.solve();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_econ_tol(1e-12);
+    auto flag = phase.solve(&ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
     if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
         return {}; // caller checks for empty
     }
@@ -64,9 +65,9 @@ std::vector<Eigen::VectorXd> solve_periodic(const ODE &ode, const Eigen::VectorX
 }
 
 // Step ig[cIdx] by dx until sign(x[cIdx] - lim) flips.
-std::vector<std::vector<Eigen::VectorXd>>
-contin(const ODE &ode, const Eigen::VectorXd &ig, double tf, int cIdx, double dx, double lim,
-       const std::vector<int> &fix_init = {0, 1, 2}) {
+std::vector<std::vector<Eigen::VectorXd>> contin(const ODE &ode, const Eigen::VectorXd &ig,
+                                                 double tf, int cIdx, double dx, double lim,
+                                                 const std::vector<int> &fix_init = {0, 1, 2}) {
     std::vector<std::vector<Eigen::VectorXd>> traj_list;
     auto first = solve_periodic(ode, ig, tf, fix_init);
     if (first.empty())

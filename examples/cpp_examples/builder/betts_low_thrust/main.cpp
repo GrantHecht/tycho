@@ -1,9 +1,9 @@
 // Source: Betts, "Practical Methods for OC", Cambridge, 2009, Example 6
 
-#include <tycho/tycho.h>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -83,8 +83,7 @@ int main() {
     auto Re_r4 = Re_r3 * Re_over_r;
 
     auto gn_sum = D2 * J2 * Re_r2 + D3 * J3 * Re_r3 + D4 * J4 * Re_r4;
-    auto gr_sum =
-        3.0 * P2 * J2 * Re_r2 + 4.0 * P3 * J3 * Re_r3 + 5.0 * P4 * J4 * Re_r4;
+    auto gr_sum = 3.0 * P2 * J2 * Re_r2 + 4.0 * P3 * J3 * Re_r3 + 5.0 * P4 * J4 * Re_r4;
 
     auto gn = gn_sum * cphi;
     auto gr = gr_sum;
@@ -107,26 +106,21 @@ int main() {
 
     auto ode_expr = StackedOutputs{Xdot, wwdot};
 
-    auto ode = ODE(ode_expr, 7, 3, 1)
-                   .var_names({{"p", 0},
-                               {"f", 1},
-                               {"g", 2},
-                               {"h", 3},
-                               {"k", 4},
-                               {"L", 5},
-                               {"w", 6},
-                               {"t", 7}})
-                   .var_group("u", 8, 3)
-                   .var_names({{"tau", 11}});
+    auto ode =
+        ODE(ode_expr, 7, 3, 1)
+            .var_names(
+                {{"p", 0}, {"f", 1}, {"g", 2}, {"h", 3}, {"k", 4}, {"L", 5}, {"w", 6}, {"t", 7}})
+            .var_group("u", 8, 3)
+            .var_names({{"tau", 11}});
 
     Eigen::VectorXd X0(12);
     X0.setZero();
     X0[0] = pt0;
-    X0[3] = -0.25396764647494;    // h0 = tan(i/2)*cos(RAAN)
+    X0[3] = -0.25396764647494; // h0 = tan(i/2)*cos(RAAN)
     X0[5] = M_PI;
-    X0[6] = 1.0 / Fstar;          // w0 (initial weight, non-dim)
+    X0[6] = 1.0 / Fstar; // w0 (initial weight, non-dim)
     X0[8] = 0.0;
-    X0[9] = 1.0;                  // ut (prograde initially)
+    X0[9] = 1.0; // ut (prograde initially)
     X0[10] = 0.0;
     X0[11] = -25.0;
 
@@ -146,8 +140,7 @@ int main() {
 
     auto integ = ode.integrator()
                      .step(0.1)
-                     .control(GenericFunction<-1, -1>(ig_prograde),
-                              {"p", "f", "g", "h", "k", "L"})
+                     .control(GenericFunction<-1, -1>(ig_prograde), {"p", "f", "g", "h", "k", "L"})
                      .build();
     auto trajIG = integ.integrate_dense(X0, tfig);
 
@@ -191,8 +184,8 @@ int main() {
         auto hk_con = eq1_args.segment<2>(3);
         auto eq3 = hk_con.squared_norm() - 0.61761258786099 * 0.61761258786099;
         // eq 6.55: f*h + g*k = 0
-        auto eq4 = eq1_args.coeff<1>() * eq1_args.coeff<3>() +
-                   eq1_args.coeff<2>() * eq1_args.coeff<4>();
+        auto eq4 =
+            eq1_args.coeff<1>() * eq1_args.coeff<3>() + eq1_args.coeff<2>() * eq1_args.coeff<4>();
         auto eq_con = StackedOutputs{eq1, eq2, eq3, eq4};
         phase.add_equal_con(PhaseRegionFlags::Back, GenericFunction<-1, -1>(eq_con),
                             {"p", "f", "g", "h", "k", "L"});
@@ -200,8 +193,7 @@ int main() {
     {
         // eq 6.56: g*h - k*f >= 0
         auto iq_args = Arguments<6>();
-        auto iq = iq_args.coeff<2>() * iq_args.coeff<3>() -
-                  iq_args.coeff<4>() * iq_args.coeff<1>();
+        auto iq = iq_args.coeff<2>() * iq_args.coeff<3>() - iq_args.coeff<4>() * iq_args.coeff<1>();
         phase.add_inequal_con(PhaseRegionFlags::Back, GenericFunction<-1, -1>(iq),
                               {"p", "f", "g", "h", "k", "L"});
     }
@@ -213,9 +205,10 @@ int main() {
     phase.add_value_objective(PhaseRegionFlags::Back, "w", -1.0);
 
     phase.set_num_partitions(8);
-    phase.optimizer().set_qp_threads(8);
-    phase.optimizer().set_print_level(1);
-    phase.optimizer().set_econ_tol(1.0e-9);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_qp_threads(8);
+    ipm.set_print_level(1);
+    ipm.set_econ_tol(1.0e-9);
 
     phase.set_adaptive_mesh(true);
     phase.set_mesh_error_estimator(MeshErrorEstimators::INTEGRATOR);
@@ -223,7 +216,12 @@ int main() {
 
     std::cout << "=== Betts Low Thrust: LEO-to-MEO with J2/J3/J4 zonal gravity ===\n\n";
 
-    const auto flag = phase.optimize_solve();
+    // optimize_solve equivalence: OPT, then (conditionally, skipped when OPT
+    // reported CONVERGED) a trailing Feasible-mode SOE run.
+    auto flag = phase.solve(&ipm).flag_;
+    if (flag != tycho::ConvergenceFlags::CONVERGED) {
+        flag = phase.solve(&ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
+    }
     if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "BettsLowThrust: FAILED (status " << static_cast<int>(flag) << ")\n";
         return EXIT_FAILURE;

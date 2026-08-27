@@ -1,10 +1,10 @@
 // Source: https://arxiv.org/pdf/2003.00142.pdf
 
-#include <tycho/tycho.h>
 #include <cmath>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -12,8 +12,8 @@ using namespace tycho::vf;
 using namespace tycho::oc;
 
 int main() {
-    constexpr double la = 1.58;   // front axle distance (m)
-    constexpr double lb = 1.72;   // rear axle distance (m)
+    constexpr double la = 1.58; // front axle distance (m)
+    constexpr double lb = 1.72; // rear axle distance (m)
     constexpr double obsrad = 5.0;
     constexpr double margin = 2.5;
     constexpr double xobs = 0.0;
@@ -32,24 +32,25 @@ int main() {
     constexpr int n_pts = 100;
     constexpr int n_segs = 128;
 
-    auto ode = ODEBuilder(4, 2)
-                   .define([la, lb](auto &args) {
-                       auto psi = args.x_var(2);
-                       auto v = args.x_var(3);
-                       auto acc = args.u_var(0);
-                       auto alpha = args.u_var(1);
+    auto ode =
+        ODEBuilder(4, 2)
+            .define([la, lb](auto &args) {
+                auto psi = args.x_var(2);
+                auto v = args.x_var(3);
+                auto acc = args.u_var(0);
+                auto alpha = args.u_var(1);
 
-                       auto beta = atan((la / (la + lb)) * tan(alpha));
-                       auto xdot = v * cos(psi + beta);
-                       auto ydot = v * sin(psi + beta);
-                       auto psidot = v * sin(beta) / lb;
-                       auto vdot = acc;
+                auto beta = atan((la / (la + lb)) * tan(alpha));
+                auto xdot = v * cos(psi + beta);
+                auto ydot = v * sin(psi + beta);
+                auto psidot = v * sin(beta) / lb;
+                auto vdot = acc;
 
-                       return stack(xdot, ydot, psidot, vdot);
-                   })
-                   .var_names({{"x", 0}, {"y", 1}, {"psi", 2}, {"v", 3},
-                               {"t", 4}, {"acc", 5}, {"alpha", 6}})
-                   .build();
+                return stack(xdot, ydot, psidot, vdot);
+            })
+            .var_names(
+                {{"x", 0}, {"y", 1}, {"psi", 2}, {"v", 3}, {"t", 4}, {"acc", 5}, {"alpha", 6}})
+            .build();
 
     // Returns 1 - ((x-xobs)/R)^2 - ((y-yobs)/R)^2 <= 0 for feasible
     auto obs_args = Arguments<2>();
@@ -78,28 +79,25 @@ int main() {
 
     auto phase = ode.phase(TranscriptionModes::LGL3, traj_ig, n_segs);
 
-    phase.add_boundary_value(PhaseRegionFlags::Front,
-                            {"x", "y", "psi", "v", "t"},
-                            Eigen::Matrix<double, 5, 1>(x0, y0, psi0, v0, 0.0));
-    phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "y"},
-                            Eigen::Vector2d(xf, yf));
+    phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "y", "psi", "v", "t"},
+                             Eigen::Matrix<double, 5, 1>(x0, y0, psi0, v0, 0.0));
+    phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "y"}, Eigen::Vector2d(xf, yf));
 
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "v", vlbound, vubound);
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "acc", -accbound, accbound);
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "alpha", -alpha_max, alpha_max);
 
-    phase.add_inequal_con(PhaseRegionFlags::Path,
-                         GenericFunction<-1, -1>(obs_con), {"x", "y"});
+    phase.add_inequal_con(PhaseRegionFlags::Path, GenericFunction<-1, -1>(obs_con), {"x", "y"});
 
     phase.add_delta_time_objective(1.0);
 
-    phase.optimizer().set_tols(1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_tols(1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9);
 
-    const auto flag = phase.optimize();
+    const auto flag = phase.solve(&ipm).flag_;
 
     if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
-        std::cerr << "BikeObstacle (builder): FAILED (status "
-                  << static_cast<int>(flag) << ")\n";
+        std::cerr << "BikeObstacle (builder): FAILED (status " << static_cast<int>(flag) << ")\n";
         return EXIT_FAILURE;
     }
 

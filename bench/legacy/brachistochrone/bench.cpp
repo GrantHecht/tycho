@@ -92,11 +92,12 @@ int main() {
     phase->add_delta_time_objective(1.0, ScaleModes::AUTO);
 
     // Suppress optimizer output
-    phase->optimizer_->set_print_level(3);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
 
     // ---- Solve (timed) -----------------------------------------------------
     auto start = std::chrono::high_resolution_clock::now();
-    const auto status = phase->solve_optimize();
+    const auto status = phase->solve(&ipm, {.presolve = true}).flag_;
     auto end = std::chrono::high_resolution_clock::now();
 
     auto duration = std::chrono::duration<double>(end - start).count();

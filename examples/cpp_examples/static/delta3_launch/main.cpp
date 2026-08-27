@@ -18,10 +18,10 @@
 
 #include "delta3_launch_ode.h"
 
-#include <tycho/tycho.h>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -108,7 +108,8 @@ int main() {
     auto make_idx = [](std::initializer_list<int> vals) {
         Eigen::VectorXi v(vals.size());
         int i = 0;
-        for (auto val : vals) v[i++] = val;
+        for (auto val : vals)
+            v[i++] = val;
         return v;
     };
 
@@ -214,17 +215,18 @@ int main() {
     auto link_vars = make_idx({0, 1, 2, 3, 4, 5, 7, 8, 9, 10});
     ocp.add_forward_link_equal_con(phase1, phase4, link_vars);
 
-    ocp.optimizer().set_opt_ls_mode("L1");
-    ocp.optimizer().set_soe_ls_mode("L1");
-    ocp.optimizer().set_max_ls_iters(2);
-    ocp.optimizer().set_print_level(1);
+    InteriorPointSolver ipm;
+    ipm.set_opt_ls_mode("L1");
+    ipm.set_soe_ls_mode("L1");
+    ipm.set_max_ls_iters(2);
+    ipm.set_print_level(1);
 
     ///////////////////////////////////////////////////////////////////////////
     // Solve
     ///////////////////////////////////////////////////////////////////////////
     std::cout << "Solving Delta III launch vehicle problem ...\n" << std::flush;
 
-    const auto status = ocp.solve_optimize();
+    const auto status = ocp.solve(&ipm, {.presolve = true}).flag_;
 
     if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "Delta3Launch: FAILED (status " << static_cast<int>(status) << ")\n";

@@ -1,10 +1,10 @@
 // Source: Kelly, M., "An introduction to trajectory optimization", SIAM Review, 2017
 
-#include <tycho/tycho.h>
 #include <cmath>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -23,29 +23,28 @@ int main() {
     constexpr int n_pts = 100;
     constexpr int n_segs = 64;
 
-    auto ode = ODEBuilder(4, 1)
-                   .define([l, m1, m2, g](auto &args) {
-                       auto x = args.x_var(0);
-                       auto theta = args.x_var(1);
-                       auto xdot = args.x_var(2);
-                       auto thetadot = args.x_var(3);
-                       auto F = args.u_var(0);
+    auto ode =
+        ODEBuilder(4, 1)
+            .define([l, m1, m2, g](auto &args) {
+                auto x = args.x_var(0);
+                auto theta = args.x_var(1);
+                auto xdot = args.x_var(2);
+                auto thetadot = args.x_var(3);
+                auto F = args.u_var(0);
 
-                       auto Q = stack((-g) * sin(theta),
-                                      F + m2 * l * sin(theta) * thetadot * thetadot);
+                auto Q = stack((-g) * sin(theta), F + m2 * l * sin(theta) * thetadot * thetadot);
 
-                       // Scalar constants must be promoted to VF expressions for stack()
-                       auto l_vf = theta * 0.0 + l;
-                       auto a_vf = theta * 0.0 + (m1 + m2);
-                       auto Mvec = stack(cos(theta), l_vf, a_vf, m2 * l * cos(theta));
-                       auto M = row_matrix(Mvec, 2, 2);
-                       auto accel = M.inverse() * Q;
+                // Scalar constants must be promoted to VF expressions for stack()
+                auto l_vf = theta * 0.0 + l;
+                auto a_vf = theta * 0.0 + (m1 + m2);
+                auto Mvec = stack(cos(theta), l_vf, a_vf, m2 * l * cos(theta));
+                auto M = row_matrix(Mvec, 2, 2);
+                auto accel = M.inverse() * Q;
 
-                       return stack(xdot, thetadot, accel);
-                   })
-                   .var_names({{"x", 0}, {"theta", 1}, {"xdot", 2}, {"thetadot", 3},
-                               {"t", 4}, {"F", 5}})
-                   .build();
+                return stack(xdot, thetadot, accel);
+            })
+            .var_names({{"x", 0}, {"theta", 1}, {"xdot", 2}, {"thetadot", 3}, {"t", 4}, {"F", 5}})
+            .build();
 
     std::vector<Eigen::VectorXd> traj_ig;
     traj_ig.reserve(n_pts);
@@ -61,13 +60,13 @@ int main() {
 
     Eigen::VectorXd front_bc(5);
     front_bc << 0.0, 0.0, 0.0, 0.0, 0.0;
-    phase.add_boundary_value(PhaseRegionFlags::Front,
-                            {"x", "theta", "xdot", "thetadot", "t"}, front_bc);
+    phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "theta", "xdot", "thetadot", "t"},
+                             front_bc);
 
     Eigen::VectorXd back_bc(5);
     back_bc << xf, M_PI, 0.0, 0.0, tf;
-    phase.add_boundary_value(PhaseRegionFlags::Back,
-                            {"x", "theta", "xdot", "thetadot", "t"}, back_bc);
+    phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "theta", "xdot", "thetadot", "t"},
+                             back_bc);
 
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "F", -Fmax, Fmax);
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "x", -xmax, xmax);
@@ -79,20 +78,20 @@ int main() {
     }
 
     phase.set_num_partitions(8);
-    phase.optimizer().set_print_level(1);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(1);
 
-    const auto flag = phase.optimize();
+    const auto flag = phase.solve(&ipm).flag_;
 
     if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
-        std::cerr << "CartPole (builder): FAILED (status "
-                  << static_cast<int>(flag) << ")\n";
+        std::cerr << "CartPole (builder): FAILED (status " << static_cast<int>(flag) << ")\n";
         return EXIT_FAILURE;
     }
 
     auto traj = phase.return_traj();
     std::cout << std::fixed << std::setprecision(6);
-    std::cout << "CartPole (builder): final theta = " << traj.back()[1]
-              << " (expected ~" << M_PI << ")\n";
+    std::cout << "CartPole (builder): final theta = " << traj.back()[1] << " (expected ~" << M_PI
+              << ")\n";
     std::cout << "CartPole (builder): PASSED\n";
     return EXIT_SUCCESS;
 }

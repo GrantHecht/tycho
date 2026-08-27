@@ -19,10 +19,10 @@
 
 #include "zermelo_ode.h"
 
-#include <tycho/tycho.h>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -33,9 +33,9 @@ namespace {
 
 // Non-template navigator — takes an already-erased ODE factory output and
 // drives InteriorPointSolver. All four wind models share this single instantiation.
-std::vector<Eigen::VectorXd>
-navigate(tycho::vf::GenericFunction<-1, -1> erased_ode, const Eigen::VectorXd &A,
-         const Eigen::VectorXd &B, double vMax) {
+std::vector<Eigen::VectorXd> navigate(tycho::vf::GenericFunction<-1, -1> erased_ode,
+                                      const Eigen::VectorXd &A, const Eigen::VectorXd &B,
+                                      double vMax) {
     constexpr int nSeg = 250;
     constexpr double tol = 1e-12;
 
@@ -77,13 +77,14 @@ navigate(tycho::vf::GenericFunction<-1, -1> erased_ode, const Eigen::VectorXd &A
     phase.add_delta_time_objective(1.0, ScaleModes::AUTO);
 
     // Solver settings (match Python: only tolerances)
-    phase.optimizer().set_econ_tol(tol);
-    phase.optimizer().set_kkt_tol(tol);
+    InteriorPointSolver ipm;
+    ipm.set_econ_tol(tol);
+    ipm.set_kkt_tol(tol);
 
-    const auto status = phase.solve_optimize();
+    const auto status = phase.solve(&ipm, {.presolve = true}).flag_;
     if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
-        std::cerr << "  FAILED: navigation did not converge (status "
-                  << static_cast<int>(status) << ")\n";
+        std::cerr << "  FAILED: navigation did not converge (status " << static_cast<int>(status)
+                  << ")\n";
         return {};
     }
     return phase.return_traj();
@@ -109,7 +110,8 @@ int main() {
         bool ok = std::abs(jac(0, 1) - (-0.0787)) < 0.01;
         std::cout << "ODE Jacobian dy column: " << jac(0, 1) << " " << jac(1, 1)
                   << (ok ? "  OK" : "  BUG") << "\n\n";
-        if (!ok) ++failures;
+        if (!ok)
+            ++failures;
     }
 
     Eigen::VectorXd A(2), B(2);
@@ -142,8 +144,8 @@ int main() {
 
     // Constant-direction wind
     std::cout << "Solving: constant-direction wind ... " << std::flush;
-    auto traj3 = navigate(
-        tycho_examples::make_zermelo_const_dir_wind_ode(vM, 45.0 * M_PI / 180.0), A, B, vM);
+    auto traj3 = navigate(tycho_examples::make_zermelo_const_dir_wind_ode(vM, 45.0 * M_PI / 180.0),
+                          A, B, vM);
     if (traj3.empty()) {
         ++failures;
         std::cout << "FAILED\n";

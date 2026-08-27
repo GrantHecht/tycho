@@ -1,10 +1,10 @@
 // Source: Betts, "Practical Methods for OC", Cambridge, 2009
 
-#include <tycho/tycho.h>
 #include <cmath>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -152,12 +152,13 @@ int main() {
     phase.add_delta_var_objective("theta", -1.0);
 
     phase.set_num_partitions(8);
-    phase.optimizer().set_soe_ls_mode("L1");
-    phase.optimizer().set_opt_ls_mode("L1");
-    phase.optimizer().set_print_level(1);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_soe_ls_mode("L1");
+    ipm.set_opt_ls_mode("L1");
+    ipm.set_print_level(1);
 
     std::cout << "Reentry: solve (unconstrained)...\n" << std::flush;
-    auto flag1 = phase.solve_optimize();
+    auto flag1 = phase.solve(&ipm, {.presolve = true}).flag_;
     if (flag1 > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "Reentry (builder): initial solve_optimize FAILED\n";
         return EXIT_FAILURE;
@@ -165,7 +166,7 @@ int main() {
 
     std::cout << "Reentry: refining to 300 segments...\n" << std::flush;
     phase.refine_traj_manual(300);
-    auto flag2 = phase.optimize();
+    auto flag2 = phase.solve(&ipm).flag_;
     if (flag2 > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "Reentry (builder): refined optimize FAILED\n";
         return EXIT_FAILURE;
@@ -176,7 +177,7 @@ int main() {
     std::cout << "Reentry: re-solving with heating rate constraint...\n" << std::flush;
     phase.add_upper_func_bound(PhaseRegionFlags::Path, GenericFunction<-1, 1>(qfunc()),
                                {"h", "v", "alpha"}, Qlimit, 1.0 / Qlimit);
-    auto flag3 = phase.optimize();
+    auto flag3 = phase.solve(&ipm).flag_;
 
     auto traj2 = phase.return_traj();
     const double crossrange1 = traj1.back()[1] * 180.0 / M_PI;

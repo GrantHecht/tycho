@@ -47,8 +47,8 @@ inline Eigen::Matrix<double, 9, 1> mee_input() {
 // gets its own concrete BM_Jacobian<ODE> instantiation that the benchmark
 // macro can take the address of.
 template <class ODE>
-inline void bm_jacobian_body(benchmark::State& state,
-                             const Eigen::Matrix<double, ODE::IRC, 1>& x_in) {
+inline void bm_jacobian_body(benchmark::State &state,
+                             const Eigen::Matrix<double, ODE::IRC, 1> &x_in) {
     ODE f;
     Eigen::Matrix<double, ODE::IRC, 1> x = x_in;
     Eigen::Matrix<double, ODE::ORC, 1> fx;
@@ -64,24 +64,24 @@ inline void bm_jacobian_body(benchmark::State& state,
 }
 
 // Per-ODE thunks so BENCHMARK_CAPTURE has a concrete function pointer.
-void BM_Brach_FDiff(benchmark::State& state) {
+void BM_Brach_FDiff(benchmark::State &state) {
     bm_jacobian_body<tycho_enzyme_test::BrachFDiff>(state, brach_input());
 }
-void BM_Brach_Enzyme(benchmark::State& state) {
+void BM_Brach_Enzyme(benchmark::State &state) {
     bm_jacobian_body<tycho_enzyme_test::BrachEnzymeAD>(state, brach_input());
 }
 
-void BM_CR3BP_FDiff(benchmark::State& state) {
+void BM_CR3BP_FDiff(benchmark::State &state) {
     bm_jacobian_body<tycho_enzyme_test::CR3BPFDiff>(state, cr3bp_input());
 }
-void BM_CR3BP_Enzyme(benchmark::State& state) {
+void BM_CR3BP_Enzyme(benchmark::State &state) {
     bm_jacobian_body<tycho_enzyme_test::CR3BPEnzymeAD>(state, cr3bp_input());
 }
 
-void BM_MEE_FDiff(benchmark::State& state) {
+void BM_MEE_FDiff(benchmark::State &state) {
     bm_jacobian_body<tycho_enzyme_test::MEEFDiff>(state, mee_input());
 }
-void BM_MEE_Enzyme(benchmark::State& state) {
+void BM_MEE_Enzyme(benchmark::State &state) {
     bm_jacobian_body<tycho_enzyme_test::MEEEnzymeAD>(state, mee_input());
 }
 
@@ -92,9 +92,9 @@ void BM_MEE_Enzyme(benchmark::State& state) {
 // independent VF evaluation).
 // -----------------------------------------------------------------------------
 
-}  // close anonymous namespace temporarily so Vectorizable BrachBench
-   // gets external linkage (Enzyme's template-instantiated __enzyme_fwddiff
-   // refuses to bind to types in an unnamed namespace).
+} // namespace
+  // gets external linkage (Enzyme's template-instantiated __enzyme_fwddiff
+  // refuses to bind to types in an unnamed namespace).
 
 namespace tycho_enzyme_bench {
 
@@ -104,16 +104,14 @@ namespace tycho_enzyme_bench {
 // composes with TYCHO_ENZYME_BATCH_WIDTH > 1.  See
 // include/tycho/detail/utils/simd_math.h.
 template <tycho::vf::DenseDerivativeMode Jm, tycho::vf::DenseDerivativeMode Hm>
-struct BrachBench
-    : tycho::vf::VectorFunction<BrachBench<Jm, Hm>, 5, 3, Jm, Hm> {
+struct BrachBench : tycho::vf::VectorFunction<BrachBench<Jm, Hm>, 5, 3, Jm, Hm> {
     using Base = tycho::vf::VectorFunction<BrachBench<Jm, Hm>, 5, 3, Jm, Hm>;
     VF_TYPE_ALIASES(Base)
     static constexpr bool is_vectorizable = true;
     double g_;
     BrachBench(double g = 32.2) : g_{g} {}
     template <class InType, class OutType>
-    inline void compute_impl(tycho::vf::CVecRef<InType> x,
-                             tycho::vf::CVecRef<OutType> fx_) const {
+    inline void compute_impl(tycho::vf::CVecRef<InType> x, tycho::vf::CVecRef<OutType> fx_) const {
         using tycho::math::cos;
         using tycho::math::sin;
         using Scalar = typename InType::Scalar;
@@ -130,22 +128,22 @@ struct BrachBench
 // because arithmetic mixing plain double with SS-typed Eigen ops requires
 // matching scalar types under Vectorizable dispatch.
 template <tycho::vf::DenseDerivativeMode Jm, tycho::vf::DenseDerivativeMode Hm>
-struct CR3BPBench
-    : tycho::vf::VectorFunction<CR3BPBench<Jm, Hm>, 7, 6, Jm, Hm> {
+struct CR3BPBench : tycho::vf::VectorFunction<CR3BPBench<Jm, Hm>, 7, 6, Jm, Hm> {
     using Base = tycho::vf::VectorFunction<CR3BPBench<Jm, Hm>, 7, 6, Jm, Hm>;
     VF_TYPE_ALIASES(Base)
     static constexpr bool is_vectorizable = true;
     double mu_;
     CR3BPBench(double mu = 0.0123) : mu_{mu} {}
     template <class InType, class OutType>
-    inline void compute_impl(tycho::vf::CVecRef<InType> x,
-                             tycho::vf::CVecRef<OutType> fx_) const {
+    inline void compute_impl(tycho::vf::CVecRef<InType> x, tycho::vf::CVecRef<OutType> fx_) const {
         using Scalar = typename InType::Scalar;
         tycho::vf::VecRef<OutType> fx = fx_.const_cast_derived();
         tycho::Vector3<Scalar> X = x.template head<3>();
         tycho::Vector3<Scalar> V = x.template segment<3>(3);
-        tycho::Vector3<Scalar> p1loc; p1loc[0] = Scalar(-mu_);
-        tycho::Vector3<Scalar> p2loc; p2loc[0] = Scalar(1.0 - mu_);
+        tycho::Vector3<Scalar> p1loc;
+        p1loc[0] = Scalar(-mu_);
+        tycho::Vector3<Scalar> p2loc;
+        p2loc[0] = Scalar(1.0 - mu_);
         tycho::Vector3<Scalar> dvec = X - p1loc;
         tycho::Vector3<Scalar> rvec = X - p2loc;
         Scalar d = (dvec.array() * dvec.array()).sum();
@@ -154,8 +152,7 @@ struct CR3BPBench
         r = sqrt(r);
         fx.template head<3>() = V;
         fx.template segment<3>(3) =
-            (Scalar(-(1.0 - mu_)) / (d * d * d)) * dvec
-          + (Scalar(-mu_) / (r * r * r)) * rvec;
+            (Scalar(-(1.0 - mu_)) / (d * d * d)) * dvec + (Scalar(-mu_) / (r * r * r)) * rvec;
         fx[3] += Scalar(2.0) * V[1] + X[0];
         fx[4] += Scalar(-2.0) * V[0] + X[1];
     }
@@ -168,20 +165,18 @@ struct CR3BPBench
 // strategy, so we opt out by inheriting from EnzymeSimdHessianUnsupported and
 // fall through to Phase 5a scalarize-per-lane.
 template <tycho::vf::DenseDerivativeMode Jm, tycho::vf::DenseDerivativeMode Hm>
-struct MEEBench
-    : tycho::vf::VectorFunction<MEEBench<Jm, Hm>, 9, 6, Jm, Hm>,
-      tycho::vf::EnzymeSimdHessianUnsupported {
+struct MEEBench : tycho::vf::VectorFunction<MEEBench<Jm, Hm>, 9, 6, Jm, Hm>,
+                  tycho::vf::EnzymeSimdHessianUnsupported {
     using Base = tycho::vf::VectorFunction<MEEBench<Jm, Hm>, 9, 6, Jm, Hm>;
     VF_TYPE_ALIASES(Base)
     static constexpr bool is_vectorizable = true;
     double mu_, sqm_;
     MEEBench(double mu = 1.0) : mu_{mu}, sqm_{std::sqrt(mu)} {}
     template <class InType, class OutType>
-    inline void compute_impl(tycho::vf::CVecRef<InType> x,
-                             tycho::vf::CVecRef<OutType> fx_) const {
+    inline void compute_impl(tycho::vf::CVecRef<InType> x, tycho::vf::CVecRef<OutType> fx_) const {
+        using std::sqrt;
         using tycho::math::cos;
         using tycho::math::sin;
-        using std::sqrt;
         using Scalar = typename InType::Scalar;
         tycho::vf::VecRef<OutType> fx = fx_.const_cast_derived();
         Scalar x0 = x[0], x1 = x[1], x2 = x[2], x3 = x[3], x4 = x[4];
@@ -210,7 +205,7 @@ struct MEEBench
     }
 };
 
-}  // namespace tycho_enzyme_bench
+} // namespace tycho_enzyme_bench
 
 namespace {
 
@@ -230,16 +225,17 @@ using SS4 = Eigen::Array<double, 4, 1>;
 // BM_JacobianVecSIMD_* variants below which call
 // simd_compute_jacobian_impl directly.
 
-void BM_Brach_Vectorized_Enzyme(benchmark::State& state) {
-    using ODE = tycho_enzyme_bench::BrachBench<
-        tycho::vf::DenseDerivativeMode::EnzymeAD,
-        tycho::vf::DenseDerivativeMode::FDiffFwd>;
+void BM_Brach_Vectorized_Enzyme(benchmark::State &state) {
+    using ODE = tycho_enzyme_bench::BrachBench<tycho::vf::DenseDerivativeMode::EnzymeAD,
+                                               tycho::vf::DenseDerivativeMode::FDiffFwd>;
     ODE f;
     Eigen::Matrix<SS4, 5, 1> x;
-    for (int i = 0; i < 5; ++i) x(i).setConstant(brach_input()[i]);
+    for (int i = 0; i < 5; ++i)
+        x(i).setConstant(brach_input()[i]);
     Eigen::Matrix<SS4, 3, 1> fx;
     Eigen::Matrix<SS4, 3, 5> jx;
-    fx.setZero(); jx.setZero();
+    fx.setZero();
+    jx.setZero();
     for (auto _ : state) {
         f.compute_jacobian(x, fx, jx);
         benchmark::DoNotOptimize(fx);
@@ -248,16 +244,17 @@ void BM_Brach_Vectorized_Enzyme(benchmark::State& state) {
     }
 }
 
-void BM_CR3BP_Vectorized_Enzyme(benchmark::State& state) {
-    using ODE = tycho_enzyme_bench::CR3BPBench<
-        tycho::vf::DenseDerivativeMode::EnzymeAD,
-        tycho::vf::DenseDerivativeMode::FDiffFwd>;
+void BM_CR3BP_Vectorized_Enzyme(benchmark::State &state) {
+    using ODE = tycho_enzyme_bench::CR3BPBench<tycho::vf::DenseDerivativeMode::EnzymeAD,
+                                               tycho::vf::DenseDerivativeMode::FDiffFwd>;
     ODE f;
     Eigen::Matrix<SS4, 7, 1> x;
-    for (int i = 0; i < 7; ++i) x(i).setConstant(cr3bp_input()[i]);
+    for (int i = 0; i < 7; ++i)
+        x(i).setConstant(cr3bp_input()[i]);
     Eigen::Matrix<SS4, 6, 1> fx;
     Eigen::Matrix<SS4, 6, 7> jx;
-    fx.setZero(); jx.setZero();
+    fx.setZero();
+    jx.setZero();
     for (auto _ : state) {
         f.compute_jacobian(x, fx, jx);
         benchmark::DoNotOptimize(fx);
@@ -266,16 +263,17 @@ void BM_CR3BP_Vectorized_Enzyme(benchmark::State& state) {
     }
 }
 
-void BM_MEE_Vectorized_Enzyme(benchmark::State& state) {
-    using ODE = tycho_enzyme_bench::MEEBench<
-        tycho::vf::DenseDerivativeMode::EnzymeAD,
-        tycho::vf::DenseDerivativeMode::FDiffFwd>;
+void BM_MEE_Vectorized_Enzyme(benchmark::State &state) {
+    using ODE = tycho_enzyme_bench::MEEBench<tycho::vf::DenseDerivativeMode::EnzymeAD,
+                                             tycho::vf::DenseDerivativeMode::FDiffFwd>;
     ODE f;
     Eigen::Matrix<SS4, 9, 1> x;
-    for (int i = 0; i < 9; ++i) x(i).setConstant(mee_input()[i]);
+    for (int i = 0; i < 9; ++i)
+        x(i).setConstant(mee_input()[i]);
     Eigen::Matrix<SS4, 6, 1> fx;
     Eigen::Matrix<SS4, 6, 9> jx;
-    fx.setZero(); jx.setZero();
+    fx.setZero();
+    jx.setZero();
     for (auto _ : state) {
         f.compute_jacobian(x, fx, jx);
         benchmark::DoNotOptimize(fx);
@@ -289,16 +287,17 @@ void BM_MEE_Vectorized_Enzyme(benchmark::State& state) {
 // SuperScalar primal path (Eigen::Array<double, W, 1> arithmetic in the
 // user's compute_impl, Enzyme differentiating through SIMD ops).
 
-void BM_Brach_VectorizedSIMD_Enzyme(benchmark::State& state) {
-    using ODE = tycho_enzyme_bench::BrachBench<
-        tycho::vf::DenseDerivativeMode::EnzymeAD,
-        tycho::vf::DenseDerivativeMode::FDiffFwd>;
+void BM_Brach_VectorizedSIMD_Enzyme(benchmark::State &state) {
+    using ODE = tycho_enzyme_bench::BrachBench<tycho::vf::DenseDerivativeMode::EnzymeAD,
+                                               tycho::vf::DenseDerivativeMode::FDiffFwd>;
     ODE f;
     Eigen::Matrix<SS4, 5, 1> x;
-    for (int i = 0; i < 5; ++i) x(i).setConstant(brach_input()[i]);
+    for (int i = 0; i < 5; ++i)
+        x(i).setConstant(brach_input()[i]);
     Eigen::Matrix<SS4, 3, 1> fx;
     Eigen::Matrix<SS4, 3, 5> jx;
-    fx.setZero(); jx.setZero();
+    fx.setZero();
+    jx.setZero();
     for (auto _ : state) {
         f.simd_compute_jacobian_impl(x, fx, jx);
         benchmark::DoNotOptimize(fx);
@@ -307,16 +306,17 @@ void BM_Brach_VectorizedSIMD_Enzyme(benchmark::State& state) {
     }
 }
 
-void BM_CR3BP_VectorizedSIMD_Enzyme(benchmark::State& state) {
-    using ODE = tycho_enzyme_bench::CR3BPBench<
-        tycho::vf::DenseDerivativeMode::EnzymeAD,
-        tycho::vf::DenseDerivativeMode::FDiffFwd>;
+void BM_CR3BP_VectorizedSIMD_Enzyme(benchmark::State &state) {
+    using ODE = tycho_enzyme_bench::CR3BPBench<tycho::vf::DenseDerivativeMode::EnzymeAD,
+                                               tycho::vf::DenseDerivativeMode::FDiffFwd>;
     ODE f;
     Eigen::Matrix<SS4, 7, 1> x;
-    for (int i = 0; i < 7; ++i) x(i).setConstant(cr3bp_input()[i]);
+    for (int i = 0; i < 7; ++i)
+        x(i).setConstant(cr3bp_input()[i]);
     Eigen::Matrix<SS4, 6, 1> fx;
     Eigen::Matrix<SS4, 6, 7> jx;
-    fx.setZero(); jx.setZero();
+    fx.setZero();
+    jx.setZero();
     for (auto _ : state) {
         f.simd_compute_jacobian_impl(x, fx, jx);
         benchmark::DoNotOptimize(fx);
@@ -325,16 +325,17 @@ void BM_CR3BP_VectorizedSIMD_Enzyme(benchmark::State& state) {
     }
 }
 
-void BM_MEE_VectorizedSIMD_Enzyme(benchmark::State& state) {
-    using ODE = tycho_enzyme_bench::MEEBench<
-        tycho::vf::DenseDerivativeMode::EnzymeAD,
-        tycho::vf::DenseDerivativeMode::FDiffFwd>;
+void BM_MEE_VectorizedSIMD_Enzyme(benchmark::State &state) {
+    using ODE = tycho_enzyme_bench::MEEBench<tycho::vf::DenseDerivativeMode::EnzymeAD,
+                                             tycho::vf::DenseDerivativeMode::FDiffFwd>;
     ODE f;
     Eigen::Matrix<SS4, 9, 1> x;
-    for (int i = 0; i < 9; ++i) x(i).setConstant(mee_input()[i]);
+    for (int i = 0; i < 9; ++i)
+        x(i).setConstant(mee_input()[i]);
     Eigen::Matrix<SS4, 6, 1> fx;
     Eigen::Matrix<SS4, 6, 9> jx;
-    fx.setZero(); jx.setZero();
+    fx.setZero();
+    jx.setZero();
     for (auto _ : state) {
         f.simd_compute_jacobian_impl(x, fx, jx);
         benchmark::DoNotOptimize(fx);
@@ -352,19 +353,22 @@ void BM_MEE_VectorizedSIMD_Enzyme(benchmark::State& state) {
 // by +0.05*lane so Enzyme cannot fold lane values together.
 // -----------------------------------------------------------------------------
 
-void BM_Brach_HessianSIMD_Enzyme(benchmark::State& state) {
-    using ODE = tycho_enzyme_bench::BrachBench<
-        tycho::vf::DenseDerivativeMode::EnzymeAD,
-        tycho::vf::DenseDerivativeMode::EnzymeAD>;
+void BM_Brach_HessianSIMD_Enzyme(benchmark::State &state) {
+    using ODE = tycho_enzyme_bench::BrachBench<tycho::vf::DenseDerivativeMode::EnzymeAD,
+                                               tycho::vf::DenseDerivativeMode::EnzymeAD>;
     ODE f;
     Eigen::Matrix<SS4, 5, 1> x;
-    for (int i = 0; i < 5; ++i) x(i).setConstant(brach_input()[i]);
+    for (int i = 0; i < 5; ++i)
+        x(i).setConstant(brach_input()[i]);
     Eigen::Matrix<SS4, 3, 1> fx;
     Eigen::Matrix<SS4, 3, 5> jx;
     Eigen::Matrix<SS4, 5, 1> g;
     Eigen::Matrix<SS4, 5, 5> h;
     Eigen::Matrix<SS4, 3, 1> lam;
-    fx.setZero(); jx.setZero(); g.setZero(); h.setZero();
+    fx.setZero();
+    jx.setZero();
+    g.setZero();
+    h.setZero();
     {
         const double seed[3] = {0.7, -1.1, 0.3};
         for (int i = 0; i < 3; ++i)
@@ -379,19 +383,22 @@ void BM_Brach_HessianSIMD_Enzyme(benchmark::State& state) {
     }
 }
 
-void BM_CR3BP_HessianSIMD_Enzyme(benchmark::State& state) {
-    using ODE = tycho_enzyme_bench::CR3BPBench<
-        tycho::vf::DenseDerivativeMode::EnzymeAD,
-        tycho::vf::DenseDerivativeMode::EnzymeAD>;
+void BM_CR3BP_HessianSIMD_Enzyme(benchmark::State &state) {
+    using ODE = tycho_enzyme_bench::CR3BPBench<tycho::vf::DenseDerivativeMode::EnzymeAD,
+                                               tycho::vf::DenseDerivativeMode::EnzymeAD>;
     ODE f;
     Eigen::Matrix<SS4, 7, 1> x;
-    for (int i = 0; i < 7; ++i) x(i).setConstant(cr3bp_input()[i]);
+    for (int i = 0; i < 7; ++i)
+        x(i).setConstant(cr3bp_input()[i]);
     Eigen::Matrix<SS4, 6, 1> fx;
     Eigen::Matrix<SS4, 6, 7> jx;
     Eigen::Matrix<SS4, 7, 1> g;
     Eigen::Matrix<SS4, 7, 7> h;
     Eigen::Matrix<SS4, 6, 1> lam;
-    fx.setZero(); jx.setZero(); g.setZero(); h.setZero();
+    fx.setZero();
+    jx.setZero();
+    g.setZero();
+    h.setZero();
     {
         const double seed[6] = {0.2, -0.5, 0.7, 0.1, -0.3, 0.4};
         for (int i = 0; i < 6; ++i)
@@ -410,19 +417,22 @@ void BM_CR3BP_HessianSIMD_Enzyme(benchmark::State& state) {
 // EnzymeSimdHessianUnsupported (composite trig+sqrt+division body trips
 // Enzyme's SS reverse-mode TypeAnalysis), so the bench routes through the
 // Phase 5a scalarize-per-lane fallback.
-void BM_MEE_HessianSIMD_Enzyme(benchmark::State& state) {
-    using ODE = tycho_enzyme_bench::MEEBench<
-        tycho::vf::DenseDerivativeMode::EnzymeAD,
-        tycho::vf::DenseDerivativeMode::EnzymeAD>;
+void BM_MEE_HessianSIMD_Enzyme(benchmark::State &state) {
+    using ODE = tycho_enzyme_bench::MEEBench<tycho::vf::DenseDerivativeMode::EnzymeAD,
+                                             tycho::vf::DenseDerivativeMode::EnzymeAD>;
     ODE f;
     Eigen::Matrix<SS4, 9, 1> x;
-    for (int i = 0; i < 9; ++i) x(i).setConstant(mee_input()[i]);
+    for (int i = 0; i < 9; ++i)
+        x(i).setConstant(mee_input()[i]);
     Eigen::Matrix<SS4, 6, 1> fx;
     Eigen::Matrix<SS4, 6, 9> jx;
     Eigen::Matrix<SS4, 9, 1> g;
     Eigen::Matrix<SS4, 9, 9> h;
     Eigen::Matrix<SS4, 6, 1> lam;
-    fx.setZero(); jx.setZero(); g.setZero(); h.setZero();
+    fx.setZero();
+    jx.setZero();
+    g.setZero();
+    h.setZero();
     {
         const double seed[6] = {0.2, -0.5, 0.7, 0.1, -0.3, 0.4};
         for (int i = 0; i < 6; ++i)
@@ -444,8 +454,8 @@ void BM_MEE_HessianSIMD_Enzyme(benchmark::State& state) {
 // FDiffFwd nested-FD reference.
 // -----------------------------------------------------------------------------
 template <class ODE>
-inline void bm_hessian_body(benchmark::State& state,
-                            const Eigen::Matrix<double, ODE::IRC, 1>& x_in) {
+inline void bm_hessian_body(benchmark::State &state,
+                            const Eigen::Matrix<double, ODE::IRC, 1> &x_in) {
     ODE f;
     Eigen::Matrix<double, ODE::IRC, 1> x = x_in;
     Eigen::Matrix<double, ODE::ORC, 1> fx;
@@ -461,7 +471,10 @@ inline void bm_hessian_body(benchmark::State& state,
     } else {
         lam.setOnes();
     }
-    fx.setZero(); jx.setZero(); g.setZero(); h.setZero();
+    fx.setZero();
+    jx.setZero();
+    g.setZero();
+    h.setZero();
 
     for (auto _ : state) {
         f.compute_jacobian_adjointgradient_adjointhessian(x, fx, jx, g, h, lam);
@@ -471,24 +484,24 @@ inline void bm_hessian_body(benchmark::State& state,
     }
 }
 
-void BM_Hessian_Brach_FDiff(benchmark::State& state) {
+void BM_Hessian_Brach_FDiff(benchmark::State &state) {
     bm_hessian_body<tycho_enzyme_test::BrachFDiff>(state, brach_input());
 }
-void BM_Hessian_Brach_Enzyme(benchmark::State& state) {
+void BM_Hessian_Brach_Enzyme(benchmark::State &state) {
     bm_hessian_body<tycho_enzyme_test::BrachEnzymeFull>(state, brach_input());
 }
 
-void BM_Hessian_CR3BP_FDiff(benchmark::State& state) {
+void BM_Hessian_CR3BP_FDiff(benchmark::State &state) {
     bm_hessian_body<tycho_enzyme_test::CR3BPFDiff>(state, cr3bp_input());
 }
-void BM_Hessian_CR3BP_Enzyme(benchmark::State& state) {
+void BM_Hessian_CR3BP_Enzyme(benchmark::State &state) {
     bm_hessian_body<tycho_enzyme_test::CR3BPEnzymeFull>(state, cr3bp_input());
 }
 
-void BM_Hessian_MEE_FDiff(benchmark::State& state) {
+void BM_Hessian_MEE_FDiff(benchmark::State &state) {
     bm_hessian_body<tycho_enzyme_test::MEEFDiff>(state, mee_input());
 }
-void BM_Hessian_MEE_Enzyme(benchmark::State& state) {
+void BM_Hessian_MEE_Enzyme(benchmark::State &state) {
     bm_hessian_body<tycho_enzyme_test::MEEEnzymeFull>(state, mee_input());
 }
 
@@ -496,8 +509,7 @@ void BM_Hessian_MEE_Enzyme(benchmark::State& state) {
 // Phase 2 gate criterion: brachistochrone InteriorPointSolver full-solve TTS comparison.
 // Same problem the e2e test runs; benchmarks the entire setup-+-solve cycle.
 // -----------------------------------------------------------------------------
-template <class BrachFunc>
-inline void bm_brachistochrone_solve_body(benchmark::State& state) {
+template <class BrachFunc> inline void bm_brachistochrone_solve_body(benchmark::State &state) {
     using namespace tycho;
     using namespace tycho::oc;
     using namespace tycho::solvers;
@@ -531,26 +543,25 @@ inline void bm_brachistochrone_solve_body(benchmark::State& state) {
         Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(4, 0, 3);
         Eigen::VectorXd front_val(4);
         front_val << x0, y0, v0, t0;
-        phase.add_boundary_value(PhaseRegionFlags::Front, front_idx, front_val,
-                                 ScaleModes::AUTO);
+        phase.add_boundary_value(PhaseRegionFlags::Front, front_idx, front_val, ScaleModes::AUTO);
 
         Eigen::VectorXi back_idx(2);
         back_idx << 0, 1;
         Eigen::VectorXd back_val(2);
         back_val << xf, yf;
-        phase.add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val,
-                                 ScaleModes::AUTO);
+        phase.add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val, ScaleModes::AUTO);
 
         phase.add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0);
         phase.add_delta_time_objective(1.0, ScaleModes::AUTO);
 
-        auto status = phase.solve_optimize();
+        tycho::solvers::InteriorPointSolver ipm;
+        auto status = phase.solve(&ipm, {.presolve = true}).flag_;
         benchmark::DoNotOptimize(status);
         benchmark::ClobberMemory();
     }
 }
 
-}  // namespace
+} // namespace
 
 // Brachistochrone (5 -> 3)
 BENCHMARK(BM_Brach_FDiff)->Name("BM_Jacobian_FDiff/Brach");
@@ -592,17 +603,13 @@ BENCHMARK(BM_MEE_HessianSIMD_Enzyme)->Name("BM_HessianVecSIMD_Enzyme/MEE");
 // Phase 2 gate: full-solve TTS for the brachistochrone.  Each iteration
 // builds the phase + solves via InteriorPointSolver, so the per-iteration cost includes
 // problem setup as well as the solve itself.
-void BM_Solve_Brach_FDiff(benchmark::State& state) {
+void BM_Solve_Brach_FDiff(benchmark::State &state) {
     bm_brachistochrone_solve_body<tycho_enzyme_test::BrachFDiff>(state);
 }
-void BM_Solve_Brach_Enzyme(benchmark::State& state) {
+void BM_Solve_Brach_Enzyme(benchmark::State &state) {
     bm_brachistochrone_solve_body<tycho_enzyme_test::BrachEnzymeFull>(state);
 }
-BENCHMARK(BM_Solve_Brach_FDiff)
-    ->Name("BM_FullSolve_FDiff/Brach")
-    ->Unit(benchmark::kMillisecond);
-BENCHMARK(BM_Solve_Brach_Enzyme)
-    ->Name("BM_FullSolve_Enzyme/Brach")
-    ->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_Solve_Brach_FDiff)->Name("BM_FullSolve_FDiff/Brach")->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_Solve_Brach_Enzyme)->Name("BM_FullSolve_Enzyme/Brach")->Unit(benchmark::kMillisecond);
 
 BENCHMARK_MAIN();

@@ -1,10 +1,10 @@
 // Source: https://www.hindawi.com/journals/aaa/2014/851720/
 
-#include <tycho/tycho.h>
 #include <cmath>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -38,8 +38,7 @@ int main() {
 
     auto phase = ode.phase(TranscriptionModes::LGL5, traj_ig, n_segs);
 
-    phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "t"},
-                            Eigen::Vector2d(x0_val, t0));
+    phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "t"}, Eigen::Vector2d(x0_val, t0));
     phase.add_boundary_value(PhaseRegionFlags::Back, "t", tf);
 
     {
@@ -50,11 +49,12 @@ int main() {
         phase.add_integral_objective(GenericFunction<-1, 1>(obj_expr), {"x", "u"});
     }
 
-    const auto flag = phase.optimize();
+    tycho::solvers::InteriorPointSolver ipm;
+    const auto flag = phase.solve(&ipm).flag_;
 
     if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
-        std::cerr << "AnalyticExample (builder): FAILED (status "
-                  << static_cast<int>(flag) << ")\n";
+        std::cerr << "AnalyticExample (builder): FAILED (status " << static_cast<int>(flag)
+                  << ")\n";
         return EXIT_FAILURE;
     }
 

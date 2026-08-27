@@ -203,19 +203,20 @@ static bool run_multi_spacecraft(const std::vector<std::vector<Eigen::VectorXd>>
                                             ScaleModes::AUTO);
     }
 
+    tycho::solvers::InteriorPointSolver ipm;
     if (deterministic) {
         // One partition and one QP thread: with nothing reducing across
         // threads, the arithmetic is the same on every run.
         ocp.base().set_num_partitions(1);
-        ocp.optimizer().set_qp_threads(1);
+        ipm.set_qp_threads(1);
     }
 
-    ocp.optimizer().set_opt_ls_mode("L1");
-    ocp.optimizer().set_delta_h(5.0e-8);
-    ocp.optimizer().set_kkt_tol(1.0e-9);
-    ocp.optimizer().set_bound_fraction(0.997);
-    ocp.optimizer().set_print_level(1);
-    ocp.optimizer().set_max_ls_iters(1);
+    ipm.set_opt_ls_mode("L1");
+    ipm.set_delta_h(5.0e-8);
+    ipm.set_kkt_tol(1.0e-9);
+    ipm.set_bound_fraction(0.997);
+    ipm.set_print_level(1);
+    ipm.set_max_ls_iters(1);
 
     // For each angular spread, substitute new front states, re-transcribe
     // every 8 iterates to keep the problem well conditioned, then
@@ -233,16 +234,16 @@ static bool run_multi_spacecraft(const std::vector<std::vector<Eigen::VectorXd>>
         }
 
         if (j == 0) {
-            auto solve_flag = ocp.solve();
+            auto solve_flag = ocp.solve(&ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
             if (solve_flag > tycho::ConvergenceFlags::ACCEPTABLE) {
                 std::cerr << "  MultiSpacecraftOpt: initial solve FAILED at j=0\n";
                 return false;
             }
         }
 
-        flag = ocp.optimize();
+        flag = ocp.solve(&ipm).flag_;
         if (flag == tycho::ConvergenceFlags::NOTCONVERGED) {
-            flag = ocp.solve_optimize();
+            flag = ocp.solve(&ipm, {.presolve = true}).flag_;
         }
 
         auto link_params = ocp.base().return_link_params();

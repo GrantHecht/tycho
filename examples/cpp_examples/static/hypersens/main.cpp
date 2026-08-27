@@ -24,9 +24,9 @@
 
 #include "hypersens_ode.h"
 
-#include <tycho/tycho.h>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -85,19 +85,20 @@ int main() {
     phase.add_lu_var_bound(PhaseRegionFlags::Path, 2, -50.0, 50.0);
 
     // Solver settings
-    phase.optimizer().set_opt_ls_mode("L1");
-    phase.optimizer().set_soe_ls_mode("L1");
-    phase.optimizer().set_max_ls_iters(2);
-    phase.optimizer().set_print_level(2);
+    InteriorPointSolver ipm;
+    ipm.set_opt_ls_mode("L1");
+    ipm.set_soe_ls_mode("L1");
+    ipm.set_max_ls_iters(2);
+    ipm.set_print_level(2);
     phase.set_num_partitions(1);
 
     // MINDEG ordering — required for stability at tf=10000
-    phase.optimizer().set_qp_ordering_mode("MINDEG");
+    ipm.set_qp_ordering_mode("MINDEG");
 
     // Adaptive mesh refinement
     phase.set_adaptive_mesh(true);
     phase.set_mesh_tol(1.0e-7);
-    phase.optimizer().set_econ_tol(1.0e-7);
+    ipm.set_econ_tol(1.0e-7);
     phase.set_max_mesh_iters(10);
     phase.set_mesh_error_estimator(MeshErrorEstimators::DEBOOR);
     phase.set_mesh_error_criteria(MeshErrorAggregation::MAX);
@@ -110,7 +111,12 @@ int main() {
               << ") ...\n"
               << std::flush;
 
-    const auto flag = phase.optimize_solve();
+    // optimize_solve equivalence: OPT, then (conditionally, skipped when OPT
+    // reported CONVERGED) a trailing Feasible-mode SOE run.
+    auto flag = phase.solve(&ipm).flag_;
+    if (flag != tycho::ConvergenceFlags::CONVERGED) {
+        flag = phase.solve(&ipm, {.mode = Mode::Feasible}).flag_;
+    }
 
     if (phase.mesh_converged()) {
         std::cout << "HyperSens: mesh CONVERGED\n";

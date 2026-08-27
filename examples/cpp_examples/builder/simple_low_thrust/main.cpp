@@ -1,7 +1,7 @@
-#include <tycho/tycho.h>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -65,15 +65,16 @@ int main() {
 
     phase.add_boundary_value(PhaseRegionFlags::Back, {"R", "V"}, Xf);
 
-    phase.optimizer().set_print_level(1);
-    phase.optimizer().set_bound_fraction(0.995);
-    phase.optimizer().set_opt_ls_mode("L1");
-    phase.optimizer().set_max_ls_iters(2);
-    phase.optimizer().set_delta_h(1.0e-6);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(1);
+    ipm.set_bound_fraction(0.995);
+    ipm.set_opt_ls_mode("L1");
+    ipm.set_max_ls_iters(2);
+    ipm.set_delta_h(1.0e-6);
 
     std::cout << "=== Phase 1: Minimum time transfer ===\n";
     phase.add_delta_time_objective(1.0);
-    auto flag_time = phase.solve_optimize();
+    auto flag_time = phase.solve(&ipm, {.presolve = true}).flag_;
     if (flag_time > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "SimpleLowThrust: time-optimal solve_optimize failed\n";
         return EXIT_FAILURE;
@@ -93,8 +94,8 @@ int main() {
         phase.add_integral_objective(GenericFunction<-1, 1>(obj_expr), {"u"});
     }
 
-    phase.optimizer().set_max_ls_iters(0);
-    auto flag_power = phase.optimize();
+    ipm.set_max_ls_iters(0);
+    auto flag_power = phase.solve(&ipm).flag_;
     if (flag_power > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "SimpleLowThrust: power-optimal optimize failed\n";
         return EXIT_FAILURE;
@@ -113,8 +114,8 @@ int main() {
         auto obj_expr = u_args.norm();
         phase.add_integral_objective(GenericFunction<-1, 1>(obj_expr), {"u"});
     }
-    phase.optimizer().set_max_ls_iters(2);
-    auto flag_mass = phase.optimize();
+    ipm.set_max_ls_iters(2);
+    auto flag_mass = phase.solve(&ipm).flag_;
     if (flag_mass > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "SimpleLowThrust: mass-optimal optimize failed\n";
         return EXIT_FAILURE;

@@ -1,7 +1,7 @@
-#include <tycho/tycho.h>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -194,16 +194,16 @@ int main() {
             X[6] = m0_phase1 + (mf_phase1 - m0_phase1) * (t / tf_phase1);
             IG1.push_back(X);
         } else if (t < tf_phase2) {
-            X[6] = m0_phase2 +
-                   (mf_phase2 - m0_phase2) * ((t - tf_phase1) / (tf_phase2 - tf_phase1));
+            X[6] =
+                m0_phase2 + (mf_phase2 - m0_phase2) * ((t - tf_phase1) / (tf_phase2 - tf_phase1));
             IG2.push_back(X);
         } else if (t < tf_phase3) {
-            X[6] = m0_phase3 +
-                   (mf_phase3 - m0_phase3) * ((t - tf_phase2) / (tf_phase3 - tf_phase2));
+            X[6] =
+                m0_phase3 + (mf_phase3 - m0_phase3) * ((t - tf_phase2) / (tf_phase3 - tf_phase2));
             IG3.push_back(X);
         } else {
-            X[6] = m0_phase4 +
-                   (mf_phase4 - m0_phase4) * ((t - tf_phase3) / (tf_phase4 - tf_phase3));
+            X[6] =
+                m0_phase4 + (mf_phase4 - m0_phase4) * ((t - tf_phase3) / (tf_phase4 - tf_phase3));
             IG4.push_back(X);
         }
     }
@@ -259,7 +259,7 @@ int main() {
 
     auto target_orbit_fn = MakeTargetOrbit(at, et, istart, Ot, Wt);
     phase4.add_equal_con(PhaseRegionFlags::Back, GenericFunction<-1, -1>(target_orbit_fn),
-                       {"R", "V"});
+                         {"R", "V"});
 
     phase4.add_value_objective(PhaseRegionFlags::Back, "m", -1.0);
 
@@ -273,14 +273,15 @@ int main() {
     // mass is discontinuous at staging events.
     ocp.add_forward_link_equal_con(phase1, phase4, {"R", "V", "t", "u"});
 
-    ocp.optimizer().set_opt_ls_mode("L1");
-    ocp.optimizer().set_soe_ls_mode("L1");
-    ocp.optimizer().set_max_ls_iters(2);
-    ocp.optimizer().set_print_level(1);
+    InteriorPointSolver ipm;
+    ipm.set_opt_ls_mode("L1");
+    ipm.set_soe_ls_mode("L1");
+    ipm.set_max_ls_iters(2);
+    ipm.set_print_level(1);
 
     std::cout << "Solving Delta III launch vehicle problem ...\n" << std::flush;
 
-    const auto status = ocp.solve_optimize();
+    const auto status = ocp.solve(&ipm, {.presolve = true}).flag_;
 
     if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "Delta3Launch (builder): FAILED (status " << static_cast<int>(status) << ")\n";

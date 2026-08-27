@@ -1,9 +1,9 @@
-#include <tycho/tycho.h>
 #include <cmath>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -57,11 +57,10 @@ auto make_chain_phase(double a, double b, int n_segs, double L) {
 
     phase.add_integral_param_function(GenericFunction<-1, 1>(length_expr), {"u"}, 0);
 
-    phase.optimizer().set_opt_ls_mode("L1");
-    phase.optimizer().set_max_ls_iters(2);
-    phase.optimizer().set_print_level(0);
-
-    phase.set_jet_job_mode(solvers::BackendProblemBase::JetJobModes::SolveOptimize);
+    // Jets are staged via set_jet_job() (M5 solve-API); until that lands, a
+    // batched run configures no per-job engine settings here and Jet::map's
+    // own jet_run() entry point is an interim placeholder that refuses every
+    // call -- see BackendProblemBase::jet_run()'s own doc comment.
 
     return phase;
 }
