@@ -47,7 +47,8 @@ TEST_F(OptimalControlTest, ShootingSparsityMatchesDenseSolve) {
         // Fresh phase per solve: transcription only runs once per phase.
         auto phase = make_brach_phase(100, 32, TranscriptionModes::CentralShooting);
         phase->enable_hessian_sparsity_ = sparsity;
-        auto status = phase->solve_optimize();
+        tycho::solvers::InteriorPointSolver ipm;
+        auto status = phase->solve(&ipm, {.presolve = true}).flag_;
         EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
         return phase->return_traj().back()[3]; // tf
     };

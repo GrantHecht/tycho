@@ -7,8 +7,8 @@
 
 #include "oc_test_utils.h"
 #include <gtest/gtest.h>
-#include <tycho/detail/optimal_control/builder/ode_builder.h>
 #include <tycho/detail/optimal_control/builder/ocp_wrapper.h>
+#include <tycho/detail/optimal_control/builder/ode_builder.h>
 #include <tycho/detail/optimal_control/builder/phase_wrapper.h>
 #include <tycho/detail/optimal_control/builder/runtime_ode.h>
 #include <tycho/tycho.h>
@@ -51,7 +51,7 @@ TEST_F(BuilderAPITest, BrachistochroneConverges) {
 
     // Front boundary: fix x, y, v, t
     phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "y", "v", "t"},
-                           Eigen::Vector4d(0, 10, 0, 0));
+                             Eigen::Vector4d(0, 10, 0, 0));
 
     // Back boundary: fix x, y
     phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "y"}, Eigen::Vector2d(10, 5));
@@ -63,7 +63,8 @@ TEST_F(BuilderAPITest, BrachistochroneConverges) {
     phase.add_delta_time_objective(1.0);
 
     // Solve
-    auto status = phase.solve_optimize();
+    tycho::solvers::InteriorPointSolver ipm;
+    auto status = phase.solve(&ipm, {.presolve = true}).flag_;
     EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
 
     // Check optimal time
@@ -145,7 +146,7 @@ TEST_F(BuilderAPITest, BrachistochroneMixedAPI) {
 
     // Named front boundary
     phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "y", "v", "t"},
-                           Eigen::Vector4d(0, 10, 0, 0));
+                             Eigen::Vector4d(0, 10, 0, 0));
 
     // Index-based back boundary
     Eigen::VectorXi back_idx(2);
@@ -158,7 +159,8 @@ TEST_F(BuilderAPITest, BrachistochroneMixedAPI) {
     // Minimize final time
     phase.add_delta_time_objective(1.0);
 
-    auto status = phase.solve_optimize();
+    tycho::solvers::InteriorPointSolver ipm;
+    auto status = phase.solve(&ipm, {.presolve = true}).flag_;
     EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
 
     auto result = phase.return_traj();
@@ -171,22 +173,22 @@ TEST_F(BuilderAPITest, OCPLinkThrowsWhenP2HasNoRegistry) {
 
     // Phase 1: has registry
     auto ode1 = ODEBuilder(3, 1)
-        .define([g](auto &args) {
-            auto v = args.x_var(2);
-            auto theta = args.u_var(0);
-            return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
-        })
-        .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"t", 3}, {"theta", 4}})
-        .build();
+                    .define([g](auto &args) {
+                        auto v = args.x_var(2);
+                        auto theta = args.u_var(0);
+                        return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
+                    })
+                    .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"t", 3}, {"theta", 4}})
+                    .build();
 
     // Phase 2: no registry
     auto ode2 = ODEBuilder(3, 1)
-        .define([g](auto &args) {
-            auto v = args.x_var(2);
-            auto theta = args.u_var(0);
-            return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
-        })
-        .build();
+                    .define([g](auto &args) {
+                        auto v = args.x_var(2);
+                        auto theta = args.u_var(0);
+                        return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
+                    })
+                    .build();
 
     std::vector<Eigen::VectorXd> traj;
     for (int i = 0; i < 50; ++i) {
@@ -203,9 +205,8 @@ TEST_F(BuilderAPITest, OCPLinkThrowsWhenP2HasNoRegistry) {
     ocp.add_phase(phase1);
     ocp.add_phase(phase2);
 
-    EXPECT_THROW(
-        ocp.add_forward_link_equal_con(phase1, phase2, {"x", "y", "v", "t"}),
-        std::invalid_argument);
+    EXPECT_THROW(ocp.add_forward_link_equal_con(phase1, phase2, {"x", "y", "v", "t"}),
+                 std::invalid_argument);
 }
 
 TEST_F(BuilderAPITest, OCPLinkThrowsOnMismatchedRegistries) {
@@ -213,23 +214,23 @@ TEST_F(BuilderAPITest, OCPLinkThrowsOnMismatchedRegistries) {
 
     // Phase 1: x=0, y=1, v=2
     auto ode1 = ODEBuilder(3, 1)
-        .define([g](auto &args) {
-            auto v = args.x_var(2);
-            auto theta = args.u_var(0);
-            return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
-        })
-        .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"t", 3}, {"theta", 4}})
-        .build();
+                    .define([g](auto &args) {
+                        auto v = args.x_var(2);
+                        auto theta = args.u_var(0);
+                        return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
+                    })
+                    .var_names({{"x", 0}, {"y", 1}, {"v", 2}, {"t", 3}, {"theta", 4}})
+                    .build();
 
     // Phase 2: same names but x=1, y=0 (swapped)
     auto ode2 = ODEBuilder(3, 1)
-        .define([g](auto &args) {
-            auto v = args.x_var(2);
-            auto theta = args.u_var(0);
-            return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
-        })
-        .var_names({{"x", 1}, {"y", 0}, {"v", 2}, {"t", 3}, {"theta", 4}})
-        .build();
+                    .define([g](auto &args) {
+                        auto v = args.x_var(2);
+                        auto theta = args.u_var(0);
+                        return stack(sin(theta) * v, cos(theta) * v * (-1.0), g * cos(theta));
+                    })
+                    .var_names({{"x", 1}, {"y", 0}, {"v", 2}, {"t", 3}, {"theta", 4}})
+                    .build();
 
     std::vector<Eigen::VectorXd> traj;
     for (int i = 0; i < 50; ++i) {
@@ -246,9 +247,7 @@ TEST_F(BuilderAPITest, OCPLinkThrowsOnMismatchedRegistries) {
     ocp.add_phase(phase1);
     ocp.add_phase(phase2);
 
-    EXPECT_THROW(
-        ocp.add_forward_link_equal_con(phase1, phase2, {"x", "y"}),
-        std::invalid_argument);
+    EXPECT_THROW(ocp.add_forward_link_equal_con(phase1, phase2, {"x", "y"}), std::invalid_argument);
 }
 
 TEST_F(BuilderAPITest, OCPIndexBasedLinkConstraint) {
@@ -287,7 +286,7 @@ TEST_F(BuilderAPITest, OCPIndexBasedLinkConstraint) {
 
     // Index-based link — the escape hatch for heterogeneous phase layouts
     Eigen::VectorXi link_vars(4);
-    link_vars << 0, 1, 2, 3;  // x, y, v, t
+    link_vars << 0, 1, 2, 3; // x, y, v, t
     ocp.add_forward_link_equal_con(phase1, phase2, link_vars);
 
     EXPECT_EQ(ocp.base().phases.size(), 2u);
@@ -295,8 +294,8 @@ TEST_F(BuilderAPITest, OCPIndexBasedLinkConstraint) {
 
 TEST_F(BuilderAPITest, OCPSolveThrowsWithNoPhases) {
     OptimalControlProblem ocp;
-    EXPECT_THROW(ocp.solve(), std::invalid_argument);
-    EXPECT_THROW(ocp.optimize(), std::invalid_argument);
-    EXPECT_THROW(ocp.solve_optimize(), std::invalid_argument);
-    EXPECT_THROW(ocp.optimize_solve(), std::invalid_argument);
+    tycho::solvers::InteriorPointSolver ipm;
+    EXPECT_THROW(ocp.solve(&ipm), std::invalid_argument);
+    EXPECT_THROW(ocp.solve(&ipm, {.mode = tycho::solvers::Mode::Feasible}), std::invalid_argument);
+    EXPECT_THROW(ocp.solve(&ipm, {.presolve = true}), std::invalid_argument);
 }

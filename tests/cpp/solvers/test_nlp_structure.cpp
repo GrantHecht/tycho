@@ -12,8 +12,8 @@ using TychoTest::SolverTest;
 // BackendProblemBase/OptimizationProblem live in tycho::solvers; this
 // file previously relied on the TychoTest -> tycho::solvers using-directive
 // leak (fixed in solver_test_utils.h) to see them unqualified.
-using tycho::solvers::OptimizationProblem;
 using tycho::solvers::BackendProblemBase;
+using tycho::solvers::OptimizationProblem;
 
 TEST_F(SolverTest, NLPDimensionsConsistency) {
     auto phase = make_brach_solver_phase(16);
@@ -38,18 +38,13 @@ TEST_F(SolverTest, NLPSparsityNonEmpty) {
     EXPECT_EQ(nlp->num_kkt_elems_, nlp->num_user_kkt_elems_ + nlp->num_solver_kkt_elems_);
 }
 
-// Regression: the direct-NLP ctor silently overrode base defaults with a
-// single partition and a single QP thread, giving direct-NLP users 1 QP
-// thread while Phase/OCP got min(TYCHO_DEFAULT_QP_THREADS, cores).
+// Regression (pre-M5): the direct-NLP ctor silently overrode base defaults
+// with a single partition, diverging from Phase/OCP's own default. The
+// paired QP-thread-default half of this regression retired along with the
+// problem-owned optimizer (M5): QP thread count is now a setting on
+// whichever InteriorPointSolver engine the caller constructs and passes to
+// solve(), not a value BackendProblemBase's constructor can default.
 TEST(OptimizationProblemDefaults, MatchesBaseInitPartitions) {
-    // On a single-threaded host the base defaults collapse to the same 1/1
-    // the old override produced — the assertions below would pass either way.
-    if (BackendProblemBase::default_num_partitions() <= 1 &&
-        std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count()) <= 1)
-        GTEST_SKIP() << "single-threaded host: defaults indistinguishable from the old override";
-
     OptimizationProblem prob;
     EXPECT_EQ(prob.num_partitions_, BackendProblemBase::default_num_partitions());
-    EXPECT_EQ(prob.optimizer_->settings().qp_threads_,
-              std::min(TYCHO_DEFAULT_QP_THREADS, tycho::utils::get_core_count()));
 }

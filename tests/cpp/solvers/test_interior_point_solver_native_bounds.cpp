@@ -11,10 +11,9 @@
 //
 // Tests come in three kinds. Pure kernels are checked against a written-out
 // formula. Single private helpers are driven through NativeBoundsHarness, which
-// InteriorPointSolver befriends (interior_point_solver.h). End-to-end solves go through the public entry
-// point and assert on where they land, what the multipliers say about the
-// active bound, and -- through a late-callback probe -- that no iterate ever
-// left the box on the way there.
+// InteriorPointSolver befriends (interior_point_solver.h). End-to-end solves go through the public
+// entry point and assert on where they land, what the multipliers say about the active bound, and
+// -- through a late-callback probe -- that no iterate ever left the box on the way there.
 //
 // The last group is the neutrality check the whole feature rests on: a problem
 // that declares no variable bounds leaves the bound state empty, leaves the
@@ -26,8 +25,8 @@
 #include "solver_test_utils.h"
 
 #include "tycho/detail/hven_namespaces.h"
-#include <hven/detail/interior/barrier_math.h>
-#include <hven/detail/interior/bound_set.h>
+#include "tycho/detail/solvers_vf/optimization_problem.h"
+#include <hven/detail/drivers/interior_point_solver_presets.h>
 #include <hven/detail/globalization/acceptance_strategy.h>
 #include <hven/detail/globalization/backtracking_line_search.h>
 #include <hven/detail/globalization/noop_recovery.h>
@@ -36,10 +35,10 @@
 #include <hven/detail/globalization/soc.h>
 #include <hven/detail/globalization/solver_context.h>
 #include <hven/detail/globalization/watchdog.h>
-#include <hven/model/non_linear_program.h>
-#include "tycho/detail/solvers_vf/optimization_problem.h"
+#include <hven/detail/interior/barrier_math.h>
+#include <hven/detail/interior/bound_set.h>
 #include <hven/drivers/interior_point_solver.h>
-#include <hven/detail/drivers/interior_point_solver_presets.h>
+#include <hven/model/non_linear_program.h>
 
 #include <gtest/gtest.h>
 
@@ -59,12 +58,12 @@
 using tycho::solvers::BoundDualState;
 using tycho::solvers::BoundSet;
 using tycho::solvers::FixedVariableTreatments;
+using tycho::solvers::InteriorPointSolver;
 using tycho::solvers::kBoundMultInitCap;
 using tycho::solvers::kFreeModeClipMuCap;
 using tycho::solvers::kKappaD;
 using tycho::solvers::kKappaSigma;
 using tycho::solvers::NonLinearProgram;
-using tycho::solvers::InteriorPointSolver;
 
 namespace {
 
@@ -198,18 +197,18 @@ class NativeBoundsHarness {
         for (int i = 0; i < num_vars; i++) {
             native_bounds_add_shifted_square(prob_, i, center);
         }
-        prob_.optimizer_->set_print_level(3);
         prob_.transcribe();
-        solver_ = prob_.optimizer_.get();
+        solver_.set_nlp(prob_.nlp_);
+        solver_.set_print_level(3);
     }
 
-    InteriorPointSolver &solver() { return *solver_; }
+    InteriorPointSolver &solver() { return solver_; }
     NonLinearProgram &nlp() { return *prob_.nlp_; }
-    int pv() const { return solver_->primal_vars_; }
-    int dim() const { return solver_->kkt_dim_; }
-    int ec() const { return solver_->equal_cons_; }
-    int ic() const { return solver_->inequal_cons_; }
-    int sv() const { return solver_->slack_vars_; }
+    int pv() const { return solver_.primal_vars_; }
+    int dim() const { return solver_.kkt_dim_; }
+    int ec() const { return solver_.equal_cons_; }
+    int ic() const { return solver_.inequal_cons_; }
+    int sv() const { return solver_.slack_vars_; }
 
     // Adds x[i0] + x[i1] == target BEFORE transcription is re-run, for the
     // equality-only end-to-end case.
@@ -219,7 +218,7 @@ class NativeBoundsHarness {
         prob_.add_equal_con(tycho::vf::GenericFunction<-1, -1>(con),
                             (Eigen::VectorXi(2) << i0, i1).finished());
         prob_.transcribe();
-        solver_ = prob_.optimizer_.get();
+        solver_.set_nlp(prob_.nlp_);
     }
 
     // Adds x[i0] <= target, which is what gives the solver a slack block --
@@ -231,22 +230,22 @@ class NativeBoundsHarness {
         prob_.add_inequal_con(tycho::vf::GenericFunction<-1, -1>(con),
                               (Eigen::VectorXi(1) << i0).finished());
         prob_.transcribe();
-        solver_ = prob_.optimizer_.get();
+        solver_.set_nlp(prob_.nlp_);
     }
 
     // Builds the globalization components from the current settings, so a
     // restoration strategy exists for the exit sequence to hand back to without
     // running a solve first.
-    void build_components() { solver_->rebuild_globalization_components(); }
+    void build_components() { solver_.rebuild_globalization_components(); }
 
-    void set_stashed_mu(double mu) { solver_->stashed_mu_ = mu; }
+    void set_stashed_mu(double mu) { solver_.stashed_mu_ = mu; }
 
     // The nested restoration return, driven directly. Returns the barrier
     // parameter it restored.
     double drive_nested_restoration_exit(Eigen::VectorXd &xsl) {
         double mu = 0.0;
-        solver_->exit_feasibility_restoration_nested(xsl, /*obj_scale=*/1.0, /*theta_orig=*/0.0,
-                                                     /*barr_obj=*/0.0, mu);
+        solver_.exit_feasibility_restoration_nested(xsl, /*obj_scale=*/1.0, /*theta_orig=*/0.0,
+                                                    /*barr_obj=*/0.0, mu);
         return mu;
     }
 
@@ -254,8 +253,8 @@ class NativeBoundsHarness {
     // own bound classification (at the shipped relax factor), the interior push
     // and the whole iteration, so this is the end-to-end path rather than the
     // hand-driven one the kernel tests use.
-    Eigen::VectorXd solve(const Eigen::VectorXd &x0) { return solver_->optimize(x0); }
-    tycho::ConvergenceFlags flag() const { return solver_->result().converge_flag_; }
+    Eigen::VectorXd solve(const Eigen::VectorXd &x0) { return solver_.optimize(x0); }
+    tycho::ConvergenceFlags flag() const { return solver_.result().converge_flag_; }
 
     // Declares a bound and re-materializes the staged declarations, mirroring
     // what a transcription would have staged. make_nlp reallocates the KKT
@@ -266,7 +265,7 @@ class NativeBoundsHarness {
         prob_.nlp_->set_variable_bound(index, lower, upper);
         prob_.nlp_->make_nlp(prob_.nlp_->primal_vars_, prob_.nlp_->user_equal_cons_,
                              prob_.nlp_->inequal_cons_);
-        solver_->set_nlp(prob_.nlp_);
+        solver_.set_nlp(prob_.nlp_);
     }
 
     // Classifies the declared bounds with NO relaxation (so the recorded values
@@ -275,14 +274,14 @@ class NativeBoundsHarness {
     // in run_phase_sequence() does.
     void configure_bounds() {
         prob_.nlp_->configure_variable_treatment(FixedVariableTreatments::MakeParameter, 0.0);
-        solver_->refresh_nlp_dimensions();
-        solver_->bounds_ =
+        solver_.refresh_nlp_dimensions();
+        solver_.bounds_ =
             prob_.nlp_->variable_bound_set().any() ? &prob_.nlp_->variable_bound_set() : nullptr;
     }
 
-    const BoundSet *installed_bounds() const { return solver_->bounds_; }
-    void install_bounds(const BoundSet *b) { solver_->bounds_ = b; }
-    BoundDualState &duals() { return solver_->bound_duals_; }
+    const BoundSet *installed_bounds() const { return solver_.bounds_; }
+    void install_bounds(const BoundSet *b) { solver_.bounds_ = b; }
+    BoundDualState &duals() { return solver_.bound_duals_; }
 
     // The same state on a InteriorPointSolver this harness does not own -- a phase's
     // optimizer, or one driving a problem built outside the harness.
@@ -295,8 +294,8 @@ class NativeBoundsHarness {
     // what the step-length mechanism reads to find the bound legs.
     tycho::solvers::SolverContext live_context() {
         tycho::solvers::SolverContext ctx = this->bare_context();
-        ctx.bounds_ = solver_->bounds_;
-        ctx.bound_duals_ = &solver_->bound_duals_;
+        ctx.bounds_ = solver_.bounds_;
+        ctx.bound_duals_ = &solver_.bound_duals_;
         return ctx;
     }
 
@@ -305,16 +304,16 @@ class NativeBoundsHarness {
     // it reads are private to InteriorPointSolver.
     tycho::solvers::SolverContext bare_context() {
         return tycho::solvers::SolverContext{
-            &this->nlp(),           solver_->kkt_sol_,
-            solver_->settings_,     solver_->primal_vars_,
-            solver_->slack_vars_,   solver_->equal_cons_,
-            solver_->inequal_cons_, solver_->kkt_dim_,
-            solver_->stli_scratch_, solver_->declaration_primals_scratch_};
+            &this->nlp(),          solver_.kkt_sol_,
+            solver_.settings_,     solver_.primal_vars_,
+            solver_.slack_vars_,   solver_.equal_cons_,
+            solver_.inequal_cons_, solver_.kkt_dim_,
+            solver_.stli_scratch_, solver_.declaration_primals_scratch_};
     }
 
-    void push(Eigen::VectorXd &x, double mu0) { solver_->push_initial_point_interior(x, mu0); }
+    void push(Eigen::VectorXd &x, double mu0) { solver_.push_initial_point_interior(x, mu0); }
     void direction(const Eigen::VectorXd &x, const Eigen::VectorXd &dx, double mu) {
-        solver_->compute_bound_dual_direction(x, dx, mu);
+        solver_.compute_bound_dual_direction(x, dx, mu);
     }
     // `xsl_new` is a full compound iterate. The harness problems carry no
     // constraints, so its width is the primal width and the slack/multiplier
@@ -323,14 +322,14 @@ class NativeBoundsHarness {
     // stationarity block handed over explicitly.
     double pd_error(Eigen::VectorXd &xsl, Eigen::VectorXd &rhs, const Eigen::VectorXd &prim_base,
                     double mu) {
-        tycho::solvers::KKTVector vx = solver_->kkt_view(xsl);
-        tycho::solvers::KKTVector vr = solver_->kkt_view(rhs);
-        return solver_->primal_dual_error(vx, vr, prim_base, mu);
+        tycho::solvers::KKTVector vx = solver_.kkt_view(xsl);
+        tycho::solvers::KKTVector vr = solver_.kkt_view(rhs);
+        return solver_.primal_dual_error(vx, vr, prim_base, mu);
     }
 
     void commit(double alphad, Eigen::VectorXd xsl_new, double mu, bool monotone_mu) {
-        tycho::solvers::KKTVector v = solver_->kkt_view(xsl_new);
-        solver_->apply_bound_dual_step(alphad, v, mu, monotone_mu);
+        tycho::solvers::KKTVector v = solver_.kkt_view(xsl_new);
+        solver_.apply_bound_dual_step(alphad, v, mu, monotone_mu);
     }
 
     // Puts the solver's primal-diagonal coefficients into the state every
@@ -346,18 +345,18 @@ class NativeBoundsHarness {
         Eigen::VectorXd GX = Eigen::VectorXd::Zero(pv());
         Eigen::VectorXd RHS = Eigen::VectorXd::Zero(dim());
         double val = 0.0;
-        solver_->eval_nlp(InteriorPointSolver::AlgorithmModes::OPT, 1.0, XSL, val, GX, RHS,
-                          solver_->kkt_sol_.matrix(), 0.1);
+        solver_.eval_nlp(InteriorPointSolver::AlgorithmModes::OPT, 1.0, XSL, val, GX, RHS,
+                         solver_.kkt_sol_.matrix(), 0.1);
         Eigen::VectorXd diag(pv());
         for (int i = 0; i < pv(); i++) {
-            diag[i] = solver_->kkt_sol_.matrix().coeff(i, i);
+            diag[i] = solver_.kkt_sol_.matrix().coeff(i, i);
         }
         return diag;
     }
 
   private:
     tycho::solvers::OptimizationProblem prob_;
-    InteriorPointSolver *solver_ = nullptr;
+    InteriorPointSolver solver_;
 };
 
 // --- Barrier kernels ------------------------------------------------------
@@ -1302,15 +1301,16 @@ TEST(NativeBounds, EqualityOnlyProblemWithABoundedVariableSolves) {
 // needs to touch, without dragging the solve off the answer.
 TEST(NativeBounds, PhaseWithAControlPathBoundSolvesNatively) {
     auto phase = native_bounds_build_brach();
-    phase->optimizer_->set_print_level(3);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
 
     NativeBoundsInteriorProbe probe;
     probe.resolve = native_bounds_phase_resolver(phase);
-    probe.install(*phase->optimizer_);
+    probe.install(ipm);
 
     // A phase has no NonLinearProgram until it is transcribed, and its solve is
     // what transcribes it -- so nothing may read phase->nlp_ before this line.
-    const auto status = phase->solve_optimize();
+    const auto status = phase->solve(&ipm, {.presolve = true}).flag_;
     EXPECT_EQ(status, tycho::ConvergenceFlags::CONVERGED);
 
     // The control bound was recorded natively, so no inequality rows carry it.
@@ -1332,11 +1332,15 @@ TEST(NativeBounds, PhaseWithAControlPathBoundSolvesNatively) {
 TEST(NativeBounds, ABoundAndAnEquivalentInequalityBoxAgreeAndTheBoundKktIsSmaller) {
     auto bounded = native_bounds_build_brach();
     auto constrained = native_bounds_build_brach_with_inequality_box();
-    bounded->optimizer_->set_print_level(3);
-    constrained->optimizer_->set_print_level(3);
+    tycho::solvers::InteriorPointSolver ipm_bounded;
+    tycho::solvers::InteriorPointSolver ipm_constrained;
+    ipm_bounded.set_print_level(3);
+    ipm_constrained.set_print_level(3);
 
-    ASSERT_EQ(bounded->solve_optimize(), tycho::ConvergenceFlags::CONVERGED);
-    ASSERT_EQ(constrained->solve_optimize(), tycho::ConvergenceFlags::CONVERGED);
+    ASSERT_EQ(bounded->solve(&ipm_bounded, {.presolve = true}).flag_,
+              tycho::ConvergenceFlags::CONVERGED);
+    ASSERT_EQ(constrained->solve(&ipm_constrained, {.presolve = true}).flag_,
+              tycho::ConvergenceFlags::CONVERGED);
 
     EXPECT_NEAR(bounded->return_traj().back()[3], constrained->return_traj().back()[3], 1.0e-3);
 
@@ -1479,7 +1483,8 @@ TEST(NativeBounds, WatchdogRevertRestoresTheBoundMultipliersWithTheIterate) {
         double alphad = 1.0;
         int soc_steps = 0;
         return watchdog.on_step_rejected(citer, iters, ctx, acceptance, mechanism,
-                                         InteriorPointSolver::LineSearchModes::AUGLANG, /*obj_scale=*/1.0,
+                                         InteriorPointSolver::LineSearchModes::AUGLANG,
+                                         /*obj_scale=*/1.0,
                                          /*mu=*/1.0, merit, /*barr_obj=*/0.0, v, v, v, v, v, alpha,
                                          alphap, alphad, soc_steps, resolved_depth, activations);
     };
@@ -1661,7 +1666,8 @@ TEST(NativeBounds, TheInfeasibilityMeasureExcludesTheBoundBarrierAccount) {
         ctx.bounds_ = with_bounds ? h.installed_bounds() : nullptr;
         NativeBoundsCapturingAcceptance acceptance;
         tycho::solvers::IterateInfo citer;
-        mechanism.run_acceptance_backtrack(InteriorPointSolver::LineSearchModes::AUGLANG, /*obj_scale=*/1.0, mu,
+        mechanism.run_acceptance_backtrack(InteriorPointSolver::LineSearchModes::AUGLANG,
+                                           /*obj_scale=*/1.0, mu,
                                            /*prim_obj=*/0.0, /*barr_obj=*/0.0, xsl, dxsl, xsl2, rhs,
                                            rhs2, acceptance, citer, iters, ctx);
         EXPECT_EQ(acceptance.calls_, 1) << "the ladder did not evaluate exactly one trial";
@@ -1732,25 +1738,24 @@ class NativeBoundsRestorationHarness {
             prob_.add_equal_con(tycho::vf::GenericFunction<-1, -1>(x0 * x0 + x1 * x1 - 1.0),
                                 (Eigen::VectorXi(2) << 0, 1).finished());
         }
-        prob_.optimizer_->set_print_level(3);
-        prob_.optimizer_->set_qp_threads(1);
         prob_.transcribe();
         prob_.nlp_->set_variable_bound(0, 0.9, 0.99);
         prob_.nlp_->make_nlp(prob_.nlp_->primal_vars_, prob_.nlp_->user_equal_cons_,
                              prob_.nlp_->inequal_cons_);
-        prob_.optimizer_->set_nlp(prob_.nlp_);
-        prob_.optimizer_->settings().restoration_mode_ = mode;
-        solver_ = prob_.optimizer_.get();
+        solver_.set_nlp(prob_.nlp_);
+        solver_.set_print_level(3);
+        solver_.set_qp_threads(1);
+        solver_.settings().restoration_mode_ = mode;
     }
 
-    InteriorPointSolver &solver() { return *solver_; }
+    InteriorPointSolver &solver() { return solver_; }
     const NonLinearProgram *nlp() const { return prob_.nlp_.get(); }
     static Eigen::VectorXd guess() { return (Eigen::VectorXd(2) << 0.95, 5.0).finished(); }
-    Eigen::VectorXd solve() { return solver_->optimize(this->guess()); }
+    Eigen::VectorXd solve() { return solver_.optimize(this->guess()); }
 
   private:
     tycho::solvers::OptimizationProblem prob_;
-    InteriorPointSolver *solver_ = nullptr;
+    InteriorPointSolver solver_;
 };
 
 // The shared body of the two restoration-episode tests. The elastic (or
@@ -1876,15 +1881,16 @@ namespace {
 // fields and no algorithm code.
 void native_bounds_expect_preset_solves(const char *preset) {
     auto phase = native_bounds_build_brach();
-    phase->optimizer_->set_print_level(3);
-    phase->optimizer_->set_qp_threads(1);
-    phase->optimizer_->apply_preset(preset);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
+    ipm.set_qp_threads(1);
+    ipm.apply_preset(preset);
 
     NativeBoundsInteriorProbe probe;
     probe.resolve = native_bounds_phase_resolver(phase);
-    probe.install(*phase->optimizer_);
+    probe.install(ipm);
 
-    const auto status = phase->solve_optimize();
+    const auto status = phase->solve(&ipm, {.presolve = true}).flag_;
     EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE) << "preset: " << preset;
 
     // The bound reaches the solver as a bound under every one of them -- an
@@ -1998,24 +2004,25 @@ TEST(NativeBounds, AThrowingTrialTheBoundLegsCannotPreventIsStillJustARejectedRu
         prob.add_equal_con(tycho::vf::GenericFunction<-1, -1>(x - 1.0),
                            (Eigen::VectorXi(1) << 0).finished());
     }
-    prob.optimizer_->set_print_level(3);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     prob.transcribe();
     prob.nlp_->set_variable_bound(0, -5.0, 5.0);
     prob.nlp_->make_nlp(prob.nlp_->primal_vars_, prob.nlp_->user_equal_cons_,
                         prob.nlp_->inequal_cons_);
-    prob.optimizer_->set_nlp(prob.nlp_);
+    ipm.set_nlp(prob.nlp_);
 
     NativeBoundsInteriorProbe probe;
     probe.resolve = [&prob]() -> const NonLinearProgram * { return prob.nlp_.get(); };
-    probe.install(*prob.optimizer_);
+    probe.install(ipm);
 
-    const Eigen::VectorXd sol = prob.optimizer_->optimize(Eigen::VectorXd::Constant(1, 0.0));
+    const Eigen::VectorXd sol = ipm.optimize(Eigen::VectorXd::Constant(1, 0.0));
 
-    EXPECT_EQ(prob.optimizer_->result().converge_flag_, tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_EQ(ipm.result().converge_flag_, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_NEAR(sol[0], 1.0, 1.0e-6);
     // The throw happened and was absorbed, rather than the threshold never
     // having been crossed at all.
-    EXPECT_GE(prob.optimizer_->eval_error_log().count_, 1);
+    EXPECT_GE(ipm.eval_error_log().count_, 1);
     EXPECT_TRUE(prob.nlp_->has_variable_bounds());
     probe.expect_every_iterate_interior();
 }

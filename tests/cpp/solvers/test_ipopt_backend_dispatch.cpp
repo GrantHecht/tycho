@@ -1,17 +1,21 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Backend-neutral NLP solve dispatch (BackendProblemBase::nlp_solver_).
+// Backend-neutral engine dispatch (tycho::solvers::EngineRef).
 //
-// Every solve/optimize entry point routes through a single dispatch seam so an
-// alternative NLP solver backend can intercept the transcribed NLP. These tests
-// run in the default build (no Ipopt linked): they lock the default backend to
-// the built-in solver, verify that selecting the Ipopt backend without build
-// support fails loudly rather than silently falling back, and pin the sentinel
-// defaults of the run-info record. Solve-path tests for the Ipopt backend
-// itself live in the build-gated Ipopt test group.
+// M5 solve-API: backend selection is no longer a property stored on the
+// problem (the old BackendProblemBase::nlp_solver_/NLPSolvers enum); it is
+// simply which engine (InteriorPointSolver or IpoptSolver) the caller passes
+// to solve(). These tests run in the default build (no Ipopt linked): they
+// pin that constructing an IpoptSolver engine without ENABLE_IPOPT fails
+// loudly at construction time rather than silently falling back, that
+// adaptive mesh refinement refuses an engine that reports no constraint
+// residuals (Ipopt is such an engine) before touching the host, and the
+// sentinel defaults of the run-info record. Solve-path tests for the Ipopt
+// backend itself live in the build-gated Ipopt test group.
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "solver_test_utils.h"
 
+#include "tycho/detail/solvers/engines.h"
 #include "tycho/detail/solvers/nlp_backend.h"
 #include "tycho/detail/solvers_vf/optimization_problem.h"
 
@@ -48,77 +52,50 @@ std::unique_ptr<OptimizationProblem> build_ipopt_dispatch_nlp() {
         auto x = args.coeff<0>();
         prob->add_equal_con(GenericFunction<-1, -1>(x - 1.0), (Eigen::VectorXi(1) << 0).finished());
     }
-    prob->optimizer_->set_print_level(3);
     return prob;
 }
 
-TEST(NlpSolverDispatch, DefaultsToInteriorPoint) {
+TEST(NlpSolverDispatch, InteriorPointSolverEngineSolves) {
     auto prob = build_ipopt_dispatch_nlp();
-    EXPECT_EQ(prob->nlp_solver_, ts::NLPSolvers::interior_point);
-    auto flag = prob->optimize();
+    ts::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
+    auto flag = prob->solve(&ipm).flag_;
     EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
-    EXPECT_NEAR(prob->optimizer_->result().obj_val_, 1.0, 1e-6);
+    EXPECT_NEAR(ipm.result().obj_val_, 1.0, 1e-6);
 }
 
-TEST(NlpSolverDispatch, IpoptWithoutBuildSupportThrows) {
+// IpoptSolver's constructor is the refusal point, not a per-problem dispatch
+// gate: any code path that would construct one without ENABLE_IPOPT fails
+// here, before there is a problem or an engine reference to dispatch on.
+TEST(NlpSolverDispatch, ConstructingIpoptSolverWithoutBuildSupportThrows) {
     if (ts::ipopt_backend::available()) {
         GTEST_SKIP() << "built with Ipopt support";
     }
-    auto prob = build_ipopt_dispatch_nlp();
-    prob->nlp_solver_ = ts::NLPSolvers::ipopt;
-    EXPECT_THROW(prob->optimize(), std::runtime_error);
+    EXPECT_THROW(
+        {
+            ts::IpoptSolver ipopt;
+            (void)ipopt;
+        },
+        std::runtime_error);
 }
 
-// The phase entry points route through the same seam, so selecting the Ipopt
-// backend without build support fails there too rather than silently solving
-// with the built-in solver.
-TEST(NlpSolverDispatch, PhaseIpoptWithoutBuildSupportThrows) {
-    if (ts::ipopt_backend::available()) {
-        GTEST_SKIP() << "built with Ipopt support";
-    }
-    auto phase = make_brach_solver_phase(4);
-    phase->nlp_solver_ = ts::NLPSolvers::ipopt;
-    EXPECT_THROW(phase->solve(), std::runtime_error);
-}
-
-// Mesh refinement consumes the built-in solver's constraint residuals at the
-// solution, so it is rejected up front for any other backend -- before a solve
-// is attempted -- instead of refining on stale data.
+// Mesh refinement consumes an engine's constraint residuals at the solution,
+// so run_amr_loop refuses any engine that does not report them -- before a
+// solve is attempted -- instead of refining on stale data. Ipopt is such an
+// engine (fill_ipopt_stage leaves StageOutput::eq_cons_/iq_cons_ empty).
+// Constructing an IpoptSolver requires ENABLE_IPOPT (see
+// ConstructingIpoptSolverWithoutBuildSupportThrows above), so this test only
+// runs in a build configured with it; the build-gated Ipopt test group
+// carries the rest of the Ipopt-specific solve-path coverage.
 TEST(NlpSolverDispatch, AdaptiveMeshWithIpoptRejected) {
-    if (ts::ipopt_backend::available()) {
-        GTEST_SKIP() << "built with Ipopt support";
+    if (!ts::ipopt_backend::available()) {
+        GTEST_SKIP() << "not built with Ipopt support";
     }
     auto phase = make_brach_solver_phase(4);
     phase->set_adaptive_mesh(true);
     phase->print_mesh_info_ = false;
-    phase->nlp_solver_ = ts::NLPSolvers::ipopt;
-    EXPECT_THROW(phase->solve(), std::invalid_argument);
-}
-
-// Ipopt is not reliably re-entrant, so a Jet batch element that selects it is
-// rejected at the jet_run entry point -- before jet_initialize() touches the
-// problem and before any solve begins. The guard reads the backend enum, which
-// exists in every build, so this holds with or without Ipopt linked.
-TEST(NlpSolverDispatch, JetRunWithIpoptBackendRejected) {
-    auto prob = build_ipopt_dispatch_nlp();
-    prob->set_jet_job_mode(ts::BackendProblemBase::JetJobModes::Optimize);
-    prob->nlp_solver_ = ts::NLPSolvers::ipopt;
-    try {
-        prob->jet_run();
-        ADD_FAILURE() << "expected the Ipopt re-entrancy guard to throw";
-    } catch (const std::invalid_argument &e) {
-        const std::string msg = e.what();
-        EXPECT_NE(msg.find("Ipopt is not reliably re-entrant"), std::string::npos) << msg;
-    }
-}
-
-// The same batch element with the built-in backend runs to convergence, so the
-// rejection above is attributable to the backend selection and not to the Jet
-// entry point itself.
-TEST(NlpSolverDispatch, JetRunWithInteriorPointBackendRuns) {
-    auto prob = build_ipopt_dispatch_nlp();
-    prob->set_jet_job_mode(ts::BackendProblemBase::JetJobModes::Optimize);
-    EXPECT_EQ(prob->jet_run(), tycho::ConvergenceFlags::CONVERGED);
+    ts::IpoptSolver ipopt;
+    EXPECT_THROW(phase->solve(&ipopt), std::invalid_argument);
 }
 
 TEST(NlpSolverDispatch, RunInfoDefaultsAreSentinels) {

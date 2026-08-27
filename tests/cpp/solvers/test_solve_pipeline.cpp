@@ -87,10 +87,11 @@ std::unique_ptr<OptimizationProblem> solve_pipeline_build_inequality_nlp() {
     return prob;
 }
 
-// min x^2 with x fixed at 3.0 and fixed_variable_treatment_ = MakeConstraint,
-// so that optimize() installs one internal fixing row ("x - 3 = 0") on
-// prob->nlp_ via NonLinearProgram::configure_variable_treatment -- the
-// artifact SqpFeasibleRefusesByName's sibling guard below refuses on.
+// min x^2 with x fixed at 3.0. The caller solves this with an engine whose
+// fixed_variable_treatment_ = MakeConstraint, so that the solve installs one
+// internal fixing row ("x - 3 = 0") on prob->nlp_ via
+// NonLinearProgram::configure_variable_treatment -- the artifact
+// SqpFeasibleRefusesByName's sibling guard below refuses on.
 std::unique_ptr<OptimizationProblem> solve_pipeline_build_make_constraint_nlp() {
     using tycho::vf::Arguments;
     using tycho::vf::GenericFunction;
@@ -102,8 +103,6 @@ std::unique_ptr<OptimizationProblem> solve_pipeline_build_make_constraint_nlp() 
         prob->add_objective(GenericFunction<-1, 1>(x * x), (Eigen::VectorXi(1) << 0).finished());
     }
     prob->add_variable_bound(0, 3.0, 3.0);
-    prob->optimizer_->settings().fixed_variable_treatment_ =
-        FixedVariableTreatments::MakeConstraint;
     return prob;
 }
 
@@ -250,10 +249,12 @@ TEST(SolvePipeline, IpoptFeasibleRefusesByName) {
 
 TEST(SolvePipeline, SqpRefusesMakeConstraintInternalFixingRows) {
     auto prob = solve_pipeline_build_make_constraint_nlp();
+    InteriorPointSolver ipm;
+    ipm.settings().fixed_variable_treatment_ = FixedVariableTreatments::MakeConstraint;
     // Materializes the internal fixing row on prob->nlp_ via
     // configure_variable_treatment(MakeConstraint, ...), run from inside
-    // optimize()'s own transcribe-then-solve path.
-    prob->optimize();
+    // solve()'s own transcribe-then-solve path.
+    prob->solve(&ipm);
     ASSERT_TRUE(prob->nlp_);
     ASSERT_GT(prob->nlp_->internal_fixed_constraints(), 0);
 
@@ -553,7 +554,6 @@ TEST(SolvePipeline, AdaptiveMeshRefinesThroughNewSolvePipeline) {
     // combination test_mesh_refinement.cpp's MeshRefinementIterates uses to
     // force at least one real refinement within a handful of iterations.
     auto phase = TychoTest::make_brach_phase(50, 8);
-    phase->optimizer_->set_print_level(0);
     phase->print_mesh_info_ = false;
     phase->set_adaptive_mesh(true);
     phase->set_mesh_tol(1e-7);
@@ -564,6 +564,7 @@ TEST(SolvePipeline, AdaptiveMeshRefinesThroughNewSolvePipeline) {
     const int coarse_primal_vars = phase->nlp_->primal_vars_;
 
     InteriorPointSolver ipm;
+    ipm.set_print_level(0);
     EngineRef ref = &ipm;
     SolveOptions opts;
     opts.presolve = true; // mirrors the old solve_optimize() shape this mesh loop used
@@ -605,9 +606,9 @@ TEST(SolvePipeline, AdaptiveMeshRefinesThroughNewSolvePipeline) {
 
 TEST(SolvePipeline, SinglePhaseSolveHasExactlyOnePhaseResult) {
     auto phase = TychoTest::make_linear_phase();
-    phase->optimizer_->set_print_level(0);
 
     InteriorPointSolver ipm;
+    ipm.set_print_level(0);
     EngineRef ref = &ipm;
     SolveResult result = phase->solve(ref);
 
@@ -654,9 +655,9 @@ TEST(SolvePipeline, MultiPhaseSlicesTileTheWholeSpace) {
     // which zero-fills its bound multiplier by construction regardless of
     // how "away from the optimum" the pin is. RelaxBounds keeps it a
     // genuine two-sided bounded variable instead, so its z is real; the
-    // solving ENGINE's own settings are what matter here (not either
-    // phase's own optimizer_, which the EngineRef-based solve() below never
-    // touches).
+    // solving ENGINE's own settings are what matter here -- there is no
+    // problem-owned optimizer any more for a stray per-phase setting to
+    // shadow it with.
     //
     // Together this guarantees eq_lmults_/iq_lmults_/bound_lmults_ are all
     // nonzero and phase-distinct, rather than vacuously all-zero.
@@ -687,9 +688,9 @@ TEST(SolvePipeline, MultiPhaseSlicesTileTheWholeSpace) {
     OptimalControlProblemBase ocp;
     ocp.add_phase(phase0);
     ocp.add_phase(phase1);
-    ocp.optimizer_->set_print_level(0);
 
     InteriorPointSolver ipm;
+    ipm.set_print_level(0);
     ipm.settings().fixed_variable_treatment_ = FixedVariableTreatments::RelaxBounds;
     EngineRef ref = &ipm;
     SolveResult result = ocp.solve(ref);
@@ -756,9 +757,9 @@ TEST(SolvePipeline, MultiPhaseSlicesTileTheWholeSpace) {
 
 TEST(SolvePipeline, PhaseResultIsSnapshotNotView) {
     auto phase = solve_pipeline_make_snapshot_phase();
-    phase->optimizer_->set_print_level(0);
 
     InteriorPointSolver ipm;
+    ipm.set_print_level(0);
     EngineRef ref = &ipm;
     SolveResult result = phase->solve(ref);
 

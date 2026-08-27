@@ -46,13 +46,13 @@ namespace {
 using tycho::solvers::AcceptanceStrategy;
 using tycho::solvers::FeasibilitySwitchRecovery;
 using tycho::solvers::GlobalizationMechanism;
+using tycho::solvers::InteriorPointSolver;
 using tycho::solvers::IterateInfo;
 using tycho::solvers::kRecoveryDepthRestoration;
 using tycho::solvers::kRecoveryDepthUnresolved;
 using tycho::solvers::kRecoveryDepthWatchdog;
 using tycho::solvers::OptimizationProblem;
 using tycho::solvers::ProgressMeasures;
-using tycho::solvers::InteriorPointSolver;
 using tycho::solvers::RecoveryChain;
 using tycho::solvers::RestorationModes;
 using tycho::solvers::RestorationStrategy;
@@ -132,9 +132,9 @@ class FeasSwitchStubInner : public RecoveryChain {
 // by FeasibilitySwitchRecovery, which only reads ctx.restoration_ / RHS).
 class FeasSwitchUnusedMechanism : public GlobalizationMechanism {
   public:
-    double compute_step(InteriorPointSolver::LineSearchModes, double, double, double, double, Eigen::VectorXd &,
+    double compute_step(InteriorPointSolver::LineSearchModes, double, double, double, double,
                         Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &,
-                        AcceptanceStrategy &, double &, double &, IterateInfo &,
+                        Eigen::VectorXd &, AcceptanceStrategy &, double &, double &, IterateInfo &,
                         const std::vector<IterateInfo> &, SolverContext &) override {
         ADD_FAILURE() << "mechanism must not be reached by FeasibilitySwitchRecovery";
         return 1.0;
@@ -166,8 +166,7 @@ class FeasSwitchUnusedAcceptance : public AcceptanceStrategy {
 // Drive FeasibilitySwitchRecovery::on_step_rejected once and return its Action;
 // captures resolved_depth via the out-parameter.
 RecoveryChain::Action drive_feas_switch(FeasibilitySwitchRecovery &fsr, SolverContext &ctx,
-                                        int &resolved_depth_out,
-                                        IterateInfo *citer_out = nullptr) {
+                                        int &resolved_depth_out, IterateInfo *citer_out = nullptr) {
     FeasSwitchUnusedMechanism mechanism;
     FeasSwitchUnusedAcceptance acceptance;
     IterateInfo local_citer;
@@ -179,8 +178,8 @@ RecoveryChain::Action drive_feas_switch(FeasibilitySwitchRecovery &fsr, SolverCo
     int watchdog_activations = 0;
     resolved_depth_out = kRecoveryDepthUnresolved;
     return fsr.on_step_rejected(citer, iters, ctx, acceptance, mechanism,
-                                InteriorPointSolver::LineSearchModes::AUGLANG, 1.0, 1e-3, 0.0, 0.0, v, v, v, v, v,
-                                alpha, alphap, alphad, soc_steps, resolved_depth_out,
+                                InteriorPointSolver::LineSearchModes::AUGLANG, 1.0, 1e-3, 0.0, 0.0,
+                                v, v, v, v, v, alpha, alphap, alphad, soc_steps, resolved_depth_out,
                                 watchdog_activations);
 }
 
@@ -194,7 +193,8 @@ TEST(FeasibilitySwitchTruthTable, InnerRetryPassesThrough) {
     inert.restoration_ = &restoration;
     SolverContext ctx = inert.ctx();
 
-    FeasibilitySwitchRecovery fsr(std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kRetry));
+    FeasibilitySwitchRecovery fsr(
+        std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kRetry));
     int depth = 0;
     EXPECT_EQ(drive_feas_switch(fsr, ctx, depth), RecoveryChain::Action::kRetry);
 }
@@ -345,8 +345,7 @@ TEST(FeasibilitySwitchSoftPreStage, EscalatesOnEleventhSuccessiveSoftIteration) 
     int depth = 0;
     // Iterations 1..10 (== kMaxSoftRestoIters) stay in the pre-stage.
     for (int k = 0; k < 10; ++k)
-        EXPECT_EQ(drive_feas_switch(fsr, ctx, depth),
-                  RecoveryChain::Action::kSoftFeasibilityStep);
+        EXPECT_EQ(drive_feas_switch(fsr, ctx, depth), RecoveryChain::Action::kSoftFeasibilityStep);
     // The 11th escalates to the full restoration switch.
     EXPECT_EQ(drive_feas_switch(fsr, ctx, depth), RecoveryChain::Action::kSwitchToFeasibility);
 }
@@ -365,8 +364,7 @@ TEST(FeasibilitySwitchSoftPreStage, AcceptedStepResetsSoftCounter) {
         std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
     int depth = 0;
     for (int k = 0; k < 10; ++k)
-        EXPECT_EQ(drive_feas_switch(fsr, ctx, depth),
-                  RecoveryChain::Action::kSoftFeasibilityStep);
+        EXPECT_EQ(drive_feas_switch(fsr, ctx, depth), RecoveryChain::Action::kSoftFeasibilityStep);
     // A regular accepted step recovered: the pre-stage exits and the counter
     // clears. Without the reset the next drive would escalate (11th); with it the
     // pre-stage runs from the top again.
@@ -387,8 +385,7 @@ TEST(FeasibilitySwitchSoftPreStage, ResetClearsSoftCounter) {
         std::make_unique<FeasSwitchStubInner>(RecoveryChain::Action::kAcceptAsIs));
     int depth = 0;
     for (int k = 0; k < 10; ++k)
-        EXPECT_EQ(drive_feas_switch(fsr, ctx, depth),
-                  RecoveryChain::Action::kSoftFeasibilityStep);
+        EXPECT_EQ(drive_feas_switch(fsr, ctx, depth), RecoveryChain::Action::kSoftFeasibilityStep);
     fsr.reset();
     EXPECT_EQ(drive_feas_switch(fsr, ctx, depth), RecoveryChain::Action::kSoftFeasibilityStep);
 }
@@ -400,8 +397,8 @@ TEST(FeasibilitySwitchSoftPreStage, ResetClearsSoftCounter) {
 // Build a direct NLP: minimize (x - target)^2 subject to (x - a) = 0 and, when
 // `inconsistent`, also (x - b) = 0 (b != a makes the two equalities
 // contradictory — a genuinely infeasible problem). One variable, x0 = start.
-std::unique_ptr<OptimizationProblem> feas_switch_build_nlp(double start, double a, bool inconsistent,
-                                                           double b) {
+std::unique_ptr<OptimizationProblem> feas_switch_build_nlp(double start, double a,
+                                                           bool inconsistent, double b) {
     using tycho::vf::Arguments;
     using tycho::vf::GenericFunction;
 
@@ -416,16 +413,13 @@ std::unique_ptr<OptimizationProblem> feas_switch_build_nlp(double start, double 
     {
         auto args = Arguments<1>();
         auto x = args.coeff<0>();
-        prob->add_equal_con(GenericFunction<-1, -1>(x - a),
-                            (Eigen::VectorXi(1) << 0).finished());
+        prob->add_equal_con(GenericFunction<-1, -1>(x - a), (Eigen::VectorXi(1) << 0).finished());
     }
     if (inconsistent) {
         auto args = Arguments<1>();
         auto x = args.coeff<0>();
-        prob->add_equal_con(GenericFunction<-1, -1>(x - b),
-                            (Eigen::VectorXi(1) << 0).finished());
+        prob->add_equal_con(GenericFunction<-1, -1>(x - b), (Eigen::VectorXi(1) << 0).finished());
     }
-    prob->optimizer_->set_print_level(3);
     return prob;
 }
 
@@ -435,16 +429,20 @@ std::unique_ptr<OptimizationProblem> feas_switch_build_nlp(double start, double 
 // the "on" half is only meaningful against the "off" half it contrasts with.
 TEST_F(SolverTest, RestorationDiagnosticsSentinelOnlyWhenOff) {
     auto off = feas_switch_build_nlp(/*start=*/0.0, /*a=*/1.0, /*inconsistent=*/false, /*b=*/0.0);
+    tycho::solvers::InteriorPointSolver ipm_off;
+    ipm_off.set_print_level(3);
     // restoration_mode_ defaults to off.
-    off->optimize();
-    const auto &r_off = off->optimizer_->result();
+    off->solve(&ipm_off);
+    const auto &r_off = ipm_off.result();
     EXPECT_EQ(r_off.last_feas_rest_entries_, -1);
     EXPECT_EQ(r_off.last_feas_rest_iters_, -1);
 
     auto on = feas_switch_build_nlp(0.0, 1.0, false, 0.0);
-    on->optimizer_->settings().restoration_mode_ = RestorationModes::proximal_switch;
-    on->optimize();
-    const auto &r_on = on->optimizer_->result();
+    tycho::solvers::InteriorPointSolver ipm_on;
+    ipm_on.set_print_level(3);
+    ipm_on.settings().restoration_mode_ = RestorationModes::proximal_switch;
+    on->solve(&ipm_on);
+    const auto &r_on = ipm_on.result();
     // With restoration constructed the counters are reported as real counts --
     // NOT the sentinel — regardless of whether entry actually fired.
     // EXPECT_GE(..., 0) below is the stronger check: it subsumes ruling out the
@@ -462,17 +460,17 @@ TEST_F(SolverTest, ForcedEntryOnFeasibleProblemEntersExitsAndConverges) {
     // reduction exit fires, and optimality mode then converges on the true
     // objective (x -> 1).
     auto prob = feas_switch_build_nlp(/*start=*/0.0, /*a=*/1.0, /*inconsistent=*/false, /*b=*/0.0);
-    prob->optimizer_->settings().restoration_mode_ = RestorationModes::proximal_switch;
-    prob->optimizer_->set_max_ls_iters(0);
-    prob->optimizer_->set_max_iters(50);
-    auto flag = prob->optimize();
-
-    const auto &r = prob->optimizer_->result();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.settings().restoration_mode_ = RestorationModes::proximal_switch;
+    ipm.set_max_ls_iters(0);
+    ipm.set_max_iters(50);
+    auto flag = prob->solve(&ipm).flag_;
+    const auto &r = ipm.result();
     EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
-    EXPECT_GE(r.last_feas_rest_entries_, 1);           // restoration was entered
-    EXPECT_LE(r.last_feas_rest_entries_, 2);           // and not beyond the budget
+    EXPECT_GE(r.last_feas_rest_entries_, 1); // restoration was entered
+    EXPECT_LE(r.last_feas_rest_entries_, 2); // and not beyond the budget
     ASSERT_EQ(r.primals_.size(), 1);
-    EXPECT_NEAR(r.primals_[0], 1.0, 1e-4);             // converged on the true objective
+    EXPECT_NEAR(r.primals_[0], 1.0, 1e-4); // converged on the true objective
 }
 
 TEST_F(SolverTest, ForcedEntryUnderFilterAcceptanceStillConverges) {
@@ -489,20 +487,20 @@ TEST_F(SolverTest, ForcedEntryUnderFilterAcceptanceStillConverges) {
     // so a solve that reaches this exit path failing to converge is exactly the
     // symptom this test would catch.
     auto prob = feas_switch_build_nlp(/*start=*/0.0, /*a=*/1.0, /*inconsistent=*/false, /*b=*/0.0);
+    tycho::solvers::InteriorPointSolver ipm;
     using tycho::solvers::AcceptanceStrategies;
     using tycho::solvers::BarrierGovernors;
-    prob->optimizer_->settings().restoration_mode_ = RestorationModes::proximal_switch;
-    prob->optimizer_->settings().acceptance_strategy_ = AcceptanceStrategies::filter;
-    prob->optimizer_->settings().barrier_governor_ = BarrierGovernors::monitored;
-    prob->optimizer_->set_max_ls_iters(0);
-    prob->optimizer_->set_max_iters(50);
-    auto flag = prob->optimize();
-
-    const auto &r = prob->optimizer_->result();
+    ipm.settings().restoration_mode_ = RestorationModes::proximal_switch;
+    ipm.settings().acceptance_strategy_ = AcceptanceStrategies::filter;
+    ipm.settings().barrier_governor_ = BarrierGovernors::monitored;
+    ipm.set_max_ls_iters(0);
+    ipm.set_max_iters(50);
+    auto flag = prob->solve(&ipm).flag_;
+    const auto &r = ipm.result();
     EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
-    EXPECT_GE(r.last_feas_rest_entries_, 1);           // restoration was entered
+    EXPECT_GE(r.last_feas_rest_entries_, 1); // restoration was entered
     ASSERT_EQ(r.primals_.size(), 1);
-    EXPECT_NEAR(r.primals_[0], 1.0, 1e-4);             // converged on the true objective
+    EXPECT_NEAR(r.primals_[0], 1.0, 1e-4); // converged on the true objective
 }
 
 TEST_F(SolverTest, ForcedEntryOnInfeasibleProblemDoesNotFalselyConverge) {
@@ -510,12 +508,12 @@ TEST_F(SolverTest, ForcedEntryOnInfeasibleProblemDoesNotFalselyConverge) {
     // entry (max_ls_iters_ = 0) must NOT report the proximal subproblem's
     // convergence as a solve of the true problem.
     auto prob = feas_switch_build_nlp(/*start=*/0.0, /*a=*/1.0, /*inconsistent=*/true, /*b=*/-1.0);
-    prob->optimizer_->settings().restoration_mode_ = RestorationModes::proximal_switch;
-    prob->optimizer_->set_max_ls_iters(0);
-    prob->optimizer_->set_max_iters(40);
-    auto flag = prob->optimize();
-
-    const auto &r = prob->optimizer_->result();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.settings().restoration_mode_ = RestorationModes::proximal_switch;
+    ipm.set_max_ls_iters(0);
+    ipm.set_max_iters(40);
+    auto flag = prob->solve(&ipm).flag_;
+    const auto &r = ipm.result();
     // Hard assertion: never fatal-skipped, always runs.
     EXPECT_NE(flag, tycho::ConvergenceFlags::CONVERGED);
     // Soft check: entry depends on pivot perturbation producing a finite step
@@ -524,7 +522,7 @@ TEST_F(SolverTest, ForcedEntryOnInfeasibleProblemDoesNotFalselyConverge) {
     // IS the entry assertion -- reaching past it means restoration was entered.
     if (r.last_feas_rest_entries_ < 1) {
         GTEST_SKIP() << "factorization returned non-finite step on this platform; "
-                       "entry not exercised";
+                        "entry not exercised";
     }
 }
 
@@ -532,13 +530,13 @@ TEST_F(SolverTest, BudgetZeroRefusesAllEntries) {
     // max_feas_rest_ = 0 exhausts the budget before the first entry, so
     // FeasibilitySwitchRecovery never switches even on an infeasible start.
     auto prob = feas_switch_build_nlp(/*start=*/0.0, /*a=*/1.0, /*inconsistent=*/true, /*b=*/-1.0);
-    prob->optimizer_->settings().restoration_mode_ = RestorationModes::proximal_switch;
-    prob->optimizer_->settings().max_feas_rest_ = 0;
-    prob->optimizer_->set_max_ls_iters(0);
-    prob->optimizer_->set_max_iters(40);
-    auto flag = prob->optimize();
-
-    const auto &r = prob->optimizer_->result();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.settings().restoration_mode_ = RestorationModes::proximal_switch;
+    ipm.settings().max_feas_rest_ = 0;
+    ipm.set_max_ls_iters(0);
+    ipm.set_max_iters(40);
+    auto flag = prob->solve(&ipm).flag_;
+    const auto &r = ipm.result();
     EXPECT_EQ(r.last_feas_rest_entries_, 0); // budget refused every entry
     EXPECT_NE(flag, tycho::ConvergenceFlags::CONVERGED);
 }
@@ -577,8 +575,7 @@ TEST(FeasibilitySwitch, FilterSeedsRestorationConstraintTol) {
     solver.settings().barrier_governor_ = tycho::solvers::BarrierGovernors::monitored;
     solver.settings().econ_tol_ = 3.0e-7;
     solver.rebuild_globalization_components();
-    auto *filter =
-        dynamic_cast<tycho::solvers::FilterAcceptance *>(solver.acceptance_.get());
+    auto *filter = dynamic_cast<tycho::solvers::FilterAcceptance *>(solver.acceptance_.get());
     ASSERT_NE(filter, nullptr);
     EXPECT_DOUBLE_EQ(filter->restoration_constraint_tol(), 3.0e-7);
 }
@@ -588,21 +585,21 @@ TEST(FeasibilitySwitch, FilterSeedsRestorationConstraintTol) {
 //
 // These tests force a NestedL1Restoration active on a hand-built 2-variable NLP
 // with one violated equality and drive the solver seam directly. NestedSeamHarness
-// is befriended by InteriorPointSolver (interior_point_solver.h) so it can reach the private eval_nlp /
-// alg_impl / restoration_ / dimension members; the tests below assert on its
-// public outputs. Nothing wires nested entry yet (a later change does), so this
-// is the only way to exercise the seam.
+// is befriended by InteriorPointSolver (interior_point_solver.h) so it can reach the private
+// eval_nlp / alg_impl / restoration_ / dimension members; the tests below assert on its public
+// outputs. Nothing wires nested entry yet (a later change does), so this is the only way to
+// exercise the seam.
 // -----------------------------------------------------------------------------
 
 using tycho::solvers::BarrierGovernor;
 using tycho::solvers::ClassicAdaptiveGovernor;
 using tycho::solvers::FeasibilitySwitchRecovery;
 using tycho::solvers::GlobalizationMechanism;
+using tycho::solvers::InteriorPointSolver;
 using tycho::solvers::IterateInfo;
 using tycho::solvers::kMaxSoftRestoIters;
 using tycho::solvers::NestedL1Restoration;
 using tycho::solvers::OptimizationProblem;
-using tycho::solvers::InteriorPointSolver;
 using tycho::solvers::RestorationModes;
 using tycho::solvers::SolverContext;
 
@@ -709,24 +706,24 @@ class NestedSeamHarness {
             prob_.add_equal_con(GenericFunction<-1, -1>(x0 + x1 - 4.0),
                                 (Eigen::VectorXi(2) << 0, 1).finished());
         }
-        prob_.optimizer_->set_print_level(3);
         prob_.transcribe();
-        solver_ = prob_.optimizer_.get();
+        solver_.set_nlp(prob_.nlp_);
+        solver_.set_print_level(3);
     }
 
-    InteriorPointSolver &solver() { return *solver_; }
-    int pv() const { return solver_->primal_vars_; }
-    int sv() const { return solver_->slack_vars_; }
-    int ec() const { return solver_->equal_cons_; }
-    int ic() const { return solver_->inequal_cons_; }
-    int dim() const { return solver_->kkt_dim_; }
+    InteriorPointSolver &solver() { return solver_; }
+    int pv() const { return solver_.primal_vars_; }
+    int sv() const { return solver_.slack_vars_; }
+    int ec() const { return solver_.equal_cons_; }
+    int ic() const { return solver_.inequal_cons_; }
+    int dim() const { return solver_.kkt_dim_; }
 
     // Inject a fresh NestedL1Restoration and enter the nested phase at the given
     // primals with the equality residual implied by the constraint.
     NestedL1Restoration *enter_nested(const Eigen::VectorXd &primals, double outer_mu) {
         auto strat = std::make_unique<NestedL1Restoration>();
         NestedL1Restoration *raw = strat.get();
-        solver_->restoration_ = std::move(strat);
+        solver_.restoration_ = std::move(strat);
         Eigen::VectorXd eq_res(1);
         eq_res[0] = primals[0] + primals[1] - 4.0;
         Eigen::VectorXd iq_res(0);
@@ -751,10 +748,10 @@ class NestedSeamHarness {
         Eigen::VectorXd GX = Eigen::VectorXd::Zero(pv());
         Eigen::VectorXd AGXS = Eigen::VectorXd::Zero(dim());
         double val = 0.0;
-        solver_->eval_nlp(InteriorPointSolver::AlgorithmModes::OPTNO, 0.0, XSL, val, GX, AGXS,
-                          solver_->kkt_sol_.matrix(), mu);
+        solver_.eval_nlp(InteriorPointSolver::AlgorithmModes::OPTNO, 0.0, XSL, val, GX, AGXS,
+                         solver_.kkt_sol_.matrix(), mu);
         const int yrow = pv() + sv();
-        kkt_yy_ = solver_->kkt_sol_.matrix().coeff(yrow, yrow);
+        kkt_yy_ = solver_.kkt_sol_.matrix().coeff(yrow, yrow);
         rhs_eq_ = AGXS.segment(pv() + sv(), ec())[0];
     }
 
@@ -764,15 +761,15 @@ class NestedSeamHarness {
         auto strat = std::make_unique<NestedSeamProximalDouble>(pv());
         NestedSeamProximalDouble *raw = strat.get();
         raw->active_ = true;
-        solver_->restoration_ = std::move(strat);
+        solver_.restoration_ = std::move(strat);
         Eigen::VectorXd XSL(dim());
         XSL.head(pv()) = primals;
         XSL.segment(pv() + sv(), ec())[0] = 0.0;
         Eigen::VectorXd GX = Eigen::VectorXd::Zero(pv());
         Eigen::VectorXd AGXS = Eigen::VectorXd::Zero(dim());
         double val = 0.0;
-        solver_->eval_nlp(InteriorPointSolver::AlgorithmModes::OPTNO, 0.0, XSL, val, GX, AGXS,
-                          solver_->kkt_sol_.matrix(), mu);
+        solver_.eval_nlp(InteriorPointSolver::AlgorithmModes::OPTNO, 0.0, XSL, val, GX, AGXS,
+                         solver_.kkt_sol_.matrix(), mu);
         return raw;
     }
 
@@ -781,19 +778,19 @@ class NestedSeamHarness {
     // before its own step recovery overwrites the stored deltas).
     struct StepCapture {
         bool captured = false;
-        double n, p, zn, zp;    // elastic state after the applied step
+        double n, p, zn, zp;     // elastic state after the applied step
         double dn, dp, dzn, dzp; // recovered step that was applied
     };
 
     StepCapture drive_one_step(double outer_mu) {
-        solver_->settings().max_iters_ = 4;
-        solver_->settings().max_ls_iters_ = 0; // full step, deterministic alpha = 1
-        solver_->settings().print_level_ = 3;
-        solver_->rebuild_globalization_components();
-        solver_->ensure_solver_initialized();
-        bool docompute = solver_->claim_kkt_analysis();
+        solver_.settings().max_iters_ = 4;
+        solver_.settings().max_ls_iters_ = 0; // full step, deterministic alpha = 1
+        solver_.settings().print_level_ = 3;
+        solver_.rebuild_globalization_components();
+        solver_.ensure_solver_initialized();
+        bool docompute = solver_.claim_kkt_analysis();
         Eigen::VectorXd x = (Eigen::VectorXd(2) << 0.0, 0.0).finished();
-        Eigen::VectorXd XSL = solver_->init_impl(x, outer_mu, docompute);
+        Eigen::VectorXd XSL = solver_.init_impl(x, outer_mu, docompute);
 
         NestedL1Restoration *comp = enter_nested(XSL.head(pv()), outer_mu);
         // This harness isolates the elastic step-recovery seam (recover → apply)
@@ -803,35 +800,34 @@ class NestedSeamHarness {
         // test observes. Consuming the one-shot budget up front keeps every
         // iteration on the ordinary accept-as-is path. The re-center fallback has
         // its own coverage (NestedRestorationRecenter suite).
-        solver_->resto_recentered_ = true;
+        solver_.resto_recentered_ = true;
         // Run the phase at the restoration barrier the elastics were initialized
         // at (what the entry orchestration will set the live μ to).
         const double phase_mu = comp->entry_mu();
 
         StepCapture cap;
-        solver_->set_early_callback([comp, &cap](int i, double, Eigen::Ref<Eigen::VectorXd>, double,
-                                                 Eigen::Ref<Eigen::VectorXd>,
-                                                 Eigen::Ref<Eigen::VectorXd>,
-                                                 Eigen::SparseMatrix<double, Eigen::RowMajor> &)
-                                        -> int {
-            if (i == 1 && !cap.captured) {
-                cap.captured = true;
-                cap.n = comp->ec_n()[0];
-                cap.p = comp->ec_p()[0];
-                cap.zn = comp->ec_zn()[0];
-                cap.zp = comp->ec_zp()[0];
-                cap.dn = comp->ec_dn()[0];
-                cap.dp = comp->ec_dp()[0];
-                cap.dzn = comp->ec_dzn()[0];
-                cap.dzp = comp->ec_dzp()[0];
-            }
-            return 0;
-        });
+        solver_.set_early_callback(
+            [comp, &cap](int i, double, Eigen::Ref<Eigen::VectorXd>, double,
+                         Eigen::Ref<Eigen::VectorXd>, Eigen::Ref<Eigen::VectorXd>,
+                         Eigen::SparseMatrix<double, Eigen::RowMajor> &) -> int {
+                if (i == 1 && !cap.captured) {
+                    cap.captured = true;
+                    cap.n = comp->ec_n()[0];
+                    cap.p = comp->ec_p()[0];
+                    cap.zn = comp->ec_zn()[0];
+                    cap.zp = comp->ec_zp()[0];
+                    cap.dn = comp->ec_dn()[0];
+                    cap.dp = comp->ec_dp()[0];
+                    cap.dzn = comp->ec_dzn()[0];
+                    cap.dzp = comp->ec_dzp()[0];
+                }
+                return 0;
+            });
 
-        solver_->alg_impl(InteriorPointSolver::AlgorithmModes::OPT, InteriorPointSolver::BarrierModes::LOQO,
-                          InteriorPointSolver::LineSearchModes::L1, solver_->settings().obj_scale_, phase_mu,
-                          XSL);
-        solver_->disable_early_callback();
+        solver_.alg_impl(
+            InteriorPointSolver::AlgorithmModes::OPT, InteriorPointSolver::BarrierModes::LOQO,
+            InteriorPointSolver::LineSearchModes::L1, solver_.settings().obj_scale_, phase_mu, XSL);
+        solver_.disable_early_callback();
         return cap;
     }
 
@@ -840,7 +836,7 @@ class NestedSeamHarness {
 
   private:
     OptimizationProblem prob_;
-    InteriorPointSolver *solver_ = nullptr;
+    InteriorPointSolver solver_;
 };
 
 // (i) The assembled KKT constraint-row diagonal equals the NEGATED component
@@ -873,8 +869,8 @@ TEST(NestedRestorationSeam, RhsSegmentCarriesCondensedResidual) {
     const double p = comp->ec_p()[0];
     const double zn = comp->ec_zn()[0];
     const double zp = comp->ec_zp()[0];
-    const double rtilde = (c + n - p) + mu / zn - (n / zn) * (rho + y) - mu / zp +
-                          (p / zp) * (rho - y);
+    const double rtilde =
+        (c + n - p) + mu / zn - (n / zn) * (rho + y) - mu / zp + (p / zp) * (rho - y);
     EXPECT_NEAR(h.rhs_eq_, rtilde, 1e-8 * (1.0 + std::abs(rtilde)));
 }
 
@@ -930,8 +926,8 @@ TEST(NestedRestorationSeam, ProximalPathNeverConsultsNestedSurface) {
     NestedSeamHarness h;
     Eigen::VectorXd primals = (Eigen::VectorXd(2) << 0.0, 0.0).finished();
     NestedSeamProximalDouble *dbl = h.run_eval_seam_proximal(primals, /*mu=*/0.1);
-    EXPECT_TRUE(dbl->proximal_touched_);  // proximal branch ran
-    EXPECT_FALSE(dbl->nested_touched_);   // nested surface untouched
+    EXPECT_TRUE(dbl->proximal_touched_); // proximal branch ran
+    EXPECT_FALSE(dbl->nested_touched_);  // nested surface untouched
 }
 
 // -----------------------------------------------------------------------------
@@ -964,17 +960,17 @@ class NestedSeamIneqHarness {
             prob_.add_inequal_con(GenericFunction<-1, -1>(x - 5.0),
                                   (Eigen::VectorXi(1) << 0).finished());
         }
-        prob_.optimizer_->set_print_level(3);
         prob_.transcribe();
-        solver_ = prob_.optimizer_.get();
+        solver_.set_nlp(prob_.nlp_);
+        solver_.set_print_level(3);
     }
 
-    InteriorPointSolver &solver() { return *solver_; }
-    int pv() const { return solver_->primal_vars_; }
-    int sv() const { return solver_->slack_vars_; }
-    int ec() const { return solver_->equal_cons_; }
-    int ic() const { return solver_->inequal_cons_; }
-    int dim() const { return solver_->kkt_dim_; }
+    InteriorPointSolver &solver() { return solver_; }
+    int pv() const { return solver_.primal_vars_; }
+    int sv() const { return solver_.slack_vars_; }
+    int ec() const { return solver_.equal_cons_; }
+    int ic() const { return solver_.inequal_cons_; }
+    int dim() const { return solver_.kkt_dim_; }
 
     // Enter nested restoration with the inequality residual g(x)+s implied by the
     // given primals and slack (no equality channel).
@@ -982,7 +978,7 @@ class NestedSeamIneqHarness {
                                       double outer_mu) {
         auto strat = std::make_unique<NestedL1Restoration>();
         NestedL1Restoration *raw = strat.get();
-        solver_->restoration_ = std::move(strat);
+        solver_.restoration_ = std::move(strat);
         Eigen::VectorXd eq_res(0);
         Eigen::VectorXd iq_res(1);
         iq_res[0] = (primals[0] - 5.0) + slack; // g(x) + s
@@ -999,15 +995,15 @@ class NestedSeamIneqHarness {
     void run_eval_seam(const Eigen::VectorXd &primals, double slack, double z, double mu) {
         Eigen::VectorXd XSL = Eigen::VectorXd::Zero(dim());
         XSL.head(pv()) = primals;
-        XSL[pv()] = slack;      // single slack (sv == ic == 1)
-        XSL[dim() - 1] = z;     // single inequality multiplier
+        XSL[pv()] = slack;  // single slack (sv == ic == 1)
+        XSL[dim() - 1] = z; // single inequality multiplier
         Eigen::VectorXd GX = Eigen::VectorXd::Zero(pv());
         Eigen::VectorXd AGXS = Eigen::VectorXd::Zero(dim());
         double val = 0.0;
-        solver_->eval_nlp(InteriorPointSolver::AlgorithmModes::OPTNO, 0.0, XSL, val, GX, AGXS,
-                          solver_->kkt_sol_.matrix(), mu);
+        solver_.eval_nlp(InteriorPointSolver::AlgorithmModes::OPTNO, 0.0, XSL, val, GX, AGXS,
+                         solver_.kkt_sol_.matrix(), mu);
         const int zrow = pv() + sv() + ec();
-        kkt_zz_ = solver_->kkt_sol_.matrix().coeff(zrow, zrow);
+        kkt_zz_ = solver_.kkt_sol_.matrix().coeff(zrow, zrow);
         rhs_iq_ = AGXS.tail(ic())[0];
     }
 
@@ -1015,7 +1011,7 @@ class NestedSeamIneqHarness {
     // seed the aggregates with a (tiny, late-solve) original-pair value and let
     // the seam fold in the active phase's elastic pairs.
     void augment_comp(double &avgcomp, double &mincomp, double &maxcomp, int base_count) {
-        solver_->augment_complementarity_nested(avgcomp, mincomp, maxcomp, base_count);
+        solver_.augment_complementarity_nested(avgcomp, mincomp, maxcomp, base_count);
     }
 
     double kkt_zz_ = 0.0;
@@ -1023,7 +1019,7 @@ class NestedSeamIneqHarness {
 
   private:
     OptimizationProblem prob_;
-    InteriorPointSolver *solver_ = nullptr;
+    InteriorPointSolver solver_;
 };
 
 // (i-iq) The assembled KKT inequality-row diagonal equals the NEGATED component
@@ -1189,56 +1185,56 @@ class NestedLifecycleHarness {
             prob_.add_inequal_con(GenericFunction<-1, -1>(x - (100.0 + k)),
                                   (Eigen::VectorXi(1) << 0).finished());
         }
-        prob_.optimizer_->set_print_level(3);
         prob_.transcribe();
-        solver_ = prob_.optimizer_.get();
+        solver_.set_nlp(prob_.nlp_);
+        solver_.set_print_level(3);
     }
 
-    InteriorPointSolver &solver() { return *solver_; }
-    int pv() const { return solver_->primal_vars_; }
-    int sv() const { return solver_->slack_vars_; }
-    int ec() const { return solver_->equal_cons_; }
-    int ic() const { return solver_->inequal_cons_; }
-    int dim() const { return solver_->kkt_dim_; }
+    InteriorPointSolver &solver() { return solver_; }
+    int pv() const { return solver_.primal_vars_; }
+    int sv() const { return solver_.slack_vars_; }
+    int ec() const { return solver_.equal_cons_; }
+    int ic() const { return solver_.inequal_cons_; }
+    int dim() const { return solver_.kkt_dim_; }
 
     // Build acceptance_/governor_/recovery_ (through the proximal-switch mode, the
     // wired one) then replace restoration_ with a fresh NestedL1Restoration.
     NestedL1Restoration *inject_nested() {
-        solver_->settings().restoration_mode_ = RestorationModes::proximal_switch;
-        solver_->rebuild_globalization_components();
+        solver_.settings().restoration_mode_ = RestorationModes::proximal_switch;
+        solver_.rebuild_globalization_components();
         auto strat = std::make_unique<NestedL1Restoration>();
         NestedL1Restoration *raw = strat.get();
-        solver_->restoration_ = std::move(strat);
+        solver_.restoration_ = std::move(strat);
         return raw;
     }
 
     // Direct drivers for the private lifecycle helpers + state.
     void call_enter(Eigen::VectorXd &XSL, Eigen::VectorXd &RHS, double prim_obj, double barr_obj,
                     double &mu) {
-        solver_->enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
+        solver_.enter_feasibility_restoration(XSL, RHS, prim_obj, barr_obj, mu);
     }
     void call_exit(Eigen::VectorXd &XSL, double obj_scale, double theta, double barr, double &mu) {
-        solver_->exit_feasibility_restoration_nested(XSL, obj_scale, theta, barr, mu);
+        solver_.exit_feasibility_restoration_nested(XSL, obj_scale, theta, barr, mu);
     }
-    bool ratchet(double theta) const { return solver_->resto_ratchet_passes(theta); }
-    double &stashed_mu() { return solver_->stashed_mu_; }
-    bool &first_iter() { return solver_->resto_first_iter_; }
+    bool ratchet(double theta) const { return solver_.resto_ratchet_passes(theta); }
+    double &stashed_mu() { return solver_.stashed_mu_; }
+    bool &first_iter() { return solver_.resto_first_iter_; }
     // Second-level re-center one-shot flag + the production re-center seam.
-    bool &recentered() { return solver_->resto_recentered_; }
-    bool call_try_recenter(double mu) { return solver_->try_recenter_elastics(mu); }
-    double &theta_prev() { return solver_->resto_theta_orig_prev_; }
-    void set_econ_tol(double t) { solver_->settings().econ_tol_ = t; }
+    bool &recentered() { return solver_.resto_recentered_; }
+    bool call_try_recenter(double mu) { return solver_.try_recenter_elastics(mu); }
+    double &theta_prev() { return solver_.resto_theta_orig_prev_; }
+    void set_econ_tol(double t) { solver_.settings().econ_tol_ = t; }
 
     // True exactly when a nested l1 restoration phase is live — the same predicate
     // the alg_impl barrier-update seam gates the monotone schedule on.
     bool nested_active() const {
-        return solver_->restoration_ && solver_->restoration_->is_active() &&
-               solver_->restoration_->is_nested();
+        return solver_.restoration_ && solver_.restoration_->is_active() &&
+               solver_.restoration_->is_nested();
     }
     // Replace the configured barrier governor (used to install a recording guard
     // after rebuild_globalization_components() has built the default one).
     void set_governor(std::unique_ptr<tycho::solvers::BarrierGovernor> g) {
-        solver_->governor_ = std::move(g);
+        solver_.governor_ = std::move(g);
     }
 
     // Segment accessors into a full KKT vector [primals | slacks | eq | iq].
@@ -1249,51 +1245,51 @@ class NestedLifecycleHarness {
     // iterate's μ so a caller can confirm it is the outer schedule value, not the
     // (large) restoration barrier parameter.
     tycho::ConvergenceFlags run_forced_entry(NestedL1Restoration *&comp_out,
-                                              InteriorPointSolver::LineSearchModes lsmode,
-                                              InteriorPointSolver::BarrierModes barmode, double &final_mu,
-                                              double init_mu = 0.1, int preload_soft_counter = 0,
-                                              const std::function<void()> &after_rebuild = {}) {
-        solver_->settings().restoration_mode_ = RestorationModes::proximal_switch;
-        solver_->settings().max_ls_iters_ = 0;
-        solver_->settings().max_iters_ = 120;
-        solver_->rebuild_globalization_components();
+                                             InteriorPointSolver::LineSearchModes lsmode,
+                                             InteriorPointSolver::BarrierModes barmode,
+                                             double &final_mu, double init_mu = 0.1,
+                                             int preload_soft_counter = 0,
+                                             const std::function<void()> &after_rebuild = {}) {
+        solver_.settings().restoration_mode_ = RestorationModes::proximal_switch;
+        solver_.settings().max_ls_iters_ = 0;
+        solver_.settings().max_iters_ = 120;
+        solver_.rebuild_globalization_components();
         // Optional hook: swap in a test governor now that the default one has been
         // built (see FreeOracleUnreachableDuringNestedPhase).
         if (after_rebuild)
             after_rebuild();
         auto strat = std::make_unique<NestedL1Restoration>();
         comp_out = strat.get();
-        solver_->restoration_ = std::move(strat);
+        solver_.restoration_ = std::move(strat);
         if (preload_soft_counter > 0) {
             // Pre-exhaust the soft pre-stage budget so the first ladder-exhausted
             // rejection escalates straight into the full restoration phase —
             // deterministic full-lifecycle coverage on a feasible problem.
-            auto *fsr = dynamic_cast<FeasibilitySwitchRecovery *>(solver_->recovery_.get());
+            auto *fsr = dynamic_cast<FeasibilitySwitchRecovery *>(solver_.recovery_.get());
             if (fsr)
                 fsr->soft_counter_ = preload_soft_counter;
         }
-        solver_->ensure_solver_initialized();
-        bool docompute = solver_->claim_kkt_analysis();
-        Eigen::VectorXd XSL = solver_->init_impl(start_, init_mu, docompute);
+        solver_.ensure_solver_initialized();
+        bool docompute = solver_.claim_kkt_analysis();
+        Eigen::VectorXd XSL = solver_.init_impl(start_, init_mu, docompute);
         final_mu = init_mu;
         double *fm = &final_mu;
-        solver_->set_late_callback(
-            [fm](const IterateInfo &it, tycho::ConstEigenRef<Eigen::VectorXd>,
-                 tycho::ConstEigenRef<Eigen::VectorXd>) -> int {
-                *fm = it.mu_;
-                return 0;
-            });
-        solver_->alg_impl(InteriorPointSolver::AlgorithmModes::OPT, barmode, lsmode,
-                          solver_->settings().obj_scale_, init_mu, XSL);
-        solver_->disable_late_callback();
-        return solver_->result().converge_flag_;
+        solver_.set_late_callback([fm](const IterateInfo &it, tycho::ConstEigenRef<Eigen::VectorXd>,
+                                       tycho::ConstEigenRef<Eigen::VectorXd>) -> int {
+            *fm = it.mu_;
+            return 0;
+        });
+        solver_.alg_impl(InteriorPointSolver::AlgorithmModes::OPT, barmode, lsmode,
+                         solver_.settings().obj_scale_, init_mu, XSL);
+        solver_.disable_late_callback();
+        return solver_.result().converge_flag_;
     }
 
     double start_x0() const { return start_[0]; }
 
   private:
     OptimizationProblem prob_;
-    InteriorPointSolver *solver_ = nullptr;
+    InteriorPointSolver solver_;
     Eigen::VectorXd start_;
 };
 
@@ -1315,12 +1311,12 @@ TEST(NestedRestorationLifecycle, EntrySetsBarrierAndStashesOuterMu) {
     double mu = 0.1;
     h.call_enter(XSL, RHS, /*prim_obj=*/0.0, /*barr_obj=*/0.0, mu);
 
-    EXPECT_DOUBLE_EQ(h.stashed_mu(), 0.1);       // old μ stashed
-    EXPECT_DOUBLE_EQ(mu, 5.0);                   // μ ← max(0.1, |h|)
-    EXPECT_DOUBLE_EQ(comp->entry_mu(), 5.0);     // component agrees
-    EXPECT_DOUBLE_EQ(XSL[yrow], 0.0);            // equality multiplier zeroed
-    EXPECT_TRUE(h.first_iter());                 // first-iteration guard armed
-    EXPECT_DOUBLE_EQ(h.theta_prev(), 5.0);       // ratchet seeded with entry θ
+    EXPECT_DOUBLE_EQ(h.stashed_mu(), 0.1);   // old μ stashed
+    EXPECT_DOUBLE_EQ(mu, 5.0);               // μ ← max(0.1, |h|)
+    EXPECT_DOUBLE_EQ(comp->entry_mu(), 5.0); // component agrees
+    EXPECT_DOUBLE_EQ(XSL[yrow], 0.0);        // equality multiplier zeroed
+    EXPECT_TRUE(h.first_iter());             // first-iteration guard armed
+    EXPECT_DOUBLE_EQ(h.theta_prev(), 5.0);   // ratchet seeded with entry θ
 }
 
 // (ii) The multiplier re-entry restores the stashed outer μ.
@@ -1360,19 +1356,19 @@ TEST(NestedRestorationLifecycle, ReentryNewtonStepThenZeroesEqualityMultipliers)
     h.call_enter(XSL, RHS, 0.0, 0.0, mu);
 
     // Hand-set the phase's final slack / multipliers, then force a known stashed μ.
-    const int srow = h.pv();               // first slack
-    const int yrow = h.pv() + h.sv();      // equality multiplier
+    const int srow = h.pv();                   // first slack
+    const int yrow = h.pv() + h.sv();          // equality multiplier
     const int zrow = h.pv() + h.sv() + h.ec(); // first inequality multiplier
     XSL[srow] = 0.5;
-    XSL[zrow] = 0.5;    // z < μ_outer/s = 2.0 ⇒ Δz > 0, no boundary cap
-    XSL[yrow] = 0.9;    // nonzero, must be zeroed
+    XSL[zrow] = 0.5; // z < μ_outer/s = 2.0 ⇒ Δz > 0, no boundary cap
+    XSL[yrow] = 0.9; // nonzero, must be zeroed
     h.stashed_mu() = 1.0;
 
     h.call_exit(XSL, 1.0, 1e-8, 0.0, mu);
 
-    EXPECT_NEAR(XSL[zrow], 2.0, 1e-12);  // z ← μ_outer/s (undamped)
-    EXPECT_DOUBLE_EQ(XSL[yrow], 0.0);    // equality multiplier zeroed
-    EXPECT_DOUBLE_EQ(mu, 1.0);           // μ restored
+    EXPECT_NEAR(XSL[zrow], 2.0, 1e-12); // z ← μ_outer/s (undamped)
+    EXPECT_DOUBLE_EQ(XSL[yrow], 0.0);   // equality multiplier zeroed
+    EXPECT_DOUBLE_EQ(mu, 1.0);          // μ restored
 }
 
 // (iv) The z-reset triggers when the updated max|z| exceeds kBoundMultReset-
@@ -1418,8 +1414,8 @@ TEST(NestedRestorationLifecycle, KappaRestoRatchetTruthTable) {
 
     // Floor regime (prev tiny, 0.9·prev < econ_tol): pass iff θ ≤ econ_tol.
     h.theta_prev() = 1.0e-9;
-    EXPECT_TRUE(h.ratchet(5.0e-7)); // below the econ_tol floor
-    EXPECT_TRUE(h.ratchet(1.0e-6)); // at the floor
+    EXPECT_TRUE(h.ratchet(5.0e-7));  // below the econ_tol floor
+    EXPECT_TRUE(h.ratchet(1.0e-6));  // at the floor
     EXPECT_FALSE(h.ratchet(2.0e-6)); // above the floor
 }
 
@@ -1440,8 +1436,9 @@ TEST(NestedRestorationLifecycle, SoftPreStageResolvesWithoutFullEntry) {
                              /*inconsistent=*/false);
     NestedL1Restoration *comp = nullptr;
     double final_mu = 0.0;
-    auto flag = h.run_forced_entry(comp, InteriorPointSolver::LineSearchModes::L1, InteriorPointSolver::BarrierModes::LOQO,
-                                   final_mu, /*init_mu=*/0.1);
+    auto flag =
+        h.run_forced_entry(comp, InteriorPointSolver::LineSearchModes::L1,
+                           InteriorPointSolver::BarrierModes::LOQO, final_mu, /*init_mu=*/0.1);
 
     EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     ASSERT_NE(comp, nullptr);
@@ -1464,8 +1461,9 @@ TEST(NestedRestorationLifecycle, EndToEndWithInequalityConvergesUnderSoftPreStag
                              /*inconsistent=*/false);
     NestedL1Restoration *comp = nullptr;
     double final_mu = 0.0;
-    auto flag = h.run_forced_entry(comp, InteriorPointSolver::LineSearchModes::L1, InteriorPointSolver::BarrierModes::LOQO,
-                                   final_mu, /*init_mu=*/0.1);
+    auto flag =
+        h.run_forced_entry(comp, InteriorPointSolver::LineSearchModes::L1,
+                           InteriorPointSolver::BarrierModes::LOQO, final_mu, /*init_mu=*/0.1);
 
     EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     ASSERT_NE(comp, nullptr);
@@ -1483,8 +1481,9 @@ TEST(NestedRestorationLifecycle, EndToEndLangLineSearchConvergesUnderSoftPreStag
                              /*inconsistent=*/false);
     NestedL1Restoration *comp = nullptr;
     double final_mu = 0.0;
-    auto flag = h.run_forced_entry(comp, InteriorPointSolver::LineSearchModes::LANG, InteriorPointSolver::BarrierModes::LOQO,
-                                   final_mu, /*init_mu=*/0.1);
+    auto flag =
+        h.run_forced_entry(comp, InteriorPointSolver::LineSearchModes::LANG,
+                           InteriorPointSolver::BarrierModes::LOQO, final_mu, /*init_mu=*/0.1);
 
     EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     ASSERT_NE(comp, nullptr);
@@ -1509,8 +1508,9 @@ TEST(NestedRestorationLifecycle, SoftPreStageEscalatesIntoFullL1Phase) {
                              /*inconsistent=*/true);
     NestedL1Restoration *comp = nullptr;
     double final_mu = 0.0;
-    auto flag = h.run_forced_entry(comp, InteriorPointSolver::LineSearchModes::L1, InteriorPointSolver::BarrierModes::LOQO,
-                                   final_mu, /*init_mu=*/0.1);
+    auto flag =
+        h.run_forced_entry(comp, InteriorPointSolver::LineSearchModes::L1,
+                           InteriorPointSolver::BarrierModes::LOQO, final_mu, /*init_mu=*/0.1);
 
     ASSERT_NE(comp, nullptr);
     EXPECT_NE(flag, tycho::ConvergenceFlags::CONVERGED); // never falsely converges
@@ -1535,9 +1535,10 @@ TEST(NestedRestorationLifecycle, ForcedEscalationRunsFullPhaseAndConverges) {
                              /*inconsistent=*/false);
     NestedL1Restoration *comp = nullptr;
     double final_mu = 0.0;
-    auto flag = h.run_forced_entry(comp, InteriorPointSolver::LineSearchModes::L1, InteriorPointSolver::BarrierModes::LOQO,
-                                   final_mu, /*init_mu=*/0.1,
-                                   /*preload_soft_counter=*/kMaxSoftRestoIters);
+    auto flag =
+        h.run_forced_entry(comp, InteriorPointSolver::LineSearchModes::L1,
+                           InteriorPointSolver::BarrierModes::LOQO, final_mu, /*init_mu=*/0.1,
+                           /*preload_soft_counter=*/kMaxSoftRestoIters);
 
     EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     ASSERT_NE(comp, nullptr);
@@ -1610,14 +1611,15 @@ TEST(NestedRestorationRecenter, FiresExactlyOncePerFailureRunEndToEnd) {
                              /*inconsistent=*/false);
     NestedL1Restoration *comp = nullptr;
     double final_mu = 0.0;
-    auto flag = h.run_forced_entry(comp, InteriorPointSolver::LineSearchModes::L1, InteriorPointSolver::BarrierModes::LOQO,
-                                   final_mu, /*init_mu=*/0.1,
-                                   /*preload_soft_counter=*/kMaxSoftRestoIters);
+    auto flag =
+        h.run_forced_entry(comp, InteriorPointSolver::LineSearchModes::L1,
+                           InteriorPointSolver::BarrierModes::LOQO, final_mu, /*init_mu=*/0.1,
+                           /*preload_soft_counter=*/kMaxSoftRestoIters);
 
     EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     ASSERT_NE(comp, nullptr);
-    EXPECT_GE(comp->entries(), 1);           // full phase entered
-    EXPECT_EQ(comp->recenter_calls(), 1);    // exactly one re-center; rest fall through
+    EXPECT_GE(comp->entries(), 1);        // full phase entered
+    EXPECT_EQ(comp->recenter_calls(), 1); // exactly one re-center; rest fall through
     const auto &r = h.solver().result();
     ASSERT_EQ(r.primals_.size(), 2);
     EXPECT_NEAR(r.primals_[0], 2.0, 1e-3);
@@ -1768,13 +1770,13 @@ TEST(NestedRestorationMonotoneSchedule, HoldsThenAdvancesOnBarrierProgressGate) 
         cur.barr_inf_ = 100.0; // restoration-scale complementarity: subproblem NOT solved.
         double barr_obj = 0.0;
         bool mu_event = true; // must be cleared by the call.
-        const double mu = g.update_barrier_monotone(/*mu_in=*/4.0, XSL, RHS, ctx, barr_obj, cur,
-                                                     mu_event);
-        EXPECT_DOUBLE_EQ(mu, 4.0);          // held at the anchored resto μ.
-        EXPECT_FALSE(mu_event);             // no new subproblem.
+        const double mu =
+            g.update_barrier_monotone(/*mu_in=*/4.0, XSL, RHS, ctx, barr_obj, cur, mu_event);
+        EXPECT_DOUBLE_EQ(mu, 4.0);              // held at the anchored resto μ.
+        EXPECT_FALSE(mu_event);                 // no new subproblem.
         EXPECT_GT(mu, inert.settings_.min_mu_); // never collapsed to the μ floor.
         EXPECT_DOUBLE_EQ(barr_obj, -4.0 * log_sum);
-        EXPECT_DOUBLE_EQ(RHS[1], 0.5 - 4.0 / 2.0);  // iq_lmult - μ/slack
+        EXPECT_DOUBLE_EQ(RHS[1], 0.5 - 4.0 / 2.0); // iq_lmult - μ/slack
         EXPECT_DOUBLE_EQ(RHS[2], 0.25 - 4.0 / 4.0);
     }
 
@@ -1788,8 +1790,8 @@ TEST(NestedRestorationMonotoneSchedule, HoldsThenAdvancesOnBarrierProgressGate) 
         cur.barr_inf_ = 0.05; // subproblem sufficiently solved at μ=4.
         double barr_obj = 0.0;
         bool mu_event = false;
-        const double mu = g.update_barrier_monotone(/*mu_in=*/4.0, XSL, RHS, ctx, barr_obj, cur,
-                                                     mu_event);
+        const double mu =
+            g.update_barrier_monotone(/*mu_in=*/4.0, XSL, RHS, ctx, barr_obj, cur, mu_event);
         // fiacco_mccormick_mu(4, 1e-6,1e-6,1e-12,100) = min(0.2*4=0.8, 4^1.5=8) = 0.8.
         EXPECT_DOUBLE_EQ(mu, 0.8);
         EXPECT_TRUE(mu_event); // strict decrease -> a new barrier subproblem.
@@ -1813,10 +1815,11 @@ TEST(NestedRestorationLifecycle, FreeOracleUnreachableDuringNestedPhase) {
 
     NestedL1Restoration *comp = nullptr;
     double final_mu = 0.0;
-    auto flag = h.run_forced_entry(comp, InteriorPointSolver::LineSearchModes::L1, InteriorPointSolver::BarrierModes::LOQO,
-                                   final_mu, /*init_mu=*/0.1,
-                                   /*preload_soft_counter=*/kMaxSoftRestoIters,
-                                   /*after_rebuild=*/[&] { h.set_governor(std::move(guard)); });
+    auto flag =
+        h.run_forced_entry(comp, InteriorPointSolver::LineSearchModes::L1,
+                           InteriorPointSolver::BarrierModes::LOQO, final_mu, /*init_mu=*/0.1,
+                           /*preload_soft_counter=*/kMaxSoftRestoIters,
+                           /*after_rebuild=*/[&] { h.set_governor(std::move(guard)); });
 
     EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
     ASSERT_NE(comp, nullptr);
@@ -1845,7 +1848,8 @@ TEST(NestedRestorationLifecycle, SelfSafeguardingGovernorDrivesInPhaseUpdate) {
 
     NestedL1Restoration *comp = nullptr;
     double final_mu = 0.0;
-    h.run_forced_entry(comp, InteriorPointSolver::LineSearchModes::L1, InteriorPointSolver::BarrierModes::LOQO, final_mu,
+    h.run_forced_entry(comp, InteriorPointSolver::LineSearchModes::L1,
+                       InteriorPointSolver::BarrierModes::LOQO, final_mu,
                        /*init_mu=*/0.1, /*preload_soft_counter=*/kMaxSoftRestoIters,
                        /*after_rebuild=*/[&] { h.set_governor(std::move(guard)); });
 

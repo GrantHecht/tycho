@@ -57,11 +57,11 @@ using tycho::solvers::BacktrackingLineSearch;
 using tycho::solvers::BarrierGovernors;
 using tycho::solvers::ChainedRecovery;
 using tycho::solvers::FilterAcceptance;
+using tycho::solvers::InteriorPointSolver;
 using tycho::solvers::IterateInfo;
 using tycho::solvers::ModernMeritAcceptance;
 using tycho::solvers::OptimizationProblem;
 using tycho::solvers::ProgressMeasures;
-using tycho::solvers::InteriorPointSolver;
 using tycho::solvers::RecoveryChain;
 using tycho::solvers::RestorationModes;
 using tycho::solvers::SolverContext;
@@ -139,7 +139,6 @@ std::unique_ptr<OptimizationProblem> build_soc_generic_nlp(double start, double 
         auto x = args.coeff<0>();
         prob->add_equal_con(GenericFunction<-1, -1>(x - a), (Eigen::VectorXi(1) << 0).finished());
     }
-    prob->optimizer_->set_print_level(3);
     return prob;
 }
 
@@ -161,7 +160,8 @@ class SocGenericHarness {
         {
             auto args = Arguments<1>();
             auto x = args.coeff<0>();
-            prob_.add_objective(GenericFunction<-1, 1>(x * x), (Eigen::VectorXi(1) << 0).finished());
+            prob_.add_objective(GenericFunction<-1, 1>(x * x),
+                                (Eigen::VectorXi(1) << 0).finished());
         }
         {
             auto args = Arguments<1>();
@@ -170,34 +170,34 @@ class SocGenericHarness {
             prob_.add_inequal_con(GenericFunction<-1, -1>(x - 2.0),
                                   (Eigen::VectorXi(1) << 0).finished());
         }
-        prob_.optimizer_->set_print_level(3);
         prob_.transcribe();
-        solver_ = prob_.optimizer_.get();
-        solver_->rebuild_globalization_components();
+        solver_.set_nlp(prob_.nlp_);
+        solver_.set_print_level(3);
+        solver_.rebuild_globalization_components();
     }
 
-    tycho::solvers::InteriorPointSolver &solver() { return *solver_; }
-    void rebuild() { solver_->rebuild_globalization_components(); }
-    tycho::solvers::RecoveryChain *recovery() { return solver_->recovery_.get(); }
-    tycho::solvers::AcceptanceStrategy *acceptance() { return solver_->acceptance_.get(); }
+    tycho::solvers::InteriorPointSolver &solver() { return solver_; }
+    void rebuild() { solver_.rebuild_globalization_components(); }
+    tycho::solvers::RecoveryChain *recovery() { return solver_.recovery_.get(); }
+    tycho::solvers::AcceptanceStrategy *acceptance() { return solver_.acceptance_.get(); }
 
-    int pv() const { return solver_->primal_vars_; }
-    int sv() const { return solver_->slack_vars_; }
-    int dim() const { return solver_->kkt_dim_; }
+    int pv() const { return solver_.primal_vars_; }
+    int sv() const { return solver_.slack_vars_; }
+    int dim() const { return solver_.kkt_dim_; }
 
     tycho::solvers::SolverContext make_ctx() {
         return tycho::solvers::SolverContext{
-            solver_->nlp_.get(),        solver_->kkt_sol_,
-            solver_->settings_,         solver_->primal_vars_,
-            solver_->slack_vars_,       solver_->equal_cons_,
-            solver_->inequal_cons_,     solver_->kkt_dim_,
-            solver_->stli_scratch_,     solver_->declaration_primals_scratch_,
-            solver_->restoration_.get()};
+            solver_.nlp_.get(),        solver_.kkt_sol_,
+            solver_.settings_,         solver_.primal_vars_,
+            solver_.slack_vars_,       solver_.equal_cons_,
+            solver_.inequal_cons_,     solver_.kkt_dim_,
+            solver_.stli_scratch_,     solver_.declaration_primals_scratch_,
+            solver_.restoration_.get()};
     }
 
   private:
     tycho::solvers::OptimizationProblem prob_;
-    tycho::solvers::InteriorPointSolver *solver_;
+    tycho::solvers::InteriorPointSolver solver_;
 };
 
 namespace {
@@ -212,9 +212,9 @@ TEST(SocGenericAcceptanceRouting, GenericStrategyReTestGoesThroughStrategySurfac
     SolverContext ctx = h.make_ctx();
 
     Eigen::VectorXd XSL = Eigen::VectorXd::Zero(h.dim());
-    XSL[0] = 0.5;                // primal
-    XSL[h.pv()] = 1.0;           // slack > 0
-    XSL[h.pv() + h.sv()] = 0.1;  // inequality multiplier
+    XSL[0] = 0.5;               // primal
+    XSL[h.pv()] = 1.0;          // slack > 0
+    XSL[h.pv() + h.sv()] = 0.1; // inequality multiplier
     Eigen::VectorXd DXSL = Eigen::VectorXd::Constant(h.dim(), 0.001);
     Eigen::VectorXd XSL2 = Eigen::VectorXd::Zero(h.dim());
     Eigen::VectorXd RHS = Eigen::VectorXd::Constant(h.dim(), 0.1);
@@ -225,8 +225,8 @@ TEST(SocGenericAcceptanceRouting, GenericStrategyReTestGoesThroughStrategySurfac
     const std::vector<IterateInfo> iters;
 
     const double alpha = mechanism.run_acceptance_backtrack(
-        InteriorPointSolver::LineSearchModes::L1, 1.0, 1e-2, 0.0, 0.0, XSL, DXSL, XSL2, RHS, RHS2, acceptance,
-        citer, iters, ctx);
+        InteriorPointSolver::LineSearchModes::L1, 1.0, 1e-2, 0.0, 0.0, XSL, DXSL, XSL2, RHS, RHS2,
+        acceptance, citer, iters, ctx);
 
     // The corrected/extended re-test verdict came from the generic strategy
     // surface (is_iterate_acceptable), never the classic path.
@@ -253,8 +253,9 @@ TEST(SocGenericAcceptanceRouting, GenericStrategyReTestGoesThroughStrategySurfac
     IterateInfo citer;
     const std::vector<IterateInfo> iters;
 
-    mechanism.run_acceptance_backtrack(InteriorPointSolver::LineSearchModes::L1, 1.0, 1e-2, 0.0, 0.0, XSL, DXSL,
-                                       XSL2, RHS, RHS2, acceptance, citer, iters, ctx);
+    mechanism.run_acceptance_backtrack(InteriorPointSolver::LineSearchModes::L1, 1.0, 1e-2, 0.0,
+                                       0.0, XSL, DXSL, XSL2, RHS, RHS2, acceptance, citer, iters,
+                                       ctx);
 
     // Every backtrack rung consulted the strategy surface and all rejected.
     EXPECT_GE(acceptance.accept_calls_, 1);
@@ -274,8 +275,8 @@ TEST(SocGenericAcceptanceRouting, ClassicStrategyReTestForwardsToClassicLineSear
     const std::vector<IterateInfo> iters;
 
     const double alpha = mechanism.run_acceptance_backtrack(
-        InteriorPointSolver::LineSearchModes::L1, 1.0, 1e-2, 0.0, 0.0, XSL, DXSL, XSL2, RHS, RHS2, acceptance,
-        citer, iters, ctx);
+        InteriorPointSolver::LineSearchModes::L1, 1.0, 1e-2, 0.0, 0.0, XSL, DXSL, XSL2, RHS, RHS2,
+        acceptance, citer, iters, ctx);
 
     EXPECT_EQ(acceptance.classic_calls_, 1);
     EXPECT_TRUE(citer.accepted_);
@@ -315,26 +316,28 @@ TEST(SocGenericAcceptanceRouting, FilterPlusSocBuildsChainedRecoveryOverSocAndFi
 
 TEST(SocGenericAcceptanceIntegration, FilterMonitoredWithSocSolves) {
     auto prob = build_soc_generic_nlp(/*start=*/0.0, /*a=*/1.0);
-    prob->optimizer_->settings().acceptance_strategy_ = AcceptanceStrategies::filter;
-    prob->optimizer_->settings().barrier_governor_ = BarrierGovernors::monitored;
-    prob->optimizer_->settings().max_soc_ = 4;
-    prob->optimizer_->set_max_iters(80);
-    auto flag = prob->optimize();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.settings().acceptance_strategy_ = AcceptanceStrategies::filter;
+    ipm.settings().barrier_governor_ = BarrierGovernors::monitored;
+    ipm.settings().max_soc_ = 4;
+    ipm.set_max_iters(80);
+    auto flag = prob->solve(&ipm).flag_;
     EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
-    const auto &r = prob->optimizer_->result();
+    const auto &r = ipm.result();
     ASSERT_EQ(r.primals_.size(), 1);
     EXPECT_NEAR(r.primals_[0], 1.0, 1e-4);
 }
 
 TEST(SocGenericAcceptanceIntegration, MeritWithSocAndExtendedBacktrackSolves) {
     auto prob = build_soc_generic_nlp(/*start=*/0.0, /*a=*/1.0);
-    prob->optimizer_->settings().acceptance_strategy_ = AcceptanceStrategies::merit;
-    prob->optimizer_->settings().max_soc_ = 4;
-    prob->optimizer_->settings().ls_extended_iters_ = 2;
-    prob->optimizer_->set_max_iters(80);
-    auto flag = prob->optimize();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.settings().acceptance_strategy_ = AcceptanceStrategies::merit;
+    ipm.settings().max_soc_ = 4;
+    ipm.settings().ls_extended_iters_ = 2;
+    ipm.set_max_iters(80);
+    auto flag = prob->solve(&ipm).flag_;
     EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
-    const auto &r = prob->optimizer_->result();
+    const auto &r = ipm.result();
     ASSERT_EQ(r.primals_.size(), 1);
     EXPECT_NEAR(r.primals_[0], 1.0, 1e-4);
 }
@@ -354,14 +357,15 @@ TEST(SocGenericAcceptanceIntegration, MeritWithSocAndExtendedBacktrackSolves) {
 // composition on feasible problems, pinned here.
 TEST(SocGenericAcceptanceIntegration, SocRescuePreemptsRestorationOnFeasibleProblem) {
     auto prob = build_soc_generic_nlp(/*start=*/0.0, /*a=*/1.0);
-    prob->optimizer_->settings().acceptance_strategy_ = AcceptanceStrategies::merit;
-    prob->optimizer_->settings().restoration_mode_ = RestorationModes::l1_nested;
-    prob->optimizer_->settings().max_soc_ = 4;
-    prob->optimizer_->set_max_ls_iters(0);
-    prob->optimizer_->set_max_iters(80);
-    auto flag = prob->optimize();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.settings().acceptance_strategy_ = AcceptanceStrategies::merit;
+    ipm.settings().restoration_mode_ = RestorationModes::l1_nested;
+    ipm.settings().max_soc_ = 4;
+    ipm.set_max_ls_iters(0);
+    ipm.set_max_iters(80);
+    auto flag = prob->solve(&ipm).flag_;
     EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE);
-    const auto &r = prob->optimizer_->result();
+    const auto &r = ipm.result();
     EXPECT_EQ(r.last_feas_rest_entries_, 0); // corrections rescued every rejection
     ASSERT_EQ(r.primals_.size(), 1);
     EXPECT_NEAR(r.primals_[0], 1.0, 1e-4);
@@ -373,22 +377,22 @@ TEST(SocGenericAcceptanceIntegration, SocRescuePreemptsRestorationOnFeasibleProb
 // in-phase composition this suite exists to cover.
 TEST(SocGenericAcceptanceIntegration, L1NestedRestorationWithSocComposesInPhase) {
     auto prob = build_soc_generic_nlp(/*start=*/0.0, /*a=*/1.0);
+    tycho::solvers::InteriorPointSolver ipm;
     {
         using tycho::vf::Arguments;
         using tycho::vf::GenericFunction;
         auto args = Arguments<1>();
         auto x = args.coeff<0>();
         // Contradicts x - 1 = 0: jointly infeasible, violation bounded below by 1.
-        prob->add_equal_con(GenericFunction<-1, -1>(x + 1.0),
-                            (Eigen::VectorXi(1) << 0).finished());
+        prob->add_equal_con(GenericFunction<-1, -1>(x + 1.0), (Eigen::VectorXi(1) << 0).finished());
     }
-    prob->optimizer_->settings().acceptance_strategy_ = AcceptanceStrategies::merit;
-    prob->optimizer_->settings().restoration_mode_ = RestorationModes::l1_nested;
-    prob->optimizer_->settings().max_soc_ = 4;
-    prob->optimizer_->set_max_ls_iters(0);
-    prob->optimizer_->set_max_iters(80);
-    auto flag = prob->optimize();
-    const auto &r = prob->optimizer_->result();
+    ipm.settings().acceptance_strategy_ = AcceptanceStrategies::merit;
+    ipm.settings().restoration_mode_ = RestorationModes::l1_nested;
+    ipm.settings().max_soc_ = 4;
+    ipm.set_max_ls_iters(0);
+    ipm.set_max_iters(80);
+    auto flag = prob->solve(&ipm).flag_;
+    const auto &r = ipm.result();
     EXPECT_GE(r.last_feas_rest_entries_, 1); // restoration entered with SOC in the chain
     EXPECT_NE(flag, tycho::ConvergenceFlags::CONVERGED); // never falsely converges
 }

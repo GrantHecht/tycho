@@ -1,92 +1,74 @@
 ///////////////////////////////////////////////////////////////////////////////
 // Jet batch runner tests
+//
+// M5 task 8 interim: jet_run() -- the mode-sequence-driven entry point
+// Jet::map dispatches to on each pool worker -- is a placeholder that
+// unconditionally throws std::logic_error (the jet_job_mode_/JetJobModes
+// surface it used to switch on is retired along with the five mode methods;
+// batched solves are staged through set_jet_job() instead, landing in a
+// follow-up task). Until that lands, these tests pin the interim contract:
+// Jet::map's own plumbing (single problem list, single generator, a
+// pool-saturating job count, multiple generators dispatched by index) still
+// runs every job and correctly propagates the first job's exception to the
+// caller (hven::Jet::map's own future-draining behavior), rather than
+// hanging or losing the failure. The pre-M5 convergence assertions these
+// tests used to make are restored once Task 9 lands real batched dispatch.
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "solver_test_utils.h"
 #include <gtest/gtest.h>
+
+#include <stdexcept>
 
 using namespace tycho;
 using TychoTest::BrachODE;
 using TychoTest::make_brach_solver_phase;
 using TychoTest::SolverTest;
 
-// Jet/BackendProblemBase live in tycho::solvers; this file previously
-// relied on the TychoTest -> tycho::solvers using-directive leak (fixed in
-// solver_test_utils.h) to see them unqualified.
+// Jet lives in tycho::solvers; this file previously relied on the
+// TychoTest -> tycho::solvers using-directive leak (fixed in
+// solver_test_utils.h) to see it unqualified.
 using tycho::solvers::Jet;
-using tycho::solvers::BackendProblemBase;
 
-TEST_F(SolverTest, JetMapPrebuiltProblems) {
-    // Create 3 identical Brachistochrone phases, solve via Jet::map
+TEST_F(SolverTest, JetMapPrebuiltProblemsRefusesViaInterimJetRun) {
     std::vector<std::shared_ptr<ODEPhase<BrachODE>>> phases;
     for (int i = 0; i < 3; ++i) {
-        auto p = make_brach_solver_phase(16);
-        p->jet_job_mode_ = BackendProblemBase::JetJobModes::SolveOptimize;
-        phases.push_back(p);
+        phases.push_back(make_brach_solver_phase(16));
     }
 
-    auto results = Jet::map(phases, false);
-    ASSERT_EQ(results.size(), 3u);
-    for (int i = 0; i < 3; ++i) {
-        auto traj = results[i]->return_traj();
-        double tf = traj.back()[3];
-        EXPECT_NEAR(tf, 1.8013, 0.02)
-            << "Jet problem " << i << " did not converge to expected time";
-    }
+    EXPECT_THROW(Jet::map(phases, false), std::logic_error);
 }
 
-TEST_F(SolverTest, JetMapSingleGenerator) {
-    // Single generator function that builds a Brach phase from a segment count
+TEST_F(SolverTest, JetMapSingleGeneratorRefusesViaInterimJetRun) {
     std::function<std::shared_ptr<ODEPhase<BrachODE>>(int)> gen = [](int n_segs) {
-        auto p = make_brach_solver_phase(n_segs);
-        p->jet_job_mode_ = BackendProblemBase::JetJobModes::SolveOptimize;
-        return p;
+        return make_brach_solver_phase(n_segs);
     };
 
     std::vector<int> args = {16, 16};
-    auto results = Jet::map(gen, args, false);
-    ASSERT_EQ(results.size(), 2u);
-    for (int i = 0; i < 2; ++i) {
-        auto traj = results[i]->return_traj();
-        double tf = traj.back()[3];
-        EXPECT_NEAR(tf, 1.8013, 0.02) << "Jet single-gen problem " << i << " did not converge";
-    }
+    EXPECT_THROW(Jet::map(gen, args, false), std::logic_error);
 }
 
-TEST_F(SolverTest, JetMapSaturatedPool) {
-    // Regression test: Jet.map must not deadlock when num_jobs >= pool threads.
-    // Root cause: parallel_task() in NLP eval methods was submitting work to the
-    // global pool while already running on a pool worker, saturating all threads.
+TEST_F(SolverTest, JetMapSaturatedPoolRefusesViaInterimJetRun) {
+    // Regression coverage retained from the pre-M5 deadlock test: with more
+    // jobs than pool threads, every job's exception must still be collected
+    // (and the first re-thrown) without the pool hanging.
     int nt = tycho::utils::get_num_threads();
     int num_jobs = std::max(nt + 2, 6); // more jobs than pool threads
 
     std::vector<std::shared_ptr<ODEPhase<BrachODE>>> phases;
     for (int i = 0; i < num_jobs; ++i) {
-        auto p = make_brach_solver_phase(16);
-        p->jet_job_mode_ = BackendProblemBase::JetJobModes::SolveOptimize;
-        phases.push_back(p);
+        phases.push_back(make_brach_solver_phase(16));
     }
 
-    auto results = Jet::map(phases, false);
-    ASSERT_EQ(results.size(), static_cast<size_t>(num_jobs));
-    for (int i = 0; i < num_jobs; ++i) {
-        auto traj = results[i]->return_traj();
-        double tf = traj.back()[3];
-        EXPECT_NEAR(tf, 1.8013, 0.02) << "Jet saturated-pool problem " << i << " did not converge";
-    }
+    EXPECT_THROW(Jet::map(phases, false), std::logic_error);
 }
 
-TEST_F(SolverTest, JetMapMultiGenerator) {
-    // Two generators: different segment counts
+TEST_F(SolverTest, JetMapMultiGeneratorRefusesViaInterimJetRun) {
     std::function<std::shared_ptr<ODEPhase<BrachODE>>(int)> gen16 = [](int) {
-        auto p = make_brach_solver_phase(16);
-        p->jet_job_mode_ = BackendProblemBase::JetJobModes::SolveOptimize;
-        return p;
+        return make_brach_solver_phase(16);
     };
     std::function<std::shared_ptr<ODEPhase<BrachODE>>(int)> gen32 = [](int) {
-        auto p = make_brach_solver_phase(32);
-        p->jet_job_mode_ = BackendProblemBase::JetJobModes::SolveOptimize;
-        return p;
+        return make_brach_solver_phase(32);
     };
 
     std::vector<std::function<std::shared_ptr<ODEPhase<BrachODE>>(int)>> genfuncs = {gen16, gen32};
@@ -94,11 +76,5 @@ TEST_F(SolverTest, JetMapMultiGenerator) {
     Eigen::VectorXi genfidxes(3);
     genfidxes << 0, 1, 0; // gen16, gen32, gen16
 
-    auto results = Jet::map(genfuncs, args, genfidxes, false);
-    ASSERT_EQ(results.size(), 3u);
-    for (int i = 0; i < 3; ++i) {
-        auto traj = results[i]->return_traj();
-        double tf = traj.back()[3];
-        EXPECT_NEAR(tf, 1.8013, 0.02) << "Jet multi-gen problem " << i << " did not converge";
-    }
+    EXPECT_THROW(Jet::map(genfuncs, args, genfidxes, false), std::logic_error);
 }

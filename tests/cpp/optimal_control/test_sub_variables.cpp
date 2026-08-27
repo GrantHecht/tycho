@@ -89,9 +89,10 @@ TEST_F(SubVariablesPhaseTest, AddValueLockPinsInitialState) {
     phase.add_integral_objective(GenericFunction<-1, 1>(Arguments<2>().squared_norm()),
                                  {"u1", "u2"});
 
-    phase.optimizer().set_print_level(3);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
 
-    auto status = phase.solve_optimize();
+    auto status = phase.solve(&ipm, {.presolve = true}).flag_;
     ASSERT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE)
         << "Phase with add_value_lock did not converge";
 
@@ -136,8 +137,9 @@ TEST_F(SubVariablesPhaseTest, NamedOverloadLocksFrontState) {
     phase.add_integral_objective(GenericFunction<-1, 1>(Arguments<2>().squared_norm()),
                                  {"u1", "u2"});
 
-    phase.optimizer().set_print_level(3);
-    auto status = phase.solve_optimize();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
+    auto status = phase.solve(&ipm, {.presolve = true}).flag_;
     ASSERT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
 
     auto result = phase.return_traj();

@@ -238,10 +238,8 @@ std::vector<std::pair<std::string, std::function<void(TranscribedAggregate &)>>>
 l2_provider_stream_accessors() {
     return {
         {"kkt_dimension", [](TranscribedAggregate &p) { static_cast<void>(p.kkt_dimension()); }},
-        {"kkt_claim_rows",
-         [](TranscribedAggregate &p) { static_cast<void>(p.kkt_claim_rows()); }},
-        {"kkt_claim_cols",
-         [](TranscribedAggregate &p) { static_cast<void>(p.kkt_claim_cols()); }},
+        {"kkt_claim_rows", [](TranscribedAggregate &p) { static_cast<void>(p.kkt_claim_rows()); }},
+        {"kkt_claim_cols", [](TranscribedAggregate &p) { static_cast<void>(p.kkt_claim_cols()); }},
         {"kkt_claim_partitions",
          [](TranscribedAggregate &p) { static_cast<void>(p.kkt_claim_partitions()); }},
         {"hessian_claims", [](TranscribedAggregate &p) { static_cast<void>(p.hessian_claims()); }},
@@ -747,8 +745,12 @@ TEST(Level2Provider, TheClaimStreamIsTheSameUnderEveryTreatmentThatKeepsTheDecla
 // re-analyses against the new layout before using it.
 TEST(Level2Provider, NegotiatingWhileAConsumerIsBoundReanalysesOnTheNextSolve) {
     L2ProviderFixture fixture;
-    // transcribe() hands the program to the optimizer, whose sparsity analysis
-    // binds its own destination.
+    tycho::solvers::InteriorPointSolver ipm;
+    // set_nlp() binds the engine's own sparsity analysis to the program as a
+    // consumer, without running a solve -- transcribe() alone no longer does
+    // this (there is no problem-owned engine to hand the NLP to any more), so
+    // this call establishes the "a consumer is bound" precondition instead.
+    ipm.set_nlp(fixture.prob_.nlp_);
     ASSERT_NE(fixture.prob_.nlp_->bound_kkt_destination(), nullptr);
 
     EXPECT_NO_THROW(fixture.provider().negotiate_partition_count(1));
@@ -759,7 +761,8 @@ TEST(Level2Provider, NegotiatingWhileAConsumerIsBoundReanalysesOnTheNextSolve) {
     EXPECT_EQ(fixture.prob_.nlp_->bound_kkt_destination(), nullptr);
 
     // The next solve re-analyses against the new layout and converges.
-    EXPECT_EQ(fixture.prob_.solve_optimize(), tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_EQ(fixture.prob_.solve(&ipm, {.presolve = true}).flag_,
+              tycho::ConvergenceFlags::CONVERGED);
     EXPECT_NE(fixture.prob_.nlp_->bound_kkt_destination(), nullptr);
 }
 
@@ -777,7 +780,8 @@ TEST(Level2Provider, NegotiatingAReducedHostIsRefusedBeforeTheHostIsTouched) {
     prob.add_variable_bound(2, 1.25, 1.25);
     prob.transcribe();
 
-    ASSERT_EQ(prob.solve_optimize(), tycho::ConvergenceFlags::CONVERGED);
+    tycho::solvers::InteriorPointSolver ipm;
+    ASSERT_EQ(prob.solve(&ipm, {.presolve = true}).flag_, tycho::ConvergenceFlags::CONVERGED);
     ASSERT_TRUE(prob.nlp_->is_reduced());
     ASSERT_NE(prob.nlp_->bound_kkt_destination(), nullptr);
 

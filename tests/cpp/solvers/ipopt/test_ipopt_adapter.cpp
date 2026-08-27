@@ -81,7 +81,6 @@ std::unique_ptr<OptimizationProblem> build_ipopt_adapter_problem(double x0 = 0.5
         prob->add_inequal_con(GenericFunction<-1, -1>(a - b), idx);
     }
 
-    prob->optimizer_->set_print_level(3);
     return prob;
 }
 
@@ -367,15 +366,19 @@ TEST(IpoptBackend, StructuralShape) {
 // on the same solution.
 TEST(IpoptBackend, ParityWithInteriorPointOnSmoothProblem) {
     auto native_prob = build_ipopt_adapter_problem();
-    const auto native_flag = native_prob->optimize();
+    ts::InteriorPointSolver native_ipm;
+    const auto native_flag = native_prob->solve(&native_ipm).flag_;
     ASSERT_EQ(native_flag, tycho::ConvergenceFlags::CONVERGED);
-    const double native_obj = native_prob->optimizer_->result().obj_val_;
+    const double native_obj = native_ipm.result().obj_val_;
     const Eigen::VectorXd native_vars = native_prob->return_vars();
 
     auto ipopt_prob = build_ipopt_adapter_problem();
-    ipopt_prob->nlp_solver_ = ts::NLPSolvers::ipopt;
-    const auto ipopt_flag = ipopt_prob->optimize();
+    ts::IpoptSolver ipopt;
+    const ts::SolveResult ipopt_result = ipopt_prob->solve(&ipopt);
+    const auto ipopt_flag = ipopt_result.flag_;
     EXPECT_EQ(ipopt_flag, tycho::ConvergenceFlags::CONVERGED);
+    ASSERT_FALSE(ipopt_result.stages_.empty());
+    const ts::StageResult &ipopt_stage = ipopt_result.final_stage();
 
     const Eigen::VectorXd ipopt_vars = ipopt_prob->return_vars();
     ASSERT_EQ(ipopt_vars.size(), native_vars.size());
@@ -384,7 +387,7 @@ TEST(IpoptBackend, ParityWithInteriorPointOnSmoothProblem) {
     }
 
     EXPECT_NEAR(native_obj, ipopt_adapter_optimal_objective(), 1e-6);
-    EXPECT_NEAR(ipopt_prob->last_ipopt_result_.objective_, native_obj, 1e-6);
+    EXPECT_NEAR(ipopt_stage.objective_, native_obj, 1e-6);
 
     // Multiplier direction: eval_h and finalize_solution both document that
     // Ipopt's lambda maps onto (LE, LI) with no sign flip, so the two
@@ -402,28 +405,27 @@ TEST(IpoptBackend, ParityWithInteriorPointOnSmoothProblem) {
             << "inequality multiplier " << i;
     }
 
-    EXPECT_TRUE(ipopt_prob->last_ipopt_result_.ran_);
-    EXPECT_EQ(ipopt_prob->last_ipopt_result_.normalized_, "converged");
-    EXPECT_EQ(ipopt_prob->last_ipopt_result_.converge_flag_, tycho::ConvergenceFlags::CONVERGED);
-    EXPECT_GT(ipopt_prob->last_ipopt_result_.iterations_, 0);
-    EXPECT_GE(ipopt_prob->last_ipopt_result_.wall_time_s_, 0.0);
-    EXPECT_LT(ipopt_prob->last_ipopt_result_.constraint_violation_, 1e-6);
-
-    // The built-in solver's run info is untouched by an Ipopt run.
-    EXPECT_FALSE(native_prob->last_ipopt_result_.ran_);
+    EXPECT_EQ(ipopt_stage.engine_name_, ts::IpoptSolver::name());
+    EXPECT_EQ(ipopt_stage.engine_notes_.at("normalized"), "converged");
+    EXPECT_EQ(ipopt_stage.flag_, tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_GT(ipopt_stage.iterations_, 0);
+    EXPECT_GE(ipopt_stage.wall_time_s_, 0.0);
+    EXPECT_LT(ipopt_stage.engine_details_.at("constraint_violation"), 1e-6);
 }
 
 // A collocation phase solves through the same seam, and the solved variables
 // flow back into the phase's trajectory.
 TEST(IpoptBackend, PhaseProblemEndToEnd) {
     auto phase = make_brach_solver_phase(4);
-    phase->nlp_solver_ = ts::NLPSolvers::ipopt;
+    ts::IpoptSolver ipopt;
 
-    const auto flag = phase->optimize();
+    const ts::SolveResult result = phase->solve(&ipopt);
+    const auto flag = result.flag_;
     EXPECT_LE(flag, tycho::ConvergenceFlags::ACCEPTABLE)
         << "ipopt backend did not solve the collocation phase";
-    EXPECT_TRUE(phase->last_ipopt_result_.ran_);
-    EXPECT_GT(phase->last_ipopt_result_.iterations_, 0);
+    ASSERT_FALSE(result.stages_.empty());
+    EXPECT_EQ(result.final_stage().engine_name_, ts::IpoptSolver::name());
+    EXPECT_GT(result.final_stage().iterations_, 0);
 
     // Trajectory extraction: the boundary conditions the phase was built with
     // must hold at the returned trajectory's endpoints.
@@ -457,11 +459,10 @@ TEST(IpoptBackend, EvalExceptionSurfacesAfterSolve) {
         auto x = args.coeff<0>();
         prob.add_equal_con(GenericFunction<-1, -1>(x - 1.0), (Eigen::VectorXi(1) << 0).finished());
     }
-    prob.optimizer_->set_print_level(3);
-    prob.nlp_solver_ = ts::NLPSolvers::ipopt;
+    ts::IpoptSolver ipopt;
 
     try {
-        prob.optimize();
+        prob.solve(&ipopt);
         FAIL() << "expected the latched evaluation error to be re-raised";
     } catch (const std::runtime_error &e) {
         const std::string what = e.what();
@@ -474,11 +475,11 @@ TEST(IpoptBackend, EvalExceptionSurfacesAfterSolve) {
 // silently or ignored.
 TEST(IpoptBackend, BadOptionRejected) {
     auto prob = build_ipopt_adapter_problem();
-    prob->nlp_solver_ = ts::NLPSolvers::ipopt;
-    prob->ipopt_options_ = {{"linear_solver", "no_such_solver"}};
+    ts::IpoptSolver ipopt;
+    ipopt.options() = {{"linear_solver", "no_such_solver"}};
 
     try {
-        prob->optimize();
+        prob->solve(&ipopt);
         FAIL() << "expected the rejected option to be reported";
     } catch (const std::runtime_error &e) {
         const std::string what = e.what();

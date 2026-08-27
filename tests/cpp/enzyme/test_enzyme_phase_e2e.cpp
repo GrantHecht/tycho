@@ -55,8 +55,7 @@ TEST(EnzymePhaseE2E, BrachistochroneEnzymeFwdFDiff) {
     // erasure preserves the underlying derivative path (verified
     // lane-for-lane in EnzymeJacobian.GenericFunctionTypeErasure), so calls
     // through this wrapper hit the EnzymeAD scalar Jacobian.
-    auto erased = tycho::vf::GenericFunction<-1, -1>(
-        tycho_enzyme_test::BrachEnzymeAD(g));
+    auto erased = tycho::vf::GenericFunction<-1, -1>(tycho_enzyme_test::BrachEnzymeAD(g));
     ODE ode(std::move(erased), 3, 1, 0);
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, n_defects);
 
@@ -64,16 +63,14 @@ TEST(EnzymePhaseE2E, BrachistochroneEnzymeFwdFDiff) {
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(4, 0, 3);
     Eigen::VectorXd front_val(4);
     front_val << x0, y0, v0, t0;
-    phase.add_boundary_value(PhaseRegionFlags::Front, front_idx, front_val,
-                             ScaleModes::AUTO);
+    phase.add_boundary_value(PhaseRegionFlags::Front, front_idx, front_val, ScaleModes::AUTO);
 
     // Back boundary: x(tf)=xf, y(tf)=yf.
     Eigen::VectorXi back_idx(2);
     back_idx << 0, 1;
     Eigen::VectorXd back_val(2);
     back_val << xf, yf;
-    phase.add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val,
-                             ScaleModes::AUTO);
+    phase.add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val, ScaleModes::AUTO);
 
     // Control bounds: theta in [-0.1, 2.0].
     phase.add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0);
@@ -81,17 +78,16 @@ TEST(EnzymePhaseE2E, BrachistochroneEnzymeFwdFDiff) {
     // Minimum-time objective.
     phase.add_delta_time_objective(1.0, ScaleModes::AUTO);
 
-    const auto status = phase.solve_optimize();
-    ASSERT_EQ(static_cast<int>(status),
-              static_cast<int>(tycho::ConvergenceFlags::CONVERGED))
+    tycho::solvers::InteriorPointSolver ipm;
+    const auto status = phase.solve(&ipm, {.presolve = true}).flag_;
+    ASSERT_EQ(static_cast<int>(status), static_cast<int>(tycho::ConvergenceFlags::CONVERGED))
         << "InteriorPointSolver did not reach CONVERGED; status=" << static_cast<int>(status);
-    EXPECT_LT(phase.optimizer().result().iter_num_, 50)
+    EXPECT_LT(ipm.result().iter_num_, 50)
         << "InteriorPointSolver iter count regression (Enzyme Jacobian path)";
 
     const auto result = phase.return_traj();
     const double tf_opt = result.back()[3];
-    EXPECT_NEAR(tf_opt, 1.8013, 1e-4)
-        << "Optimal time mismatch (Enzyme path); got " << tf_opt;
+    EXPECT_NEAR(tf_opt, 1.8013, 1e-4) << "Optimal time mismatch (Enzyme path); got " << tf_opt;
 }
 
 // -----------------------------------------------------------------------------
@@ -128,33 +124,30 @@ TEST(EnzymePhaseE2E, BrachistochroneFullEnzymePipeline) {
         traj.push_back(pt);
     }
 
-    auto erased = tycho::vf::GenericFunction<-1, -1>(
-        tycho_enzyme_test::BrachEnzymeFull(g));
+    auto erased = tycho::vf::GenericFunction<-1, -1>(tycho_enzyme_test::BrachEnzymeFull(g));
     ODE ode(std::move(erased), 3, 1, 0);
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, n_defects);
 
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(4, 0, 3);
     Eigen::VectorXd front_val(4);
     front_val << x0, y0, v0, t0;
-    phase.add_boundary_value(PhaseRegionFlags::Front, front_idx, front_val,
-                             ScaleModes::AUTO);
+    phase.add_boundary_value(PhaseRegionFlags::Front, front_idx, front_val, ScaleModes::AUTO);
 
     Eigen::VectorXi back_idx(2);
     back_idx << 0, 1;
     Eigen::VectorXd back_val(2);
     back_val << xf, yf;
-    phase.add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val,
-                             ScaleModes::AUTO);
+    phase.add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val, ScaleModes::AUTO);
 
     phase.add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0);
     phase.add_delta_time_objective(1.0, ScaleModes::AUTO);
 
-    const auto status = phase.solve_optimize();
-    ASSERT_EQ(static_cast<int>(status),
-              static_cast<int>(tycho::ConvergenceFlags::CONVERGED))
+    tycho::solvers::InteriorPointSolver ipm;
+    const auto status = phase.solve(&ipm, {.presolve = true}).flag_;
+    ASSERT_EQ(static_cast<int>(status), static_cast<int>(tycho::ConvergenceFlags::CONVERGED))
         << "InteriorPointSolver did not reach CONVERGED under <EnzymeAD, EnzymeAD>; status="
         << static_cast<int>(status);
-    EXPECT_LT(phase.optimizer().result().iter_num_, 50)
+    EXPECT_LT(ipm.result().iter_num_, 50)
         << "InteriorPointSolver iter count regression (full Enzyme pipeline)";
 
     const auto result = phase.return_traj();

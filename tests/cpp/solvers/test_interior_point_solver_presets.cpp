@@ -23,10 +23,10 @@ using namespace tycho;
 using tycho::solvers::AcceptanceStrategies;
 using tycho::solvers::BarrierGovernors;
 using tycho::solvers::InertiaModes;
-using tycho::solvers::kInteriorPointSolverPresets;
-using tycho::solvers::MeritPenaltyRules;
 using tycho::solvers::InteriorPointSolver;
 using tycho::solvers::InteriorPointSolverPresetFields;
+using tycho::solvers::kInteriorPointSolverPresets;
+using tycho::solvers::MeritPenaltyRules;
 using tycho::solvers::RestorationModes;
 using TychoTest::make_brach_solver_phase;
 using TychoTest::SolverTest;
@@ -37,7 +37,8 @@ namespace {
 // File-local name kept unique across tests/cpp/solvers/ (unity build merges
 // these TUs; anonymous namespaces do not isolate across files in the same
 // unity TU) -- prefix "PresetGate" is not used anywhere else in tests/cpp/.
-void PresetGateExpectFieldsMatch(const InteriorPointSolver::Settings &s, const InteriorPointSolverPresetFields &f) {
+void PresetGateExpectFieldsMatch(const InteriorPointSolver::Settings &s,
+                                 const InteriorPointSolverPresetFields &f) {
     EXPECT_EQ(s.acceptance_strategy_, f.acceptance_strategy_);
     EXPECT_EQ(s.merit_penalty_rule_, f.merit_penalty_rule_);
     EXPECT_EQ(s.barrier_governor_, f.barrier_governor_);
@@ -238,11 +239,12 @@ TEST_F(SolverTest, PresetGateLeavesNonGlobalizationFieldsUntouched) {
 TEST_F(SolverTest, PresetGateEveryPresetSolvesSmokeProblem) {
     for (const auto &entry : kInteriorPointSolverPresets) {
         auto phase = make_brach_solver_phase(16);
-        phase->optimizer_->set_print_level(3);
-        phase->optimizer_->set_qp_threads(1);
-        phase->optimizer_->apply_preset(entry.name_);
+        InteriorPointSolver ipm;
+        ipm.set_print_level(3);
+        ipm.set_qp_threads(1);
+        ipm.apply_preset(entry.name_);
 
-        const auto status = phase->solve_optimize();
+        const auto status = phase->solve(&ipm, {.presolve = true}).flag_;
         EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE)
             << "preset: " << entry.name_ << " did not converge/acceptable on the smoke problem";
     }

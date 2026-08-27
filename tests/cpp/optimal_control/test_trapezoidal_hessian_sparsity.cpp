@@ -42,7 +42,8 @@ TEST_F(OptimalControlTest, TrapezoidalSparsityMatchesDenseSolve) {
         // Fresh phase per solve: transcription only runs once per phase.
         auto phase = make_brach_phase(100, 32, TranscriptionModes::Trapezoidal);
         phase->enable_hessian_sparsity_ = sparsity;
-        auto status = phase->solve_optimize();
+        tycho::solvers::InteriorPointSolver ipm;
+        auto status = phase->solve(&ipm, {.presolve = true}).flag_;
         EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
         return phase->return_traj().back()[3]; // tf
     };
@@ -61,7 +62,8 @@ TEST_F(OptimalControlTest, TrapezoidalSparsityMatchesDenseSolveBlockConstant) {
         auto phase = make_brach_phase(100, 32, TranscriptionModes::Trapezoidal);
         phase->set_control_mode(ControlModes::BlockConstant);
         phase->enable_hessian_sparsity_ = sparsity;
-        auto status = phase->solve_optimize();
+        tycho::solvers::InteriorPointSolver ipm;
+        auto status = phase->solve(&ipm, {.presolve = true}).flag_;
         EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
         return phase->return_traj().back()[3]; // tf
     };
