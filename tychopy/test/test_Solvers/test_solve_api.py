@@ -124,16 +124,8 @@ def test_result_presolve_and_main_stage_roles():
 
 
 # ---------------------------------------------------------------------------
-# presolve=/polish=/warm= accepted paths, and the legacy no-arg solve().
+# presolve=/polish=/warm= accepted paths.
 # ---------------------------------------------------------------------------
-
-
-def test_legacy_no_arg_solve_still_returns_flag():
-    prob = _small_problem()
-    prob.optimizer.print_level = 0
-    flag = prob.solve()
-    assert flag == solvs.ConvergenceFlags.CONVERGED
-    assert isinstance(flag, solvs.ConvergenceFlags)
 
 
 def test_solve_presolve_none_aliases_false():

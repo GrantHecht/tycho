@@ -55,17 +55,18 @@ Every module under `tests/corpus/problems/` defines exactly:
 ```python
 TIER = "degenerate" | "hard" | "literature"
 TIMEOUT = <int seconds>          # subprocess kill ceiling
-SOLVE_MODE = "solve" | "optimize" | "solve_optimize" | "solve_optimize_solve" | "optimize_solve"
+SOLVE_CALL = {"mode": "optimal", ...}   # kwargs for prob.solve(engine, **SOLVE_CALL)
 
 def build():
     """Construct the problem (fully, but unsolved) and return it -- a
-    Phase or an OptimizationProblem, both of which expose `.optimizer`,
-    `.optimize()`/`.solve()`/etc, and `.nlp_solver`/`.ipopt_options`/
-    `.last_ipopt_result` for backend selection. Must not call the harness's
-    `configure` callback and must not call any solve entry point (optimizer
-    knobs the *problem itself* owns do belong here -- see the `build()`
-    bullet below), must not plot, must not write files, must not read wall
-    clock."""
+    Phase or an OptimizationProblem. Both expose `.solve(engine, mode=,
+    presolve=, polish=, warm=)`, the one entry point for every solve shape;
+    there is no per-problem `.optimizer`/engine -- the engine is built and
+    owned by the driver (see below). Must not call the harness's
+    `configure` callback and must not call `.solve()` itself (engine
+    settings the *problem itself* owns belong in an optional `configure`
+    hook -- see the `build()` bullet below), must not plot, must not write
+    files, must not read wall clock."""
 ```
 
 and, optionally, at most one of:
@@ -74,10 +75,22 @@ and, optionally, at most one of:
 NOTES = "<static string>"          # most modules omit this (implicit "")
 
 def POST_SOLVE(prob) -> str:
-    """Called only on the psiopt backend, only after the SOLVE_MODE entry
-    point has run, to compute notes that depend on post-solve state (e.g.
+    """Called only on the psiopt backend, only after the SOLVE_CALL-driven
+    solve has run, to compute notes that depend on post-solve state (e.g.
     hard_hypersens_stiff's `phase.mesh_converged` check -- the one module
     in the corpus that needs this)."""
+```
+
+and, optionally:
+
+```python
+def configure(engine) -> None:
+    """Problem-owned engine tuning (tolerances, line-search mode, thread
+    count, ...) -- runs BEFORE the harness's own `configure` callback (the
+    `--config KEY=VALUE` overrides), so a CLI override still wins. This is
+    where a module reaches settings that used to be baked directly into
+    `build()`'s own `phase.optimizer` before the engine was detached from
+    the problem."""
 ```
 
 - `TIER` groups problems by why they're hard: `"degenerate"` (structurally
@@ -88,36 +101,44 @@ def POST_SOLVE(prob) -> str:
 - `TIMEOUT` is a plain `int` (seconds); the harness passes it straight to
   `subprocess.run(..., timeout=TIMEOUT)` for the child process running this
   problem.
-- `SOLVE_MODE` names the entry point the pre-split `build_and_solve` used to
-  call (`getattr(prob, SOLVE_MODE)()` on the psiopt backend -- see
-  `tests/corpus/driver.py`). Only `"optimize"`, `"solve_optimize"`, and
-  `"optimize_solve"` are used by any module today; `"solve"` and
-  `"solve_optimize_solve"` are valid contract values with no current user.
+- `SOLVE_CALL` is a plain kwargs dict dispatched as
+  `prob.solve(engine, **SOLVE_CALL)` (module call shape) -- see
+  `tests/corpus/driver.py`'s module docstring for the full convention,
+  including the `feasible_fallback` reserved key the driver consumes for
+  the old two/three-stage combo shapes, and the mapping from the retired
+  `SOLVE_MODE` vocabulary (`"solve"`/`"optimize"`/`"solve_optimize"`/
+  `"optimize_solve"`/`"solve_optimize_solve"`) onto today's `SOLVE_CALL`
+  dicts. Only the `dict(mode="optimal")`, `dict(mode="optimal",
+  presolve=True)`, and `dict(mode="optimal", feasible_fallback=True)`
+  shapes are used by any module today.
 - `build()` does everything the old `build_and_solve` did up to (excluding)
   the `configure(...)` call -- construct the ODE/dynamics, the phase or
-  `OptimizationProblem`, boundary values/bounds/objective, and any
-  optimizer knobs the problem itself sets (tolerances, `opt_ls_mode`,
-  `num_partitions`, ...) -- and returns the unsolved problem object.
+  `OptimizationProblem`, and boundary values/bounds/objective -- and
+  returns the unsolved problem object. Any engine knob the problem itself
+  owns (tolerances, `opt_ls_mode`, thread count, ...) goes in the optional
+  `configure(engine)` hook instead, since the engine does not exist until
+  the driver constructs it.
 - The shared driver (`tests/corpus/driver.py::run`) owns everything the old
-  `build_and_solve` tail used to do: calling `configure(prob.optimizer)`
-  *immediately before* the solve (this is how `--config KEY=VALUE` reaches
-  the interior-point solver -- the harness's `configure` does `setattr(optimizer, key, value)`
-  for each pair), dispatching `SOLVE_MODE`, and normalizing the result dict.
-  A problem module has no way to opt out of `configure` being called on the
-  psiopt backend.
+  `build_and_solve` tail used to do: constructing the engine, applying the
+  module's own `configure(engine)` hook (if defined) and then the harness's
+  `configure(engine)` (this is how `--config KEY=VALUE` reaches the
+  interior-point solver -- the harness's `configure` does
+  `setattr(engine, key, value)` for each pair), dispatching `SOLVE_CALL`,
+  and normalizing the result dict. A problem module has no way to opt out
+  of the harness's `configure` being called on the psiopt backend.
 - The result dict's `"flag"` is the *name* of the convergence flag
   (`flag.name`, e.g. `"CONVERGED"`), not the enum member itself, so it
   round-trips through JSON without a custom encoder. On the psiopt backend
-  this comes from the module's own `SOLVE_MODE` call; on the ipopt backend,
-  from `prob.optimize()` (which still returns a `ConvergenceFlags` member
-  under that backend).
-- `"objective"` / `"iterations"` come from `optimizer.last_obj_val` /
-  `optimizer.last_iter_num` on the psiopt backend (`None` if unreachable,
-  e.g. the solve raised before those properties were ever populated -- each
+  this comes from the module's own `SOLVE_CALL`-driven `SolveResult.flag`;
+  on the ipopt backend, from the single `prob.solve(engine)` call's
+  `SolveResult.flag` (uniform across both backends).
+- `"objective"` / `"iterations"` come from `engine.last_obj_val` /
+  `engine.last_iter_num` on the psiopt backend (`None` if unreachable, e.g.
+  the solve raised before those properties were ever populated -- each
   guarded independently by its own `try/except AttributeError`), or from
-  `prob.last_ipopt_result.objective` / `.iterations` on the ipopt backend.
-- `build()` (and `POST_SOLVE`, if defined) must be silent w.r.t. side
-  effects that would make corpus runs non-reproducible or slow: no
+  `SolveResult.objective()` / `.iterations()` on the ipopt backend.
+- `build()` (and `POST_SOLVE`/`configure`, if defined) must be silent w.r.t.
+  side effects that would make corpus runs non-reproducible or slow: no
   plotting, no file writes, no wall-clock reads. (the interior-point solver's own console
   printing is fine and in fact required on the psiopt backend — see
   "Iteration counting" below.)
@@ -145,14 +166,16 @@ statically):
 ```
 
 `ConvergenceFlags` is an `enum.IntEnum` with **exactly these five members** —
-it is what `phase.optimize()` / `.solve()` / `.solve_optimize()` /
-`.optimize_solve()` / `.solve_optimize_solve()` return, and also what
-`optimizer.converge_flag` reports after the fact. `phase.optimizer` (a
-`_tychopy.solvers.InteriorPointSolver` instance) also exposes `last_iter_num: int` and
-`last_obj_val: float` as read-only properties — this is deliberately the
-entire per-solve surface the interior-point solver exposes to Python today (no
-feasibility/KKT-residual/factorization data); richer diagnostics may arrive
-with future interior-point solver diagnostics counters, and this schema may grow then.
+it is what `SolveResult.flag` reports after a `phase.solve(engine, ...)` /
+`ocp.solve(engine, ...)` / `prob.solve(engine, ...)` call. The engine itself
+(an `InteriorPointSolver`/`SqpSolver`/`IpoptSolver` instance the caller
+constructs and passes in -- there is no per-problem `.optimizer` anymore)
+also exposes `last_iter_num: int` and `last_obj_val: float` as read-only
+properties on the `InteriorPointSolver` engine specifically — this is
+deliberately the entire per-solve surface the interior-point solver exposes to
+Python today beyond `SolveResult` itself (no feasibility/KKT-residual/
+factorization data); richer diagnostics may arrive with future interior-point
+solver diagnostics counters, and this schema may grow then.
 
 The harness maps flag name to JSONL `status` exhaustively:
 
@@ -224,7 +247,7 @@ of the form `" Iterations : N"` once per solve, whenever `print_level < 2`
 (the library default, so problem modules should not raise their print
 level above that unless they want to lose this signal). Summing over all
 matches
-means a problem that calls `optimize()` more than once (e.g. a two-stage
+means a problem that calls `solve()` more than once (e.g. a two-stage
 solve) gets its iteration counts combined. `-1` means no match was found
 (e.g. the child crashed before ever calling into the interior-point solver, or print_level was
 raised too high).
@@ -233,7 +256,7 @@ On the **ipopt backend**, the interior-point solver's console printer never runs
 the identical transcribed NLP directly), so this stdout instrument has
 nothing to match. The parent instead trusts the child's own reported
 `iterations` (`driver.py`'s ipopt branch reads it straight from
-`prob.last_ipopt_result.iterations`).
+`SolveResult.iterations()`).
 
 ### `--backend {psiopt,ipopt}`
 
@@ -247,10 +270,10 @@ problem module does and does not control on this path.
 
 ### `--config KEY=VALUE ...`
 
-On the **psiopt backend**, applied via `setattr(optimizer, key, value)`
-inside the child, immediately before the solve (see the problem-module
-contract above). Each `VALUE` is parsed as `int`, then `float`, then left
-as a plain `str` (first cast that doesn't raise wins) — e.g.
+On the **psiopt backend**, applied via `setattr(engine, key, value)` inside
+the child, immediately before the solve (see the problem-module contract
+above). Each `VALUE` is parsed as `int`, then `float`, then left as a plain
+`str` (first cast that doesn't raise wins) — e.g.
 `--config max_iters=200 kkt_tol=1e-8 opt_ls_mode=L1` sets an int, a float,
 and a string respectively. `KEY` must name a *settable* interior-point solver property
 (see `tychopy/_stubs/_tychopy/solvers.pyi` for the full list — `max_iters`,
@@ -260,31 +283,33 @@ then records as `status: "error"`.
 
 On the **ipopt backend**, each `VALUE` stays a plain string (no int/float
 casting — Ipopt's own option parser does its own type coercion) and the
-whole `{KEY: VALUE}` mapping populates `problem.ipopt_options` verbatim
-(e.g. `--config linear_solver=pardisomkl tol=1e-8`), applied after the
-Ipopt adapter's matched-tolerance baseline so these entries win.
+whole `{KEY: VALUE}` mapping populates the `IpoptSolver` engine's `.options`
+dict verbatim (e.g. `--config linear_solver=pardisomkl tol=1e-8`).
 
 ## Backend selection
 
 Every problem module's `build()` is identical regardless of backend — only
 the driver's dispatch after `build()` returns changes:
 
-- **psiopt** (default): `configure(prob.optimizer)` then the module's
-  `SOLVE_MODE` entry point, exactly reproducing the pre-split behavior.
-- **ipopt**: sets `prob.nlp_solver = NLPSolvers.ipopt` and forwards
-  `--config` (as verbatim strings) into `prob.ipopt_options`, then always
-  calls `prob.optimize()` — a single NLP solve, regardless of the module's
-  `SOLVE_MODE` (the staging modes `solve_optimize`/`optimize_solve`/
-  `solve_optimize_solve` have no Ipopt analog). `SOLVE_MODE` is recorded in
-  `notes` on this path instead of being honored. `NOTES` (when the module
-  defines it) is still included in the ipopt-backend notes string, but
-  `POST_SOLVE` is skipped on the ipopt backend (it only ever inspects
-  psiopt-specific post-solve state, e.g. `phase.mesh_converged`, which is
-  orthogonal to what an ipopt-backend solve leaves behind).
-  `"objective"`/`"iterations"` come from
-  `prob.last_ipopt_result`, not from `optimizer.last_obj_val`/
-  `last_iter_num` (those reflect only the most recent interior-point solver run and are
-  left untouched by an ipopt-backend solve).
+- **psiopt** (default): constructs an `InteriorPointSolver` engine, applies
+  the module's own `configure(engine)` hook (if defined) then the harness's
+  `configure(engine)`, then dispatches the module's `SOLVE_CALL`, exactly
+  reproducing the pre-split behavior.
+- **ipopt**: constructs an `IpoptSolver` engine, forwards `--config` (as
+  verbatim strings) into its `.options` dict, then always calls
+  `prob.solve(engine)` — a single NLP solve, regardless of the module's
+  `SOLVE_CALL` (the staging shapes -- `presolve`/`feasible_fallback` -- have
+  no Ipopt analog). `SOLVE_CALL` is recorded in `notes` on this path instead
+  of being honored. `NOTES` (when the module defines it) is still included
+  in the ipopt-backend notes string, but `POST_SOLVE` is skipped on the
+  ipopt backend (it only ever inspects psiopt-specific post-solve state,
+  e.g. `phase.mesh_converged`, which is orthogonal to what an ipopt-backend
+  solve leaves behind); `configure(engine)` is likewise not called on this
+  path. `"objective"`/`"iterations"` come from the returned
+  `SolveResult.objective()`/`.iterations()`, not from
+  `engine.last_obj_val`/`last_iter_num` (those reflect only the most recent
+  `InteriorPointSolver` run and are irrelevant to an `IpoptSolver`-driven
+  solve).
 
 A problem module cannot select or refuse a backend — that is exclusively
 the harness's `--backend` flag.
@@ -368,7 +393,7 @@ prob.add_objective(scalar_func, [indices])     # optional -- omit entirely for
                                                 # a pure-feasibility problem
 prob.add_equal_con(vector_func, [indices])     # g(x) == 0
 prob.add_inequal_con(vector_func, [indices])   # g(x) <= 0  (see below)
-flag = prob.optimize()
+result = prob.solve(tychopy.solvers.IPM())
 prob.return_vars()
 ```
 

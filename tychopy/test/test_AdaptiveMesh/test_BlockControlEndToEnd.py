@@ -75,24 +75,29 @@ class test_BlockControlEndToEnd(unittest.TestCase):
         phase.add_lu_var_bound("Path", 5, -self.umax, self.umax)
         phase.add_lu_var_bound("Path", 0, -self.dmax, self.dmax)
         phase.add_integral_objective(Args(1)[0] ** 2, [5])
-        phase.optimizer.print_level = 0
-        phase.optimizer.eq_con_tol = 1.0e-8
         phase.print_mesh_info = False
         return phase
+
+    def _make_engine(self, **kwargs):
+        ipm = ast.solvers.InteriorPointSolver(**kwargs)
+        ipm.print_level = 0
+        ipm.eq_con_tol = 1.0e-8
+        return ipm
 
     def test_blockconstant_endtoend_converges(self):
         # Reference objective: a fixed, densely-segmented BlockConstant solve
         # (no adaptive mesh involved) for this control parameterization.
         ref_phase = self._make_cartpole_phase("LGL5", 48)
         ref_phase.set_control_mode("BlockConstant")
+        ref_ipm = self._make_engine()
 
-        ref_flag = ref_phase.optimize()
+        ref_result = ref_phase.solve(ref_ipm)
         self.assertEqual(
-            ref_flag,
+            ref_result.flag,
             ast.solvers.ConvergenceFlags.CONVERGED,
             "Reference problem did not converge",
         )
-        ref_obj = ref_phase.optimizer.last_obj_val
+        ref_obj = ref_ipm.last_obj_val
 
         # Solve under test: BlockConstant control (u_vars > 0), adaptive mesh
         # with ENDTOEND mesh-error criteria -> exercises the calc_global_error
@@ -101,17 +106,20 @@ class test_BlockControlEndToEnd(unittest.TestCase):
         phase.set_control_mode("BlockConstant")
         phase.adaptive_mesh = True
         phase.set_num_partitions(1)
-        phase.optimizer.qp_threads = 1
+        ipm = self._make_engine()
+        ipm.qp_threads = 1
         phase.mesh_error_criteria = oc.MeshErrorAggregation.ENDTOEND
         phase.mesh_error_distributor = oc.MeshErrorAggregation.AVG
         phase.mesh_error_estimator = oc.MeshErrorEstimators.DEBOOR
         phase.set_mesh_tol(1e-6)
         phase.mesh_err_factor = 20
 
-        flag = phase.optimize()
+        result = phase.solve(ipm)
 
         self.assertEqual(
-            flag, ast.solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
+            result.flag,
+            ast.solvers.ConvergenceFlags.CONVERGED,
+            "Problem did not converge",
         )
         self.assertTrue(
             phase.mesh_converged, "Mesh did not converge under ENDTOEND criteria"
@@ -122,7 +130,7 @@ class test_BlockControlEndToEnd(unittest.TestCase):
         # against block-0's stale control for every later block, which either
         # prevents convergence outright or lets the mesh "converge" against a
         # trajectory whose objective has drifted from the true optimum.
-        obj = phase.optimizer.last_obj_val
+        obj = ipm.last_obj_val
         self.assertLess(
             abs(obj - ref_obj),
             0.1,

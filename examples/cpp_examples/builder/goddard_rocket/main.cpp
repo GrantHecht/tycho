@@ -172,7 +172,9 @@ int main() {
     // singular arc via phase2's path constraint, so an SQP polish stage
     // after the IPM main solve measurably tightens the KKT residual.
     tycho::solvers::SqpSolver sqp;
-    sqp.options().kkt_tol = 1.0e-9; // match the main engine so the tightening is by design
+    // Pinned tighter than the main stage's achieved residual, so the polish
+    // must actually improve it.
+    sqp.options().kkt_tol = 1.0e-9;
     tycho::solvers::EngineRef polish_ref = &sqp;
     const auto result = ocp.solve(ipm, {.polish = &polish_ref});
     const auto status =

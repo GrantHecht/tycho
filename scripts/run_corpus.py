@@ -25,18 +25,18 @@ Options:
                            before any child is spawned).
     --call-shape {module,optimize}  How to invoke each problem (default:
                            module, today's behavior). 'optimize' always runs
-                           a single optimize() call, for cross-backend
-                           comparability with the ipopt backend's
-                           single-solve mapping.
+                           a single Optimal-mode solve() call, for
+                           cross-backend comparability with the ipopt
+                           backend's single-solve mapping.
     --config KEY=VALUE...  Zero or more KEY=VALUE pairs. On the psiopt
-                           backend these are applied to the interior-point solver optimizer
-                           via setattr() inside the child subprocess,
-                           immediately before optimize/solve (values are
+                           backend these are applied to the interior-point
+                           solver engine via setattr() inside the child
+                           subprocess, immediately before solve() (values are
                            parsed as int, then float, then left as str, in
                            that order). On the ipopt backend these instead
-                           populate problem.ipopt_options verbatim as
-                           strings (Ipopt's own option parser does its own
-                           type coercion).
+                           populate the IpoptSolver engine's .options dict
+                           verbatim as strings (Ipopt's own option parser
+                           does its own type coercion).
     --preset NAME          Reserved for a future named-configuration table.
                            No presets are defined yet; passing this always
                            errors with a clear message.
@@ -141,9 +141,10 @@ def _parse_config_args(pairs, verbatim: bool = False) -> dict:
 
     ``verbatim`` selects the ipopt backend's semantics: every value stays a
     plain string (Ipopt's own option parser does its own type coercion) and
-    populates ``problem.ipopt_options`` rather than being setattr()'d onto
-    the interior-point solver optimizer, where values are cast int, then float, then left
-    as str (see the psiopt-backend docstring at the top of this file).
+    populates the ``IpoptSolver`` engine's ``.options`` dict rather than
+    being setattr()'d onto the interior-point solver engine, where values
+    are cast int, then float, then left as str (see the psiopt-backend
+    docstring at the top of this file).
     """
     config = {}
     for item in pairs or []:
@@ -182,20 +183,20 @@ def _run_child(
 
     mod = importlib.import_module(f"problems.{module_name}")
 
-    def configure(optimizer):
+    def configure(engine):
         for key, value in config.items():
             try:
-                setattr(optimizer, key, value)
+                setattr(engine, key, value)
             except TypeError:
                 # Enum-typed properties reject raw ints/strings; coerce through
                 # the property's own enum type (by value for ints, by member
                 # name for strings) and let a genuine mismatch raise.
-                current = getattr(optimizer, key)
+                current = getattr(engine, key)
                 enum_type = type(current)
                 if isinstance(value, int):
-                    setattr(optimizer, key, enum_type(value))
+                    setattr(engine, key, enum_type(value))
                 else:
-                    setattr(optimizer, key, getattr(enum_type, str(value)))
+                    setattr(engine, key, getattr(enum_type, str(value)))
 
     # config doubles as backend_options on the ipopt backend (see
     # _parse_config_args's verbatim mode, selected by the parent when
@@ -496,9 +497,9 @@ def _parse_args():
         choices=("module", "optimize"),
         default="module",
         help="How to invoke each problem: 'module' runs the module's declared "
-        "SOLVE_MODE (default, today's behavior); 'optimize' runs a single "
-        "optimize() call regardless, for cross-backend comparability with "
-        "the ipopt backend's single-solve mapping.",
+        "SOLVE_CALL (default, today's behavior); 'optimize' runs a single "
+        "Optimal-mode solve() call regardless, for cross-backend "
+        "comparability with the ipopt backend's single-solve mapping.",
     )
     parser.add_argument(
         "--config",
@@ -506,9 +507,9 @@ def _parse_args():
         action="extend",
         default=[],
         metavar="KEY=VALUE",
-        help="KEY=VALUE pairs: setattr onto the optimizer in the child "
-        "(--backend psiopt) or populate problem.ipopt_options verbatim as "
-        "strings (--backend ipopt).",
+        help="KEY=VALUE pairs: setattr onto the engine in the child "
+        "(--backend psiopt) or populate the IpoptSolver engine's .options "
+        "dict verbatim as strings (--backend ipopt).",
     )
     parser.add_argument(
         "--preset",

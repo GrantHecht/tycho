@@ -70,10 +70,10 @@ oc = typy.optimal_control
 
 TIER = "hard"
 TIMEOUT = 120
-SOLVE_MODE = "solve_optimize"
+SOLVE_CALL = {"mode": "optimal", "presolve": True}
 NOTES = (
     "Order-sensitive (also true of the unperturbed parent); "
-    "iteration count at the two solve_optimize stages' max_iters cap "
+    "iteration count at the two presolve/main stages' max_iters cap "
     "is stable, objective is not guaranteed byte-identical. See "
     "module docstring."
 )
@@ -116,6 +116,11 @@ def build():
     phase.add_lu_var_bound("Path", 3, -1, 1)
     phase.add_delta_time_objective(0.01)
 
-    phase.optimizer.set_opt_ls_mode("L1")
-
     return phase
+
+
+def configure(engine):
+    """Problem-owned engine tuning (was baked into ``build()``'s
+    ``phase.optimizer`` before the engine was detached from the problem --
+    see tests/corpus/README.md for the contract)."""
+    engine.set_opt_ls_mode("L1")

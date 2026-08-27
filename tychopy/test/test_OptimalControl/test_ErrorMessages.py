@@ -95,7 +95,7 @@ class TestOptimizationProblemBoundsOffByOne(unittest.TestCase):
         # Index 2 == numVars is the exact off-by-one boundary (not just > numVars).
         prob.add_equal_con(con, [0, 2])
         with self.assertRaisesRegex(ValueError, "out of bounds"):
-            prob.solve()
+            prob.solve(solvs.InteriorPointSolver(), mode="feasible")
 
     def test_equality_constraint_negative_index_raises(self):
         """A negative variable index (e.g. -1) is not caught by the VectorXi
@@ -108,7 +108,7 @@ class TestOptimizationProblemBoundsOffByOne(unittest.TestCase):
         con = vf.Arguments(2)  # identity: 2 in, 2 out
         prob.add_equal_con(con, [0, -1])
         with self.assertRaisesRegex(ValueError, "out of bounds"):
-            prob.solve()
+            prob.solve(solvs.InteriorPointSolver(), mode="feasible")
 
     def test_inequality_constraint_valid_indices_still_work(self):
         """Sanity check of the construction path with in-bounds indices --
@@ -118,8 +118,9 @@ class TestOptimizationProblemBoundsOffByOne(unittest.TestCase):
         prob.set_vars([0.0, 0.0])
         con = vf.Arguments(2).squared_norm() - 2.0
         prob.add_inequal_con(con, [0, 1])  # both indices < numVars == 2
-        prob.optimizer.print_level = 0
-        prob.solve()  # must not raise
+        ipm = solvs.InteriorPointSolver()
+        ipm.print_level = 0
+        prob.solve(ipm, mode="feasible")  # must not raise
 
 
 if __name__ == "__main__":

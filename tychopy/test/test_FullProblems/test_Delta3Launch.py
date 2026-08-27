@@ -257,14 +257,15 @@ class test_Delta3Launch(unittest.TestCase):
         ocp.add_forward_link_equal_con(
             phase1, phase4, [0, 1, 2, 3, 4, 5, 7, 8, 9, 10], auto_scale="auto"
         )
-        ocp.optimizer.set_opt_ls_mode("L1")
-        ocp.optimizer.max_ls_iters = 2
-        ocp.optimizer.print_level = 3
+        ipm = ast.solvers.InteriorPointSolver()
+        ipm.set_opt_ls_mode("L1")
+        ipm.max_ls_iters = 2
+        ipm.print_level = 3
+        ipm.qp_threads = 8
 
         ocp.num_partitions = 8
-        ocp.optimizer.qp_threads = 8
 
-        Flag = ocp.optimize()
+        Result = ocp.solve(ipm)
 
         # Phase1Traj = phase1.return_traj()
         # Phase2Traj = phase2.return_traj()
@@ -276,11 +277,13 @@ class test_Delta3Launch(unittest.TestCase):
         MassError = abs(FinalMassKg - self.FinalObj)
 
         self.assertEqual(
-            Flag, ast.solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
+            Result.flag,
+            ast.solvers.ConvergenceFlags.CONVERGED,
+            "Problem did not converge",
         )
 
         self.assertLess(
-            ocp.optimizer.last_iter_num,
+            ipm.last_iter_num,
             self.MaximumIters,
             "Optimizer iterations exceeded expected maximum",
         )

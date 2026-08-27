@@ -54,7 +54,7 @@ Args = vf.Arguments
 
 TIER = "degenerate"
 TIMEOUT = 30
-SOLVE_MODE = "optimize"
+SOLVE_CALL = {"mode": "optimal"}
 
 # Original brief spec value was 1.001 (a 1e-3 gap against the x(1) = 1.0
 # target); that fell inside the interior-point solver's acceptable-equality tolerance and read

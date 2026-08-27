@@ -181,7 +181,9 @@ if __name__ == "__main__":
     # polish stage after the IPM main solve measurably tightens the KKT
     # residual.
     sqp = solvs.SQP()
-    sqp.kkt_tol = 1e-9  # match the main engine so the tightening is by design
+    # Pinned tighter than the main stage's achieved residual, so the polish
+    # must actually improve it.
+    sqp.kkt_tol = 1e-9
     result = ocp.solve(ipm, polish=sqp)
 
     main_kkt = result.stages[0].kkt_residual

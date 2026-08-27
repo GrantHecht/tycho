@@ -71,17 +71,18 @@ class test_FreeFlyingRobot(unittest.TestCase):
         phase.add_boundary_value("Back", range(0, 7), XF)
         phase.add_lu_var_bounds("Path", range(7, 11), 0.0, 1.0)
         phase.add_integral_objective(Args(4).sum(), range(7, 11))
-        phase.optimizer.print_level = 3
-        phase.optimizer.opt_ls_mode = sol.LineSearchModes.L1
-        phase.optimizer.max_ls_iters = 1
-        phase.optimizer.set_tols(1.0e-9, 1.0e-9, 1.0e-9)
-        Flag = phase.optimize()
+        ipm = sol.InteriorPointSolver()
+        ipm.print_level = 3
+        ipm.opt_ls_mode = sol.LineSearchModes.L1
+        ipm.max_ls_iters = 1
+        ipm.set_tols(1.0e-9, 1.0e-9, 1.0e-9)
+        Result = phase.solve(ipm)
 
-        Obj = phase.optimizer.last_obj_val
+        Obj = ipm.last_obj_val
         ObjError = abs(Obj - self.FinalObj)
 
         self.assertIn(
-            Flag,
+            Result.flag,
             (
                 ast.solvers.ConvergenceFlags.CONVERGED,
                 ast.solvers.ConvergenceFlags.ACCEPTABLE,
@@ -90,7 +91,7 @@ class test_FreeFlyingRobot(unittest.TestCase):
         )
 
         self.assertLess(
-            phase.optimizer.last_iter_num,
+            ipm.last_iter_num,
             self.MaximumIters,
             "Optimizer iterations exceeded expected maximum",
         )

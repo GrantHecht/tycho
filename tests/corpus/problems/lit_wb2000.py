@@ -84,7 +84,7 @@ Args = vf.Arguments
 
 TIER = "literature"
 TIMEOUT = 30
-SOLVE_MODE = "optimize"
+SOLVE_CALL = {"mode": "optimal"}
 
 # Wächter-Biegler constants verified against Benson-Shanno-Vanderbei's
 # reproduction (see docstring above) -- NOT the brief's original (a=1, b=0.5),

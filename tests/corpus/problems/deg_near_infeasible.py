@@ -83,7 +83,7 @@ Args = vf.Arguments
 
 TIER = "degenerate"
 TIMEOUT = 30
-SOLVE_MODE = "optimize"
+SOLVE_CALL = {"mode": "optimal"}
 
 # Exact bang-bang reachability bound derived in the module docstring.
 _MAX_REACH = 0.25

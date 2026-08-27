@@ -63,7 +63,7 @@ tModes = oc.TranscriptionModes
 
 TIER = "hard"
 TIMEOUT = 90
-SOLVE_MODE = "solve_optimize"
+SOLVE_CALL = {"mode": "optimal", "presolve": True}
 NOTES = (
     "Order-sensitive: iteration count and objective vary "
     "run-to-run near this DIVERGING failure; flag and failure "
@@ -124,7 +124,12 @@ def build():
     phase.add_lu_var_bound("Path", 3, -np.pi, np.pi)
     phase.add_delta_time_objective(1.0)
 
-    phase.optimizer.set_eq_con_tol(_TOL)
-    phase.optimizer.set_kkt_tol(_TOL)
-
     return phase
+
+
+def configure(engine):
+    """Problem-owned engine tuning (was baked into ``build()``'s
+    ``phase.optimizer`` before the engine was detached from the problem --
+    see tests/corpus/README.md for the contract)."""
+    engine.set_eq_con_tol(_TOL)
+    engine.set_kkt_tol(_TOL)

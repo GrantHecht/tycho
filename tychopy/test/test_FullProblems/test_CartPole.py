@@ -73,19 +73,22 @@ class test_CartPole(unittest.TestCase):
         phase.add_lu_var_bound("Path", 5, -umax, umax)
         phase.add_lu_var_bound("Path", 0, -dmax, dmax)
         phase.add_integral_objective(Args(1)[0] ** 2, [5])
-        phase.optimizer.print_level = 3
-        Flag = phase.optimize()
+        ipm = ast.solvers.InteriorPointSolver()
+        ipm.print_level = 3
+        Result = phase.solve(ipm)
 
-        Obj = phase.optimizer.last_obj_val
+        Obj = ipm.last_obj_val
         ObjError = abs(Obj - self.FinalObj)
 
         self.assertLess(
-            phase.optimizer.last_iter_num,
+            ipm.last_iter_num,
             self.MaximumIters,
             "Optimizer iterations exceeded expected maximum",
         )
         self.assertEqual(
-            Flag, ast.solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
+            Result.flag,
+            ast.solvers.ConvergenceFlags.CONVERGED,
+            "Problem did not converge",
         )
         self.assertLess(
             ObjError,

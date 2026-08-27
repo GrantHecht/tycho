@@ -36,19 +36,22 @@ class test_RosenBrock(unittest.TestCase):
         prob.set_vars(Ipoint)
         prob.add_objective(RosenBrockObj(), [0, 1])
         prob.add_inequal_con(con, [0, 1])
-        prob.optimizer.set_opt_ls_mode(lsmode)
-        prob.optimizer.print_level = 3
-        Flag = prob.optimize()
+        ipm = solvs.InteriorPointSolver()
+        ipm.set_opt_ls_mode(lsmode)
+        ipm.print_level = 3
+        Result = prob.solve(ipm)
         Fpoint = prob.return_vars()
 
         SolError = np.linalg.norm(Fpoint - self.KnownSol)
 
         self.assertEqual(
-            Flag, ast.solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
+            Result.flag,
+            ast.solvers.ConvergenceFlags.CONVERGED,
+            "Problem did not converge",
         )
 
         self.assertLess(
-            prob.optimizer.last_iter_num,
+            ipm.last_iter_num,
             self.MaximumIters,
             "Optimizer iterations exceeded expected maximum",
         )

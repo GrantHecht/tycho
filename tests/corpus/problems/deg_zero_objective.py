@@ -53,7 +53,7 @@ oc = typy.optimal_control
 
 TIER = "degenerate"
 TIMEOUT = 30
-SOLVE_MODE = "optimize"
+SOLVE_CALL = {"mode": "optimal"}
 
 
 class _DoubleIntegrator(oc.ODEBase):

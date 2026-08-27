@@ -63,7 +63,7 @@ Args = vf.Arguments
 
 TIER = "literature"
 TIMEOUT = 30
-SOLVE_MODE = "optimize"
+SOLVE_CALL = {"mode": "optimal"}
 
 
 def build():

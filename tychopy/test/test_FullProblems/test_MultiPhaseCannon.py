@@ -146,27 +146,30 @@ class test_MultiPhaseCannon(unittest.TestCase):
             aphase, "ODEParams", [0], dphase, "ODEParams", [0], auto_scale="auto"
         )
 
-        ocp.optimizer.set_opt_ls_mode("L1")
-        ocp.optimizer.max_ls_iters = 2
-        ocp.optimizer.print_level = 3
+        ipm = ast.solvers.InteriorPointSolver()
+        ipm.set_opt_ls_mode("L1")
+        ipm.max_ls_iters = 2
+        ipm.print_level = 3
+        ipm.qp_threads = 1
+        ipm.set_qp_ordering_mode("MINDEG")
         ocp.set_num_partitions(1)
-        ocp.optimizer.qp_threads = 1
-        ocp.optimizer.set_qp_ordering_mode("MINDEG")
 
-        Flag = ocp.optimize()
+        Result = ocp.solve(ipm)
 
         Ascent = aphase.return_traj()
         Descent = dphase.return_traj()
 
-        Obj = ocp.optimizer.last_obj_val * Lstar
+        Obj = ipm.last_obj_val * Lstar
         ObjError = abs(Obj - self.FinalObj)
 
         self.assertEqual(
-            Flag, ast.solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
+            Result.flag,
+            ast.solvers.ConvergenceFlags.CONVERGED,
+            "Problem did not converge",
         )
 
         self.assertLess(
-            ocp.optimizer.last_iter_num,
+            ipm.last_iter_num,
             self.MaximumIters,
             "Optimizer iterations exceeded expected maximum",
         )

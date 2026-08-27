@@ -42,23 +42,24 @@ class test_InteriorPointSolverInitTime(unittest.TestCase):
         prob.set_vars([-1, -1])
         prob.add_objective(RosenBrockObj(), [0, 1])
         prob.add_inequal_con(DiskCon(), [0, 1])
-        prob.optimizer.print_level = 0
         return prob
 
     def test_init_time_zero_on_second_solve(self):
         prob = self._make_problem()
+        ipm = solvs.InteriorPointSolver()
+        ipm.print_level = 0
 
-        flag1 = prob.optimize()
-        self.assertEqual(flag1, ast.solvers.ConvergenceFlags.CONVERGED)
-        first_init_time = prob.optimizer.last_solver_init_time
+        flag1 = prob.solve(ipm)
+        self.assertEqual(flag1.flag, ast.solvers.ConvergenceFlags.CONVERGED)
+        first_init_time = ipm.last_solver_init_time
         # Allowed to be > 0 (this is the process-wide first solve) or 0.0
         # (an earlier test in this pytest session already initialized the
         # math runtime) -- both are valid under the one-shot contract.
         self.assertGreaterEqual(first_init_time, 0.0)
 
-        flag2 = prob.optimize()
-        self.assertEqual(flag2, ast.solvers.ConvergenceFlags.CONVERGED)
-        second_init_time = prob.optimizer.last_solver_init_time
+        flag2 = prob.solve(ipm)
+        self.assertEqual(flag2.flag, ast.solvers.ConvergenceFlags.CONVERGED)
+        second_init_time = ipm.last_solver_init_time
         # Never the process-wide first call to ensure_solver_initialized()
         # (already consumed by flag1's solve, if not earlier) -> must be
         # exactly 0.0 per the documented contract.

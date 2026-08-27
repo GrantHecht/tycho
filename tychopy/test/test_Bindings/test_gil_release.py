@@ -140,15 +140,14 @@ class TestGilRelease(unittest.TestCase):
         prob.set_vars([-1.0, -1.0])
         prob.add_objective(rosen_obj(), [0, 1])
         prob.add_inequal_con(Args(2).squared_norm() - 2.0, [0, 1])
-        prob.optimizer.print_level = 3
-        prob.optimize()  # transcribe + first solve (already guarded path)
+        ipm = solvs.InteriorPointSolver()
+        ipm.print_level = 3
+        prob.solve(ipm)  # transcribe + first solve (already guarded path)
         x0 = np.array([-1.0, -1.0])
         cases = {
-            "solve": lambda: [prob.optimizer.solve(x0) for _ in range(20)],
-            "optimize": lambda: [prob.optimizer.optimize(x0) for _ in range(10)],
-            "solve_optimize": lambda: [
-                prob.optimizer.solve_optimize(x0) for _ in range(10)
-            ],
+            "solve": lambda: [ipm.solve(x0) for _ in range(20)],
+            "optimize": lambda: [ipm.optimize(x0) for _ in range(10)],
+            "solve_optimize": lambda: [ipm.solve_optimize(x0) for _ in range(10)],
         }
         for name, fn in cases.items():
             with self.subTest(method=name):
