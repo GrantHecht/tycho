@@ -10,6 +10,9 @@
 #include "tycho/detail/solvers/engines.h"
 #include "tycho/detail/solvers_vf/optimization_problem.h"
 
+#include <hven/warmstart/ipm_polish_extension.h>
+#include <hven/warmstart/warm_start_data.h>
+
 // oc_test_utils.h (tests/cpp/optimal_control/) supplies make_brach_phase(),
 // reused here (rather than duplicated) for the one AMR-through-solve() case
 // below -- it needs a real Phase with a real mesh, which a bare VF problem
@@ -20,6 +23,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cstddef>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -68,11 +73,15 @@ std::unique_ptr<OptimizationProblem> solve_pipeline_build_tiny_nlp() {
 // precision, so the very first iterate's constraint residual (and the KKT
 // infeasibility measure built from it) is already non-finite -- hven's own
 // divergence check (`!std::isfinite(...)`) fires immediately, and the
-// diverging iterate's primal/multiplier blocks captured into the completed
-// warm-start payload are themselves non-finite. Needed only by
-// DivergingPresolveDoesNotThrowOnMainStageHandoff below, to reach that
-// payload through the real solve() pipeline rather than fabricating a
-// WarmStartData by hand (warm_or_null is file-local to
+// eq_lmults_ block captured into the completed warm-start payload (computed
+// from that infinite residual) is itself non-finite. primal_ stays at the
+// finite x=1000 starting point, and there is no declared bound here for
+// bound_lmults_ to carry, so this fixture alone only exercises warm_or_null's
+// eq_lmults_ check -- it checks primal_/iq_lmults_/bound_lmults_ too, because
+// a different diverging problem could go non-finite through any of those
+// instead. Needed only by DivergingPresolveDoesNotThrowOnMainStageHandoff
+// below, to reach that payload through the real solve() pipeline rather than
+// fabricating a WarmStartData by hand (warm_or_null is file-local to
 // solve_pipeline.cpp).
 std::unique_ptr<OptimizationProblem> solve_pipeline_build_diverging_nlp() {
     using tycho::vf::Arguments;
@@ -109,6 +118,30 @@ std::unique_ptr<OptimizationProblem> solve_pipeline_build_inequality_nlp() {
         prob->add_inequal_con(GenericFunction<-1, -1>(2.0 - x),
                               (Eigen::VectorXi(1) << 0).finished());
     }
+    return prob;
+}
+
+// A one-sided-bounded NLP: min x^2 s.t. x >= 2 as a genuine variable bound
+// (not a fixed lower==upper pin), optimum x = 2, objective 4, bound
+// multiplier z = 2x = 4 (stationarity at a free variable's lower bound:
+// grad f - z = 0). Unlike solve_pipeline_build_make_constraint_nlp's fixed
+// pin, a one-sided bound with lower < upper is never eliminated by the
+// default MakeParameter fixed-variable treatment, so it stays a genuine
+// bounded variable with a real bound_lmults_ entry. Needed only by
+// CoreOnlyWarmCrossesEngines below, which needs a fixture whose warm-start
+// payload actually carries an active bound to strip the polish extension
+// away from.
+std::unique_ptr<OptimizationProblem> solve_pipeline_build_bounded_nlp() {
+    using tycho::vf::Arguments;
+    using tycho::vf::GenericFunction;
+    auto prob = std::make_unique<OptimizationProblem>();
+    prob->set_vars(Eigen::VectorXd::Constant(1, 0.0));
+    {
+        auto args = Arguments<1>();
+        auto x = args.coeff<0>();
+        prob->add_objective(GenericFunction<-1, 1>(x * x), (Eigen::VectorXi(1) << 0).finished());
+    }
+    prob->add_variable_bound(0, 2.0, std::numeric_limits<double>::infinity());
     return prob;
 }
 
@@ -419,17 +452,21 @@ TEST(SolvePipeline, StagesRunInOrderAndAllReport) {
     EXPECT_NEAR(prob->active_variables_[0], 1.0, 1e-6);
 }
 
-// Regression test (review finding I-1): a presolve stage that genuinely
-// diverges must not crash the hand-off to the main stage. Before the fix,
-// warm_or_null() only checked the exported payload's primal_ for
-// non-emptiness, so a diverged presolve's non-finite bound_lmults_ (and
-// primal_) were staged onto the main stage's engine via stage_warm_start(),
-// which throws std::invalid_argument out of hven's own block validation
+// Regression test: a presolve stage that genuinely diverges must not crash
+// the hand-off to the main stage. Before the fix, warm_or_null() only
+// checked the exported payload's primal_ for non-emptiness, so a diverged
+// presolve's non-finite eq_lmults_ (primal_ itself stays finite at this
+// fixture's x=1000 start, and there is no bound_lmults_ block to go
+// non-finite either -- see solve_pipeline_build_diverging_nlp's own note)
+// was staged onto the main stage's engine via stage_warm_start(), which
+// throws std::invalid_argument out of hven's own block validation
 // (InteriorPointSolver::validate_warm_start_blocks) -- turning a value the
 // pipeline's own contract promises ("a non-convergent stage is a value ...
 // never a thrown exception") into an uncaught exception instead. With the
-// fix, a non-finite export is treated exactly like an empty one: the main
-// stage runs unseeded and reports its own flag as a value.
+// fix, warm_or_null() checks every block (primal_/eq_lmults_/iq_lmults_/
+// bound_lmults_) for finiteness rather than just primal_'s non-emptiness, so
+// a non-finite export through ANY block is treated exactly like an empty
+// one: the main stage runs unseeded and reports its own flag as a value.
 TEST(SolvePipeline, DivergingPresolveDoesNotThrowOnMainStageHandoff) {
     auto prob = solve_pipeline_build_diverging_nlp();
     InteriorPointSolver ipm;
@@ -831,4 +868,175 @@ TEST(SolvePipeline, PhaseResultIsSnapshotNotView) {
     ASSERT_EQ(result.phases_[0].eq_lmults_.size(), before.size());
     EXPECT_TRUE((result.phases_[0].eq_lmults_.array() == before.array()).all());
     EXPECT_FALSE((result.phases_[0].eq_lmults_.array() == 12345.0).all());
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Crossover and warm value-flow end-to-end: the "hven.ipm.polish.v1"
+// extension actually driving an IPM-to-SQP polish stage through opts.polish,
+// a core-only (extension-stripped) warm start crossing engines on its own,
+// an unrecognized extension tag passing through untouched, and a corrupted
+// KNOWN tag refusing loudly at the staging call rather than being treated as
+// an unrecognized one. See hven's warmstart/ipm_polish_extension.h for the
+// extension's own contract (WHY IT EXISTS / WHAT IT CARRIES) and
+// warm_start_data.h for the currency it rides inside of.
+///////////////////////////////////////////////////////////////////////////////
+
+TEST(SolvePipeline, CrossoverPolishRunsSqpFromIpmWarm) {
+    // The brach fixture, solved to completion by the interior-point engine,
+    // then polished by a real SQP solve seeded from the main stage's own
+    // export -- which, since the main engine is InteriorPointSolver, carries
+    // the "hven.ipm.polish.v1" extension automatically
+    // (capture_completed_warm_start attaches it on every completed solve).
+    auto phase = TychoTest::make_brach_phase(50, 8);
+    phase->print_mesh_info_ = false;
+
+    InteriorPointSolver ipm;
+    ipm.set_print_level(0);
+    EngineRef main_ref = &ipm;
+
+    SqpSolver sqp;
+    EngineRef polish_ref = &sqp;
+
+    SolveOptions opts;
+    opts.mode = Mode::Optimal;
+    opts.polish = &polish_ref;
+
+    SolveResult result = phase->solve(main_ref, opts);
+
+    ASSERT_EQ(result.stages_.size(), 2u);
+    EXPECT_EQ(result.stages_[0].role_, "main");
+    EXPECT_EQ(result.stages_[0].engine_name_, "InteriorPointSolver");
+    EXPECT_EQ(result.stages_[1].role_, "polish");
+    EXPECT_EQ(result.stages_[1].engine_name_, "SqpSolver");
+    EXPECT_EQ(result.stages_[1].flag_, tycho::ConvergenceFlags::CONVERGED);
+    EXPECT_TRUE(result.converged());
+}
+
+TEST(SolvePipeline, CoreOnlyWarmCrossesEngines) {
+    // Source run: the bounded NLP, solved by the interior-point engine. Its
+    // export carries the polish extension, same as the crossover test above.
+    auto prob_source = solve_pipeline_build_bounded_nlp();
+    InteriorPointSolver source_engine;
+    source_engine.set_print_level(0);
+    EngineRef source_ref = &source_engine;
+    SolveResult source_result = prob_source->solve(source_ref);
+    ASSERT_TRUE(source_result.converged());
+
+    // Strip the extension list down to the core-only shape every producer
+    // that is NOT this project's interior-point engine emits (the R3
+    // capability downgrade) -- the four core blocks and the stamp are
+    // untouched, only the extension is gone.
+    hven::solvers::WarmStartData core_only = source_result.warm_;
+    ASSERT_FALSE(core_only.extensions_.empty());
+    core_only.extensions_.clear();
+
+    // Seed a fresh SQP solve of the SAME declared problem from the
+    // core-only value: accepted, and converges.
+    auto prob_target = solve_pipeline_build_bounded_nlp();
+    prob_target->transcribe();
+    SqpSolver sqp;
+    EngineRef sqp_ref = &sqp;
+
+    SolveOptions opts;
+    opts.mode = Mode::Optimal;
+    opts.warm = &core_only;
+
+    SolveResult target_result;
+    ASSERT_NO_THROW(target_result = prob_target->solve(sqp_ref, opts));
+    EXPECT_TRUE(target_result.converged());
+    ASSERT_EQ(prob_target->active_variables_.size(), 1);
+    EXPECT_NEAR(prob_target->active_variables_[0], 2.0, 1e-4);
+
+    // Deliberately no assertion on bound duals here. A core-only payload
+    // carries only the currency's signed z = zL - zU difference, which does
+    // not invert to the (zL, zU) pair the crossover needs -- see
+    // ipm_polish_extension.h's own WHY IT EXISTS note -- so the SQP engine
+    // never ingests warm.z on this path (sqp_driver.cpp's own note: "the
+    // three vectors tested are exactly the three that are ingested; z is
+    // not") and fresh-seeds its bound duals regardless of what a core-only
+    // value happens to carry there. Asserting anything about bound-dual
+    // carryover here would assert a behavior this path does not have.
+}
+
+TEST(SolvePipeline, ForeignExtensionSkippedSilently) {
+    // The bounded fixture, not the tiny equality-only one: the interior-point
+    // engine only attaches "hven.ipm.polish.v1" when the declared problem
+    // carries at least one finite variable bound (capture_completed_warm_
+    // start's own gate, `this->bounds_ != nullptr`) -- a bound-free export IS
+    // core-only already, which would make this test vacuous.
+    auto prob_source = solve_pipeline_build_bounded_nlp();
+    InteriorPointSolver source_engine;
+    source_engine.set_print_level(0);
+    EngineRef source_ref = &source_engine;
+    SolveResult source_result = prob_source->solve(source_ref);
+    ASSERT_TRUE(source_result.converged());
+
+    // A payload carrying a tag no engine in this project knows, alongside
+    // the real "hven.ipm.polish.v1" one the IPM export already attached.
+    hven::solvers::WarmStartData tagged = source_result.warm_;
+    hven::solvers::WarmExtension foreign;
+    foreign.tag_ = "some.other.vendor.extension.v7";
+    foreign.payload_ = {std::byte{0xDE}, std::byte{0xAD}, std::byte{0xBE}, std::byte{0xEF}};
+    tagged.extensions_.push_back(foreign);
+
+    auto prob_target = solve_pipeline_build_bounded_nlp();
+    prob_target->transcribe();
+    InteriorPointSolver ipm;
+    ipm.set_print_level(0);
+    EngineRef ref = &ipm;
+
+    SolveOptions opts;
+    opts.mode = Mode::Optimal;
+    opts.warm = &tagged;
+
+    // Handed to the IPM: no throw, and the solve converges. The unknown tag
+    // is simply not looked at -- R3's capability downgrade, not an error.
+    SolveResult result;
+    ASSERT_NO_THROW(result = prob_target->solve(ref, opts));
+    EXPECT_TRUE(result.converged());
+}
+
+TEST(SolvePipeline, MalformedKnownTagRefusesAtStaging) {
+    // The bounded fixture -- see ForeignExtensionSkippedSilently's own note
+    // on why the tiny equality-only fixture cannot stand in here: only a
+    // problem with a finite variable bound gets a polish extension to
+    // corrupt in the first place.
+    auto prob_source = solve_pipeline_build_bounded_nlp();
+    InteriorPointSolver source_engine;
+    source_engine.set_print_level(0);
+    EngineRef source_ref = &source_engine;
+    SolveResult source_result = prob_source->solve(source_ref);
+    ASSERT_TRUE(source_result.converged());
+
+    // Corrupt the "hven.ipm.polish.v1" extension's own bytes -- its leading
+    // magic byte -- rather than fabricating a new tag: this is corruption
+    // under a KNOWN tag, not a foreign one, and the two must be told apart.
+    hven::solvers::WarmStartData corrupted = source_result.warm_;
+    bool found_tag = false;
+    for (hven::solvers::WarmExtension &extension : corrupted.extensions_) {
+        if (extension.tag_ == hven::solvers::kIpmPolishTag) {
+            ASSERT_GE(extension.payload_.size(), 8u);
+            extension.payload_[0] = std::byte{0xFF};
+            found_tag = true;
+        }
+    }
+    ASSERT_TRUE(found_tag) << "the interior-point engine's own export must carry "
+                           << hven::solvers::kIpmPolishTag;
+
+    auto prob_target = solve_pipeline_build_bounded_nlp();
+    prob_target->transcribe();
+    ASSERT_TRUE(prob_target->nlp_);
+    SqpSolver sqp;
+    EngineRef sqp_ref = &sqp;
+    const Eigen::VectorXd x0 = Eigen::VectorXd::Constant(1, 0.0);
+
+    // Staging refuses -- naming the tag -- rather than silently treating the
+    // corrupted payload as an unrecognized extension.
+    try {
+        tycho::solvers::run_engine_stage(sqp_ref, Mode::Optimal, prob_target->nlp_, x0, &corrupted);
+        FAIL() << "expected std::invalid_argument";
+    } catch (const std::invalid_argument &e) {
+        const std::string what = e.what();
+        EXPECT_NE(what.find(std::string(hven::solvers::kIpmPolishTag)), std::string::npos);
+    }
 }

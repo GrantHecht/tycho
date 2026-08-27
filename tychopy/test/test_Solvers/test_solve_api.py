@@ -150,6 +150,52 @@ def test_warm_accepts_solve_result_and_warm_start_data():
 
 
 # ---------------------------------------------------------------------------
+# Warm-chain sanity on a continuation-shaped problem.
+# ---------------------------------------------------------------------------
+
+
+def _circle_problem(target, radius):
+    """Same declared shape as _small_problem (2 variables, 1 equality row):
+    minimize the squared distance to `target` subject to lying on the circle
+    of the given `radius`. A continuation step moves `target`/`radius` --
+    values baked into the equality row's own numeric constants, not the
+    declared problem's dimensions or bound structure -- so consecutive calls
+    with different arguments key the SAME declaration, exactly the
+    OrbitContinuation pattern (examples/python_examples/OrbitContinuation.py)
+    of re-solving a perturbed instance of one fixed declared problem."""
+    prob = solvs.OptimizationProblem()
+    prob.set_vars([0.5, 1.7])
+    prob.add_objective((Args(2) - target).squared_norm(), [0, 1])
+    prob.add_equal_con(Args(2).squared_norm() - radius**2, [0, 1])
+    return prob
+
+
+def test_warm_chain_continuation_both_solves_converge():
+    """A cold solve, a modest perturbation of the declared problem's own
+    values (not its shape), and a re-solve warm-started off the cold solve's
+    own SolveResult -- the OrbitContinuation shape: `warm=r1` accepted and
+    stamp-matched (test_stale_warm_stamp_refused above is this same check's
+    negative), so the only hard gate here is that both solves converge.
+
+    Iteration counts are RECORDED, not asserted: a >1-partition IPM solve's
+    iteration count is not guaranteed reproducible across runs (the
+    nondeterminism carve-out this whole suite already assumes elsewhere), so
+    "warm-started converges in fewer iterations than cold" is evidence a
+    human can read off the captured output, never a hard gate that could
+    flake on exactly the runs it is meant to demonstrate."""
+    r1 = _circle_problem([1.0, 2.0], 2.0).solve(_quiet_ipm())
+    assert bool(r1)
+
+    r2 = _circle_problem([1.0, 2.0], 2.05).solve(_quiet_ipm(), warm=r1)
+    assert bool(r2)
+
+    print(
+        f"OrbitContinuation-shaped warm chain: cold solve {r1.iterations()} iters, "
+        f"warm-started re-solve {r2.iterations()} iters"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Pickling.
 # ---------------------------------------------------------------------------
 

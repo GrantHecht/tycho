@@ -220,7 +220,7 @@ def test_driver_feasible_fallback_retries_on_non_convergence():
     }
     # No warm= on the retry: the retired combo method passed no warm
     # payload between its phases either, relying on in-place primal
-    # continuation -- see driver._dispatch_psiopt_solve's docstring (I-3).
+    # continuation -- see driver._dispatch_psiopt_solve's docstring.
     assert prob.calls[1] == {
         "mode": "feasible",
         "presolve": False,
@@ -233,10 +233,10 @@ def test_driver_feasible_fallback_retries_on_non_convergence():
 class _AcceptableProbeProblem:
     """Stub problem whose first solve() reports ACCEPTABLE (a converged --
     ``bool(result) is True`` -- but not exactly CONVERGED flag) and second
-    (the feasible_fallback retry) reports CONVERGED. Regression case for
-    review finding I-2: the retired ``optimize_solve()``'s own
-    conditional-phase gate skipped the trailing Solve phase only on an
-    EXACT CONVERGED (``psiopt/src/psiopt.cpp``), so a merely-ACCEPTABLE
+    (the feasible_fallback retry) reports CONVERGED. Regression case: the
+    retired ``optimize_solve()``'s own conditional-phase gate skipped the
+    trailing Solve phase only on an EXACT CONVERGED
+    (``psiopt/src/psiopt.cpp``), so a merely-ACCEPTABLE
     main stage must still trigger the fallback -- the ``not result``/
     ``converged()`` idiom (which treats ACCEPTABLE as already "done") gets
     this wrong; ``result.flag != ConvergenceFlags.CONVERGED`` gets it
