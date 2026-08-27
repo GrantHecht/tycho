@@ -206,7 +206,7 @@ int main() {
     ipm.set_max_ls_iters(2);
 
     std::cout << "MinTimeToClimb: solving...\n" << std::flush;
-    const auto flag = phase.solve(&ipm, {.presolve = true}).flag_;
+    const auto flag = phase.solve(ipm, {.presolve = true}).flag_;
 
     if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "MinTimeToClimb (builder): solver FAILED (status " << static_cast<int>(flag)

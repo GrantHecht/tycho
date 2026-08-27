@@ -61,9 +61,8 @@ auto make_chain_phase(double a, double b, int n_segs, double L,
     // Stage the batched (Jet) solve: `ipm` is shared as the job's prototype
     // engine across every phase in the batch (Jet::map clones it once per
     // jet_run() call -- see BackendProblemBase::set_jet_job()'s doc comment
-    // for why sharing one prototype this way is safe). presolve=true here
-    // reproduces the retired SolveOptimize job mode's meaning: a Feasible
-    // stage first, then the Optimal main stage.
+    // for why sharing one prototype this way is safe). presolve=true runs a
+    // Feasible stage first, then the Optimal main stage.
     phase.set_jet_job(ipm, solvers::SolveOptions{.presolve = true});
 
     return phase;
@@ -76,14 +75,12 @@ int main() {
     constexpr int n_jobs = 100;
 
     tycho::solvers::InteriorPointSolver ipm;
-    // Restored from the pre-M5 per-phase optimizer() configuration (parity
-    // with the Python twin and the pre-M5 example): line-search mode/max
+    // Matches the Python twin's engine configuration: line-search mode/max
     // iters are real engine settings, not jet-path artifacts. print_level
     // stays at its class default (0) here deliberately -- ClonedEngine
     // (solve_pipeline.cpp) forces any InteriorPointSolver clone still at
     // that default to a silent print_level for a jet run, so this ends up
-    // quiet exactly like the pre-M5 jet path's forced print_level_ = 10 did,
-    // without this example having to know that constant.
+    // quiet without this example having to know that constant.
     ipm.set_opt_ls_mode("L1");
     ipm.set_max_ls_iters(2);
 

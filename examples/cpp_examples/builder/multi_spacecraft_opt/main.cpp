@@ -221,8 +221,8 @@ static bool run_multi_spacecraft(const std::vector<std::vector<Eigen::VectorXd>>
     // For each angular spread, substitute new front states, re-transcribe
     // every 8 iterates to keep the problem well conditioned, then run a
     // Feasible-mode solve (first iterate only) followed by an Optimal-mode
-    // solve, falling back to a Feasible presolve + Optimal pair if that
-    // doesn't converge.
+    // solve, falling back to a Feasible presolve + Optimal pair if it
+    // reports NOTCONVERGED.
     tycho::ConvergenceFlags flag = tycho::ConvergenceFlags::CONVERGED;
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(7, 0, 6);
     for (size_t j = 0; j < all_istates.size(); ++j) {
@@ -236,16 +236,16 @@ static bool run_multi_spacecraft(const std::vector<std::vector<Eigen::VectorXd>>
         }
 
         if (j == 0) {
-            auto solve_flag = ocp.solve(&ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
+            auto solve_flag = ocp.solve(ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
             if (solve_flag > tycho::ConvergenceFlags::ACCEPTABLE) {
                 std::cerr << "  MultiSpacecraftOpt: initial solve FAILED at j=0\n";
                 return false;
             }
         }
 
-        flag = ocp.solve(&ipm).flag_;
+        flag = ocp.solve(ipm).flag_;
         if (flag == tycho::ConvergenceFlags::NOTCONVERGED) {
-            flag = ocp.solve(&ipm, {.presolve = true}).flag_;
+            flag = ocp.solve(ipm, {.presolve = true}).flag_;
         }
 
         auto link_params = ocp.base().return_link_params();

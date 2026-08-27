@@ -158,7 +158,7 @@ int main() {
     ipm.set_print_level(1);
 
     std::cout << "Reentry: solve (unconstrained)...\n" << std::flush;
-    auto flag1 = phase.solve(&ipm, {.presolve = true}).flag_;
+    auto flag1 = phase.solve(ipm, {.presolve = true}).flag_;
     if (flag1 > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "Reentry (builder): initial solve FAILED\n";
         return EXIT_FAILURE;
@@ -166,7 +166,7 @@ int main() {
 
     std::cout << "Reentry: refining to 300 segments...\n" << std::flush;
     phase.refine_traj_manual(300);
-    auto flag2 = phase.solve(&ipm).flag_;
+    auto flag2 = phase.solve(ipm).flag_;
     if (flag2 > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "Reentry (builder): refined optimize FAILED\n";
         return EXIT_FAILURE;
@@ -177,7 +177,7 @@ int main() {
     std::cout << "Reentry: re-solving with heating rate constraint...\n" << std::flush;
     phase.add_upper_func_bound(PhaseRegionFlags::Path, GenericFunction<-1, 1>(qfunc()),
                                {"h", "v", "alpha"}, Qlimit, 1.0 / Qlimit);
-    auto flag3 = phase.solve(&ipm).flag_;
+    auto flag3 = phase.solve(ipm).flag_;
 
     auto traj2 = phase.return_traj();
     const double crossrange1 = traj1.back()[1] * 180.0 / M_PI;

@@ -59,7 +59,7 @@ int main() {
     ipm.set_opt_ls_mode("L1");
     ipm.set_print_level(1);
 
-    const auto flag = phase.solve(&ipm, {.presolve = true}).flag_;
+    const auto flag = phase.solve(ipm, {.presolve = true}).flag_;
 
     if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "MountainCar (builder): FAILED (status " << static_cast<int>(flag) << ")\n";

@@ -113,9 +113,9 @@ int main() {
 
     // Optimal-mode solve; if it doesn't fully converge, fall back to a
     // Feasible-mode solve.
-    auto flag = phase.solve(&ipm).flag_;
+    auto flag = phase.solve(ipm).flag_;
     if (flag != tycho::ConvergenceFlags::CONVERGED) {
-        flag = phase.solve(&ipm, {.mode = Mode::Feasible}).flag_;
+        flag = phase.solve(ipm, {.mode = Mode::Feasible}).flag_;
     }
 
     if (phase.mesh_converged()) {

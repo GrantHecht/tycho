@@ -56,7 +56,7 @@ int main() {
     phase.add_delta_time_objective(1.0);
 
     InteriorPointSolver ipm;
-    const auto status = phase.solve(&ipm, {.presolve = true}).flag_;
+    const auto status = phase.solve(ipm, {.presolve = true}).flag_;
 
     if (status <= tycho::ConvergenceFlags::ACCEPTABLE) {
         const auto result = phase.return_traj();

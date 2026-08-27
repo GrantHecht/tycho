@@ -62,7 +62,7 @@ int main() {
     ipm.set_econ_tol(1.0e-8);
     ipm.set_icon_tol(1.0e-8);
 
-    const auto flag = phase.solve(&ipm).flag_;
+    const auto flag = phase.solve(ipm).flag_;
 
     auto traj = phase.return_traj();
     std::cout << std::fixed << std::setprecision(6);

@@ -163,7 +163,7 @@ int main() {
     ipm.set_print_level(1);
 
     std::cout << "Solving multi-phase cannon ...\n" << std::flush;
-    const auto status = ocp.solve(&ipm).flag_;
+    const auto status = ocp.solve(ipm).flag_;
 
     if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "MultiPhaseCannon (builder): FAILED (status " << static_cast<int>(status)

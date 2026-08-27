@@ -179,8 +179,9 @@ if __name__ == "__main__":
     # This multi-phase formulation confines the throttle to a bang-bang /
     # singular arc via phase2's PathCon equality constraint, so an SQP
     # polish stage after the IPM main solve measurably tightens the KKT
-    # residual at near-constant cost.
+    # residual.
     sqp = solvs.SQP()
+    sqp.kkt_tol = 1e-9  # match the main engine so the tightening is by design
     result = ocp.solve(ipm, polish=sqp)
 
     main_kkt = result.stages[0].kkt_residual

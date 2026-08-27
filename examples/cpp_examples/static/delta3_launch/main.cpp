@@ -226,7 +226,7 @@ int main() {
     ///////////////////////////////////////////////////////////////////////////
     std::cout << "Solving Delta III launch vehicle problem ...\n" << std::flush;
 
-    const auto status = ocp.solve(&ipm, {.presolve = true}).flag_;
+    const auto status = ocp.solve(ipm, {.presolve = true}).flag_;
 
     if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "Delta3Launch: FAILED (status " << static_cast<int>(status) << ")\n";

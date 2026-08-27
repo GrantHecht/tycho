@@ -135,7 +135,7 @@ NavResult navigate(ODE &ode, const std::vector<Eigen::Vector2d> &points, double 
     tycho::solvers::InteriorPointSolver ipm;
     ipm.set_econ_tol(tol);
     ipm.set_kkt_tol(tol);
-    const auto status = ocp.solve(&ipm, {.presolve = true}).flag_;
+    const auto status = ocp.solve(ipm, {.presolve = true}).flag_;
 
     NavResult result;
     result.converged = (status <= tycho::ConvergenceFlags::ACCEPTABLE);

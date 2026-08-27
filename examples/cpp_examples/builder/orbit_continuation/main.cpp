@@ -56,7 +56,7 @@ std::vector<Eigen::VectorXd> solve_periodic(const ODE &ode, const Eigen::VectorX
 
     tycho::solvers::InteriorPointSolver ipm;
     ipm.set_econ_tol(1e-12);
-    auto flag = phase.solve(&ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
+    auto flag = phase.solve(ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
     if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
         return {}; // caller checks for empty
     }

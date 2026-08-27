@@ -94,7 +94,7 @@ int main() {
     tycho::solvers::InteriorPointSolver ipm;
     ipm.set_tols(1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9);
 
-    const auto flag = phase.solve(&ipm).flag_;
+    const auto flag = phase.solve(ipm).flag_;
 
     if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "BikeObstacle (builder): FAILED (status " << static_cast<int>(flag) << ")\n";

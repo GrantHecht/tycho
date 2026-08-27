@@ -78,9 +78,9 @@ int main() {
     {
         // Feasible presolve, then an Optimal-mode solve; if that doesn't
         // fully converge, fall back to a further Feasible-mode solve.
-        auto flag = phase.solve(&ipm, {.presolve = true}).flag_;
+        auto flag = phase.solve(ipm, {.presolve = true}).flag_;
         if (flag != tycho::ConvergenceFlags::CONVERGED) {
-            flag = phase.solve(&ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
+            flag = phase.solve(ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
         }
         if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
             std::cerr << "TopputtoLowThrust: time-optimal solve failed (status "
@@ -109,9 +109,9 @@ int main() {
     {
         // Optimal-mode solve; if it doesn't fully converge, fall back to a
         // Feasible-mode solve.
-        auto flag = phase.solve(&ipm).flag_;
+        auto flag = phase.solve(ipm).flag_;
         if (flag != tycho::ConvergenceFlags::CONVERGED) {
-            flag = phase.solve(&ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
+            flag = phase.solve(ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
         }
         if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
             std::cerr << "TopputtoLowThrust: fuel-optimal initial solve failed (status "
@@ -121,9 +121,9 @@ int main() {
     }
     phase.refine_traj_manual(800);
     {
-        auto flag = phase.solve(&ipm).flag_;
+        auto flag = phase.solve(ipm).flag_;
         if (flag != tycho::ConvergenceFlags::CONVERGED) {
-            flag = phase.solve(&ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
+            flag = phase.solve(ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
         }
         if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
             std::cerr << "TopputtoLowThrust: fuel-optimal refined solve failed (status "

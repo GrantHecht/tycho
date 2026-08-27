@@ -50,7 +50,7 @@ int main() {
     }
 
     tycho::solvers::InteriorPointSolver ipm;
-    const auto flag = phase.solve(&ipm).flag_;
+    const auto flag = phase.solve(ipm).flag_;
 
     if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "AnalyticExample (builder): FAILED (status " << static_cast<int>(flag)

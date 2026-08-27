@@ -116,7 +116,7 @@ int main() {
     ipm.set_econ_tol(1.0e-9);
 
     std::cout << "=== Dionysus Low Thrust: Earth-to-Asteroid Mass-Optimal Transfer ===\n";
-    auto flag = phase.solve(&ipm).flag_;
+    auto flag = phase.solve(ipm).flag_;
 
     auto traj = phase.return_traj();
     double final_mass_nd = traj.back()[6];

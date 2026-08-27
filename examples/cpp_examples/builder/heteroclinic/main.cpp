@@ -149,7 +149,7 @@ std::vector<Eigen::VectorXd> make_orbit(const ODE &ode,
     tycho::solvers::InteriorPointSolver ipm;
     ipm.set_econ_tol(1.0e-12);
     ipm.set_print_level(1);
-    auto flag = phase.solve(&ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
+    auto flag = phase.solve(ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
     if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
         return {}; // caller checks for empty
     }
@@ -342,7 +342,7 @@ std::pair<Trajectory, Trajectory> make_heteroclinic(const ODE &ode, const Trajec
     tycho::solvers::InteriorPointSolver ipm;
     ipm.set_econ_tol(1.0e-9);
     ipm.set_opt_ls_mode("L1");
-    auto flag = ocp.solve(&ipm).flag_;
+    auto flag = ocp.solve(ipm).flag_;
     if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
         return {}; // caller checks for empty
     }

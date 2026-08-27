@@ -247,7 +247,7 @@ static bool run_form2() {
     ipm.set_bound_fraction(0.995);
     ipm.set_print_level(1);
 
-    auto flag = phase.solve(&ipm).flag_;
+    auto flag = phase.solve(ipm).flag_;
 
     auto traj = phase.return_traj();
     double tf_final = traj.back()[13] * Tstar;
@@ -321,7 +321,7 @@ static bool run_form1() {
     ipm.set_bound_fraction(0.995);
     ipm.set_print_level(1);
 
-    auto flag = phase.solve(&ipm).flag_;
+    auto flag = phase.solve(ipm).flag_;
 
     auto traj = phase.return_traj();
     double tf_final = traj.back()[20] * Tstar;

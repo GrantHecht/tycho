@@ -81,7 +81,7 @@ std::vector<Eigen::VectorXd> navigate(tycho::vf::GenericFunction<-1, -1> erased_
     ipm.set_econ_tol(tol);
     ipm.set_kkt_tol(tol);
 
-    const auto status = phase.solve(&ipm, {.presolve = true}).flag_;
+    const auto status = phase.solve(ipm, {.presolve = true}).flag_;
     if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "  FAILED: navigation did not converge (status " << static_cast<int>(status)
                   << ")\n";

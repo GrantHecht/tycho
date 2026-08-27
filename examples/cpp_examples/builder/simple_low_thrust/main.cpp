@@ -74,7 +74,7 @@ int main() {
 
     std::cout << "=== Phase 1: Minimum time transfer ===\n";
     phase.add_delta_time_objective(1.0);
-    auto flag_time = phase.solve(&ipm, {.presolve = true}).flag_;
+    auto flag_time = phase.solve(ipm, {.presolve = true}).flag_;
     if (flag_time > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "SimpleLowThrust: time-optimal solve failed\n";
         return EXIT_FAILURE;
@@ -95,7 +95,7 @@ int main() {
     }
 
     ipm.set_max_ls_iters(0);
-    auto flag_power = phase.solve(&ipm).flag_;
+    auto flag_power = phase.solve(ipm).flag_;
     if (flag_power > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "SimpleLowThrust: power-optimal optimize failed\n";
         return EXIT_FAILURE;
@@ -115,7 +115,7 @@ int main() {
         phase.add_integral_objective(GenericFunction<-1, 1>(obj_expr), {"u"});
     }
     ipm.set_max_ls_iters(2);
-    auto flag_mass = phase.solve(&ipm).flag_;
+    auto flag_mass = phase.solve(ipm).flag_;
     if (flag_mass > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "SimpleLowThrust: mass-optimal optimize failed\n";
         return EXIT_FAILURE;
