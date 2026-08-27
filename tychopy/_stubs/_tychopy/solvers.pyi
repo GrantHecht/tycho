@@ -1381,6 +1381,44 @@ class OptimizationProblemBase:
             problem.
         """
 
+    def set_jet_job(self, prototype: object, mode: object = 'optimal', presolve: object | None = False, polish: object | None = None, warm: object | None = None) -> None:
+        """
+        Stage a batched (Jet) solve on this problem.
+
+        jet_run() -- which ``Jet.map`` calls on each pool-worker job -- clones
+        ``prototype`` and runs the staged options against the clone;
+        ``prototype`` itself is never run, so several problems in one
+        ``Jet.map`` batch can safely share it.
+
+        Parameters
+        ----------
+        prototype : InteriorPointSolver | SqpSolver | IpoptSolver
+            Non-owning; kept alive for as long as this problem is (so a caller
+            need not hold its own reference past this call).
+        mode : Mode | str, optional
+            ``Mode.Optimal``/``"optimal"`` (default) or ``Mode.Feasible``/
+            ``"feasible"``.
+        presolve : bool | InteriorPointSolver | SqpSolver | IpoptSolver | None, optional
+            ``False`` (default) or ``None``: no presolve stage. ``True``: run a
+            Feasible presolve stage on ``prototype`` itself (also cloned per
+            jet_run() call). An engine instance: run the presolve stage on a
+            clone of that engine instead (implies presolve); kept alive the
+            same way as ``prototype``.
+        polish : InteriorPointSolver | SqpSolver | IpoptSolver | None, optional
+            When given, run an Optimal polish stage (on a clone) after the main
+            stage. Kept alive the same way as ``presolve``.
+        warm : SolveResult | WarmStartData | None, optional
+            Declared-space warm-start currency seeding the first stage that
+            runs on every jet_run() call. Kept alive the same way as
+            ``prototype``.
+
+        Raises
+        ------
+        ValueError
+            If ``prototype``/``presolve``/``polish``/``mode``/``warm`` is not
+            one of the types listed above.
+        """
+
 class Jet:
     @overload
     @staticmethod

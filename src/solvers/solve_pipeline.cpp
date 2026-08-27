@@ -50,8 +50,10 @@
 #include <algorithm>
 #include <mutex>
 #include <stdexcept>
+#include <type_traits>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <fmt/format.h>
@@ -283,6 +285,45 @@ const SolveResult &BackendProblemBase::last_result() const {
         throw std::logic_error("last_result: no solve() has completed on this instance yet");
     }
     return *this->last_result_cache_;
+}
+
+ConvergenceFlags BackendProblemBase::jet_run() {
+    if (!this->jet_prototype_.has_value()) {
+        throw std::logic_error(
+            "jet_run(): no jet job staged on this problem; call set_jet_job(prototype, opts) "
+            "before Jet::map runs it");
+    }
+
+    this->jet_initialize();
+
+    // Clone the staged prototype so this call solves against its own fresh
+    // engine instance -- the prototype itself is never touched, so several
+    // jet_run() calls sharing one prototype (Jet::map's pool workers) never
+    // contend on its per-engine concurrency latch. InteriorPointSolver's
+    // clone_prototype() overload returns by unique_ptr (see that function's
+    // own doc comment for why); SqpSolver/IpoptSolver's return by value --
+    // the `if constexpr` below picks the right shape for whichever
+    // alternative the staged EngineRef holds.
+    SolveResult result;
+    try {
+        result = std::visit(
+            [&](auto *proto) -> SolveResult {
+                using EngineT = std::decay_t<decltype(*proto)>;
+                auto clone = clone_prototype(*proto);
+                if constexpr (std::is_same_v<EngineT, InteriorPointSolver>) {
+                    return this->solve(EngineRef{clone.get()}, *this->jet_solve_options_);
+                } else {
+                    return this->solve(EngineRef{&clone}, *this->jet_solve_options_);
+                }
+            },
+            *this->jet_prototype_);
+    } catch (...) {
+        this->jet_release();
+        throw;
+    }
+
+    this->jet_release();
+    return result.flag_;
 }
 
 tycho::ConvergenceFlags BackendProblemBase::run_adaptive_mesh(EngineRef, Mode, SolveResult &) {

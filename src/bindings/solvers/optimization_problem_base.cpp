@@ -182,4 +182,107 @@ ValueError
     or whatever the dispatched engine itself raises for a malformed
     problem.
 )doc");
+
+    // set_jet_job(): stages a batched (Jet) solve. Argument conversion is
+    // identical to solve()'s above (same helpers, same presolve=None/bool/
+    // engine and polish=engine/None shapes) -- the difference is what
+    // happens to the result: set_jet_job() copies opts.presolve_engine/
+    // opts.polish's pointee into storage THIS problem instance owns (see
+    // BackendProblemBase::set_jet_job's own doc comment), so the local
+    // presolve_engine_storage/polish_engine_storage below are safe to let go
+    // out of scope at the end of this call -- unlike solve(), nothing here
+    // needs to survive past this call for the deferred jet_run() to see the
+    // right engine.
+    obj.def(
+        "set_jet_job",
+        [](BackendProblemBase &self, nb::object prototype, nb::object mode, nb::object presolve,
+           nb::object polish, nb::object warm) {
+            EngineRef proto_ref = engine_ref_from_pyobject(prototype, "prototype");
+
+            SolveOptions opts;
+            opts.mode = mode_from_pyobject(mode);
+
+            EngineRef presolve_engine_storage{};
+            if (presolve.is_none()) {
+                opts.presolve = false;
+            } else if (nb::isinstance<nb::bool_>(presolve)) {
+                opts.presolve = nb::cast<bool>(presolve);
+            } else {
+                presolve_engine_storage = engine_ref_from_pyobject(presolve, "presolve");
+                opts.presolve = true;
+                opts.presolve_engine = &presolve_engine_storage;
+            }
+
+            EngineRef polish_engine_storage{};
+            if (!polish.is_none()) {
+                polish_engine_storage = engine_ref_from_pyobject(polish, "polish");
+                opts.polish = &polish_engine_storage;
+            }
+
+            const hven::solvers::WarmStartData *warm_ptr = nullptr;
+            if (!warm.is_none()) {
+                SolveResult *sr = nullptr;
+                hven::solvers::WarmStartData *wsd = nullptr;
+                if (nb::try_cast<SolveResult *>(warm, sr, false)) {
+                    warm_ptr = &sr->warm_;
+                } else if (nb::try_cast<hven::solvers::WarmStartData *>(warm, wsd, false)) {
+                    warm_ptr = wsd;
+                } else {
+                    throw std::invalid_argument(
+                        fmt::format("warm: expected a SolveResult, WarmStartData, or None, got {}",
+                                    nb::cast<std::string>(nb::str(warm.type()))));
+                }
+            }
+            opts.warm = warm_ptr;
+
+            self.set_jet_job(proto_ref, opts);
+        },
+        nb::arg("prototype"), nb::arg("mode") = "optimal", nb::arg("presolve").none() = false,
+        nb::arg("polish") = nb::none(), nb::arg("warm") = nb::none(),
+        // The C++ contract makes the caller responsible for keeping
+        // prototype/presolve/polish/warm alive across the deferred
+        // jet_run() call (set_jet_job's own doc comment). On the Python
+        // side we can and do better: keep_alive<self, arg> ties each of
+        // these objects' Python lifetime to this problem's, so a caller
+        // that stops holding its own reference to e.g. `ipm` right after
+        // this call (as HangingChain.py's Job() does) can't end up with a
+        // dangling prototype by the time Jet.map's pool worker actually
+        // runs jet_run() -- this problem keeps it alive for them.
+        nb::keep_alive<1, 2>(), nb::keep_alive<1, 4>(), nb::keep_alive<1, 5>(),
+        nb::keep_alive<1, 6>(),
+        R"doc(Stage a batched (Jet) solve on this problem.
+
+jet_run() -- which ``Jet.map`` calls on each pool-worker job -- clones
+``prototype`` and runs the staged options against the clone;
+``prototype`` itself is never run, so several problems in one
+``Jet.map`` batch can safely share it.
+
+Parameters
+----------
+prototype : InteriorPointSolver | SqpSolver | IpoptSolver
+    Non-owning; kept alive for as long as this problem is (so a caller
+    need not hold its own reference past this call).
+mode : Mode | str, optional
+    ``Mode.Optimal``/``"optimal"`` (default) or ``Mode.Feasible``/
+    ``"feasible"``.
+presolve : bool | InteriorPointSolver | SqpSolver | IpoptSolver | None, optional
+    ``False`` (default) or ``None``: no presolve stage. ``True``: run a
+    Feasible presolve stage on ``prototype`` itself (also cloned per
+    jet_run() call). An engine instance: run the presolve stage on a
+    clone of that engine instead (implies presolve); kept alive the
+    same way as ``prototype``.
+polish : InteriorPointSolver | SqpSolver | IpoptSolver | None, optional
+    When given, run an Optimal polish stage (on a clone) after the main
+    stage. Kept alive the same way as ``presolve``.
+warm : SolveResult | WarmStartData | None, optional
+    Declared-space warm-start currency seeding the first stage that
+    runs on every jet_run() call. Kept alive the same way as
+    ``prototype``.
+
+Raises
+------
+ValueError
+    If ``prototype``/``presolve``/``polish``/``mode``/``warm`` is not
+    one of the types listed above.
+)doc");
 }

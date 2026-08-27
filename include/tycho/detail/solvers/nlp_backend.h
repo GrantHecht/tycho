@@ -307,6 +307,39 @@ struct BackendProblemBase {
     ///        solve() call completes.
     std::optional<SolveResult> last_result_cache_;
 
+    /// @brief Non-owning prototype engine staged by set_jet_job(); unset
+    ///        (nullopt) until that call runs. jet_run() clones this on every
+    ///        call rather than dispatching through it directly -- see
+    ///        set_jet_job()'s doc comment for the lifetime contract this
+    ///        implies.
+    std::optional<EngineRef> jet_prototype_;
+
+    /// @brief Solve options set_jet_job() stages for jet_run() to pass the
+    ///        per-call clone; copied by value from the caller's argument.
+    ///        `jet_solve_options_->presolve_engine`/`->polish`, when set,
+    ///        point into jet_presolve_engine_storage_/jet_polish_engine_storage_
+    ///        below rather than into whatever storage the caller's own
+    ///        SolveOptions argument used -- see set_jet_job()'s doc comment.
+    std::optional<SolveOptions> jet_solve_options_;
+
+    /// @brief Owns the EngineRef VALUE (a small pointer variant, not the
+    ///        engine it names) that jet_solve_options_->presolve_engine
+    ///        points at, when set_jet_job() was called with a presolve
+    ///        engine. SolveOptions::presolve_engine is a raw, non-owning
+    ///        EngineRef* -- fine for solve(), where the caller's own local
+    ///        naturally outlives one synchronous call, but a staged
+    ///        set_jet_job() call can run much later (inside a Jet::map on a
+    ///        pool worker thread), so set_jet_job() copies the pointee HERE
+    ///        instead of trusting a caller-side temporary to still be alive
+    ///        then. The referenced engine ITSELF is still the caller's
+    ///        responsibility to keep alive -- this only owns the pointer
+    ///        variant, not the object it points to.
+    std::optional<EngineRef> jet_presolve_engine_storage_;
+
+    /// @brief Same as jet_presolve_engine_storage_ above, for
+    ///        jet_solve_options_->polish.
+    std::optional<EngineRef> jet_polish_engine_storage_;
+
   public:
     /// Compute default partition count from the global thread budget.
     /// Over-partitions by 4x so the work-stealing pool can smooth out
@@ -348,22 +381,86 @@ struct BackendProblemBase {
     /// @brief Releases whatever jet_initialize() acquired.
     virtual void jet_release() = 0;
 
-    /// @brief Interim placeholder for the batched (Jet) solve entry point.
+    /// @brief Stages a batched (Jet) solve on this problem: jet_run() clones
+    ///        `prototype` via clone_prototype() and calls this->solve() on
+    ///        the fresh clone with `opts`, once per jet_run() call --
+    ///        `prototype` itself is never run, only copied from. This is
+    ///        what lets one prototype engine be shared as the job
+    ///        description across every problem in a Jet::map batch: each
+    ///        pool-worker's jet_run() call gets its own clone, so none of
+    ///        them ever contends on `prototype`'s own per-engine concurrency
+    ///        latch (solve()'s "this engine instance is already inside a
+    ///        solve" guard), and `prototype` is left exactly as cold as it
+    ///        started once the whole batch finishes.
     ///
-    /// The mode-sequence surface jet_run() used to dispatch through
-    /// (JetJobModes/jet_job_mode_) is retired along with the five mode
-    /// methods; the batched entry point is staged through set_jet_job
-    /// instead, landing in a follow-up task. Until then this always throws,
-    /// naming what replaces it, so Jet::map keeps compiling against this
-    /// entry point without silently running a stale job description.
-    ///
-    /// @throws std::logic_error unconditionally.
-    ConvergenceFlags jet_run() {
-        throw std::logic_error(
-            "jet_run(): the retired mode-sequence surface (jet_job_mode_/JetJobModes) that "
-            "used to drive this is gone; jets are staged via set_jet_job(), not yet landed on "
-            "this branch");
+    /// @param prototype Non-owning reference. The CALLER must keep the
+    ///        referenced engine alive for as long as jet_run() can still be
+    ///        called on this problem -- i.e. for the duration of any
+    ///        Jet::map call this problem participates in -- the same
+    ///        lifetime contract solve()'s own EngineRef parameter already
+    ///        carries, just held open longer because this stages the call
+    ///        rather than running it immediately.
+    /// @param opts Copied by value onto this problem. When `opts.presolve_engine`
+    ///        or `opts.polish` are set, the EngineRef VALUE they point at is
+    ///        also copied -- into jet_presolve_engine_storage_/
+    ///        jet_polish_engine_storage_, which this problem instance owns --
+    ///        so the caller's own SolveOptions argument (and whatever
+    ///        temporary held the EngineRef it pointed at) may go out of scope
+    ///        immediately after this call returns. The referenced ENGINE
+    ///        objects themselves are a different matter: those are never
+    ///        copied (an engine is not copyable/clonable in place), so the
+    ///        CALLER must still keep them alive for as long as jet_run() can
+    ///        run -- exactly the same contract `prototype` carries above.
+    void set_jet_job(EngineRef prototype, SolveOptions opts) {
+        this->jet_prototype_ = prototype;
+
+        if (opts.presolve_engine != nullptr) {
+            this->jet_presolve_engine_storage_ = *opts.presolve_engine;
+            opts.presolve_engine = &*this->jet_presolve_engine_storage_;
+        } else {
+            this->jet_presolve_engine_storage_.reset();
+        }
+
+        if (opts.polish != nullptr) {
+            this->jet_polish_engine_storage_ = *opts.polish;
+            opts.polish = &*this->jet_polish_engine_storage_;
+        } else {
+            this->jet_polish_engine_storage_.reset();
+        }
+
+        this->jet_solve_options_ = std::move(opts);
     }
+
+    /// @brief Convenience overloads: the same call, taking a concrete engine
+    ///        by lvalue reference instead of an already-formed EngineRef --
+    ///        mirrors solve()'s own convenience overloads above.
+    void set_jet_job(InteriorPointSolver &e, SolveOptions opts) {
+        this->set_jet_job(EngineRef{&e}, std::move(opts));
+    }
+    void set_jet_job(SqpSolver &e, SolveOptions opts) {
+        this->set_jet_job(EngineRef{&e}, std::move(opts));
+    }
+    void set_jet_job(IpoptSolver &e, SolveOptions opts) {
+        this->set_jet_job(EngineRef{&e}, std::move(opts));
+    }
+
+    /// @brief Runs the job set_jet_job() staged: jet_initialize(), clone the
+    ///        staged prototype engine, this->solve() the clone with the
+    ///        staged options, jet_release(), and return the deciding stage's
+    ///        convergence flag. last_result() reflects this call afterward,
+    ///        same as any other solve() call. Called by Jet::map on pool
+    ///        worker threads (see the concurrency note on set_jet_job()
+    ///        above for why that is safe against a shared prototype).
+    ///
+    /// jet_release() still runs when this->solve() throws, so a failed
+    /// jet_run() leaves the problem in the same released state a successful
+    /// one would.
+    ///
+    /// @throws std::logic_error if set_jet_job() was never called on this
+    ///         instance. Otherwise, whatever this->solve() itself throws for
+    ///         a malformed problem, a stale reduced-space NLP, or an
+    ///         engine-specific mode refusal.
+    ConvergenceFlags jet_run();
 };
 
 namespace ipopt_backend {

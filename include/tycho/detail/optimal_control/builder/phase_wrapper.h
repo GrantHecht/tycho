@@ -1251,6 +1251,29 @@ class Phase {
         return phase_->solve(e, opts);
     }
 
+    /// @brief Stage a batched (Jet) solve on the wrapped phase; see @ref
+    ///        tycho::solvers::BackendProblemBase::set_jet_job.
+    /// @param prototype Non-owning; the caller keeps it alive for the
+    ///        duration of any Jet::map call this phase participates in.
+    /// @param opts      Copied by value; passed to the per-jet-call clone's
+    ///                  solve().
+    void set_jet_job(tycho::solvers::EngineRef prototype, tycho::solvers::SolveOptions opts) {
+        phase_->set_jet_job(prototype, std::move(opts));
+    }
+
+    /// @brief Convenience overloads: the same call, taking a concrete engine
+    ///        by lvalue reference so a caller can write `phase.set_jet_job(
+    ///        ipm, opts)` directly instead of forming an EngineRef.
+    void set_jet_job(InteriorPointSolver &e, tycho::solvers::SolveOptions opts) {
+        phase_->set_jet_job(e, std::move(opts));
+    }
+    void set_jet_job(tycho::solvers::SqpSolver &e, tycho::solvers::SolveOptions opts) {
+        phase_->set_jet_job(e, std::move(opts));
+    }
+    void set_jet_job(tycho::solvers::IpoptSolver &e, tycho::solvers::SolveOptions opts) {
+        phase_->set_jet_job(e, std::move(opts));
+    }
+
     // ── Result accessors ──────────────────────────────────────────────────────
 
     /// @brief Return the current discretized trajectory.
