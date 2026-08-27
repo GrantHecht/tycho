@@ -811,17 +811,6 @@ class IpoptRunInfo:
     @property
     def wall_time_s(self) -> float: ...
 
-class NLPSolvers(enum.Enum):
-    """NLP solver backend selector for the solve/optimize entry points."""
-
-    interior_point = 0
-    """Built-in interior-point solver (default)."""
-
-    ipopt = 1
-    """
-    Linked Ipopt on the identical transcribed NLP (requires ENABLE_IPOPT build).
-    """
-
 def ipopt_available() -> bool:
     """True when this build was configured with ENABLE_IPOPT."""
 
@@ -1329,98 +1318,26 @@ class IpoptSolver:
 
 class OptimizationProblemBase:
     @property
-    def jet_job_mode(self) -> JetJobModes: ...
-
-    @jet_job_mode.setter
-    def jet_job_mode(self, arg: JetJobModes, /) -> None: ...
-
-    @property
     def num_partitions(self) -> int:
         """
         Number of NLP matrix partitions.
 
         Assignment routes through :meth:`set_num_partitions` and raises
-        ``ValueError`` for values < 1. The QP thread count is a separate setting:
-        assign ``optimizer.qp_threads``.
+        ``ValueError`` for values < 1. The QP thread count is a separate setting,
+        set on whichever engine is passed to :meth:`solve`.
         """
 
     @num_partitions.setter
     def num_partitions(self, arg: int, /) -> None: ...
 
-    @property
-    def optimizer(self) -> InteriorPointSolver: ...
-
-    @property
-    def nlp_solver(self) -> NLPSolvers:
-        """
-        NLP solver backend for the solve/optimize entry points.
-
-        NLPSolvers.interior_point (default) is the built-in solver, byte-identical to
-        previous behavior. NLPSolvers.ipopt runs the identical transcribed NLP
-        through a linked Ipopt installation; requires a build configured with
-        ENABLE_IPOPT (raises RuntimeError otherwise). The ipopt backend always
-        performs a single NLP solve of the full objective-bearing problem: the
-        feasibility-then-optimize staging modes have no Ipopt analog. In
-        particular ``solve()`` -- which under the built-in solver runs the
-        feasibility-only stage -- minimizes the objective like ``optimize()``
-        when this backend is selected; there is no feasibility-only analog.
-
-        Jet batch runs reject this backend: Ipopt is not reliably re-entrant, so
-        a Jet job whose problem selects it raises ValueError before that job's
-        solve begins. Run the ipopt backend one solve at a time.
-
-        The built-in solver's own diagnostics (``optimizer.last_obj_val``,
-        ``optimizer.last_iter_num``, and every other result()-backed property on
-        ``optimizer``) reflect only the most recent InteriorPointSolver run and are left
-        untouched by an ipopt-backend run -- use ``last_ipopt_result`` as the
-        source of truth for diagnostics of the most recent ipopt-backend
-        solve.
-        """
-
-    @nlp_solver.setter
-    def nlp_solver(self, arg: NLPSolvers, /) -> None: ...
-
-    @property
-    def ipopt_options(self) -> dict[str, str]:
-        """
-        String key/value options forwarded verbatim to Ipopt (e.g.
-        {"linear_solver": "pardisomkl"}). Applied after the matched-tolerance
-        baseline, so entries here win. Ignored by the interior-point backend.
-
-        Reading this attribute returns a *copy* of the stored map, so in-place
-        mutation (``prob.ipopt_options["linear_solver"] = "ma57"``) silently has
-        no effect. Assign a whole dict instead, or read-modify-write:
-        ``opts = prob.ipopt_options; opts["linear_solver"] = "ma57";
-        prob.ipopt_options = opts``.
-        """
-
-    @ipopt_options.setter
-    def ipopt_options(self, arg: Mapping[str, str], /) -> None: ...
-
-    @property
-    def last_ipopt_result(self) -> IpoptRunInfo:
-        """
-        Diagnostics of the most recent ipopt-backend run on this problem
-        (sentinel values with ran == False before any such run).
-        """
-
     def set_num_partitions(self, num_partitions: int) -> None:
         """
         Set the number of NLP matrix partitions (must be >= 1).
 
-        The QP thread count is a separate setting: assign ``optimizer.qp_threads``.
+        The QP thread count is a separate setting, set on whichever engine is
+        passed to :meth:`solve`.
         """
 
-    @overload
-    def set_jet_job_mode(self, arg: JetJobModes, /) -> None: ...
-
-    @overload
-    def set_jet_job_mode(self, arg: str, /) -> None: ...
-
-    @overload
-    def solve(self) -> ConvergenceFlags: ...
-
-    @overload
     def solve(self, engine: object, mode: object = 'optimal', presolve: object | None = False, polish: object | None = None, warm: object | None = None) -> SolveResult:
         """
         Run the engine-driven staged solve: an optional Feasible presolve
@@ -1463,29 +1380,6 @@ class OptimizationProblemBase:
             or whatever the dispatched engine itself raises for a malformed
             problem.
         """
-
-    def optimize(self) -> ConvergenceFlags: ...
-
-    def solve_optimize(self) -> ConvergenceFlags: ...
-
-    def solve_optimize_solve(self) -> ConvergenceFlags: ...
-
-    def optimize_solve(self) -> ConvergenceFlags: ...
-
-class JetJobModes(enum.Enum):
-    DoNothing = 1
-
-    NotSet = 0
-
-    Solve = 2
-
-    Optimize = 3
-
-    SolveOptimize = 4
-
-    SolveOptimizeSolve = 5
-
-    OptimizeSolve = 6
 
 class Jet:
     @overload
