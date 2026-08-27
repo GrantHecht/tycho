@@ -31,6 +31,14 @@
 // seeds that same iteration's main stage. The adaptive-mesh override still
 // sets SolveResult::warm_ itself from whichever main-mode stage ran LAST,
 // since that is the one a polish stage after the loop should seed from.
+//
+// A predecessor's export only seeds the next stage when it is non-empty
+// (warm_or_null() below): an empty export means the predecessor's own
+// engine call captured nothing to hand forward (e.g. a defensive internal
+// check inside the engine skipped the capture; engines.cpp's
+// fill_ipm_stage documents this as non-fatal), and the stage it would have
+// seeded simply runs unseeded instead of failing on a block-size mismatch
+// against an empty payload.
 
 #include "tycho/detail/solvers/nlp_backend.h"
 
@@ -141,6 +149,21 @@ void append_stage(SolveResult &r, const StageOutput &out, const char *role) {
     r.stages_.push_back(std::move(report));
 }
 
+/// @brief `w` as a warm-start pointer to seed the next stage with, or null
+///        when `w` is empty. An empty `primal_` means the stage that
+///        produced `w` exported nothing -- engines.cpp's `fill_ipm_stage`
+///        documents this as a defensive, non-fatal outcome (e.g. the
+///        engine's own internal-consistency check skipped the capture) --
+///        and seeding an empty payload unconditionally would turn that into
+///        a hard `std::invalid_argument` out of the next stage's own
+///        block-size check instead of the "run unseeded" outcome the
+///        pipeline intends. Mirrors the size guard `fill_ipopt_stage`
+///        already applies to a warm payload before using it as a starting
+///        point.
+const hven::solvers::WarmStartData *warm_or_null(const hven::solvers::WarmStartData &w) {
+    return w.primal_.size() > 0 ? &w : nullptr;
+}
+
 } // namespace
 
 SolveResult BackendProblemBase::solve(EngineRef engine, const SolveOptions &opts_in) {
@@ -221,7 +244,7 @@ SolveResult BackendProblemBase::solve(EngineRef engine, const SolveOptions &opts
             this->accept_stage(out);
             append_stage(result, out, "presolve");
             presolve_warm = std::move(out.warm_);
-            first_stage_warm = &presolve_warm;
+            first_stage_warm = warm_or_null(presolve_warm);
         }
 
         StageOutput main_out = run_engine_stage(engine, opts.mode, this->nlp_,
@@ -232,8 +255,9 @@ SolveResult BackendProblemBase::solve(EngineRef engine, const SolveOptions &opts
     }
 
     if (opts.polish != nullptr) {
-        StageOutput polish_out = run_engine_stage(*opts.polish, Mode::Optimal, this->nlp_,
-                                                  this->initial_primal(), &result.warm_);
+        StageOutput polish_out =
+            run_engine_stage(*opts.polish, Mode::Optimal, this->nlp_, this->initial_primal(),
+                             warm_or_null(result.warm_));
         this->accept_stage(polish_out);
         append_stage(result, polish_out, "polish");
         result.warm_ = polish_out.warm_;
@@ -326,7 +350,7 @@ tycho::ConvergenceFlags BackendProblemBase::run_amr_loop(
         StageOutput presolve_out =
             run_one(presolve_engine, Mode::Feasible, "presolve", first_stage_warm, false);
         presolve_warm = std::move(presolve_out.warm_);
-        first_stage_warm = &presolve_warm;
+        first_stage_warm = warm_or_null(presolve_warm);
     }
 
     StageOutput main_out = run_one(engine, mode, "main", first_stage_warm, true);
@@ -370,7 +394,7 @@ tycho::ConvergenceFlags BackendProblemBase::run_amr_loop(
                 StageOutput presolve_out =
                     run_one(presolve_engine, Mode::Feasible, "presolve", nullptr, false);
                 presolve_warm = std::move(presolve_out.warm_);
-                iter_main_warm = &presolve_warm;
+                iter_main_warm = warm_or_null(presolve_warm);
             }
 
             main_out = run_one(engine, mode, "main", iter_main_warm, true);

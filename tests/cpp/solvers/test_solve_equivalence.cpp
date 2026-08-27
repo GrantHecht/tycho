@@ -58,7 +58,7 @@ using tycho::solvers::SolveOptions;
 using tycho::solvers::SolveResult;
 
 ///////////////////////////////////////////////////////////////////////////////
-// Probe phase subclasses: expose the protected active_eq_lmults_/
+// Probe phase subclass: exposes the protected active_eq_lmults_/
 // active_iq_lmults_ (ODEPhaseBase keeps them protected) so the pins below can
 // read the FULL declared-space multiplier vectors directly, the same way
 // SolvePipelinePhaseResultSnapshotPhase (test_solve_pipeline.cpp) exposes
@@ -69,12 +69,6 @@ using tycho::solvers::SolveResult;
 
 struct SolveEquivalenceProbeBrachPhase : ODEPhase<TychoTest::BrachODE> {
     using ODEPhase<TychoTest::BrachODE>::ODEPhase;
-    Eigen::VectorXd eq_lmults() const { return this->active_eq_lmults_; }
-    Eigen::VectorXd iq_lmults() const { return this->active_iq_lmults_; }
-};
-
-struct SolveEquivalenceProbeLinearPhase : ODEPhase<TychoTest::LinearODE> {
-    using ODEPhase<TychoTest::LinearODE>::ODEPhase;
     Eigen::VectorXd eq_lmults() const { return this->active_eq_lmults_; }
     Eigen::VectorXd iq_lmults() const { return this->active_iq_lmults_; }
 };
@@ -134,60 +128,100 @@ solve_equivalence_build_brach_phase(int n_segs = 16) {
     return phase;
 }
 
-/// @brief The exactly-representable LinearODE phase (oc_test_utils.h's
-/// make_linear_phase()), duplicated onto the probe subclass for the same
-/// reason as above.
-std::shared_ptr<SolveEquivalenceProbeLinearPhase>
-solve_equivalence_build_linear_phase(int nsegs = 2) {
-    constexpr double x0 = 0.0, v0 = 1.0, t0 = 0.0, tf = 1.0;
-    constexpr int n_pts = 5;
+/// @brief One leg of a 2-phase Brachistochrone relay: the same geometry as
+/// solve_equivalence_build_brach_phase() above, guessed over the segment
+/// [xs,ys] -> [xe,ye] starting from guess time `ts`, fixing its own front
+/// boundary only when `fix_front` is true. The second leg passes
+/// `fix_front=false`: its front (x, y, v, t) is supplied entirely by the
+/// OCP-level link constraint in solve_equivalence_build_two_phase_ocp()
+/// below, not restated here -- fixing it independently AND linking it would
+/// make the two declarations redundant.
+std::shared_ptr<SolveEquivalenceProbeBrachPhase>
+solve_equivalence_build_relay_leg(int n_segs, double xs, double ys, double vs, double ts, double xe,
+                                  double ye, bool fix_front) {
+    constexpr double g = 9.81;
+    constexpr double tf_guess = 1.0, theta_guess = 1.0;
+    const int n_pts = n_segs * 3 + 1;
 
     std::vector<Eigen::VectorXd> traj;
     traj.reserve(n_pts);
     for (int i = 0; i < n_pts; ++i) {
         double s = static_cast<double>(i) / (n_pts - 1);
-        double t = t0 + (tf - t0) * s;
-        Eigen::VectorXd pt(3);
-        pt[0] = x0 + v0 * (t - t0);
-        pt[1] = v0;
-        pt[2] = t;
+        Eigen::VectorXd pt(5);
+        pt[0] = xs + (xe - xs) * s;
+        pt[1] = ys + (ye - ys) * s;
+        pt[2] = vs + g * s * tf_guess * std::cos(theta_guess);
+        pt[3] = ts + tf_guess * s;
+        pt[4] = theta_guess;
         traj.push_back(pt);
     }
 
-    TychoTest::LinearODE ode;
-    auto phase = std::make_shared<SolveEquivalenceProbeLinearPhase>(ode, TranscriptionModes::LGL3,
-                                                                    traj, nsegs);
+    TychoTest::BrachODE ode(g);
+    auto phase = std::make_shared<SolveEquivalenceProbeBrachPhase>(ode, TranscriptionModes::LGL3,
+                                                                   traj, n_segs);
 
-    Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(3, 0, 2);
-    Eigen::VectorXd front_val(3);
-    front_val << x0, v0, t0;
-    phase->add_boundary_value(PhaseRegionFlags::Front, front_idx, front_val, ScaleModes::AUTO);
+    if (fix_front) {
+        Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(4, 0, 3);
+        Eigen::VectorXd front_val(4);
+        front_val << xs, ys, vs, ts;
+        phase->add_boundary_value(PhaseRegionFlags::Front, front_idx, front_val, ScaleModes::AUTO);
+    }
 
-    Eigen::VectorXi back_idx(1);
-    back_idx << 2;
-    Eigen::VectorXd back_val(1);
-    back_val << tf;
+    Eigen::VectorXi back_idx(2);
+    back_idx << 0, 1;
+    Eigen::VectorXd back_val(2);
+    back_val << xe, ye;
     phase->add_boundary_value(PhaseRegionFlags::Back, back_idx, back_val, ScaleModes::AUTO);
 
+    constexpr double u_lower = -0.1, u_upper = 2.0;
+    phase->add_lu_var_bound(PhaseRegionFlags::Path, 4, u_lower, u_upper);
+
+    phase->add_delta_time_objective(1.0, ScaleModes::AUTO);
+
+    phase->optimizer_->set_print_level(3);
     return phase;
 }
 
-/// @brief A genuinely 2-phase OCP (different mesh sizes, so a slicing/offset
-/// bug cannot hide behind two identically-shaped phases), built from two
-/// independent LinearODE phases with no link constraints between them.
+/// @brief A genuine 2-phase OCP: a Brachistochrone relay split across two
+/// legs (different mesh sizes, so a slicing/offset bug cannot hide behind two
+/// identically-shaped phases) that hand off through one link-equality
+/// constraint (x, y, v, t continuity at the waypoint) and share a real
+/// objective -- each leg's own delta-time objective, whose sum is the total
+/// transit time the single-phase Brachistochrone minimizes. This gives the
+/// OCP-level assertions in the direct rows below (link multiplier vectors,
+/// objective) real content: a nonempty link-equality vector and a nonzero
+/// objective, rather than an empty vector or a zero compared to itself.
 struct SolveEquivalenceOcpBundle {
     std::shared_ptr<OptimalControlProblemBase> ocp;
-    std::shared_ptr<SolveEquivalenceProbeLinearPhase> phase0;
-    std::shared_ptr<SolveEquivalenceProbeLinearPhase> phase1;
+    std::shared_ptr<SolveEquivalenceProbeBrachPhase> phase0;
+    std::shared_ptr<SolveEquivalenceProbeBrachPhase> phase1;
 };
 
 SolveEquivalenceOcpBundle solve_equivalence_build_two_phase_ocp() {
+    constexpr double x0 = 0.0, y0 = 10.0, v0 = 0.0, t0 = 0.0;
+    constexpr double xm = 5.0, ym = 7.5; // relay waypoint between the two legs
+    constexpr double xf = 10.0, yf = 5.0;
+
     SolveEquivalenceOcpBundle bundle;
     bundle.ocp = std::make_shared<OptimalControlProblemBase>();
-    bundle.phase0 = solve_equivalence_build_linear_phase(2);
-    bundle.phase1 = solve_equivalence_build_linear_phase(3);
+    bundle.phase0 =
+        solve_equivalence_build_relay_leg(6, x0, y0, v0, t0, xm, ym, /*fix_front=*/true);
+    bundle.phase1 =
+        solve_equivalence_build_relay_leg(8, xm, ym, v0, t0 + 1.0, xf, yf, /*fix_front=*/false);
     bundle.ocp->add_phase(bundle.phase0);
     bundle.ocp->add_phase(bundle.phase1);
+
+    // The one link constraint: continuity of (x, y, v, t) from leg 1's end to
+    // leg 2's start. x and y are already fixed to the same waypoint by
+    // phase0's own back boundary value above; v and t are genuinely free
+    // until this link ties them, and phase1 declares no front boundary of its
+    // own, so this is the sole source of its starting state, not a redundant
+    // restatement of an independent fixing.
+    Eigen::VectorXi link_vars(4);
+    link_vars << 0, 1, 2, 3;
+    bundle.ocp->add_direct_link_equal_con(0, PhaseRegionFlags::Back, link_vars, 1,
+                                          PhaseRegionFlags::Front, link_vars, ScaleModes::AUTO);
+
     bundle.ocp->optimizer_->set_print_level(3);
     return bundle;
 }
@@ -242,8 +276,8 @@ void solve_equivalence_make_engine_deterministic(InteriorPointSolver &engine) {
 
 ///////////////////////////////////////////////////////////////////////////////
 // Comparison helpers. Bit-identity failures name the first differing index
-// and its values, per this task's own requirement to report a divergence's
-// location and magnitude rather than just "not equal".
+// and its values, so a mismatch reports a divergence's location and
+// magnitude rather than just "not equal".
 ///////////////////////////////////////////////////////////////////////////////
 
 Eigen::VectorXd solve_equivalence_flatten(const std::vector<Eigen::VectorXd> &traj) {
@@ -323,8 +357,10 @@ double solve_equivalence_rel_diff(double a, double b) {
 TEST(SolveEquivalence, DirectOptimal_BrachPhase) {
     auto old_phase = solve_equivalence_build_brach_phase();
     solve_equivalence_make_deterministic(*old_phase);
+    const Eigen::VectorXd initial_primal = solve_equivalence_flatten(old_phase->return_traj());
     const tycho::ConvergenceFlags old_flag = old_phase->optimize();
     const double old_obj = old_phase->optimizer_->result().obj_val_;
+    const Eigen::VectorXd old_bound_lmults = old_phase->optimizer_->result().bound_lmults_;
 
     auto new_phase = solve_equivalence_build_brach_phase();
     solve_equivalence_make_deterministic(*new_phase);
@@ -335,6 +371,11 @@ TEST(SolveEquivalence, DirectOptimal_BrachPhase) {
     opts.mode = Mode::Optimal;
     SolveResult result = new_phase->solve(ref, opts);
 
+    // Neither arm is vacuously green: the fixture must actually converge, and
+    // the solution must have genuinely moved off the initial guess.
+    EXPECT_EQ(tycho::ConvergenceFlags::CONVERGED, old_flag);
+    EXPECT_GT((solve_equivalence_flatten(old_phase->return_traj()) - initial_primal).norm(), 1e-3);
+
     EXPECT_EQ(old_flag, result.flag_);
     EXPECT_TRUE(SolveEquivalenceVectorsBitIdentical(
         "old.primal", "new.primal", solve_equivalence_flatten(old_phase->return_traj()),
@@ -343,14 +384,18 @@ TEST(SolveEquivalence, DirectOptimal_BrachPhase) {
         "old.eq_lmults", "new.eq_lmults", old_phase->eq_lmults(), new_phase->eq_lmults()));
     EXPECT_TRUE(SolveEquivalenceVectorsBitIdentical(
         "old.iq_lmults", "new.iq_lmults", old_phase->iq_lmults(), new_phase->iq_lmults()));
+    EXPECT_TRUE(SolveEquivalenceVectorsBitIdentical("old.bound_lmults", "new.bound_lmults",
+                                                    old_bound_lmults, ipm.result().bound_lmults_));
     EXPECT_EQ(old_obj, result.stages_.back().objective_);
 }
 
 TEST(SolveEquivalence, DirectFeasible_BrachPhase) {
     auto old_phase = solve_equivalence_build_brach_phase();
     solve_equivalence_make_deterministic(*old_phase);
+    const Eigen::VectorXd initial_primal = solve_equivalence_flatten(old_phase->return_traj());
     const tycho::ConvergenceFlags old_flag = old_phase->solve();
     const double old_obj = old_phase->optimizer_->result().obj_val_;
+    const Eigen::VectorXd old_bound_lmults = old_phase->optimizer_->result().bound_lmults_;
 
     auto new_phase = solve_equivalence_build_brach_phase();
     solve_equivalence_make_deterministic(*new_phase);
@@ -361,6 +406,13 @@ TEST(SolveEquivalence, DirectFeasible_BrachPhase) {
     opts.mode = Mode::Feasible;
     SolveResult result = new_phase->solve(ref, opts);
 
+    // A feasibility-only solve can legitimately land on ACCEPTABLE rather
+    // than CONVERGED (test_interior_point_solver_convergence.cpp's
+    // BrachistochroneSolveOnly accepts the same range) -- but it must reach
+    // one of those, and the solution must have moved off the initial guess.
+    EXPECT_LE(old_flag, tycho::ConvergenceFlags::ACCEPTABLE);
+    EXPECT_GT((solve_equivalence_flatten(old_phase->return_traj()) - initial_primal).norm(), 1e-3);
+
     EXPECT_EQ(old_flag, result.flag_);
     EXPECT_TRUE(SolveEquivalenceVectorsBitIdentical(
         "old.primal", "new.primal", solve_equivalence_flatten(old_phase->return_traj()),
@@ -369,14 +421,24 @@ TEST(SolveEquivalence, DirectFeasible_BrachPhase) {
         "old.eq_lmults", "new.eq_lmults", old_phase->eq_lmults(), new_phase->eq_lmults()));
     EXPECT_TRUE(SolveEquivalenceVectorsBitIdentical(
         "old.iq_lmults", "new.iq_lmults", old_phase->iq_lmults(), new_phase->iq_lmults()));
+    EXPECT_TRUE(SolveEquivalenceVectorsBitIdentical("old.bound_lmults", "new.bound_lmults",
+                                                    old_bound_lmults, ipm.result().bound_lmults_));
     EXPECT_EQ(old_obj, result.stages_.back().objective_);
 }
 
 TEST(SolveEquivalence, DirectOptimal_TwoPhaseOcp) {
     auto old_bundle = solve_equivalence_build_two_phase_ocp();
     solve_equivalence_make_deterministic(*old_bundle.ocp);
+    Eigen::VectorXd initial_primal(0);
+    {
+        const Eigen::VectorXd p0 = solve_equivalence_flatten(old_bundle.phase0->return_traj());
+        const Eigen::VectorXd p1 = solve_equivalence_flatten(old_bundle.phase1->return_traj());
+        initial_primal.resize(p0.size() + p1.size());
+        initial_primal << p0, p1;
+    }
     const tycho::ConvergenceFlags old_flag = old_bundle.ocp->optimize();
     const double old_obj = old_bundle.ocp->optimizer_->result().obj_val_;
+    const Eigen::VectorXd old_bound_lmults = old_bundle.ocp->optimizer_->result().bound_lmults_;
 
     auto new_bundle = solve_equivalence_build_two_phase_ocp();
     solve_equivalence_make_deterministic(*new_bundle.ocp);
@@ -387,6 +449,17 @@ TEST(SolveEquivalence, DirectOptimal_TwoPhaseOcp) {
     opts.mode = Mode::Optimal;
     SolveResult result = new_bundle.ocp->solve(ref, opts);
 
+    // Neither arm is vacuously green: the fixture must actually converge, and
+    // the solution must have genuinely moved off the initial guess.
+    EXPECT_EQ(tycho::ConvergenceFlags::CONVERGED, old_flag);
+    {
+        const Eigen::VectorXd p0 = solve_equivalence_flatten(old_bundle.phase0->return_traj());
+        const Eigen::VectorXd p1 = solve_equivalence_flatten(old_bundle.phase1->return_traj());
+        Eigen::VectorXd final_primal(p0.size() + p1.size());
+        final_primal << p0, p1;
+        EXPECT_GT((final_primal - initial_primal).norm(), 1e-3);
+    }
+
     EXPECT_EQ(old_flag, result.flag_);
     EXPECT_TRUE(SolveEquivalenceVectorsBitIdentical(
         "old.phase0.primal", "new.phase0.primal",
@@ -414,14 +487,24 @@ TEST(SolveEquivalence, DirectOptimal_TwoPhaseOcp) {
     EXPECT_TRUE(SolveEquivalenceVectorsBitIdentical("old.link_iq_lmults", "new.link_iq_lmults",
                                                     old_bundle.ocp->active_iq_lmults_,
                                                     new_bundle.ocp->active_iq_lmults_));
+    EXPECT_TRUE(SolveEquivalenceVectorsBitIdentical("old.bound_lmults", "new.bound_lmults",
+                                                    old_bound_lmults, ipm.result().bound_lmults_));
     EXPECT_EQ(old_obj, result.stages_.back().objective_);
 }
 
 TEST(SolveEquivalence, DirectFeasible_TwoPhaseOcp) {
     auto old_bundle = solve_equivalence_build_two_phase_ocp();
     solve_equivalence_make_deterministic(*old_bundle.ocp);
+    Eigen::VectorXd initial_primal(0);
+    {
+        const Eigen::VectorXd p0 = solve_equivalence_flatten(old_bundle.phase0->return_traj());
+        const Eigen::VectorXd p1 = solve_equivalence_flatten(old_bundle.phase1->return_traj());
+        initial_primal.resize(p0.size() + p1.size());
+        initial_primal << p0, p1;
+    }
     const tycho::ConvergenceFlags old_flag = old_bundle.ocp->solve();
     const double old_obj = old_bundle.ocp->optimizer_->result().obj_val_;
+    const Eigen::VectorXd old_bound_lmults = old_bundle.ocp->optimizer_->result().bound_lmults_;
 
     auto new_bundle = solve_equivalence_build_two_phase_ocp();
     solve_equivalence_make_deterministic(*new_bundle.ocp);
@@ -432,6 +515,18 @@ TEST(SolveEquivalence, DirectFeasible_TwoPhaseOcp) {
     opts.mode = Mode::Feasible;
     SolveResult result = new_bundle.ocp->solve(ref, opts);
 
+    // A feasibility-only solve can legitimately land on ACCEPTABLE rather
+    // than CONVERGED -- but it must reach one of those, and the solution must
+    // have moved off the initial guess.
+    EXPECT_LE(old_flag, tycho::ConvergenceFlags::ACCEPTABLE);
+    {
+        const Eigen::VectorXd p0 = solve_equivalence_flatten(old_bundle.phase0->return_traj());
+        const Eigen::VectorXd p1 = solve_equivalence_flatten(old_bundle.phase1->return_traj());
+        Eigen::VectorXd final_primal(p0.size() + p1.size());
+        final_primal << p0, p1;
+        EXPECT_GT((final_primal - initial_primal).norm(), 1e-3);
+    }
+
     EXPECT_EQ(old_flag, result.flag_);
     EXPECT_TRUE(SolveEquivalenceVectorsBitIdentical(
         "old.phase0.primal", "new.phase0.primal",
@@ -459,6 +554,8 @@ TEST(SolveEquivalence, DirectFeasible_TwoPhaseOcp) {
     EXPECT_TRUE(SolveEquivalenceVectorsBitIdentical("old.link_iq_lmults", "new.link_iq_lmults",
                                                     old_bundle.ocp->active_iq_lmults_,
                                                     new_bundle.ocp->active_iq_lmults_));
+    EXPECT_TRUE(SolveEquivalenceVectorsBitIdentical("old.bound_lmults", "new.bound_lmults",
+                                                    old_bound_lmults, ipm.result().bound_lmults_));
     EXPECT_EQ(old_obj, result.stages_.back().objective_);
 }
 
@@ -467,6 +564,7 @@ TEST(SolveEquivalence, DirectOptimal_VfProblem) {
     solve_equivalence_make_deterministic(*old_prob);
     const tycho::ConvergenceFlags old_flag = old_prob->optimize();
     const double old_obj = old_prob->optimizer_->result().obj_val_;
+    const Eigen::VectorXd old_bound_lmults = old_prob->optimizer_->result().bound_lmults_;
 
     auto new_prob = solve_equivalence_build_vf_nlp();
     solve_equivalence_make_deterministic(*new_prob);
@@ -477,6 +575,14 @@ TEST(SolveEquivalence, DirectOptimal_VfProblem) {
     opts.mode = Mode::Optimal;
     SolveResult result = new_prob->solve(ref, opts);
 
+    // Self-validating against the known analytic optimum (x0=1, x1=2) rather
+    // than only comparing the two arms to each other -- a change that broke
+    // both arms identically would otherwise stay invisible here.
+    EXPECT_EQ(tycho::ConvergenceFlags::CONVERGED, old_flag);
+    ASSERT_EQ(old_prob->active_variables_.size(), 2);
+    EXPECT_NEAR(old_prob->active_variables_[0], 1.0, 1e-6);
+    EXPECT_NEAR(old_prob->active_variables_[1], 2.0, 1e-6);
+
     EXPECT_EQ(old_flag, result.flag_);
     EXPECT_TRUE(SolveEquivalenceVectorsBitIdentical(
         "old.primal", "new.primal", old_prob->active_variables_, new_prob->active_variables_));
@@ -486,14 +592,18 @@ TEST(SolveEquivalence, DirectOptimal_VfProblem) {
     EXPECT_TRUE(SolveEquivalenceVectorsBitIdentical("old.iq_lmults", "new.iq_lmults",
                                                     old_prob->active_iq_lmults_,
                                                     new_prob->active_iq_lmults_));
+    EXPECT_TRUE(SolveEquivalenceVectorsBitIdentical("old.bound_lmults", "new.bound_lmults",
+                                                    old_bound_lmults, ipm.result().bound_lmults_));
     EXPECT_EQ(old_obj, result.stages_.back().objective_);
 }
 
 TEST(SolveEquivalence, DirectFeasible_VfProblem) {
     auto old_prob = solve_equivalence_build_vf_nlp();
     solve_equivalence_make_deterministic(*old_prob);
+    const Eigen::VectorXd initial_primal = old_prob->active_variables_;
     const tycho::ConvergenceFlags old_flag = old_prob->solve();
     const double old_obj = old_prob->optimizer_->result().obj_val_;
+    const Eigen::VectorXd old_bound_lmults = old_prob->optimizer_->result().bound_lmults_;
 
     auto new_prob = solve_equivalence_build_vf_nlp();
     solve_equivalence_make_deterministic(*new_prob);
@@ -504,6 +614,16 @@ TEST(SolveEquivalence, DirectFeasible_VfProblem) {
     opts.mode = Mode::Feasible;
     SolveResult result = new_prob->solve(ref, opts);
 
+    // Feasibility only (no objective to optimize), so the analytic optimum
+    // does not apply here -- but the equality constraint's target (x0=1) and
+    // the inequality's feasible half-space (x1>=2) both must hold, and the
+    // starting guess (0, 0) violates both, so a genuine solve must move.
+    EXPECT_LE(old_flag, tycho::ConvergenceFlags::ACCEPTABLE);
+    ASSERT_EQ(old_prob->active_variables_.size(), 2);
+    EXPECT_NEAR(old_prob->active_variables_[0], 1.0, 1e-6);
+    EXPECT_GE(old_prob->active_variables_[1], 2.0 - 1e-6);
+    EXPECT_GT((old_prob->active_variables_ - initial_primal).norm(), 1e-3);
+
     EXPECT_EQ(old_flag, result.flag_);
     EXPECT_TRUE(SolveEquivalenceVectorsBitIdentical(
         "old.primal", "new.primal", old_prob->active_variables_, new_prob->active_variables_));
@@ -513,6 +633,8 @@ TEST(SolveEquivalence, DirectFeasible_VfProblem) {
     EXPECT_TRUE(SolveEquivalenceVectorsBitIdentical("old.iq_lmults", "new.iq_lmults",
                                                     old_prob->active_iq_lmults_,
                                                     new_prob->active_iq_lmults_));
+    EXPECT_TRUE(SolveEquivalenceVectorsBitIdentical("old.bound_lmults", "new.bound_lmults",
+                                                    old_bound_lmults, ipm.result().bound_lmults_));
     EXPECT_EQ(old_obj, result.stages_.back().objective_);
 }
 
@@ -526,9 +648,9 @@ TEST(SolveEquivalence, DirectFeasible_VfProblem) {
 // barrier parameter, filter/watchdog/proximal-regularization state, ...)
 // across phases directly inside that call. The new staged pipeline runs the
 // same phases as separate solve() calls chained through the engine-neutral
-// WarmStartData currency: a presolve stage's export now seeds the main
-// stage that follows it (this was closed as part of this same task -- see
-// src/solvers/solve_pipeline.cpp's WARM SEEDING note), and the explicit
+// WarmStartData currency: a presolve stage's export seeds the main stage
+// that follows it (see src/solvers/solve_pipeline.cpp's WARM SEEDING note),
+// and the explicit
 // chain between the two top-level calls in a chain row seeds the second call
 // from the first's export the same way. WarmStartData carries the primal,
 // duals, and slacks -- the pieces the pipeline documents as portable between
@@ -553,9 +675,9 @@ TEST(SolveEquivalence, DirectFeasible_VfProblem) {
 // (ComposedSolveOptimize, ComposedSolveOptimizeSolve_Converged) measured a
 // peak objective relative difference of ~1.45e-9 and a peak whole-vector
 // primal relative difference of ~4.04e-9 against the old fused call, on this
-// fixture -- roughly 3-4x the initially requested 1e-9 bound, down from
-// ~1.3e-9 / ~1e-7 (a per-component, not whole-vector, measure) before the
-// chain existed. The residual gap is the engine-internal bookkeeping
+// fixture -- roughly 3-4x a bit-identity (1e-9) bound, down from ~1.3e-9 /
+// ~1e-7 (a per-component, not whole-vector, measure) before the chain
+// existed. The residual gap is the engine-internal bookkeeping
 // WarmStartData does not carry (see above), not a defect in the chain
 // itself. 1e-8 keeps roughly an order of magnitude of margin over the
 // measured values while staying far tighter than the engine's own

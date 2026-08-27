@@ -216,7 +216,11 @@ struct BackendProblemBase {
     /// a uniform value chain: a presolve stage's own `StageOutput::warm_`
     /// export seeds the main stage that follows it, and the main stage's own
     /// export seeds a `Mode::Optimal` polish stage that follows that --
-    /// independent of `opts.warm`, which only ever seeds the first stage.
+    /// independent of `opts.warm`, which only ever seeds the first stage. A
+    /// predecessor's export seeds the next stage only when it is non-empty;
+    /// an empty export (the exporting stage captured nothing to hand
+    /// forward) leaves the next stage unseeded rather than failing on a
+    /// block-size mismatch.
     ///
     /// `prepare_solve()` (transcribe-if-needed) runs before the stamp check,
     /// so the check compares against the transcription this call will
