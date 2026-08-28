@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <limits>
 #include <map>
 #include <string>
 #include <vector>
@@ -53,15 +54,21 @@ Mode mode_from_string(const std::string &s);
 /// numeric and string diagnostics that do not warrant a named field here --
 /// kept as plain maps rather than one opaque blob so they stay trivially
 /// picklable and additive.
+///
+/// The three residual fields default to NaN, not 0.0: NaN is this project's
+/// cross-engine "unmeasured" value (the same convention hven's own solution
+/// records carry), and every engine writes NaN into a residual it did not
+/// measure. A 0.0 default would make a stage that reported nothing read as
+/// converged to machine precision.
 struct StageResult {
     std::string role_;        ///< "presolve" | "main" | "polish".
     std::string engine_name_; ///< Engine class name, e.g. "InteriorPointSolver".
     tycho::ConvergenceFlags flag_ = tycho::ConvergenceFlags::NOTCONVERGED;
     int iterations_ = 0;
-    double objective_ = 0.0; ///< Caller's scale.
-    double kkt_residual_ = 0.0;
-    double eq_violation_ = 0.0; ///< Max-norm.
-    double iq_violation_ = 0.0; ///< Max-norm.
+    double objective_ = 0.0;                                         ///< Caller's scale.
+    double kkt_residual_ = std::numeric_limits<double>::quiet_NaN(); ///< NaN: unmeasured.
+    double eq_violation_ = std::numeric_limits<double>::quiet_NaN(); ///< Max-norm; NaN: unmeasured.
+    double iq_violation_ = std::numeric_limits<double>::quiet_NaN(); ///< Max-norm; NaN: unmeasured.
     double wall_time_s_ = 0.0;
     std::map<std::string, double> engine_details_;    ///< Engine-specific numeric annex.
     std::map<std::string, std::string> engine_notes_; ///< Engine-specific string annex.

@@ -32,6 +32,25 @@
 // sets SolveResult::warm_ itself from whichever main-mode stage ran LAST,
 // since that is the one a polish stage after the loop should seed from.
 //
+// The CALLER's own opts.warm is held to the same two conditions (empty, or
+// non-finite anywhere): such a payload costs the seeding and nothing more --
+// the first stage runs cold and records why in its engine_notes_["warm"] --
+// rather than raising. A usable payload taken under a different declaration
+// still refuses, by name. This is what keeps the documented retry idiom
+// (solve; on a non-convergent result, solve again with warm= that result)
+// working in the case it exists for: a diverged stage's export is exactly the
+// payload most likely to be non-finite.
+//
+// ENGINE HAND-OFF. Before any stage whose engine is a different CLASS from
+// the previous stage's -- in this call or an earlier one on the same problem
+// -- the pipeline restores the declared layout (require_declared_layout_for()
+// + prepare_solve()). An engine may leave the NLP on a layout of its own (the
+// interior-point engine's default fixed-variable treatment leaves it on a
+// reduced variable space), and the SQP/Ipopt adapters refuse such a layout by
+// name. Restoring it at the hand-off is what makes the crossover the API
+// advertises -- solve(ipm, polish=sqp), or solve(ipm) then solve(sqp, warm=)
+// -- work on a problem with a fixed variable.
+//
 // A predecessor's export only seeds the next stage when it is non-empty AND
 // every block is finite (warm_or_null() below): an empty export means the
 // predecessor's own engine call captured nothing to hand forward (e.g. a
@@ -51,6 +70,7 @@
 #include <algorithm>
 #include <mutex>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
 #include <unordered_set>
 #include <utility>
@@ -177,6 +197,13 @@ void append_stage(SolveResult &r, const StageOutput &out, const char *role) {
 ///        so a payload with any non-finite entry is treated exactly like an
 ///        empty one: the next stage runs unseeded, from whatever primal the
 ///        problem itself already holds, instead of raising at the hand-off.
+///
+///        The caller-supplied `opts.warm` is held to the SAME two conditions,
+///        through warm_unusable_reason() below: the payload a caller is most
+///        likely to hand back is the one a non-convergent solve just returned
+///        (the documented retry idiom), which is precisely the payload most
+///        likely to be empty or non-finite. Refusing it there would make the
+///        retry raise in the one case it exists for.
 const hven::solvers::WarmStartData *warm_or_null(const hven::solvers::WarmStartData &w) {
     if (w.primal_.size() == 0) {
         return nullptr;
@@ -184,6 +211,28 @@ const hven::solvers::WarmStartData *warm_or_null(const hven::solvers::WarmStartD
     const bool all_finite = w.primal_.allFinite() && w.eq_lmults_.allFinite() &&
                             w.iq_lmults_.allFinite() && w.bound_lmults_.allFinite();
     return all_finite ? &w : nullptr;
+}
+
+/// @brief Empty when `w` can seed a stage; otherwise a sentence naming why it
+///        cannot, for the annex note the degraded stage carries.
+///
+/// The two unusable shapes are the two warm_or_null() above already screens
+/// stage-to-stage exports for -- an empty payload (the source stage exported
+/// nothing) and a non-finite one (the source stage diverged rather than
+/// exporting a usable point). Neither is a caller error, so neither refuses;
+/// each simply costs the seeding.
+std::string warm_unusable_reason(const hven::solvers::WarmStartData &w) {
+    if (w.primal_.size() == 0) {
+        return "the warm= payload was empty (the stage it came from exported no warm start), "
+               "so this stage ran cold, from the problem's own current point.";
+    }
+    if (!(w.primal_.allFinite() && w.eq_lmults_.allFinite() && w.iq_lmults_.allFinite() &&
+          w.bound_lmults_.allFinite())) {
+        return "the warm= payload carried a non-finite value (the stage it came from diverged "
+               "rather than exporting a usable point), so this stage ran cold, from the "
+               "problem's own current point.";
+    }
+    return {};
 }
 
 /// @brief Owns one per-jet-call engine clone (clone_prototype()) and exposes
@@ -244,6 +293,20 @@ class ClonedEngine {
 
 } // namespace
 
+void BackendProblemBase::require_declared_layout_for(EngineRef engine) {
+    const int engine_class = static_cast<int>(engine.index());
+    if (this->last_stage_engine_class_ >= 0 && this->last_stage_engine_class_ != engine_class) {
+        // The previous stage's engine may have left the NLP on a layout of
+        // its own (a reduced variable space, or appended internal fixing
+        // rows). Marking the transcription stale here means the
+        // prepare_solve() that follows re-lays the declared layout, so the
+        // next engine's adapter sees the problem as declared. See the
+        // declaration's own comment for why this is the pipeline's job.
+        this->invalidate_transcription();
+    }
+    this->last_stage_engine_class_ = engine_class;
+}
+
 SolveResult BackendProblemBase::solve(EngineRef engine, const SolveOptions &opts_in) {
     SolveOptions opts = opts_in;
 
@@ -260,32 +323,58 @@ SolveResult BackendProblemBase::solve(EngineRef engine, const SolveOptions &opts
         // Not a refusal: an explicit override engine implies presolve.
         opts.presolve = true;
     }
+    if (opts.presolve) {
+        // A presolve stage runs Mode::Feasible, which only the interior-point
+        // engine implements. Refused here rather than from inside the stage,
+        // so the combination never gets as far as the latch or a
+        // transcription.
+        refuse_presolve_engine_without_feasible_mode(
+            opts.presolve_engine != nullptr ? *opts.presolve_engine : engine);
+    }
 
     // Throws std::invalid_argument, naming the reason, if any named engine is
     // already inside another solve() call. Held for the rest of this call.
     std::vector<EngineLatch> latches = latch_solve_engines(engine, opts);
 
     // --- Transcription / wiring ---
+    // Whichever engine runs the FIRST stage decides whether the layout the
+    // last stage (possibly from an earlier solve() call on this problem) left
+    // behind has to be undone first.
+    this->require_declared_layout_for(
+        opts.presolve && opts.presolve_engine != nullptr ? *opts.presolve_engine : engine);
     this->prepare_solve();
 
-    // --- Warm-start stamp pre-check ---
-    // The engine's own check at solve entry is the authoritative one (it
-    // runs regardless of this pre-check); this exists only so the refusal
-    // surfaces before any stage work runs.
+    // --- Warm-start pre-check ---
+    // Two outcomes, never a third: an unusable payload (empty, or non-finite
+    // anywhere) costs the seeding and nothing else -- the first stage runs
+    // cold and says so in its annex; a usable payload taken under a different
+    // declaration refuses, naming both digests. The emptiness/finiteness test
+    // runs FIRST, so an empty payload is never diagnosed as a stamp mismatch
+    // (a default-constructed payload carries a default stamp, which would
+    // otherwise be reported as "taken from a different declared problem" --
+    // true of the bytes, wrong about the cause).
+    //
+    // The stamp check duplicates the engine's own check at solve entry (which
+    // runs regardless); it exists here only so the refusal surfaces before any
+    // stage work does.
+    SolveResult result;
+    const hven::solvers::WarmStartData *first_stage_warm = nullptr;
+    std::string warm_degraded_note;
     if (opts.warm != nullptr) {
-        const hven::solvers::DeclarationKey current_key =
-            hven::solvers::declaration_key(this->provider_->declaration());
-        if (!(current_key == opts.warm->structure_key_)) {
-            throw std::invalid_argument(fmt::format(
-                "solve: the warm-start payload's declaration key (digest={0}) does not match "
-                "the current transcription's declaration key (digest={1}); the payload was "
-                "taken from a different declared problem",
-                opts.warm->structure_key_.digest(), current_key.digest()));
+        warm_degraded_note = warm_unusable_reason(*opts.warm);
+        if (warm_degraded_note.empty()) {
+            const hven::solvers::DeclarationKey current_key =
+                hven::solvers::declaration_key(this->provider_->declaration());
+            if (!(current_key == opts.warm->structure_key_)) {
+                throw std::invalid_argument(fmt::format(
+                    "solve: the warm-start payload's declaration key (digest={0}) does not match "
+                    "the current transcription's declaration key (digest={1}); the payload was "
+                    "taken from a different declared problem",
+                    opts.warm->structure_key_.digest(), current_key.digest()));
+            }
+            first_stage_warm = opts.warm;
         }
     }
-
-    SolveResult result;
-    const hven::solvers::WarmStartData *first_stage_warm = opts.warm;
 
     if (this->adaptive_mesh_enabled()) {
         this->active_solve_options_ = &opts;
@@ -325,6 +414,8 @@ SolveResult BackendProblemBase::solve(EngineRef engine, const SolveOptions &opts
             first_stage_warm = warm_or_null(presolve_warm);
         }
 
+        this->require_declared_layout_for(engine);
+        this->prepare_solve();
         StageOutput main_out = run_engine_stage(engine, opts.mode, this->nlp_,
                                                 this->initial_primal(), first_stage_warm);
         this->accept_stage(main_out);
@@ -333,6 +424,8 @@ SolveResult BackendProblemBase::solve(EngineRef engine, const SolveOptions &opts
     }
 
     if (opts.polish != nullptr) {
+        this->require_declared_layout_for(*opts.polish);
+        this->prepare_solve();
         StageOutput polish_out =
             run_engine_stage(*opts.polish, Mode::Optimal, this->nlp_, this->initial_primal(),
                              warm_or_null(result.warm_));
@@ -347,6 +440,12 @@ SolveResult BackendProblemBase::solve(EngineRef engine, const SolveOptions &opts
         // -- SolveResult::final_stage()/flag_ read out of an empty stage
         // list -- is worse than a clear refusal here.
         throw std::logic_error("solve: no stage ran (internal pipeline error)");
+    }
+    if (!warm_degraded_note.empty()) {
+        // The first stage is the one opts.warm would have seeded, whichever
+        // role it took (presolve, main, or -- under adaptive mesh -- mesh
+        // iteration 0's own first stage).
+        result.stages_.front().engine_notes_["warm"] = warm_degraded_note;
     }
     result.flag_ = result.stages_.back().flag_;
     result.structure_key_ = hven::solvers::declaration_key(this->provider_->declaration());
@@ -425,7 +524,13 @@ tycho::ConvergenceFlags BackendProblemBase::run_amr_loop(
     const bool do_presolve = opts != nullptr && opts->presolve;
     EngineRef presolve_engine =
         (opts != nullptr && opts->presolve_engine != nullptr) ? *opts->presolve_engine : engine;
-    const hven::solvers::WarmStartData *first_stage_warm = opts != nullptr ? opts->warm : nullptr;
+    // Held to the same two conditions the rest of the chain is (non-empty,
+    // finite throughout): solve() records the reason a caller's payload was
+    // dropped, but the drop itself has to happen here too, since this loop
+    // reads opts->warm directly rather than taking solve()'s already-screened
+    // pointer.
+    const hven::solvers::WarmStartData *first_stage_warm =
+        (opts != nullptr && opts->warm != nullptr) ? warm_or_null(*opts->warm) : nullptr;
 
     // Every engine call re-transcribes first: a mesh update
     // (update_mesh()/update_meshs()) invalidates the current transcription
@@ -435,6 +540,11 @@ tycho::ConvergenceFlags BackendProblemBase::run_amr_loop(
     auto run_one = [&](EngineRef eng, Mode m, const char *role,
                        const hven::solvers::WarmStartData *warm,
                        bool require_residual_report) -> StageOutput {
+        // Marks the transcription stale when this stage's engine class
+        // differs from the previous stage's, so the prepare_solve() below
+        // re-lays the declared layout for it (solve()'s own hand-off rule,
+        // applied to every stage the mesh loop runs).
+        this->require_declared_layout_for(eng);
         this->prepare_solve();
         StageOutput out = run_engine_stage(eng, m, this->nlp_, this->initial_primal(), warm);
         if (require_residual_report && out.eq_cons_.size() == 0 && out.iq_cons_.size() == 0) {
@@ -471,9 +581,10 @@ tycho::ConvergenceFlags BackendProblemBase::run_amr_loop(
     if (do_presolve) {
         // The presolve stage is never the one mesh error estimation reads
         // from (the main stage always runs after it and owns the post-opt
-        // info), so it is not held to the residual-report requirement -- an
-        // SQP/Ipopt presolve feeding an interior-point main stage under
-        // adaptive mesh is a legal composition.
+        // info), so it is not held to the residual-report requirement -- only
+        // the main stage is. (Which engines may run a presolve stage at all
+        // is a separate question, settled by solve()'s refusal matrix: the
+        // stage runs Mode::Feasible, so the engine must implement it.)
         StageOutput presolve_out =
             run_one(presolve_engine, Mode::Feasible, "presolve", first_stage_warm, false);
         presolve_warm = std::move(presolve_out.warm_);

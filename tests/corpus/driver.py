@@ -102,31 +102,28 @@ def _dispatch_psiopt_solve(prob, engine, solve_call):
     Solve phase (``optimize_solve`` / ``solve_optimize_solve``) as an
     explicit second call -- see the module docstring's ``SOLVE_CALL``
     section for the exact mapping. ``presolve``/``polish``/``warm`` forward
-    straight to ``solve()`` unchanged: the presolve-stage-diverges hand-off
-    (a diverging presolve's non-finite export reaching the main stage's
-    warm-start validation and raising instead of reporting a flag) is now
-    fixed at the pipeline level (``src/solvers/solve_pipeline.cpp``'s
-    ``warm_or_null`` treats a non-finite export the same as an empty one),
-    so this driver no longer needs to route around it.
+    straight to ``solve()`` unchanged: an empty or non-finite warm payload,
+    whether it came from a previous stage or from the caller, degrades to a
+    cold start at the pipeline level (``src/solvers/solve_pipeline.cpp``)
+    rather than raising, so this driver needs no route around it.
 
     ``feasible_fallback`` retries with ``mode="feasible"`` only when the
     main call's flag is not exactly CONVERGED -- mirroring the retired
     ``optimize_solve()``'s own conditional-phase gate (an ACCEPTABLE main
     stage still ran the trailing Solve phase under the old vocabulary; see
-    the module docstring). No ``warm=`` is passed on the retry: the retired
-    combo method passed no warm payload between its phases either, relying
-    on the same in-place primal continuation a presolve stage relies on
-    (see ``solve_pipeline.cpp``'s own WARM SEEDING note) -- and passing the
-    main stage's own (possibly non-convergent, possibly non-finite) export
-    through the caller-supplied ``warm=`` argument would reach hven's block
-    validation directly, a path ``warm_or_null``'s stage-to-stage guard
-    does not cover.
+    the module docstring). The retry passes ``warm=result``, which is the
+    idiom the documentation gives callers for this exact shape (see the
+    migration table in ``docs/source/reference/python/solvers.md``): a
+    payload that is empty or non-finite -- the likely outcome of a
+    non-convergent main stage -- costs the seeding and nothing else, the
+    retry running cold and saying so in its first stage's
+    ``engine_notes["warm"]``.
     """
     call = dict(solve_call)
     feasible_fallback = call.pop("feasible_fallback", False)
     result = prob.solve(engine, **call)
     if feasible_fallback and result.flag != solvs.ConvergenceFlags.CONVERGED:
-        result = prob.solve(engine, mode="feasible")
+        result = prob.solve(engine, mode="feasible", warm=result)
     return result
 
 

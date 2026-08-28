@@ -1,9 +1,10 @@
-"""The M5 solve-API binding surface: solve(engine, mode=, presolve=, polish=,
+"""The solve() binding surface: solve(engine, mode=, presolve=, polish=,
 warm=), the Mode/SolveResult/StageResult/PhaseResult/WarmStartData types and
 their pickling, and the IPM/SqpSolver kwargs constructors."""
 
 import pickle
 
+import numpy as np
 import pytest
 
 import tychopy.solvers as solvs
@@ -225,6 +226,55 @@ def test_warm_chain_continuation_both_solves_converge(record_property):
     )
 
     record_property("warm_chain_iterations", iterations)
+
+
+# ---------------------------------------------------------------------------
+# A warm= payload that cannot be used degrades to a cold start.
+# ---------------------------------------------------------------------------
+
+
+def test_empty_warm_payload_runs_cold_and_records_why():
+    """An empty payload is not a stale stamp: it costs the seeding, and the
+    reason is on the first stage's annex. (A default-constructed payload
+    carries a default stamp too, so the emptiness test has to run first or
+    the refusal would name the wrong cause.)"""
+    r = _small_problem().solve(_quiet_ipm(), warm=solvs.WarmStartData())
+    assert bool(r)
+    assert "empty" in r.stages[0].engine_notes["warm"]
+
+
+def test_non_finite_warm_payload_runs_cold_and_records_why():
+    """The documented retry idiom's own case: the payload handed back after a
+    non-convergent solve is the one a diverged stage exported."""
+    prob = solvs.OptimizationProblem()
+    prob.set_vars([1000.0])
+    prob.add_equal_con(Args(1)[0].exp() - 5.0, [0])
+
+    diverged = prob.solve(_quiet_ipm(), mode="feasible")
+    assert not bool(diverged)
+    assert len(diverged.warm.primal) > 0
+    assert not np.isfinite(
+        np.concatenate(
+            [
+                np.asarray(diverged.warm.primal),
+                np.asarray(diverged.warm.eq_lmults),
+                np.asarray(diverged.warm.iq_lmults),
+                np.asarray(diverged.warm.bound_lmults),
+            ]
+        )
+    ).all()
+
+    retried = prob.solve(_quiet_ipm(), mode="feasible", warm=diverged)
+    assert "non-finite" in retried.stages[0].engine_notes["warm"]
+
+
+def test_presolve_engine_without_feasible_mode_refused_naming_both_parts():
+    with pytest.raises(ValueError, match=r"presolve=.*SqpSolver"):
+        _small_problem().solve(_quiet_ipm(), presolve=solvs.SqpSolver())
+    with pytest.raises(ValueError, match=r"presolve=.*SqpSolver"):
+        _small_problem().solve(solvs.SqpSolver(), presolve=True)
+    with pytest.raises(ValueError, match=r"presolve=.*SqpSolver"):
+        _small_problem().set_jet_job(solvs.SqpSolver(), presolve=True)
 
 
 # ---------------------------------------------------------------------------

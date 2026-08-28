@@ -39,6 +39,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <variant>
 
 #include <Eigen/Core>
 
@@ -89,9 +90,6 @@ struct IpoptSolveOutput {
 ///        and on which engine, whether an optimality polish stage follows it
 ///        and on which engine, and the warm-start currency (if any) that
 ///        seeds the first stage that runs.
-///
-/// Verbatim per the solve-API spec: every field name and default here is
-/// binding.
 struct SolveOptions {
     Mode mode = Mode::Optimal;
     bool presolve = false; ///< true: run a Feasible stage first with the main engine.
@@ -100,6 +98,29 @@ struct SolveOptions {
     EngineRef *polish = nullptr; ///< second engine after the main stage.
     const hven::solvers::WarmStartData *warm = nullptr; ///< seeds the first stage.
 };
+
+/// @brief Refuses, by name, an engine asked to run the presolve stage that
+///        has no feasibility-only mode of its own.
+///
+/// A presolve stage always runs `Mode::Feasible`, and only the interior-point
+/// engine implements that mode -- `SqpSolver` and `IpoptSolver` each refuse it
+/// from inside `run_engine_stage`. Checking it here instead means the
+/// combination is refused as part of the refusal matrix, before the engine or
+/// the NLP is touched, rather than from the middle of a call that has already
+/// transcribed and latched.
+///
+/// @throws std::invalid_argument naming both halves: that `presolve=` runs a
+///         feasibility stage, and which engine cannot run one.
+inline void refuse_presolve_engine_without_feasible_mode(EngineRef presolve_engine) {
+    if (std::holds_alternative<InteriorPointSolver *>(presolve_engine)) {
+        return;
+    }
+    throw std::invalid_argument(
+        fmt::format("presolve= runs a feasibility stage, and the {0} engine has no "
+                    "feasibility-only mode; run the presolve stage on the interior-point "
+                    "engine instead",
+                    engine_name(presolve_engine)));
+}
 
 /// Every tycho optimization problem — OptimizationProblem, ODEPhaseBase and
 /// OptimalControlProblemBase alike — derives from this rather than from the
@@ -148,25 +169,38 @@ struct BackendProblemBase {
     /// Refused before any stage runs (`std::invalid_argument`, in this
     /// order): `opts.polish` paired with `opts.mode == Mode::Feasible`;
     /// `opts.presolve`/`opts.presolve_engine` paired with
-    /// `opts.mode == Mode::Feasible`; `opts.presolve_engine` set with
-    /// `engine`, `opts.presolve_engine` (if set) or `opts.polish` (if set)
-    /// already inside another solve() call (a per-engine concurrency latch --
-    /// engines serve solves sequentially, never concurrently). A
-    /// `opts.presolve_engine` with `opts.presolve == false` is not a
-    /// refusal: it implies `presolve = true`.
+    /// `opts.mode == Mode::Feasible`; a presolve stage asked of an engine
+    /// with no feasibility-only mode (SqpSolver/IpoptSolver, whether named by
+    /// `opts.presolve_engine` or inherited from `engine` by
+    /// `opts.presolve == true`); `engine`, `opts.presolve_engine` (if set) or
+    /// `opts.polish` (if set) already inside another solve() call (a
+    /// per-engine concurrency latch -- engines serve solves sequentially,
+    /// never concurrently). A `opts.presolve_engine` with
+    /// `opts.presolve == false` is not a refusal: it implies
+    /// `presolve = true`.
     ///
     /// `opts.warm`, when set, seeds the primal/dual state of whichever stage
-    /// runs FIRST (presolve if requested, else main) after a stamp check:
-    /// its `DeclarationKey` must match the current transcription's, or the
-    /// call refuses naming both keys' digests. Every stage after the first is
-    /// a uniform value chain: a presolve stage's own `StageOutput::warm_`
-    /// export seeds the main stage that follows it, and the main stage's own
-    /// export seeds a `Mode::Optimal` polish stage that follows that --
-    /// independent of `opts.warm`, which only ever seeds the first stage. A
-    /// predecessor's export seeds the next stage only when it is non-empty;
-    /// an empty export (the exporting stage captured nothing to hand
-    /// forward) leaves the next stage unseeded rather than failing on a
-    /// block-size mismatch.
+    /// runs FIRST (presolve if requested, else main). A payload that is
+    /// EMPTY, or that carries a non-finite value in any block, is not a
+    /// refusal: that stage simply runs cold, and the reason is recorded in
+    /// the first stage's `engine_notes_["warm"]`. This is what makes the
+    /// documented retry idiom -- solve, and on a non-convergent result solve
+    /// again with `warm=` that result -- work in the case it exists for: a
+    /// diverged stage's export is exactly the payload most likely to be
+    /// non-finite. A payload that is usable but was taken under a DIFFERENT
+    /// declaration is still refused, naming both keys' digests. Every stage
+    /// after the first is a uniform value chain: a presolve stage's own
+    /// `StageOutput::warm_` export seeds the main stage that follows it, and
+    /// the main stage's own export seeds a `Mode::Optimal` polish stage that
+    /// follows that -- independent of `opts.warm`, which only ever seeds the
+    /// first stage. A predecessor's export seeds the next stage under the
+    /// same two conditions: non-empty, and finite throughout.
+    ///
+    /// A stage whose engine is a different CLASS from the previous stage's
+    /// (in this call, or in an earlier call on this same problem) is preceded
+    /// by a re-transcription, so that whatever layout the previous engine
+    /// left the NLP on never reaches the next engine's adapter --
+    /// see require_declared_layout_for().
     ///
     /// `prepare_solve()` (transcribe-if-needed) runs before the stamp check,
     /// so the check compares against the transcription this call will
@@ -195,10 +229,13 @@ struct BackendProblemBase {
         return this->solve(EngineRef{&e}, opts);
     }
 
-    /// @brief The most recently completed solve()'s result, as a value
-    ///        copy -- reading it twice, or after the problem has since been
-    ///        re-transcribed or re-solved differently, still returns the
-    ///        snapshot taken at that solve() call.
+    /// @brief The most recently completed solve()'s result: a reference to
+    ///        the snapshot this problem cached when that call returned.
+    ///        Nothing in the problem writes into that cached value
+    ///        afterwards, so reading it twice -- or after the problem has
+    ///        since been re-transcribed, or re-solved differently -- still
+    ///        reports the solve it was taken from, until the next solve()
+    ///        replaces it wholesale.
     /// @throws std::logic_error if no solve() has completed on this
     ///         instance yet.
     const SolveResult &last_result() const;
@@ -208,6 +245,13 @@ struct BackendProblemBase {
     ///        (and any per-type solver state) for the solve() call about to
     ///        run. One override per concrete problem type.
     virtual void prepare_solve() = 0;
+
+    /// @brief Marks the current transcription stale, so that the next
+    ///        prepare_solve() lays the problem out from its declaration
+    ///        again. Every concrete problem type already owns exactly this
+    ///        switch (`reset_transcription()`); this is the base-visible
+    ///        name the staged pipeline reaches it through.
+    virtual void invalidate_transcription() = 0;
 
     /// @brief The full decision-variable vector solve() seeds the first
     ///        stage's starting point with -- the active trajectory/static
@@ -294,6 +338,31 @@ struct BackendProblemBase {
                                          int max_mesh_iters, bool solve_only_first,
                                          bool print_mesh_info, const AmrLoopHooks &hooks);
 
+    /// @brief Called before every stage, with that stage's engine: when the
+    ///        engine is a different CLASS from the one that ran the previous
+    ///        stage -- in this solve() call or in an earlier one on this same
+    ///        problem instance -- the current transcription is marked stale,
+    ///        so the prepare_solve() that follows lays the DECLARED layout
+    ///        again before the stage runs.
+    ///
+    ///        This exists because an engine may legitimately leave the
+    ///        transcribed NLP on a layout of its own: the interior-point
+    ///        engine's default fixed-variable treatment eliminates every
+    ///        fixed variable, leaving the NLP on a reduced variable space
+    ///        after the solve, and its MakeConstraint treatment appends one
+    ///        internal equality row per fixed variable. Neither shape is
+    ///        something the SQP or Ipopt adapters accept -- they apply
+    ///        variable bounds directly and refuse both by name. Rather than
+    ///        let a caller meet that refusal halfway through a crossover the
+    ///        API advertises (`solve(ipm, polish=sqp)`, or a `solve(ipm)`
+    ///        then `solve(sqp, warm=...)` chain on one problem), the
+    ///        pipeline restores the declared layout at the hand-off itself.
+    ///        The cost is one transcription, paid only when the engine class
+    ///        actually changes; the primal has already been written back by
+    ///        accept_stage(), and a warm payload's stamp is keyed on the
+    ///        DECLARATION, so it survives the re-transcription unchanged.
+    void require_declared_layout_for(EngineRef engine);
+
     /// @brief The options of the solve() call presently dispatching on this
     ///        instance, or null outside of one. Set for the duration of the
     ///        run_adaptive_mesh() call above so an override can read
@@ -303,6 +372,15 @@ struct BackendProblemBase {
     const SolveOptions *active_solve_options_ = nullptr;
 
   private:
+    /// @brief Which EngineRef alternative ran the most recent stage on this
+    ///        problem (`EngineRef::index()`), or -1 before any stage has run.
+    ///        Deliberately persists ACROSS solve() calls: the layout an
+    ///        engine leaves behind lives on the transcribed NLP, not on the
+    ///        call, so a two-call cross-engine chain needs the same hand-off
+    ///        handling a single staged call does. See
+    ///        require_declared_layout_for().
+    int last_stage_engine_class_ = -1;
+
     /// @brief Value cache backing last_result(); unset until the first
     ///        solve() call completes.
     std::optional<SolveResult> last_result_cache_;
@@ -407,10 +485,11 @@ struct BackendProblemBase {
     ///
     ///        Refusal-matrix predicates that do not depend on engine/NLP
     ///        state (`polish=` with `mode=Feasible`, `presolve=`/
-    ///        `presolve_engine=` with `mode=Feasible`) are checked here too,
-    ///        eagerly -- the same checks solve() runs, but surfaced at the
-    ///        call that staged the bad combination rather than from inside a
-    ///        Jet::map pool worker.
+    ///        `presolve_engine=` with `mode=Feasible`, and a presolve stage
+    ///        asked of an engine with no feasibility-only mode) are checked
+    ///        here too, eagerly -- the same checks solve() runs, but surfaced
+    ///        at the call that staged the bad combination rather than from
+    ///        inside a Jet::map pool worker.
     ///
     ///        jet_run()'s clones are NOT byte-identical to what solve() would
     ///        hand the same engine object: every InteriorPointSolver clone
@@ -460,6 +539,10 @@ struct BackendProblemBase {
             // Not a refusal: an explicit override engine implies presolve --
             // mirrors solve()'s own normalization.
             opts.presolve = true;
+        }
+        if (opts.presolve) {
+            refuse_presolve_engine_without_feasible_mode(
+                opts.presolve_engine != nullptr ? *opts.presolve_engine : prototype);
         }
 
         this->jet_prototype_ = prototype;

@@ -303,10 +303,16 @@ SqpModelAdapter::SqpModelAdapter(std::shared_ptr<NonLinearProgram> nlp, Eigen::V
     saved_analyzed_kkt_matrix_ = nlp_->analyzed_kkt_matrix_;
     kkt_binding_saved_ = true;
 
-    kkt_.resize(nlp_->kkt_dim_, nlp_->kkt_dim_);
-    nlp_->analyze_sparsity(kkt_);
-
+    // Inside the try from here on: analyze_sparsity() is the call that
+    // actually performs the rebind, so a throw out of it (or out of the
+    // resize that sizes its destination) is exactly the case the restore
+    // below exists for -- leaving it outside the try would leave the shared
+    // nlp_ half-rebound to a kkt_ buffer that dies with this half-built
+    // adapter.
     try {
+        kkt_.resize(nlp_->kkt_dim_, nlp_->kkt_dim_);
+        nlp_->analyze_sparsity(kkt_);
+
         const int cons_start = primal_vars_ + slack_vars_;
         std::vector<AdapterCoord> hess_coords, jac_e_coords, jac_i_coords;
 

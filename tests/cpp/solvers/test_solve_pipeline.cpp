@@ -145,6 +145,33 @@ std::unique_ptr<OptimizationProblem> solve_pipeline_build_bounded_nlp() {
     return prob;
 }
 
+// min (x0 - 2)^2 + (x1 - 3)^2 with x0 PINNED at 1.0 by a fixed
+// (lower == upper) native variable bound; optimum x0 = 1, x1 = 3,
+// objective 1.
+//
+// The pin is the point. Under the interior-point engine's DEFAULT
+// fixed-variable treatment (MakeParameter) a solve ELIMINATES x0 and leaves
+// the program on its reduced variable space -- precisely the layout the SQP
+// and Ipopt adapters refuse by name. Any crossover onto one of those engines
+// therefore has to restore the declared layout first, which is what the two
+// crossover cases below pin.
+std::unique_ptr<OptimizationProblem> solve_pipeline_build_fixed_variable_nlp() {
+    using tycho::vf::Arguments;
+    using tycho::vf::GenericFunction;
+    auto prob = std::make_unique<OptimizationProblem>();
+    prob->set_vars(Eigen::VectorXd::Constant(2, 0.0));
+    {
+        auto args = Arguments<2>();
+        auto x0 = args.coeff<0>();
+        auto x1 = args.coeff<1>();
+        prob->add_objective(
+            GenericFunction<-1, 1>((x0 - 2.0) * (x0 - 2.0) + (x1 - 3.0) * (x1 - 3.0)),
+            (Eigen::VectorXi(2) << 0, 1).finished());
+    }
+    prob->add_variable_bound(0, 1.0, 1.0);
+    return prob;
+}
+
 // min x^2 with x fixed at 3.0. The caller solves this with an engine whose
 // fixed_variable_treatment_ = MakeConstraint, so that the solve installs one
 // internal fixing row ("x - 3 = 0") on prob->nlp_ via
@@ -164,25 +191,37 @@ std::unique_ptr<OptimizationProblem> solve_pipeline_build_make_constraint_nlp() 
     return prob;
 }
 
-// A test-local Phase subclass exposing a way to overwrite the protected
-// post-solve multiplier state directly (active_eq_lmults_ is protected on
+// A test-local Phase subclass reaching the protected post-solve multiplier
+// state directly (active_eq_lmults_/active_iq_lmults_ are protected on
 // ODEPhaseBase), mirroring oc_test_utils.h's BrachSwitchTestPhase pattern.
-// Used only by PhaseResultIsSnapshotNotView below, to prove
+// Two tests use it: PhaseResultIsSnapshotNotView clobbers the state to prove
 // fill_phase_results() copied its slices out rather than aliasing back into
-// this phase's own mutable state.
-struct SolvePipelinePhaseResultSnapshotPhase : ODEPhase<TychoTest::LinearODE> {
+// this phase's own mutable state, and the accept_stage cases read the sizes
+// back to prove a stage that reported no multipliers left none behind.
+struct SolvePipelineProbePhase : ODEPhase<TychoTest::LinearODE> {
     using ODEPhase<TychoTest::LinearODE>::ODEPhase;
     void clobber_eq_lmults_for_test() {
         this->active_eq_lmults_ =
             Eigen::VectorXd::Constant(this->active_eq_lmults_.size(), 12345.0);
     }
+    int eq_lmults_size_for_test() const { return int(this->active_eq_lmults_.size()); }
+    int iq_lmults_size_for_test() const { return int(this->active_iq_lmults_.size()); }
+    bool multipliers_loaded_for_test() const { return this->multipliers_loaded_; }
 };
 
-// Builds a SolvePipelinePhaseResultSnapshotPhase with the exact same linear-dynamics
+// An OptimalControlProblemBase with the solve() hooks re-exposed, so a test
+// can hand accept_stage() a StageOutput it built itself -- the deterministic
+// stand-in for an engine exit that reports no multipliers at all.
+struct SolvePipelineHookOcp : OptimalControlProblemBase {
+    using OptimalControlProblemBase::accept_stage;
+    using OptimalControlProblemBase::initial_primal;
+};
+
+// Builds a SolvePipelineProbePhase with the exact same linear-dynamics
 // setup as TychoTest::make_linear_phase() (x0=0, v0=1, t in [0, 1], 2
 // defects) -- duplicated rather than reused because make_linear_phase()
 // returns the plain ODEPhase<LinearODE> type, not this test-local subclass.
-std::shared_ptr<SolvePipelinePhaseResultSnapshotPhase> solve_pipeline_make_snapshot_phase() {
+std::shared_ptr<SolvePipelineProbePhase> solve_pipeline_make_probe_phase() {
     constexpr double x0 = 0.0, v0 = 1.0, t0 = 0.0, tf = 1.0;
     constexpr int n_pts = 5;
 
@@ -199,9 +238,8 @@ std::shared_ptr<SolvePipelinePhaseResultSnapshotPhase> solve_pipeline_make_snaps
     }
 
     TychoTest::LinearODE ode;
-    auto phase =
-        std::make_shared<SolvePipelinePhaseResultSnapshotPhase>(ode, TranscriptionModes::LGL3, traj,
-                                                                /*nsegs=*/2);
+    auto phase = std::make_shared<SolvePipelineProbePhase>(ode, TranscriptionModes::LGL3, traj,
+                                                           /*nsegs=*/2);
 
     Eigen::VectorXi front_idx = Eigen::VectorXi::LinSpaced(3, 0, 2);
     Eigen::VectorXd front_val(3);
@@ -848,7 +886,7 @@ TEST(SolvePipeline, MultiPhaseSlicesTileTheWholeSpace) {
 }
 
 TEST(SolvePipeline, PhaseResultIsSnapshotNotView) {
-    auto phase = solve_pipeline_make_snapshot_phase();
+    auto phase = solve_pipeline_make_probe_phase();
 
     InteriorPointSolver ipm;
     ipm.set_print_level(0);
@@ -1065,5 +1103,263 @@ TEST(SolvePipeline, MalformedKnownTagRefusesAtStaging) {
         const std::string what = e.what();
         EXPECT_NE(what.find(std::string(hven::solvers::kIpmPolishTag)), std::string::npos);
         EXPECT_NE(what.find("stage_warm_start"), std::string::npos);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Stages that report no multipliers, cross-engine hand-offs, a caller-supplied
+// warm payload that cannot be used, and the presolve-engine refusal.
+///////////////////////////////////////////////////////////////////////////////
+
+// An engine can finish a stage with NO prices at all: the SQP engine leaves
+// lambda_e/lambda_i/z empty on an infeasible or numerical-error exit (it says
+// so in the notes it attaches), and an Ipopt run aborted before
+// finalize_solution can hand back short ones. Splitting an empty vector per
+// phase reads past its end at every phase offset -- and Eigen's own bounds
+// assert is compiled out of this project's Release build, so the read is
+// silent. The StageOutput here is built by hand rather than extracted from a
+// real failing solve, so the case is reached deterministically, with exactly
+// the shape engines.cpp documents.
+TEST(SolvePipeline, OcpAcceptsAStageThatReportedNoMultipliers) {
+    auto phase0 = solve_pipeline_make_probe_phase();
+    auto phase1 = solve_pipeline_make_probe_phase();
+
+    SolvePipelineHookOcp ocp;
+    ocp.add_phase(phase0);
+    ocp.add_phase(phase1);
+
+    InteriorPointSolver ipm;
+    ipm.set_print_level(0);
+    ocp.solve(&ipm);
+    // Fixture guard: the interior-point stage DID leave prices behind, so the
+    // emptying below is a real change of state, not a no-op on a phase that
+    // never had any. (Whether that stage converged is beside the point here --
+    // the interior-point engine reports multipliers either way.)
+    ASSERT_GT(phase0->eq_lmults_size_for_test(), 0);
+    ASSERT_GT(phase1->eq_lmults_size_for_test(), 0);
+    ASSERT_TRUE(phase0->multipliers_loaded_for_test());
+
+    StageOutput no_prices;
+    no_prices.flag_ = tycho::ConvergenceFlags::NOTCONVERGED;
+    no_prices.primal_ = ocp.initial_primal();
+    // eq_lmults_/iq_lmults_/bound_lmults_/eq_cons_/iq_cons_ all left empty --
+    // the SQP kInfeasible/kNumericalError shape.
+
+    ASSERT_NO_THROW(ocp.accept_stage(no_prices));
+
+    EXPECT_EQ(phase0->eq_lmults_size_for_test(), 0);
+    EXPECT_EQ(phase0->iq_lmults_size_for_test(), 0);
+    EXPECT_EQ(phase1->eq_lmults_size_for_test(), 0);
+    EXPECT_EQ(phase1->iq_lmults_size_for_test(), 0);
+    EXPECT_FALSE(phase0->multipliers_loaded_for_test());
+    EXPECT_FALSE(phase1->multipliers_loaded_for_test());
+    // And the readers built on that state refuse by name rather than handing
+    // back whatever the emptied vectors happen to slice to.
+    EXPECT_THROW((void)phase0->return_costate_traj(), std::invalid_argument);
+}
+
+// The same guard, reached through a real solve: a 2-phase OCP with
+// contradictory boundary values on one phase, solved by the SQP engine. Which
+// failing status the driver reports is its own business (an infeasible exit
+// leaves the multipliers empty; a max-iteration exit fills them), so the
+// assertions hold either way -- what is pinned is that the call returns a
+// coherent result instead of reading out of bounds.
+TEST(SolvePipeline, MultiPhaseOcpSurvivesAnSqpFailureExit) {
+    auto phase0 = solve_pipeline_make_probe_phase();
+    auto phase1 = solve_pipeline_make_probe_phase();
+
+    // Two equality boundary values pinning the SAME entry to two different
+    // values: infeasible by construction, with no dependence on the dynamics.
+    Eigen::VectorXi idx(1);
+    idx << 0;
+    Eigen::VectorXd val(1);
+    val << 7.0;
+    phase0->add_boundary_value(PhaseRegionFlags::Back, idx, val, ScaleModes::AUTO);
+    Eigen::VectorXd other(1);
+    other << -7.0;
+    phase0->add_boundary_value(PhaseRegionFlags::Back, idx, other, ScaleModes::AUTO);
+
+    OptimalControlProblemBase ocp;
+    ocp.add_phase(phase0);
+    ocp.add_phase(phase1);
+
+    SqpSolver sqp;
+    sqp.options().max_iter = 25; // bounds the run; the exit status is not pinned
+    EngineRef ref = &sqp;
+
+    SolveResult result;
+    ASSERT_NO_THROW(result = ocp.solve(ref));
+    EXPECT_FALSE(result.converged());
+    ASSERT_EQ(result.stages_.size(), 1u);
+    EXPECT_EQ(result.stages_[0].engine_name_, "SqpSolver");
+
+    // Each phase either carries its full declared multiplier width or carries
+    // none -- never a partial slice read past the end of a short vector.
+    for (auto *phase : {phase0.get(), phase1.get()}) {
+        const int eq_size = phase->eq_lmults_size_for_test();
+        EXPECT_TRUE(eq_size == 0 || phase->multipliers_loaded_for_test());
+    }
+}
+
+// The crossover the API advertises, on a problem with a fixed variable: the
+// interior-point main stage leaves the program on its reduced space, and the
+// SQP polish stage that follows refuses exactly that layout -- unless the
+// pipeline restores the declared one at the hand-off.
+TEST(SolvePipeline, CrossoverPolishSurvivesAFixedVariable) {
+    auto prob = solve_pipeline_build_fixed_variable_nlp();
+
+    InteriorPointSolver ipm;
+    ipm.set_print_level(0);
+    // The DEFAULT treatment is the case under test, so it is asserted rather
+    // than set: a future default of RelaxBounds would make this test vacuous.
+    ASSERT_EQ(ipm.settings().fixed_variable_treatment_, FixedVariableTreatments::MakeParameter);
+
+    SqpSolver sqp;
+    EngineRef polish_ref = &sqp;
+    SolveOptions opts;
+    opts.polish = &polish_ref;
+
+    SolveResult result;
+    ASSERT_NO_THROW(result = prob->solve(&ipm, opts));
+
+    ASSERT_EQ(result.stages_.size(), 2u);
+    EXPECT_EQ(result.stages_[0].engine_name_, "InteriorPointSolver");
+    EXPECT_EQ(result.stages_[1].role_, "polish");
+    EXPECT_EQ(result.stages_[1].engine_name_, "SqpSolver");
+    EXPECT_TRUE(result.converged());
+    EXPECT_NEAR(prob->active_variables_[0], 1.0, 1e-6);
+    EXPECT_NEAR(prob->active_variables_[1], 3.0, 1e-5);
+}
+
+// The same hand-off across two SEPARATE calls on one problem instance -- the
+// chain the documentation gives for a cross-engine warm start. The reduced
+// layout persists on the problem between the calls, so the second call is
+// where it has to be undone.
+TEST(SolvePipeline, IpmThenSqpChainSurvivesAFixedVariable) {
+    auto prob = solve_pipeline_build_fixed_variable_nlp();
+
+    InteriorPointSolver ipm;
+    ipm.set_print_level(0);
+    SolveResult r1 = prob->solve(&ipm);
+    ASSERT_TRUE(r1.converged());
+    // Fixture guard: the layout the SQP adapter refuses is genuinely present
+    // when the second call starts.
+    ASSERT_TRUE(prob->nlp_->is_reduced());
+
+    SqpSolver sqp;
+    SolveOptions opts;
+    opts.warm = &r1.warm_;
+
+    SolveResult r2;
+    ASSERT_NO_THROW(r2 = prob->solve(&sqp, opts));
+
+    ASSERT_EQ(r2.stages_.size(), 1u);
+    EXPECT_EQ(r2.stages_[0].engine_name_, "SqpSolver");
+    EXPECT_TRUE(r2.converged());
+    EXPECT_FALSE(prob->nlp_->is_reduced());
+    EXPECT_NEAR(prob->active_variables_[0], 1.0, 1e-6);
+    EXPECT_NEAR(prob->active_variables_[1], 3.0, 1e-5);
+}
+
+// A caller-supplied warm payload that is EMPTY costs the seeding and nothing
+// else. It must not be diagnosed as a stamp mismatch either: a
+// default-constructed payload carries a default stamp, so the emptiness test
+// has to run first, or the refusal names the wrong cause.
+TEST(SolvePipeline, EmptyCallerWarmRunsColdAndSaysSo) {
+    auto prob = solve_pipeline_build_tiny_nlp();
+    InteriorPointSolver ipm;
+    ipm.set_print_level(0);
+
+    hven::solvers::WarmStartData empty_payload;
+    ASSERT_EQ(empty_payload.primal_.size(), 0);
+
+    SolveOptions opts;
+    opts.warm = &empty_payload;
+
+    SolveResult result;
+    ASSERT_NO_THROW(result = prob->solve(&ipm, opts));
+    EXPECT_TRUE(result.converged());
+
+    ASSERT_FALSE(result.stages_.empty());
+    const auto &notes = result.stages_.front().engine_notes_;
+    const auto note = notes.find("warm");
+    ASSERT_NE(note, notes.end());
+    EXPECT_NE(note->second.find("empty"), std::string::npos);
+}
+
+// A caller-supplied warm payload carrying a NON-FINITE value degrades the same
+// way. This is the documented retry idiom's own case: the payload a caller
+// hands back after a non-convergent solve is exactly the one a diverged stage
+// exported.
+TEST(SolvePipeline, NonFiniteCallerWarmRunsColdAndSaysSo) {
+    auto prob = solve_pipeline_build_diverging_nlp();
+    InteriorPointSolver ipm;
+    ipm.set_print_level(0);
+
+    SolveOptions feasible;
+    feasible.mode = Mode::Feasible;
+    SolveResult diverged = prob->solve(&ipm, feasible);
+    EXPECT_FALSE(diverged.converged());
+    // Fixture guard: the payload really is non-empty and really is non-finite,
+    // so this test exercises the finiteness branch and not the empty one.
+    ASSERT_GT(diverged.warm_.primal_.size(), 0);
+    ASSERT_FALSE(diverged.warm_.primal_.allFinite() && diverged.warm_.eq_lmults_.allFinite() &&
+                 diverged.warm_.iq_lmults_.allFinite() && diverged.warm_.bound_lmults_.allFinite());
+
+    SolveOptions retry;
+    retry.mode = Mode::Feasible;
+    retry.warm = &diverged.warm_;
+
+    SolveResult result;
+    ASSERT_NO_THROW(result = prob->solve(&ipm, retry));
+
+    ASSERT_FALSE(result.stages_.empty());
+    const auto &notes = result.stages_.front().engine_notes_;
+    const auto note = notes.find("warm");
+    ASSERT_NE(note, notes.end());
+    EXPECT_NE(note->second.find("non-finite"), std::string::npos);
+}
+
+// An engine with no feasibility-only mode cannot run the presolve stage. The
+// refusal belongs in the refusal matrix, before the latch and the
+// transcription, and names both halves.
+TEST(SolvePipeline, PresolveEngineWithoutFeasibleModeRefusesNamingBothParts) {
+    auto prob = solve_pipeline_build_tiny_nlp();
+    InteriorPointSolver ipm;
+    ipm.set_print_level(0);
+    SqpSolver sqp;
+    EngineRef sqp_ref = &sqp;
+
+    // Named explicitly as the presolve engine.
+    {
+        SolveOptions opts;
+        opts.presolve_engine = &sqp_ref;
+        try {
+            prob->solve(&ipm, opts);
+            FAIL() << "expected std::invalid_argument";
+        } catch (const std::invalid_argument &e) {
+            const std::string what = e.what();
+            EXPECT_NE(what.find("presolve="), std::string::npos);
+            EXPECT_NE(what.find("SqpSolver"), std::string::npos);
+        }
+    }
+    // Inherited from the main engine by presolve=true.
+    {
+        SolveOptions opts;
+        opts.presolve = true;
+        try {
+            prob->solve(sqp_ref, opts);
+            FAIL() << "expected std::invalid_argument";
+        } catch (const std::invalid_argument &e) {
+            const std::string what = e.what();
+            EXPECT_NE(what.find("presolve="), std::string::npos);
+            EXPECT_NE(what.find("SqpSolver"), std::string::npos);
+        }
+    }
+    // And eagerly, at the call that stages a batched job.
+    {
+        SolveOptions opts;
+        opts.presolve = true;
+        EXPECT_THROW(prob->set_jet_job(sqp_ref, opts), std::invalid_argument);
     }
 }

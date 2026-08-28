@@ -188,13 +188,16 @@ class _FallbackProbeProblem:
 
     def __init__(self):
         self.calls = []
+        self.results = []
 
     def solve(self, engine, mode="optimal", presolve=False, polish=None, warm=None):
         self.calls.append(
             {"mode": mode, "presolve": presolve, "polish": polish, "warm": warm}
         )
         converged = len(self.calls) > 1
-        return _FakeResult("CONVERGED" if converged else "NOTCONVERGED", converged)
+        result = _FakeResult("CONVERGED" if converged else "NOTCONVERGED", converged)
+        self.results.append(result)
+        return result
 
 
 class _FallbackProbeModule:
@@ -218,14 +221,15 @@ def test_driver_feasible_fallback_retries_on_non_convergence():
         "polish": None,
         "warm": None,
     }
-    # No warm= on the retry: the retired combo method passed no warm
-    # payload between its phases either, relying on in-place primal
-    # continuation -- see driver._dispatch_psiopt_solve's docstring.
+    # The retry hands the main stage's own result back as warm=, which is
+    # the idiom the documentation gives callers for exactly this shape: a
+    # payload that is empty or non-finite -- the likely outcome of a
+    # non-convergent main stage -- costs the seeding and nothing else.
     assert prob.calls[1] == {
         "mode": "feasible",
         "presolve": False,
         "polish": None,
-        "warm": None,
+        "warm": prob.results[0],
     }
     assert result["flag"] == "CONVERGED"
 

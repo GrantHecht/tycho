@@ -232,6 +232,9 @@ struct OptimizationProblem : BackendProblemBase {
             this->transcribe();
     }
 
+    /// @brief solve() hook: mark this problem as needing transcription again.
+    void invalidate_transcription() override { this->reset_transcription(); }
+
     /// @brief solve() hook: the active variables vector.
     Eigen::VectorXd initial_primal() const override { return this->active_variables_; }
 

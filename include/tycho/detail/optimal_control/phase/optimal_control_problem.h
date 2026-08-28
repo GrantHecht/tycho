@@ -1775,24 +1775,66 @@ struct OptimalControlProblemBase : BackendProblemBase {
             this->transcribe();
     }
 
+    /// @brief solve() hook: mark this problem, and every phase in it, as
+    ///        needing transcription again. Both levels matter: this problem's
+    ///        own transcribe() reads each phase's transcription, and
+    ///        check_transcriptions() consults the phases' flags.
+    void invalidate_transcription() override {
+        this->reset_transcription();
+        for (auto phase : this->phases) {
+            phase->reset_transcription();
+        }
+    }
+
     /// @brief solve() hook: the packed multi-phase decision-variable
     ///        vector (make_solver_input()).
     Eigen::VectorXd initial_primal() const override { return this->make_solver_input(); }
 
     /// @brief solve() hook: write a stage's output back across every
     ///        phase -- full post-opt residuals when the engine reported them
-    ///        (StageOutput::eq_cons_/iq_cons_ non-empty), else multipliers
-    ///        only, invalidated on this problem and every phase.
+    ///        (StageOutput::eq_cons_/iq_cons_ wide enough to split), else
+    ///        multipliers only, invalidated on this problem and every phase.
+    ///
+    /// A stage can also end with NO prices at all: the SQP engine leaves its
+    /// multiplier vectors empty on an infeasible or numerical-error exit
+    /// (engines.cpp says so in the notes it attaches), and an Ipopt run that
+    /// aborts before finalize_solution can hand back short ones. Splitting
+    /// such a vector per phase would read past its end at every phase offset
+    /// -- silently, since Eigen's own bounds assert is compiled out of this
+    /// project's Release build -- so the declared row counts are checked
+    /// first. Too short, and the whole problem records "this stage reported
+    /// no prices": per-phase multipliers cleared, post-optimality info
+    /// invalidated here and on every phase. The primal is still written back
+    /// either way; a stage that gave up still moved the iterate.
+    ///
+    /// The comparison is `>=`, not `==`: the interior-point engine's
+    /// MakeConstraint fixed-variable treatment appends internal equality rows
+    /// behind the declared ones, and collect_solver_multipliers below is
+    /// written to address the declared rows from the FRONT for exactly that
+    /// reason.
     void accept_stage(const StageOutput &out) override {
         this->collect_solver_output(out.primal_);
-        if (out.eq_cons_.size() > 0 || out.iq_cons_.size() > 0) {
+
+        const int eq_rows = this->num_phase_eq_cons_.sum() + this->num_link_eq_cons_;
+        const int iq_rows = this->num_phase_iq_cons_.sum() + this->num_link_iq_cons_;
+        const bool have_multipliers =
+            out.eq_lmults_.size() >= eq_rows && out.iq_lmults_.size() >= iq_rows;
+        const bool have_residuals = (out.eq_cons_.size() > 0 || out.iq_cons_.size() > 0) &&
+                                    out.eq_cons_.size() >= eq_rows &&
+                                    out.iq_cons_.size() >= iq_rows;
+
+        if (have_multipliers && have_residuals) {
             this->collect_post_opt_info(out.eq_cons_, out.eq_lmults_, out.iq_cons_, out.iq_lmults_);
-        } else {
+            return;
+        }
+        if (have_multipliers) {
             this->collect_solver_multipliers(out.eq_lmults_, out.iq_lmults_);
-            this->invalidate_post_opt_info();
-            for (auto phase : this->phases) {
-                phase->invalidate_post_opt_info();
-            }
+        } else {
+            this->clear_solver_multipliers();
+        }
+        this->invalidate_post_opt_info();
+        for (auto phase : this->phases) {
+            phase->invalidate_post_opt_info();
         }
     }
 
@@ -1915,6 +1957,21 @@ struct OptimalControlProblemBase : BackendProblemBase {
             EM.segment(this->num_phase_eq_cons_.sum(), this->num_link_eq_cons_);
         this->active_iq_lmults_ =
             IM.segment(this->num_phase_iq_cons_.sum(), this->num_link_iq_cons_);
+    }
+
+    /// @internal
+    /// @brief Drop the stored multipliers, here and on every phase: the
+    ///        outcome when a solver stage reported no usable prices at all.
+    ///        The link slots and every phase's slice are emptied together, so
+    ///        no consumer can read a stale price from the stage before.
+    /// @endinternal
+    void clear_solver_multipliers() {
+        this->multipliers_loaded_ = false;
+        this->active_eq_lmults_.resize(0);
+        this->active_iq_lmults_.resize(0);
+        for (auto phase : this->phases) {
+            phase->clear_solver_multipliers();
+        }
     }
 
     /// @internal

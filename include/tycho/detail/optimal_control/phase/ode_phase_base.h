@@ -1907,6 +1907,18 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
     }
 
     /// @internal
+    /// @brief Drop the stored multipliers: the outcome when a solver stage
+    ///        reported no usable prices at all. Emptied rather than zeroed,
+    ///        so no consumer can mistake a stale or invented price for a
+    ///        measured one.
+    /// @endinternal
+    void clear_solver_multipliers() {
+        this->multipliers_loaded_ = false;
+        this->active_eq_lmults_.resize(0);
+        this->active_iq_lmults_.resize(0);
+    }
+
+    /// @internal
     /// @brief Store post-optimization constraint values and multipliers.
     /// @param EC  Equality-constraint residuals.
     /// @param EM  Equality-constraint multipliers.
@@ -1936,6 +1948,9 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
             this->transcribe();
     }
 
+    /// @brief solve() hook: mark this phase as needing transcription again.
+    void invalidate_transcription() override { this->reset_transcription(); }
+
     /// @brief solve() hook: the packed decision-variable vector
     ///        (make_solver_input(), same input interior_point_call_impl seeds
     ///        the engine with).
@@ -1948,12 +1963,34 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
     ///        multipliers only.
     void accept_stage(const StageOutput &out) override {
         this->collect_solver_output(out.primal_);
-        if (out.eq_cons_.size() > 0 || out.iq_cons_.size() > 0) {
+
+        // A stage can end with no prices at all -- the SQP engine leaves its
+        // multiplier vectors empty on an infeasible or numerical-error exit,
+        // and an Ipopt run aborted before finalize_solution can hand back
+        // short ones. Storing an empty vector as though it were this phase's
+        // multipliers would leave every costate/multiplier reader looking at
+        // a size it cannot use; record "no prices from this stage" instead.
+        // The comparison is `>=` because the interior-point engine's
+        // MakeConstraint fixed-variable treatment appends internal equality
+        // rows behind the declared ones.
+        const int eq_rows = this->indexer_.num_phase_eq_cons_;
+        const int iq_rows = this->indexer_.num_phase_iq_cons_;
+        const bool have_multipliers =
+            out.eq_lmults_.size() >= eq_rows && out.iq_lmults_.size() >= iq_rows;
+        const bool have_residuals = (out.eq_cons_.size() > 0 || out.iq_cons_.size() > 0) &&
+                                    out.eq_cons_.size() >= eq_rows &&
+                                    out.iq_cons_.size() >= iq_rows;
+
+        if (have_multipliers && have_residuals) {
             this->collect_post_opt_info(out.eq_cons_, out.eq_lmults_, out.iq_cons_, out.iq_lmults_);
-        } else {
-            this->collect_solver_multipliers(out.eq_lmults_, out.iq_lmults_);
-            this->invalidate_post_opt_info();
+            return;
         }
+        if (have_multipliers) {
+            this->collect_solver_multipliers(out.eq_lmults_, out.iq_lmults_);
+        } else {
+            this->clear_solver_multipliers();
+        }
+        this->invalidate_post_opt_info();
     }
 
     /// @brief solve() hook: a single Phase IS the whole declared problem, so
