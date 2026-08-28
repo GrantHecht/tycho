@@ -208,25 +208,23 @@ def test_warm_chain_continuation_both_solves_converge(record_property):
     assert bool(r1)
 
     r_unperturbed = _circle_problem([1.0, 2.0], 2.0).solve(_quiet_ipm(), warm=r1)
+    r2 = _circle_problem([1.0, 2.0], 2.05).solve(_quiet_ipm(), warm=r1)
+    assert bool(r2)
+
+    iterations = {
+        "cold": r1.iterations(),
+        "warm_unperturbed": r_unperturbed.iterations(),
+        "warm_perturbed": r2.iterations(),
+    }
+
     assert r_unperturbed.iterations() < r1.iterations(), (
         f"warm-started re-solve of the SAME declared problem took "
         f"{r_unperturbed.iterations()} iterations, not fewer than the cold "
         f"solve's {r1.iterations()} -- the warm payload may not have been "
-        f"applied (cold={r1.iterations()}, warm_unperturbed="
-        f"{r_unperturbed.iterations()})"
+        f"applied (iterations={iterations})"
     )
 
-    r2 = _circle_problem([1.0, 2.0], 2.05).solve(_quiet_ipm(), warm=r1)
-    assert bool(r2)
-
-    record_property(
-        "warm_chain_iterations",
-        {
-            "cold": r1.iterations(),
-            "warm_unperturbed": r_unperturbed.iterations(),
-            "warm_perturbed": r2.iterations(),
-        },
-    )
+    record_property("warm_chain_iterations", iterations)
 
 
 # ---------------------------------------------------------------------------

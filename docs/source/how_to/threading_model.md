@@ -59,6 +59,7 @@ utils.set_num_threads(4)           # resize to 4 worker threads
 #include <tycho/tycho.h>
 using namespace tycho;
 using namespace tycho::oc;
+using namespace tycho::solvers;
 
 int cores = utils::get_core_count();    // physical CPU cores
 int n     = utils::get_num_threads();   // current pool size (default: hardware_concurrency)
@@ -183,20 +184,25 @@ phase.set_num_partitions(4);   // split the NLP into 4 partitions
 ::::
 
 The partition count and the Pardiso linear-solver thread count are distinct
-resources and are set independently. Set the latter on the optimizer itself,
-and only when you specifically need to pin it:
+resources and are set independently. Set the latter on the engine you pass to
+`solve()`, and only when you specifically need to pin it:
 
 ::::{tab-set}
 :::{tab-item} Python
 ```python
+from tychopy import solvers as slv
+
 phase.set_num_partitions(4)
-phase.optimizer.qp_threads = 2
+ipm = slv.IPM(qp_threads=2)
+phase.solve(ipm)
 ```
 :::
 :::{tab-item} C++
 ```cpp
 phase.set_num_partitions(4);
-phase.optimizer().set_qp_threads(2);
+InteriorPointSolver ipm;
+ipm.set_qp_threads(2);
+phase.solve(ipm);
 ```
 :::
 ::::
@@ -223,10 +229,12 @@ trajs = integ.integrate_dense_parallel(x0s, tfs, threads=utils.get_num_threads()
 # (here just the first; in practice you would score the trajectories).
 best_idx = 0
 
-# Build and solve the phase — the optimizer uses the same global pool
+# Build and solve the phase — the engine uses the same global pool
+from tychopy import solvers as slv
+
 phase = ode.phase("LGL3", trajs[best_idx], 50)
 phase.set_num_partitions(utils.get_num_threads())
-phase.optimize()
+phase.solve(slv.IPM())
 ```
 :::
 :::{tab-item} C++
@@ -236,10 +244,11 @@ utils::set_num_threads(utils::get_core_count());
 // Generate initial guesses in parallel
 auto trajs = integ.integrate_dense_parallel(x0s, tfs, utils::get_num_threads());
 
-// Build and solve the phase — the optimizer uses the same global pool
+// Build and solve the phase — the engine uses the same global pool
 auto phase = ode.phase(TranscriptionModes::LGL3, trajs[best_idx], 50);
 phase.set_num_partitions(utils::get_num_threads());
-phase.optimize();
+InteriorPointSolver ipm;
+phase.solve(ipm);
 ```
 :::
 ::::

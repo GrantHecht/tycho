@@ -17,8 +17,10 @@ the *second* move, once a preset has told you which family of mechanism
 helps:
 
 ```python
-phase.optimizer.apply_preset("filter_l1")
-flag = phase.solve_optimize()
+import tychopy.solvers as slv
+
+ipm = slv.IPM(preset="filter_l1")
+result = phase.solve(ipm, presolve=True)
 ```
 
 `apply_preset` assigns exactly nine fields and touches nothing else — your
@@ -272,8 +274,9 @@ members of the enums re-exported from `tychopy.solvers`:
 ```python
 import tychopy.solvers as slv
 
-phase.optimizer.acceptance_strategy = slv.AcceptanceStrategies.filter
-phase.optimizer.barrier_governor = slv.BarrierGovernors.monitored
+ipm = slv.IPM()
+ipm.acceptance_strategy = slv.AcceptanceStrategies.filter
+ipm.barrier_governor = slv.BarrierGovernors.monitored
 ```
 
 | Mechanism | What it does | When it helps | Cost |
@@ -368,7 +371,7 @@ carries no direct literature reference.
 The staged shape is the default and should stay the default:
 
 ```python
-flag = phase.solve_optimize()     # feasibility stage, then optimization
+result = phase.solve(ipm, presolve=True)   # feasibility presolve stage, then optimization
 ```
 
 The feasibility stage runs the `SOE` algorithm mode: the objective is
@@ -385,10 +388,11 @@ and the optimization stage that follows is a local method that cannot leave
 that basin. When the initial guess is in the wrong basin, staging *commits*
 you to the wrong basin.
 
-For those problems, hand the whole problem to a single call instead:
+For those problems, hand the whole problem to a single call instead, with no
+presolve stage:
 
 ```python
-flag = phase.optimize()           # objective present from iteration 0
+result = phase.solve(ipm)           # objective present from iteration 0
 ```
 
 The measured case, re-measured after variable bounds became native solver
@@ -396,24 +400,24 @@ bounds: under the `merit_l1` configuration — merit acceptance with the
 classic adaptive governor and nested l1 restoration — the corpus scores
 9 converged + 2 acceptable under the corpus problems' own call shapes. Call
 shape still changes individual outcomes: run the same corpus through a
-single `optimize()` per problem instead and three problems move.
-`hard_mountaincar_badguess` moves from converged at iteration 164 to
-acceptable at iteration 195; `hard_hypersens_stiff` moves from acceptable at
-iteration 123 to acceptable at iteration 72; and the zermelo wrong-basin
-problem moves from **diverging** to **failing** — worse, not better, under
-native bounds (this problem's own module docstring already flags its exact
-iteration count and objective near this failure as order-sensitive from run
-to run; the status change is the stable part of the measurement). The
-combined corpus total is unchanged either way (11 of 17
-converged-or-acceptable); which individual problems land where is not.
+single main-stage-only call per problem instead (no presolve) and three
+problems move. `hard_mountaincar_badguess` moves from converged at iteration
+164 to acceptable at iteration 195; `hard_hypersens_stiff` moves from
+acceptable at iteration 123 to acceptable at iteration 72; and the zermelo
+wrong-basin problem moves from **diverging** to **failing** — worse, not
+better, under native bounds (this problem's own module docstring already
+flags its exact iteration count and objective near this failure as
+order-sensitive from run to run; the status change is the stable part of
+the measurement). The combined corpus total is unchanged either way (11 of
+17 converged-or-acceptable); which individual problems land where is not.
 
-So: keep `solve_optimize()` as the default, and do not assume a single
-`optimize()` call is a strict improvement — call shape is a lever
-independent of the acceptance mechanism, and it can move an individual
-problem in either direction. When a solve converges to something you believe
-is the wrong answer, or the feasibility stage itself is where the trouble
-lives, trying the other call shape is still worth a measurement; just
-measure it rather than assume it will help.
+So: keep the presolve-then-optimize shape (`presolve=True`) as the default,
+and do not assume a single no-presolve call is a strict improvement — call
+shape is a lever independent of the acceptance mechanism, and it can move an
+individual problem in either direction. When a solve converges to something
+you believe is the wrong answer, or the feasibility stage itself is where
+the trouble lives, trying the other call shape is still worth a measurement;
+just measure it rather than assume it will help.
 
 ## Honest limits
 

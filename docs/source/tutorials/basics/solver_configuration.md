@@ -10,16 +10,18 @@ preset**, then by setting the same fields by hand — reading the solver's
 the configuration to find out which mechanism actually rescued it.
 
 The lesson generalizes past this problem. A preset is not magic: it is nine
-field assignments on `problem.optimizer`, chosen because those nine mechanisms
-were measured together. Once you have seen a preset and its hand-written
-equivalent produce bit-identical results, the reference table of presets stops
-being a menu of incantations and becomes a list of starting points.
+field assignments on the `InteriorPointSolver` engine you pass to `solve()`,
+chosen because those nine mechanisms were measured together. Once you have
+seen a preset and its hand-written equivalent produce bit-identical results,
+the reference table of presets stops being a menu of incantations and becomes
+a list of starting points.
 
 We use a bare NLP rather than a phase to keep the problem three variables wide
 and the solve instantaneous, but nothing here is NLP-specific. A
 {doc}`phase </tutorials/basics/your_first_phase>` and an
 {py:class}`~tychopy.optimal_control.OptimalControlProblem` expose the same
-`optimizer` handle, the same presets, and the same diagnostics.
+`solve(engine, ...)` call, the same presets, and the same diagnostics on
+whichever `InteriorPointSolver` engine you pass in.
 
 Every `{doctest}` block below (the ones showing `>>>` prompts) is executed as
 part of Tycho's test suite, so the results shown are real. Each step builds on
@@ -86,7 +88,7 @@ written $-x_2 \le 0$.
 
 Wrapping the construction in a function is deliberate: we build the identical
 problem six times below, once per configuration, so that each solve starts
-from the same guess with a fresh optimizer and its own diagnostic record.
+from the same guess with a fresh engine and its own diagnostic record.
 
 ```{doctest}
 >>> prob = wachter_biegler()
@@ -102,7 +104,7 @@ settings introduce it, and they are easy to confuse because both look like
   derivative evaluation is split into, each partition running on its own
   thread. It defaults to a value derived from the machine's core count, so it
   is a property of *where* you ran as much as of *what* you ran.
-- `optimizer.qp_threads` is the thread count handed to the sparse
+- the engine's `qp_threads` is the thread count handed to the sparse
   factorization of the KKT system.
 
 Both distribute floating-point work whose accumulation order then depends on
@@ -111,8 +113,8 @@ or one machine — to the next. Pinning both to `1` removes that variable. It
 costs wall-clock time on a large problem, so it is a debugging posture rather
 than a production one, but while you are comparing two configurations a
 difference you cannot attribute to your change is worse than a slow solve. (If
-you need reproducibility *and* the threads, `optimizer.cnr_mode = True` pins
-the sparse solver's conditional-numerical-reproducibility mode instead.)
+you need reproducibility *and* the threads, the engine's `cnr_mode = True`
+pins the sparse solver's conditional-numerical-reproducibility mode instead.)
 
 Be honest about the scale at which this matters: the three-variable problem
 below is far too small for either knob to bite, and it produces identical
@@ -124,31 +126,32 @@ We also silence the iteration table with `print_level = 3`; drop that line to
 watch the failure happen live.
 
 ```{doctest}
+>>> stock = slv.IPM()
 >>> prob.set_num_partitions(1)
->>> prob.optimizer.qp_threads = 1
->>> prob.optimizer.print_level = 3
->>> prob.num_partitions, prob.optimizer.qp_threads
+>>> stock.qp_threads = 1
+>>> stock.print_level = 3
+>>> prob.num_partitions, stock.qp_threads
 (1, 1)
 ```
 
 ## 3. Solve with the stock settings
 
-`optimize()` runs the optimization stage and returns a
-{py:class}`~tychopy.solvers.ConvergenceFlags`.
+`solve(engine)` runs the engine-driven solve and returns a
+{py:class}`~tychopy.solvers.SolveResult`; `result.flag` is the
+{py:class}`~tychopy.solvers.ConvergenceFlags` for the final stage that ran.
 
 ```{doctest}
->>> flag = prob.optimize()
->>> str(flag)
+>>> result = prob.solve(stock)
+>>> str(result.flag)
 'ConvergenceFlags.NOTCONVERGED'
 ```
 
 `NOTCONVERGED` is the flag; it is not yet a diagnosis. The diagnosis lives on
-the optimizer, whose read-only `last_*` properties describe the solve that just
+the engine, whose read-only `last_*` properties describe the solve that just
 finished. Start with the coarsest question — did the solver run out of budget,
 or did it stop for a reason?
 
 ```{doctest}
->>> stock = prob.optimizer
 >>> stock.last_iter_num == stock.max_iters
 True
 ```
@@ -206,16 +209,17 @@ make impossible.
 acceptance, the monitored barrier governor, and nested l1 elastic restoration:
 
 ```{doctest}
+>>> opt = slv.IPM()
 >>> tuned = wachter_biegler()
 >>> tuned.set_num_partitions(1)
->>> tuned.optimizer.qp_threads = 1
->>> tuned.optimizer.print_level = 3
->>> tuned.optimizer.apply_preset("filter_l1")
->>> tuned.optimizer.acceptance_strategy
+>>> opt.qp_threads = 1
+>>> opt.print_level = 3
+>>> opt.apply_preset("filter_l1")
+>>> opt.acceptance_strategy
 AcceptanceStrategies.filter
->>> tuned.optimizer.barrier_governor
+>>> opt.barrier_governor
 BarrierGovernors.monitored
->>> tuned.optimizer.restoration_mode
+>>> opt.restoration_mode
 RestorationModes.l1_nested
 ```
 
@@ -223,7 +227,7 @@ A preset assigns exactly nine fields and reads nothing else, so the
 reproducibility and output settings we chose above survive it untouched:
 
 ```{doctest}
->>> tuned.optimizer.qp_threads, tuned.optimizer.print_level, tuned.optimizer.max_iters
+>>> opt.qp_threads, opt.print_level, opt.max_iters
 (1, 3, 500)
 ```
 
@@ -232,10 +236,9 @@ undo your tolerances, your iteration cap, or your threading. Now solve the
 identical problem again.
 
 ```{doctest}
->>> flag = tuned.optimize()
->>> str(flag)
+>>> result = tuned.solve(opt)
+>>> str(result.flag)
 'ConvergenceFlags.CONVERGED'
->>> opt = tuned.optimizer
 >>> [round(float(v), 4) for v in opt.last_primals]
 [1.0, 0.0, 0.0]
 >>> abs(float(opt.last_obj_val) - 1.0) < 1e-4
@@ -268,15 +271,16 @@ property with the same validation, so the preset above has an exact
 hand-written equivalent. The enumerations come from `tychopy.solvers`:
 
 ```{doctest}
+>>> byhand_engine = slv.IPM()
 >>> byhand = wachter_biegler()
 >>> byhand.set_num_partitions(1)
->>> byhand.optimizer.qp_threads = 1
->>> byhand.optimizer.print_level = 3
->>> byhand.optimizer.acceptance_strategy = slv.AcceptanceStrategies.filter
->>> byhand.optimizer.barrier_governor = slv.BarrierGovernors.monitored
->>> byhand.optimizer.restoration_mode = slv.RestorationModes.l1_nested
->>> flag = byhand.optimize()
->>> str(flag)
+>>> byhand_engine.qp_threads = 1
+>>> byhand_engine.print_level = 3
+>>> byhand_engine.acceptance_strategy = slv.AcceptanceStrategies.filter
+>>> byhand_engine.barrier_governor = slv.BarrierGovernors.monitored
+>>> byhand_engine.restoration_mode = slv.RestorationModes.l1_nested
+>>> result = byhand.solve(byhand_engine)
+>>> str(result.flag)
 'ConvergenceFlags.CONVERGED'
 ```
 
@@ -285,9 +289,9 @@ other six fields already hold their default values. And the two solves agree
 exactly — same iteration count, same answer:
 
 ```{doctest}
->>> byhand.optimizer.last_iter_num == opt.last_iter_num
+>>> byhand_engine.last_iter_num == opt.last_iter_num
 True
->>> float(byhand.optimizer.last_obj_val) == float(opt.last_obj_val)
+>>> float(byhand_engine.last_obj_val) == float(opt.last_obj_val)
 True
 ```
 
@@ -298,13 +302,14 @@ for it without one is rejected — the whole settings block is re-validated when
 solve starts, not when you assign:
 
 ```{doctest}
+>>> solo_engine = slv.IPM()
 >>> solo = wachter_biegler()
 >>> solo.set_num_partitions(1)
->>> solo.optimizer.qp_threads = 1
->>> solo.optimizer.print_level = 3
->>> solo.optimizer.acceptance_strategy = slv.AcceptanceStrategies.filter
+>>> solo_engine.qp_threads = 1
+>>> solo_engine.print_level = 3
+>>> solo_engine.acceptance_strategy = slv.AcceptanceStrategies.filter
 >>> try:
-...     _ = solo.optimize()
+...     _ = solo.solve(solo_engine)
 ... except ValueError as err:
 ...     print(type(err).__name__)
 ValueError
@@ -354,17 +359,18 @@ only way to find out is to ablate — turn one mechanism off and re-solve. Drop
 restoration, keep filter acceptance (with the monitored governor it requires):
 
 ```{doctest}
+>>> ablated_engine = slv.IPM()
 >>> ablated = wachter_biegler()
 >>> ablated.set_num_partitions(1)
->>> ablated.optimizer.qp_threads = 1
->>> ablated.optimizer.print_level = 3
->>> ablated.optimizer.acceptance_strategy = slv.AcceptanceStrategies.filter
->>> ablated.optimizer.barrier_governor = slv.BarrierGovernors.monitored
->>> str(ablated.optimize())
+>>> ablated_engine.qp_threads = 1
+>>> ablated_engine.print_level = 3
+>>> ablated_engine.acceptance_strategy = slv.AcceptanceStrategies.filter
+>>> ablated_engine.barrier_governor = slv.BarrierGovernors.monitored
+>>> str(ablated.solve(ablated_engine).flag)
 'ConvergenceFlags.CONVERGED'
->>> abs(float(ablated.optimizer.last_obj_val) - 1.0) < 1e-4
+>>> abs(float(ablated_engine.last_obj_val) - 1.0) < 1e-4
 True
->>> ablated.optimizer.last_feas_rest_entries
+>>> ablated_engine.last_feas_rest_entries
 -1
 ```
 
@@ -373,15 +379,16 @@ solves. Now the other direction — keep nested l1 restoration, revert acceptanc
 to the default classic merit test:
 
 ```{doctest}
+>>> other_engine = slv.IPM()
 >>> other = wachter_biegler()
 >>> other.set_num_partitions(1)
->>> other.optimizer.qp_threads = 1
->>> other.optimizer.print_level = 3
->>> other.optimizer.barrier_governor = slv.BarrierGovernors.monitored
->>> other.optimizer.restoration_mode = slv.RestorationModes.l1_nested
->>> str(other.optimize())
+>>> other_engine.qp_threads = 1
+>>> other_engine.print_level = 3
+>>> other_engine.barrier_governor = slv.BarrierGovernors.monitored
+>>> other_engine.restoration_mode = slv.RestorationModes.l1_nested
+>>> str(other.solve(other_engine).flag)
 'ConvergenceFlags.NOTCONVERGED'
->>> other.optimizer.last_feas_rest_entries > 0
+>>> other_engine.last_feas_rest_entries > 0
 True
 ```
 
@@ -411,7 +418,7 @@ for a mechanism that reports nothing because it was not selected. Neither says
 and *still* saw `last_soc_steps == 0`, that would be the genuinely interesting
 result.
 
-Finally, every diagnostic is scoped to one optimizer and one solve. The stock
+Finally, every diagnostic is scoped to one engine and one solve. The stock
 problem's record is untouched by everything we did afterwards, which is what
 makes side-by-side comparison of two configurations possible at all:
 
@@ -431,7 +438,7 @@ fine. That is why the stock configuration is still the stock configuration.
 
 ## What you learned
 
-- Pin `problem.set_num_partitions(1)` and `optimizer.qp_threads = 1` before
+- Pin `problem.set_num_partitions(1)` and the engine's `qp_threads = 1` before
   comparing configurations, so that a difference between two runs is
   attributable to the settings you changed rather than to how the work was
   split across threads.
@@ -466,4 +473,5 @@ fine. That is why the stock configuration is still the stock configuration.
   thing to check when residuals diverge, and more often the real fix than any
   solver setting.
 - {doc}`Setting up a phase </tutorials/basics/your_first_phase>` — the same
-  `optimizer` handle, presets, and diagnostics on an optimal-control problem.
+  engine-driven `solve()` call, presets, and diagnostics on an optimal-control
+  problem.

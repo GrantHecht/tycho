@@ -73,6 +73,7 @@ import tychopy as typy
 
 vf = typy.vector_functions
 oc = typy.optimal_control
+slv = typy.solvers
 Args = vf.Arguments
 
 # Dynamics: two-body gravity + bounded thrust
@@ -101,7 +102,7 @@ phase.add_lu_norm_bound("Path", [7, 8, 9], 0.001, 1, 1.0)
 phase.add_boundary_value("Back", range(0, 6), Xf)
 phase.add_delta_time_objective(1.0)
 
-phase.optimize()              # InteriorPointSolver
+phase.solve(slv.IPM())        # InteriorPointSolver
 traj = phase.return_traj()    # time-optimal spiral out to the r=2 orbit
 ```
 

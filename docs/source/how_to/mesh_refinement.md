@@ -26,13 +26,15 @@ aggregated error must reach:
 ::::{tab-set}
 :::{tab-item} Python
 ```python
+import tychopy.solvers as slv
+
 phase.set_adaptive_mesh(True)
 phase.set_mesh_tol(1.0e-7)
 
 # Keep the equality-constraint tolerance at least as tight as the mesh
-# tolerance; otherwise the optimizer can satisfy its optimality conditions
+# tolerance; otherwise the engine can satisfy its optimality conditions
 # before the mesh-error criterion is met.
-phase.optimizer.eq_con_tol = 1.0e-8
+ipm = slv.IPM(eq_con_tol=1.0e-8)
 ```
 :::
 :::{tab-item} C++
@@ -44,21 +46,22 @@ phase.set_adaptive_mesh(true);
 phase.set_mesh_tol(1.0e-7);
 
 // Keep the equality-constraint tolerance at least as tight as the mesh tolerance.
-phase.optimizer().set_econ_tol(1.0e-8);
+InteriorPointSolver ipm;
+ipm.set_econ_tol(1.0e-8);
 ```
 :::
 ::::
 
-With adaptive mesh enabled, `phase.optimize()` (or `phase.solve_optimize()`
-when your initial guess is poor) runs the refinement loop automatically: it
-solves, estimates the error, refines the mesh, and repeats up to
-`set_max_mesh_iters` times or until the tolerance is met. The boolean state is
-also exposed as the read/write attribute `phase.adaptive_mesh`, and the
-tolerance as `phase.mesh_tol`.
+With adaptive mesh enabled, `phase.solve(ipm)` (or `phase.solve(ipm,
+presolve=True)` when your initial guess is poor) runs the refinement loop
+automatically: it solves, estimates the error, refines the mesh, and repeats
+up to `set_max_mesh_iters` times or until the tolerance is met. The boolean
+state is also exposed as the read/write attribute `phase.adaptive_mesh`, and
+the tolerance as `phase.mesh_tol`.
 
 If you want to drive the loop by hand instead, call
 `phase.refine_traj_auto()` to perform a single estimate-and-redistribute step
-between your own `optimize` calls.
+between your own `solve` calls.
 
 ## Choose an error estimator and aggregation
 
@@ -155,9 +158,10 @@ per-segment error against the tolerance line, the normalized error
 distribution, and its integral — one curve per iteration:
 
 ```python
+import tychopy.solvers as slv
 from tychopy.optimal_control.mesh_error_plots import PhaseMeshErrorPlot
 
-phase.optimize()
+phase.solve(slv.IPM())
 PhaseMeshErrorPlot(phase, show=True)
 ```
 

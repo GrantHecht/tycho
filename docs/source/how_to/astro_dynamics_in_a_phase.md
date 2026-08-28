@@ -41,6 +41,7 @@ import numpy as np
 from tychopy import astro
 from tychopy import vector_functions as vf
 from tychopy import optimal_control as oc
+from tychopy import solvers as slv
 
 class MEEDynamicsODE(oc.ODEBase):
     def __init__(self, mu):
@@ -60,6 +61,7 @@ class MEEDynamicsODE(oc.ODEBase):
 using namespace tycho;
 using namespace tycho::vf;
 using namespace tycho::oc;
+using namespace tycho::solvers;
 
 double mu = 1.0;   // normalized gravitational parameter
 
@@ -203,8 +205,8 @@ phase.add_delta_time_objective(1.0);
 ::::{tab-set}
 :::{tab-item} Python
 ```python
-phase.optimizer.set_print_level(3)
-flag = phase.optimize()
+ipm = slv.IPM(print_level=3)
+result = phase.solve(ipm)
 
 Traj = phase.return_traj()
 tf   = Traj[-1][6]   # time is at index 6 of each trajectory row
@@ -213,8 +215,9 @@ p_f  = Traj[-1][0]   # semi-latus rectum at arrival
 :::
 :::{tab-item} C++
 ```cpp
-phase.optimizer().set_print_level(3);
-auto flag = phase.optimize();
+InteriorPointSolver ipm;
+ipm.set_print_level(3);
+auto result = phase.solve(ipm);
 
 auto Traj  = phase.return_traj();
 double tf  = Traj.back()[6];   // time is at index 6 of each trajectory row

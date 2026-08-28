@@ -84,17 +84,18 @@ norm-bounded integrator initial guess.
    phase.add_lu_norm_bound("Path", [7, 8, 9], 0.001, 1, 1.0)
    phase.add_boundary_value("Back", range(0, 6), Xf[0:6])
 
-   phase.optimizer.set_print_level(3)
-   phase.optimizer.set_bound_fraction(0.995)
-   phase.optimizer.set_opt_ls_mode("L1")
-   phase.optimizer.set_max_ls_iters(2)
-   phase.optimizer.set_delta_h(1.0e-6)
+   ipm = typy.solvers.IPM()
+   ipm.set_print_level(3)
+   ipm.set_bound_fraction(0.995)
+   ipm.set_opt_ls_mode("L1")
+   ipm.set_max_ls_iters(2)
+   ipm.set_delta_h(1.0e-6)
 
    # Minimum-time transfer. (The full example also runs minimum-power and
    # minimum-mass objectives on the same phase via powerobj / massobj; here we
    # show only the time-optimal solution.)
    phase.add_delta_time_objective(1.0)
-   phase.optimize()
+   phase.solve(ipm)
 
    TimeOptimal = phase.return_traj()
    print("Transfer time:", TimeOptimal[-1][6])

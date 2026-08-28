@@ -786,31 +786,6 @@ class InertiaModes(enum.Enum):
     Proximal primal-dual regularization: a small persistent, decaying primal base shift (rho_k, floored at 1e-10, the Cipolla-Gondzio floor) on the Hessian diagonal, plus an always-on barrier-scaled dual shift (delta_c = 1e-8 * mu^0.25, Ipopt's jacobian_regularization_value/exponent constants, matching its perturb_always_cd semantics) on the constraint-row diagonals, are baked into the base matrix every iteration in place of the classic zero-perturbation first attempt -- the same escalation ladder still fires on top when the base attempt has wrong inertia or is singular (a singular base attempt is itself treated as wrong inertia under this mode, matching classic). Ladder exhaustion, under either mode, force-rejects the step through the recovery chain and -- if the rejection goes unresolved -- aborts the phase as ConvergenceFlags.SINGULAR_KKT (see max_refac). rho_k decays toward its floor by decr_h each iteration the base attempt sufficed, or persists at the decayed total shift (rho_k plus the ladder's last delta) when the ladder fired. The dual shift is suppressed while a nested l1 restoration phase is active -- the elastic pivots already regularize those constraint rows at a magnitude the dual shift would be negligible against, and stacking it would make the elastic step-recovery algebra inconsistent with the solved system; the proximal mode-switch restoration touches only the primal diagonal, so the dual shift stays on under it. No new tunable constants -- rho_k's floor and the dual shift's scale/exponent are fixed. See last_prox_reg_primal/last_prox_reg_dual for the per-solve diagnostics this mode reports.
     """
 
-class IpoptRunInfo:
-    @property
-    def ran(self) -> bool: ...
-
-    @property
-    def status(self) -> str: ...
-
-    @property
-    def normalized(self) -> str: ...
-
-    @property
-    def converge_flag(self) -> ConvergenceFlags: ...
-
-    @property
-    def iterations(self) -> int: ...
-
-    @property
-    def objective(self) -> float: ...
-
-    @property
-    def constraint_violation(self) -> float: ...
-
-    @property
-    def wall_time_s(self) -> float: ...
-
 def ipopt_available() -> bool:
     """True when this build was configured with ENABLE_IPOPT."""
 
