@@ -63,6 +63,13 @@ Mode mode_from_string(const std::string &s);
 struct StageResult {
     std::string role_;        ///< "presolve" | "main" | "polish".
     std::string engine_name_; ///< Engine class name, e.g. "InteriorPointSolver".
+    /// Which objective this stage pursued. A presolve stage always runs
+    /// `Mode::Feasible`; a main stage runs whichever mode the call asked for;
+    /// a polish stage always runs `Mode::Optimal`. Recorded per stage because
+    /// the mode is what tells a later solve whether this stage's multipliers
+    /// are duals of the objective it is about to minimize -- see
+    /// `SolveOptions::set_warm()`.
+    Mode mode_ = Mode::Optimal;
     tycho::ConvergenceFlags flag_ = tycho::ConvergenceFlags::NOTCONVERGED;
     int iterations_ = 0;
     double objective_ = 0.0;                                         ///< Caller's scale.

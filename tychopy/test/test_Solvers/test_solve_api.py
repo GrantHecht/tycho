@@ -7,7 +7,9 @@ import pickle
 import numpy as np
 import pytest
 
+import tychopy.optimal_control as oc
 import tychopy.solvers as solvs
+import tychopy.vector_functions as vf
 from tychopy.vector_functions import Arguments as Args
 
 
@@ -240,7 +242,7 @@ def test_empty_warm_payload_runs_cold_and_records_why():
     the refusal would name the wrong cause.)"""
     r = _small_problem().solve(_quiet_ipm(), warm=solvs.WarmStartData())
     assert bool(r)
-    assert "empty" in r.stages[0].engine_notes["warm"]
+    assert "empty" in r.stages[0].engine_notes["warm_payload"]
 
 
 def test_non_finite_warm_payload_runs_cold_and_records_why():
@@ -265,7 +267,99 @@ def test_non_finite_warm_payload_runs_cold_and_records_why():
     ).all()
 
     retried = prob.solve(_quiet_ipm(), mode="feasible", warm=diverged)
-    assert "non-finite" in retried.stages[0].engine_notes["warm"]
+    assert "non-finite" in retried.stages[0].engine_notes["warm_payload"]
+
+
+# ---------------------------------------------------------------------------
+# A warm= payload taken from a feasibility solve seeds the primal only.
+# ---------------------------------------------------------------------------
+
+
+class _BrachOde(oc.ODEBase):
+    """The classic brachistochrone, the smallest fixture in this file whose
+    solve is long enough for a multiplier seed to change the iteration
+    count."""
+
+    def __init__(self, g=9.81):
+        xtu = oc.ODEArguments(3, 1)
+        _, _, v = xtu.x_vec().tolist()
+        theta = xtu.u_var(0)
+        ode = vf.stack([vf.sin(theta) * v, -1.0 * vf.cos(theta) * v, g * vf.cos(theta)])
+        super().__init__(ode, 3, 1)
+
+
+def _brach_phase(n_pts=20, n_defects=4):
+    g = 9.81
+    states = []
+    for s in np.linspace(0.0, 1.0, n_pts):
+        states.append(np.array([10.0 * s, 10.0 - 5.0 * s, g * s * np.cos(1.0), s, 1.0]))
+    phase = _BrachOde(g).phase("LGL3", states, n_defects)
+    phase.add_boundary_value("Front", range(0, 4), [0.0, 10.0, 0.0, 0.0])
+    phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
+    phase.add_boundary_value("Back", [0, 1], [10.0, 5.0])
+    phase.add_delta_time_objective(1.0)
+    return phase
+
+
+def test_warm_from_a_feasibility_solve_forwards_the_primal_only():
+    """The multipliers a mode="feasible" solve ends on are duals of the
+    feasibility measure it minimized, not of the objective, so an optimality
+    solve seeded from that result takes its point and derives its own prices.
+    Measured while those duals were still forwarded, the optimality solve took
+    20 iterations on this fixture against the 10 it takes from the same point
+    unseeded."""
+    phase = _brach_phase()
+    feasible = phase.solve(_quiet_ipm(), mode="feasible")
+    assert bool(feasible)
+
+    seeded = phase.solve(_quiet_ipm(), warm=feasible)
+    assert bool(seeded)
+    assert "primal" in seeded.stages[0].engine_notes["warm_payload"]
+
+    # Reference: the same optimality solve from the same point, with no warm=
+    # at all -- which is what "primal only" means here, the point being
+    # carried by the problem's own write-back either way.
+    reference_phase = _brach_phase()
+    assert bool(reference_phase.solve(_quiet_ipm(), mode="feasible"))
+    reference = reference_phase.solve(_quiet_ipm())
+    assert bool(reference)
+
+    assert seeded.iterations() == reference.iterations()
+
+
+def test_warm_from_an_optimality_solve_still_seeds_the_duals():
+    """The rule is about a feasibility stage's multipliers, not about warm=
+    in general: an optimality result's duals are duals of the same objective
+    and still travel."""
+    r1 = _circle_problem([1.0, 2.0], 2.0).solve(_quiet_ipm())
+    assert bool(r1)
+
+    r2 = _circle_problem([1.0, 2.0], 2.0).solve(_quiet_ipm(), warm=r1)
+    assert bool(r2)
+    assert "warm_payload" not in r2.stages[0].engine_notes
+    # The payload really was applied (this fixture's cold solve takes more).
+    assert r2.iterations() < r1.iterations()
+
+
+def test_raw_warm_start_data_from_a_feasibility_solve_passes_through():
+    """A bare WarmStartData carries no record of the stage that produced it,
+    so it is taken as given -- the primal-only rule applies to a SolveResult,
+    which knows which mode its stages ran."""
+    phase = _brach_phase()
+    feasible = phase.solve(_quiet_ipm(), mode="feasible")
+    assert bool(feasible)
+
+    seeded = phase.solve(_quiet_ipm(), warm=feasible.warm)
+    assert bool(seeded)
+    assert "warm_payload" not in seeded.stages[0].engine_notes
+
+
+def test_stage_mode_reports_which_objective_the_stage_pursued():
+    r = _small_problem().solve(_quiet_ipm(), presolve=True)
+    assert [s.mode for s in r.stages] == [solvs.Mode.Feasible, solvs.Mode.Optimal]
+    assert _small_problem().solve(_quiet_ipm(), mode="feasible").stages[0].mode == (
+        solvs.Mode.Feasible
+    )
 
 
 def test_presolve_engine_without_feasible_mode_refused_naming_both_parts():
@@ -291,6 +385,7 @@ def test_solve_result_pickle_roundtrip():
     assert len(r2.stages) == len(r.stages)
     assert r2.stages[0].role == r.stages[0].role
     assert r2.stages[0].engine_name == r.stages[0].engine_name
+    assert r2.stages[0].mode == r.stages[0].mode
     assert r2.stages[0].iterations == r.stages[0].iterations
     assert r2.stages[0].objective == pytest.approx(r.stages[0].objective)
     assert r2.structure_key == r.structure_key

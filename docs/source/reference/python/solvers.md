@@ -123,6 +123,14 @@ fixed-variable treatment leaves the program on a reduced variable space)
 never reaches the next engine, which applies variable bounds directly. The
 cost is one extra transcription per crossover.
 
+Inside one call, each stage after the first is seeded by the one before it,
+with one exception that follows from what multipliers mean: a `presolve=`
+stage runs the feasibility algorithm, so it hands the main stage its **point**
+— written back onto the problem, exactly as any stage's result is — and not
+its multipliers, which price the feasibility measure rather than the
+objective. The main stage's own export does seed a `polish=` stage in full,
+multipliers included: both stages minimize the same objective.
+
 After a `polish=` stage, the problem holds the *polish* stage's iterate, and
 `result.flag` is the polish stage's flag — a polish stage runs to completion
 and reports whatever it found, even when that is worse than the main stage's
@@ -693,7 +701,10 @@ engine-neutral record of what a solve did:
 | `iterations()` | The final stage's iteration count. |
 
 `StageResult` reports one stage's outcome: `role` (`"presolve"` /
-`"main"` / `"polish"`), `engine_name`, `flag`, `iterations`, `objective`,
+`"main"` / `"polish"`), `mode` (which objective the stage pursued —
+`Mode.Feasible` for a presolve stage, `Mode.Optimal` for a polish stage,
+whichever mode the call asked for on the main stage), `engine_name`, `flag`,
+`iterations`, `objective`,
 `kkt_residual`, `eq_violation`, `iq_violation` (both max-norm),
 `wall_time_s`, and two annex dicts for engine-specific diagnostics that
 don't warrant a named field — `engine_details` (`dict[str, float]`) and
@@ -729,10 +740,21 @@ refinement changed the transcription's shape.
 A payload that is *empty*, or that carries a non-finite value in any block,
 is not an error: the stage it would have seeded simply runs cold, from the
 problem's own current point, and records why in that stage's
-`engine_notes["warm"]`. This is what makes the retry idiom in the migration
-table above — `r = prob.solve(ipm)`, then on a non-convergent `r`,
+`engine_notes["warm_payload"]`. This is what makes the retry idiom in the
+migration table above — `r = prob.solve(ipm)`, then on a non-convergent `r`,
 `prob.solve(ipm, mode="feasible", warm=r)` — work in the case it exists for:
 a stage that diverged is exactly the one whose export may be non-finite.
+
+A payload taken from a *feasibility* solve seeds an optimality stage's
+**primal only**. The multipliers a `mode="feasible"` stage ends on price the
+feasibility measure that stage minimized, not the objective — seeding them
+into an optimality solve costs it iterations — so that solve starts from the
+payload's point and derives its own prices, and says so in the same
+`engine_notes["warm_payload"]` note. A `SolveResult` knows which mode each of
+its stages ran (`result.stages[i].mode`), which is how this is decided; a
+bare `WarmStartData` carries no such record, so `warm=r.warm` is taken as
+given. The same rule governs the presolve stage inside one `solve()` call —
+see below.
 
 Both `SolveResult` and
 `WarmStartData` (along with `StageResult`, `PhaseResult`, and

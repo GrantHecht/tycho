@@ -117,7 +117,7 @@ def _dispatch_psiopt_solve(prob, engine, solve_call):
     payload that is empty or non-finite -- the likely outcome of a
     non-convergent main stage -- costs the seeding and nothing else, the
     retry running cold and saying so in its first stage's
-    ``engine_notes["warm"]``.
+    ``engine_notes["warm_payload"]``.
     """
     call = dict(solve_call)
     feasible_fallback = call.pop("feasible_fallback", False)

@@ -382,6 +382,13 @@ constraints are meaningful before the objective is allowed to pull on
 anything, and it keeps the optimizer from chasing objective reductions
 through regions the model does not describe.
 
+What the optimization stage inherits from it is the *point* it landed on,
+and only that. The multipliers a feasibility stage ends on price the
+constraint residual it was minimizing, not the objective, so the stage that
+follows derives its own — seeding it with the feasibility stage's prices
+measurably costs it iterations. The same holds when you pass a
+`mode="feasible"` result to a later call as `warm=`.
+
 Its weakness follows directly from its strength. The feasibility stage is
 objective-blind: it lands on whichever feasible point is nearest the guess,
 and the optimization stage that follows is a local method that cannot leave

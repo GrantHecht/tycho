@@ -820,6 +820,9 @@ StageOutput run_engine_stage(EngineRef engine, Mode mode,
                              const std::shared_ptr<NonLinearProgram> &nlp,
                              const Eigen::VectorXd &x0, const hven::solvers::WarmStartData *warm) {
     StageOutput out;
+    // Recorded here rather than in each per-engine filler: the mode is this
+    // seam's own argument, so every engine's stage reports it identically.
+    out.report_.mode_ = mode;
     std::visit(
         [&](auto *e) {
             using EngineType = std::decay_t<decltype(*e)>;

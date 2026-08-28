@@ -186,6 +186,11 @@ void TychoBind<SolveResult>::build(nb::module_ &m) {
         .def_ro("role", &StageResult::role_, "\"presolve\" | \"main\" | \"polish\".")
         .def_ro("engine_name", &StageResult::engine_name_,
                 "Engine class name, e.g. \"InteriorPointSolver\".")
+        .def_ro("mode", &StageResult::mode_,
+                "Which objective this stage pursued: a presolve stage always runs "
+                "Mode.Feasible, a polish stage always Mode.Optimal, a main stage whichever "
+                "mode the call asked for. This is what tells a later solve whether the "
+                "stage's multipliers price the objective it is about to minimize.")
         .def_ro("flag", &StageResult::flag_)
         .def_ro("iterations", &StageResult::iterations_)
         .def_ro("objective", &StageResult::objective_, "Caller's scale.")
@@ -201,29 +206,30 @@ void TychoBind<SolveResult>::build(nb::module_ &m) {
             "Engine-specific string annex, as a plain dict.")
         .def("__getstate__",
              [](const StageResult &self) {
-                 return std::make_tuple(self.role_, self.engine_name_, self.flag_, self.iterations_,
-                                        self.objective_, self.kkt_residual_, self.eq_violation_,
-                                        self.iq_violation_, self.wall_time_s_, self.engine_details_,
-                                        self.engine_notes_);
+                 return std::make_tuple(self.role_, self.engine_name_, self.mode_, self.flag_,
+                                        self.iterations_, self.objective_, self.kkt_residual_,
+                                        self.eq_violation_, self.iq_violation_, self.wall_time_s_,
+                                        self.engine_details_, self.engine_notes_);
              })
         .def("__setstate__",
              [](StageResult &self,
-                std::tuple<std::string, std::string, tycho::ConvergenceFlags, int, double, double,
-                           double, double, double, std::map<std::string, double>,
+                std::tuple<std::string, std::string, Mode, tycho::ConvergenceFlags, int, double,
+                           double, double, double, double, std::map<std::string, double>,
                            std::map<std::string, std::string>>
                     state) {
                  new (&self) StageResult{};
                  self.role_ = std::get<0>(state);
                  self.engine_name_ = std::get<1>(state);
-                 self.flag_ = std::get<2>(state);
-                 self.iterations_ = std::get<3>(state);
-                 self.objective_ = std::get<4>(state);
-                 self.kkt_residual_ = std::get<5>(state);
-                 self.eq_violation_ = std::get<6>(state);
-                 self.iq_violation_ = std::get<7>(state);
-                 self.wall_time_s_ = std::get<8>(state);
-                 self.engine_details_ = std::get<9>(state);
-                 self.engine_notes_ = std::get<10>(state);
+                 self.mode_ = std::get<2>(state);
+                 self.flag_ = std::get<3>(state);
+                 self.iterations_ = std::get<4>(state);
+                 self.objective_ = std::get<5>(state);
+                 self.kkt_residual_ = std::get<6>(state);
+                 self.eq_violation_ = std::get<7>(state);
+                 self.iq_violation_ = std::get<8>(state);
+                 self.wall_time_s_ = std::get<9>(state);
+                 self.engine_details_ = std::get<10>(state);
+                 self.engine_notes_ = std::get<11>(state);
              });
 
     // -------------------------------------------------------------------

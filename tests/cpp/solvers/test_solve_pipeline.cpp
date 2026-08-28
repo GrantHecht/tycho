@@ -1292,7 +1292,7 @@ TEST(SolvePipeline, EmptyCallerWarmRunsColdAndSaysSo) {
 
     ASSERT_FALSE(result.stages_.empty());
     const auto &notes = result.stages_.front().engine_notes_;
-    const auto note = notes.find("warm");
+    const auto note = notes.find("warm_payload");
     ASSERT_NE(note, notes.end());
     EXPECT_NE(note->second.find("empty"), std::string::npos);
 }
@@ -1325,9 +1325,195 @@ TEST(SolvePipeline, NonFiniteCallerWarmRunsColdAndSaysSo) {
 
     ASSERT_FALSE(result.stages_.empty());
     const auto &notes = result.stages_.front().engine_notes_;
-    const auto note = notes.find("warm");
+    const auto note = notes.find("warm_payload");
     ASSERT_NE(note, notes.end());
     EXPECT_NE(note->second.find("non-finite"), std::string::npos);
+}
+
+// A feasibility presolve hands the main stage its PRIMAL, not its
+// multipliers. The multipliers a Mode::Feasible stage ends on are duals of a
+// different objective -- the feasibility measure it minimized, not the
+// problem's objective -- and seeding an optimality stage with them costs that
+// stage extra iterations. What the main stage does inherit is the presolve's
+// point, written onto the problem by accept_stage() before the main stage
+// reads initial_primal().
+//
+// The reference arm is the same two engine runs issued as two separate
+// solve() calls on one problem: that path carries the presolve's primal
+// through the problem's own write-back and has no way to carry its duals at
+// all, so it is exactly the semantics this hand-off is held to. Measured on
+// the chained code, the main stage took 20 iterations against the reference's
+// 10 on this fixture.
+TEST(SolvePipeline, PresolveHandsTheMainStageItsPrimalNotItsDuals) {
+    auto composed_phase = TychoTest::make_brach_phase(20, 4);
+    composed_phase->print_mesh_info_ = false;
+    InteriorPointSolver composed_ipm;
+    composed_ipm.set_print_level(0);
+
+    SolveOptions opts;
+    opts.presolve = true;
+    SolveResult composed = composed_phase->solve(composed_ipm, opts);
+
+    ASSERT_EQ(composed.stages_.size(), 2u);
+    ASSERT_EQ(composed.stages_[0].role_, "presolve");
+    ASSERT_EQ(composed.stages_[1].role_, "main");
+    ASSERT_TRUE(composed.converged());
+
+    auto reference_phase = TychoTest::make_brach_phase(20, 4);
+    reference_phase->print_mesh_info_ = false;
+    InteriorPointSolver reference_ipm;
+    reference_ipm.set_print_level(0);
+
+    SolveOptions feasible;
+    feasible.mode = Mode::Feasible;
+    SolveResult reference_presolve = reference_phase->solve(reference_ipm, feasible);
+    ASSERT_TRUE(reference_presolve.converged());
+    SolveResult reference_main = reference_phase->solve(reference_ipm);
+    ASSERT_TRUE(reference_main.converged());
+
+    // Fixture guard: the feasibility stage really does end on non-trivial
+    // multipliers, so "they were not chained" is a statement about something
+    // that existed to chain.
+    ASSERT_GT(reference_presolve.warm_.eq_lmults_.size(), 0);
+    ASSERT_GT(reference_presolve.warm_.eq_lmults_.cwiseAbs().maxCoeff(), 0.0);
+
+    EXPECT_EQ(composed.stages_[0].iterations_, reference_presolve.stages_[0].iterations_);
+    EXPECT_EQ(composed.stages_[1].iterations_, reference_main.stages_[0].iterations_);
+}
+
+// The same rule, observed at the mechanism rather than in an iteration count:
+// the presolve hand-off stages nothing onto the main stage's engine.
+//
+// The probe is a multiplier seed left standing on the main engine across the
+// solve() call. hven refuses a mis-sized seed by name at solve entry, and a
+// stage_warm_start() call on an engine clears whatever seed is standing on it
+// at that moment (interior_point_solver.h's PRECEDENCE note), so the refusal
+// is reachable only while the hand-off leaves the main engine unstaged. The
+// presolve runs on its own engine here so that its own run does not consume
+// the seed first.
+TEST(SolvePipeline, PresolveHandOffStagesNothingOntoTheMainEngine) {
+    // Seven equality and three inequality entries against a problem declaring
+    // one equality row and no inequality rows: mis-sized on both halves.
+    const Eigen::VectorXd bad_eq = Eigen::VectorXd::Constant(7, 0.5);
+    const Eigen::VectorXd bad_iq = Eigen::VectorXd::Constant(3, 0.5);
+
+    // Fixture guard: this seed genuinely is refused when it survives to a
+    // solve, so the refusal asserted below is evidence of survival and not of
+    // some unrelated failure.
+    {
+        auto guard_prob = solve_pipeline_build_tiny_nlp();
+        InteriorPointSolver guard_ipm;
+        guard_ipm.set_print_level(0);
+        guard_ipm.set_initial_multipliers(bad_eq, bad_iq);
+        EXPECT_THROW((void)guard_prob->solve(guard_ipm), std::invalid_argument);
+    }
+
+    auto prob = solve_pipeline_build_tiny_nlp();
+    InteriorPointSolver presolve_ipm;
+    presolve_ipm.set_print_level(0);
+    InteriorPointSolver main_ipm;
+    main_ipm.set_print_level(0);
+    EngineRef presolve_ref = &presolve_ipm;
+
+    main_ipm.set_initial_multipliers(bad_eq, bad_iq);
+
+    SolveOptions opts;
+    opts.presolve_engine = &presolve_ref;
+    try {
+        (void)prob->solve(main_ipm, opts);
+        FAIL() << "expected the staged-seed refusal: the main stage's engine kept the seed only "
+                  "because the presolve hand-off staged nothing onto it";
+    } catch (const std::invalid_argument &e) {
+        EXPECT_NE(std::string(e.what()).find("seeded multipliers sized"), std::string::npos);
+    }
+}
+
+// The other half of the rule: a main -> polish hand-off is Optimal -> Optimal,
+// so it keeps the full chain -- the polish stage IS seeded from the main
+// stage's own export, multipliers and all. Observed through the same
+// mechanism, read the other way round: a mis-sized multiplier seed left
+// standing on the polish engine is CLEARED by the pipeline's staging call, so
+// the solve completes instead of meeting hven's staged-seed refusal.
+TEST(SolvePipeline, PolishStageIsSeededFromTheMainStageExport) {
+    const Eigen::VectorXd bad_eq = Eigen::VectorXd::Constant(7, 0.5);
+    const Eigen::VectorXd bad_iq = Eigen::VectorXd::Constant(3, 0.5);
+
+    // Fixture guard: same as above -- the seed is poisonous unless something
+    // clears it.
+    {
+        auto guard_prob = solve_pipeline_build_tiny_nlp();
+        InteriorPointSolver guard_ipm;
+        guard_ipm.set_print_level(0);
+        guard_ipm.set_initial_multipliers(bad_eq, bad_iq);
+        EXPECT_THROW((void)guard_prob->solve(guard_ipm), std::invalid_argument);
+    }
+
+    auto prob = solve_pipeline_build_tiny_nlp();
+    InteriorPointSolver ipm;
+    ipm.set_print_level(0);
+    InteriorPointSolver polish_ipm;
+    polish_ipm.set_print_level(0);
+    EngineRef polish_ref = &polish_ipm;
+
+    polish_ipm.set_initial_multipliers(bad_eq, bad_iq);
+
+    SolveOptions opts;
+    opts.polish = &polish_ref;
+
+    SolveResult result;
+    ASSERT_NO_THROW(result = prob->solve(ipm, opts));
+    ASSERT_EQ(result.stages_.size(), 2u);
+    EXPECT_EQ(result.stages_[1].role_, "polish");
+    EXPECT_TRUE(result.converged());
+    EXPECT_NEAR(prob->active_variables_[0], 1.0, 1e-6);
+}
+
+// The same rule across two calls: a payload a caller took from a feasibility
+// solve seeds an optimality solve's PRIMAL and not its multipliers.
+// SolveOptions::set_warm() is what carries that provenance -- it reads the
+// mode of the stage the payload came from -- while a bare
+// `opts.warm = &r.warm_` states only the payload, and is taken as given.
+TEST(SolvePipeline, CallerWarmFromAFeasibilitySolveSeedsThePrimalOnly) {
+    auto phase = TychoTest::make_brach_phase(20, 4);
+    phase->print_mesh_info_ = false;
+    InteriorPointSolver ipm;
+    ipm.set_print_level(0);
+
+    SolveOptions feasible;
+    feasible.mode = Mode::Feasible;
+    SolveResult feasible_result = phase->solve(ipm, feasible);
+    ASSERT_TRUE(feasible_result.converged());
+    ASSERT_EQ(feasible_result.stages_.size(), 1u);
+    // Fixture guard: the payload really does carry the multipliers whose
+    // travel is at issue, and really is stamped as a feasibility result.
+    ASSERT_EQ(feasible_result.stages_.front().mode_, Mode::Feasible);
+    ASSERT_GT(feasible_result.warm_.eq_lmults_.size(), 0);
+    ASSERT_GT(feasible_result.warm_.eq_lmults_.cwiseAbs().maxCoeff(), 0.0);
+
+    SolveOptions seeded_opts;
+    seeded_opts.set_warm(feasible_result);
+    ASSERT_TRUE(seeded_opts.warm_duals_from_feasible_stage);
+    SolveResult seeded = phase->solve(ipm, seeded_opts);
+    ASSERT_TRUE(seeded.converged());
+
+    const auto &notes = seeded.stages_.front().engine_notes_;
+    const auto note = notes.find("warm_payload");
+    ASSERT_NE(note, notes.end());
+    EXPECT_NE(note->second.find("primal"), std::string::npos);
+
+    // The same optimality solve from the same point with no payload at all --
+    // which is what "primal only" amounts to here, the point being carried by
+    // the problem's own write-back either way.
+    auto reference_phase = TychoTest::make_brach_phase(20, 4);
+    reference_phase->print_mesh_info_ = false;
+    InteriorPointSolver reference_ipm;
+    reference_ipm.set_print_level(0);
+    SolveResult reference_feasible = reference_phase->solve(reference_ipm, feasible);
+    ASSERT_TRUE(reference_feasible.converged());
+    SolveResult reference = reference_phase->solve(reference_ipm);
+    ASSERT_TRUE(reference.converged());
+
+    EXPECT_EQ(seeded.stages_.front().iterations_, reference.stages_.front().iterations_);
 }
 
 // An engine with no feasibility-only mode cannot run the presolve stage. The

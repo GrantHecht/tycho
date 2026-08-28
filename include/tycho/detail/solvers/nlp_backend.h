@@ -97,6 +97,30 @@ struct SolveOptions {
         nullptr;                 ///< overrides the presolve stage's engine (implies presolve).
     EngineRef *polish = nullptr; ///< second engine after the main stage.
     const hven::solvers::WarmStartData *warm = nullptr; ///< seeds the first stage.
+
+    /// @brief True when `warm`'s multipliers were produced by a
+    ///        feasibility-only stage.
+    ///
+    /// Those multipliers are duals of the feasibility measure that stage
+    /// minimized, not of the problem's objective, so an optimality stage is
+    /// seeded with the payload's PRIMAL alone and derives its own prices.
+    /// A bare `WarmStartData` carries no record of the stage that produced
+    /// it, so this stays false unless the caller says otherwise; `set_warm()`
+    /// below fills it in from a finished solve, which does know.
+    bool warm_duals_from_feasible_stage = false;
+
+    /// @brief Seeds from a finished solve: takes that result's payload AND
+    ///        the mode its deciding stage ran (the stage `warm_` was taken
+    ///        from), so the primal-only rule above applies without the caller
+    ///        having to state it.
+    ///
+    /// Holds a pointer into `r`, which must outlive the solve() call this
+    /// options value is passed to.
+    void set_warm(const SolveResult &r) {
+        this->warm = &r.warm_;
+        this->warm_duals_from_feasible_stage =
+            !r.stages_.empty() && r.stages_.back().mode_ == Mode::Feasible;
+    }
 };
 
 /// @brief Refuses, by name, an engine asked to run the presolve stage that
@@ -183,18 +207,31 @@ struct BackendProblemBase {
     /// runs FIRST (presolve if requested, else main). A payload that is
     /// EMPTY, or that carries a non-finite value in any block, is not a
     /// refusal: that stage simply runs cold, and the reason is recorded in
-    /// the first stage's `engine_notes_["warm"]`. This is what makes the
-    /// documented retry idiom -- solve, and on a non-convergent result solve
-    /// again with `warm=` that result -- work in the case it exists for: a
-    /// diverged stage's export is exactly the payload most likely to be
-    /// non-finite. A payload that is usable but was taken under a DIFFERENT
-    /// declaration is still refused, naming both keys' digests. Every stage
-    /// after the first is a uniform value chain: a presolve stage's own
-    /// `StageOutput::warm_` export seeds the main stage that follows it, and
-    /// the main stage's own export seeds a `Mode::Optimal` polish stage that
-    /// follows that -- independent of `opts.warm`, which only ever seeds the
-    /// first stage. A predecessor's export seeds the next stage under the
-    /// same two conditions: non-empty, and finite throughout.
+    /// the first stage's `engine_notes_["warm_payload"]`. This is what makes
+    /// the documented retry idiom -- solve, and on a non-convergent result
+    /// solve again with `warm=` that result -- work in the case it exists
+    /// for: a diverged stage's export is exactly the payload most likely to
+    /// be non-finite. A payload that is usable but was taken under a
+    /// DIFFERENT declaration is still refused, naming both keys' digests.
+    /// A payload whose multipliers came from a feasibility-only stage
+    /// (`opts.warm_duals_from_feasible_stage`, which `set_warm()` fills in
+    /// from a finished solve) seeds an optimality stage with its PRIMAL
+    /// alone -- feasibility duals price a different objective -- and that too
+    /// is recorded in the same annex note.
+    ///
+    /// A stage after the first is seeded by its immediate predecessor's own
+    /// `StageOutput::warm_` export WHEN BOTH RAN THE SAME MODE: the main
+    /// stage's export seeds a `Mode::Optimal` polish stage that follows it,
+    /// multipliers included. A `Mode::Feasible` presolve stage hands the
+    /// optimality main stage its PRIMAL only -- through the problem itself,
+    /// since `accept_stage()` has already written that point back before the
+    /// main stage reads `initial_primal()` -- and does not seed its
+    /// multipliers, which are duals of the feasibility measure it minimized
+    /// rather than of the objective the main stage minimizes. Seeding them
+    /// costs the main stage iterations. None of this depends on `opts.warm`,
+    /// which only ever seeds the first stage. A predecessor's export seeds
+    /// the next stage under the same two conditions as a caller's payload:
+    /// non-empty, and finite throughout.
     ///
     /// A stage whose engine is a different CLASS from the previous stage's
     /// (in this call, or in an earlier call on this same problem) is preceded

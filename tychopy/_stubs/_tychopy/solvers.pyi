@@ -972,6 +972,12 @@ class StageResult:
         """Engine class name, e.g. "InteriorPointSolver"."""
 
     @property
+    def mode(self) -> Mode:
+        """
+        Which objective this stage pursued: a presolve stage always runs Mode.Feasible, a polish stage always Mode.Optimal, a main stage whichever mode the call asked for. This is what tells a later solve whether the stage's multipliers price the objective it is about to minimize.
+        """
+
+    @property
     def flag(self) -> ConvergenceFlags: ...
 
     @property
@@ -1003,9 +1009,9 @@ class StageResult:
     def engine_notes(self) -> dict[str, str]:
         """Engine-specific string annex, as a plain dict."""
 
-    def __getstate__(self) -> tuple[str, str, ConvergenceFlags, int, float, float, float, float, float, dict[str, float], dict[str, str]]: ...
+    def __getstate__(self) -> tuple[str, str, Mode, ConvergenceFlags, int, float, float, float, float, float, dict[str, float], dict[str, str]]: ...
 
-    def __setstate__(self, arg: tuple[str, str, ConvergenceFlags, int, float, float, float, float, float, Mapping[str, float], Mapping[str, str]], /) -> None: ...
+    def __setstate__(self, arg: tuple[str, str, Mode, ConvergenceFlags, int, float, float, float, float, float, Mapping[str, float], Mapping[str, str]], /) -> None: ...
 
 class PhaseResult:
     """
@@ -1340,7 +1346,12 @@ class OptimizationProblemBase:
             current transcription's, or the call raises ValueError naming both.
             A payload that is empty, or that carries a non-finite value in any
             block, is not an error: that stage simply runs cold and records why
-            in its ``engine_notes["warm"]``.
+            in its ``engine_notes["warm_payload"]``. A ``SolveResult`` whose
+            deciding stage ran ``Mode.Feasible`` seeds the primal only -- a
+            feasibility stage's multipliers price the feasibility measure it
+            minimized, not this call's objective -- and says so in the same
+            note. A bare ``WarmStartData`` records no mode and is taken as
+            given.
 
         Returns
         -------
@@ -1397,7 +1408,10 @@ class OptimizationProblemBase:
             runs on every jet_run() call. The payload is copied into this
             problem's own storage at staging time, so (unlike ``prototype``/
             ``presolve``/``polish``) the source object need not be kept alive
-            at all past this call.
+            at all past this call. Held to the same rules as :meth:`solve`'s
+            own ``warm``, the feasibility-provenance one included: a
+            ``SolveResult`` whose deciding stage ran ``Mode.Feasible`` seeds
+            the primal only.
 
         Raises
         ------

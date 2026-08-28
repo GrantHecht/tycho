@@ -117,21 +117,24 @@ passed to :meth:`solve`.)doc");
                 opts.polish = &polish_engine_storage;
             }
 
-            const hven::solvers::WarmStartData *warm_ptr = nullptr;
+            // A SolveResult is taken through SolveOptions::set_warm(), which
+            // records the mode its deciding stage ran alongside the payload:
+            // a feasibility solve's multipliers price a different objective
+            // and seed no optimality stage. A bare WarmStartData carries no
+            // such record, so it is taken as given.
             if (!warm.is_none()) {
                 SolveResult *sr = nullptr;
                 hven::solvers::WarmStartData *wsd = nullptr;
                 if (nb::try_cast<SolveResult *>(warm, sr, false)) {
-                    warm_ptr = &sr->warm_;
+                    opts.set_warm(*sr);
                 } else if (nb::try_cast<hven::solvers::WarmStartData *>(warm, wsd, false)) {
-                    warm_ptr = wsd;
+                    opts.warm = wsd;
                 } else {
                     throw std::invalid_argument(
                         fmt::format("warm: expected a SolveResult, WarmStartData, or None, got {}",
                                     nb::cast<std::string>(nb::str(warm.type()))));
                 }
             }
-            opts.warm = warm_ptr;
 
             SolveResult result;
             {
@@ -167,7 +170,12 @@ warm : SolveResult | WarmStartData | None, optional
     current transcription's, or the call raises ValueError naming both.
     A payload that is empty, or that carries a non-finite value in any
     block, is not an error: that stage simply runs cold and records why
-    in its ``engine_notes["warm"]``.
+    in its ``engine_notes["warm_payload"]``. A ``SolveResult`` whose
+    deciding stage ran ``Mode.Feasible`` seeds the primal only -- a
+    feasibility stage's multipliers price the feasibility measure it
+    minimized, not this call's objective -- and says so in the same
+    note. A bare ``WarmStartData`` records no mode and is taken as
+    given.
 
 Returns
 -------
@@ -226,21 +234,24 @@ ValueError
                 opts.polish = &polish_engine_storage;
             }
 
-            const hven::solvers::WarmStartData *warm_ptr = nullptr;
+            // A SolveResult is taken through SolveOptions::set_warm(), which
+            // records the mode its deciding stage ran alongside the payload:
+            // a feasibility solve's multipliers price a different objective
+            // and seed no optimality stage. A bare WarmStartData carries no
+            // such record, so it is taken as given.
             if (!warm.is_none()) {
                 SolveResult *sr = nullptr;
                 hven::solvers::WarmStartData *wsd = nullptr;
                 if (nb::try_cast<SolveResult *>(warm, sr, false)) {
-                    warm_ptr = &sr->warm_;
+                    opts.set_warm(*sr);
                 } else if (nb::try_cast<hven::solvers::WarmStartData *>(warm, wsd, false)) {
-                    warm_ptr = wsd;
+                    opts.warm = wsd;
                 } else {
                     throw std::invalid_argument(
                         fmt::format("warm: expected a SolveResult, WarmStartData, or None, got {}",
                                     nb::cast<std::string>(nb::str(warm.type()))));
                 }
             }
-            opts.warm = warm_ptr;
 
             self.set_jet_job(proto_ref, opts);
         },
@@ -293,7 +304,10 @@ warm : SolveResult | WarmStartData | None, optional
     runs on every jet_run() call. The payload is copied into this
     problem's own storage at staging time, so (unlike ``prototype``/
     ``presolve``/``polish``) the source object need not be kept alive
-    at all past this call.
+    at all past this call. Held to the same rules as :meth:`solve`'s
+    own ``warm``, the feasibility-provenance one included: a
+    ``SolveResult`` whose deciding stage ran ``Mode.Feasible`` seeds
+    the primal only.
 
 Raises
 ------

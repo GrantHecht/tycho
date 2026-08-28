@@ -18,28 +18,42 @@
 // regardless of an earlier stage's flag: a non-convergent stage is a value in
 // that stage's report, never a thrown exception.
 //
-// WARM SEEDING is a uniform chain: the caller's opts.warm, when set, seeds
-// only whichever stage runs FIRST (presolve if requested, else main) -- a
-// one-shot value, exactly as run_engine_stage/stage_warm_start already
-// document. EVERY stage after the first is seeded by its immediate
-// predecessor's own StageOutput::warm_ export -- a presolve stage's export
-// seeds the main stage that follows it, and the main stage's export seeds a
-// polish stage that follows that, independent of opts.warm. This applies
-// inside the adaptive-mesh loop too: the pre-loop presolve's export seeds
-// mesh iteration 0's main stage, and (when solve_only_first is false and the
-// presolve repeats every iteration) each iteration's own presolve export
-// seeds that same iteration's main stage. The adaptive-mesh override still
-// sets SolveResult::warm_ itself from whichever main-mode stage ran LAST,
-// since that is the one a polish stage after the loop should seed from.
+// WARM SEEDING chains a stage to its predecessor, but only where the
+// multipliers mean the same thing on both sides. The caller's opts.warm, when
+// set, seeds only whichever stage runs FIRST (presolve if requested, else
+// main) -- a one-shot value, exactly as run_engine_stage/stage_warm_start
+// already document. After that, a stage is seeded by its immediate
+// predecessor's own StageOutput::warm_ export WHEN BOTH RAN THE SAME MODE:
+// the main stage's export seeds a polish stage that follows it, multipliers
+// and all, which is the whole point of the polish stage.
+//
+// A Mode::Feasible presolve stage is the exception, and the reason the rule
+// is stated in terms of modes at all. Its multipliers are duals of the
+// feasibility measure IT minimized, not of the objective the main stage
+// minimizes, and seeding an optimality stage with them measurably costs that
+// stage iterations. So the presolve hands the main stage its PRIMAL only --
+// which needs no payload: accept_stage() has already written the presolve's
+// point onto the problem, so initial_primal() for the main stage IS the
+// presolve's solution, and the engine derives its own multipliers from
+// there, exactly as it does on a cold optimality run. The same holds inside
+// the adaptive-mesh loop, where a presolve stage precedes mesh iteration 0's
+// main stage (and, when solve_only_first is false, every iteration's). The
+// adaptive-mesh override still sets SolveResult::warm_ itself from whichever
+// main-mode stage ran LAST, since that is the one a polish stage after the
+// loop should seed from.
 //
 // The CALLER's own opts.warm is held to the same two conditions (empty, or
 // non-finite anywhere): such a payload costs the seeding and nothing more --
-// the first stage runs cold and records why in its engine_notes_["warm"] --
-// rather than raising. A usable payload taken under a different declaration
-// still refuses, by name. This is what keeps the documented retry idiom
-// (solve; on a non-convergent result, solve again with warm= that result)
-// working in the case it exists for: a diverged stage's export is exactly the
-// payload most likely to be non-finite.
+// the first stage runs cold and records why in its
+// engine_notes_["warm_payload"] -- rather than raising. A usable payload
+// taken under a different declaration still refuses, by name. This is what
+// keeps the documented retry idiom (solve; on a non-convergent result, solve
+// again with warm= that result) working in the case it exists for: a diverged
+// stage's export is exactly the payload most likely to be non-finite. And it
+// is held to the mode rule too: a payload a caller took from a solve whose
+// deciding stage ran Mode::Feasible (SolveOptions::set_warm() records that;
+// a bare WarmStartData carries no such record and is taken as given) seeds an
+// optimality first stage with its primal alone, and says so in the same note.
 //
 // ENGINE HAND-OFF. Before any stage whose engine is a different CLASS from
 // the previous stage's -- in this call or an earlier one on the same problem
@@ -241,6 +255,34 @@ std::string warm_unusable_reason(const hven::solvers::WarmStartData &w) {
     return {};
 }
 
+/// @brief The mode the FIRST stage of a solve() call runs: a presolve stage,
+///        when one was asked for, always runs Mode::Feasible; otherwise the
+///        main stage runs first, in the mode the call asked for. Read by both
+///        solve() and run_amr_loop(), which each seed that first stage
+///        themselves.
+Mode first_stage_mode(const SolveOptions &opts) {
+    return opts.presolve ? Mode::Feasible : opts.mode;
+}
+
+/// @brief Whether a usable caller payload's MULTIPLIERS may seed the first
+///        stage. They may not when they were produced by a feasibility-only
+///        stage and the stage about to run pursues optimality: those prices
+///        belong to the feasibility measure, not to the objective. The
+///        payload's primal still seeds that stage (solve() passes it as the
+///        starting point); only the duals are dropped.
+bool caller_warm_duals_travel(const SolveOptions &opts) {
+    return !(opts.warm_duals_from_feasible_stage && first_stage_mode(opts) == Mode::Optimal);
+}
+
+/// @brief The sentence the first stage's annex carries when a usable caller
+///        payload seeded that stage's PRIMAL but not its multipliers -- the
+///        payload came from a feasibility-only stage, whose prices belong to
+///        a different objective (top-of-file WARM SEEDING note).
+const char *kWarmPrimalOnlyNote =
+    "the warm= payload came from a feasibility solve, so this optimality stage took its primal "
+    "as the starting point and derived its own multipliers: a feasibility stage's multipliers "
+    "price the feasibility measure it minimized, not this stage's objective.";
+
 /// @brief Owns one per-jet-call engine clone (clone_prototype()) and exposes
 ///        an EngineRef into it. jet_run() constructs one of these for the
 ///        prototype and, if staged, one each for opts.presolve_engine/
@@ -351,9 +393,11 @@ SolveResult BackendProblemBase::solve(EngineRef engine, const SolveOptions &opts
     this->prepare_solve();
 
     // --- Warm-start pre-check ---
-    // Two outcomes, never a third: an unusable payload (empty, or non-finite
-    // anywhere) costs the seeding and nothing else -- the first stage runs
-    // cold and says so in its annex; a usable payload taken under a different
+    // Three outcomes: an unusable payload (empty, or non-finite anywhere)
+    // costs the seeding and nothing else -- the first stage runs cold and
+    // says so in its annex; a usable payload whose multipliers came from a
+    // feasibility stage seeds this stage's primal only, and says that in the
+    // same annex note; a usable payload taken under a different
     // declaration refuses, naming both digests. The emptiness/finiteness test
     // runs FIRST, so an empty payload is never diagnosed as a stamp mismatch
     // (a default-constructed payload carries a default stamp, which would
@@ -365,10 +409,15 @@ SolveResult BackendProblemBase::solve(EngineRef engine, const SolveOptions &opts
     // stage work does.
     SolveResult result;
     const hven::solvers::WarmStartData *first_stage_warm = nullptr;
-    std::string warm_degraded_note;
+    // Non-empty only on the primal-only path below: the caller's payload
+    // seeds the first stage's starting point directly, since the problem's
+    // own current point is not that payload's (a caller may hand back a
+    // result taken on another instance of the same declared problem).
+    Eigen::VectorXd first_stage_primal_seed;
+    std::string warm_annex_note;
     if (opts.warm != nullptr) {
-        warm_degraded_note = warm_unusable_reason(*opts.warm);
-        if (warm_degraded_note.empty()) {
+        warm_annex_note = warm_unusable_reason(*opts.warm);
+        if (warm_annex_note.empty()) {
             const hven::solvers::DeclarationKey current_key =
                 hven::solvers::declaration_key(this->provider_->declaration());
             if (!(current_key == opts.warm->structure_key_)) {
@@ -378,7 +427,20 @@ SolveResult BackendProblemBase::solve(EngineRef engine, const SolveOptions &opts
                     "taken from a different declared problem",
                     opts.warm->structure_key_.digest(), current_key.digest()));
             }
-            first_stage_warm = opts.warm;
+            if (caller_warm_duals_travel(opts)) {
+                first_stage_warm = opts.warm;
+            } else {
+                // The duals are dropped, the primal is not: it is handed to
+                // the stage as its starting point, in place of the problem's
+                // own current point. The size test is the one
+                // fill_ipopt_stage already applies to a warm payload used the
+                // same way; the declaration key just matched, so a mismatch
+                // here is not reachable through the declared path.
+                if (opts.warm->primal_.size() == this->initial_primal().size()) {
+                    first_stage_primal_seed = opts.warm->primal_;
+                }
+                warm_annex_note = kWarmPrimalOnlyNote;
+            }
         }
     }
 
@@ -403,12 +465,6 @@ SolveResult BackendProblemBase::solve(EngineRef engine, const SolveOptions &opts
                 "flag_ (or appended no stage at all) -- these must stay in agreement");
         }
     } else {
-        // Holds the presolve stage's own warm export alive long enough to
-        // seed the main stage below -- part of the uniform value chain
-        // (top-of-file WARM SEEDING note): each stage after the first is
-        // seeded by its immediate predecessor's export, not by opts.warm
-        // again.
-        hven::solvers::WarmStartData presolve_warm;
         if (opts.presolve) {
             EngineRef presolve_engine =
                 opts.presolve_engine != nullptr ? *opts.presolve_engine : engine;
@@ -416,14 +472,21 @@ SolveResult BackendProblemBase::solve(EngineRef engine, const SolveOptions &opts
                                                this->initial_primal(), first_stage_warm);
             this->accept_stage(out);
             append_stage(result, out, "presolve");
-            presolve_warm = std::move(out.warm_);
-            first_stage_warm = warm_or_null(presolve_warm);
+            // The main stage that follows is seeded by this stage's PRIMAL
+            // and nothing else -- carried by the accept_stage() above, which
+            // is what initial_primal() below reads. The presolve's own
+            // multipliers do not travel across the mode change (top-of-file
+            // WARM SEEDING note), so its export is not staged onto the main
+            // stage's engine at all.
+            first_stage_warm = nullptr;
         }
 
         this->require_declared_layout_for(engine);
         this->prepare_solve();
-        StageOutput main_out = run_engine_stage(engine, opts.mode, this->nlp_,
-                                                this->initial_primal(), first_stage_warm);
+        StageOutput main_out = run_engine_stage(
+            engine, opts.mode, this->nlp_,
+            first_stage_primal_seed.size() != 0 ? first_stage_primal_seed : this->initial_primal(),
+            first_stage_warm);
         this->accept_stage(main_out);
         append_stage(result, main_out, "main");
         result.warm_ = main_out.warm_;
@@ -447,11 +510,13 @@ SolveResult BackendProblemBase::solve(EngineRef engine, const SolveOptions &opts
         // list -- is worse than a clear refusal here.
         throw std::logic_error("solve: no stage ran (internal pipeline error)");
     }
-    if (!warm_degraded_note.empty()) {
+    if (!warm_annex_note.empty()) {
         // The first stage is the one opts.warm would have seeded, whichever
         // role it took (presolve, main, or -- under adaptive mesh -- mesh
-        // iteration 0's own first stage).
-        result.stages_.front().engine_notes_["warm"] = warm_degraded_note;
+        // iteration 0's own first stage). The key names the caller's payload
+        // specifically, and is one no engine writes: an engine's own
+        // warm-start note is "warm_export", so this cannot overwrite one.
+        result.stages_.front().engine_notes_["warm_payload"] = warm_annex_note;
     }
     result.flag_ = result.stages_.back().flag_;
     result.structure_key_ = hven::solvers::declaration_key(this->provider_->declaration());
@@ -530,29 +595,44 @@ tycho::ConvergenceFlags BackendProblemBase::run_amr_loop(
     const bool do_presolve = opts != nullptr && opts->presolve;
     EngineRef presolve_engine =
         (opts != nullptr && opts->presolve_engine != nullptr) ? *opts->presolve_engine : engine;
-    // Held to the same two conditions the rest of the chain is (non-empty,
-    // finite throughout): solve() records the reason a caller's payload was
-    // dropped, but the drop itself has to happen here too, since this loop
-    // reads opts->warm directly rather than taking solve()'s already-screened
-    // pointer.
+    // Held to the same conditions the rest of the chain is: solve() records
+    // in the first stage's annex what became of a caller's payload, but the
+    // screening itself has to happen here too, since this loop reads
+    // opts->warm directly rather than taking solve()'s already-screened
+    // pointer. Unusable (empty, or non-finite anywhere) drops it; usable but
+    // carrying a feasibility stage's multipliers into an optimality first
+    // stage keeps only its primal, handed to that stage as its starting point
+    // below.
     const hven::solvers::WarmStartData *first_stage_warm =
         (opts != nullptr && opts->warm != nullptr) ? warm_or_null(*opts->warm) : nullptr;
+    Eigen::VectorXd first_stage_primal_seed;
+    if (first_stage_warm != nullptr && !caller_warm_duals_travel(*opts)) {
+        if (first_stage_warm->primal_.size() == this->initial_primal().size()) {
+            first_stage_primal_seed = first_stage_warm->primal_;
+        }
+        first_stage_warm = nullptr;
+    }
 
     // Every engine call re-transcribes first: a mesh update
     // (update_mesh()/update_meshs()) invalidates the current transcription
     // via reset_transcription(), exactly as the old per-type
     // interior_point_call_impl's own two-statement transcription gate did on
     // every mesh-loop call -- prepare_solve() IS that gate, reused verbatim.
+    // `primal_seed`, when non-empty, replaces the problem's own current point
+    // as this stage's starting point -- the primal-only path above, used by
+    // the first stage and no other.
     auto run_one = [&](EngineRef eng, Mode m, const char *role,
-                       const hven::solvers::WarmStartData *warm,
-                       bool require_residual_report) -> StageOutput {
+                       const hven::solvers::WarmStartData *warm, bool require_residual_report,
+                       const Eigen::VectorXd &primal_seed = Eigen::VectorXd()) -> StageOutput {
         // Marks the transcription stale when this stage's engine class
         // differs from the previous stage's, so the prepare_solve() below
         // re-lays the declared layout for it (solve()'s own hand-off rule,
         // applied to every stage the mesh loop runs).
         this->require_declared_layout_for(eng);
         this->prepare_solve();
-        StageOutput out = run_engine_stage(eng, m, this->nlp_, this->initial_primal(), warm);
+        StageOutput out =
+            run_engine_stage(eng, m, this->nlp_,
+                             primal_seed.size() != 0 ? primal_seed : this->initial_primal(), warm);
         if (require_residual_report && out.eq_cons_.size() == 0 && out.iq_cons_.size() == 0) {
             // Refused before accept_stage() runs, so a misuse path never
             // leaves the host half-mutated.
@@ -577,13 +657,6 @@ tycho::ConvergenceFlags BackendProblemBase::run_amr_loop(
     tycho::utils::Timer amr_timer;
     amr_timer.start();
 
-    // Holds the most recent presolve stage's warm export -- reused as the
-    // backing storage for both the pre-loop presolve below and each
-    // per-iteration presolve inside the loop (do_presolve && !solve_only_first),
-    // since only one of those exports is ever pending at a time. Part of the
-    // same uniform value chain described at the top of this file: a
-    // presolve's export seeds the main stage that immediately follows it.
-    hven::solvers::WarmStartData presolve_warm;
     if (do_presolve) {
         // The presolve stage is never the one mesh error estimation reads
         // from (the main stage always runs after it and owns the post-opt
@@ -591,13 +664,16 @@ tycho::ConvergenceFlags BackendProblemBase::run_amr_loop(
         // the main stage is. (Which engines may run a presolve stage at all
         // is a separate question, settled by solve()'s refusal matrix: the
         // stage runs Mode::Feasible, so the engine must implement it.)
-        StageOutput presolve_out =
-            run_one(presolve_engine, Mode::Feasible, "presolve", first_stage_warm, false);
-        presolve_warm = std::move(presolve_out.warm_);
-        first_stage_warm = warm_or_null(presolve_warm);
+        run_one(presolve_engine, Mode::Feasible, "presolve", first_stage_warm, false);
+        // Mesh iteration 0's main stage inherits the presolve's point through
+        // run_one's own accept_stage(), and nothing else: a feasibility
+        // stage's multipliers do not seed an optimality stage (top-of-file
+        // WARM SEEDING note).
+        first_stage_warm = nullptr;
     }
 
-    StageOutput main_out = run_one(engine, mode, "main", first_stage_warm, true);
+    StageOutput main_out =
+        run_one(engine, mode, "main", first_stage_warm, true, first_stage_primal_seed);
     tycho::ConvergenceFlags flag = main_out.flag_;
     r.warm_ = main_out.warm_;
 
@@ -629,19 +705,15 @@ tycho::ConvergenceFlags BackendProblemBase::run_amr_loop(
 
             // solve_only_first keeps its old name and its false-meaning: when
             // false, the presolve stage repeats on every mesh iteration
-            // rather than running only before iteration 0. Each repeat's own
-            // export re-seeds THIS iteration's main stage -- the same
-            // predecessor-seeds-successor chain as the pre-loop presolve
-            // above, not the stale export from a previous iteration.
-            const hven::solvers::WarmStartData *iter_main_warm = nullptr;
+            // rather than running only before iteration 0. Each repeat hands
+            // THIS iteration's main stage its point, through the same
+            // write-back the pre-loop presolve uses, and none of its
+            // multipliers.
             if (do_presolve && !solve_only_first) {
-                StageOutput presolve_out =
-                    run_one(presolve_engine, Mode::Feasible, "presolve", nullptr, false);
-                presolve_warm = std::move(presolve_out.warm_);
-                iter_main_warm = warm_or_null(presolve_warm);
+                run_one(presolve_engine, Mode::Feasible, "presolve", nullptr, false);
             }
 
-            main_out = run_one(engine, mode, "main", iter_main_warm, true);
+            main_out = run_one(engine, mode, "main", nullptr, true);
             flag = main_out.flag_;
             r.warm_ = main_out.warm_;
 
