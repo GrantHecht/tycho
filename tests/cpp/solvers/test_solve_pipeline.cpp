@@ -1158,13 +1158,19 @@ TEST(SolvePipeline, OcpAcceptsAStageThatReportedNoMultipliers) {
     EXPECT_THROW((void)phase0->return_costate_traj(), std::invalid_argument);
 }
 
-// The same guard, reached through a real solve: a 2-phase OCP with
-// contradictory boundary values on one phase, solved by the SQP engine. Which
+// A no-crash smoke test over the same ground, reached through a real solve: a
+// 2-phase OCP with contradictory boundary values on one phase, solved by the
+// SQP engine. It does NOT discriminate the guard the case above pins: which
 // failing status the driver reports is its own business (an infeasible exit
-// leaves the multipliers empty; a max-iteration exit fills them), so the
-// assertions hold either way -- what is pinned is that the call returns a
-// coherent result instead of reading out of bounds.
-TEST(SolvePipeline, MultiPhaseOcpSurvivesAnSqpFailureExit) {
+// leaves the multipliers empty; a max-iteration exit fills them), so the run
+// need not even reach the empty-multiplier branch, and the state assertions
+// below hold against the unguarded write-back too. Its value is that the
+// whole path -- a real multi-phase transcription, a real SQP failure exit,
+// the write-back, and the per-phase slicing -- runs end to end and returns a
+// coherent result instead of crashing. The discriminating pin for the guard
+// itself is OcpAcceptsAStageThatReportedNoMultipliers above, which hand-builds
+// the stage output so the branch is reached deterministically.
+TEST(SolvePipeline, MultiPhaseOcpSqpFailureExitReturnsACoherentResult) {
     auto phase0 = solve_pipeline_make_probe_phase();
     auto phase1 = solve_pipeline_make_probe_phase();
 
@@ -1193,11 +1199,15 @@ TEST(SolvePipeline, MultiPhaseOcpSurvivesAnSqpFailureExit) {
     ASSERT_EQ(result.stages_.size(), 1u);
     EXPECT_EQ(result.stages_[0].engine_name_, "SqpSolver");
 
-    // Each phase either carries its full declared multiplier width or carries
-    // none -- never a partial slice read past the end of a short vector.
-    for (auto *phase : {phase0.get(), phase1.get()}) {
-        const int eq_size = phase->eq_lmults_size_for_test();
-        EXPECT_TRUE(eq_size == 0 || phase->multipliers_loaded_for_test());
+    // Each phase either carries its full declared multiplier width -- the
+    // width the solve's own PhaseResult reports for it -- or carries none.
+    // Never a partial slice read past the end of a short vector.
+    ASSERT_EQ(result.phases_.size(), 2u);
+    SolvePipelineProbePhase *const probe_phases[2] = {phase0.get(), phase1.get()};
+    for (std::size_t i = 0; i < 2; ++i) {
+        const int eq_size = probe_phases[i]->eq_lmults_size_for_test();
+        EXPECT_TRUE(eq_size == 0 || eq_size == result.phases_[i].eq_count_);
+        EXPECT_TRUE(eq_size == 0 || probe_phases[i]->multipliers_loaded_for_test());
     }
 }
 

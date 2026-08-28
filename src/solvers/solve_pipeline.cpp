@@ -172,6 +172,18 @@ void append_stage(SolveResult &r, const StageOutput &out, const char *role) {
     r.stages_.push_back(std::move(report));
 }
 
+/// @brief The two shapes a warm payload can carry that make it unusable as a
+///        seed. Stated once here because two callers need them: warm_or_null()
+///        turns them into "run this stage unseeded", and
+///        warm_unusable_reason() turns them into the sentence the degraded
+///        stage's annex carries. The reasons they are not refusals are on
+///        those two functions.
+bool warm_is_empty(const hven::solvers::WarmStartData &w) { return w.primal_.size() == 0; }
+bool warm_has_non_finite(const hven::solvers::WarmStartData &w) {
+    return !(w.primal_.allFinite() && w.eq_lmults_.allFinite() && w.iq_lmults_.allFinite() &&
+             w.bound_lmults_.allFinite());
+}
+
 /// @brief `w` as a warm-start pointer to seed the next stage with, or null
 ///        when `w` is empty or carries a non-finite value in any block. An
 ///        empty `primal_` means the stage that produced `w` exported
@@ -205,12 +217,7 @@ void append_stage(SolveResult &r, const StageOutput &out, const char *role) {
 ///        likely to be empty or non-finite. Refusing it there would make the
 ///        retry raise in the one case it exists for.
 const hven::solvers::WarmStartData *warm_or_null(const hven::solvers::WarmStartData &w) {
-    if (w.primal_.size() == 0) {
-        return nullptr;
-    }
-    const bool all_finite = w.primal_.allFinite() && w.eq_lmults_.allFinite() &&
-                            w.iq_lmults_.allFinite() && w.bound_lmults_.allFinite();
-    return all_finite ? &w : nullptr;
+    return (warm_is_empty(w) || warm_has_non_finite(w)) ? nullptr : &w;
 }
 
 /// @brief Empty when `w` can seed a stage; otherwise a sentence naming why it
@@ -222,12 +229,11 @@ const hven::solvers::WarmStartData *warm_or_null(const hven::solvers::WarmStartD
 /// exporting a usable point). Neither is a caller error, so neither refuses;
 /// each simply costs the seeding.
 std::string warm_unusable_reason(const hven::solvers::WarmStartData &w) {
-    if (w.primal_.size() == 0) {
+    if (warm_is_empty(w)) {
         return "the warm= payload was empty (the stage it came from exported no warm start), "
                "so this stage ran cold, from the problem's own current point.";
     }
-    if (!(w.primal_.allFinite() && w.eq_lmults_.allFinite() && w.iq_lmults_.allFinite() &&
-          w.bound_lmults_.allFinite())) {
+    if (warm_has_non_finite(w)) {
         return "the warm= payload carried a non-finite value (the stage it came from diverged "
                "rather than exporting a usable point), so this stage ran cold, from the "
                "problem's own current point.";
