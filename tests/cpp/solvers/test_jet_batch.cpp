@@ -58,7 +58,7 @@ TEST_F(SolverTest, JetMapSingleGeneratorRefusesWithNoJobStaged) {
 }
 
 TEST_F(SolverTest, JetMapSaturatedPoolRefusesWithNoJobStaged) {
-    // Regression coverage retained from the pre-M5 deadlock test: with more
+    // Regression coverage retained from the earlier deadlock test: with more
     // jobs than pool threads, every job's exception must still be collected
     // (and the first re-thrown) without the pool hanging.
     int nt = tycho::utils::get_num_threads();

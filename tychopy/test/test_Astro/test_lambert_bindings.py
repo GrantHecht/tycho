@@ -204,7 +204,7 @@ class TestLambertBatchVectorized(unittest.TestCase):
             np.testing.assert_allclose(V2s_t[i, :], v2, rtol=1e-12)
 
     def test_vectorized_collinear_exitcodes(self):
-        # NEW BEHAVIOR (Task 10): passes only after rebuilding against the
+        # NEW BEHAVIOR: passes only after rebuilding against the
         # updated lambert_solvers_bind.cpp. On the pre-Task-10 .so, the
         # vectorized packed loop does *not* promote the "NaN-with-success"
         # collinear exit code (verified: codes stayed all-zero even though

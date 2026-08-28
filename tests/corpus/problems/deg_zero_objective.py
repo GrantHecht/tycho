@@ -26,14 +26,14 @@ continuum, since u(t) is essentially free subject only to reaching
 x(1) = 1, v(1) = 0 from rest. With no objective, the Lagrangian's
 objective Hessian block is identically zero (only the constraint-Hessian
 contribution to the KKT system survives), which is the "zero objective
-Hessian" pathology named in the Task 2 brief: it exercises the interior-point solver's
+Hessian" pathology named in the corpus brief: it exercises the interior-point solver's
 perturbation ladder (the mechanism that adds regularization when the
 reduced KKT system would otherwise be singular/indefinite purely from a
 zero cost Hessian) rather than any constraint-side degeneracy.
 
 Observed on defaults 2026-07-16: CONVERGED, 3 iterations, objective 0
 (as expected — there is nothing to minimize). This is a FINDING TO
-REPORT: the zero-objective-Hessian pathology named in the Task 2 brief
+REPORT: the zero-objective-Hessian pathology named in the corpus brief
 does NOT genuinely manifest as any difficulty here — the interior-point solver's
 perturbation ladder handles a fully-zero cost Hessian trivially,
 converging in the same handful of iterations as the well-posed baseline

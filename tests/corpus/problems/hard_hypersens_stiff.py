@@ -24,7 +24,7 @@ SUPPRESSES the "Iterations : N" console line the harness's instrument
 depends on (that line is only emitted when print_level < 2). Reproduced
 here: running the parent verbatim through this harness's iteration-count
 regex yields no matches at all -- this is exactly the "HyperSens
-0-visible" case flagged in the Task 3 brief. This module sets
+0-visible" case flagged in the corpus brief. This module sets
 ``print_level = 1`` instead (one level below the parent's), which is
 otherwise cosmetic (console verbosity only, does not change convergence
 behavior) and restores the instrument.

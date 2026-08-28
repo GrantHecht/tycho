@@ -49,7 +49,7 @@ tests/corpus/README.md). The interior-point solver's inequality convention is
 Observed on defaults 2026-07-16: ACCEPTABLE (harness status
 "acceptable"), 77 iterations, objective 0.985042 (vs. the true f* = 1),
 byte-identical across a --repeat 2 determinism check; final primal point
-~(1.0075, ~0). This matches the expected pathology named in the Task 4
+~(1.0075, ~0). This matches the expected pathology named in the corpus
 brief: the LICQ failure at x* keeps the interior-point solver from reaching a clean
 CONVERGED flag, landing instead in the "acceptable" band after a
 comparatively high iteration count for a 2-variable problem.

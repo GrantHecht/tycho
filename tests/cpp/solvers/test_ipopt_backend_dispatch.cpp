@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 // Backend-neutral engine dispatch (tycho::solvers::EngineRef).
 //
-// M5 solve-API: backend selection is no longer a property stored on the
+// Backend selection is no longer a property stored on the
 // problem (the old BackendProblemBase::nlp_solver_/NLPSolvers enum); it is
 // simply which engine (InteriorPointSolver or IpoptSolver) the caller passes
 // to solve(). These tests run in the default build (no Ipopt linked): they

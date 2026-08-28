@@ -137,8 +137,9 @@ void TychoBind<SolveResult>::build(nb::module_ &m) {
     // WarmStartData -- the warm-start currency.
     //
     // Pickled via hven's own serialize()/deserialize() (bit-exact, versioned
-    // byte form) rather than a field-by-field tuple, per the M5 solve-API
-    // binding rules.
+    // byte form) rather than a field-by-field tuple: the byte form is the
+    // currency's own versioned representation, so it survives a field being
+    // added on the solver-library side.
     // -------------------------------------------------------------------
     nb::class_<WarmStartData>(
         m, "WarmStartData",

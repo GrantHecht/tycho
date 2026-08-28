@@ -11,7 +11,7 @@ Two live defects fixed here:
    instead of ``self.MEETwoBodyEOMs(...)``, so the class was entirely
    unconstructable (``AttributeError``).
 
-Two more live defects fixed in Task 8 (see below):
+Two more live defects fixed alongside these tests (see below):
 
 3. ``ThrusterModels.LowThrustAcc.__init__`` used ``== False`` sentinel checks
    on ``LTacc``/``NonDim_LTacc`` to detect "not specified". Since
@@ -100,7 +100,7 @@ class TestMEETwoBodyLT(unittest.TestCase):
 
     def test_meetwobody_lt_constructs_and_integrates(self):
         # Default zero-arg thruster=LowThrustAcc(): ThrustExpr(u, astar) = u
-        # (non-dimensional passthrough) — pinned so a future Task 8 signature
+        # (non-dimensional passthrough) — pinned so a future signature
         # change to LowThrustAcc must preserve this zero-arg behavior.
         ode = am.MEETwoBody_LT(1.0, 1.0)
         integ = ode.integrator(0.01)
@@ -129,7 +129,7 @@ class TestMEETwoBodyCSI(unittest.TestCase):
 
 
 class TestLowThrustAcc:
-    """LowThrustAcc None-sentinel fix (Task 8, defect 3)."""
+    """LowThrustAcc None-sentinel fix (defect 3)."""
 
     def test_lowthrustacc_accepts_explicit_zero_dimensional(self):
         """Explicit dimensional LTacc=0.0 must not be misread as "unset" —
@@ -199,7 +199,7 @@ class _NeverConvergesFunc:
 
 
 class TestCalcSubPoint:
-    """CalcSubPoint Newton iteration cap (Task 8, defect 4)."""
+    """CalcSubPoint Newton iteration cap (defect 4)."""
 
     @pytest.mark.timeout(30)
     def test_calcsubpoint_converges_bounded(self):

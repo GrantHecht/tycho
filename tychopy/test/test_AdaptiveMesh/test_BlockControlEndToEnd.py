@@ -36,7 +36,7 @@ class CartPole(oc.ode_x_u.ode):
 
 ###############################################################################
 class test_BlockControlEndToEnd(unittest.TestCase):
-    """Regression test for OC review finding Section 1.3.
+    """Regression test for the per-block control refresh defect.
 
     ``calc_global_error`` re-propagates the trajectory block by block to
     estimate the ENDTOEND mesh error, but must re-seed the control segment
@@ -101,7 +101,7 @@ class test_BlockControlEndToEnd(unittest.TestCase):
 
         # Solve under test: BlockConstant control (u_vars > 0), adaptive mesh
         # with ENDTOEND mesh-error criteria -> exercises the calc_global_error
-        # per-block control refresh fixed in OC review finding Section 1.3.
+        # per-block control refresh defect fixed alongside this test.
         phase = self._make_cartpole_phase("LGL5", 12)
         phase.set_control_mode("BlockConstant")
         phase.adaptive_mesh = True

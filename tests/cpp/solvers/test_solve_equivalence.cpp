@@ -4,8 +4,8 @@
 // This file used to pin the new solve() surface bit-identical to the five
 // retired mode methods (solve/optimize/solve_optimize/solve_optimize_solve/
 // optimize_solve), back when both surfaces were live on BackendProblemBase.
-// The M5 solve-API rework deletes the five methods and the problem-owned
-// optimizer_ they dispatched through, so the "old arm" half of every row
+// That rework deleted the five methods and the problem-owned optimizer_ they
+// dispatched through, so the "old arm" half of every row
 // below is gone; what survives is what it was already proving on the NEW
 // side alone -- determinism.
 //

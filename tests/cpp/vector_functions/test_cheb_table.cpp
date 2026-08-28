@@ -1,6 +1,6 @@
 // ChebTable construction + evaluation tests.
-// Task 1: node generation, DCT-I coefficients, round-trip.
-// Task 2: derivative/multichannel correctness.
+// Node generation, DCT-I coefficients, round-trip; derivative and
+// multichannel correctness.
 
 #include "test_utils.h"
 #include <cmath>

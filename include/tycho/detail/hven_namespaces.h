@@ -47,7 +47,8 @@ using namespace ::hven::solvers;
 //   OptimizationProblemBase  Tycho's BackendProblemBase (detail/solvers/
 //                            nlp_backend.h) no longer derives from this at
 //                            all -- it is its own standalone type, carrying
-//                            the M5 solve(EngineRef, SolveOptions) pipeline.
+//                            the staged solve(EngineRef, SolveOptions)
+//                            pipeline.
 //                            It owns no engine (no optimizer_), no
 //                            nlp_solver_/ipopt_options_/last_ipopt_result_,
 //                            none of the five mode methods, and no

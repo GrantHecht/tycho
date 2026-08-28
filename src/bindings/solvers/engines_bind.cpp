@@ -38,8 +38,9 @@ namespace {
 using SqpKwSetter = std::function<void(SqpSolver &, nb::handle)>;
 
 // One kwargs-ctor table entry per plain-value SqpOptions field -- the same
-// fields BIND_SQP_RW exposes as properties (R-1: the callable-typed
-// make_strategy and the nested QpOptions are NOT kwargs-exposed).
+// fields BIND_SQP_RW exposes as properties. The callable-typed make_strategy
+// and the nested QpOptions are deliberately NOT kwargs-exposed: neither is a
+// plain value a keyword argument can carry.
 template <class T> SqpKwSetter sqp_kw_setter(T SqpOptions::*field) {
     return [field](SqpSolver &self, nb::handle v) { self.options().*field = nb::cast<T>(v); };
 }

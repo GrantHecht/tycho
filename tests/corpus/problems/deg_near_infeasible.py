@@ -28,8 +28,8 @@ rest at both ends. The problem is infeasible by construction; it probes
 set, rather than the grossly-conflicting-constraint case exercised by
 ``deg_conflicting_equality``.
 
-Reachability bound derivation (bang-bang, as specified in the Task 2
-brief): with v(0) = v(1) = 0 and |u(t)| <= 1 on t in [0, 1], the control
+Reachability bound derivation (bang-bang, as specified in the
+corpus brief): with v(0) = v(1) = 0 and |u(t)| <= 1 on t in [0, 1], the control
 that MAXIMIZES x(1) is bang-bang: full acceleration for the first half of
 the interval, then full deceleration for the second half (by symmetry —
 any other switching time either fails to return v to 0 at t=1, or reaches
@@ -52,7 +52,7 @@ Phase 2 (t in [0.5, 1], continuing from v(0.5) = 0.5, x(0.5) = 0.125):
     => x(1) = 0.125 + (1 - 0.5) - (0.5 - 0.125) = 0.125 + 0.5 - 0.375 = 0.25
 
 So the maximum reachable |x(1)| under this rest-to-rest, T=1, |u| <= 1
-setup is exactly 0.25 — matching the Task 2 brief's stated bound.
+setup is exactly 0.25 — matching the corpus brief's stated bound.
 
 Margin sizing (same HARD-LEARNED-LESSON principle applied to
 ``deg_conflicting_equality``'s conflict gap): the brief's concrete spec is

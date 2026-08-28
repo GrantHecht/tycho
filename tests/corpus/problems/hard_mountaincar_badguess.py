@@ -9,7 +9,7 @@
 
 Parent example: ``examples/python_examples/MountainCar.py`` (Dymos-style
 mountain-car minimum-time escape problem, already iteration-heavy on
-defaults per the Task 3 brief: ~124-131 iterations observed across runs on
+defaults per the corpus brief: ~124-131 iterations observed across runs on
 this toolchain -- see the determinism note below, this range itself
 reflects order-sensitivity, not measurement error). Solver setup (LGL3,
 128 segments, boundary values, path bounds with their scale factors,

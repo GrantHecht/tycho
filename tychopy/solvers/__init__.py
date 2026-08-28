@@ -30,7 +30,7 @@ PDStepStrategies = _tychopy.solvers.PDStepStrategies
 QPOrderingModes = _tychopy.solvers.QPOrderingModes
 QPPivotModes = _tychopy.solvers.QPPivotModes
 
-# M5 solve-API surface: Mode, the warm-start currency and its result types,
+# The solve() surface: Mode, the warm-start currency and its result types,
 # and the engine handle classes.
 Mode = _tychopy.solvers.Mode
 DeclarationKey = _tychopy.solvers.DeclarationKey
@@ -47,7 +47,7 @@ SsnSigmaRule = _tychopy.solvers.SsnSigmaRule
 SsnHintRule = _tychopy.solvers.SsnHintRule
 SsnInfeasibilityRule = _tychopy.solvers.SsnInfeasibilityRule
 
-# Short aliases (M5 solve-API spec).
+# Short aliases.
 IPM = InteriorPointSolver
 SQP = SqpSolver
 

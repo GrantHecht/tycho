@@ -99,12 +99,11 @@ struct StageOutput {
 
 /// Run one stage. `mode` maps: Optimal -> the engine's optimality run
 /// (IPM: optimize(x)); Feasible -> the feasibility run (IPM: solve(x)).
-/// `warm` (may be null) is staged into the engine before the run (R5:
-/// non-consuming; the engine one-shots it).
+/// `warm` (may be null) is staged into the engine before the run; staging is
+/// non-consuming, and the engine applies it to that one run only.
 ///
-/// SQP + Feasible refuses: the SQP engine has no feasibility-only mode in
-/// this milestone (M6+ on-demand); the refusal is checked first, before `nlp`
-/// or `x0` is touched.
+/// SQP + Feasible refuses: the SQP engine has no feasibility-only mode; the
+/// refusal is checked first, before `nlp` or `x0` is touched.
 ///
 /// @throws std::invalid_argument if `engine` holds a SqpSolver and `mode ==
 ///         Mode::Feasible`, naming exactly why (see engines.cpp); whatever

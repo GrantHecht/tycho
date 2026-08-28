@@ -38,10 +38,10 @@ TEST_F(SolverTest, NLPSparsityNonEmpty) {
     EXPECT_EQ(nlp->num_kkt_elems_, nlp->num_user_kkt_elems_ + nlp->num_solver_kkt_elems_);
 }
 
-// Regression (pre-M5): the direct-NLP ctor silently overrode base defaults
+// Regression: the direct-NLP ctor once silently overrode base defaults
 // with a single partition, diverging from Phase/OCP's own default. The
 // paired QP-thread-default half of this regression retired along with the
-// problem-owned optimizer (M5): QP thread count is now a setting on
+// problem-owned optimizer: QP thread count is now a setting on
 // whichever InteriorPointSolver engine the caller constructs and passes to
 // solve(), not a value BackendProblemBase's constructor can default.
 TEST(OptimizationProblemDefaults, MatchesBaseInitPartitions) {

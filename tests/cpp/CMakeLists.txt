@@ -215,8 +215,8 @@ set(TYCHO_TEST_HEAVY_SOURCES
     # The engine handle layer (EngineRef naming, SqpSolver's feasibility-mode
     # refusal, IpoptSolver's absent-build refusal, clone_prototype).
     solvers/test_solve_pipeline.cpp # file-local prefix: SolvePipeline*/solve_pipeline_*
-    # Equivalence pins: the new solve() surface vs the five retired-to-be mode
-    # methods, on both surfaces still live on BackendProblemBase.
+    # Determinism pins for the solve(engine, opts) surface (the file's own
+    # header explains what these rows used to compare against).
     solvers/test_solve_equivalence.cpp # file-local prefix: SolveEquivalence*/solve_equivalence_*
 )
 
