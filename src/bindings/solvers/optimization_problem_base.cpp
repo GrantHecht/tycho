@@ -85,7 +85,7 @@ set on whichever engine is passed to :meth:`solve`.)doc");
 The QP thread count is a separate setting, set on whichever engine is
 passed to :meth:`solve`.)doc");
 
-    // The engine-driven staged solve() (M5 solve-API). Argument conversion
+    // The engine-driven staged solve(). Argument conversion
     // (engine/mode/presolve/polish/warm) runs with the GIL held; the run
     // itself releases it. presolve_engine_storage/polish_engine_storage are
     // stack locals whose addresses SolveOptions borrows for the duration of
@@ -101,7 +101,7 @@ passed to :meth:`solve`.)doc");
 
             EngineRef presolve_engine_storage{};
             if (presolve.is_none()) {
-                // R-11: None aliases False, symmetric with polish=None.
+                // None aliases False, symmetric with polish=None.
                 opts.presolve = false;
             } else if (nb::isinstance<nb::bool_>(presolve)) {
                 opts.presolve = nb::cast<bool>(presolve);
@@ -163,8 +163,11 @@ polish : InteriorPointSolver | SqpSolver | IpoptSolver | None, optional
     main stage.
 warm : SolveResult | WarmStartData | None, optional
     Declared-space warm-start currency seeding the first stage that
-    runs. Its declaration-identity stamp must match the current
-    transcription's, or the call raises ValueError naming both.
+    runs. A usable payload's declaration-identity stamp must match the
+    current transcription's, or the call raises ValueError naming both.
+    A payload that is empty, or that carries a non-finite value in any
+    block, is not an error: that stage simply runs cold and records why
+    in its ``engine_notes["warm"]``.
 
 Returns
 -------

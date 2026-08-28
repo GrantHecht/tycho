@@ -57,7 +57,7 @@ template <class DODE> struct TychoBind<ODEPhase<DODE>> {
                      R"doc(Integrator: the reference Runge-Kutta integrator for this phase's ODE.
 
 Used by re-integration and mesh-error estimation. Adjust its step-size
-or tolerances before calling :meth:`optimize` to control propagation
+or tolerances before calling :meth:`solve` to control propagation
 accuracy.
 )doc");
         phase.def_rw("enable_hessian_sparsity", &ODEPhase<DODE>::enable_hessian_sparsity_,

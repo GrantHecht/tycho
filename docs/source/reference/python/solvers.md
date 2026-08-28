@@ -104,12 +104,30 @@ the engine's own most recent run, i.e. the last `InteriorPointSolver` stage that
 any `solve()` call on that engine instance.
 
 `SqpSolver` refuses `mode="feasible"` (`ValueError`): the SQP engine has no
-feasibility-only mode. `presolve=`/`polish=` combined with
+feasibility-only mode, and neither does the Ipopt backend. For the same
+reason, neither can run the presolve stage — `presolve=sqp`, and
+`presolve=True` on a `SqpSolver`/`IpoptSolver` main engine, are refused by
+name before anything else happens. `presolve=`/`polish=` combined with
 `mode="feasible"` on the main engine are refused the same way — feasibility
 mode runs exactly one stage. A `warm=` value whose declaration-identity stamp
 does not match the current transcription raises `ValueError` naming both
 stamps; see [Warm-starting](#warm-starting-solveresult-and-warmstartdata)
 below.
+
+Stages may mix engines: `solve(ipm, polish=sqp)` runs the interior-point
+engine and then refines with SQP, and `solve(ipm)` followed by
+`solve(sqp, warm=r)` does the same across two calls. Whenever the engine
+changes from one stage to the next, the problem is transcribed again first,
+so that a layout one engine left behind (the interior-point engine's default
+fixed-variable treatment leaves the program on a reduced variable space)
+never reaches the next engine, which applies variable bounds directly. The
+cost is one extra transcription per crossover.
+
+After a `polish=` stage, the problem holds the *polish* stage's iterate, and
+`result.flag` is the polish stage's flag — a polish stage runs to completion
+and reports whatever it found, even when that is worse than the main stage's
+result. Both stages are on the record in `result.stages`, so gate on
+`result.stages[0]` when it is the main stage's outcome you want.
 
 Old call shape → new call shape:
 
@@ -706,7 +724,17 @@ The `warm=` value is read, not consumed — the same `SolveResult`/
 `structure_key`/`DeclarationKey` must match the current transcription's, or
 the call raises `ValueError` naming both keys; this catches, for example,
 warm-starting a phase against a `SolveResult` taken before a mesh
-refinement changed the transcription's shape. Both `SolveResult` and
+refinement changed the transcription's shape.
+
+A payload that is *empty*, or that carries a non-finite value in any block,
+is not an error: the stage it would have seeded simply runs cold, from the
+problem's own current point, and records why in that stage's
+`engine_notes["warm"]`. This is what makes the retry idiom in the migration
+table above — `r = prob.solve(ipm)`, then on a non-convergent `r`,
+`prob.solve(ipm, mode="feasible", warm=r)` — work in the case it exists for:
+a stage that diverged is exactly the one whose export may be non-finite.
+
+Both `SolveResult` and
 `WarmStartData` (along with `StageResult`, `PhaseResult`, and
 `DeclarationKey`) are picklable, so a warm-start payload can be saved to
 disk and reloaded in a later process.

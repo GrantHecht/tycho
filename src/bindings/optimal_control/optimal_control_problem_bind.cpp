@@ -29,8 +29,7 @@ using PhasePtr = std::shared_ptr<ODEPhaseBase>;
 using PhaseRefType = std::variant<int, PhasePtr, std::string>;
 using PhasePack = std::tuple<PhaseRefType, RegionType, VarIndexType, VarIndexType, VarIndexType>;
 
-static void
-build_link_interface(nb::class_<OptimalControlProblemBase, BackendProblemBase> &obj);
+static void build_link_interface(nb::class_<OptimalControlProblemBase, BackendProblemBase> &obj);
 
 void TychoBind<OptimalControlProblemBase>::build(nb::module_ &m) {
     auto obj = nb::class_<OptimalControlProblemBase, BackendProblemBase>(
@@ -45,8 +44,8 @@ solves all phases together.
 
 Phases are referenced by an integer index (assigned in :meth:`add_phase`
 order), by the phase object itself, or by a registered name. Solve the whole
-problem with :meth:`optimize` (or :meth:`solve`), inherited from the shared
-optimization-problem base.
+problem with :meth:`solve`, inherited from the shared optimization-problem
+base; the solver is not owned by the problem, it is passed to that call.
 
 Examples
 --------
@@ -56,7 +55,7 @@ Assemble a multi-phase problem, link adjacent phases, and solve::
     ocp.add_phase(phase0)
     ocp.add_phase(phase1)
     ocp.add_forward_link_equal_con(0, 1, range(0, 5))
-    ocp.optimize()
+    ocp.solve(tychopy.solvers.IPM())
 )doc");
     obj.def(nb::init<>(), R"doc(Construct an empty optimal control problem with no phases.)doc");
 
@@ -352,13 +351,14 @@ numpy.ndarray
     obj.def_ro(
         "mesh_converged", &OptimalControlProblemBase::mesh_converged_,
         R"doc(``True`` if all adaptive phases satisfied their mesh-error tolerance on the last run.)doc");
-    obj.def_rw("solve_only_first", &OptimalControlProblemBase::solve_only_first_,
-               R"doc(Run only the initial *solve* step on the first mesh-refinement iteration.
+    obj.def_rw(
+        "solve_only_first", &OptimalControlProblemBase::solve_only_first_,
+        R"doc(Run the feasibility presolve stage only before the first mesh-refinement iteration.
 
-Only affects the compound ``SolveOptimize`` and ``SolveOptimizeSolve`` job
-modes: when ``True``, subsequent mesh iterations drop the leading solve step
-(running ``Optimize`` / ``OptimizeSolve`` instead). Has no effect on plain
-``solve`` or ``optimize``.
+Only affects a ``solve(..., presolve=...)`` call on an adaptive-mesh
+problem: when ``True`` the presolve stage runs once, before mesh iteration
+0; when ``False`` it repeats on every mesh iteration. Has no effect on a
+call without ``presolve=``.
 )doc");
 
     obj.def_rw("mesh_abort_flag", &OptimalControlProblemBase::mesh_abort_flag_,
@@ -491,8 +491,7 @@ m : MeshErrorAggregation
                 &OptimalControlProblemBase::set_mesh_error_distributor));
 }
 
-static void
-build_link_interface(nb::class_<OptimalControlProblemBase, BackendProblemBase> &obj) {
+static void build_link_interface(nb::class_<OptimalControlProblemBase, BackendProblemBase> &obj) {
 
     //////////// equal_cons_////////////////////////////////////////
     {

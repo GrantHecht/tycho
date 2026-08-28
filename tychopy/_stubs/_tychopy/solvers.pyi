@@ -1336,8 +1336,11 @@ class OptimizationProblemBase:
             main stage.
         warm : SolveResult | WarmStartData | None, optional
             Declared-space warm-start currency seeding the first stage that
-            runs. Its declaration-identity stamp must match the current
-            transcription's, or the call raises ValueError naming both.
+            runs. A usable payload's declaration-identity stamp must match the
+            current transcription's, or the call raises ValueError naming both.
+            A payload that is empty, or that carries a non-finite value in any
+            block, is not an error: that stage simply runs cold and records why
+            in its ``engine_notes["warm"]``.
 
         Returns
         -------
