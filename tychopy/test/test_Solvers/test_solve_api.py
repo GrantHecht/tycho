@@ -341,6 +341,38 @@ def test_warm_from_an_optimality_solve_still_seeds_the_duals():
     assert r2.iterations() < r1.iterations()
 
 
+def _exp_problem(x_start):
+    """exp(x) - 5 = 0, solution x = ln 5, started wherever the caller asks.
+    From a workable start it solves in a few iterations; from x = 1000,
+    exp(x) overflows and the first iterate is already non-finite, so a cold
+    solve diverges. Every start declares the same problem (one variable, one
+    equality row, no bounds), so a payload taken on one instance keys
+    identically on another."""
+    prob = solvs.OptimizationProblem()
+    prob.set_vars([x_start])
+    prob.add_equal_con(vf.exp(Args(1)[0]) - 5.0, [0])
+    return prob
+
+
+def test_warm_from_a_feasibility_solve_starts_another_instance_from_that_point():
+    """The case the primal seeding exists for: the result comes from a
+    DIFFERENT instance of the same declared problem, so the point it carries
+    is not one the instance being solved already holds. Here the second
+    instance cannot converge from its own start at all, so converging is
+    evidence that the payload's point became its starting point."""
+    a = _exp_problem(1.0)
+    feasible = a.solve(_quiet_ipm(), mode="feasible")
+    assert bool(feasible)
+
+    # The second instance's own start is one a cold solve gets nowhere from.
+    cold = _exp_problem(1000.0).solve(_quiet_ipm())
+    assert cold.flag == solvs.ConvergenceFlags.DIVERGING
+
+    seeded = _exp_problem(1000.0).solve(_quiet_ipm(), warm=feasible)
+    assert bool(seeded)
+    assert "primal" in seeded.stages[0].engine_notes["warm_payload"]
+
+
 def test_raw_warm_start_data_from_a_feasibility_solve_passes_through():
     """A bare WarmStartData carries no record of the stage that produced it,
     so it is taken as given -- the primal-only rule applies to a SolveResult,

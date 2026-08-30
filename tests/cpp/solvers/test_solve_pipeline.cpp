@@ -23,6 +23,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <cstddef>
 #include <limits>
 #include <memory>
@@ -68,6 +69,28 @@ std::unique_ptr<OptimizationProblem> solve_pipeline_build_tiny_nlp() {
     return prob;
 }
 
+// A single-variable equality NLP -- exp(x) - 5 = 0, solution x = ln 5 --
+// started wherever the caller asks. Two starts are used below, and the
+// difference between them is the whole point: from a sane start the problem
+// solves in a few iterations, while from x = 1000 it diverges on its first
+// iterate, per the note on solve_pipeline_build_diverging_nlp just below.
+// Every start declares the SAME problem (one variable, one equality row, no
+// bounds), so a payload taken on one instance keys identically on another --
+// which is what lets a test seed one instance from another's result.
+std::unique_ptr<OptimizationProblem> solve_pipeline_build_exp_nlp(double x_start) {
+    using tycho::vf::Arguments;
+    using tycho::vf::GenericFunction;
+    auto prob = std::make_unique<OptimizationProblem>();
+    prob->set_vars(Eigen::VectorXd::Constant(1, x_start));
+    {
+        auto args = Arguments<1>();
+        auto x = args.coeff<0>();
+        prob->add_equal_con(GenericFunction<-1, -1>(x.exp() - 5.0),
+                            (Eigen::VectorXi(1) << 0).finished());
+    }
+    return prob;
+}
+
 // A single-variable equality NLP that genuinely diverges under Mode::Feasible:
 // exp(x) - 5 = 0, started at x = 1000. exp(1000) overflows to +inf in double
 // precision, so the very first iterate's constraint residual (and the KKT
@@ -79,22 +102,11 @@ std::unique_ptr<OptimizationProblem> solve_pipeline_build_tiny_nlp() {
 // bound_lmults_ to carry, so this fixture alone only exercises warm_or_null's
 // eq_lmults_ check -- it checks primal_/iq_lmults_/bound_lmults_ too, because
 // a different diverging problem could go non-finite through any of those
-// instead. Needed only by DivergingPresolveDoesNotThrowOnMainStageHandoff
-// below, to reach that payload through the real solve() pipeline rather than
-// fabricating a WarmStartData by hand (warm_or_null is file-local to
-// solve_pipeline.cpp).
+// instead. Used by the two diverging-hand-off cases below, to reach that
+// payload through the real solve() pipeline rather than fabricating a
+// WarmStartData by hand (warm_or_null is file-local to solve_pipeline.cpp).
 std::unique_ptr<OptimizationProblem> solve_pipeline_build_diverging_nlp() {
-    using tycho::vf::Arguments;
-    using tycho::vf::GenericFunction;
-    auto prob = std::make_unique<OptimizationProblem>();
-    prob->set_vars(Eigen::VectorXd::Constant(1, 1000.0));
-    {
-        auto args = Arguments<1>();
-        auto x = args.coeff<0>();
-        prob->add_equal_con(GenericFunction<-1, -1>(x.exp() - 5.0),
-                            (Eigen::VectorXi(1) << 0).finished());
-    }
-    return prob;
+    return solve_pipeline_build_exp_nlp(1000.0);
 }
 
 // An active-inequality NLP: min x^2 s.t. 2 - x <= 0 (i.e. x >= 2), optimum
@@ -207,6 +219,13 @@ struct SolvePipelineProbePhase : ODEPhase<TychoTest::LinearODE> {
     int eq_lmults_size_for_test() const { return int(this->active_eq_lmults_.size()); }
     int iq_lmults_size_for_test() const { return int(this->active_iq_lmults_.size()); }
     bool multipliers_loaded_for_test() const { return this->multipliers_loaded_; }
+
+    // The three solve() hooks the stage sequence runs through, re-exposed so
+    // a test can drive one stage by hand and look at what the write-back left
+    // behind -- the same shape SolvePipelineHookOcp uses for the OCP type.
+    using ODEPhaseBase::accept_stage;
+    using ODEPhaseBase::initial_primal;
+    using ODEPhaseBase::prepare_solve;
 };
 
 // An OptimalControlProblemBase with the solve() hooks re-exposed, so a test
@@ -490,21 +509,71 @@ TEST(SolvePipeline, StagesRunInOrderAndAllReport) {
     EXPECT_NEAR(prob->active_variables_[0], 1.0, 1e-6);
 }
 
-// Regression test: a presolve stage that genuinely diverges must not crash
-// the hand-off to the main stage. Before the fix, warm_or_null() only
-// checked the exported payload's primal_ for non-emptiness, so a diverged
-// presolve's non-finite eq_lmults_ (primal_ itself stays finite at this
-// fixture's x=1000 start, and there is no bound_lmults_ block to go
-// non-finite either -- see solve_pipeline_build_diverging_nlp's own note)
-// was staged onto the main stage's engine via stage_warm_start(), which
-// throws std::invalid_argument out of hven's own block validation
-// (InteriorPointSolver::validate_warm_start_blocks) -- turning a value the
-// pipeline's own contract promises ("a non-convergent stage is a value ...
-// never a thrown exception") into an uncaught exception instead. With the
-// fix, warm_or_null() checks every block (primal_/eq_lmults_/iq_lmults_/
-// bound_lmults_) for finiteness rather than just primal_'s non-emptiness, so
-// a non-finite export through ANY block is treated exactly like an empty
-// one: the main stage runs unseeded and reports its own flag as a value.
+// A main stage that genuinely diverges must not crash the hand-off to a
+// polish stage. Main -> polish is the one hand-off that passes a payload from
+// stage to stage (the presolve hand-off passes only a point, through the
+// problem itself), so it is the one that meets a diverged export as a seed.
+//
+// warm_or_null() screens every block of that export for finiteness. Without
+// that screen -- checking only primal_ for non-emptiness, as an earlier
+// revision did -- this fixture's diverged main stage hands the polish stage
+// non-finite eq_lmults_ (primal_ itself stays finite at the x=1000 start, and
+// there is no bound_lmults_ block to go non-finite either; see
+// solve_pipeline_build_diverging_nlp's own note), and staging that reaches
+// InteriorPointSolver::validate_warm_start_blocks, which throws
+// std::invalid_argument on a non-finite block. That would turn a value the
+// pipeline's contract promises ("a non-convergent stage is a value ... never
+// a thrown exception") into an uncaught exception out of solve().
+//
+// Checked against exactly that: with warm_or_null()'s finiteness disjunct
+// removed in the working tree, this case throws std::invalid_argument naming
+// eq_lmults_ and the test fails; restored, it passes. The annex note is the
+// second half of the pin -- the polish stage has to SAY it ran cold, rather
+// than leaving a silently unseeded stage indistinguishable from a seeded one.
+TEST(SolvePipeline, DivergingMainStageDoesNotThrowOnPolishHandoff) {
+    // Fixture guard: the diverged main stage really does export a non-empty
+    // payload carrying a non-finite block, so "it was screened out" below is
+    // a statement about something that existed to screen.
+    {
+        auto guard_prob = solve_pipeline_build_diverging_nlp();
+        InteriorPointSolver guard_ipm;
+        guard_ipm.set_print_level(0);
+        SolveResult guard = guard_prob->solve(guard_ipm);
+        ASSERT_EQ(guard.stages_.back().flag_, tycho::ConvergenceFlags::DIVERGING);
+        ASSERT_GT(guard.warm_.primal_.size(), 0);
+        ASSERT_FALSE(guard.warm_.eq_lmults_.allFinite());
+    }
+
+    auto prob = solve_pipeline_build_diverging_nlp();
+    InteriorPointSolver ipm;
+    ipm.set_print_level(0);
+    InteriorPointSolver polish_ipm;
+    polish_ipm.set_print_level(0);
+    EngineRef ref = &ipm;
+    EngineRef polish_ref = &polish_ipm;
+
+    SolveOptions opts;
+    opts.mode = Mode::Optimal;
+    opts.polish = &polish_ref;
+
+    SolveResult result;
+    ASSERT_NO_THROW(result = prob->solve(ref, opts));
+
+    ASSERT_EQ(result.stages_.size(), 2u);
+    EXPECT_EQ(result.stages_[0].role_, "main");
+    EXPECT_EQ(result.stages_[0].flag_, tycho::ConvergenceFlags::DIVERGING);
+    EXPECT_EQ(result.stages_[1].role_, "polish");
+    EXPECT_FALSE(result.converged());
+
+    const auto &notes = result.stages_[1].engine_notes_;
+    const auto note = notes.find("warm_handoff");
+    ASSERT_NE(note, notes.end());
+    EXPECT_NE(note->second.find("non-finite"), std::string::npos);
+}
+
+// The presolve hand-off's own half of the same contract: a presolve stage
+// that diverges is a value in that stage's report, and the main stage after
+// it still runs.
 TEST(SolvePipeline, DivergingPresolveDoesNotThrowOnMainStageHandoff) {
     auto prob = solve_pipeline_build_diverging_nlp();
     InteriorPointSolver ipm;
@@ -1381,6 +1450,38 @@ TEST(SolvePipeline, PresolveHandsTheMainStageItsPrimalNotItsDuals) {
     EXPECT_EQ(composed.stages_[1].iterations_, reference_main.stages_[0].iterations_);
 }
 
+// What the presolve hand-off rests on: the point a finished stage leaves on
+// the problem is the point the next stage starts from, unchanged. The main
+// stage after a presolve is seeded through the problem itself and by nothing
+// else, so if accept_stage()'s write-back and initial_primal()'s read-back
+// were not exact inverses -- a rescale, a clamp, a reorder anywhere in the
+// trajectory pack/unpack -- the main stage would silently start somewhere
+// other than where the presolve ended, and every iteration-count comparison
+// in this file would be measuring that instead of the seeding rule.
+//
+// Driven one stage at a time rather than through solve(), because the check
+// is on the StageOutput the pipeline hands accept_stage() and that value is
+// internal to a solve() call. Compared bit-for-bit, not approximately: this
+// round trip has no numerics of its own to lose precision in.
+TEST(SolvePipeline, StageWriteBackHandsTheNextStageTheSamePoint) {
+    auto phase = solve_pipeline_make_probe_phase();
+    InteriorPointSolver ipm;
+    ipm.set_print_level(0);
+    EngineRef ref = &ipm;
+
+    phase->prepare_solve();
+    StageOutput out = tycho::solvers::run_engine_stage(ref, Mode::Feasible, phase->nlp_,
+                                                       phase->initial_primal(), nullptr);
+    ASSERT_GT(out.primal_.size(), 0);
+    phase->accept_stage(out);
+
+    const Eigen::VectorXd next_start = phase->initial_primal();
+    ASSERT_EQ(next_start.size(), out.primal_.size());
+    EXPECT_TRUE((next_start.array() == out.primal_.array()).all())
+        << "the write-back changed the point: max difference "
+        << (next_start - out.primal_).cwiseAbs().maxCoeff();
+}
+
 // The same rule, observed at the mechanism rather than in an iteration count:
 // the presolve hand-off stages nothing onto the main stage's engine.
 //
@@ -1492,7 +1593,7 @@ TEST(SolvePipeline, CallerWarmFromAFeasibilitySolveSeedsThePrimalOnly) {
 
     SolveOptions seeded_opts;
     seeded_opts.set_warm(feasible_result);
-    ASSERT_TRUE(seeded_opts.warm_duals_from_feasible_stage);
+    ASSERT_TRUE(seeded_opts.warm_duals_from_feasible_stage());
     SolveResult seeded = phase->solve(ipm, seeded_opts);
     ASSERT_TRUE(seeded.converged());
 
@@ -1514,6 +1615,94 @@ TEST(SolvePipeline, CallerWarmFromAFeasibilitySolveSeedsThePrimalOnly) {
     ASSERT_TRUE(reference.converged());
 
     EXPECT_EQ(seeded.stages_.front().iterations_, reference.stages_.front().iterations_);
+}
+
+// The case the primal seed exists for, and the one a single-instance test
+// cannot see: the caller hands back a result taken on ANOTHER instance of the
+// same declared problem. When the payload came from the same instance, that
+// instance's current point already IS the payload's primal, so a stage that
+// ignored the seed entirely would look identical.
+//
+// Instance A solves in feasibility mode from a workable start. Instance B is
+// declared identically -- same variable, same row, same (absent) bounds, so
+// the payload's stamp matches -- but starts at x = 1000, where a cold solve
+// diverges on its first iterate. So the observable is not an iteration count
+// but the difference between diverging and converging: B can only converge
+// from A's point, and the only route from A's point into B is the seed.
+TEST(SolvePipeline, CallerPrimalSeedStartsAnotherInstanceFromThatPoint) {
+    auto instance_a = solve_pipeline_build_exp_nlp(1.0);
+    InteriorPointSolver ipm_a;
+    ipm_a.set_print_level(0);
+
+    SolveOptions feasible;
+    feasible.mode = Mode::Feasible;
+    SolveResult a = instance_a->solve(ipm_a, feasible);
+    ASSERT_TRUE(a.converged());
+    ASSERT_EQ(a.stages_.back().mode_, Mode::Feasible);
+    ASSERT_EQ(a.warm_.primal_.size(), 1);
+    ASSERT_NEAR(a.warm_.primal_[0], std::log(5.0), 1e-6);
+
+    // Fixture guard: instance B's own starting point is one a cold solve
+    // cannot get anywhere from, so B converging below is evidence that its
+    // starting point moved -- not that the problem is easy from anywhere.
+    {
+        auto cold_b = solve_pipeline_build_exp_nlp(1000.0);
+        InteriorPointSolver cold_ipm;
+        cold_ipm.set_print_level(0);
+        SolveResult cold = cold_b->solve(cold_ipm);
+        ASSERT_EQ(cold.stages_.back().flag_, tycho::ConvergenceFlags::DIVERGING);
+    }
+
+    auto instance_b = solve_pipeline_build_exp_nlp(1000.0);
+    InteriorPointSolver ipm_b;
+    ipm_b.set_print_level(0);
+
+    SolveOptions seeded_opts;
+    seeded_opts.set_warm(a);
+    ASSERT_TRUE(seeded_opts.warm_duals_from_feasible_stage());
+    SolveResult b = instance_b->solve(ipm_b, seeded_opts);
+
+    EXPECT_TRUE(b.converged());
+    EXPECT_NEAR(instance_b->active_variables_[0], std::log(5.0), 1e-6);
+
+    // And it says which seeding it got: the primal, not the multipliers.
+    const auto &notes = b.stages_.front().engine_notes_;
+    const auto note = notes.find("warm_payload");
+    ASSERT_NE(note, notes.end());
+    EXPECT_NE(note->second.find("primal"), std::string::npos);
+}
+
+// The provenance set_warm() records belongs to the payload it was recorded
+// for, not to the options value: overwriting warm= with a bare WarmStartData
+// afterwards leaves a payload that states nothing about where it came from,
+// and it is taken as given.
+TEST(SolvePipeline, WarmProvenanceDoesNotOutliveThePayloadItWasRecordedFor) {
+    auto prob = solve_pipeline_build_tiny_nlp();
+    InteriorPointSolver ipm;
+    ipm.set_print_level(0);
+
+    SolveOptions feasible;
+    feasible.mode = Mode::Feasible;
+    SolveResult feasible_result = prob->solve(ipm, feasible);
+    ASSERT_EQ(feasible_result.stages_.back().mode_, Mode::Feasible);
+
+    SolveOptions opts;
+    opts.set_warm(feasible_result);
+    EXPECT_TRUE(opts.warm_duals_from_feasible_stage());
+
+    // A different payload under the same options value: whatever was true of
+    // the first one says nothing about this one.
+    hven::solvers::WarmStartData raw = feasible_result.warm_;
+    opts.warm = &raw;
+    EXPECT_FALSE(opts.warm_duals_from_feasible_stage());
+
+    // Pointed back at the very payload set_warm() recorded, the record
+    // applies again -- it was always a statement about that payload, and that
+    // payload has not changed.
+    opts.warm = &feasible_result.warm_;
+    EXPECT_TRUE(opts.warm_duals_from_feasible_stage());
+    opts.warm = nullptr;
+    EXPECT_FALSE(opts.warm_duals_from_feasible_stage());
 }
 
 // An engine with no feasibility-only mode cannot run the presolve stage. The
