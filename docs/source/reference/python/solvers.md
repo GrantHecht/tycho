@@ -727,7 +727,8 @@ that only its producing engine interprets). Pass a previous `SolveResult` or
 ```python
 r1 = phase.solve(ipm)                       # cold solve
 r2 = phase.solve(ipm, warm=r1)              # warm-started off r1's SolveResult
-r3 = phase.solve(ipm, warm=r1.warm)         # equivalently, off the WarmStartData directly
+r3 = phase.solve(ipm, warm=r1.warm)         # off the payload alone, without the record
+                                            # of the stage it came from (see below)
 ```
 
 The `warm=` value is read, not consumed — the same `SolveResult`/
@@ -753,8 +754,15 @@ payload's point and derives its own prices, and says so in the same
 `engine_notes["warm_payload"]` note. A `SolveResult` knows which mode each of
 its stages ran (`result.stages[i].mode`), which is how this is decided; a
 bare `WarmStartData` carries no such record, so `warm=r.warm` is taken as
-given. The same rule governs the presolve stage inside one `solve()` call —
-see below.
+given — which is why `warm=r` and `warm=r.warm` seed the same state only when
+`r` is an optimality solve, as `r1` is in the snippet above. The same rule
+governs the presolve stage inside one `solve()` call — see below.
+
+Inside one `solve()` call, a `polish=` stage is seeded from the main stage's
+own export, multipliers included. When that export is unusable — the main
+stage diverged, or captured nothing — the polish stage runs cold from the
+point the main stage left on the problem, and says so in its own
+`engine_notes["warm_handoff"]`.
 
 Both `SolveResult` and
 `WarmStartData` (along with `StageResult`, `PhaseResult`, and

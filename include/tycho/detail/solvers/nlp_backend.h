@@ -98,28 +98,67 @@ struct SolveOptions {
     EngineRef *polish = nullptr; ///< second engine after the main stage.
     const hven::solvers::WarmStartData *warm = nullptr; ///< seeds the first stage.
 
-    /// @brief True when `warm`'s multipliers were produced by a
-    ///        feasibility-only stage.
+    /// @brief Bookkeeping for `warm_duals_from_feasible_stage()` below: the
+    ///        payload `set_warm()` found to have come from a feasibility-only
+    ///        stage, or null when the last `set_warm()` call found otherwise
+    ///        (or none has run).
     ///
-    /// Those multipliers are duals of the feasibility measure that stage
-    /// minimized, not of the problem's objective, so an optimality stage is
-    /// seeded with the payload's PRIMAL alone and derives its own prices.
-    /// A bare `WarmStartData` carries no record of the stage that produced
-    /// it, so this stays false unless the caller says otherwise; `set_warm()`
-    /// below fills it in from a finished solve, which does know.
-    bool warm_duals_from_feasible_stage = false;
+    /// Maintained by `set_warm()` and `rebind_warm_to_copy()`; setting it by
+    /// hand is asserting something about a payload's origin that nothing
+    /// checked. It is a pointer rather than a bool so the assertion can be
+    /// compared against `warm` -- see warm_duals_from_feasible_stage(). It
+    /// stays a public member (with the trailing underscore that marks it as
+    /// bookkeeping) only so that SolveOptions remains an aggregate, which the
+    /// `solve(engine, {.presolve = true})` call style throughout the tests and
+    /// examples relies on.
+    const hven::solvers::WarmStartData *feasible_stage_payload_ = nullptr;
 
     /// @brief Seeds from a finished solve: takes that result's payload AND
     ///        the mode its deciding stage ran (the stage `warm_` was taken
-    ///        from), so the primal-only rule above applies without the caller
+    ///        from), so the primal-only rule below applies without the caller
     ///        having to state it.
     ///
     /// Holds a pointer into `r`, which must outlive the solve() call this
     /// options value is passed to.
     void set_warm(const SolveResult &r) {
         this->warm = &r.warm_;
-        this->warm_duals_from_feasible_stage =
-            !r.stages_.empty() && r.stages_.back().mode_ == Mode::Feasible;
+        this->feasible_stage_payload_ =
+            (!r.stages_.empty() && r.stages_.back().mode_ == Mode::Feasible) ? &r.warm_ : nullptr;
+    }
+
+    /// @brief Whether `warm`'s multipliers are known to have been produced by
+    ///        a feasibility-only stage.
+    ///
+    /// Those multipliers are duals of the feasibility measure that stage
+    /// minimized, not of the problem's objective, so an optimality stage is
+    /// seeded with the payload's PRIMAL alone and derives its own prices.
+    ///
+    /// The answer is tied to the payload it was learned about, not carried
+    /// loose beside it: `set_warm()` records WHICH payload came from a
+    /// feasibility stage, and this reports true only while `warm` still names
+    /// that same payload. Assigning `warm` directly afterwards -- with a bare
+    /// `WarmStartData`, or with another result's payload -- therefore reads as
+    /// what it is, a payload stating nothing about the stage that produced it,
+    /// rather than inheriting the previous answer.
+    bool warm_duals_from_feasible_stage() const {
+        return this->warm != nullptr && this->warm == this->feasible_stage_payload_;
+    }
+
+    /// @brief Points `warm` at `payload` -- a COPY of the payload `warm`
+    ///        already names -- carrying whatever `set_warm()` recorded about
+    ///        it across to the copy.
+    ///
+    /// set_jet_job() needs this: it copies the caller's payload into storage
+    /// the problem owns and re-points `warm` at that copy, and the copy has to
+    /// stay the same kind of payload the original was. A plain
+    /// `opts.warm = &copy` would look exactly like a caller substituting an
+    /// unrelated payload, and a jet job staged from a feasibility solve's
+    /// result would then seed its stages with those multipliers after all.
+    void rebind_warm_to_copy(const hven::solvers::WarmStartData *payload) {
+        if (this->warm != nullptr && this->warm == this->feasible_stage_payload_) {
+            this->feasible_stage_payload_ = payload;
+        }
+        this->warm = payload;
     }
 };
 
@@ -214,10 +253,11 @@ struct BackendProblemBase {
     /// be non-finite. A payload that is usable but was taken under a
     /// DIFFERENT declaration is still refused, naming both keys' digests.
     /// A payload whose multipliers came from a feasibility-only stage
-    /// (`opts.warm_duals_from_feasible_stage`, which `set_warm()` fills in
-    /// from a finished solve) seeds an optimality stage with its PRIMAL
-    /// alone -- feasibility duals price a different objective -- and that too
-    /// is recorded in the same annex note.
+    /// (`set_warm()` records that from a finished solve; a payload assigned
+    /// straight to `opts.warm` states nothing about where it came from and is
+    /// taken as given) seeds an optimality stage with its PRIMAL alone --
+    /// feasibility duals price a different objective -- and that too is
+    /// recorded in the same annex note.
     ///
     /// A stage after the first is seeded by its immediate predecessor's own
     /// `StageOutput::warm_` export WHEN BOTH RAN THE SAME MODE: the main
@@ -231,7 +271,10 @@ struct BackendProblemBase {
     /// costs the main stage iterations. None of this depends on `opts.warm`,
     /// which only ever seeds the first stage. A predecessor's export seeds
     /// the next stage under the same two conditions as a caller's payload:
-    /// non-empty, and finite throughout.
+    /// non-empty, and finite throughout. A polish stage that met neither --
+    /// its main stage diverged, or captured nothing -- runs cold from the
+    /// point that stage left on the problem, and records why in its own
+    /// `engine_notes_["warm_handoff"]`.
     ///
     /// A stage whose engine is a different CLASS from the previous stage's
     /// (in this call, or in an earlier call on this same problem) is preceded
@@ -600,7 +643,10 @@ struct BackendProblemBase {
 
         if (opts.warm != nullptr) {
             this->jet_warm_storage_ = *opts.warm;
-            opts.warm = &*this->jet_warm_storage_;
+            // Not a plain assignment to opts.warm: the copy has to keep
+            // whatever set_warm() recorded about the original -- see
+            // SolveOptions::rebind_warm_to_copy().
+            opts.rebind_warm_to_copy(&*this->jet_warm_storage_);
         } else {
             this->jet_warm_storage_.reset();
         }

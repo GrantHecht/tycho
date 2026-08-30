@@ -65,14 +65,17 @@
 // advertises -- solve(ipm, polish=sqp), or solve(ipm) then solve(sqp, warm=)
 // -- work on a problem with a fixed variable.
 //
-// A predecessor's export only seeds the next stage when it is non-empty AND
-// every block is finite (warm_or_null() below): an empty export means the
-// predecessor's own engine call captured nothing to hand forward (e.g. a
+// Main -> polish is the one hand-off that passes a payload from stage to
+// stage (the presolve seam passes only a point, through the problem), and
+// that payload is screened before it seeds anything: it must be non-empty AND
+// finite in every block (warm_or_null() below). An empty export means the
+// main stage's own engine call captured nothing to hand forward (e.g. a
 // defensive internal check inside the engine skipped the capture; engines.cpp's
 // fill_ipm_stage documents this as non-fatal), and a non-finite value means
-// the predecessor genuinely diverged rather than exporting a usable point;
-// either way, the stage it would have seeded simply runs unseeded instead of
-// failing on a block-size mismatch or a downstream non-finite-value check.
+// that stage genuinely diverged rather than exporting a usable point. Either
+// way the polish stage runs unseeded, from the point the main stage left on
+// the problem, and its annex says so -- instead of the run failing on a
+// block-size mismatch or a downstream non-finite-value check.
 
 #include "tycho/detail/solvers/nlp_backend.h"
 
@@ -212,7 +215,7 @@ bool warm_has_non_finite(const hven::solvers::WarmStartData &w) {
 ///
 ///        The finite check exists because a stage that ran to a genuine
 ///        DIVERGING result can still export a non-empty payload -- e.g. a
-///        presolve stage that diverges can leave non-finite bound
+///        main stage that diverges under `polish=` can leave non-finite
 ///        multipliers in its own `StageOutput::warm_` -- and staging that
 ///        payload as the next stage's seed reaches
 ///        `InteriorPointSolver::stage_warm_start`'s own block validation,
@@ -237,23 +240,35 @@ const hven::solvers::WarmStartData *warm_or_null(const hven::solvers::WarmStartD
 /// @brief Empty when `w` can seed a stage; otherwise a sentence naming why it
 ///        cannot, for the annex note the degraded stage carries.
 ///
-/// The two unusable shapes are the two warm_or_null() above already screens
-/// stage-to-stage exports for -- an empty payload (the source stage exported
-/// nothing) and a non-finite one (the source stage diverged rather than
-/// exporting a usable point). Neither is a caller error, so neither refuses;
-/// each simply costs the seeding.
-std::string warm_unusable_reason(const hven::solvers::WarmStartData &w) {
+/// The two unusable shapes are the two warm_or_null() above screens every
+/// payload for -- an empty payload (the stage it came from exported nothing)
+/// and a non-finite one (that stage diverged rather than exporting a usable
+/// point). Neither is a caller error, so neither refuses; each simply costs
+/// the seeding.
+///
+/// @param subject names the payload the sentence is about, since both places
+///        a payload is screened write one of these notes: the caller's own
+///        `opts.warm` on the first stage, and the main stage's export on a
+///        polish stage that follows it.
+std::string warm_unusable_reason(const hven::solvers::WarmStartData &w, const char *subject) {
     if (warm_is_empty(w)) {
-        return "the warm= payload was empty (the stage it came from exported no warm start), "
-               "so this stage ran cold, from the problem's own current point.";
+        return fmt::format("{0} was empty (the stage it came from exported no warm start), so "
+                           "this stage ran cold, from the problem's own current point.",
+                           subject);
     }
     if (warm_has_non_finite(w)) {
-        return "the warm= payload carried a non-finite value (the stage it came from diverged "
-               "rather than exporting a usable point), so this stage ran cold, from the "
-               "problem's own current point.";
+        return fmt::format("{0} carried a non-finite value (the stage it came from diverged "
+                           "rather than exporting a usable point), so this stage ran cold, from "
+                           "the problem's own current point.",
+                           subject);
     }
     return {};
 }
+
+/// @brief What warm_unusable_reason() calls the two payloads it is asked
+///        about, so the sentence names the one the reader has to look at.
+const char *kCallerPayload = "the warm= payload";
+const char *kPredecessorExport = "the preceding stage's own export";
 
 /// @brief The mode the FIRST stage of a solve() call runs: a presolve stage,
 ///        when one was asked for, always runs Mode::Feasible; otherwise the
@@ -271,7 +286,28 @@ Mode first_stage_mode(const SolveOptions &opts) {
 ///        payload's primal still seeds that stage (solve() passes it as the
 ///        starting point); only the duals are dropped.
 bool caller_warm_duals_travel(const SolveOptions &opts) {
-    return !(opts.warm_duals_from_feasible_stage && first_stage_mode(opts) == Mode::Optimal);
+    return !(opts.warm_duals_from_feasible_stage() && first_stage_mode(opts) == Mode::Optimal);
+}
+
+/// @brief Refuses, naming both sizes, a caller payload whose primal cannot BE
+///        this stage's starting point because it does not have the problem's
+///        own number of variables.
+///
+/// Unreachable through the declared path: the declaration key is compared
+/// first, and the primal variable count is one of the dimensions that key is
+/// taken over -- a payload of a different width keys differently and is
+/// refused there, naming both digests. It is written as a refusal anyway
+/// rather than as a silent skip because the alternative is worse than either:
+/// skipping the seed leaves the stage's annex saying the payload's primal was
+/// the starting point when it was not.
+void refuse_primal_seed_size_mismatch(Eigen::Index payload_size, Eigen::Index problem_size) {
+    if (payload_size != problem_size) {
+        throw std::invalid_argument(fmt::format(
+            "solve: the warm-start payload's primal holds {0} entries but this problem's "
+            "current point holds {1}; a payload seeding a stage's starting point must be "
+            "stated over the same declared variables",
+            payload_size, problem_size));
+    }
 }
 
 /// @brief The sentence the first stage's annex carries when a usable caller
@@ -416,7 +452,7 @@ SolveResult BackendProblemBase::solve(EngineRef engine, const SolveOptions &opts
     Eigen::VectorXd first_stage_primal_seed;
     std::string warm_annex_note;
     if (opts.warm != nullptr) {
-        warm_annex_note = warm_unusable_reason(*opts.warm);
+        warm_annex_note = warm_unusable_reason(*opts.warm, kCallerPayload);
         if (warm_annex_note.empty()) {
             const hven::solvers::DeclarationKey current_key =
                 hven::solvers::declaration_key(this->provider_->declaration());
@@ -432,13 +468,10 @@ SolveResult BackendProblemBase::solve(EngineRef engine, const SolveOptions &opts
             } else {
                 // The duals are dropped, the primal is not: it is handed to
                 // the stage as its starting point, in place of the problem's
-                // own current point. The size test is the one
-                // fill_ipopt_stage already applies to a warm payload used the
-                // same way; the declaration key just matched, so a mismatch
-                // here is not reachable through the declared path.
-                if (opts.warm->primal_.size() == this->initial_primal().size()) {
-                    first_stage_primal_seed = opts.warm->primal_;
-                }
+                // own current point.
+                refuse_primal_seed_size_mismatch(opts.warm->primal_.size(),
+                                                 this->initial_primal().size());
+                first_stage_primal_seed = opts.warm->primal_;
                 warm_annex_note = kWarmPrimalOnlyNote;
             }
         }
@@ -495,11 +528,22 @@ SolveResult BackendProblemBase::solve(EngineRef engine, const SolveOptions &opts
     if (opts.polish != nullptr) {
         this->require_declared_layout_for(*opts.polish);
         this->prepare_solve();
+        // The one stage-to-stage hand-off that passes a payload: the main
+        // stage's export seeds the polish stage, multipliers and all. When
+        // that export is unusable (the main stage diverged, or captured
+        // nothing), the polish stage runs cold from the point the main stage
+        // left on the problem -- and says so in its own annex, under a key
+        // that names the hand-off rather than the caller's payload. No engine
+        // writes this key: an engine's own warm-start note is "warm_export".
+        const std::string handoff_note = warm_unusable_reason(result.warm_, kPredecessorExport);
         StageOutput polish_out =
             run_engine_stage(*opts.polish, Mode::Optimal, this->nlp_, this->initial_primal(),
                              warm_or_null(result.warm_));
         this->accept_stage(polish_out);
         append_stage(result, polish_out, "polish");
+        if (!handoff_note.empty()) {
+            result.stages_.back().engine_notes_["warm_handoff"] = handoff_note;
+        }
         result.warm_ = polish_out.warm_;
     }
 
@@ -607,9 +651,9 @@ tycho::ConvergenceFlags BackendProblemBase::run_amr_loop(
         (opts != nullptr && opts->warm != nullptr) ? warm_or_null(*opts->warm) : nullptr;
     Eigen::VectorXd first_stage_primal_seed;
     if (first_stage_warm != nullptr && !caller_warm_duals_travel(*opts)) {
-        if (first_stage_warm->primal_.size() == this->initial_primal().size()) {
-            first_stage_primal_seed = first_stage_warm->primal_;
-        }
+        refuse_primal_seed_size_mismatch(first_stage_warm->primal_.size(),
+                                         this->initial_primal().size());
+        first_stage_primal_seed = first_stage_warm->primal_;
         first_stage_warm = nullptr;
     }
 
