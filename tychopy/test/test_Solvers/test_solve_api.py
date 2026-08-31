@@ -523,3 +523,23 @@ def test_sqp_bad_kwarg_value_type_raises_type_error_naming_it():
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))
+
+
+@pytest.mark.parametrize(
+    "make",
+    [
+        lambda: solvs.DeclarationKey(),
+        lambda: solvs.WarmExtension("hven.ipm.polish.v1", b"\x00"),
+        lambda: solvs.WarmStartData(),
+    ],
+    ids=["DeclarationKey", "WarmExtension", "WarmStartData"],
+)
+def test_warm_value_types_are_unhashable(make):
+    # Every field is writable and == compares values, so a hash would go stale
+    # once a stored instance is edited; the types opt out of hashing entirely.
+    value = make()
+    assert value == make()
+    with pytest.raises(TypeError):
+        hash(value)
+    with pytest.raises(TypeError):
+        {value}
