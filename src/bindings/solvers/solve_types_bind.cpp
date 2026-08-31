@@ -40,30 +40,6 @@ std::vector<std::byte> byte_vector_from_bytes(const nb::bytes &b) {
     return v;
 }
 
-// A boost::hash_combine-shaped mixer, used to build __hash__ for the value
-// types below from the same fields their __eq__ compares (or, for
-// WarmStartData, the cheap documented subset -- see its class docstring).
-std::size_t hash_combine(std::size_t seed, std::size_t v) {
-    return seed ^ (v + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2));
-}
-
-std::size_t hash_warm_extension(const WarmExtension &self) {
-    std::size_t h = std::hash<std::string>{}(self.tag_);
-    std::string_view payload_view(reinterpret_cast<const char *>(self.payload_.data()),
-                                  self.payload_.size());
-    return hash_combine(h, std::hash<std::string_view>{}(payload_view));
-}
-
-std::size_t hash_warm_start_data(const WarmStartData &self) {
-    std::size_t h = static_cast<std::size_t>(self.structure_key_.digest());
-    h = hash_combine(h, static_cast<std::size_t>(self.primal_.size()));
-    h = hash_combine(h, static_cast<std::size_t>(self.eq_lmults_.size()));
-    h = hash_combine(h, static_cast<std::size_t>(self.iq_lmults_.size()));
-    h = hash_combine(h, static_cast<std::size_t>(self.bound_lmults_.size()));
-    h = hash_combine(h, static_cast<std::size_t>(self.extensions_.size()));
-    return h;
-}
-
 } // namespace
 
 void TychoBind<SolveResult>::build(nb::module_ &m) {
@@ -90,7 +66,6 @@ void TychoBind<SolveResult>::build(nb::module_ &m) {
         .def(
             "__eq__", [](const DeclarationKey &a, const DeclarationKey &b) { return a == b; },
             nb::is_operator())
-        .def("__hash__", [](const DeclarationKey &self) { return self.digest(); })
         .def("__getstate__",
              [](const DeclarationKey &self) {
                  return std::make_tuple(self.declaration_digest_, self.bound_digest_);
@@ -99,6 +74,11 @@ void TychoBind<SolveResult>::build(nb::module_ &m) {
              [](DeclarationKey &self, std::tuple<std::uint64_t, std::uint64_t> state) {
                  new (&self) DeclarationKey{std::get<0>(state), std::get<1>(state)};
              });
+
+    // Every field above is writable and == compares values, so a hash would go
+    // stale the moment a stored instance is edited; Python's rule for such a
+    // type is to be unhashable.
+    m.attr("DeclarationKey").attr("__hash__") = nb::none();
 
     // -------------------------------------------------------------------
     // WarmExtension -- one opaque engine extension (tag + payload bytes).
@@ -123,7 +103,6 @@ void TychoBind<SolveResult>::build(nb::module_ &m) {
         .def(
             "__eq__", [](const WarmExtension &a, const WarmExtension &b) { return a == b; },
             nb::is_operator())
-        .def("__hash__", &hash_warm_extension)
         .def("__getstate__",
              [](const WarmExtension &self) {
                  return std::make_tuple(self.tag_, bytes_from_byte_vector(self.payload_));
@@ -141,6 +120,8 @@ void TychoBind<SolveResult>::build(nb::module_ &m) {
     // currency's own versioned representation, so it survives a field being
     // added on the solver-library side.
     // -------------------------------------------------------------------
+    m.attr("WarmExtension").attr("__hash__") = nb::none();
+
     nb::class_<WarmStartData>(
         m, "WarmStartData",
         "The engine-neutral warm-start currency: a declared-space primal/dual core, the "
@@ -156,12 +137,6 @@ void TychoBind<SolveResult>::build(nb::module_ &m) {
         .def(
             "__eq__", [](const WarmStartData &a, const WarmStartData &b) { return a == b; },
             nb::is_operator())
-        .def("__hash__", &hash_warm_start_data,
-             "Hashes a cheap, stable subset consistent with == -- the declaration-identity "
-             "stamp's digest plus the four block sizes -- not the full primal/dual/extension "
-             "content. Two equal WarmStartData values always hash equal; two unequal values "
-             "sharing that subset (e.g. differing only in payload values) hash equal too, "
-             "which is a legal (if collision-prone) hash under Python's contract.")
         .def("__getstate__",
              [](const WarmStartData &self) {
                  auto bytes = hven::solvers::serialize(self);
@@ -178,6 +153,8 @@ void TychoBind<SolveResult>::build(nb::module_ &m) {
     // -------------------------------------------------------------------
     // StageResult -- one solver stage's outcome.
     // -------------------------------------------------------------------
+    m.attr("WarmStartData").attr("__hash__") = nb::none();
+
     nb::class_<StageResult>(
         m, "StageResult",
         "One solver stage's outcome: which stage it was, which engine ran it, and the "

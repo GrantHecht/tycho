@@ -869,11 +869,11 @@ class DeclarationKey:
 
     def __eq__(self, arg: DeclarationKey, /) -> bool: ...
 
-    def __hash__(self) -> int: ...
-
     def __getstate__(self) -> tuple[int, int]: ...
 
     def __setstate__(self, arg: tuple[int, int], /) -> None: ...
+
+    __hash__: None = None
 
 class WarmExtension:
     """
@@ -896,11 +896,11 @@ class WarmExtension:
 
     def __eq__(self, arg: WarmExtension, /) -> bool: ...
 
-    def __hash__(self) -> int: ...
-
     def __getstate__(self) -> tuple[str, bytes]: ...
 
     def __setstate__(self, arg: tuple[str, bytes], /) -> None: ...
+
+    __hash__: None = None
 
 class WarmStartData:
     """
@@ -947,14 +947,11 @@ class WarmStartData:
 
     def __eq__(self, arg: WarmStartData, /) -> bool: ...
 
-    def __hash__(self) -> int:
-        """
-        Hashes a cheap, stable subset consistent with == -- the declaration-identity stamp's digest plus the four block sizes -- not the full primal/dual/extension content. Two equal WarmStartData values always hash equal; two unequal values sharing that subset (e.g. differing only in payload values) hash equal too, which is a legal (if collision-prone) hash under Python's contract.
-        """
-
     def __getstate__(self) -> bytes: ...
 
     def __setstate__(self, arg: bytes, /) -> None: ...
+
+    __hash__: None = None
 
 class StageResult:
     """
