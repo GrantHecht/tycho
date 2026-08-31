@@ -140,8 +140,9 @@ integrating to apogee and then to ground contact.
    # State continuity across the apogee, plus shared cannonball radius parameter.
    ocp.add_forward_link_equal_con(aphase, dphase, range(0, 5))
    ocp.add_param_link_equal_con(aphase, dphase, "ODEParams", "rad")
-   ocp.optimizer.set_print_level(3)
-   ocp.optimize()
+   ipm = typy.solvers.IPM()
+   ipm.set_print_level(3)
+   ocp.solve(ipm)
 
    Ascent = aphase.return_traj()
    Descent = dphase.return_traj()

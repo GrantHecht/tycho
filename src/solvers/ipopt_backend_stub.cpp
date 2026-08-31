@@ -14,15 +14,16 @@ namespace tycho::solvers::ipopt_backend {
 
 bool available() { return false; }
 
-BackendProblemBase::NlpSolveOutput solve(BackendProblemBase &prob,
-                                         BackendProblemBase::JetJobModes mode,
-                                         const Eigen::VectorXd &input) {
-    (void)prob;
-    (void)mode;
-    (void)input;
+IpoptSolveOutput solve(const std::shared_ptr<NonLinearProgram> &nlp, const Eigen::VectorXd &x0,
+                       const std::map<std::string, std::string> &ipopt_options,
+                       const InteriorPointSolver::Settings &tolerance_baseline) {
+    (void)nlp;
+    (void)x0;
+    (void)ipopt_options;
+    (void)tolerance_baseline;
     throw std::runtime_error("Tycho was built without Ipopt support; configure with "
                              "-DENABLE_IPOPT=ON (requires an installed Ipopt discoverable "
-                             "via pkg-config) to use nlp_solver = ipopt");
+                             "via pkg-config) to construct an IpoptSolver engine");
 }
 
 } // namespace tycho::solvers::ipopt_backend

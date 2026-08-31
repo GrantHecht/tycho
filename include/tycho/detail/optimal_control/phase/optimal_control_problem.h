@@ -49,9 +49,15 @@
 namespace tycho::oc {
 
 // Solvers types
-using tycho::solvers::NonLinearProgram;
 using tycho::solvers::BackendProblemBase;
+using tycho::solvers::EngineRef;
 using tycho::solvers::InteriorPointSolver;
+using tycho::solvers::Mode;
+using tycho::solvers::NonLinearProgram;
+using tycho::solvers::PhaseResult;
+using tycho::solvers::SolveOptions;
+using tycho::solvers::SolveResult;
+using tycho::solvers::StageOutput;
 
 // VF types
 using vf::Arguments;
@@ -509,8 +515,8 @@ struct OptimalControlProblemBase : BackendProblemBase {
         if (ith < 0)
             ith = (int(this->phases.size()) + ith);
         if (ith < 0 || ith >= int(this->phases.size()))
-            throw std::invalid_argument(fmt::format(
-                "phase: index {} out of range for {} phases", ith, this->phases.size()));
+            throw std::invalid_argument(fmt::format("phase: index {} out of range for {} phases",
+                                                    ith, this->phases.size()));
         return this->phases[ith];
     }
 
@@ -1656,22 +1662,21 @@ struct OptimalControlProblemBase : BackendProblemBase {
     /// @internal
     /// @brief Prepare the problem for a "jet" (batched) solve.
     /// @endinternal
-    void jet_initialize() {
-        // See OptimizationProblem::jet_initialize() (solvers_vf/optimization_problem.h)
-        // for why these two calls are separate and ordered this way.
-        this->optimizer_->set_qp_threads(1);
+    void jet_initialize() override {
+        // Single-partition evaluation on the calling thread. The engine-level
+        // settings (QP thread count, print level) that this used to force
+        // onto the problem's own owned optimizer no longer apply here --
+        // there is no owned optimizer; the caller configures whichever
+        // engine it hands to solve() directly.
         this->set_num_partitions(1);
-        this->optimizer_->set_print_level(10);
         this->print_mesh_info_ = false;
         this->transcribe();
     }
     /// @internal
     /// @brief Tear down jet-solve state and restore the default configuration.
     /// @endinternal
-    void jet_release() {
-        this->optimizer_->release();
+    void jet_release() override {
         this->init_partitions();
-        this->optimizer_->set_print_level(0);
         this->print_mesh_info_ = true;
         this->nlp_ = std::shared_ptr<NonLinearProgram>();
         this->provider_ = std::shared_ptr<tycho::solvers::TranscribedAggregate>();
@@ -1757,19 +1762,132 @@ struct OptimalControlProblemBase : BackendProblemBase {
         const std::vector<Eigen::VectorXi> &opv, const std::vector<Eigen::VectorXi> &spv,
         const std::vector<Eigen::VectorXi> &lv, int orows, int &NextCLoc) const;
 
-    /// @internal
-    /// @brief Drive InteriorPointSolver for a single solve/optimize pass (no mesh loop).
-    /// @param mode  The solve/optimize job mode.
-    /// @return The solver convergence flag.
-    /// @endinternal
-    tycho::ConvergenceFlags interior_point_call_impl(JetJobModes mode);
+    // -------------------------------------------------------------------
+    // solve() hooks (nlp_backend.h): the override set
+    // BackendProblemBase::solve() dispatches through.
+    // -------------------------------------------------------------------
 
-    /// @internal
-    /// @brief Run the full problem solve, including the multi-phase mesh-refinement loop.
-    /// @param mode  The solve/optimize job mode.
-    /// @return The solver convergence flag.
-    /// @endinternal
-    tycho::ConvergenceFlags ocp_call_impl(JetJobModes mode);
+    /// @brief solve() hook: transcribes if needed, after checking every
+    ///        phase's own transcription currency.
+    void prepare_solve() override {
+        this->check_transcriptions();
+        if (this->do_transcription_)
+            this->transcribe();
+    }
+
+    /// @brief solve() hook: mark this problem, and every phase in it, as
+    ///        needing transcription again. Both levels matter: this problem's
+    ///        own transcribe() reads each phase's transcription, and
+    ///        check_transcriptions() consults the phases' flags.
+    void invalidate_transcription() override {
+        this->reset_transcription();
+        for (auto phase : this->phases) {
+            phase->reset_transcription();
+        }
+    }
+
+    /// @brief solve() hook: the packed multi-phase decision-variable
+    ///        vector (make_solver_input()).
+    Eigen::VectorXd initial_primal() const override { return this->make_solver_input(); }
+
+    /// @brief solve() hook: write a stage's output back across every
+    ///        phase -- full post-opt residuals when the engine reported them
+    ///        (StageOutput::eq_cons_/iq_cons_ wide enough to split), else
+    ///        multipliers only, invalidated on this problem and every phase.
+    ///
+    /// A stage can also end with NO prices at all: the SQP engine leaves its
+    /// multiplier vectors empty on an infeasible or numerical-error exit
+    /// (engines.cpp says so in the notes it attaches), and an Ipopt run that
+    /// aborts before finalize_solution can hand back short ones. Splitting
+    /// such a vector per phase would read past its end at every phase offset
+    /// -- silently, since Eigen's own bounds assert is compiled out of this
+    /// project's Release build -- so the declared row counts are checked
+    /// first. Too short, and the whole problem records "this stage reported
+    /// no prices": per-phase multipliers cleared, post-optimality info
+    /// invalidated here and on every phase. The primal is still written back
+    /// either way; a stage that gave up still moved the iterate.
+    ///
+    /// The comparison is `>=`, not `==`: the interior-point engine's
+    /// MakeConstraint fixed-variable treatment appends internal equality rows
+    /// behind the declared ones, and collect_solver_multipliers below is
+    /// written to address the declared rows from the FRONT for exactly that
+    /// reason.
+    void accept_stage(const StageOutput &out) override {
+        this->collect_solver_output(out.primal_);
+
+        const int eq_rows = this->num_phase_eq_cons_.sum() + this->num_link_eq_cons_;
+        const int iq_rows = this->num_phase_iq_cons_.sum() + this->num_link_iq_cons_;
+        const bool have_multipliers =
+            out.eq_lmults_.size() >= eq_rows && out.iq_lmults_.size() >= iq_rows;
+        const bool have_residuals = (out.eq_cons_.size() > 0 || out.iq_cons_.size() > 0) &&
+                                    out.eq_cons_.size() >= eq_rows &&
+                                    out.iq_cons_.size() >= iq_rows;
+
+        if (have_multipliers && have_residuals) {
+            this->collect_post_opt_info(out.eq_cons_, out.eq_lmults_, out.iq_cons_, out.iq_lmults_);
+            return;
+        }
+        if (have_multipliers) {
+            this->collect_solver_multipliers(out.eq_lmults_, out.iq_lmults_);
+        } else {
+            this->clear_solver_multipliers();
+        }
+        this->invalidate_post_opt_info();
+        for (auto phase : this->phases) {
+            phase->invalidate_post_opt_info();
+        }
+    }
+
+    /// @brief solve() hook: one @ref PhaseResult per phase, index-keyed the
+    ///        same way `this->phases` is, reusing the SAME per-phase offset
+    ///        bookkeeping (`num_phase_vars_`/`num_phase_eq_cons_`/
+    ///        `num_phase_iq_cons_`) that `collect_solver_output`/
+    ///        `collect_solver_multipliers` above already split the full
+    ///        primal/dual vectors by -- never re-derived independently. Each
+    ///        phase's slice is copied out of `r.warm_` (the final stage's
+    ///        own declared-space export) when it is big enough to hold that
+    ///        slice, so every field is a value snapshot, never a view into
+    ///        any phase's post-solve state; when the deciding stage's engine
+    ///        exported no warm payload (or a short one -- run_engine_stage
+    ///        documents this as possible), the corresponding slice is left
+    ///        empty rather than reading past the export's own size. Link
+    ///        rows/params (if any) are deliberately excluded -- they belong
+    ///        to no single phase.
+    void fill_phase_results(SolveResult &r) const override {
+        r.phases_.reserve(r.phases_.size() + this->phases.size());
+        for (int i = 0; i < this->phases.size(); i++) {
+            PhaseResult pr;
+            pr.index_ = i;
+            pr.var_start_ = (i > 0) ? this->num_phase_vars_.segment(0, i).sum() : 0;
+            pr.var_count_ = this->num_phase_vars_[i];
+            pr.eq_start_ = (i > 0) ? this->num_phase_eq_cons_.segment(0, i).sum() : 0;
+            pr.eq_count_ = this->num_phase_eq_cons_[i];
+            pr.iq_start_ = (i > 0) ? this->num_phase_iq_cons_.segment(0, i).sum() : 0;
+            pr.iq_count_ = this->num_phase_iq_cons_[i];
+            // r.warm_ can be smaller than the declared space (or empty) when
+            // the deciding stage's engine exported no warm payload --
+            // run_engine_stage documents this as possible. Leave the slice
+            // empty rather than reading past the export's own size (an
+            // out-of-range Eigen segment, silently OOB under Release/NDEBUG).
+            if (r.warm_.eq_lmults_.size() >= pr.eq_start_ + pr.eq_count_) {
+                pr.eq_lmults_ = r.warm_.eq_lmults_.segment(pr.eq_start_, pr.eq_count_);
+            }
+            if (r.warm_.iq_lmults_.size() >= pr.iq_start_ + pr.iq_count_) {
+                pr.iq_lmults_ = r.warm_.iq_lmults_.segment(pr.iq_start_, pr.iq_count_);
+            }
+            if (r.warm_.bound_lmults_.size() >= pr.var_start_ + pr.var_count_) {
+                pr.bound_lmults_ = r.warm_.bound_lmults_.segment(pr.var_start_, pr.var_count_);
+            }
+            r.phases_.push_back(std::move(pr));
+        }
+    }
+
+    /// @brief solve() hook: mirrors the old adaptive_mesh_ gate.
+    bool adaptive_mesh_enabled() const override { return this->adaptive_mesh_; }
+
+    /// @brief solve() hook: the multi-phase adaptive-mesh loop, built on
+    ///        run_engine_stage. Defined in optimal_control_problem.cpp.
+    tycho::ConvergenceFlags run_adaptive_mesh(EngineRef engine, Mode mode, SolveResult &r) override;
 
     /// @internal
     /// @brief Assemble the full problem decision vector from all phases and link params.
@@ -1842,6 +1960,21 @@ struct OptimalControlProblemBase : BackendProblemBase {
     }
 
     /// @internal
+    /// @brief Drop the stored multipliers, here and on every phase: the
+    ///        outcome when a solver stage reported no usable prices at all.
+    ///        The link slots and every phase's slice are emptied together, so
+    ///        no consumer can read a stale price from the stage before.
+    /// @endinternal
+    void clear_solver_multipliers() {
+        this->multipliers_loaded_ = false;
+        this->active_eq_lmults_.resize(0);
+        this->active_iq_lmults_.resize(0);
+        for (auto phase : this->phases) {
+            phase->clear_solver_multipliers();
+        }
+    }
+
+    /// @internal
     /// @brief Distribute post-optimization constraint values and multipliers.
     /// @param EC  Equality-constraint residuals for the whole problem.
     /// @param EM  Equality-constraint multipliers for the whole problem.
@@ -1877,23 +2010,10 @@ struct OptimalControlProblemBase : BackendProblemBase {
     }
 
   public:
-    /// @brief Solve the multi-phase problem for feasibility (no optimization).
-    /// @return The solver convergence flag.
-    tycho::ConvergenceFlags solve() { return ocp_call_impl(JetJobModes::Solve); }
-    /// @brief Optimize the multi-phase problem (minimize the objective subject to constraints).
-    /// @return The solver convergence flag.
-    tycho::ConvergenceFlags optimize() { return ocp_call_impl(JetJobModes::Optimize); }
-    /// @brief Solve for feasibility, then optimize.
-    /// @return The solver convergence flag.
-    tycho::ConvergenceFlags solve_optimize() { return ocp_call_impl(JetJobModes::SolveOptimize); }
-    /// @brief Solve, optimize, then solve again to tighten feasibility.
-    /// @return The solver convergence flag.
-    tycho::ConvergenceFlags solve_optimize_solve() {
-        return ocp_call_impl(JetJobModes::SolveOptimizeSolve);
-    }
-    /// @brief Optimize, then solve to tighten feasibility.
-    /// @return The solver convergence flag.
-    tycho::ConvergenceFlags optimize_solve() { return ocp_call_impl(JetJobModes::OptimizeSolve); }
+    // BackendProblemBase's new solve(EngineRef, SolveOptions) overload is
+    // the only solve() this class has -- OptimalControlProblemBase declares
+    // no 0-arg override of its own, so nothing here hides it and no
+    // using-declaration is needed.
 
     /// @brief Print the problem-size statistics.
     /// @param showfuns  Whether to also print per-function details.

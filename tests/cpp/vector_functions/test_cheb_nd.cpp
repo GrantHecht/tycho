@@ -1,10 +1,10 @@
-// N-D ChebTable value evaluation tests (Task 1) and Jacobian tests (Task 2).
+// N-D ChebTable value-evaluation, Jacobian and Hessian tests.
 // Tests for N-D cheb_points, from_values (separable DCT-I), tensor-Clenshaw eval,
 // multichannel value eval, and analytic Jacobian vs FD / closed-form.
 #include "test_utils.h"
+#include <cmath>
 #include <gtest/gtest.h>
 #include <tycho/tycho.h>
-#include <cmath>
 
 using namespace tycho;
 using namespace TychoTest;
@@ -12,7 +12,7 @@ using namespace TychoTest;
 // Helper: Chebyshev polynomial T_k(x)
 static double Tk(int k, double x) { return std::cos(k * std::acos(std::clamp(x, -1.0, 1.0))); }
 
-// Local finite-difference Jacobian helper (Task 2 plan Step 1)
+// Local finite-difference Jacobian helper
 static Eigen::MatrixXd fd_jacobian(const oc::ChebTable &t, const Eigen::VectorXd &x,
                                    double e = 1e-5) {
     Eigen::MatrixXd J(t.output_dim(), x.size());
@@ -33,9 +33,9 @@ TEST_F(ChebNdTest, TensorProductPolyExact2D) {
     Eigen::VectorXd lb(2), ub(2);
     lb << -1, -1;
     ub << 1, 1;
-    auto nodes = oc::ChebTable::cheb_points(orders, lb, ub);  // vector<VectorXd>, per axis
+    auto nodes = oc::ChebTable::cheb_points(orders, lb, ub); // vector<VectorXd>, per axis
     const int nx = orders[0] + 1, ny = orders[1] + 1;
-    oc::ChebTable::MatType vals(nx * ny, 1);  // (tsize, olen=1), row-major (x outer, y inner)
+    oc::ChebTable::MatType vals(nx * ny, 1); // (tsize, olen=1), row-major (x outer, y inner)
     for (int i = 0; i < nx; ++i)
         for (int j = 0; j < ny; ++j)
             vals(i * ny + j, 0) = Tk(2, nodes[0][i]) * Tk(3, nodes[1][j]);
@@ -73,7 +73,7 @@ TEST_F(ChebNdTest, RoundTrip3D) {
             }
 }
 
-// Task 1 review carryover: multichannel (olen=2) 2-D value test.
+// Multichannel (olen=2) 2-D value test.
 // Two independent functions stacked as 2 columns: f0(x,y)=T2(x)*T3(y), f1(x,y)=sin(x)*cos(y).
 TEST_F(ChebNdTest, Multichannel2D) {
     std::vector<int> orders{6, 6};
@@ -107,7 +107,7 @@ TEST_F(ChebNdTest, Multichannel2D) {
         }
 }
 
-// Task 2: Jacobian of smooth 2-D function vs central differences to 1e-6.
+// Jacobian of a smooth 2-D function vs central differences to 1e-6.
 // f(x,y) = exp(sin(x)) * cos(y)
 TEST_F(ChebNdTest, JacobianVsFD_Smooth2D) {
     std::vector<int> orders{10, 10};
@@ -119,8 +119,7 @@ TEST_F(ChebNdTest, JacobianVsFD_Smooth2D) {
     oc::ChebTable::MatType vals(nx * ny, 1);
     for (int i = 0; i < nx; ++i)
         for (int j = 0; j < ny; ++j)
-            vals(i * ny + j, 0) =
-                std::exp(std::sin(nodes[0][i])) * std::cos(nodes[1][j]);
+            vals(i * ny + j, 0) = std::exp(std::sin(nodes[0][i])) * std::cos(nodes[1][j]);
     auto tab = oc::ChebTable::from_values(vals, lb, ub, orders);
 
     for (double x : {-0.5, 0.0, 0.6}) {
@@ -169,7 +168,7 @@ TEST_F(ChebNdTest, JacobianNonUnitDomain) {
     }
 }
 
-// Task 2: Jacobian of T2(x)*T3(y) vs closed-form gradient to 1e-9.
+// Jacobian of T2(x)*T3(y) vs closed-form gradient to 1e-9.
 // T2(x) = 2x^2 - 1,  T2'(x) = 4x
 // T3(y) = 4y^3 - 3y, T3'(y) = 12y^2 - 3
 // df/dx = T2'(x)*T3(y) = 4x * T3(y)
@@ -190,7 +189,7 @@ TEST_F(ChebNdTest, JacobianVsClosedForm_TensorPoly) {
     auto T2 = [](double x) { return 2.0 * x * x - 1.0; };
     auto T3 = [](double y) { return 4.0 * y * y * y - 3.0 * y; };
     auto dT2 = [](double x) { return 4.0 * x; };            // T2'(x) = 4x
-    auto dT3 = [](double y) { return 12.0 * y * y - 3.0; };  // T3'(y) = 12y^2-3
+    auto dT3 = [](double y) { return 12.0 * y * y - 3.0; }; // T3'(y) = 12y^2-3
 
     for (double x : {-0.6, 0.1, 0.7}) {
         for (double y : {-0.3, 0.4, 0.9}) {
@@ -208,7 +207,7 @@ TEST_F(ChebNdTest, JacobianVsClosedForm_TensorPoly) {
 }
 
 // ============================================================================
-// Task 3: Hessian tests
+// Hessian tests
 // ============================================================================
 
 // Local FD Hessian helper (central 2nd differences, incl. mixed partials).
@@ -226,14 +225,19 @@ static std::vector<Eigen::MatrixXd> fd_hessian(const oc::ChebTable &t, const Eig
         xp[i] += e;
         xm[i] -= e;
         Eigen::VectorXd fp = t.eval(xp), fm = t.eval(xm);
-        for (int c = 0; c < olen; ++c) H[c](i, i) = (fp[c] - 2.0 * f0[c] + fm[c]) / (e * e);
+        for (int c = 0; c < olen; ++c)
+            H[c](i, i) = (fp[c] - 2.0 * f0[c] + fm[c]) / (e * e);
         // Cross entries
         for (int j = i + 1; j < D; ++j) {
             Eigen::VectorXd xpp = x, xpm = x, xmp = x, xmm = x;
-            xpp[i] += e; xpp[j] += e;
-            xpm[i] += e; xpm[j] -= e;
-            xmp[i] -= e; xmp[j] += e;
-            xmm[i] -= e; xmm[j] -= e;
+            xpp[i] += e;
+            xpp[j] += e;
+            xpm[i] += e;
+            xpm[j] -= e;
+            xmp[i] -= e;
+            xmp[j] += e;
+            xmm[i] -= e;
+            xmm[j] -= e;
             Eigen::VectorXd fpp = t.eval(xpp), fpm = t.eval(xpm);
             Eigen::VectorXd fmp = t.eval(xmp), fmm = t.eval(xmm);
             for (int c = 0; c < olen; ++c) {
@@ -246,7 +250,7 @@ static std::vector<Eigen::MatrixXd> fd_hessian(const oc::ChebTable &t, const Eig
     return H;
 }
 
-// Task 3: Hessian vs FD on [-1,1]^2, smooth function.
+// Hessian vs FD on [-1,1]^2, smooth function.
 // Uses e=1e-4 and tolerates 1e-4 (FD accuracy).
 TEST_F(ChebNdTest, HessianVsFD_Smooth2D) {
     std::vector<int> orders{12, 12};
@@ -258,8 +262,7 @@ TEST_F(ChebNdTest, HessianVsFD_Smooth2D) {
     oc::ChebTable::MatType vals(nx * ny, 1);
     for (int i = 0; i < nx; ++i)
         for (int j = 0; j < ny; ++j)
-            vals(i * ny + j, 0) =
-                std::exp(std::sin(nodes[0][i])) * std::cos(nodes[1][j]);
+            vals(i * ny + j, 0) = std::exp(std::sin(nodes[0][i])) * std::cos(nodes[1][j]);
     auto tab = oc::ChebTable::from_values(vals, lb, ub, orders);
 
     for (double x : {-0.5, 0.2, 0.7}) {
@@ -269,10 +272,8 @@ TEST_F(ChebNdTest, HessianVsFD_Smooth2D) {
             auto Ha = tab.eval_hessian(q);
             auto Hfd = fd_hessian(tab, q);
             ASSERT_EQ(Ha.size(), 1u);
-            EXPECT_NEAR(Ha[0](0, 0), Hfd[0](0, 0), 1e-4)
-                << "H[0](0,0) at " << x << "," << y;
-            EXPECT_NEAR(Ha[0](1, 1), Hfd[0](1, 1), 1e-4)
-                << "H[0](1,1) at " << x << "," << y;
+            EXPECT_NEAR(Ha[0](0, 0), Hfd[0](0, 0), 1e-4) << "H[0](0,0) at " << x << "," << y;
+            EXPECT_NEAR(Ha[0](1, 1), Hfd[0](1, 1), 1e-4) << "H[0](1,1) at " << x << "," << y;
             EXPECT_NEAR(Ha[0](0, 1), Hfd[0](0, 1), 1e-4)
                 << "H[0](0,1) cross-term at " << x << "," << y;
             // Symmetry
@@ -282,7 +283,7 @@ TEST_F(ChebNdTest, HessianVsFD_Smooth2D) {
     }
 }
 
-// Task 3: Hessian vs FD on NON-UNIT domain so hinv[j]*hinv[k] scaling is exercised.
+// Hessian vs FD on a NON-UNIT domain so hinv[j]*hinv[k] scaling is exercised.
 // Domain [0,4] x [-1,2]: hinv = {0.5, 2/3}.
 // On [-1,1] hinv==1 so hinv[j]*hinv[k] is never tested; this test catches a missing
 // or wrong chain-rule factor in eval_hessian.
@@ -296,8 +297,7 @@ TEST_F(ChebNdTest, HessianNonUnitDomain) {
     oc::ChebTable::MatType vals(nx * ny, 1);
     for (int i = 0; i < nx; ++i)
         for (int j = 0; j < ny; ++j)
-            vals(i * ny + j, 0) =
-                std::exp(std::sin(nodes[0][i])) * std::cos(nodes[1][j]);
+            vals(i * ny + j, 0) = std::exp(std::sin(nodes[0][i])) * std::cos(nodes[1][j]);
     auto tab = oc::ChebTable::from_values(vals, lb, ub, orders);
 
     for (double x : {0.5, 2.0, 3.5}) {
@@ -318,7 +318,7 @@ TEST_F(ChebNdTest, HessianNonUnitDomain) {
     }
 }
 
-// Task 3: Hessian of T2(x)*T3(y) vs closed-form analytic Hessian to 1e-8.
+// Hessian of T2(x)*T3(y) vs closed-form analytic Hessian to 1e-8.
 // f(x,y) = T2(x)*T3(y)
 // T2(x)   = 2x^2 - 1,    T2'(x) = 4x,        T2''(x) = 4
 // T3(y)   = 4y^3 - 3y,   T3'(y) = 12y^2 - 3, T3''(y) = 24y
@@ -354,19 +354,16 @@ TEST_F(ChebNdTest, HessianVsClosedForm_TensorPoly) {
             double Hxx = d2T2(x) * T3(y);
             double Hyy = T2(x) * d2T3(y);
             double Hxy = dT2(x) * dT3(y);
-            EXPECT_NEAR(H[0](0, 0), Hxx, 1e-8)
-                << "H_xx closed-form at " << x << "," << y;
-            EXPECT_NEAR(H[0](1, 1), Hyy, 1e-8)
-                << "H_yy closed-form at " << x << "," << y;
-            EXPECT_NEAR(H[0](0, 1), Hxy, 1e-8)
-                << "H_xy closed-form at " << x << "," << y;
+            EXPECT_NEAR(H[0](0, 0), Hxx, 1e-8) << "H_xx closed-form at " << x << "," << y;
+            EXPECT_NEAR(H[0](1, 1), Hyy, 1e-8) << "H_yy closed-form at " << x << "," << y;
+            EXPECT_NEAR(H[0](0, 1), Hxy, 1e-8) << "H_xy closed-form at " << x << "," << y;
             EXPECT_NEAR(H[0](0, 1), H[0](1, 0), 1e-14)
                 << "Hessian not symmetric at " << x << "," << y;
         }
     }
 }
 
-// Task 3 review: 3-D Hessian vs FD on a NON-UNIT domain. The 2-D Hessian tests
+// 3-D Hessian vs FD on a NON-UNIT domain. The 2-D Hessian tests
 // only exercise hess_index at D=2, and the 3-D VF test checks symmetry/adjoint
 // (not values) — a wrong hess_index cross-partial tensor at D=3 would go
 // undetected. This pins all six D=3 Hessian entries (incl. cross-partials) and

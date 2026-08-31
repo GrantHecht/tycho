@@ -23,8 +23,8 @@
 #include "solver_test_utils.h"
 
 #include "tycho/detail/hven_namespaces.h"
-#include <hven/detail/interior/barrier_math.h>
 #include <hven/detail/globalization/inertia_regularization.h>
+#include <hven/detail/interior/barrier_math.h>
 
 #include <gtest/gtest.h>
 
@@ -140,7 +140,6 @@ std::unique_ptr<OptimizationProblem> build_inertia_duplicated_equality_nlp() {
         prob->add_equal_con(GenericFunction<-1, -1>(x0 + x1 - 1.0),
                             (Eigen::VectorXi(2) << 0, 1).finished());
     }
-    prob->optimizer_->set_print_level(3);
     return prob;
 }
 
@@ -148,12 +147,14 @@ std::unique_ptr<OptimizationProblem> build_inertia_duplicated_equality_nlp() {
 // drives the duplicated-equality problem to its unique optimum.
 TEST(InertiaRegularizationSolve, ProximalRegularizationConvergesOnRankDeficientKkt) {
     auto prob = build_inertia_duplicated_equality_nlp();
-    prob->optimizer_->settings().inertia_mode_ = InertiaModes::proximal_regularization;
-    prob->optimizer_->set_max_iters(100);
-    auto flag = prob->optimize();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
+    ipm.settings().inertia_mode_ = InertiaModes::proximal_regularization;
+    ipm.set_max_iters(100);
+    auto flag = prob->solve(&ipm).flag_;
 
     EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
-    const auto &r = prob->optimizer_->result();
+    const auto &r = ipm.result();
     // Solve-output tolerances, not arithmetic ones: the solver stops at
     // econ_tol_/kkt_tol_ = 1e-6 on a regularized (shifted) KKT system, so the
     // primals land within a few multiples of that tolerance of the analytic
@@ -173,12 +174,14 @@ TEST(InertiaRegularizationSolve, ProximalRegularizationConvergesOnRankDeficientK
 // unique optimum.)
 TEST(InertiaRegularizationSolve, ClassicConvergesOnRankDeficientKkt) {
     auto prob = build_inertia_duplicated_equality_nlp();
-    prob->optimizer_->settings().inertia_mode_ = InertiaModes::classic;
-    prob->optimizer_->set_max_iters(100);
-    auto flag = prob->optimize();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
+    ipm.settings().inertia_mode_ = InertiaModes::classic;
+    ipm.set_max_iters(100);
+    auto flag = prob->solve(&ipm).flag_;
 
     EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
-    const auto &r = prob->optimizer_->result();
+    const auto &r = ipm.result();
     EXPECT_NEAR(r.obj_val_, 0.5, 1e-5);
     ASSERT_EQ(r.primals_.size(), 2);
     EXPECT_NEAR(r.primals_[0], 0.5, 1e-4);
@@ -202,7 +205,6 @@ std::unique_ptr<OptimizationProblem> build_inertia_wellcond_nlp() {
         auto x = args.coeff<0>();
         prob->add_equal_con(GenericFunction<-1, -1>(x - 1.0), (Eigen::VectorXi(1) << 0).finished());
     }
-    prob->optimizer_->set_print_level(3);
     return prob;
 }
 
@@ -242,19 +244,18 @@ std::unique_ptr<OptimizationProblem> build_inertia_active_bound_nlp(double lower
         prob->add_equal_con(GenericFunction<-1, -1>(x0 + x1 - 1.5),
                             (Eigen::VectorXi(2) << 0, 1).finished());
     }
-    prob->optimizer_->set_print_level(3);
-    prob->optimizer_->settings().inertia_mode_ = InertiaModes::classic;
     // Bound declarations are staged on the NonLinearProgram, which transcription
     // creates -- so the declaration has to follow it. make_nlp then
     // re-materializes the staged box (the row count it is handed is the user's
-    // own, user_equal_cons_) and the solver is re-pointed at the rebuilt
-    // program. optimize() below does not re-transcribe: transcribe() clears the
-    // pending flag, so the bound survives into the solve.
+    // own, user_equal_cons_). solve() below does not re-transcribe (transcribe()
+    // clears the pending flag, so the bound survives into the solve), and
+    // re-points whichever engine it is given at the (rebuilt) NLP itself, so no
+    // separate set_nlp() call is needed here -- inertia_mode_ is set by each
+    // caller on its own engine.
     prob->transcribe();
     prob->nlp_->set_variable_bound(0, lower, upper);
     prob->nlp_->make_nlp(prob->nlp_->primal_vars_, prob->nlp_->user_equal_cons_,
                          prob->nlp_->inequal_cons_);
-    prob->optimizer_->set_nlp(prob->nlp_);
     return prob;
 }
 
@@ -295,13 +296,12 @@ constexpr double kInertiaLargeSigma = 1.0e6;
 } // namespace
 
 // InertiaRegularizationSolve_ClassicDegeneracyLatchTracksSingularity_Test reaches
-// InteriorPointSolver::dc_latched_ (private) via the friend declaration in interior_point_solver.h, which
-// befriends the GLOBAL-scope class ::InertiaRegularizationSolve_..._Test that
-// gtest's TEST() macro generates. TEST() declares its fixture class as a member
-// of whatever namespace textually encloses it -- inside the anonymous namespace
-// above, that would be a DISTINCT (anonymous namespace)::..._Test entity that the
-// friend declaration does not name, so the access would be denied at compile
-// time despite the friend declaration being syntactically present (see the
+// InteriorPointSolver::dc_latched_ (private) via the friend declaration in interior_point_solver.h,
+// which befriends the GLOBAL-scope class ::InertiaRegularizationSolve_..._Test that gtest's TEST()
+// macro generates. TEST() declares its fixture class as a member of whatever namespace textually
+// encloses it -- inside the anonymous namespace above, that would be a DISTINCT (anonymous
+// namespace)::..._Test entity that the friend declaration does not name, so the access would be
+// denied at compile time despite the friend declaration being syntactically present (see the
 // established precedent in test_recovery_dispatch_gate.cpp, which closes its
 // anonymous namespace before its own friended RecoveryDispatchGate_* tests for
 // the same reason). Hence this test sits between the two anonymous-namespace
@@ -318,9 +318,11 @@ constexpr double kInertiaLargeSigma = 1.0e6;
 // never set on problems whose factorizations stay full-rank.
 TEST(InertiaRegularizationSolve, ClassicDegeneracyLatchTracksSingularity) {
     auto degen = build_inertia_duplicated_equality_nlp();
-    degen->optimizer_->settings().inertia_mode_ = InertiaModes::classic;
-    degen->optimizer_->set_max_iters(100);
-    (void)degen->optimize();
+    tycho::solvers::InteriorPointSolver ipm_degen;
+    ipm_degen.set_print_level(3);
+    ipm_degen.settings().inertia_mode_ = InertiaModes::classic;
+    ipm_degen.set_max_iters(100);
+    (void)degen->solve(&ipm_degen);
 #ifdef USE_ACCELERATE_SPARSE
     // Accelerate reports inertia honestly (no Pardiso-style static pivot
     // perturbation), so the duplicated-equality problem's singular KKT is
@@ -331,14 +333,16 @@ TEST(InertiaRegularizationSolve, ClassicDegeneracyLatchTracksSingularity) {
     // -- see the sibling ClassicConvergesOnRankDeficientKkt test's comment for
     // the same caveat. The healthy-problem EXPECT_FALSE below is NOT guarded:
     // a never-singular solve must never latch on any backend.
-    EXPECT_TRUE(degen->optimizer_->dc_latched_)
+    EXPECT_TRUE(ipm_degen.dc_latched_)
         << "delta_c engaged on a rank-deficient problem must set the latch";
 #endif
 
     auto healthy = build_inertia_wellcond_nlp();
-    healthy->optimizer_->settings().inertia_mode_ = InertiaModes::classic;
-    (void)healthy->optimize();
-    EXPECT_FALSE(healthy->optimizer_->dc_latched_)
+    tycho::solvers::InteriorPointSolver ipm_healthy;
+    ipm_healthy.set_print_level(3);
+    ipm_healthy.settings().inertia_mode_ = InertiaModes::classic;
+    (void)healthy->solve(&ipm_healthy);
+    EXPECT_FALSE(ipm_healthy.dc_latched_)
         << "a full-rank problem must never engage delta_c or the latch";
 }
 
@@ -364,8 +368,10 @@ TEST(InertiaRegularizationSolve, ClassicDegeneracyLatchTracksSingularity) {
 // any backend.
 TEST(InertiaRegularizationSolve, ActiveBoundCurvatureNeverTripsSingularitySignal) {
     auto prob = build_inertia_active_bound_nlp(/*lower=*/0.0, /*upper=*/1.0);
-    const auto flag = prob->optimize();
-    auto &opt = *prob->optimizer_;
+    tycho::solvers::InteriorPointSolver opt;
+    opt.set_print_level(3);
+    opt.settings().inertia_mode_ = InertiaModes::classic;
+    const auto flag = prob->solve(&opt).flag_;
 
     // Not ACCEPTABLE (that would mean the solve limped in on the relaxed
     // tolerances), and not SINGULAR_KKT (an exhausted ladder).
@@ -405,8 +411,10 @@ TEST(InertiaRegularizationSolve, ActiveBoundCurvatureNeverTripsSingularitySignal
 // not just the last few. Same assertions.
 TEST(InertiaRegularizationSolve, NarrowBoxCurvatureNeverTripsSingularitySignal) {
     auto prob = build_inertia_active_bound_nlp(/*lower=*/0.99, /*upper=*/1.0);
-    const auto flag = prob->optimize();
-    auto &opt = *prob->optimizer_;
+    tycho::solvers::InteriorPointSolver opt;
+    opt.set_print_level(3);
+    opt.settings().inertia_mode_ = InertiaModes::classic;
+    const auto flag = prob->solve(&opt).flag_;
 
     EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
     const auto &r = opt.result();
@@ -435,16 +443,20 @@ namespace {
 // and δ_c is negligible, so the mode is a near-no-op).
 TEST(InertiaRegularizationSolve, WellConditionedParityAcrossModes) {
     auto prob_classic = build_inertia_wellcond_nlp();
-    prob_classic->optimizer_->settings().inertia_mode_ = InertiaModes::classic;
-    auto flag_classic = prob_classic->optimize();
+    tycho::solvers::InteriorPointSolver ipm_classic;
+    ipm_classic.set_print_level(3);
+    ipm_classic.settings().inertia_mode_ = InertiaModes::classic;
+    auto flag_classic = prob_classic->solve(&ipm_classic).flag_;
     ASSERT_EQ(flag_classic, tycho::ConvergenceFlags::CONVERGED);
-    const double obj_classic = prob_classic->optimizer_->result().obj_val_;
+    const double obj_classic = ipm_classic.result().obj_val_;
 
     auto prob_prox = build_inertia_wellcond_nlp();
-    prob_prox->optimizer_->settings().inertia_mode_ = InertiaModes::proximal_regularization;
-    auto flag_prox = prob_prox->optimize();
+    tycho::solvers::InteriorPointSolver ipm_prox;
+    ipm_prox.set_print_level(3);
+    ipm_prox.settings().inertia_mode_ = InertiaModes::proximal_regularization;
+    auto flag_prox = prob_prox->solve(&ipm_prox).flag_;
     ASSERT_EQ(flag_prox, tycho::ConvergenceFlags::CONVERGED);
-    const double obj_prox = prob_prox->optimizer_->result().obj_val_;
+    const double obj_prox = ipm_prox.result().obj_val_;
 
     EXPECT_NEAR(obj_classic, 1.0, 1e-6);
     EXPECT_NEAR(obj_prox, obj_classic, 1e-6);
@@ -478,15 +490,16 @@ TEST(InertiaRegularizationSolve, ProximalRegularizationWithL1NestedRestoration) 
         auto x = args.coeff<0>();
         prob->add_equal_con(GenericFunction<-1, -1>(x + 1.0), (Eigen::VectorXi(1) << 0).finished());
     }
-    prob->optimizer_->set_print_level(3);
-    prob->optimizer_->settings().inertia_mode_ = InertiaModes::proximal_regularization;
-    prob->optimizer_->settings().acceptance_strategy_ = AcceptanceStrategies::merit;
-    prob->optimizer_->settings().restoration_mode_ = RestorationModes::l1_nested;
-    prob->optimizer_->set_max_ls_iters(0);
-    prob->optimizer_->set_max_iters(80);
-    auto flag = prob->optimize();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
+    ipm.settings().inertia_mode_ = InertiaModes::proximal_regularization;
+    ipm.settings().acceptance_strategy_ = AcceptanceStrategies::merit;
+    ipm.settings().restoration_mode_ = RestorationModes::l1_nested;
+    ipm.set_max_ls_iters(0);
+    ipm.set_max_iters(80);
+    auto flag = prob->solve(&ipm).flag_;
 
-    const auto &r = prob->optimizer_->result();
+    const auto &r = ipm.result();
     EXPECT_GE(r.last_feas_rest_entries_, 1);             // restoration entered
     EXPECT_NE(flag, tycho::ConvergenceFlags::CONVERGED); // never falsely converges
 }

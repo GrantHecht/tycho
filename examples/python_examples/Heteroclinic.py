@@ -61,9 +61,10 @@ def MakeOrbit(ode, OrbitIG, Jconst, nsegs=100):
 
     # Specifying Jacobi constant, not amplitude of orbit
     phase.add_equal_con("First", JacobiFunc(ode.mu) - Jconst, range(0, 6))
-    phase.optimizer.set_eq_con_tol(1.0e-12)
-    phase.optimizer.print_level = 1
-    phase.solve()  # Solve the orbit
+    ipm = sol.IPM()
+    ipm.set_eq_con_tol(1.0e-12)
+    ipm.print_level = 1
+    phase.solve(ipm, mode="feasible")  # Solve the orbit
 
     return phase.return_traj()
 
@@ -201,9 +202,10 @@ def MakeHeteroclinic(ode, Man1, Man2, L1Orbit, L2Orbit):
     ocp.add_forward_link_equal_con(phase1, phase2, range(0, 6), auto_scale="auto")
     ocp.set_adaptive_mesh()
 
-    ocp.optimizer.set_eq_con_tol(1.0e-9)
-    ocp.optimizer.set_opt_ls_mode("L1")
-    ocp.optimize()
+    ipm = sol.IPM()
+    ipm.set_eq_con_tol(1.0e-9)
+    ipm.set_opt_ls_mode("L1")
+    ocp.solve(ipm)
 
     Traj1 = phase1.return_traj()
     Traj2 = phase2.return_traj()

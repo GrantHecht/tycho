@@ -59,7 +59,7 @@ Args = vf.Arguments
 
 TIER = "hard"
 TIMEOUT = 120
-SOLVE_MODE = "optimize"
+SOLVE_CALL = {"mode": "optimal"}
 
 
 class _LTModel(oc.ODEBase):
@@ -114,10 +114,16 @@ def build():
     phase.add_lu_norm_bound("Path", [7, 8, 9], 0.001, 1, 1.0)
     phase.add_boundary_value("Back", range(0, 6), Xf[0:6])
 
-    phase.optimizer.set_bound_fraction(0.995)
-    phase.optimizer.set_opt_ls_mode("L1")
-    phase.optimizer.set_max_ls_iters(2)
-    phase.optimizer.set_delta_h(1.0e-6)
     phase.add_delta_time_objective(1.0)
 
     return phase
+
+
+def configure(engine):
+    """Problem-owned engine tuning (was baked into ``build()``'s
+    ``phase.optimizer`` before the engine was detached from the problem --
+    see tests/corpus/README.md for the contract)."""
+    engine.set_bound_fraction(0.995)
+    engine.set_opt_ls_mode("L1")
+    engine.set_max_ls_iters(2)
+    engine.set_delta_h(1.0e-6)

@@ -24,7 +24,7 @@ SUPPRESSES the "Iterations : N" console line the harness's instrument
 depends on (that line is only emitted when print_level < 2). Reproduced
 here: running the parent verbatim through this harness's iteration-count
 regex yields no matches at all -- this is exactly the "HyperSens
-0-visible" case flagged in the Task 3 brief. This module sets
+0-visible" case flagged in the corpus brief. This module sets
 ``print_level = 1`` instead (one level below the parent's), which is
 otherwise cosmetic (console verbosity only, does not change convergence
 behavior) and restores the instrument.
@@ -63,7 +63,7 @@ known solution).
 Stiff variant (nsegs=2, adaptive mesh OFF, eq_con_tol/kkt_tol=1e-12):
 ACCEPTABLE (harness status "acceptable" — not a clean CONVERGED), 103
 total iterations (52 + 51 across the two internal interior-point solver calls issued by
-``phase.optimize_solve()``) -- 103 / 30 ≈ 3.4x the parent, clearing the
+this module's ``feasible_fallback`` solve chain) -- 103 / 30 ≈ 3.4x the parent, clearing the
 ≥2x rule -- AND ``phase.mesh_converged`` is False, AND the objective
 (≈ 969.8) is wildly wrong relative to the true ≈ 1.669. This is recorded
 in ``notes`` since the harness's flag-derived status does not capture the
@@ -83,7 +83,7 @@ Args = vf.Arguments
 
 TIER = "hard"
 TIMEOUT = 60
-SOLVE_MODE = "optimize_solve"
+SOLVE_CALL = {"mode": "optimal", "feasible_fallback": True}
 
 # Deviation from the parent's nsegs=10 / adaptive-mesh-on / tol=1e-7 — see
 # module docstring for why a single-lever nsegs change was insufficient.
@@ -120,21 +120,27 @@ def build():
     phase.add_integral_objective(Args(2).squared_norm() / 2, [0, 2])
     phase.add_lu_var_bound("Path", 0, -50, 50)
     phase.add_lu_var_bound("Path", 2, -50, 50)
-    phase.optimizer.set_opt_ls_mode("L1")
-    phase.optimizer.set_soe_ls_mode("L1")
-    phase.optimizer.set_qp_ordering_mode("MINDEG")
-    # One level below the parent's print_level=2 -- see docstring Deviation #1.
-    phase.optimizer.print_level = 1
     phase.set_num_partitions(1)
-    phase.optimizer.qp_threads = 1
 
     # Perturbation: adaptive mesh refinement disabled, so nsegs=2 is the
     # permanent (under-resolved) mesh -- see docstring Deviation #2.
     phase.set_adaptive_mesh(False)
-    phase.optimizer.set_eq_con_tol(_TOL)
-    phase.optimizer.set_kkt_tol(_TOL)
 
     return phase
+
+
+def configure(engine):
+    """Problem-owned engine tuning (was baked into ``build()``'s
+    ``phase.optimizer`` before the engine was detached from the problem --
+    see tests/corpus/README.md for the contract)."""
+    engine.set_opt_ls_mode("L1")
+    engine.set_soe_ls_mode("L1")
+    engine.set_qp_ordering_mode("MINDEG")
+    # One level below the parent's print_level=2 -- see docstring Deviation #1.
+    engine.print_level = 1
+    engine.qp_threads = 1
+    engine.set_eq_con_tol(_TOL)
+    engine.set_kkt_tol(_TOL)
 
 
 def POST_SOLVE(prob) -> str:

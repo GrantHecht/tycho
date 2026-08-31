@@ -64,8 +64,9 @@ values.
    phase.add_lu_var_bound("Path", 4, -0.1, 2.00)
    phase.add_boundary_value("Back", [0, 1], [xf, yf])
    phase.add_delta_time_objective(1.0)
-   phase.optimizer.set_print_level(3)
-   phase.optimize()
+   ipm = typy.solvers.IPM()
+   ipm.set_print_level(3)
+   phase.solve(ipm)
 
    Traj = np.array(phase.return_traj()).T
 

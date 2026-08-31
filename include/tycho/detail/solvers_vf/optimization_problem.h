@@ -26,11 +26,11 @@
 #include <fmt/format.h>
 
 #include "tycho/detail/hven_namespaces.h"
-#include <hven/model/non_linear_program.h>
 #include "tycho/detail/solvers/nlp_backend.h"
 #include "tycho/detail/solvers_vf/transcribed_aggregate.h"
-#include <hven/drivers/interior_point_solver.h>
 #include "tycho/vector_functions.h"
+#include <hven/drivers/interior_point_solver.h>
+#include <hven/model/non_linear_program.h>
 
 namespace tycho::solvers {
 
@@ -88,10 +88,10 @@ struct OptimizationProblem : BackendProblemBase {
         for (auto &index : func.indices_) {
             int isize = index.size();
             if (irows != isize) {
-                throw std::invalid_argument(fmt::format(
-                    "Input size of {0:} (IRows = {1:}) does not match that implied by "
-                    "indexing parameters (IRows = {2:}).",
-                    ftype, irows, isize));
+                throw std::invalid_argument(
+                    fmt::format("Input size of {0:} (IRows = {1:}) does not match that implied by "
+                                "indexing parameters (IRows = {2:}).",
+                                ftype, irows, isize));
             }
         }
     }
@@ -113,8 +113,8 @@ struct OptimizationProblem : BackendProblemBase {
     ///         NaN, or if the two finite sides are inverted.
     void add_variable_bound(int index, double lower, double upper) {
         if (index < 0) {
-            throw std::invalid_argument(fmt::format(
-                "add_variable_bound: variable index {0} is negative", index));
+            throw std::invalid_argument(
+                fmt::format("add_variable_bound: variable index {0} is negative", index));
         }
         if (std::isnan(lower) || std::isnan(upper)) {
             throw std::invalid_argument(
@@ -196,74 +196,53 @@ struct OptimizationProblem : BackendProblemBase {
 
     void transcribe();
 
-    void jet_initialize() {
-        // Single-partition evaluation on the calling thread, and a single QP
-        // thread: two independent settings, set independently. set_qp_threads
-        // goes first because it validates and can throw.
-        this->optimizer_->set_qp_threads(1);
+    /// @internal
+    /// @brief Prepare the problem for a "jet" (batched) solve.
+    ///
+    /// Single-partition evaluation on the calling thread. The engine-level
+    /// settings (QP thread count, print level) that jet_initialize() used to
+    /// force onto the problem's own owned optimizer no longer apply here --
+    /// there is no owned optimizer; the caller configures whichever engine
+    /// it hands to solve() directly.
+    /// @endinternal
+    void jet_initialize() override {
         this->set_num_partitions(1);
-        this->optimizer_->set_print_level(10);
         this->transcribe();
     }
-    void jet_release() {
-        this->optimizer_->release();
-        // Same ordering rationale as jet_initialize() above.
-        this->optimizer_->set_qp_threads(1);
+    /// @internal
+    /// @brief Tear down jet-solve state and restore the default configuration.
+    /// @endinternal
+    void jet_release() override {
         this->set_num_partitions(1);
-        this->optimizer_->set_print_level(0);
         this->nlp_ = std::shared_ptr<NonLinearProgram>();
         this->provider_ = std::shared_ptr<TranscribedAggregate>();
         this->reset_transcription();
     }
 
-    tycho::ConvergenceFlags solve() {
+    // BackendProblemBase's new solve(EngineRef, SolveOptions) overload is
+    // the only solve() this class has -- OptimizationProblem declares no
+    // 0-arg override of its own, so nothing here hides it and no
+    // using-declaration is needed.
+
+  protected:
+    /// @brief solve() hook: transcribe if needed (make_nlp + set_nlp
+    ///        wiring already lives inside transcribe()).
+    void prepare_solve() override {
         if (this->do_transcription_)
             this->transcribe();
-        auto out = this->run_nlp_solver(JetJobModes::Solve, this->active_variables_);
-        this->active_variables_ = out.variables_;
-        this->active_eq_lmults_ = out.eq_lmults_;
-        this->active_iq_lmults_ = out.iq_lmults_;
-        return out.flag_;
     }
 
-    tycho::ConvergenceFlags optimize() {
-        if (this->do_transcription_)
-            this->transcribe();
-        auto out = this->run_nlp_solver(JetJobModes::Optimize, this->active_variables_);
-        this->active_variables_ = out.variables_;
-        this->active_eq_lmults_ = out.eq_lmults_;
-        this->active_iq_lmults_ = out.iq_lmults_;
-        return out.flag_;
-    }
+    /// @brief solve() hook: mark this problem as needing transcription again.
+    void invalidate_transcription() override { this->reset_transcription(); }
 
-    tycho::ConvergenceFlags solve_optimize() {
-        if (this->do_transcription_)
-            this->transcribe();
-        auto out = this->run_nlp_solver(JetJobModes::SolveOptimize, this->active_variables_);
-        this->active_variables_ = out.variables_;
-        this->active_eq_lmults_ = out.eq_lmults_;
-        this->active_iq_lmults_ = out.iq_lmults_;
-        return out.flag_;
-    }
+    /// @brief solve() hook: the active variables vector.
+    Eigen::VectorXd initial_primal() const override { return this->active_variables_; }
 
-    tycho::ConvergenceFlags solve_optimize_solve() {
-        if (this->do_transcription_)
-            this->transcribe();
-        auto out = this->run_nlp_solver(JetJobModes::SolveOptimizeSolve, this->active_variables_);
-        this->active_variables_ = out.variables_;
+    /// @brief solve() hook: write the stage's primal/multipliers back.
+    void accept_stage(const StageOutput &out) override {
+        this->active_variables_ = out.primal_;
         this->active_eq_lmults_ = out.eq_lmults_;
         this->active_iq_lmults_ = out.iq_lmults_;
-        return out.flag_;
-    }
-
-    tycho::ConvergenceFlags optimize_solve() {
-        if (this->do_transcription_)
-            this->transcribe();
-        auto out = this->run_nlp_solver(JetJobModes::OptimizeSolve, this->active_variables_);
-        this->active_variables_ = out.variables_;
-        this->active_eq_lmults_ = out.eq_lmults_;
-        this->active_iq_lmults_ = out.iq_lmults_;
-        return out.flag_;
     }
 };
 

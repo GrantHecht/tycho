@@ -23,6 +23,7 @@ import tychopy as typy
 ## Setup
 vf = typy.vector_functions
 oc = typy.optimal_control
+solvs = typy.solvers
 
 Args = vf.Arguments
 
@@ -139,12 +140,13 @@ def MultSpaceCraft(Trajs, IStates, SetPointIG, LTacc=0.01, NSegs=75):
 
     ocp.add_link_param_equal_con(Args(6).head3().dot(Args(6).tail3()), range(0, 6))
 
-    ocp.optimizer.set_opt_ls_mode("L1")
-    ocp.optimizer.set_delta_h(5.0e-8)
-    ocp.optimizer.set_kkt_tol(1.0e-9)
-    ocp.optimizer.set_bound_fraction(0.997)
-    ocp.optimizer.print_level = 1
-    ocp.optimizer.set_max_ls_iters(1)
+    ipm = solvs.IPM()
+    ipm.set_opt_ls_mode("L1")
+    ipm.set_delta_h(5.0e-8)
+    ipm.set_kkt_tol(1.0e-9)
+    ipm.set_bound_fraction(0.997)
+    ipm.print_level = 1
+    ipm.set_max_ls_iters(1)
 
     Data = []
 
@@ -170,13 +172,13 @@ def MultSpaceCraft(Trajs, IStates, SetPointIG, LTacc=0.01, NSegs=75):
 
         # Solve before optimizing for the intial run
         if j == 0:
-            ocp.solve()
+            ocp.solve(ipm, mode="feasible")
         t0 = time.perf_counter()
-        Flag = ocp.optimize()
+        Flag = ocp.solve(ipm)
         tf = time.perf_counter()
         print((tf - t0) * 1000.0)
-        if Flag == typy.solvers.ConvergenceFlags.NOTCONVERGED:
-            ocp.solve_optimize()
+        if Flag.flag == typy.solvers.ConvergenceFlags.NOTCONVERGED:
+            ocp.solve(ipm, presolve=True)
 
         Data.append(
             [[phase.return_traj() for phase in ocp.phases], ocp.return_link_params()]

@@ -56,6 +56,10 @@ set(TYCHO_TEST_LIGHT_SOURCES
     # Boundary pins for the model contract. Light because it reaches only the
     # solver library's own headers -- no tycho/tycho.h, no VectorFunction.
     solvers/test_model_contract_pins.cpp
+    # The solve-call value types (Mode/StageResult/PhaseResult/SolveResult).
+    # Light for the same reason: only solve_types.h and the solver library's
+    # own warm-start header, no tycho/tycho.h, no VectorFunction.
+    solvers/test_solve_types.cpp
 )
 
 set(TYCHO_TEST_HEAVY_SOURCES
@@ -208,6 +212,12 @@ set(TYCHO_TEST_HEAVY_SOURCES
     # The transcribed problem as a Level 2 provider. Standalone below, for the
     # same reason the suite above is.
     solvers/test_level2_provider.cpp # file-local prefix: Level2Provider*/l2_provider_*
+    # The engine handle layer (EngineRef naming, SqpSolver's feasibility-mode
+    # refusal, IpoptSolver's absent-build refusal, clone_prototype).
+    solvers/test_solve_pipeline.cpp # file-local prefix: SolvePipeline*/solve_pipeline_*
+    # Determinism pins for the solve(engine, opts) surface (the file's own
+    # header explains what these rows used to compare against).
+    solvers/test_solve_equivalence.cpp # file-local prefix: SolveEquivalence*/solve_equivalence_*
 )
 
 #-------------------------------------------------------------------------------

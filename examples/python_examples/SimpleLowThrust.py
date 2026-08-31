@@ -108,16 +108,17 @@ if __name__ == "__main__":
     phase.add_lu_norm_bound("Path", [7, 8, 9], 0.001, 1, 1.0)
     phase.add_boundary_value("Back", range(0, 6), Xf[0:6])
 
-    phase.optimizer.set_print_level(1)
-    phase.optimizer.set_bound_fraction(0.995)
-    phase.optimizer.set_opt_ls_mode("L1")
-    phase.optimizer.set_max_ls_iters(2)
-    phase.optimizer.set_delta_h(1.0e-6)
+    ipm = sol.IPM()
+    ipm.set_print_level(1)
+    ipm.set_bound_fraction(0.995)
+    ipm.set_opt_ls_mode("L1")
+    ipm.set_max_ls_iters(2)
+    ipm.set_delta_h(1.0e-6)
     ########################################
     phase.add_delta_time_objective(1.0)
 
-    phase.optimize()
-    phase.optimizer.max_ls_iters = 0
+    phase.solve(ipm)
+    ipm.max_ls_iters = 0
 
     TimeOptimal = phase.return_traj()
     TimeCostates = phase.return_costate_traj()
@@ -125,7 +126,7 @@ if __name__ == "__main__":
     phase.remove_state_objective(-1)
     ########################################
     phase.add_integral_objective(LTModel.powerobj(0.5), [7, 8, 9])
-    phase.optimize()
+    phase.solve(ipm)
 
     PowerOptimal = phase.return_traj()
     PowerCostates = phase.return_costate_traj()
@@ -133,7 +134,7 @@ if __name__ == "__main__":
     #######################################
 
     phase.add_integral_objective(LTModel.massobj(1.0), [7, 8, 9])
-    phase.optimize()
+    phase.solve(ipm)
 
     MassOptimal = phase.return_traj()
     MassCostates = phase.return_costate_traj()

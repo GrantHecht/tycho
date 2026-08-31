@@ -1,9 +1,9 @@
 // Source: Dymos optimal control library (OpenMDAO)
 
-#include <tycho/tycho.h>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -11,9 +11,9 @@ using namespace tycho::vf;
 using namespace tycho::oc;
 
 static constexpr double g0 = 9.81;
-static constexpr double Lstar = 1000.0;    // m
-static constexpr double Tstar = 60.0;      // sec
-static constexpr double Mstar = 10.0;      // kg
+static constexpr double Lstar = 1000.0; // m
+static constexpr double Tstar = 60.0;   // sec
+static constexpr double Mstar = 10.0;   // kg
 static const double Astar = Lstar / (Tstar * Tstar);
 static const double Vstar = Lstar / Tstar;
 static const double Rhostar = Mstar / (Lstar * Lstar * Lstar);
@@ -26,22 +26,18 @@ static const double h_scale = 8.44e3 / Lstar;
 static const double E0 = 400000.0 / Estar;
 static const double g = g0 / Astar;
 
-static double MFunc_val(double rad) {
-    return (4.0 / 3.0) * (M_PI * RhoIron) * (rad * rad * rad);
-}
+static double MFunc_val(double rad) { return (4.0 / 3.0) * (M_PI * RhoIron) * (rad * rad * rad); }
 
-static double SFunc_val(double rad) {
-    return M_PI * (rad * rad);
-}
+static double SFunc_val(double rad) { return M_PI * (rad * rad); }
 
 ODE make_cannon_ode() {
     return ODEBuilder(4, 0, 1)
         .define([](auto &args) {
-            auto v     = args.x_var(0);
+            auto v = args.x_var(0);
             auto gamma = args.x_var(1);
-            auto h     = args.x_var(2);
-            auto r     = args.x_var(3);
-            auto rad   = args.p_var(0);
+            auto h = args.x_var(2);
+            auto r = args.x_var(3);
+            auto rad = args.p_var(0);
 
             auto M = (4.0 / 3.0) * (M_PI * RhoIron) * (rad * rad * rad);
             auto S = M_PI * (rad * rad);
@@ -50,10 +46,10 @@ ODE make_cannon_ode() {
 
             auto D = (0.5 * CD) * rho * (v * v) * S;
 
-            auto vdot     = D * (-1.0) / M - g * sin(gamma);
+            auto vdot = D * (-1.0) / M - g * sin(gamma);
             auto gammadot = g * cos(gamma) * (-1.0) / v;
-            auto hdot     = v * sin(gamma);
-            auto rdot     = v * cos(gamma);
+            auto hdot = v * sin(gamma);
+            auto rdot = v * cos(gamma);
 
             return stack(vdot, gammadot, hdot, rdot);
         })
@@ -64,7 +60,7 @@ ODE make_cannon_ode() {
 // Energy constraint: 0.5 * M(rad) * v^2 - E0 <= 0, scaled by 0.01.
 auto make_energy_constraint() {
     auto args = Arguments<2>();
-    auto v   = args.coeff<0>();
+    auto v = args.coeff<0>();
     auto rad = args.coeff<1>();
 
     auto M = (4.0 / 3.0) * (M_PI * RhoIron) * (rad * rad * rad);
@@ -101,9 +97,8 @@ int main() {
     auto ascent_event_expr = ascent_args.coeff(0) * sin(ascent_args.coeff(1));
     auto ascent_event = GenericFunction<-1, 1>(ascent_event_expr);
 
-    auto [ascent_traj, ascent_events] =
-        integ.integrate_dense(IG, 60.0 / Tstar,
-                              std::vector<EventPack>{EventPack{ascent_event, 0, 1}}, false);
+    auto [ascent_traj, ascent_events] = integ.integrate_dense(
+        IG, 60.0 / Tstar, std::vector<EventPack>{EventPack{ascent_event, 0, 1}}, false);
 
     // Descent event: h crossing zero (ground impact)
     auto descent_args = ODEArguments(4, 0, 1);
@@ -133,11 +128,13 @@ int main() {
     // Energy inequality references state var v (xvars=0) and ODE param rad (pvars=0).
     {
         auto efunc = make_energy_constraint();
-        Eigen::VectorXi xvars(1); xvars << 0;
-        Eigen::VectorXi pvars(1); pvars << 0;
+        Eigen::VectorXi xvars(1);
+        xvars << 0;
+        Eigen::VectorXi pvars(1);
+        pvars << 0;
         Eigen::VectorXi empty;
-        aphase.add_inequal_con(
-            PhaseRegionFlags::Front, efunc, xvars, pvars, empty, ScaleModes::AUTO);
+        aphase.add_inequal_con(PhaseRegionFlags::Front, efunc, xvars, pvars, empty,
+                               ScaleModes::AUTO);
     }
 
     aphase.add_boundary_value(PhaseRegionFlags::Back, "gamma", 0.0);
@@ -155,21 +152,22 @@ int main() {
     ocp.add_forward_link_equal_con(aphase, dphase, {"v", "gamma", "h", "r", "t"});
 
     {
-        Eigen::VectorXi pvar(1); pvar << 0;
-        ocp.add_direct_link_equal_con(
-            0, PhaseRegionFlags::ODEParams, pvar,
-            1, PhaseRegionFlags::ODEParams, pvar);
+        Eigen::VectorXi pvar(1);
+        pvar << 0;
+        ocp.add_direct_link_equal_con(0, PhaseRegionFlags::ODEParams, pvar, 1,
+                                      PhaseRegionFlags::ODEParams, pvar);
     }
 
-    ocp.optimizer().set_opt_ls_mode("L1");
-    ocp.optimizer().set_print_level(1);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_opt_ls_mode("L1");
+    ipm.set_print_level(1);
 
     std::cout << "Solving multi-phase cannon ...\n" << std::flush;
-    const auto status = ocp.optimize();
+    const auto status = ocp.solve(ipm).flag_;
 
     if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
-        std::cerr << "MultiPhaseCannon (builder): FAILED (status "
-                  << static_cast<int>(status) << ")\n";
+        std::cerr << "MultiPhaseCannon (builder): FAILED (status " << static_cast<int>(status)
+                  << ")\n";
         return 1;
     }
 

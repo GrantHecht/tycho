@@ -42,6 +42,7 @@ dphase.add_value_objective("Back", "r", -1.0)   # maximize final range
 ```cpp
 using namespace tycho;
 using namespace tycho::oc;
+using namespace tycho::solvers;
 
 auto aphase = ode.phase(TranscriptionModes::LGL5, ascent_ig, 128);
 Eigen::Vector3d front_vals(h0, r0, 0.0);
@@ -163,12 +164,16 @@ individual phases:
 ::::{tab-set}
 :::{tab-item} Python
 ```python
-ocp.optimize()              # or ocp.solve_optimize() for a rough guess
+import tychopy.solvers as slv
+
+ipm = slv.IPM()
+ocp.solve(ipm)               # or ocp.solve(ipm, presolve=True) for a rough-guess presolve stage
 ```
 :::
 :::{tab-item} C++
 ```cpp
-ocp.optimize();             // or ocp.solve_optimize() for a rough guess
+InteriorPointSolver ipm;
+ocp.solve(ipm);              // or {.presolve = true} for a rough-guess presolve stage
 ```
 :::
 ::::

@@ -185,15 +185,16 @@ embedded in a VectorFunction, and adaptive mesh refinement
    phase.add_boundary_value("Back", ["h", "v", "fpa"], [htf, vtf, fpatf])
    phase.add_delta_time_objective(1.0)
 
-   phase.optimizer.set_print_level(3)
+   ipm = typy.solvers.IPM()
+   ipm.set_print_level(3)
    phase.set_num_partitions(8)
-   phase.optimizer.qp_threads = 8
+   ipm.qp_threads = 8
 
    # Adaptive mesh refinement, driven by the integrator-based error estimator.
    phase.set_adaptive_mesh(True)
    phase.set_mesh_error_estimator(oc.MeshErrorEstimators.INTEGRATOR)
    phase.set_mesh_tol(1.0e-7)
-   phase.optimize()
+   phase.solve(ipm)
 
    Traj = phase.return_traj()
    print("Minimum time to climb: {0:.2f} s".format(Traj[-1][4]))

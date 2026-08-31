@@ -97,6 +97,8 @@ nanobind_add_module(_tychopy
     solvers/interior_point_solver_bind.cpp
     solvers/optimization_problem_bind.cpp
     solvers/jet_bind.cpp
+    solvers/solve_types_bind.cpp
+    solvers/engines_bind.cpp
     # Astro bindings
     astro/lambert_solvers_bind.cpp
     # Integrators bindings

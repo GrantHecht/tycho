@@ -1,11 +1,11 @@
 // Source: http://www.ee.ic.ac.uk/ICLOCS/ExampleParallelParking.html
 //         https://ieeexplore.ieee.org/document/7463491
 
-#include <tycho/tycho.h>
 #include <cmath>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -32,8 +32,7 @@ template <class T, class K> auto fslot_fn(const T &X, const K &k, double SL, dou
 
 // Helper: triangle area |x1(y2-y3) + x2(y3-y1) + x3(y1-y2)| / 2
 template <class T1, class T2, class T3, class T4, class T5, class T6>
-auto tri_area(const T1 &ax, const T2 &ay, const T3 &bx, const T4 &by, const T5 &cx,
-              const T6 &cy) {
+auto tri_area(const T1 &ax, const T2 &ay, const T3 &bx, const T4 &by, const T5 &cx, const T6 &cy) {
     return abs(ax * (by - cy) + bx * (cy - ay) + cx * (ay - by)) / 2.0;
 }
 
@@ -71,30 +70,30 @@ int main() {
 
     const double area_ref = (l_axes + l_front + l_rear) * 2.0 * b_width;
 
-    auto ode = ODEBuilder(6, 2)
-                   .define([l_axes](auto &args) {
-                       auto x = args.x_var(0);
-                       auto y = args.x_var(1);
-                       auto v = args.x_var(2);
-                       auto a = args.x_var(3);
-                       auto theta = args.x_var(4);
-                       auto phi = args.x_var(5);
-                       auto u1 = args.u_var(0);
-                       auto u2 = args.u_var(1);
+    auto ode =
+        ODEBuilder(6, 2)
+            .define([l_axes](auto &args) {
+                auto x = args.x_var(0);
+                auto y = args.x_var(1);
+                auto v = args.x_var(2);
+                auto a = args.x_var(3);
+                auto theta = args.x_var(4);
+                auto phi = args.x_var(5);
+                auto u1 = args.u_var(0);
+                auto u2 = args.u_var(1);
 
-                       return stack(v * cos(theta), v * sin(theta), a, u1,
-                                    v * tan(phi) / l_axes, u2);
-                   })
-                   .var_names({{"x", 0},
-                               {"y", 1},
-                               {"v", 2},
-                               {"a", 3},
-                               {"theta", 4},
-                               {"phi", 5},
-                               {"t", 6},
-                               {"u1", 7},
-                               {"u2", 8}})
-                   .build();
+                return stack(v * cos(theta), v * sin(theta), a, u1, v * tan(phi) / l_axes, u2);
+            })
+            .var_names({{"x", 0},
+                        {"y", 1},
+                        {"v", 2},
+                        {"a", 3},
+                        {"theta", 4},
+                        {"phi", 5},
+                        {"t", 6},
+                        {"u1", 7},
+                        {"u2", 8}})
+            .build();
 
     // Slot boundary constraint (8 inequalities); uses static param k.
     auto make_slot_fn = []() {
@@ -109,10 +108,10 @@ int main() {
         auto [CXw, CYw] = corner_world(x, y, theta, Cx_b, Cy_b);
         auto [DX, DY] = corner_world(x, y, theta, Dx_b, Dy_b);
 
-        return stack(AY - CL, (-1.0) * AY + fslot_fn(AX, k, SL, SW),
-                     BY - CL, (-1.0) * BY + fslot_fn(BX, k, SL, SW),
-                     CYw - CL, (-1.0) * CYw + fslot_fn(CXw, k, SL, SW),
-                     DY - CL, (-1.0) * DY + fslot_fn(DX, k, SL, SW));
+        return stack(AY - CL, (-1.0) * AY + fslot_fn(AX, k, SL, SW), BY - CL,
+                     (-1.0) * BY + fslot_fn(BX, k, SL, SW), CYw - CL,
+                     (-1.0) * CYw + fslot_fn(CXw, k, SL, SW), DY - CL,
+                     (-1.0) * DY + fslot_fn(DX, k, SL, SW));
     };
 
     auto make_corner_fn = [area_ref]() {
@@ -151,10 +150,9 @@ int main() {
         auto y = args.coeff<0>();
         auto theta = args.coeff<1>();
 
-        return stack(y + sin(theta) * Ax_b + cos(theta) * Ay_b,
-                     y + sin(theta) * Bx_b + cos(theta) * By_b,
-                     y + sin(theta) * Cx_b + cos(theta) * Cy_b,
-                     y + sin(theta) * Dx_b + cos(theta) * Dy_b);
+        return stack(
+            y + sin(theta) * Ax_b + cos(theta) * Ay_b, y + sin(theta) * Bx_b + cos(theta) * By_b,
+            y + sin(theta) * Cx_b + cos(theta) * Cy_b, y + sin(theta) * Dx_b + cos(theta) * Dy_b);
     };
 
     auto make_curv_fn = [l_axes]() {
@@ -174,11 +172,9 @@ int main() {
         return XtU;
     };
 
-    std::vector<Eigen::VectorXd> waypoints = {make_state(x0, y0, 13.18, 0),
-                                               make_state(0.0, y0, 0.0, 5),
-                                               make_state(5.5, y0, 10.0, 10),
-                                               make_state(1.0, -0.5, 20.0, 15),
-                                               make_state(1.0, -1.0, 0.0, 25)};
+    std::vector<Eigen::VectorXd> waypoints = {
+        make_state(x0, y0, 13.18, 0), make_state(0.0, y0, 0.0, 5), make_state(5.5, y0, 10.0, 10),
+        make_state(1.0, -0.5, 20.0, 15), make_state(1.0, -1.0, 0.0, 25)};
 
     // Phase is first constructed with a dummy IG, then re-set from sparse
     // waypoints with LERP interpolation.
@@ -199,8 +195,8 @@ int main() {
 
     Eigen::VectorXd front_bc(7);
     front_bc << x0, y0, 0.0, 0.0, theta0, 0.0, 0.0;
-    phase.add_boundary_value(PhaseRegionFlags::Front,
-                             {"x", "y", "v", "a", "theta", "phi", "t"}, front_bc);
+    phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "y", "v", "a", "theta", "phi", "t"},
+                             front_bc);
 
     phase.add_boundary_value(PhaseRegionFlags::Back, {"v", "a"}, Eigen::Vector2d(0.0, 0.0));
 
@@ -211,9 +207,8 @@ int main() {
         Eigen::VectorXi op_empty;
         Eigen::VectorXi sp_idx(1);
         sp_idx << 0;
-        phase.add_inequal_con(PhaseRegionFlags::Path,
-                              GenericFunction<-1, -1>(make_slot_fn()), xtup, op_empty,
-                              sp_idx, ScaleModes::AUTO);
+        phase.add_inequal_con(PhaseRegionFlags::Path, GenericFunction<-1, -1>(make_slot_fn()), xtup,
+                              op_empty, sp_idx, ScaleModes::AUTO);
     }
 
     phase.add_inequal_con(PhaseRegionFlags::Back, GenericFunction<-1, -1>(make_final_y_fn()),
@@ -236,15 +231,16 @@ int main() {
     phase.add_delta_time_objective(1.0);
 
     phase.set_num_partitions(8);
-    phase.optimizer().set_bound_fraction(0.995);
-    phase.optimizer().set_max_iters(2000);
-    phase.optimizer().set_print_level(1);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_bound_fraction(0.995);
+    ipm.set_max_iters(2000);
+    ipm.set_print_level(1);
 
     std::cout << "ParallelParking: coarse solve (k=" << k1 << ", segs=" << n_segs1 << ")...\n"
               << std::flush;
-    auto flag_coarse = phase.solve_optimize();
+    auto flag_coarse = phase.solve(ipm, {.presolve = true}).flag_;
     if (flag_coarse > tycho::ConvergenceFlags::ACCEPTABLE) {
-        std::cerr << "ParallelParking (builder): coarse solve_optimize FAILED\n";
+        std::cerr << "ParallelParking (builder): coarse solve FAILED\n";
         return EXIT_FAILURE;
     }
 
@@ -252,8 +248,8 @@ int main() {
               << std::flush;
     phase.refine_traj_manual(n_segs2);
     phase.sub_variable(PhaseRegionFlags::StaticParams, "k", k2);
-    phase.optimizer().set_kkt_tol(1.0e-8);
-    auto flag_refine = phase.optimize();
+    ipm.set_kkt_tol(1.0e-8);
+    auto flag_refine = phase.solve(ipm).flag_;
     if (flag_refine > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "ParallelParking (builder): refined optimize FAILED\n";
         return EXIT_FAILURE;

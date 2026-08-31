@@ -1,9 +1,9 @@
-#include <tycho/tycho.h>
 #include <cmath>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -11,7 +11,8 @@ using namespace tycho::vf;
 using namespace tycho::oc;
 
 /// Build a Phase for a single chain-length value L.
-auto make_chain_phase(double a, double b, int n_segs, double L) {
+auto make_chain_phase(double a, double b, int n_segs, double L,
+                      tycho::solvers::InteriorPointSolver &ipm) {
 
     auto ode = ODEBuilder(1, 1)
                    .define([](auto &args) { return args.u_var(0); })
@@ -57,11 +58,12 @@ auto make_chain_phase(double a, double b, int n_segs, double L) {
 
     phase.add_integral_param_function(GenericFunction<-1, 1>(length_expr), {"u"}, 0);
 
-    phase.optimizer().set_opt_ls_mode("L1");
-    phase.optimizer().set_max_ls_iters(2);
-    phase.optimizer().set_print_level(0);
-
-    phase.set_jet_job_mode(solvers::BackendProblemBase::JetJobModes::SolveOptimize);
+    // Stage the batched (Jet) solve: `ipm` is shared as the job's prototype
+    // engine across every phase in the batch (Jet::map clones it once per
+    // jet_run() call -- see BackendProblemBase::set_jet_job()'s doc comment
+    // for why sharing one prototype this way is safe). presolve=true runs a
+    // Feasible stage first, then the Optimal main stage.
+    phase.set_jet_job(ipm, solvers::SolveOptions{.presolve = true});
 
     return phase;
 }
@@ -72,12 +74,22 @@ int main() {
     constexpr int n_segs = 500;
     constexpr int n_jobs = 100;
 
+    tycho::solvers::InteriorPointSolver ipm;
+    // Matches the Python twin's engine configuration: line-search mode/max
+    // iters are real engine settings, not jet-path artifacts. print_level
+    // stays at its class default (0) here deliberately -- ClonedEngine
+    // (solve_pipeline.cpp) forces any InteriorPointSolver clone still at
+    // that default to a silent print_level for a jet run, so this ends up
+    // quiet without this example having to know that constant.
+    ipm.set_opt_ls_mode("L1");
+    ipm.set_max_ls_iters(2);
+
     std::vector<std::shared_ptr<ODEPhaseBase>> jobs;
     jobs.reserve(n_jobs);
 
     for (int i = 0; i < n_jobs; ++i) {
         double L = 2.25 + (8.0 - 2.25) * static_cast<double>(i) / (n_jobs - 1);
-        auto phase = make_chain_phase(a, b, n_segs, L);
+        auto phase = make_chain_phase(a, b, n_segs, L, ipm);
         jobs.push_back(phase.base_ptr());
     }
 

@@ -12,7 +12,9 @@ using TychoTest::SolverTest;
 
 TEST_F(SolverTest, BrachistochroneEndToEnd) {
     auto phase = make_brach_solver_phase(32);
-    auto status = phase->solve_optimize();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
+    auto status = phase->solve(&ipm, {.presolve = true}).flag_;
     EXPECT_EQ(status, tycho::ConvergenceFlags::CONVERGED);
 
     auto result = phase->return_traj();
@@ -22,8 +24,10 @@ TEST_F(SolverTest, BrachistochroneEndToEnd) {
 
 TEST_F(SolverTest, BrachistochroneSolveOnly) {
     auto phase = make_brach_solver_phase(16);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     // solve() only finds feasibility
-    auto status = phase->solve();
+    auto status = phase->solve(&ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
     // Should converge (feasible) -- Brachistochrone is well-posed.
     // ConvergenceFlags enum is ordered by severity: CONVERGED < ACCEPTABLE < NOTCONVERGED <
     // DIVERGING, so <= ACCEPTABLE accepts either CONVERGED or ACCEPTABLE.
@@ -42,8 +46,9 @@ static_assert(tycho::ConvergenceFlags::NOTCONVERGED < tycho::ConvergenceFlags::D
 
 TEST_F(SolverTest, PrintLevelZeroConverges) {
     auto phase = make_brach_solver_phase(16);
-    phase->optimizer_->set_print_level(0);
-    auto status = phase->solve_optimize();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(0);
+    auto status = phase->solve(&ipm, {.presolve = true}).flag_;
     EXPECT_EQ(status, tycho::ConvergenceFlags::CONVERGED);
 }
 
@@ -58,11 +63,9 @@ TEST_F(SolverTest, ToleranceSetterRejectsInvalid) {
     // Zero
     EXPECT_THROW(opt.set_kkt_tol(0.0), std::invalid_argument);
     // NaN
-    EXPECT_THROW(opt.set_kkt_tol(std::numeric_limits<double>::quiet_NaN()),
-                 std::invalid_argument);
+    EXPECT_THROW(opt.set_kkt_tol(std::numeric_limits<double>::quiet_NaN()), std::invalid_argument);
     // Inf
-    EXPECT_THROW(opt.set_kkt_tol(std::numeric_limits<double>::infinity()),
-                 std::invalid_argument);
+    EXPECT_THROW(opt.set_kkt_tol(std::numeric_limits<double>::infinity()), std::invalid_argument);
     // Valid
     EXPECT_NO_THROW(opt.set_kkt_tol(1e-8));
 
@@ -135,8 +138,7 @@ TEST_F(SolverTest, ObjScaleRejectsNonFinite) {
     InteriorPointSolver opt;
     EXPECT_THROW(opt.set_obj_scale(std::numeric_limits<double>::quiet_NaN()),
                  std::invalid_argument);
-    EXPECT_THROW(opt.set_obj_scale(std::numeric_limits<double>::infinity()),
-                 std::invalid_argument);
+    EXPECT_THROW(opt.set_obj_scale(std::numeric_limits<double>::infinity()), std::invalid_argument);
 }
 
 TEST_F(SolverTest, QpParamSetterValidation) {
@@ -202,13 +204,17 @@ TEST_F(SolverTest, CompositeSetterValidationPropagates) {
 }
 
 TEST_F(SolverTest, StringToEnumConverters) {
-    EXPECT_EQ(InteriorPointSolver::strto_LineSearchMode("AUGLANG"), InteriorPointSolver::LineSearchModes::AUGLANG);
+    EXPECT_EQ(InteriorPointSolver::strto_LineSearchMode("AUGLANG"),
+              InteriorPointSolver::LineSearchModes::AUGLANG);
     EXPECT_THROW(InteriorPointSolver::strto_LineSearchMode("INVALID"), std::invalid_argument);
-    EXPECT_EQ(InteriorPointSolver::strto_BarrierMode("LOQO"), InteriorPointSolver::BarrierModes::LOQO);
+    EXPECT_EQ(InteriorPointSolver::strto_BarrierMode("LOQO"),
+              InteriorPointSolver::BarrierModes::LOQO);
     EXPECT_THROW(InteriorPointSolver::strto_BarrierMode("NOPE"), std::invalid_argument);
-    EXPECT_EQ(InteriorPointSolver::strto_OrderingMode("METIS"), InteriorPointSolver::QPOrderingModes::METIS);
+    EXPECT_EQ(InteriorPointSolver::strto_OrderingMode("METIS"),
+              InteriorPointSolver::QPOrderingModes::METIS);
     EXPECT_THROW(InteriorPointSolver::strto_OrderingMode("INVALID"), std::invalid_argument);
-    EXPECT_EQ(InteriorPointSolver::strto_BestCriteriaMode("KKT"), InteriorPointSolver::BestCriteriaModes::KKT);
+    EXPECT_EQ(InteriorPointSolver::strto_BestCriteriaMode("KKT"),
+              InteriorPointSolver::BestCriteriaModes::KKT);
     EXPECT_THROW(InteriorPointSolver::strto_BestCriteriaMode("INVALID"), std::invalid_argument);
 }
 
@@ -257,8 +263,10 @@ TEST_F(SolverTest, OptimizeThrowsWithoutNlp) {
 TEST_F(SolverTest, OptimizeThrowsOnSizeMismatch) {
     auto phase = make_brach_solver_phase(16);
     phase->transcribe(false, false); // set up NLP without solving
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_nlp(phase->nlp_);
     Eigen::VectorXd wrong_size = Eigen::VectorXd::Zero(3);
-    EXPECT_THROW(phase->optimizer_->optimize(wrong_size), std::invalid_argument);
+    EXPECT_THROW(ipm.optimize(wrong_size), std::invalid_argument);
 }
 
 // =============================================================================
@@ -267,8 +275,14 @@ TEST_F(SolverTest, OptimizeThrowsOnSizeMismatch) {
 
 TEST_F(SolverTest, BrachistochroneOptimizeSolve) {
     auto phase = make_brach_solver_phase(32);
-    phase->optimizer_->set_print_level(3);
-    auto status = phase->optimize_solve();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
+    // optimize_solve equivalence: OPT, then (conditionally, skipped when OPT
+    // reported CONVERGED) a trailing Feasible-mode SOE run.
+    auto status = phase->solve(&ipm).flag_;
+    if (status != tycho::ConvergenceFlags::CONVERGED) {
+        status = phase->solve(&ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
+    }
     EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
 }
 
@@ -284,41 +298,87 @@ TEST_F(SolverTest, ConditionalStepSkippedOnConvergence) {
     // accumulation order -- not just the factorization -- is deterministic.
     // optimize alone
     auto phase_opt = make_brach_solver_phase(32);
-    phase_opt->optimizer_->set_print_level(3);
-    phase_opt->optimizer_->set_qp_threads(1);
+    tycho::solvers::InteriorPointSolver ipm_opt;
+    ipm_opt.set_print_level(3);
+    ipm_opt.set_qp_threads(1);
     phase_opt->set_num_partitions(1);
-    auto status_opt = phase_opt->optimize();
+    auto status_opt = phase_opt->solve(&ipm_opt).flag_;
     ASSERT_EQ(status_opt, tycho::ConvergenceFlags::CONVERGED);
-    int opt_iters = phase_opt->optimizer_->result().iter_num_;
+    int opt_iters = ipm_opt.result().iter_num_;
 
-    // optimize_solve: the solve step is conditional, so if optimize converges,
-    // the total iteration count should equal optimize-only.
-    auto phase_os = make_brach_solver_phase(32);
-    phase_os->optimizer_->set_print_level(3);
-    phase_os->optimizer_->set_qp_threads(1);
-    phase_os->set_num_partitions(1);
-    auto status_os = phase_os->optimize_solve();
-    EXPECT_LE(status_os, tycho::ConvergenceFlags::ACCEPTABLE);
-    int os_iters = phase_os->optimizer_->result().iter_num_;
+    // The caller-side conditional retry that replaced the retired
+    // optimize_solve() (see BrachistochroneOptimizeSolve above: a trailing
+    // Feasible-mode solve, run only if the first call did not already
+    // converge) must actually SKIP that trailing call once the first call
+    // converges -- pinned here via an explicit second_call_ran flag rather
+    // than an `if` whose branch this scenario alone can never prove was
+    // live. The other branch (below) proves the flag is not just always
+    // false by construction: it forces the first call short of convergence
+    // and asserts the retry actually runs there.
+    auto phase_skip = make_brach_solver_phase(32);
+    tycho::solvers::InteriorPointSolver ipm_skip;
+    ipm_skip.set_print_level(3);
+    ipm_skip.set_qp_threads(1);
+    phase_skip->set_num_partitions(1);
+    auto status_skip = phase_skip->solve(&ipm_skip).flag_;
+    ASSERT_EQ(status_skip, tycho::ConvergenceFlags::CONVERGED);
+    bool second_call_ran = false;
+    if (status_skip != tycho::ConvergenceFlags::CONVERGED) {
+        second_call_ran = true;
+        status_skip = phase_skip->solve(&ipm_skip, {.mode = tycho::solvers::Mode::Feasible}).flag_;
+    }
+    EXPECT_FALSE(second_call_ran)
+        << "the conditional retry must be skipped once the first call already converged";
+    int skip_iters = ipm_skip.result().iter_num_;
+    EXPECT_EQ(skip_iters, opt_iters)
+        << "iteration count must match the optimize-only reference when the "
+           "conditional retry is (correctly) skipped";
 
-    EXPECT_EQ(os_iters, opt_iters)
-        << "optimize_solve should skip the conditional solve when optimize converges";
+    // Now force the first call short of convergence, so the same conditional
+    // structure takes its OTHER branch: the retry must actually run.
+    auto phase_retry = make_brach_solver_phase(32);
+    tycho::solvers::InteriorPointSolver ipm_retry;
+    ipm_retry.set_print_level(3);
+    ipm_retry.set_qp_threads(1);
+    ipm_retry.set_max_iters(3); // force NOTCONVERGED on the first call
+    phase_retry->set_num_partitions(1);
+    auto status_retry = phase_retry->solve(&ipm_retry).flag_;
+    ASSERT_NE(status_retry, tycho::ConvergenceFlags::CONVERGED);
+    bool retry_second_call_ran = false;
+    if (status_retry != tycho::ConvergenceFlags::CONVERGED) {
+        retry_second_call_ran = true;
+        ipm_retry.set_max_iters(200); // the retry gets a real budget, unlike the starved first call
+        status_retry =
+            phase_retry->solve(&ipm_retry, {.mode = tycho::solvers::Mode::Feasible}).flag_;
+    }
+    EXPECT_TRUE(retry_second_call_ran)
+        << "the conditional retry must actually run once the first call failed to converge";
+    EXPECT_LE(status_retry, tycho::ConvergenceFlags::ACCEPTABLE);
 }
 
 TEST_F(SolverTest, BrachistochroneSolveOptimizeSolve) {
     auto phase = make_brach_solver_phase(32);
-    phase->optimizer_->set_print_level(3);
-    auto status = phase->solve_optimize_solve();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
+    // solve_optimize_solve equivalence: a presolve+main call (SOE then OPT),
+    // then (conditionally, skipped when OPT reported CONVERGED) a trailing
+    // Feasible-mode SOE run.
+    auto status = phase->solve(&ipm, {.presolve = true}).flag_;
+    if (status != tycho::ConvergenceFlags::CONVERGED) {
+        status = phase->solve(&ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
+    }
     EXPECT_LE(status, tycho::ConvergenceFlags::ACCEPTABLE);
-    EXPECT_EQ(phase->optimizer_->result().primals_.size(), phase->nlp_->primal_vars_);
+    EXPECT_EQ(ipm.result().primals_.size(), phase->nlp_->primal_vars_);
 }
 
 TEST_F(SolverTest, ResultAccessorPopulatedAfterSolve) {
     auto phase = make_brach_solver_phase(32);
-    auto status = phase->solve_optimize();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
+    auto status = phase->solve(&ipm, {.presolve = true}).flag_;
     EXPECT_EQ(status, tycho::ConvergenceFlags::CONVERGED);
 
-    const auto &r = phase->optimizer_->result();
+    const auto &r = ipm.result();
     EXPECT_GT(r.iter_num_, 0);
     EXPECT_GT(r.obj_val_, 0.0);
     EXPECT_GT(r.total_time_, 0.0);
@@ -334,12 +394,13 @@ TEST_F(SolverTest, ResultAccessorPopulatedAfterSolve) {
 
 TEST_F(SolverTest, ResultResetBetweenCalls) {
     auto phase = make_brach_solver_phase(32);
-    phase->optimizer_->set_print_level(3);
-    phase->solve_optimize();
-    int first_iters = phase->optimizer_->result().iter_num_;
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
+    phase->solve(&ipm, {.presolve = true});
+    int first_iters = ipm.result().iter_num_;
 
-    phase->optimize();
-    const auto &r = phase->optimizer_->result();
+    phase->solve(&ipm);
+    const auto &r = ipm.result();
     int second_iters = r.iter_num_;
 
     // iter_num_ should reflect only the second call, not accumulated
@@ -363,39 +424,42 @@ TEST_F(SolverTest, ResultResetBetweenCalls) {
 
 TEST_F(SolverTest, ReturnBestPreservesNonFinalIterate) {
     auto phase = make_brach_solver_phase(16);
-    phase->optimizer_->set_print_level(3);
-    phase->optimizer_->set_max_iters(3); // force NOTCONVERGED
-    phase->optimizer_->settings().return_best_ = true;
-    phase->optimizer_->settings().best_criteria_ = InteriorPointSolver::BestCriteriaModes::ECONS;
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
+    ipm.set_max_iters(3); // force NOTCONVERGED
+    ipm.settings().return_best_ = true;
+    ipm.settings().best_criteria_ = InteriorPointSolver::BestCriteriaModes::ECONS;
 
-    auto status = phase->optimize();
+    auto status = phase->solve(&ipm).flag_;
     EXPECT_EQ(status, tycho::ConvergenceFlags::NOTCONVERGED);
 
-    const auto &r = phase->optimizer_->result();
+    const auto &r = ipm.result();
     EXPECT_GT(r.primals_.size(), 0u);
     EXPECT_EQ(r.primals_.size(), phase->nlp_->primal_vars_);
     EXPECT_GT(r.obj_val_, 0.0);
 
     // Verify without return_best for comparison — both should produce valid primals
     auto phase2 = make_brach_solver_phase(16);
-    phase2->optimizer_->set_print_level(3);
-    phase2->optimizer_->set_max_iters(3);
-    phase2->optimizer_->settings().return_best_ = false;
+    tycho::solvers::InteriorPointSolver ipm2;
+    ipm2.set_print_level(3);
+    ipm2.set_max_iters(3);
+    ipm2.settings().return_best_ = false;
 
-    phase2->optimize();
-    EXPECT_EQ(phase2->optimizer_->result().primals_.size(), r.primals_.size());
+    phase2->solve(&ipm2);
+    EXPECT_EQ(ipm2.result().primals_.size(), r.primals_.size());
 }
 
 TEST_F(SolverTest, DivergenceEarlyExitInPhaseSequence) {
     auto phase = make_brach_solver_phase(16);
-    phase->optimizer_->set_print_level(3);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     // Set divergence tolerances extremely tight — solver triggers DIVERGING quickly.
     // Must also lower convergence and acceptable tols to satisfy
     // the conv <= acc <= div cross-field invariant.
-    phase->optimizer_->set_tols(1e-22, 1e-22, 1e-22, 1e-22);
-    phase->optimizer_->set_acc_tols(1e-21, 1e-21, 1e-21, 1e-21);
-    phase->optimizer_->set_div_tols(1e-20, 1e-20, 1e-20, 1e-20);
-    auto status = phase->solve_optimize();
+    ipm.set_tols(1e-22, 1e-22, 1e-22, 1e-22);
+    ipm.set_acc_tols(1e-21, 1e-21, 1e-21, 1e-21);
+    ipm.set_div_tols(1e-20, 1e-20, 1e-20, 1e-20);
+    auto status = phase->solve(&ipm, {.presolve = true}).flag_;
     EXPECT_EQ(status, tycho::ConvergenceFlags::DIVERGING);
 }
 
@@ -460,11 +524,12 @@ TEST_F(SolverTest, DivTolsCompositeDelegation) {
 
 TEST_F(SolverTest, MultiplierAndConstraintResultPopulation) {
     auto phase = make_brach_solver_phase(32);
-    phase->optimizer_->set_print_level(3);
-    auto status = phase->solve_optimize();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
+    auto status = phase->solve(&ipm, {.presolve = true}).flag_;
     ASSERT_EQ(status, tycho::ConvergenceFlags::CONVERGED);
 
-    const auto &r = phase->optimizer_->result();
+    const auto &r = ipm.result();
 
     // Equality multipliers and constraints should be populated and correctly sized
     EXPECT_EQ(r.eq_lmults_.size(), phase->nlp_->equal_cons_);

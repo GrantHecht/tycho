@@ -77,10 +77,20 @@ def Job(a, b, n, L):
     phase.add_integral_objective(Energy(), [0, 2])
     phase.add_integral_param_function(Length(), [2], 0)
 
-    phase.optimizer.set_opt_ls_mode("L1")
-    phase.optimizer.set_max_ls_iters(2)
-    phase.optimizer.print_level = 1
-    phase.jet_job_mode = typy.solvers.JetJobModes.SolveOptimize
+    ipm = solvs.IPM()
+    ipm.set_opt_ls_mode("L1")
+    ipm.set_max_ls_iters(2)
+    # A batched Jet run only auto-silences an engine still at the class
+    # default print_level (0); an explicit non-default value here is
+    # honored and would flood the console across 100 jobs. Use a silent
+    # level explicitly.
+    ipm.print_level = 3
+
+    # Stage the batched (Jet) solve: presolve=True runs a Feasible stage
+    # first, then the Optimal main stage. phase.set_jet_job() keeps `ipm`
+    # alive for as long as `phase` is, so it is safe to let this local go
+    # out of scope once Job() returns.
+    phase.set_jet_job(ipm, presolve=True)
 
     return phase
 

@@ -441,136 +441,28 @@ void tycho::oc::OptimalControlProblemBase::transcribe(bool showstats, bool showf
 
     this->nlp_ = std::move(nlp);
     this->provider_ = std::move(provider);
-    this->optimizer_->set_nlp(this->nlp_);
 
     //////DO NOT GET RID OF THIS!!!!!!//
     this->do_transcription_ = false;
 }
 
-tycho::ConvergenceFlags tycho::oc::OptimalControlProblemBase::interior_point_call_impl(JetJobModes mode) {
+tycho::ConvergenceFlags tycho::oc::OptimalControlProblemBase::run_adaptive_mesh(EngineRef engine,
+                                                                                Mode mode,
+                                                                                SolveResult &r) {
+    // The mesh-loop mechanics (stage bookkeeping, the re-transcription gate,
+    // the residual-report check, warm seeding, the banner/timer) live once in
+    // BackendProblemBase::run_amr_loop(); only the mesh-representation-
+    // specific pieces are supplied here.
+    BackendProblemBase::AmrLoopHooks hooks;
+    hooks.init_mesh = [this]() { this->init_meshs(); };
+    hooks.mesh_converged = [this](int) { return this->check_meshs(this->print_mesh_info_); };
+    hooks.update_mesh = [this]() { this->update_meshs(this->print_mesh_info_); };
+    hooks.print_iteration = [this](int iter) { this->print_meshs(iter); };
+    hooks.converged_message = "All Meshes Converged";
+    hooks.not_converged_message = "All Meshes Not Converged";
 
-    this->check_transcriptions();
-    if (this->do_transcription_)
-        this->transcribe();
-    VectorXd Input = this->make_solver_input();
-    auto out = this->run_nlp_solver(mode, Input);
-    VectorXd Output = out.variables_;
-
-    this->collect_solver_output(Output);
-
-    if (this->nlp_solver_ == solvers::NLPSolvers::interior_point) {
-        this->collect_post_opt_info(this->optimizer_->result().eq_cons_, out.eq_lmults_,
-                                    this->optimizer_->result().iq_cons_, out.iq_lmults_);
-    } else {
-        // Constraint residuals at the solution are an artifact of the built-in
-        // solver's KKT bookkeeping and have no counterpart from another
-        // backend, so the post-solve constraint data is marked unavailable —
-        // on the problem and on every phase it would otherwise be distributed
-        // to — and only the multipliers are stored.
-        this->collect_solver_multipliers(out.eq_lmults_, out.iq_lmults_);
-        this->invalidate_post_opt_info();
-        for (auto phase : this->phases) {
-            phase->invalidate_post_opt_info();
-        }
-    }
-
-    return out.flag_;
-}
-
-tycho::ConvergenceFlags tycho::oc::OptimalControlProblemBase::ocp_call_impl(JetJobModes mode) {
-    // Mesh refinement is driven by the built-in solver's constraint residuals at
-    // the solution, which no other backend reports, so the refinement loop is
-    // only defined for the built-in solver.
-    if (this->adaptive_mesh_ && this->nlp_solver_ != solvers::NLPSolvers::interior_point) {
-        throw std::invalid_argument("adaptive mesh refinement requires nlp_solver = interior_point");
-    }
-
-    if (this->print_mesh_info_ && this->adaptive_mesh_) {
-        fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65);
-        fmt::print(fmt::fg(fmt::color::dim_gray), "Beginning");
-        fmt::print(": ");
-        fmt::print(fmt::fg(fmt::color::royal_blue), "Adaptive Mesh Refinement");
-        fmt::print("\n");
-    }
-
-    utils::Timer Runtimer;
-    Runtimer.start();
-
-    tycho::ConvergenceFlags flag = this->interior_point_call_impl(mode);
-
-    JetJobModes nextmode = mode;
-    if (this->solve_only_first_) {
-        switch (mode) {
-        case JetJobModes::SolveOptimize:
-            nextmode = JetJobModes::Optimize;
-            break;
-        case JetJobModes::SolveOptimizeSolve:
-            nextmode = JetJobModes::OptimizeSolve;
-            break;
-        default:
-            break;
-        }
-    }
-
-    if (this->adaptive_mesh_) {
-
-        if (flag >= this->mesh_abort_flag_) {
-            if (this->print_mesh_info_) {
-                fmt::print(fmt::fg(fmt::color::red),
-                           "Mesh Iteration 0 Failed to Solve: Aborting\n");
-            }
-        } else {
-            init_meshs();
-            for (int i = 0; i < this->max_mesh_iters_; i++) {
-                if (check_meshs(this->print_mesh_info_)) {
-                    if (this->print_mesh_info_) {
-                        this->print_meshs(i);
-                        fmt::print(fmt::fg(fmt::color::lime_green), "All Meshes Converged\n");
-                    }
-
-                    break;
-                } else if (i == this->max_mesh_iters_ - 1) {
-                    if (this->print_mesh_info_) {
-                        this->print_meshs(i);
-                        fmt::print(fmt::fg(fmt::color::red), "All Meshes Not Converged\n");
-                    }
-                    break;
-                } else {
-                    update_meshs(this->print_mesh_info_);
-                    if (this->print_mesh_info_)
-                        this->print_meshs(i);
-                }
-                flag = this->interior_point_call_impl(nextmode);
-                if (flag >= this->mesh_abort_flag_) {
-                    if (this->print_mesh_info_) {
-                        fmt::print(fmt::fg(fmt::color::red),
-                                   "Mesh Iteration {0:} Failed to Solve: Aborting\n", i + 1);
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
-    if (this->print_mesh_info_ && this->adaptive_mesh_) {
-
-        Runtimer.stop();
-        double tseconds = double(Runtimer.count<std::chrono::microseconds>()) / 1000000;
-        fmt::print("Total Time:");
-        if (tseconds > 0.5) {
-            fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.4f} s\n", tseconds);
-        } else {
-            fmt::print(fmt::fg(fmt::color::cyan), "{0:>10.2f} ms\n", tseconds * 1000);
-        }
-
-        fmt::print(fmt::fg(fmt::color::dim_gray), "Finished ");
-        fmt::print(": ");
-        fmt::print(fmt::fg(fmt::color::royal_blue), "Adaptive Mesh Refinement");
-        fmt::print("\n");
-        fmt::print(fmt::fg(fmt::color::white), "{0:=^{1}}\n", "", 65);
-    }
-
-    return flag;
+    return this->run_amr_loop(engine, mode, r, this->mesh_abort_flag_, this->max_mesh_iters_,
+                              this->solve_only_first_, this->print_mesh_info_, hooks);
 }
 
 void tycho::oc::OptimalControlProblemBase::print_stats(bool showfuns) {

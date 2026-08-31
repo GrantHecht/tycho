@@ -1,10 +1,10 @@
-#include <tycho/tycho.h>
 #include <Eigen/Eigenvalues>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
 #include <numeric>
 #include <tuple>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -17,9 +17,7 @@ static constexpr double MuMoon = 4.9048695e12;
 static const double mu = MuMoon / (MuEarth + MuMoon);
 static constexpr double LD = 384400000.0; // Earth-Moon distance (m)
 
-static Eigen::Vector3d normalize_vec(const Eigen::Vector3d &v) {
-    return v / v.norm();
-}
+static Eigen::Vector3d normalize_vec(const Eigen::Vector3d &v) { return v / v.norm(); }
 
 // Co-linear Lagrange point solver (L1 with sign=-1, L2 with sign=+1).
 // Iterates the standard CR3BP fixed-point relation; sign factors out the
@@ -29,16 +27,15 @@ static Eigen::Vector3d compute_lagrange_colinear(int sign, double mu_val) {
     double guess = gamma0 + 1.0;
     while (std::abs(guess - gamma0) > 1.0e-14) {
         gamma0 = guess;
-        guess = std::pow(
-            (mu_val * (gamma0 + sign) * (gamma0 + sign)) /
-                (3.0 - 2.0 * mu_val + sign * gamma0 * (3.0 - mu_val + sign * gamma0)),
-            1.0 / 3.0);
+        guess = std::pow((mu_val * (gamma0 + sign) * (gamma0 + sign)) /
+                             (3.0 - 2.0 * mu_val + sign * gamma0 * (3.0 - mu_val + sign * gamma0)),
+                         1.0 / 3.0);
     }
     return Eigen::Vector3d(1.0 - mu_val + sign * guess, 0.0, 0.0);
 }
 
-static void cr3bp_accel_partials(const Eigen::Vector3d &pos, double mu_val,
-                                  double &Oxx, double &Oyy, double &Ozz) {
+static void cr3bp_accel_partials(const Eigen::Vector3d &pos, double mu_val, double &Oxx,
+                                 double &Oyy, double &Ozz) {
     double x = pos[0], y = pos[1], z = pos[2];
     double r1 = std::sqrt((x + mu_val) * (x + mu_val) + y * y + z * z);
     double r2 = std::sqrt((x - 1.0 + mu_val) * (x - 1.0 + mu_val) + y * y + z * z);
@@ -53,18 +50,14 @@ static void cr3bp_accel_partials(const Eigen::Vector3d &pos, double mu_val,
     Oxx = 1.0 - (1.0 - mu_val) / r1_3 - mu_val / r2_3 +
           3.0 * (1.0 - mu_val) * (x + mu_val) * (x + mu_val) / r1_5 +
           3.0 * mu_val * (x - 1.0 + mu_val) * (x - 1.0 + mu_val) / r2_5;
-    Oyy = 1.0 - (1.0 - mu_val) / r1_3 - mu_val / r2_3 +
-          3.0 * (1.0 - mu_val) * y * y / r1_5 +
+    Oyy = 1.0 - (1.0 - mu_val) / r1_3 - mu_val / r2_3 + 3.0 * (1.0 - mu_val) * y * y / r1_5 +
           3.0 * mu_val * y * y / r2_5;
-    Ozz = -(1.0 - mu_val) / r1_3 - mu_val / r2_3 +
-          3.0 * (1.0 - mu_val) * z * z / r1_5 +
+    Ozz = -(1.0 - mu_val) / r1_3 - mu_val / r2_3 + 3.0 * (1.0 - mu_val) * z * z / r1_5 +
           3.0 * mu_val * z * z / r2_5;
 }
 
-std::vector<Eigen::VectorXd> gen_lissajous(const Eigen::Vector3d &lp,
-                                            double xnd, double znd,
-                                            double phideg, double psideg,
-                                            double nplanrev, int npo) {
+std::vector<Eigen::VectorXd> gen_lissajous(const Eigen::Vector3d &lp, double xnd, double znd,
+                                           double phideg, double psideg, double nplanrev, int npo) {
     double Oxx, Oyy, Ozz;
     cr3bp_accel_partials(lp, mu, Oxx, Oyy, Ozz);
 
@@ -113,10 +106,7 @@ ODE make_cr3bp_ode() {
     auto dyn = astro::CRTBPDynamics(mu);
     auto ode_expr = GenericFunction<-1, -1>(dyn.eval(stack(state, zero_accel)));
 
-    return ODE(ode_expr, 6, 0)
-        .var_group("R", 0, 3)
-        .var_group("V", 3, 3)
-        .var_names({{"t", 6}});
+    return ODE(ode_expr, 6, 0).var_group("R", 0, 3).var_group("V", 3, 3).var_names({{"t", 6}});
 }
 
 auto make_jacobi_func() {
@@ -139,8 +129,8 @@ auto make_jacobi_func() {
 }
 
 std::vector<Eigen::VectorXd> make_orbit(const ODE &ode,
-                                         const std::vector<Eigen::VectorXd> &orbit_ig,
-                                         double Jconst, int nsegs = 100) {
+                                        const std::vector<Eigen::VectorXd> &orbit_ig, double Jconst,
+                                        int nsegs = 100) {
     auto phase = ode.phase(TranscriptionModes::LGL5, orbit_ig, nsegs);
 
     // Planar perpendicular crossing
@@ -156,9 +146,10 @@ std::vector<Eigen::VectorXd> make_orbit(const ODE &ode,
     auto jfunc = make_jacobi_func() - Jconst;
     phase.add_equal_con(PhaseRegionFlags::Front, GenericFunction<-1, -1>(jfunc), {"R", "V"});
 
-    phase.optimizer().set_econ_tol(1.0e-12);
-    phase.optimizer().set_print_level(1);
-    auto flag = phase.solve();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_econ_tol(1.0e-12);
+    ipm.set_print_level(1);
+    auto flag = phase.solve(ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
     if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
         return {}; // caller checks for empty
     }
@@ -168,9 +159,8 @@ std::vector<Eigen::VectorXd> make_orbit(const ODE &ode,
 
 using Trajectory = std::vector<Eigen::VectorXd>;
 
-std::vector<Trajectory> get_manifold(const ODE &ode, const Trajectory &orbit_in,
-                                     double dx, double dt, int nman = 100,
-                                     bool stable = true) {
+std::vector<Trajectory> get_manifold(const ODE &ode, const Trajectory &orbit_in, double dx,
+                                     double dt, int nman = 100, bool stable = true) {
     auto integ = ode.integrator().method(IVPAlg::DOPRI87).step(0.01).build();
     integ.set_abs_tol(1.0e-13);
 
@@ -198,9 +188,8 @@ std::vector<Trajectory> get_manifold(const ODE &ode, const Trajectory &orbit_in,
 
         std::vector<int> idxs(6);
         std::iota(idxs.begin(), idxs.end(), 0);
-        std::sort(idxs.begin(), idxs.end(), [&](int a, int b) {
-            return std::abs(vals[a]) < std::abs(vals[b]);
-        });
+        std::sort(idxs.begin(), idxs.end(),
+                  [&](int a, int b) { return std::abs(vals[a]) < std::abs(vals[b]); });
 
         // Monodromy convention: smallest |λ| is the stable direction,
         // largest is the unstable direction.
@@ -235,10 +224,7 @@ std::vector<Trajectory> get_manifold(const ODE &ode, const Trajectory &orbit_in,
     auto cull_func = GenericFunction<-1, 1>(alt * y_term);
 
     using EventPack = typename decltype(integ)::EventPack;
-    std::vector<EventPack> events = {
-        {cross_moon_func, 0, 1},
-        {cull_func, 0, 1}
-    };
+    std::vector<EventPack> events = {{cross_moon_func, 0, 1}, {cull_func, 0, 1}};
 
     auto results = integ.integrate_dense_parallel(eig_igs, ts, events, ncores);
 
@@ -254,9 +240,8 @@ std::vector<Trajectory> get_manifold(const ODE &ode, const Trajectory &orbit_in,
     return manifolds;
 }
 
-std::pair<Trajectory, Trajectory>
-find_closest_connection(const std::vector<Trajectory> &orbs1,
-                        const std::vector<Trajectory> &orbs2) {
+std::pair<Trajectory, Trajectory> find_closest_connection(const std::vector<Trajectory> &orbs1,
+                                                          const std::vector<Trajectory> &orbs2) {
     double best_dist = std::numeric_limits<double>::max();
     int best_i = 0, best_j = 0;
 
@@ -274,9 +259,10 @@ find_closest_connection(const std::vector<Trajectory> &orbs1,
     return {orbs1[best_i], orbs2[best_j]};
 }
 
-std::pair<Trajectory, Trajectory>
-make_heteroclinic(const ODE &ode, const Trajectory &man1, const Trajectory &man2,
-                  const Trajectory &l1_orbit, const Trajectory &l2_orbit) {
+std::pair<Trajectory, Trajectory> make_heteroclinic(const ODE &ode, const Trajectory &man1,
+                                                    const Trajectory &man2,
+                                                    const Trajectory &l1_orbit,
+                                                    const Trajectory &l2_orbit) {
 
     auto orbit_tab1 = std::make_shared<LGLInterpTable>(l1_orbit);
     orbit_tab1->make_periodic();
@@ -285,9 +271,13 @@ make_heteroclinic(const ODE &ode, const Trajectory &man1, const Trajectory &man2
     orbit_tab2->make_periodic();
 
     Eigen::VectorXi pos_vars(3);
-    pos_vars[0] = 0; pos_vars[1] = 1; pos_vars[2] = 2;
+    pos_vars[0] = 0;
+    pos_vars[1] = 1;
+    pos_vars[2] = 2;
     Eigen::VectorXi vel_vars(3);
-    vel_vars[0] = 3; vel_vars[1] = 4; vel_vars[2] = 5;
+    vel_vars[0] = 3;
+    vel_vars[1] = 4;
+    vel_vars[2] = 5;
 
     auto make_pos_con = [&](const std::shared_ptr<LGLInterpTable> &tab) {
         auto rt_args = Arguments<4>();
@@ -304,9 +294,15 @@ make_heteroclinic(const ODE &ode, const Trajectory &man1, const Trajectory &man2
     };
 
     Eigen::VectorXi pos_t_idx(4);
-    pos_t_idx[0] = 0; pos_t_idx[1] = 1; pos_t_idx[2] = 2; pos_t_idx[3] = 6;
+    pos_t_idx[0] = 0;
+    pos_t_idx[1] = 1;
+    pos_t_idx[2] = 2;
+    pos_t_idx[3] = 6;
     Eigen::VectorXi vel_t_idx(4);
-    vel_t_idx[0] = 3; vel_t_idx[1] = 4; vel_t_idx[2] = 5; vel_t_idx[3] = 6;
+    vel_t_idx[0] = 3;
+    vel_t_idx[1] = 4;
+    vel_t_idx[2] = 5;
+    vel_t_idx[3] = 6;
 
     Trajectory man1_traj(man1.begin() + 1, man1.end());
     auto phase1 = ode.phase(TranscriptionModes::LGL7, man1_traj, 50);
@@ -334,14 +330,19 @@ make_heteroclinic(const ODE &ode, const Trajectory &man1, const Trajectory &man2
     ocp.add_phase(phase2);
 
     Eigen::VectorXi link_vars(6);
-    link_vars[0] = 0; link_vars[1] = 1; link_vars[2] = 2;
-    link_vars[3] = 3; link_vars[4] = 4; link_vars[5] = 5;
+    link_vars[0] = 0;
+    link_vars[1] = 1;
+    link_vars[2] = 2;
+    link_vars[3] = 3;
+    link_vars[4] = 4;
+    link_vars[5] = 5;
     ocp.add_forward_link_equal_con(phase1, phase2, link_vars);
     ocp.set_adaptive_mesh(true);
 
-    ocp.optimizer().set_econ_tol(1.0e-9);
-    ocp.optimizer().set_opt_ls_mode("L1");
-    auto flag = ocp.optimize();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_econ_tol(1.0e-9);
+    ipm.set_opt_ls_mode("L1");
+    auto flag = ocp.solve(ipm).flag_;
     if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
         return {}; // caller checks for empty
     }
@@ -359,8 +360,7 @@ make_heteroclinic(const ODE &ode, const Trajectory &man1, const Trajectory &man2
 
     double vstar = std::sqrt((MuEarth + MuMoon) / LD);
     double total_dv = (dv1 + dv2) * vstar;
-    std::cout << "  Total DV: " << std::fixed << std::setprecision(4) << total_dv
-              << " m/s\n";
+    std::cout << "  Total DV: " << std::fixed << std::setprecision(4) << total_dv << " m/s\n";
 
     return {traj1, traj2};
 }
@@ -421,8 +421,8 @@ int main() {
     std::cout << "\nFinding closest connection...\n";
     auto [traj1_ig, traj2_ig] = find_closest_connection(unstable_l1, stable_l2);
     double conn_dist = (traj1_ig.back().head<6>() - traj2_ig.back().head<6>()).norm();
-    std::cout << "  Connection distance: " << std::scientific << std::setprecision(4)
-              << conn_dist << "\n";
+    std::cout << "  Connection distance: " << std::scientific << std::setprecision(4) << conn_dist
+              << "\n";
 
     std::reverse(traj2_ig.begin(), traj2_ig.end());
 
@@ -434,14 +434,14 @@ int main() {
     double link_err = (traj1.back().head<6>() - traj2.front().head<6>()).norm();
 
     std::cout << "\n=== Results ===\n";
-    std::cout << "  L1 orbit period: " << std::fixed << std::setprecision(4)
-              << L1Orbit.back()[6] << "\n";
-    std::cout << "  L2 orbit period: " << std::fixed << std::setprecision(4)
-              << L2Orbit.back()[6] << "\n";
-    std::cout << "  Manifold arms: " << unstable_l1.size() << " unstable L1, "
-              << stable_l2.size() << " stable L2\n";
-    std::cout << "  Link continuity error: " << std::scientific << std::setprecision(2)
-              << link_err << "\n";
+    std::cout << "  L1 orbit period: " << std::fixed << std::setprecision(4) << L1Orbit.back()[6]
+              << "\n";
+    std::cout << "  L2 orbit period: " << std::fixed << std::setprecision(4) << L2Orbit.back()[6]
+              << "\n";
+    std::cout << "  Manifold arms: " << unstable_l1.size() << " unstable L1, " << stable_l2.size()
+              << " stable L2\n";
+    std::cout << "  Link continuity error: " << std::scientific << std::setprecision(2) << link_err
+              << "\n";
 
     bool ok = link_err < 1.0e-6;
     if (ok) {

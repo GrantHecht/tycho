@@ -76,7 +76,7 @@ def DiskCon():
 
 def _make_problem():
     """Smallest available problem that can drive InteriorPointSolver::run_phase_sequence
-    (and therefore Settings::validate()) via optimize()/solve(). Mirrors
+    (and therefore Settings::validate()) via solve(). Mirrors
     test_interior_point_solver_init_time.py's RosenBrock+disk-constraint problem -- the repo
     has no standalone double-integrator OCP fixture, and this static NLP is
     equally fast and sufficient to reach validate() before any iteration.
@@ -85,245 +85,223 @@ def _make_problem():
     prob.set_vars([-1, -1])
     prob.add_objective(RosenBrockObj(), [0, 1])
     prob.add_inequal_con(DiskCon(), [0, 1])
-    prob.optimizer.print_level = 3  # fully silent
     return prob
+
+
+def _make_engine(**kwargs):
+    """A fresh InteriorPointSolver engine, silenced for test output. Every
+    test that used to reach the optimizer through ``prob.optimizer`` now
+    constructs its own engine and passes it explicitly to ``prob.solve()``."""
+    ipm = solvs.InteriorPointSolver(**kwargs)
+    ipm.print_level = 3  # fully silent
+    return ipm
 
 
 class test_AcceptanceStrategyRoundTrip(unittest.TestCase):
     def test_default_is_classic_merit(self):
-        prob = _make_problem()
+        ipm = _make_engine()
         self.assertEqual(
-            prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.classic_merit
+            ipm.acceptance_strategy, solvs.AcceptanceStrategies.classic_merit
         )
 
     def test_round_trip(self):
-        prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.merit
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.merit
+        self.assertEqual(ipm.acceptance_strategy, solvs.AcceptanceStrategies.merit)
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.classic_merit
         self.assertEqual(
-            prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.merit
-        )
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.classic_merit
-        self.assertEqual(
-            prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.classic_merit
+            ipm.acceptance_strategy, solvs.AcceptanceStrategies.classic_merit
         )
 
     def test_round_trip_funnel(self):
-        prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.funnel
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.funnel
+        self.assertEqual(ipm.acceptance_strategy, solvs.AcceptanceStrategies.funnel)
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.classic_merit
         self.assertEqual(
-            prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.funnel
-        )
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.classic_merit
-        self.assertEqual(
-            prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.classic_merit
+            ipm.acceptance_strategy, solvs.AcceptanceStrategies.classic_merit
         )
 
     def test_round_trip_filter(self):
-        prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.filter
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.filter
+        self.assertEqual(ipm.acceptance_strategy, solvs.AcceptanceStrategies.filter)
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.classic_merit
         self.assertEqual(
-            prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.filter
-        )
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.classic_merit
-        self.assertEqual(
-            prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.classic_merit
+            ipm.acceptance_strategy, solvs.AcceptanceStrategies.classic_merit
         )
 
     def test_round_trip_funnel_via_int_coercion(self):
         # The corpus harness selects strategies by raw int; enum-from-int
         # coercion must resolve to the same member as the named attribute.
-        prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies(2)
-        self.assertEqual(
-            prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.funnel
-        )
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies(2)
+        self.assertEqual(ipm.acceptance_strategy, solvs.AcceptanceStrategies.funnel)
 
     def test_round_trip_filter_via_int_coercion(self):
-        prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies(3)
-        self.assertEqual(
-            prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.filter
-        )
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies(3)
+        self.assertEqual(ipm.acceptance_strategy, solvs.AcceptanceStrategies.filter)
 
 
 class test_MeritPenaltyRuleRoundTrip(unittest.TestCase):
     def test_default_is_wmno(self):
-        prob = _make_problem()
-        self.assertEqual(
-            prob.optimizer.merit_penalty_rule, solvs.MeritPenaltyRules.wmno
-        )
+        ipm = _make_engine()
+        self.assertEqual(ipm.merit_penalty_rule, solvs.MeritPenaltyRules.wmno)
 
     def test_round_trip(self):
-        prob = _make_problem()
-        prob.optimizer.merit_penalty_rule = solvs.MeritPenaltyRules.flexible
-        self.assertEqual(
-            prob.optimizer.merit_penalty_rule, solvs.MeritPenaltyRules.flexible
-        )
-        prob.optimizer.merit_penalty_rule = solvs.MeritPenaltyRules.wmno
-        self.assertEqual(
-            prob.optimizer.merit_penalty_rule, solvs.MeritPenaltyRules.wmno
-        )
+        ipm = _make_engine()
+        ipm.merit_penalty_rule = solvs.MeritPenaltyRules.flexible
+        self.assertEqual(ipm.merit_penalty_rule, solvs.MeritPenaltyRules.flexible)
+        ipm.merit_penalty_rule = solvs.MeritPenaltyRules.wmno
+        self.assertEqual(ipm.merit_penalty_rule, solvs.MeritPenaltyRules.wmno)
 
 
 class test_MaxSocRoundTrip(unittest.TestCase):
     def test_default_is_zero(self):
-        prob = _make_problem()
-        self.assertEqual(prob.optimizer.max_soc, 0)
+        ipm = _make_engine()
+        self.assertEqual(ipm.max_soc, 0)
 
     def test_round_trip(self):
-        prob = _make_problem()
-        prob.optimizer.max_soc = 4
-        self.assertEqual(prob.optimizer.max_soc, 4)
+        ipm = _make_engine()
+        ipm.max_soc = 4
+        self.assertEqual(ipm.max_soc, 4)
 
     def test_rejects_negative(self):
-        prob = _make_problem()
+        ipm = _make_engine()
         with self.assertRaises(ValueError):
-            prob.optimizer.max_soc = -1
+            ipm.max_soc = -1
         # Rejected write must not clobber the prior valid value.
-        self.assertEqual(prob.optimizer.max_soc, 0)
+        self.assertEqual(ipm.max_soc, 0)
 
 
 class test_LsExtendedItersRoundTrip(unittest.TestCase):
     def test_default_is_zero(self):
-        prob = _make_problem()
-        self.assertEqual(prob.optimizer.ls_extended_iters, 0)
+        ipm = _make_engine()
+        self.assertEqual(ipm.ls_extended_iters, 0)
 
     def test_round_trip(self):
-        prob = _make_problem()
-        prob.optimizer.ls_extended_iters = 3
-        self.assertEqual(prob.optimizer.ls_extended_iters, 3)
+        ipm = _make_engine()
+        ipm.ls_extended_iters = 3
+        self.assertEqual(ipm.ls_extended_iters, 3)
 
     def test_rejects_negative(self):
-        prob = _make_problem()
+        ipm = _make_engine()
         with self.assertRaises(ValueError):
-            prob.optimizer.ls_extended_iters = -1
-        self.assertEqual(prob.optimizer.ls_extended_iters, 0)
+            ipm.ls_extended_iters = -1
+        self.assertEqual(ipm.ls_extended_iters, 0)
 
 
 class test_WatchdogRoundTrip(unittest.TestCase):
     def test_default_is_false(self):
-        prob = _make_problem()
-        self.assertEqual(prob.optimizer.watchdog, False)
+        ipm = _make_engine()
+        self.assertEqual(ipm.watchdog, False)
 
     def test_round_trip(self):
-        prob = _make_problem()
-        prob.optimizer.watchdog = True
-        self.assertEqual(prob.optimizer.watchdog, True)
-        prob.optimizer.watchdog = False
-        self.assertEqual(prob.optimizer.watchdog, False)
+        ipm = _make_engine()
+        ipm.watchdog = True
+        self.assertEqual(ipm.watchdog, True)
+        ipm.watchdog = False
+        self.assertEqual(ipm.watchdog, False)
 
 
 class test_BarrierGovernorRoundTrip(unittest.TestCase):
     def test_default_is_classic_adaptive(self):
-        prob = _make_problem()
-        self.assertEqual(
-            prob.optimizer.barrier_governor, solvs.BarrierGovernors.classic_adaptive
-        )
+        ipm = _make_engine()
+        self.assertEqual(ipm.barrier_governor, solvs.BarrierGovernors.classic_adaptive)
 
     def test_round_trip(self):
-        prob = _make_problem()
-        prob.optimizer.barrier_governor = solvs.BarrierGovernors.monitored
-        self.assertEqual(
-            prob.optimizer.barrier_governor, solvs.BarrierGovernors.monitored
-        )
-        prob.optimizer.barrier_governor = solvs.BarrierGovernors.classic_adaptive
-        self.assertEqual(
-            prob.optimizer.barrier_governor, solvs.BarrierGovernors.classic_adaptive
-        )
+        ipm = _make_engine()
+        ipm.barrier_governor = solvs.BarrierGovernors.monitored
+        self.assertEqual(ipm.barrier_governor, solvs.BarrierGovernors.monitored)
+        ipm.barrier_governor = solvs.BarrierGovernors.classic_adaptive
+        self.assertEqual(ipm.barrier_governor, solvs.BarrierGovernors.classic_adaptive)
 
     def test_round_trip_via_int_coercion(self):
         # The corpus harness selects the governor by raw int; enum-from-int
         # coercion must resolve to the same member as the named attribute.
-        prob = _make_problem()
-        prob.optimizer.barrier_governor = solvs.BarrierGovernors(1)
-        self.assertEqual(
-            prob.optimizer.barrier_governor, solvs.BarrierGovernors.monitored
-        )
+        ipm = _make_engine()
+        ipm.barrier_governor = solvs.BarrierGovernors(1)
+        self.assertEqual(ipm.barrier_governor, solvs.BarrierGovernors.monitored)
 
 
 class test_NeverMonotoneRoundTrip(unittest.TestCase):
     def test_default_is_false(self):
-        prob = _make_problem()
-        self.assertEqual(prob.optimizer.never_monotone, False)
+        ipm = _make_engine()
+        self.assertEqual(ipm.never_monotone, False)
 
     def test_round_trip(self):
-        prob = _make_problem()
-        prob.optimizer.never_monotone = True
-        self.assertEqual(prob.optimizer.never_monotone, True)
-        prob.optimizer.never_monotone = False
-        self.assertEqual(prob.optimizer.never_monotone, False)
+        ipm = _make_engine()
+        ipm.never_monotone = True
+        self.assertEqual(ipm.never_monotone, True)
+        ipm.never_monotone = False
+        self.assertEqual(ipm.never_monotone, False)
 
 
 class test_RestorationModeRoundTrip(unittest.TestCase):
     def test_default_is_off(self):
-        prob = _make_problem()
-        self.assertEqual(prob.optimizer.restoration_mode, solvs.RestorationModes.off)
+        ipm = _make_engine()
+        self.assertEqual(ipm.restoration_mode, solvs.RestorationModes.off)
 
     def test_round_trip(self):
-        prob = _make_problem()
-        prob.optimizer.restoration_mode = solvs.RestorationModes.proximal_switch
-        self.assertEqual(
-            prob.optimizer.restoration_mode, solvs.RestorationModes.proximal_switch
-        )
-        prob.optimizer.restoration_mode = solvs.RestorationModes.off
-        self.assertEqual(prob.optimizer.restoration_mode, solvs.RestorationModes.off)
+        ipm = _make_engine()
+        ipm.restoration_mode = solvs.RestorationModes.proximal_switch
+        self.assertEqual(ipm.restoration_mode, solvs.RestorationModes.proximal_switch)
+        ipm.restoration_mode = solvs.RestorationModes.off
+        self.assertEqual(ipm.restoration_mode, solvs.RestorationModes.off)
 
     def test_round_trip_via_int_coercion(self):
         # The corpus harness selects the mode by raw int; enum-from-int
         # coercion must resolve to the same member as the named attribute.
-        prob = _make_problem()
-        prob.optimizer.restoration_mode = solvs.RestorationModes(1)
-        self.assertEqual(
-            prob.optimizer.restoration_mode, solvs.RestorationModes.proximal_switch
-        )
+        ipm = _make_engine()
+        ipm.restoration_mode = solvs.RestorationModes(1)
+        self.assertEqual(ipm.restoration_mode, solvs.RestorationModes.proximal_switch)
 
     def test_round_trip_l1_nested(self):
-        prob = _make_problem()
-        prob.optimizer.restoration_mode = solvs.RestorationModes.l1_nested
-        self.assertEqual(
-            prob.optimizer.restoration_mode, solvs.RestorationModes.l1_nested
-        )
-        prob.optimizer.restoration_mode = solvs.RestorationModes.off
-        self.assertEqual(prob.optimizer.restoration_mode, solvs.RestorationModes.off)
+        ipm = _make_engine()
+        ipm.restoration_mode = solvs.RestorationModes.l1_nested
+        self.assertEqual(ipm.restoration_mode, solvs.RestorationModes.l1_nested)
+        ipm.restoration_mode = solvs.RestorationModes.off
+        self.assertEqual(ipm.restoration_mode, solvs.RestorationModes.off)
 
     def test_round_trip_l1_nested_via_int_coercion(self):
         # Mirrors test_round_trip_via_int_coercion for the third member.
-        prob = _make_problem()
-        prob.optimizer.restoration_mode = solvs.RestorationModes(2)
-        self.assertEqual(
-            prob.optimizer.restoration_mode, solvs.RestorationModes.l1_nested
-        )
+        ipm = _make_engine()
+        ipm.restoration_mode = solvs.RestorationModes(2)
+        self.assertEqual(ipm.restoration_mode, solvs.RestorationModes.l1_nested)
 
 
 class test_MaxFeasRestRoundTrip(unittest.TestCase):
     def test_default_is_two(self):
-        prob = _make_problem()
-        self.assertEqual(prob.optimizer.max_feas_rest, 2)
+        ipm = _make_engine()
+        self.assertEqual(ipm.max_feas_rest, 2)
 
     def test_round_trip(self):
-        prob = _make_problem()
-        prob.optimizer.max_feas_rest = 5
-        self.assertEqual(prob.optimizer.max_feas_rest, 5)
-        prob.optimizer.max_feas_rest = 2
-        self.assertEqual(prob.optimizer.max_feas_rest, 2)
+        ipm = _make_engine()
+        ipm.max_feas_rest = 5
+        self.assertEqual(ipm.max_feas_rest, 5)
+        ipm.max_feas_rest = 2
+        self.assertEqual(ipm.max_feas_rest, 2)
 
     def test_zero_is_accepted(self):
         # 0 disables restoration entry entirely but is itself a valid budget.
         prob = _make_problem()
-        prob.optimizer.max_feas_rest = 0
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        ipm = _make_engine()
+        ipm.max_feas_rest = 0
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_zero_disables_restoration_entry(self):
         # Strengthens test_zero_is_accepted: proves 0 doesn't merely validate
         # but actually disables entry when restoration_mode is on, by
         # asserting the entry counter stays at 0 for a proximal_switch solve.
         prob = _make_problem()
-        prob.optimizer.restoration_mode = solvs.RestorationModes.proximal_switch
-        prob.optimizer.max_feas_rest = 0
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
-        self.assertEqual(prob.optimizer.last_feas_rest_entries, 0)
+        ipm = _make_engine()
+        ipm.restoration_mode = solvs.RestorationModes.proximal_switch
+        ipm.max_feas_rest = 0
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(ipm.last_feas_rest_entries, 0)
 
     def test_zero_disables_restoration_entry_l1_nested(self):
         # Budget semantics parity: max_feas_rest gates NestedL1Restoration::
@@ -333,23 +311,24 @@ class test_MaxFeasRestRoundTrip(unittest.TestCase):
         # test_zero_disables_restoration_entry above with restoration_mode
         # swapped to l1_nested.
         prob = _make_problem()
-        prob.optimizer.restoration_mode = solvs.RestorationModes.l1_nested
-        prob.optimizer.max_feas_rest = 0
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
-        self.assertEqual(prob.optimizer.last_feas_rest_entries, 0)
+        ipm = _make_engine()
+        ipm.restoration_mode = solvs.RestorationModes.l1_nested
+        ipm.max_feas_rest = 0
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(ipm.last_feas_rest_entries, 0)
 
     def test_rejects_negative(self):
         # max_feas_rest_ now has a dedicated validated setter mirroring
         # max_soc/ls_extended_iters, so the raise fires immediately on
         # assignment rather than being deferred to validate() at
-        # optimize()/solve() time.
-        prob = _make_problem()
+        # solve() time.
+        ipm = _make_engine()
         with self.assertRaises(ValueError) as ctx:
-            prob.optimizer.max_feas_rest = -1
+            ipm.max_feas_rest = -1
         self.assertIn("max_feas_rest", str(ctx.exception))
         # Rejected write must not clobber the prior valid value.
-        self.assertEqual(prob.optimizer.max_feas_rest, 2)
+        self.assertEqual(ipm.max_feas_rest, 2)
 
 
 class test_BadRestorationModeValue(unittest.TestCase):
@@ -378,70 +357,78 @@ class test_BarrierGovernorComboGuard(unittest.TestCase):
 
     def test_funnel_classic_adaptive_raises_before_any_iteration(self):
         prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.funnel
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.funnel
         with self.assertRaises(ValueError) as ctx:
-            prob.optimize()
+            prob.solve(ipm)
         msg = str(ctx.exception)
         self.assertIn("barrier_governor", msg)
         self.assertIn("never_monotone", msg)
-        self.assertEqual(prob.optimizer.last_iter_num, 0)
+        self.assertEqual(ipm.last_iter_num, 0)
 
     def test_filter_classic_adaptive_raises_before_any_iteration(self):
         prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.filter
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.filter
         with self.assertRaises(ValueError) as ctx:
-            prob.optimize()
+            prob.solve(ipm)
         msg = str(ctx.exception)
         self.assertIn("barrier_governor", msg)
         self.assertIn("never_monotone", msg)
-        self.assertEqual(prob.optimizer.last_iter_num, 0)
+        self.assertEqual(ipm.last_iter_num, 0)
 
     def test_never_monotone_with_monitored_raises_before_any_iteration(self):
         prob = _make_problem()
-        prob.optimizer.barrier_governor = solvs.BarrierGovernors.monitored
-        prob.optimizer.never_monotone = True
+        ipm = _make_engine()
+        ipm.barrier_governor = solvs.BarrierGovernors.monitored
+        ipm.never_monotone = True
         with self.assertRaises(ValueError) as ctx:
-            prob.optimize()
+            prob.solve(ipm)
         msg = str(ctx.exception)
         self.assertIn("barrier_governor", msg)
         self.assertIn("never_monotone", msg)
-        self.assertEqual(prob.optimizer.last_iter_num, 0)
+        self.assertEqual(ipm.last_iter_num, 0)
 
     def test_funnel_with_monitored_governor_validates_and_solves(self):
         prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.funnel
-        prob.optimizer.barrier_governor = solvs.BarrierGovernors.monitored
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.funnel
+        ipm.barrier_governor = solvs.BarrierGovernors.monitored
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_filter_with_never_monotone_validates_and_solves(self):
         prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.filter
-        prob.optimizer.never_monotone = True
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.filter
+        ipm.never_monotone = True
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_classic_merit_unaffected_by_classic_adaptive_governor(self):
         prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.classic_merit
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.classic_merit
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_merit_unaffected_by_classic_adaptive_governor(self):
         prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.merit
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.merit
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_classic_merit_with_monitored_governor_is_allowed_opt_in(self):
         # classic_merit + monitored is allowed opt-in -- bit-identity is
         # about the DEFAULT governor selection, not about excluding
         # classic_merit from pairing with the monitored governor.
         prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.classic_merit
-        prob.optimizer.barrier_governor = solvs.BarrierGovernors.monitored
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.classic_merit
+        ipm.barrier_governor = solvs.BarrierGovernors.monitored
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
 
 class test_MonotoneDiagnostics(unittest.TestCase):
@@ -453,18 +440,20 @@ class test_MonotoneDiagnostics(unittest.TestCase):
 
     def test_default_solve_reports_sentinels(self):
         prob = _make_problem()
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
-        self.assertEqual(prob.optimizer.last_monotone_switches, -1)
-        self.assertEqual(prob.optimizer.last_monotone_iters, -1)
+        ipm = _make_engine()
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(ipm.last_monotone_switches, -1)
+        self.assertEqual(ipm.last_monotone_iters, -1)
 
     def test_monitored_solve_populates_diagnostics(self):
         prob = _make_problem()
-        prob.optimizer.barrier_governor = solvs.BarrierGovernors.monitored
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
-        self.assertGreaterEqual(prob.optimizer.last_monotone_switches, 0)
-        self.assertGreaterEqual(prob.optimizer.last_monotone_iters, 0)
+        ipm = _make_engine()
+        ipm.barrier_governor = solvs.BarrierGovernors.monitored
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertGreaterEqual(ipm.last_monotone_switches, 0)
+        self.assertGreaterEqual(ipm.last_monotone_iters, 0)
 
 
 class test_FeasRestDiagnostics(unittest.TestCase):
@@ -482,26 +471,29 @@ class test_FeasRestDiagnostics(unittest.TestCase):
 
     def test_default_solve_reports_sentinels(self):
         prob = _make_problem()
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
-        self.assertEqual(prob.optimizer.last_feas_rest_entries, -1)
-        self.assertEqual(prob.optimizer.last_feas_rest_iters, -1)
+        ipm = _make_engine()
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(ipm.last_feas_rest_entries, -1)
+        self.assertEqual(ipm.last_feas_rest_iters, -1)
 
     def test_proximal_switch_solve_reports_non_negative_counts(self):
         prob = _make_problem()
-        prob.optimizer.restoration_mode = solvs.RestorationModes.proximal_switch
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
-        self.assertGreaterEqual(prob.optimizer.last_feas_rest_entries, 0)
-        self.assertGreaterEqual(prob.optimizer.last_feas_rest_iters, 0)
+        ipm = _make_engine()
+        ipm.restoration_mode = solvs.RestorationModes.proximal_switch
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertGreaterEqual(ipm.last_feas_rest_entries, 0)
+        self.assertGreaterEqual(ipm.last_feas_rest_iters, 0)
 
     def test_l1_nested_solve_reports_non_negative_counts(self):
         prob = _make_problem()
-        prob.optimizer.restoration_mode = solvs.RestorationModes.l1_nested
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
-        self.assertGreaterEqual(prob.optimizer.last_feas_rest_entries, 0)
-        self.assertGreaterEqual(prob.optimizer.last_feas_rest_iters, 0)
+        ipm = _make_engine()
+        ipm.restoration_mode = solvs.RestorationModes.l1_nested
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertGreaterEqual(ipm.last_feas_rest_entries, 0)
+        self.assertGreaterEqual(ipm.last_feas_rest_iters, 0)
 
 
 class test_RestorationComboMatrix(unittest.TestCase):
@@ -528,12 +520,13 @@ class test_RestorationComboMatrix(unittest.TestCase):
         self, acceptance_strategy, barrier_governor, restoration_mode, **extra_settings
     ):
         prob = _make_problem()
-        prob.optimizer.acceptance_strategy = acceptance_strategy
-        prob.optimizer.barrier_governor = barrier_governor
-        prob.optimizer.restoration_mode = restoration_mode
+        ipm = _make_engine()
+        ipm.acceptance_strategy = acceptance_strategy
+        ipm.barrier_governor = barrier_governor
+        ipm.restoration_mode = restoration_mode
         for name, value in extra_settings.items():
-            setattr(prob.optimizer, name, value)
-        return prob.optimize()
+            setattr(ipm, name, value)
+        return prob.solve(ipm)
 
     def test_classic_merit_classic_adaptive_with_restoration_solves(self):
         for mode in self.RESTORATION_MODES:
@@ -543,7 +536,7 @@ class test_RestorationComboMatrix(unittest.TestCase):
                     solvs.BarrierGovernors.classic_adaptive,
                     mode,
                 )
-                self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+                self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_merit_classic_adaptive_with_restoration_solves(self):
         for mode in self.RESTORATION_MODES:
@@ -553,7 +546,7 @@ class test_RestorationComboMatrix(unittest.TestCase):
                     solvs.BarrierGovernors.classic_adaptive,
                     mode,
                 )
-                self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+                self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_classic_merit_monitored_with_restoration_solves(self):
         for mode in self.RESTORATION_MODES:
@@ -563,7 +556,7 @@ class test_RestorationComboMatrix(unittest.TestCase):
                     solvs.BarrierGovernors.monitored,
                     mode,
                 )
-                self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+                self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_funnel_monitored_with_restoration_solves(self):
         for mode in self.RESTORATION_MODES:
@@ -573,7 +566,7 @@ class test_RestorationComboMatrix(unittest.TestCase):
                     solvs.BarrierGovernors.monitored,
                     mode,
                 )
-                self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+                self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_filter_monitored_with_restoration_solves(self):
         for mode in self.RESTORATION_MODES:
@@ -583,7 +576,7 @@ class test_RestorationComboMatrix(unittest.TestCase):
                     solvs.BarrierGovernors.monitored,
                     mode,
                 )
-                self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+                self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_filter_never_monotone_with_restoration_solves(self):
         for mode in self.RESTORATION_MODES:
@@ -594,31 +587,27 @@ class test_RestorationComboMatrix(unittest.TestCase):
                     mode,
                     never_monotone=True,
                 )
-                self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+                self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
 
 class test_InertiaModeRoundTrip(unittest.TestCase):
     def test_default_is_classic(self):
-        prob = _make_problem()
-        self.assertEqual(prob.optimizer.inertia_mode, solvs.InertiaModes.classic)
+        ipm = _make_engine()
+        self.assertEqual(ipm.inertia_mode, solvs.InertiaModes.classic)
 
     def test_round_trip(self):
-        prob = _make_problem()
-        prob.optimizer.inertia_mode = solvs.InertiaModes.proximal_regularization
-        self.assertEqual(
-            prob.optimizer.inertia_mode, solvs.InertiaModes.proximal_regularization
-        )
-        prob.optimizer.inertia_mode = solvs.InertiaModes.classic
-        self.assertEqual(prob.optimizer.inertia_mode, solvs.InertiaModes.classic)
+        ipm = _make_engine()
+        ipm.inertia_mode = solvs.InertiaModes.proximal_regularization
+        self.assertEqual(ipm.inertia_mode, solvs.InertiaModes.proximal_regularization)
+        ipm.inertia_mode = solvs.InertiaModes.classic
+        self.assertEqual(ipm.inertia_mode, solvs.InertiaModes.classic)
 
     def test_round_trip_via_int_coercion(self):
         # The corpus harness selects the mode by raw int; enum-from-int
         # coercion must resolve to the same member as the named attribute.
-        prob = _make_problem()
-        prob.optimizer.inertia_mode = solvs.InertiaModes(1)
-        self.assertEqual(
-            prob.optimizer.inertia_mode, solvs.InertiaModes.proximal_regularization
-        )
+        ipm = _make_engine()
+        ipm.inertia_mode = solvs.InertiaModes(1)
+        self.assertEqual(ipm.inertia_mode, solvs.InertiaModes.proximal_regularization)
 
 
 class test_BadInertiaModeValue(unittest.TestCase):
@@ -650,48 +639,49 @@ class test_InertiaModeComboMatrix(unittest.TestCase):
         **extra_settings,
     ):
         prob = _make_problem()
-        prob.optimizer.inertia_mode = solvs.InertiaModes.proximal_regularization
-        prob.optimizer.acceptance_strategy = acceptance_strategy
-        prob.optimizer.barrier_governor = barrier_governor
-        prob.optimizer.restoration_mode = restoration_mode
+        ipm = _make_engine()
+        ipm.inertia_mode = solvs.InertiaModes.proximal_regularization
+        ipm.acceptance_strategy = acceptance_strategy
+        ipm.barrier_governor = barrier_governor
+        ipm.restoration_mode = restoration_mode
         for name, value in extra_settings.items():
-            setattr(prob.optimizer, name, value)
-        return prob.optimize()
+            setattr(ipm, name, value)
+        return prob.solve(ipm)
 
     def test_classic_merit_classic_adaptive_solves(self):
         flag = self._solve_with(
             solvs.AcceptanceStrategies.classic_merit,
             solvs.BarrierGovernors.classic_adaptive,
         )
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_merit_classic_adaptive_solves(self):
         flag = self._solve_with(
             solvs.AcceptanceStrategies.merit,
             solvs.BarrierGovernors.classic_adaptive,
         )
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_classic_merit_monitored_solves(self):
         flag = self._solve_with(
             solvs.AcceptanceStrategies.classic_merit,
             solvs.BarrierGovernors.monitored,
         )
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_funnel_monitored_solves(self):
         flag = self._solve_with(
             solvs.AcceptanceStrategies.funnel,
             solvs.BarrierGovernors.monitored,
         )
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_filter_monitored_solves(self):
         flag = self._solve_with(
             solvs.AcceptanceStrategies.filter,
             solvs.BarrierGovernors.monitored,
         )
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_filter_never_monotone_solves(self):
         flag = self._solve_with(
@@ -699,7 +689,7 @@ class test_InertiaModeComboMatrix(unittest.TestCase):
             solvs.BarrierGovernors.classic_adaptive,
             never_monotone=True,
         )
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_with_proximal_switch_restoration_solves(self):
         flag = self._solve_with(
@@ -707,7 +697,7 @@ class test_InertiaModeComboMatrix(unittest.TestCase):
             solvs.BarrierGovernors.classic_adaptive,
             restoration_mode=solvs.RestorationModes.proximal_switch,
         )
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_with_l1_nested_restoration_solves(self):
         flag = self._solve_with(
@@ -715,7 +705,7 @@ class test_InertiaModeComboMatrix(unittest.TestCase):
             solvs.BarrierGovernors.classic_adaptive,
             restoration_mode=solvs.RestorationModes.l1_nested,
         )
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_watchdog_max_soc_ls_extended_iters_compose(self):
         # inertia_mode is orthogonal to the recovery-link knobs too.
@@ -726,7 +716,7 @@ class test_InertiaModeComboMatrix(unittest.TestCase):
             ls_extended_iters=2,
             watchdog=True,
         )
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
 
 class test_ProxRegDiagnostics(unittest.TestCase):
@@ -740,18 +730,20 @@ class test_ProxRegDiagnostics(unittest.TestCase):
 
     def test_default_solve_reports_sentinels(self):
         prob = _make_problem()
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
-        self.assertEqual(prob.optimizer.last_prox_reg_primal, -1.0)
-        self.assertEqual(prob.optimizer.last_prox_reg_dual, -1.0)
+        ipm = _make_engine()
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(ipm.last_prox_reg_primal, -1.0)
+        self.assertEqual(ipm.last_prox_reg_dual, -1.0)
 
     def test_proximal_regularization_solve_reports_non_negative_shifts(self):
         prob = _make_problem()
-        prob.optimizer.inertia_mode = solvs.InertiaModes.proximal_regularization
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
-        self.assertGreaterEqual(prob.optimizer.last_prox_reg_primal, 0.0)
-        self.assertGreaterEqual(prob.optimizer.last_prox_reg_dual, 0.0)
+        ipm = _make_engine()
+        ipm.inertia_mode = solvs.InertiaModes.proximal_regularization
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertGreaterEqual(ipm.last_prox_reg_primal, 0.0)
+        self.assertGreaterEqual(ipm.last_prox_reg_dual, 0.0)
 
     def test_mode_off_after_mode_on_restores_sentinels(self):
         # Guards both the mode-gate on the phase-close write and the
@@ -760,15 +752,16 @@ class test_ProxRegDiagnostics(unittest.TestCase):
         # reports -1.0 again if the fields were actually re-sentineled and
         # the classic path really skips the write.
         prob = _make_problem()
-        prob.optimizer.inertia_mode = solvs.InertiaModes.proximal_regularization
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
-        self.assertGreaterEqual(prob.optimizer.last_prox_reg_primal, 0.0)
-        prob.optimizer.inertia_mode = solvs.InertiaModes.classic
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
-        self.assertEqual(prob.optimizer.last_prox_reg_primal, -1.0)
-        self.assertEqual(prob.optimizer.last_prox_reg_dual, -1.0)
+        ipm = _make_engine()
+        ipm.inertia_mode = solvs.InertiaModes.proximal_regularization
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertGreaterEqual(ipm.last_prox_reg_primal, 0.0)
+        ipm.inertia_mode = solvs.InertiaModes.classic
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(ipm.last_prox_reg_primal, -1.0)
+        self.assertEqual(ipm.last_prox_reg_dual, -1.0)
 
 
 class test_EvalExceptionDiagnostic(unittest.TestCase):
@@ -781,16 +774,17 @@ class test_EvalExceptionDiagnostic(unittest.TestCase):
 
     def test_fresh_optimizer_reports_empty_sentinel(self):
         prob = _make_problem()
-        self.assertEqual(prob.optimizer.last_eval_exception, "")
+        ipm = _make_engine()
+        self.assertEqual(ipm.last_eval_exception, "")
         # A clean solve exercises the per-solve reset path and must leave the
         # sentinel untouched.
-        prob.optimize()
-        self.assertEqual(prob.optimizer.last_eval_exception, "")
+        prob.solve(ipm)
+        self.assertEqual(ipm.last_eval_exception, "")
 
     def test_property_rejects_assignment(self):
-        prob = _make_problem()
+        ipm = _make_engine()
         with self.assertRaises(AttributeError):
-            prob.optimizer.last_eval_exception = "boom"
+            ipm.last_eval_exception = "boom"
 
 
 class test_BadEnumValues(unittest.TestCase):
@@ -844,69 +838,77 @@ class test_AcceptanceGenericRecoveryComposition(unittest.TestCase):
 
     def test_merit_max_soc_composes_and_solves(self):
         prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.merit
-        prob.optimizer.max_soc = 4
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.merit
+        ipm.max_soc = 4
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_merit_ls_extended_iters_composes_and_solves(self):
         prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.merit
-        prob.optimizer.ls_extended_iters = 2
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.merit
+        ipm.ls_extended_iters = 2
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_watchdog_alone_is_compatible_with_merit(self):
         # The watchdog link is compatible with every acceptance strategy;
         # SOC / extended backtracking now are too (see the sibling tests).
         prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.merit
-        prob.optimizer.watchdog = True
-        flag = prob.optimize()
-        self.assertEqual(flag, ast.solvers.ConvergenceFlags.CONVERGED)
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.merit
+        ipm.watchdog = True
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, ast.solvers.ConvergenceFlags.CONVERGED)
 
     def test_funnel_max_soc_composes_and_solves(self):
         prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.funnel
-        prob.optimizer.barrier_governor = solvs.BarrierGovernors.monitored
-        prob.optimizer.max_soc = 4
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.funnel
+        ipm.barrier_governor = solvs.BarrierGovernors.monitored
+        ipm.max_soc = 4
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_funnel_ls_extended_iters_composes_and_solves(self):
         prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.funnel
-        prob.optimizer.barrier_governor = solvs.BarrierGovernors.monitored
-        prob.optimizer.ls_extended_iters = 2
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.funnel
+        ipm.barrier_governor = solvs.BarrierGovernors.monitored
+        ipm.ls_extended_iters = 2
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_filter_max_soc_composes_and_solves(self):
         prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.filter
-        prob.optimizer.never_monotone = True
-        prob.optimizer.max_soc = 4
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.filter
+        ipm.never_monotone = True
+        ipm.max_soc = 4
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_filter_ls_extended_iters_composes_and_solves(self):
         prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.filter
-        prob.optimizer.never_monotone = True
-        prob.optimizer.ls_extended_iters = 2
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.filter
+        ipm.never_monotone = True
+        ipm.ls_extended_iters = 2
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_filter_soc_and_extended_and_watchdog_compose_and_solve(self):
         # All three recovery links enabled at once under a generic strategy.
         prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.filter
-        prob.optimizer.barrier_governor = solvs.BarrierGovernors.monitored
-        prob.optimizer.max_soc = 4
-        prob.optimizer.ls_extended_iters = 2
-        prob.optimizer.watchdog = True
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.filter
+        ipm.barrier_governor = solvs.BarrierGovernors.monitored
+        ipm.max_soc = 4
+        ipm.ls_extended_iters = 2
+        ipm.watchdog = True
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_watchdog_alone_is_compatible_with_funnel(self):
         # The watchdog link is compatible with every acceptance strategy (as
@@ -916,19 +918,21 @@ class test_AcceptanceGenericRecoveryComposition(unittest.TestCase):
         # below) -- never_monotone is used here, barrier_governor=monitored
         # is used in the filter sibling below, to exercise both opt-ins.
         prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.funnel
-        prob.optimizer.watchdog = True
-        prob.optimizer.never_monotone = True
-        flag = prob.optimize()
-        self.assertEqual(flag, ast.solvers.ConvergenceFlags.CONVERGED)
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.funnel
+        ipm.watchdog = True
+        ipm.never_monotone = True
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, ast.solvers.ConvergenceFlags.CONVERGED)
 
     def test_watchdog_alone_is_compatible_with_filter(self):
         prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.filter
-        prob.optimizer.watchdog = True
-        prob.optimizer.barrier_governor = solvs.BarrierGovernors.monitored
-        flag = prob.optimize()
-        self.assertEqual(flag, ast.solvers.ConvergenceFlags.CONVERGED)
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.filter
+        ipm.watchdog = True
+        ipm.barrier_governor = solvs.BarrierGovernors.monitored
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, ast.solvers.ConvergenceFlags.CONVERGED)
 
 
 class test_SolveDiagnostics(unittest.TestCase):
@@ -936,10 +940,11 @@ class test_SolveDiagnostics(unittest.TestCase):
 
     def test_defaults_are_zero_after_solve(self):
         prob = _make_problem()
-        prob.optimize()
-        self.assertEqual(prob.optimizer.last_soc_steps, 0)
-        self.assertEqual(prob.optimizer.last_watchdog_activations, 0)
-        hist = prob.optimizer.last_recovery_depth_histogram
+        ipm = _make_engine()
+        prob.solve(ipm)
+        self.assertEqual(ipm.last_soc_steps, 0)
+        self.assertEqual(ipm.last_watchdog_activations, 0)
+        hist = ipm.last_recovery_depth_histogram
         # 5 buckets: SOC, extended backtracking, watchdog, unresolved,
         # restoration -- the restoration bucket only increments when a
         # restoration mode (proximal_switch or l1_nested) is enabled.
@@ -961,48 +966,52 @@ class test_AcceptanceDiagnostics(unittest.TestCase):
 
     def test_funnel_solve_reports_width_filter_sentinel(self):
         prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.funnel
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.funnel
         # funnel requires an explicit barrier_governor/never_monotone opt-in
         # (Settings::validate()) -- exercise the barrier_governor=monitored
         # flavor here (the filter sibling below uses never_monotone).
-        prob.optimizer.barrier_governor = solvs.BarrierGovernors.monitored
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
-        self.assertGreater(prob.optimizer.last_funnel_width, 0.0)
-        self.assertTrue(math.isfinite(prob.optimizer.last_funnel_width))
-        self.assertEqual(prob.optimizer.last_filter_size, -1)
-        self.assertEqual(prob.optimizer.last_filter_resets, -1)
+        ipm.barrier_governor = solvs.BarrierGovernors.monitored
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertGreater(ipm.last_funnel_width, 0.0)
+        self.assertTrue(math.isfinite(ipm.last_funnel_width))
+        self.assertEqual(ipm.last_filter_size, -1)
+        self.assertEqual(ipm.last_filter_resets, -1)
 
     def test_filter_solve_reports_size_funnel_sentinel(self):
         prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.filter
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.filter
         # never_monotone opt-in flavor (see the funnel sibling above).
-        prob.optimizer.never_monotone = True
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
-        self.assertGreaterEqual(prob.optimizer.last_filter_size, 0)
-        self.assertGreaterEqual(prob.optimizer.last_filter_resets, 0)
-        self.assertEqual(prob.optimizer.last_funnel_width, -1.0)
+        ipm.never_monotone = True
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertGreaterEqual(ipm.last_filter_size, 0)
+        self.assertGreaterEqual(ipm.last_filter_resets, 0)
+        self.assertEqual(ipm.last_funnel_width, -1.0)
 
     def test_default_solve_reports_all_sentinels(self):
         prob = _make_problem()
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
-        self.assertEqual(prob.optimizer.last_funnel_width, -1.0)
-        self.assertEqual(prob.optimizer.last_filter_size, -1)
-        self.assertEqual(prob.optimizer.last_filter_resets, -1)
+        ipm = _make_engine()
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(ipm.last_funnel_width, -1.0)
+        self.assertEqual(ipm.last_filter_size, -1)
+        self.assertEqual(ipm.last_filter_resets, -1)
 
     def test_merit_solve_reports_all_sentinels(self):
         # classic_merit's generic-path sibling (merit) also has no
         # funnel/filter state to report -- the default AcceptanceStrategy::
         # append_diagnostics() no-op applies to it too.
         prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.merit
-        flag = prob.optimize()
-        self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
-        self.assertEqual(prob.optimizer.last_funnel_width, -1.0)
-        self.assertEqual(prob.optimizer.last_filter_size, -1)
-        self.assertEqual(prob.optimizer.last_filter_resets, -1)
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.merit
+        flag = prob.solve(ipm)
+        self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(ipm.last_funnel_width, -1.0)
+        self.assertEqual(ipm.last_filter_size, -1)
+        self.assertEqual(ipm.last_filter_resets, -1)
 
 
 class test_ComponentRebuildTakesEffectWithoutRetranscription(unittest.TestCase):
@@ -1014,17 +1023,17 @@ class test_ComponentRebuildTakesEffectWithoutRetranscription(unittest.TestCase):
     a first solve was silently ignored by a re-solve that did not
     retranscribe.
 
-    Reachability from Python: OptimizationProblem::optimize()
+    Reachability from Python: OptimizationProblemBase::solve()
     (include/tycho/detail/solvers/optimization_problem.h) gates
     ``transcribe()`` (and therefore ``set_nlp()``) on ``do_transcription_``
     alone, which is cleared once transcribe() runs and set back to True
     only by problem-EDITING calls (add_objective/add_*_con/
-    reset_transcription) -- never by writing an optimizer setting, and
+    reset_transcription) -- never by writing an engine setting, and
     NOT by ``set_vars()`` (a plain assignment to active_variables_). So:
-    optimize(), set_vars(<original guess>), flip acceptance_strategy,
-    optimize() again reaches run_phase_sequence() a second time WITHOUT an
-    intervening set_nlp() call, from the SAME cold start as the first
-    solve -- the exact repro path for the staleness bug, with the
+    solve(ipm), set_vars(<original guess>), flip acceptance_strategy on the
+    SAME ``ipm``, solve(ipm) again reaches run_phase_sequence() a second
+    time WITHOUT an intervening set_nlp() call, from the SAME cold start as
+    the first solve -- the exact repro path for the staleness bug, with the
     warm-start confound removed.
 
     The observable: on this Rosenbrock+disk fixture from [-1, -1] the two
@@ -1041,16 +1050,22 @@ class test_ComponentRebuildTakesEffectWithoutRetranscription(unittest.TestCase):
 
     def test_acceptance_strategy_switch_is_live_on_resolve(self):
         # Cold-start reference counts, each from a fresh problem (each
-        # first optimize() transcribes, so both references are built the
+        # first solve() transcribes, so both references are built the
         # ordinary way).
         ref_classic = _make_problem()
-        self.assertEqual(ref_classic.optimize(), solvs.ConvergenceFlags.CONVERGED)
-        iters_classic = ref_classic.optimizer.last_iter_num
+        ipm_classic = _make_engine()
+        self.assertEqual(
+            ref_classic.solve(ipm_classic).flag, solvs.ConvergenceFlags.CONVERGED
+        )
+        iters_classic = ipm_classic.last_iter_num
 
         ref_merit = _make_problem()
-        ref_merit.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.merit
-        self.assertEqual(ref_merit.optimize(), solvs.ConvergenceFlags.CONVERGED)
-        iters_merit = ref_merit.optimizer.last_iter_num
+        ipm_merit = _make_engine()
+        ipm_merit.acceptance_strategy = solvs.AcceptanceStrategies.merit
+        self.assertEqual(
+            ref_merit.solve(ipm_merit).flag, solvs.ConvergenceFlags.CONVERGED
+        )
+        iters_merit = ipm_merit.last_iter_num
 
         if iters_classic == iters_merit:
             self.skipTest(
@@ -1061,16 +1076,18 @@ class test_ComponentRebuildTakesEffectWithoutRetranscription(unittest.TestCase):
 
         # The regression scenario: solve with defaults (transcribes once),
         # restore the ORIGINAL cold start via set_vars (which does NOT set
-        # do_transcription_), flip the construction-time knob, re-optimize.
-        # No transcribe()/set_nlp() runs before the second optimize().
+        # do_transcription_), flip the construction-time knob on the same
+        # engine, re-solve. No transcribe()/set_nlp() runs before the
+        # second solve().
         prob = _make_problem()
-        self.assertEqual(prob.optimize(), solvs.ConvergenceFlags.CONVERGED)
-        self.assertEqual(prob.optimizer.last_iter_num, iters_classic)
+        ipm = _make_engine()
+        self.assertEqual(prob.solve(ipm).flag, solvs.ConvergenceFlags.CONVERGED)
+        self.assertEqual(ipm.last_iter_num, iters_classic)
 
         prob.set_vars([-1, -1])
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.merit
-        self.assertEqual(prob.optimize(), solvs.ConvergenceFlags.CONVERGED)
-        iters_resolve = prob.optimizer.last_iter_num
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.merit
+        self.assertEqual(prob.solve(ipm).flag, solvs.ConvergenceFlags.CONVERGED)
+        iters_resolve = ipm.last_iter_num
 
         # Identical solver configuration + identical cold start as the
         # merit reference => identical iterate sequence; under the pre-fix
@@ -1109,91 +1126,74 @@ class test_ApplyPreset(unittest.TestCase):
         # match without proving the preset actually writes anything.
         # Dirty every field first, then confirm apply_preset("classic")
         # overwrites all of them back to the stock configuration.
-        prob = _make_problem()
-        prob.optimizer.acceptance_strategy = solvs.AcceptanceStrategies.merit
-        prob.optimizer.barrier_governor = solvs.BarrierGovernors.monitored
-        prob.optimizer.restoration_mode = solvs.RestorationModes.l1_nested
-        prob.optimizer.inertia_mode = solvs.InertiaModes.proximal_regularization
-        prob.optimizer.max_soc = 4
-        prob.optimizer.ls_extended_iters = 2
-        prob.optimizer.watchdog = True
+        ipm = _make_engine()
+        ipm.acceptance_strategy = solvs.AcceptanceStrategies.merit
+        ipm.barrier_governor = solvs.BarrierGovernors.monitored
+        ipm.restoration_mode = solvs.RestorationModes.l1_nested
+        ipm.inertia_mode = solvs.InertiaModes.proximal_regularization
+        ipm.max_soc = 4
+        ipm.ls_extended_iters = 2
+        ipm.watchdog = True
 
-        prob.optimizer.apply_preset("classic")
+        ipm.apply_preset("classic")
 
         self.assertEqual(
-            prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.classic_merit
+            ipm.acceptance_strategy, solvs.AcceptanceStrategies.classic_merit
         )
-        self.assertEqual(
-            prob.optimizer.barrier_governor, solvs.BarrierGovernors.classic_adaptive
-        )
-        self.assertEqual(prob.optimizer.restoration_mode, solvs.RestorationModes.off)
-        self.assertEqual(prob.optimizer.inertia_mode, solvs.InertiaModes.classic)
-        self.assertEqual(prob.optimizer.max_soc, 0)
-        self.assertEqual(prob.optimizer.ls_extended_iters, 0)
-        self.assertEqual(prob.optimizer.watchdog, False)
+        self.assertEqual(ipm.barrier_governor, solvs.BarrierGovernors.classic_adaptive)
+        self.assertEqual(ipm.restoration_mode, solvs.RestorationModes.off)
+        self.assertEqual(ipm.inertia_mode, solvs.InertiaModes.classic)
+        self.assertEqual(ipm.max_soc, 0)
+        self.assertEqual(ipm.ls_extended_iters, 0)
+        self.assertEqual(ipm.watchdog, False)
 
     def test_filter_l1(self):
-        prob = _make_problem()
-        prob.optimizer.apply_preset("filter_l1")
-        self.assertEqual(
-            prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.filter
-        )
-        self.assertEqual(
-            prob.optimizer.barrier_governor, solvs.BarrierGovernors.monitored
-        )
-        self.assertEqual(
-            prob.optimizer.restoration_mode, solvs.RestorationModes.l1_nested
-        )
+        ipm = _make_engine()
+        ipm.apply_preset("filter_l1")
+        self.assertEqual(ipm.acceptance_strategy, solvs.AcceptanceStrategies.filter)
+        self.assertEqual(ipm.barrier_governor, solvs.BarrierGovernors.monitored)
+        self.assertEqual(ipm.restoration_mode, solvs.RestorationModes.l1_nested)
 
     def test_soc_recovery_l1(self):
-        prob = _make_problem()
-        prob.optimizer.apply_preset("soc_recovery_l1")
-        self.assertEqual(prob.optimizer.max_soc, 4)
-        self.assertEqual(prob.optimizer.ls_extended_iters, 2)
-        self.assertEqual(prob.optimizer.watchdog, True)
-        self.assertEqual(
-            prob.optimizer.restoration_mode, solvs.RestorationModes.l1_nested
-        )
+        ipm = _make_engine()
+        ipm.apply_preset("soc_recovery_l1")
+        self.assertEqual(ipm.max_soc, 4)
+        self.assertEqual(ipm.ls_extended_iters, 2)
+        self.assertEqual(ipm.watchdog, True)
+        self.assertEqual(ipm.restoration_mode, solvs.RestorationModes.l1_nested)
 
     def test_soc_proximal(self):
-        prob = _make_problem()
-        prob.optimizer.apply_preset("soc_proximal")
-        self.assertEqual(
-            prob.optimizer.restoration_mode, solvs.RestorationModes.proximal_switch
-        )
-        self.assertEqual(prob.optimizer.max_soc, 4)
+        ipm = _make_engine()
+        ipm.apply_preset("soc_proximal")
+        self.assertEqual(ipm.restoration_mode, solvs.RestorationModes.proximal_switch)
+        self.assertEqual(ipm.max_soc, 4)
         # Distinguishes this preset from soc_recovery_l1, which shares the
         # same acceptance/governor/inertia/max_soc fields but enables
         # watchdog and ls_extended_iters.
-        self.assertEqual(prob.optimizer.watchdog, False)
+        self.assertEqual(ipm.watchdog, False)
 
     def test_merit_l1(self):
-        prob = _make_problem()
-        prob.optimizer.apply_preset("merit_l1")
-        self.assertEqual(
-            prob.optimizer.acceptance_strategy, solvs.AcceptanceStrategies.merit
-        )
-        self.assertEqual(
-            prob.optimizer.barrier_governor, solvs.BarrierGovernors.classic_adaptive
-        )
-        self.assertEqual(
-            prob.optimizer.restoration_mode, solvs.RestorationModes.l1_nested
-        )
+        ipm = _make_engine()
+        ipm.apply_preset("merit_l1")
+        self.assertEqual(ipm.acceptance_strategy, solvs.AcceptanceStrategies.merit)
+        self.assertEqual(ipm.barrier_governor, solvs.BarrierGovernors.classic_adaptive)
+        self.assertEqual(ipm.restoration_mode, solvs.RestorationModes.l1_nested)
 
     def test_every_preset_solves(self):
         # Every preset must pass Settings::validate() -- smoke each one
-        # through a full optimize() call.
+        # through a full solve() call.
         for name in self.PRESET_NAMES:
             with self.subTest(preset=name):
                 prob = _make_problem()
-                prob.optimizer.apply_preset(name)
-                flag = prob.optimize()
-                self.assertEqual(flag, solvs.ConvergenceFlags.CONVERGED)
+                ipm = _make_engine()
+                ipm.apply_preset(name)
+                flag = prob.solve(ipm)
+                self.assertEqual(flag.flag, solvs.ConvergenceFlags.CONVERGED)
 
     def test_unrecognized_name_raises_value_error_naming_all_presets(self):
-        prob = _make_problem()
+        ipm = _make_engine()
         with self.assertRaises(ValueError) as ctx:
-            prob.optimizer.apply_preset("not_a_real_preset")
+            ipm.apply_preset("not_a_real_preset")
         msg = str(ctx.exception)
         for name in self.PRESET_NAMES:
             self.assertIn(name, msg)

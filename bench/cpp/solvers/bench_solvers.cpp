@@ -3,8 +3,8 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "../bench_phases.h"
-#include <tycho/solvers.h>
 #include <benchmark/benchmark.h>
+#include <tycho/solvers.h>
 
 ///////////////////////////////////////////////////////////////////////////////
 // InteriorPointSolver solve_optimize benchmarks
@@ -14,8 +14,10 @@
 static void BM_InteriorPointSolver_Brach_16seg(benchmark::State &state) {
     bool first = true;
     for (auto _ : state) {
-        auto phase = make_brach_phase(16, 3);
-        auto status = phase->solve_optimize();
+        auto phase = make_brach_phase(16);
+        tycho::solvers::InteriorPointSolver ipm;
+        ipm.set_print_level(3);
+        auto status = phase->solve(&ipm, {.presolve = true}).flag_;
         benchmark::DoNotOptimize(status);
         if (first) {
             if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
@@ -30,8 +32,10 @@ BENCHMARK(BM_InteriorPointSolver_Brach_16seg)->Unit(benchmark::kMillisecond);
 static void BM_InteriorPointSolver_Brach_32seg(benchmark::State &state) {
     bool first = true;
     for (auto _ : state) {
-        auto phase = make_brach_phase(32, 3);
-        auto status = phase->solve_optimize();
+        auto phase = make_brach_phase(32);
+        tycho::solvers::InteriorPointSolver ipm;
+        ipm.set_print_level(3);
+        auto status = phase->solve(&ipm, {.presolve = true}).flag_;
         benchmark::DoNotOptimize(status);
         if (first) {
             if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
@@ -52,8 +56,10 @@ BENCHMARK(BM_InteriorPointSolver_Brach_32seg)->Unit(benchmark::kMillisecond);
 static void BM_InteriorPointSolver_PolarLT_128seg(benchmark::State &state) {
     bool first = true;
     for (auto _ : state) {
-        auto phase = make_polar_lt_phase(128, 3);
-        auto status = phase->solve_optimize();
+        auto phase = make_polar_lt_phase(128);
+        tycho::solvers::InteriorPointSolver ipm;
+        ipm.set_print_level(3);
+        auto status = phase->solve(&ipm, {.presolve = true}).flag_;
         benchmark::DoNotOptimize(status);
         if (first) {
             if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
@@ -68,8 +74,10 @@ BENCHMARK(BM_InteriorPointSolver_PolarLT_128seg)->Unit(benchmark::kMillisecond);
 static void BM_InteriorPointSolver_PolarLT_256seg(benchmark::State &state) {
     bool first = true;
     for (auto _ : state) {
-        auto phase = make_polar_lt_phase(256, 3);
-        auto status = phase->solve_optimize();
+        auto phase = make_polar_lt_phase(256);
+        tycho::solvers::InteriorPointSolver ipm;
+        ipm.set_print_level(3);
+        auto status = phase->solve(&ipm, {.presolve = true}).flag_;
         benchmark::DoNotOptimize(status);
         if (first) {
             if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
@@ -90,9 +98,11 @@ BENCHMARK(BM_InteriorPointSolver_PolarLT_256seg)->Unit(benchmark::kMillisecond);
 static void BM_InteriorPointSolver_Brach_32seg_MTMetis(benchmark::State &state) {
     bool first = true;
     for (auto _ : state) {
-        auto phase = make_brach_phase(32, 3);
-        phase->optimizer_->set_qp_ordering_mode(InteriorPointSolver::QPOrderingModes::PARMETIS);
-        auto status = phase->solve_optimize();
+        auto phase = make_brach_phase(32);
+        tycho::solvers::InteriorPointSolver ipm;
+        ipm.set_print_level(3);
+        ipm.set_qp_ordering_mode(InteriorPointSolver::QPOrderingModes::PARMETIS);
+        auto status = phase->solve(&ipm, {.presolve = true}).flag_;
         benchmark::DoNotOptimize(status);
         if (first) {
             if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
@@ -107,13 +117,16 @@ BENCHMARK(BM_InteriorPointSolver_Brach_32seg_MTMetis)->Unit(benchmark::kMillisec
 static void BM_InteriorPointSolver_PolarLT_128seg_MTMetis(benchmark::State &state) {
     bool first = true;
     for (auto _ : state) {
-        auto phase = make_polar_lt_phase(128, 3);
-        phase->optimizer_->set_qp_ordering_mode(InteriorPointSolver::QPOrderingModes::PARMETIS);
-        auto status = phase->solve_optimize();
+        auto phase = make_polar_lt_phase(128);
+        tycho::solvers::InteriorPointSolver ipm;
+        ipm.set_print_level(3);
+        ipm.set_qp_ordering_mode(InteriorPointSolver::QPOrderingModes::PARMETIS);
+        auto status = phase->solve(&ipm, {.presolve = true}).flag_;
         benchmark::DoNotOptimize(status);
         if (first) {
             if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
-                state.SkipWithError("InteriorPointSolver did not converge (PolarLT 128seg MTMetis)");
+                state.SkipWithError(
+                    "InteriorPointSolver did not converge (PolarLT 128seg MTMetis)");
             }
             first = false;
         }
@@ -131,8 +144,10 @@ BENCHMARK(BM_InteriorPointSolver_PolarLT_128seg_MTMetis)->Unit(benchmark::kMilli
 static void BM_InteriorPointSolver_BettsLT_32seg(benchmark::State &state) {
     bool first = true;
     for (auto _ : state) {
-        auto phase = make_betts_lt_phase(32, TranscriptionModes::LGL3, false, 3);
-        auto status = phase->solve_optimize();
+        auto phase = make_betts_lt_phase(32, TranscriptionModes::LGL3, false);
+        tycho::solvers::InteriorPointSolver ipm;
+        ipm.set_print_level(3);
+        auto status = phase->solve(&ipm, {.presolve = true}).flag_;
         benchmark::DoNotOptimize(status);
         if (first) {
             if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
@@ -147,8 +162,10 @@ BENCHMARK(BM_InteriorPointSolver_BettsLT_32seg)->Unit(benchmark::kMillisecond);
 static void BM_InteriorPointSolver_BettsLT_64seg(benchmark::State &state) {
     bool first = true;
     for (auto _ : state) {
-        auto phase = make_betts_lt_phase(64, TranscriptionModes::LGL3, false, 3);
-        auto status = phase->solve_optimize();
+        auto phase = make_betts_lt_phase(64, TranscriptionModes::LGL3, false);
+        tycho::solvers::InteriorPointSolver ipm;
+        ipm.set_print_level(3);
+        auto status = phase->solve(&ipm, {.presolve = true}).flag_;
         benchmark::DoNotOptimize(status);
         if (first) {
             if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
@@ -163,8 +180,10 @@ BENCHMARK(BM_InteriorPointSolver_BettsLT_64seg)->Unit(benchmark::kMillisecond);
 static void BM_InteriorPointSolver_BettsLT_MeshRefine(benchmark::State &state) {
     bool first = true;
     for (auto _ : state) {
-        auto phase = make_betts_lt_phase(16, TranscriptionModes::LGL5, true, 3);
-        auto status = phase->solve_optimize();
+        auto phase = make_betts_lt_phase(16, TranscriptionModes::LGL5, true);
+        tycho::solvers::InteriorPointSolver ipm;
+        ipm.set_print_level(3);
+        auto status = phase->solve(&ipm, {.presolve = true}).flag_;
         benchmark::DoNotOptimize(status);
         if (first) {
             if (status > tycho::ConvergenceFlags::ACCEPTABLE) {

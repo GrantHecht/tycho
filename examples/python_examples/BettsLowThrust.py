@@ -34,6 +34,7 @@ from tychopy.optimal_control.mesh_error_plots import PhaseMeshErrorPlot
 
 vf = typy.vector_functions
 oc = typy.optimal_control
+solvs = typy.solvers
 Args = vf.Arguments
 
 """
@@ -542,17 +543,30 @@ if __name__ == "__main__":
     phase.add_lower_var_bound("Back", 6, 0.05)
     phase.add_value_objective("Back", 6, -1.0)
     phase.set_num_partitions(8)
-    phase.optimizer.qp_threads = 8
-    phase.optimizer.print_level = 1
-    phase.optimizer.set_eq_con_tol(1.0e-9)
-    # phase.optimizer.set_qp_ordering_mode("MTMETIS")
+    ipm = solvs.IPM()
+    ipm.qp_threads = 8
+    ipm.print_level = 1
+    ipm.set_eq_con_tol(1.0e-9)
+    # ipm.set_qp_ordering_mode("MTMETIS")
 
     phase.set_adaptive_mesh(True)
     phase.set_mesh_error_estimator(oc.MeshErrorEstimators.INTEGRATOR)
     phase.set_mesh_tol(1.0e-7)
 
+    # This is a bang-bang low-thrust problem (the control is norm-constrained
+    # to the unit sphere via an equality path constraint), the shape an SQP
+    # polish stage is expected to help on. Measured (with the last "main"
+    # stage correctly identified -- adaptive mesh refinement appends one
+    # "main" stage per mesh iteration, so stages[0] is the first, coarsest
+    # iteration, not the one the polish stage actually continues from): the
+    # IPM main stage already lands at ~3e-16 (essentially machine epsilon for
+    # this problem), past what an SQP polish stage's own convergence test can
+    # improve on (it measured ~2.4e-11 here) -- kept plain rather than
+    # showcasing a polish stage that doesn't help.
     t0 = time.perf_counter()
-    flag = phase.optimize_solve()
+    result = phase.solve(ipm)
+    if not result:
+        result = phase.solve(ipm, mode="feasible", warm=result)
     elapsed = time.perf_counter() - t0
 
     Traj = phase.return_traj()
@@ -561,7 +575,7 @@ if __name__ == "__main__":
     FinalTime = Traj[-1][7] * Tstar
     ThrottleParam = Traj[-1][-1]
 
-    print(f"LGL5 solve flag             : {flag}")
+    print(f"LGL5 solve flag             : {result.flag}")
     print(f"Wall-clock                  : {elapsed:.2f} s")
     print(f"Final Weight                : {FinalWeight:.6f} lb")
     print(f"Final Time                  : {FinalTime:.6f} s")

@@ -10,25 +10,27 @@ using namespace TychoTest;
 
 TEST_F(OptimalControlTest, MeshRefinementConvergence) {
     auto phase = make_brach_phase(50, 8); // coarse: 8 segments
-    phase->optimizer_->set_print_level(3);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     phase->set_adaptive_mesh(true);
     phase->set_mesh_tol(1e-4); // relaxed tolerance
     phase->set_max_mesh_iters(5);
     phase->print_mesh_info_ = false;
 
-    phase->solve_optimize();
+    phase->solve(&ipm, {.presolve = true});
     EXPECT_TRUE(phase->mesh_converged_) << "Mesh should converge with relaxed tolerance";
 }
 
 TEST_F(OptimalControlTest, MeshRefinementIterates) {
     auto phase = make_brach_phase(50, 8); // coarse: 8 segments
-    phase->optimizer_->set_print_level(3);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     phase->set_adaptive_mesh(true);
     phase->set_mesh_tol(1e-7); // tight tolerance forces refinement
     phase->set_max_mesh_iters(3);
     phase->print_mesh_info_ = false;
 
-    phase->solve_optimize();
+    phase->solve(&ipm, {.presolve = true});
     EXPECT_GT(phase->mesh_iters_.size(), 0u) << "Should have at least one mesh iteration";
 }
 
@@ -45,9 +47,10 @@ TEST_F(OptimalControlTest, MeshRefinementIterates) {
 
 TEST_F(OptimalControlTest, CostateErrorEstimationSupportedModesDoNotThrow) {
     auto phase = make_brach_phase(50, 8); // coarse: 8 segments
-    phase->optimizer_->set_print_level(3);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
 
-    phase->solve_optimize();
+    phase->solve(&ipm, {.presolve = true});
     EXPECT_NO_THROW((void)phase->return_costate_traj());
     EXPECT_NO_THROW((void)phase->return_traj_error());
 }
@@ -111,7 +114,8 @@ TEST(MeshRobustness, RefinementToSingleSegmentNoCrashConverges) {
     // check_mesh() then runs the de Boor estimator with num_blocks == 1 --
     // pre-fix, an out-of-bounds read of yvecs[1]/hs[1] (§1.7).
     auto phase = make_linear_phase(/*nsegs=*/2);
-    phase->optimizer_->set_print_level(3);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     phase->print_mesh_info_ = false;
     phase->set_adaptive_mesh(true);
     phase->set_mesh_error_estimator(MeshErrorEstimators::DEBOOR);
@@ -121,7 +125,8 @@ TEST(MeshRobustness, RefinementToSingleSegmentNoCrashConverges) {
     phase->num_extra_segs_ = 0;
     phase->force_one_mesh_iter_ = true;
 
-    EXPECT_NO_THROW(phase->solve());     // ASan-clean, no UB
+    EXPECT_NO_THROW(
+        phase->solve(&ipm, {.mode = tycho::solvers::Mode::Feasible})); // ASan-clean, no UB
     EXPECT_TRUE(phase->mesh_converged_); // zero-error mesh => converged, kept
     ASSERT_FALSE(phase->mesh_iters_.empty());
     // Proves the final check_mesh() really ran on a single-segment mesh,

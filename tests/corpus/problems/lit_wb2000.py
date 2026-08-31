@@ -37,7 +37,7 @@ m = (x1(0)^2 - x2(0) + a) / |x1(0) - x3(0) - b|, then certain line-search
 interior-point algorithms produce iterates that remain bounded away from
 the optimum.
 
-CORRECTION vs. the Task 4 brief: the brief's starting constants
+CORRECTION vs. the corpus brief: the brief's starting constants
 (a=1, b=0.5, start (-2, 3, 1)) do NOT satisfy the theorem above -- plugging
 them in gives m = (4 - 3 + 1)/|-2 - 1 - 0.5| = 2/3.5 ~= 0.571 and
 a - m*b = 1 - 0.286 = 0.714, which is NOT <= min(0, -0.5) = -0.5. That
@@ -84,7 +84,7 @@ Args = vf.Arguments
 
 TIER = "literature"
 TIMEOUT = 30
-SOLVE_MODE = "optimize"
+SOLVE_CALL = {"mode": "optimal"}
 
 # Wächter-Biegler constants verified against Benson-Shanno-Vanderbei's
 # reproduction (see docstring above) -- NOT the brief's original (a=1, b=0.5),

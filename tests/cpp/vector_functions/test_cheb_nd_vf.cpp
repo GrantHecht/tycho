@@ -1,12 +1,12 @@
-// N-D ChebFunction VectorFunction wrapper tests (Task 3).
+// N-D ChebFunction VectorFunction wrapper tests.
 // Covers ChebFunction<2>, ChebFunction<3>, ChebFunction<-1>:
 //   - Value, Jacobian via verify_jacobian_analytical
 //   - Hessian symmetry + adjoint gradient via verify_hessian_consistency
 //   - Composition with Arguments<N>
 #include "test_utils.h"
+#include <cmath>
 #include <gtest/gtest.h>
 #include <tycho/tycho.h>
-#include <cmath>
 
 using namespace tycho;
 using namespace TychoTest;
@@ -24,10 +24,8 @@ static std::shared_ptr<oc::ChebTable> smooth_2d() {
     oc::ChebTable::MatType vals(nx * ny, 1);
     for (int i = 0; i < nx; ++i)
         for (int j = 0; j < ny; ++j)
-            vals(i * ny + j, 0) =
-                std::exp(std::sin(nodes[0][i])) * std::cos(nodes[1][j]);
-    return std::make_shared<oc::ChebTable>(
-        oc::ChebTable::from_values(vals, lb, ub, orders));
+            vals(i * ny + j, 0) = std::exp(std::sin(nodes[0][i])) * std::cos(nodes[1][j]);
+    return std::make_shared<oc::ChebTable>(oc::ChebTable::from_values(vals, lb, ub, orders));
 }
 
 // Build a smooth 3-D table: f(x,y,z) = sin(x)*cos(y) + 0.3*z on [0,2]x[-1,1]x[1,3].
@@ -44,8 +42,7 @@ static std::shared_ptr<oc::ChebTable> smooth_3d() {
             for (int k = 0; k < nz; ++k)
                 vals((i * ny + j) * nz + k, 0) =
                     std::sin(nodes[0][i]) * std::cos(nodes[1][j]) + 0.3 * nodes[2][k];
-    return std::make_shared<oc::ChebTable>(
-        oc::ChebTable::from_values(vals, lb, ub, orders));
+    return std::make_shared<oc::ChebTable>(oc::ChebTable::from_values(vals, lb, ub, orders));
 }
 
 // ChebFunction<2>: Jacobian analytical check and Hessian consistency.
@@ -118,8 +115,7 @@ TEST_F(ChebNdVfTest, MultichannelAdjointHessian) {
             vals(i * ny + j, 0) = std::exp(std::sin(xi)) * std::cos(yi);
             vals(i * ny + j, 1) = std::sin(xi) * std::sin(yi);
         }
-    auto tab = std::make_shared<oc::ChebTable>(
-        oc::ChebTable::from_values(vals, lb, ub, orders));
+    auto tab = std::make_shared<oc::ChebTable>(oc::ChebTable::from_values(vals, lb, ub, orders));
     oc::ChebFunction<2> f(tab);
     Eigen::VectorXd x(2);
     x << 0.4, -0.3;

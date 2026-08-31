@@ -2,10 +2,14 @@
 # Solvers
 
 The Python API for Tycho's solver subsystem, exposed through the
-`tychopy.solvers` module: **InteriorPointSolver**, the built-in primal-dual interior-point
-optimizer; the problem containers that own an optimizer instance; and the
-enumerations that configure both. Every symbol below is a thin re-export of a
-nanobind-bound C++ type.
+`tychopy.solvers` module: the three solve **engines** — `InteriorPointSolver`
+(alias `IPM`), the built-in primal-dual interior-point optimizer; `SqpSolver`
+(alias `SQP`), the sequential-quadratic-programming engine; and `IpoptSolver`,
+a peer engine wrapping a linked Ipopt installation — the `solve()` call
+surface every problem container exposes; the `SolveResult`/`StageResult`/
+`PhaseResult`/`WarmStartData` value types a solve hands back or accepts; and
+the enumerations that configure all of the above. Every symbol below is a
+thin re-export of a nanobind-bound C++ type.
 
 ```{eval-rst}
 .. currentmodule:: tychopy.solvers
@@ -13,58 +17,137 @@ nanobind-bound C++ type.
 
 ## The solver object
 
-You rarely construct a solver yourself. Every
-{py:class}`~tychopy.optimal_control.PhaseInterface` and
+Every {py:class}`~tychopy.optimal_control.PhaseInterface` and
 {py:class}`~tychopy.optimal_control.OptimalControlProblem` derives from
-`OptimizationProblemBase`, which owns a `InteriorPointSolver` instance and exposes it
-through the read-only `optimizer` property. Configuring a solve means setting
-properties on that instance before calling the container's solve entry point:
+`OptimizationProblemBase`, which owns no engine of its own. You construct an
+engine directly and hand it to the container's `solve()` method:
 
 ```python
-phase.optimizer.max_iters = 300
-phase.optimizer.print_level = 1
-flag = phase.optimize()          # -> ConvergenceFlags
+ipm = tycho.solvers.IPM(max_iters=300, print_level=1)
+result = phase.solve(ipm)         # -> SolveResult
 ```
 
-`InteriorPointSolver()` is default-constructible, but a solver only becomes runnable once a
-problem hands it a transcribed NLP — so in practice you always configure
-`problem.optimizer` rather than building your own. Calling a solve entry point
-on a solver with no NLP raises `RuntimeError`.
+`InteriorPointSolver()`/`IPM()` and `SqpSolver()`/`SQP()` are default-constructible and
+carry no reference to any problem — the same instance can be reused across
+`solve()` calls on the same or different problems (settings persist between
+calls; each call re-validates them). `IpoptSolver()` raises `RuntimeError`
+naming `ENABLE_IPOPT` when the running build was not configured with Ipopt
+support (see [Ipopt backend](#ipopt-backend-build-optional) below). An engine
+that is already mid-solve refuses a second, concurrent `solve()` call — see
+the refusal notes on [`solve()`](#problem-containers) below.
 
-Settings are plain properties: assign at any point before a solve, and the new
-value takes effect on the next call. Many properties also have a matching
-`set_<name>()` method with identical validation — the twelve tolerances,
-`max_iters`, `max_acc_iters`, `max_ls_iters`, `alpha_red`, `bound_fraction`,
-`print_level`, the `delta_h`/`incr_h`/`decr_h` ladder, and the mode selectors
-`opt_bar_mode`, `soe_bar_mode`, `opt_ls_mode`, `soe_ls_mode`,
-`qp_ordering_mode`, and `best_criteria` — plus three grouped setters,
-`set_tols()`, `set_acc_tols()`, and `set_hpert_params()`. The rest are
-assignment-only, including all nine globalization fields a preset assigns and
-every `qp_*` parameter except `qp_ordering_mode`. Assignments are
-range-checked immediately (`ValueError` on a bad value); the full settings
-block, including its cross-field invariants, is re-validated on every solve
-entry, and the globalization components are rebuilt from it there, so a
-setting changed between two solves on the same optimizer takes effect on the
-second.
+Both engine classes accept their settings as constructor keyword arguments,
+in addition to the usual read-write properties:
 
-### Entry points
+```python
+ipm = tycho.solvers.IPM(preset="soc_recovery_l1", max_soc=6, print_level=2)
+sqp = tycho.solvers.SQP(kkt_tol=1e-8, max_iter=42, enable_soc=False)
+```
 
-The `InteriorPointSolver` methods take an initial primal vector and return the primal
-vector at the returned iterate; the container methods take no argument and
-return a {py:class}`~tychopy.solvers.ConvergenceFlags`.
+An unrecognized keyword, or one whose value cannot convert to the field's
+type, raises `TypeError` naming the offending keyword. For `IPM`/
+`InteriorPointSolver`, a `preset=` keyword (see
+[Configuration presets](#configuration-presets)) is applied **first**, so
+later keywords in the same call override individual fields the preset set —
+`IPM(preset="soc_recovery_l1", max_soc=6)` starts from the preset and then
+raises `max_soc` past what the preset itself sets. `SqpSolver`'s kwargs
+constructor accepts every plain-value field of its options (`kkt_tol`,
+`feas_tol`, `max_iter`, `tr_init`, `tr_max`, `tr_min`, `enable_soc`,
+`adaptive_mu`, `start_level`, `warm_full_step`, `budget_mode`,
+`elastic_ladder_early_exit`, `crash_basis`, `qp_mode`, `ssn_prox_carry`,
+`ssn_certify_from_face`, `ssn_sigma_rule`, `ssn_hint_rule`,
+`ssn_infeasibility_rule`); its QP sub-options and globalization-strategy
+factory are not kwargs-exposed.
 
-| Container method | `InteriorPointSolver` method | Stages run |
-| --- | --- | --- |
-| `solve()` | `solve(x)` | Feasibility stage only (the `soe_mode` algorithm) |
-| `optimize()` | `optimize(x)` | Optimization stage only |
-| `solve_optimize()` | `solve_optimize(x)` | Feasibility, then optimization |
-| `optimize_solve()` | — | Optimization, then a conditional feasibility stage |
-| `solve_optimize_solve()` | — | Feasibility, optimization, conditional feasibility |
+The `InteriorPointSolver` settings below (termination, barrier, globalization,
+regularization, threading, output) are plain properties: assign at any point
+before a solve, and the new value takes effect on the next call. Many
+properties also have a matching `set_<name>()` method with identical
+validation — the twelve tolerances, `max_iters`, `max_acc_iters`,
+`max_ls_iters`, `alpha_red`, `bound_fraction`, `print_level`, the
+`delta_h`/`incr_h`/`decr_h` ladder, and the mode selectors `opt_bar_mode`,
+`soe_bar_mode`, `opt_ls_mode`, `soe_ls_mode`, `qp_ordering_mode`, and
+`best_criteria` — plus three grouped setters, `set_tols()`, `set_acc_tols()`,
+and `set_hpert_params()`. The rest are assignment-only, including all nine
+globalization fields a preset assigns and every `qp_*` parameter except
+`qp_ordering_mode`. Assignments are range-checked immediately (`ValueError`
+on a bad value); the full settings block, including its cross-field
+invariants, is re-validated on every solve entry, and the globalization
+components are rebuilt from it there, so a setting changed between two
+solves on the same engine takes effect on the second.
 
-A "stage" here is one full run of the barrier algorithm with its own barrier
-mode, line-search mode, and per-phase diagnostic counters. The per-phase
-diagnostics described under [Diagnostics](#diagnostics-of-the-last-solve)
-report the *last* stage of a multi-stage call.
+### The `solve()` call
+
+Every problem container's `solve()` runs an optional Feasible presolve
+stage, a main stage, and an optional Optimal polish stage, in that order,
+and returns a {py:class}`~tychopy.solvers.SolveResult`:
+
+```python
+result = phase.solve(
+    ipm,                    # engine : InteriorPointSolver | SqpSolver | IpoptSolver
+    mode="optimal",         # Mode.Optimal/"optimal" (default) or Mode.Feasible/"feasible"
+    presolve=False,         # False/None: no presolve; True: presolve on `ipm` itself;
+                             # an engine instance: presolve on that engine instead
+    polish=None,            # None: no polish stage; an engine instance: Optimal polish on it
+    warm=None,               # SolveResult | WarmStartData | None: seeds the first stage that runs
+)
+```
+
+A "stage" here is one full engine run — for `InteriorPointSolver` that is one full run of the
+barrier algorithm with its own barrier mode, line-search mode, and per-phase
+diagnostic counters. `result.stages` lists every stage that ran, in order
+(`role` is `"presolve"`, `"main"`, or `"polish"`); `result.flag` mirrors the
+*final* stage's convergence flag, since that stage's result is what the
+caller actually gets. The per-phase diagnostics described under
+[Diagnostics](#diagnostics-of-the-last-solve) (`InteriorPointSolver.last_*`) always report
+the engine's own most recent run, i.e. the last `InteriorPointSolver` stage that ran across
+any `solve()` call on that engine instance.
+
+`SqpSolver` refuses `mode="feasible"` (`ValueError`): the SQP engine has no
+feasibility-only mode, and neither does the Ipopt backend. For the same
+reason, neither can run the presolve stage — `presolve=sqp`, and
+`presolve=True` on a `SqpSolver`/`IpoptSolver` main engine, are refused by
+name before anything else happens. `presolve=`/`polish=` combined with
+`mode="feasible"` on the main engine are refused the same way — feasibility
+mode runs exactly one stage. A `warm=` value whose declaration-identity stamp
+does not match the current transcription raises `ValueError` naming both
+stamps; see [Warm-starting](#warm-starting-solveresult-and-warmstartdata)
+below.
+
+Stages may mix engines: `solve(ipm, polish=sqp)` runs the interior-point
+engine and then refines with SQP, and `solve(ipm)` followed by
+`solve(sqp, warm=r)` does the same across two calls. Whenever the engine
+changes from one stage to the next, the problem is transcribed again first,
+so that a layout one engine left behind (the interior-point engine's default
+fixed-variable treatment leaves the program on a reduced variable space)
+never reaches the next engine, which applies variable bounds directly. The
+cost is one extra transcription per crossover.
+
+Inside one call, each stage after the first is seeded by the one before it,
+with one exception that follows from what multipliers mean: a `presolve=`
+stage runs the feasibility algorithm, so it hands the main stage its **point**
+— written back onto the problem, exactly as any stage's result is — and not
+its multipliers, which price the feasibility measure rather than the
+objective. The main stage's own export does seed a `polish=` stage in full,
+multipliers included: both stages minimize the same objective.
+
+After a `polish=` stage, the problem holds the *polish* stage's iterate, and
+`result.flag` is the polish stage's flag — a polish stage runs to completion
+and reports whatever it found, even when that is worse than the main stage's
+result. Both stages are on the record in `result.stages`, so gate on
+`result.stages[0]` when it is the main stage's outcome you want.
+
+Old call shape → new call shape:
+
+| Old | New |
+| --- | --- |
+| `phase.optimizer.set_X(v)` / `phase.optimizer.X = v` | `ipm = tycho.solvers.IPM(X=v, ...)`, or set the property on that instance before `solve()` |
+| `prob.optimize()` | `prob.solve(ipm)` |
+| `prob.solve()` | `prob.solve(ipm, mode="feasible")` |
+| `prob.solve_optimize()` | `prob.solve(ipm, presolve=True)` |
+| `prob.optimize_solve()` | `r = prob.solve(ipm)`; `if not r: prob.solve(ipm, mode="feasible", warm=r)` |
+| `prob.solve_optimize_solve()` | same two-call chain, `presolve=True` on the first call |
+| a `ConvergenceFlags` return | `result.flag`, or `bool(result)` for the converged/not-converged question |
 
 ## Settings: termination
 
@@ -199,10 +282,12 @@ control parameters; the Accelerate path reads only `qp_ordering_mode`,
 | `qp_print` | Enables the sparse solver's own message output. | `False` |
 | `force_qp_analysis` | Re-runs the symbolic analysis phase even when the sparsity pattern has already been analysed. | `False` |
 
-A default-constructed `InteriorPointSolver` reports `qp_threads = 8`; a problem-owned
-optimizer is initialized to `min(8, core count)` instead. `qp_threads` is
-distinct from the NLP partition count and from the process-global thread pool
-— see {doc}`How to control parallelism and threading </how_to/threading_model>`.
+A default-constructed `InteriorPointSolver`/`IPM` reports `qp_threads = 8` — the engine you
+construct and pass to `solve()` is not implicitly resized to the machine's
+core count, so set `qp_threads` explicitly if `8` is not what you want.
+`qp_threads` is distinct from the NLP partition count and from the
+process-global thread pool — see {doc}`How to control parallelism and
+threading </how_to/threading_model>`.
 
 `qp_scaling` is off by default deliberately: enabling it measured a large
 wall-clock win on PolarLT-class problems with many perturbed pivots, but
@@ -225,9 +310,10 @@ per-problem opt-in rather than a default
 ## Diagnostics of the last solve
 
 Every `last_*` property is read-only and reads the result record accumulated
-by the most recent `solve`/`optimize`/`solve_optimize` call on that optimizer.
-Counters are reset at the start of each call, so the values always describe
-one solve, never a running total across solves.
+by the most recent stage this `InteriorPointSolver` instance ran, whether that stage came
+from a `solve(mode=...)` call, a presolve stage, or a polish stage. Counters
+are reset at the start of each stage, so the values always describe one
+stage, never a running total across stages or calls.
 
 **Outcome and timing.**
 
@@ -263,8 +349,10 @@ converged at its initial iterate ran no acceptance test. Zero is therefore a
 real measurement, never a stand-in for "not applicable".
 
 These fields are also **last-stage-only**: they are collected once per stage,
-so a multi-stage call such as `solve_optimize()` reports the last stage's
-values rather than a total across stages.
+so a multi-stage `solve()` call (a presolve and/or polish stage alongside the
+main stage) reports the last stage this engine ran, not a total across
+stages — read them from the specific `StageResult` in `result.stages` you
+care about instead when a `solve()` call ran more than one stage.
 
 | Property | Sentinel when | Meaning |
 | --- | --- | --- |
@@ -398,14 +486,14 @@ inequality-constraint infeasibility, KKT error, or the primal objective.
    :undoc-members:
 ```
 
-### Backend and batch modes
+### Solve mode
+
+`Mode` selects which objective a `solve()`/`set_jet_job()` call pursues:
+`Mode.Optimal` (also accepted as the string `"optimal"`, the default) drives
+to optimality; `Mode.Feasible` (`"feasible"`) drives to feasibility only.
 
 ```{eval-rst}
-.. autoclass:: NLPSolvers
-   :members:
-   :undoc-members:
-
-.. autoclass:: JetJobModes
+.. autoclass:: Mode
    :members:
    :undoc-members:
 ```
@@ -423,7 +511,10 @@ unchanged. An unrecognized name raises `ValueError` listing the five valid
 names.
 
 ```python
-phase.optimizer.apply_preset("soc_proximal")
+ipm = tycho.solvers.IPM()
+ipm.apply_preset("soc_proximal")
+# or, equivalently, at construction time:
+ipm = tycho.solvers.IPM(preset="soc_proximal")
 ```
 
 The five names, each described by its mechanism:
@@ -514,19 +605,25 @@ lever.
 `OptimizationProblemBase` is the shared base of every solvable object: the
 optimal-control {py:class}`~tychopy.optimal_control.PhaseInterface` and
 {py:class}`~tychopy.optimal_control.OptimalControlProblem`, and the bare
-`OptimizationProblem` container for a hand-assembled NLP. It owns the
-`optimizer`, the NLP partition count, the batch-run mode, and the NLP backend
-selection.
+`OptimizationProblem` container for a hand-assembled NLP. It owns no engine —
+every solve names its engine explicitly (see [The `solve()`
+call](#the-solve-call) above) — but it does own the NLP partition count and
+the batched-solve staging surface.
 
 | Property or method | Meaning |
 | --- | --- |
-| `optimizer` | The owned `InteriorPointSolver` instance (read-only). |
 | `num_partitions` | Number of NLP matrix partitions. Assignment raises `ValueError` below 1. |
-| `set_num_partitions(n)` | Sets the partition count. The linear solver's thread count is set separately, via `optimizer.qp_threads`. |
-| `jet_job_mode` | Which solve entry point `Jet.map` runs for this problem (see `JetJobModes`). |
-| `nlp_solver` | NLP backend for the solve entry points (see below). |
-| `ipopt_options` | String key/value options (a `dict[str, str]`) forwarded verbatim to Ipopt. |
-| `last_ipopt_result` | `IpoptRunInfo` for the most recent Ipopt-backend run. |
+| `set_num_partitions(n)` | Sets the partition count. The linear solver's thread count is a separate, per-engine setting (`qp_threads` on the `InteriorPointSolver`/`IPM` passed to `solve()`). |
+| `solve(engine, mode="optimal", presolve=False, polish=None, warm=None)` | Runs a staged solve and returns a `SolveResult`. See above. |
+| `set_jet_job(prototype, mode="optimal", presolve=False, polish=None, warm=None)` | Stages a batched solve for `Jet.map` to run later, with the same argument shapes as `solve()`. |
+
+An engine instance already inside a `solve()` call refuses a second,
+concurrent `solve()` call on itself with `ValueError` ("this engine instance
+is already inside a solve; engines serve solves sequentially") — engines
+serve one solve at a time. `set_jet_job`/`Jet.map` sidestep this: each queued
+job clones its own copy of the prototype engine (and any staged presolve/
+polish engine) before running, so concurrent pool workers never contend for
+one shared engine object.
 
 `OptimizationProblem` adds the bare-NLP construction surface — `set_vars`,
 `return_vars`, `add_equal_con`, `add_inequal_con`, and `add_objective` — for
@@ -534,34 +631,160 @@ problems written directly against VectorFunctions rather than transcribed from
 a phase.
 
 `Jet.map` runs a batch of problems concurrently, either from a prepared list
-or from a factory callable plus an argument sequence; each problem's
-`jet_job_mode` selects which solve it runs.
+or from a factory callable plus an argument sequence; each problem runs
+whichever solve `set_jet_job` staged on it. Example (adapted from
+`examples/python_examples/HangingChain.py`):
+
+```python
+def Job(target_length):
+    phase = build_phase(target_length)
+    ipm = tycho.solvers.IPM()
+    # A presolve stage runs the feasibility algorithm first, then the
+    # Optimal main stage. set_jet_job() keeps `ipm` alive for the deferred
+    # jet_run() call, even after this function returns.
+    phase.set_jet_job(ipm, presolve=True)
+    return phase
+
+results = tycho.solvers.Jet.map(Job, job_args, True)
+```
 
 ## Ipopt backend (build-optional)
 
 Builds configured with `ENABLE_IPOPT` can hand the identical transcribed NLP
-to a linked Ipopt installation instead of InteriorPointSolver, which makes cross-solver
-comparison possible without re-modelling the problem. `ipopt_available()`
-reports whether the running build has that support; selecting
-`nlp_solver = NLPSolvers.ipopt` without it raises `RuntimeError` when the
-solve runs.
+to a linked Ipopt installation instead of `InteriorPointSolver`/`SqpSolver`, which makes
+cross-solver comparison possible without re-modelling the problem. Construct
+an `IpoptSolver` and pass it to `solve()`/`set_jet_job()` like any other
+engine:
+
+```python
+ipopt_available = tycho.solvers.ipopt_available()   # True iff this build has Ipopt support
+ipopt = tycho.solvers.IpoptSolver()                  # raises RuntimeError, naming ENABLE_IPOPT,
+                                                      # if the running build lacks it
+ipopt.options = {"tol": "1e-8"}                      # dict[str, str], forwarded verbatim to Ipopt
+result = phase.solve(ipopt)
+```
+
 The backend always performs a single NLP solve of the full objective-bearing
-problem, because the feasibility-then-optimize staging modes have no Ipopt
-analog — in particular `solve()`, which runs the feasibility-only stage under
-InteriorPointSolver, minimizes the objective exactly like `optimize()` under this backend.
-Options in `ipopt_options` are applied after a matched-tolerance baseline, so
-they win; reading the property returns a copy, so in-place mutation has no
-effect and you must assign a whole dict. Batch runs reject this backend
-outright: Ipopt is not reliably re-entrant, so a `Jet` job whose problem
-selects it raises `ValueError` before that job's solve begins — run the Ipopt
-backend one solve at a time. Finally, an Ipopt-backend run leaves every
-`optimizer.last_*` property untouched, since those reflect only the most
-recent InteriorPointSolver run; `last_ipopt_result` is the source of truth for the most
-recent Ipopt solve.
+problem, because InteriorPointSolver's feasibility-then-optimize staging has no Ipopt
+analog — in particular `mode="feasible"` against an `IpoptSolver` engine
+minimizes the objective exactly like `mode="optimal"` does. Options set on
+`ipopt.options` are applied after a matched-tolerance baseline, so they win;
+reading the property returns a copy, so in-place mutation has no effect and
+you must assign a whole dict. An `IpoptSolver` reports its outcome the same
+way every other engine does, through the returned `SolveResult`'s `stages`
+(`engine_name == "Ipopt"`); it carries no `InteriorPointSolver`-shaped `last_*`
+diagnostics, since those describe only `InteriorPointSolver`'s own tolerance surface —
+Ipopt-specific diagnostics, where present, land in that stage's
+`engine_details`/`engine_notes` annex instead.
 
 ```{eval-rst}
 .. autofunction:: ipopt_available
 
-.. autoclass:: IpoptRunInfo
+.. autoclass:: IpoptSolver
+   :members:
+```
+
+## Solve results and warm-starting
+
+`solve()`/`set_jet_job()`+`Jet.map` hand back a `SolveResult` — the
+engine-neutral record of what a solve did:
+
+| Property or method | Meaning |
+| --- | --- |
+| `flag` | The final stage's `ConvergenceFlags`. |
+| `stages` | `list[StageResult]`, run order: presolve?, main, polish?. |
+| `phases` | `list[PhaseResult]`, index-keyed like the OCP; empty for a bare VF problem. |
+| `warm` | The `WarmStartData` taken from the final deciding stage. |
+| `structure_key` | The `DeclarationKey` that `warm` was taken under. |
+| `converged()` / `bool(result)` | `True` for `CONVERGED` or `ACCEPTABLE`. |
+| `objective()` | The final stage's objective value. |
+| `iterations()` | The final stage's iteration count. |
+
+`StageResult` reports one stage's outcome: `role` (`"presolve"` /
+`"main"` / `"polish"`), `mode` (which objective the stage pursued —
+`Mode.Feasible` for a presolve stage, `Mode.Optimal` for a polish stage,
+whichever mode the call asked for on the main stage), `engine_name`, `flag`,
+`iterations`, `objective`,
+`kkt_residual`, `eq_violation`, `iq_violation` (both max-norm),
+`wall_time_s`, and two annex dicts for engine-specific diagnostics that
+don't warrant a named field — `engine_details` (`dict[str, float]`) and
+`engine_notes` (`dict[str, str]`).
+
+`PhaseResult` reports one OCP phase's slice of the solve: `index`,
+`var_start`/`var_count`, `eq_start`/`eq_count`, `iq_start`/`iq_count`, and
+the declared-space multiplier slices `eq_lmults`, `iq_lmults`, and
+`bound_lmults` (signed `z = zL - zU`).
+
+### Warm-starting
+
+`WarmStartData` is the engine-neutral warm-start currency: a declared-space
+primal/dual core (`primal`, `eq_lmults`, `iq_lmults`, `bound_lmults`), the
+`DeclarationKey` identity stamp it was taken under (`structure_key`), and a
+list of opaque per-engine `extensions` (each a `tag` + `payload` bytes pair
+that only its producing engine interprets). Pass a previous `SolveResult` or
+`WarmStartData` directly as `warm=` to `solve()`/`set_jet_job()`:
+
+```python
+r1 = phase.solve(ipm)                       # cold solve
+r2 = phase.solve(ipm, warm=r1)              # warm-started off r1's SolveResult
+r3 = phase.solve(ipm, warm=r1.warm)         # off the payload alone, without the record
+                                            # of the stage it came from (see below)
+```
+
+The `warm=` value is read, not consumed — the same `SolveResult`/
+`WarmStartData` can seed any number of subsequent calls. Its
+`structure_key`/`DeclarationKey` must match the current transcription's, or
+the call raises `ValueError` naming both keys; this catches, for example,
+warm-starting a phase against a `SolveResult` taken before a mesh
+refinement changed the transcription's shape.
+
+A payload that is *empty*, or that carries a non-finite value in any block,
+is not an error: the stage it would have seeded simply runs cold, from the
+problem's own current point, and records why in that stage's
+`engine_notes["warm_payload"]`. This is what makes the retry idiom in the
+migration table above — `r = prob.solve(ipm)`, then on a non-convergent `r`,
+`prob.solve(ipm, mode="feasible", warm=r)` — work in the case it exists for:
+a stage that diverged is exactly the one whose export may be non-finite.
+
+A payload taken from a *feasibility* solve seeds an optimality stage's
+**primal only**. The multipliers a `mode="feasible"` stage ends on price the
+feasibility measure that stage minimized, not the objective — seeding them
+into an optimality solve costs it iterations — so that solve starts from the
+payload's point and derives its own prices, and says so in the same
+`engine_notes["warm_payload"]` note. A `SolveResult` knows which mode each of
+its stages ran (`result.stages[i].mode`), which is how this is decided; a
+bare `WarmStartData` carries no such record, so `warm=r.warm` is taken as
+given — which is why `warm=r` and `warm=r.warm` seed the same state only when
+`r` is an optimality solve, as `r1` is in the snippet above. The same rule
+governs the presolve stage inside one `solve()` call — see the presolve section above.
+
+Inside one `solve()` call, a `polish=` stage is seeded from the main stage's
+own export, multipliers included. When that export is unusable — the main
+stage diverged, or captured nothing — the polish stage runs cold from the
+point the main stage left on the problem, and says so in its own
+`engine_notes["warm_handoff"]`.
+
+Both `SolveResult` and
+`WarmStartData` (along with `StageResult`, `PhaseResult`, and
+`DeclarationKey`) are picklable, so a warm-start payload can be saved to
+disk and reloaded in a later process.
+
+```{eval-rst}
+.. autoclass:: SolveResult
+   :members:
+
+.. autoclass:: StageResult
+   :members:
+
+.. autoclass:: PhaseResult
+   :members:
+
+.. autoclass:: WarmStartData
+   :members:
+
+.. autoclass:: WarmExtension
+   :members:
+
+.. autoclass:: DeclarationKey
    :members:
 ```

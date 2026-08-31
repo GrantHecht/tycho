@@ -34,10 +34,10 @@
 using namespace tycho;
 using namespace TychoTest;
 
+using tycho::solvers::InteriorPointSolver;
 using tycho::solvers::IterateInfo;
 using tycho::solvers::kDivergencePersistIters;
 using tycho::solvers::OptimizationProblem;
-using tycho::solvers::InteriorPointSolver;
 
 // -----------------------------------------------------------------------------
 // Friend harness: reaches InteriorPointSolver's private converge_check() so the trailing-
@@ -233,11 +233,12 @@ TEST(DivergencePersistence, MaratosCorpusConvergesAtDefaults) {
                            (Eigen::VectorXi(2) << 0, 1).finished());
     }
 
-    prob.optimizer_->set_print_level(3);
-    auto flag = prob.optimize();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
+    auto flag = prob.solve(&ipm).flag_;
 
     EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
-    const auto &r = prob.optimizer_->result();
+    const auto &r = ipm.result();
     EXPECT_NEAR(r.obj_val_, -1.0, 1e-4);
     EXPECT_LE(r.iter_num_, 60);
 }
@@ -266,9 +267,10 @@ TEST(DivergencePersistence, GenuineDivergenceStillAborts) {
         prob.add_equal_con(GenericFunction<-1, -1>(x1), (Eigen::VectorXi(2) << 0, 1).finished());
     }
 
-    prob.optimizer_->set_print_level(3);
-    prob.optimizer_->set_max_iters(60); // fail fast if divergence is not detected
-    auto flag = prob.optimize();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
+    ipm.set_max_iters(60); // fail fast if divergence is not detected
+    auto flag = prob.solve(&ipm).flag_;
 
     EXPECT_EQ(flag, tycho::ConvergenceFlags::DIVERGING);
 }
@@ -309,13 +311,14 @@ TEST(DivergencePersistence, ExhaustedInertiaCorrectionAbortsAsSingularKkt) {
         prob.add_equal_con(GenericFunction<-1, -1>(x0 * x0 + x1 * x1 - 1.0),
                            (Eigen::VectorXi(2) << 0, 1).finished());
     }
-    prob.optimizer_->set_print_level(0);
-    prob.optimizer_->settings().max_refac_ = 0;
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(0);
+    ipm.settings().max_refac_ = 0;
 
-    auto flag = prob.optimize();
+    auto flag = prob.solve(&ipm).flag_;
 
     EXPECT_EQ(flag, tycho::ConvergenceFlags::SINGULAR_KKT);
-    EXPECT_LE(prob.optimizer_->result().iter_num_, 10);
+    EXPECT_LE(ipm.result().iter_num_, 10);
 }
 #endif
 
@@ -352,14 +355,15 @@ TEST(DivergencePersistence, ExhaustedInertiaCorrectionIsNotResolvedByExtendedBac
         prob.add_objective(GenericFunction<-1, 1>(0.5 * (x0 * x0) - 0.5 * (x1 * x1)),
                            (Eigen::VectorXi(2) << 0, 1).finished());
     }
-    prob.optimizer_->set_print_level(3);
-    prob.optimizer_->settings().max_refac_ = 0;         // ladder off: exhaust immediately
-    prob.optimizer_->settings().ls_extended_iters_ = 2; // extended backtracking armed
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
+    ipm.settings().max_refac_ = 0;         // ladder off: exhaust immediately
+    ipm.settings().ls_extended_iters_ = 2; // extended backtracking armed
 
-    auto flag = prob.optimize();
+    auto flag = prob.solve(&ipm).flag_;
 
     EXPECT_EQ(flag, tycho::ConvergenceFlags::SINGULAR_KKT);
-    EXPECT_LE(prob.optimizer_->result().iter_num_, 10);
+    EXPECT_LE(ipm.result().iter_num_, 10);
 }
 
 } // namespace

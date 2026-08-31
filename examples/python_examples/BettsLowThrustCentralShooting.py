@@ -38,6 +38,7 @@ import tychopy as typy
 
 vf = typy.vector_functions
 oc = typy.optimal_control
+solvs = typy.solvers
 Args = vf.Arguments
 
 # ----------------------------- Non-dimensionalization -----------------------
@@ -315,16 +316,19 @@ if __name__ == "__main__":
     phase.add_value_objective("Back", 6, -1.0)
 
     phase.set_num_partitions(8)
-    phase.optimizer.qp_threads = 8
-    phase.optimizer.print_level = 1
-    phase.optimizer.set_eq_con_tol(1.0e-9)
+    ipm = solvs.IPM()
+    ipm.qp_threads = 8
+    ipm.print_level = 1
+    ipm.set_eq_con_tol(1.0e-9)
 
     # NOTE: no `set_adaptive_mesh(True)` — mesh refinement targets collocation
     # transcriptions; CentralShooting resolves accuracy via the embedded RK
     # integrator and segment density, not by polynomial-order subdivision.
 
     t0 = time.perf_counter()
-    flag = phase.optimize_solve()
+    result = phase.solve(ipm)
+    if not result:
+        result = phase.solve(ipm, mode="feasible", warm=result)
     elapsed = time.perf_counter() - t0
 
     Traj = phase.return_traj()
@@ -333,7 +337,7 @@ if __name__ == "__main__":
     FinalTime = Traj[-1][7] * Tstar
     ThrottleParam = Traj[-1][-1]
 
-    print(f"CentralShooting solve flag : {flag}")
+    print(f"CentralShooting solve flag : {result.flag}")
     print(f"Wall-clock                  : {elapsed:.2f} s")
     print(f"Final Weight                : {FinalWeight:.6f} lb")
     print(f"Final Time                  : {FinalTime:.6f} s")

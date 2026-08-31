@@ -1,8 +1,8 @@
-#include <tycho/tycho.h>
 #include <cmath>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -34,9 +34,9 @@ int main() {
     auto phase = ode.phase(TranscriptionModes::LGL5, traj_ig, n_segs);
 
     phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "v", "t"},
-                            Eigen::Vector3d(0.0, 1.0, 0.0));
+                             Eigen::Vector3d(0.0, 1.0, 0.0));
     phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "v", "t"},
-                            Eigen::Vector3d(0.0, -1.0, 1.0));
+                             Eigen::Vector3d(0.0, -1.0, 1.0));
 
     phase.add_upper_var_bound(PhaseRegionFlags::Path, "x", 1.0 / 9.0);
 
@@ -46,16 +46,16 @@ int main() {
         phase.add_integral_objective(GenericFunction<-1, 1>(obj_expr), {"u"});
     }
 
-    phase.optimizer().set_opt_ls_mode("L1");
-    phase.optimizer().set_kkt_tol(1.0e-10);
-    phase.optimizer().set_print_level(0);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_opt_ls_mode("L1");
+    ipm.set_kkt_tol(1.0e-10);
+    ipm.set_print_level(0);
     phase.set_num_partitions(1);
 
-    const auto flag = phase.optimize();
+    const auto flag = phase.solve(ipm).flag_;
 
     if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
-        std::cerr << "BrysonDenham (builder): FAILED (status "
-                  << static_cast<int>(flag) << ")\n";
+        std::cerr << "BrysonDenham (builder): FAILED (status " << static_cast<int>(flag) << ")\n";
         return EXIT_FAILURE;
     }
 

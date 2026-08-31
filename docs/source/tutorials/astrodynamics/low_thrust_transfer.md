@@ -36,6 +36,7 @@ them to `_` throughout to keep the transcript clean.
 >>> from tychopy import astro
 >>> from tychopy import vector_functions as vf
 >>> from tychopy import optimal_control as oc
+>>> from tychopy import solvers as slv
 ```
 
 ## The problem
@@ -94,6 +95,7 @@ the dynamics.
 using namespace tycho;
 using namespace tycho::vf;
 using namespace tycho::oc;
+using namespace tycho::solvers;
 
 // ODEArguments(6, 3, 0): full layout [p, f, g, h, k, L, t, ur, ut, un].
 auto args  = ODEArguments(6, 3, 0);
@@ -285,16 +287,17 @@ table) through progressively terser `1` and `2` to fully silent (`3`); pass
 ::::{tab-set}
 :::{tab-item} Python
 ```{doctest}
->>> phase.optimizer.set_print_level(3)
->>> flag = phase.optimize()
->>> str(flag)
+>>> ipm = slv.IPM(print_level=3)
+>>> result = phase.solve(ipm)
+>>> str(result.flag)
 'ConvergenceFlags.CONVERGED'
 ```
 :::
 :::{tab-item} C++
 ```cpp
-phase.optimizer().set_print_level(3);
-auto flag = phase.optimize();   // -> tycho::ConvergenceFlags::CONVERGED
+InteriorPointSolver ipm;
+ipm.set_print_level(3);
+auto result = phase.solve(ipm);   // result.flag_ -> tycho::ConvergenceFlags::CONVERGED
 ```
 :::
 ::::
@@ -384,6 +387,7 @@ plt.show()
    from tychopy import astro
    from tychopy import vector_functions as vf
    from tychopy import optimal_control as oc
+   from tychopy import solvers as slv
 
    mu = 1.0
    p0, pf = 1.0, 2.0
@@ -408,8 +412,8 @@ plt.show()
    phase.add_boundary_value("Back", [0, 1, 2, 3, 4], [pf, 0.0, 0.0, 0.0, 0.0])
    phase.add_lu_norm_bound("Path", [7, 8, 9], 0.0001, acc_max, 1.0)
    phase.add_delta_time_objective(1.0)
-   phase.optimizer.set_print_level(3)
-   phase.optimize()
+   ipm = slv.IPM(print_level=3)
+   phase.solve(ipm)
    T = np.array(phase.return_traj())
 
    times = T[:, 6]

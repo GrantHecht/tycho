@@ -73,18 +73,19 @@ class test_ObjScaling(unittest.TestCase):
         phase.add_value_objective("Back", 0, vscale)
 
         phase.set_num_partitions(1)
-        phase.optimizer.qp_threads = 1
+        ipm1 = ast.solvers.InteriorPointSolver()
+        ipm1.qp_threads = 1
         # cnr_mode requires nested-dissection ordering (hven rejects the
         # MINDEG pairing outright); the test cares about reproducible CNR
         # runs comparing against autoscaling, not the ordering choice itself.
-        phase.optimizer.cnr_mode = True
-        phase.optimizer.set_qp_ordering_mode("METIS")
+        ipm1.cnr_mode = True
+        ipm1.set_qp_ordering_mode("METIS")
 
         if __name__ != "__main__":
-            phase.optimizer.print_level = 3
+            ipm1.print_level = 3
             phase.print_mesh_info = False
 
-        phase.optimize()
+        phase.solve(ipm1)
 
         xf1 = phase.return_traj()[-1][0]
         ###################################################
@@ -102,15 +103,16 @@ class test_ObjScaling(unittest.TestCase):
 
         phase.set_auto_scaling(True)
         phase.set_num_partitions(1)
-        phase.optimizer.qp_threads = 1
-        phase.optimizer.cnr_mode = True
-        phase.optimizer.set_qp_ordering_mode("METIS")
+        ipm2 = ast.solvers.InteriorPointSolver()
+        ipm2.qp_threads = 1
+        ipm2.cnr_mode = True
+        ipm2.set_qp_ordering_mode("METIS")
 
         if __name__ != "__main__":
-            phase.optimizer.print_level = 3
+            ipm2.print_level = 3
             phase.print_mesh_info = False
 
-        phase.optimize()
+        phase.solve(ipm2)
         xf2 = phase.return_traj()[-1][0]
         ###################################################
 
@@ -131,15 +133,16 @@ class test_ObjScaling(unittest.TestCase):
         phase.set_auto_scaling(True)
 
         phase.set_num_partitions(1)
-        phase.optimizer.qp_threads = 1
-        phase.optimizer.cnr_mode = True
-        phase.optimizer.set_qp_ordering_mode("METIS")
+        ipm3 = ast.solvers.InteriorPointSolver()
+        ipm3.qp_threads = 1
+        ipm3.cnr_mode = True
+        ipm3.set_qp_ordering_mode("METIS")
 
         if __name__ != "__main__":
-            phase.optimizer.print_level = 3
+            ipm3.print_level = 3
             phase.print_mesh_info = False
 
-        phase.optimize()
+        phase.solve(ipm3)
         xf3 = phase.return_traj()[-1][0]
         ###################################################
 
@@ -160,15 +163,16 @@ class test_ObjScaling(unittest.TestCase):
         phase.set_auto_scaling(True)
 
         phase.set_num_partitions(1)
-        phase.optimizer.qp_threads = 1
-        phase.optimizer.cnr_mode = True
-        phase.optimizer.set_qp_ordering_mode("METIS")
+        ipm4 = ast.solvers.InteriorPointSolver()
+        ipm4.qp_threads = 1
+        ipm4.cnr_mode = True
+        ipm4.set_qp_ordering_mode("METIS")
 
         if __name__ != "__main__":
-            phase.optimizer.print_level = 3
+            ipm4.print_level = 3
             phase.print_mesh_info = False
 
-        phase.optimize()
+        phase.solve(ipm4)
         xf4 = phase.return_traj()[-1][0]
         ###################################################
 
@@ -203,15 +207,16 @@ class test_ObjScaling(unittest.TestCase):
 
         ocp.set_auto_scaling(True, True)
         ocp.set_num_partitions(1)
-        ocp.optimizer.qp_threads = 1
-        ocp.optimizer.cnr_mode = True
-        ocp.optimizer.set_qp_ordering_mode("METIS")
+        ipm5 = ast.solvers.InteriorPointSolver()
+        ipm5.qp_threads = 1
+        ipm5.cnr_mode = True
+        ipm5.set_qp_ordering_mode("METIS")
 
         if __name__ != "__main__":
-            ocp.optimizer.print_level = 3
+            ipm5.print_level = 3
             ocp.print_mesh_info = False
 
-        ocp.optimize()
+        ocp.solve(ipm5)
         xf5 = phase2.return_traj()[-1][0]
         ###################################################
 

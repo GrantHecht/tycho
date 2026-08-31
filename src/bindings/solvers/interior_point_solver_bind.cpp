@@ -11,16 +11,21 @@
 //   - Binding code extracted from ASSET source and reorganized (PR 2 — binding decoupling)
 //   - Migrated pybind11 -> nanobind (PR 3)
 //   - Migrated to tycho:: sub-namespaces (PR #35)
-//   - InteriorPointSolver refactor (PR #39): Settings/SolveResult structs with def_prop_rw/def_prop_ro,
+//   - InteriorPointSolver refactor (PR #39): Settings/SolveResult structs with
+//   def_prop_rw/def_prop_ro,
 //     validated setters, result read-only bindings, dead binding removal
 //   - Native variable bounds: bound_interval_push/bound_relax_factor/
 //     fixed_variable_treatment properties and the FixedVariableTreatments enum
 // =============================================================================
 
 #include "interior_point_solver_bind.h"
-#include "tycho/detail/solvers/nlp_backend.h"
 #include "tycho/detail/hven_namespaces.h"
+#include "tycho/detail/solvers/nlp_backend.h"
 #include <hven/drivers/interior_point_solver.h>
+
+#include <functional>
+#include <map>
+#include <string>
 
 #include <nanobind/stl/string_view.h>
 
@@ -31,12 +36,123 @@ using namespace tycho::solvers;
 using namespace tycho::astro;
 using namespace tycho::utils;
 
+namespace {
+
+// -----------------------------------------------------------------------
+// The kwargs constructor's field table (IPM ruling: kwargs map onto the
+// existing bound setters below -- validated setters keep validation; plain
+// fields go through settings() directly, exactly as BIND_SETTINGS_VALIDATED/
+// BIND_SETTINGS_RW do for the properties). Kept as a lazily-built static
+// table rather than duplicating each entry inline in __init__, so the
+// kwargs surface and the property surface read from the same setter/field
+// list.
+// -----------------------------------------------------------------------
+using IpmKwSetter = std::function<void(InteriorPointSolver &, nb::handle)>;
+
+template <class T> IpmKwSetter ipm_kw_validated(void (InteriorPointSolver::*setter)(T)) {
+    return [setter](InteriorPointSolver &self, nb::handle v) {
+        (self.*setter)(nb::cast<std::decay_t<T>>(v));
+    };
+}
+
+template <class T> IpmKwSetter ipm_kw_rw(T InteriorPointSolver::Settings::*field) {
+    return [field](InteriorPointSolver &self, nb::handle v) {
+        self.settings().*field = nb::cast<T>(v);
+    };
+}
+
+const std::map<std::string, IpmKwSetter> &ipm_kwarg_table() {
+    using Settings = InteriorPointSolver::Settings;
+    static const std::map<std::string, IpmKwSetter> table = {
+        {"max_iters", ipm_kw_validated(&InteriorPointSolver::set_max_iters)},
+        {"max_acc_iters", ipm_kw_validated(&InteriorPointSolver::set_max_acc_iters)},
+        {"max_ls_iters", ipm_kw_validated(&InteriorPointSolver::set_max_ls_iters)},
+        {"max_soc", ipm_kw_validated(&InteriorPointSolver::set_max_soc)},
+        {"ls_extended_iters", ipm_kw_validated(&InteriorPointSolver::set_ls_extended_iters)},
+        {"alpha_red", ipm_kw_validated(&InteriorPointSolver::set_alpha_red)},
+        {"wide_console", ipm_kw_rw(&Settings::wide_console_)},
+        {"fast_factor_alg", ipm_kw_rw(&Settings::fast_factor_alg_)},
+        {"obj_scale", ipm_kw_validated(&InteriorPointSolver::set_obj_scale)},
+        {"print_level", ipm_kw_validated(&InteriorPointSolver::set_print_level)},
+        {"kkt_tol", ipm_kw_validated(&InteriorPointSolver::set_kkt_tol)},
+        {"bar_tol", ipm_kw_validated(&InteriorPointSolver::set_bar_tol)},
+        {"eq_con_tol", ipm_kw_validated(&InteriorPointSolver::set_econ_tol)},
+        {"ineq_con_tol", ipm_kw_validated(&InteriorPointSolver::set_icon_tol)},
+        {"acc_kkt_tol", ipm_kw_validated(&InteriorPointSolver::set_acc_kkt_tol)},
+        {"acc_bar_tol", ipm_kw_validated(&InteriorPointSolver::set_acc_bar_tol)},
+        {"acc_eq_con_tol", ipm_kw_validated(&InteriorPointSolver::set_acc_econ_tol)},
+        {"acc_ineq_con_tol", ipm_kw_validated(&InteriorPointSolver::set_acc_icon_tol)},
+        {"div_kkt_tol", ipm_kw_validated(&InteriorPointSolver::set_div_kkt_tol)},
+        {"div_bar_tol", ipm_kw_validated(&InteriorPointSolver::set_div_bar_tol)},
+        {"div_eq_con_tol", ipm_kw_validated(&InteriorPointSolver::set_div_econ_tol)},
+        {"div_ineq_con_tol", ipm_kw_validated(&InteriorPointSolver::set_div_icon_tol)},
+        {"neg_slack_reset", ipm_kw_validated(&InteriorPointSolver::set_neg_slack_reset)},
+        {"bound_fraction", ipm_kw_validated(&InteriorPointSolver::set_bound_fraction)},
+        {"bound_push", ipm_kw_validated(&InteriorPointSolver::set_bound_push)},
+        {"bound_interval_push", ipm_kw_validated(&InteriorPointSolver::set_bound_interval_push)},
+        {"bound_relax_factor", ipm_kw_validated(&InteriorPointSolver::set_bound_relax_factor)},
+        {"fixed_variable_treatment",
+         ipm_kw_validated(&InteriorPointSolver::set_fixed_variable_treatment)},
+        {"delta_h", ipm_kw_validated(&InteriorPointSolver::set_delta_h)},
+        {"incr_h", ipm_kw_validated(&InteriorPointSolver::set_incr_h)},
+        {"decr_h", ipm_kw_validated(&InteriorPointSolver::set_decr_h)},
+        {"inertia_mode", ipm_kw_rw(&Settings::inertia_mode_)},
+        {"init_mu", ipm_kw_validated(&InteriorPointSolver::set_init_mu)},
+        {"min_mu", ipm_kw_validated(&InteriorPointSolver::set_min_mu)},
+        {"max_mu", ipm_kw_validated(&InteriorPointSolver::set_max_mu)},
+        {"pd_step_strategy", ipm_kw_rw(&Settings::pd_step_strategy_)},
+        {"qp_par_solve", ipm_kw_validated(&InteriorPointSolver::set_qp_par_solve)},
+        {"soe_mode", ipm_kw_rw(&Settings::soe_mode_)},
+        {"opt_bar_mode", ipm_kw_rw(&Settings::opt_bar_mode_)},
+        {"soe_bar_mode", ipm_kw_rw(&Settings::soe_bar_mode_)},
+        {"opt_ls_mode", ipm_kw_rw(&Settings::opt_ls_mode_)},
+        {"soe_ls_mode", ipm_kw_rw(&Settings::soe_ls_mode_)},
+        {"acceptance_strategy", ipm_kw_rw(&Settings::acceptance_strategy_)},
+        {"merit_penalty_rule", ipm_kw_rw(&Settings::merit_penalty_rule_)},
+        {"watchdog", ipm_kw_rw(&Settings::watchdog_)},
+        {"barrier_governor", ipm_kw_rw(&Settings::barrier_governor_)},
+        {"never_monotone", ipm_kw_rw(&Settings::never_monotone_)},
+        {"restoration_mode", ipm_kw_rw(&Settings::restoration_mode_)},
+        {"max_feas_rest", ipm_kw_validated(&InteriorPointSolver::set_max_feas_rest)},
+        {"force_qp_analysis", ipm_kw_rw(&Settings::force_qp_analysis_)},
+        {"qp_ref_steps", ipm_kw_validated(&InteriorPointSolver::set_qp_ref_steps)},
+        {"qp_pivot_perturb", ipm_kw_validated(&InteriorPointSolver::set_qp_pivot_perturb)},
+        {"qp_matching", ipm_kw_validated(&InteriorPointSolver::set_qp_matching)},
+        {"qp_scaling", ipm_kw_validated(&InteriorPointSolver::set_qp_scaling)},
+        {"qp_threads", ipm_kw_validated(&InteriorPointSolver::set_qp_threads)},
+        {"qp_pivot_strategy", ipm_kw_rw(&Settings::qp_pivot_strategy_)},
+        {"qp_ordering_mode", ipm_kw_rw(&Settings::qp_ord_)},
+#ifdef USE_ACCELERATE_SPARSE
+        {"accel_pivot_tolerance",
+         ipm_kw_validated(&InteriorPointSolver::set_accel_pivot_tolerance)},
+        {"accel_zero_tolerance", ipm_kw_validated(&InteriorPointSolver::set_accel_zero_tolerance)},
+#endif
+        {"qp_print", ipm_kw_rw(&Settings::qp_print_)},
+        {"return_best", ipm_kw_rw(&Settings::return_best_)},
+        {"best_criteria",
+         [](InteriorPointSolver &self, nb::handle v) {
+             if (nb::isinstance<InteriorPointSolver::BestCriteriaModes>(v))
+                 self.settings().best_criteria_ =
+                     nb::cast<InteriorPointSolver::BestCriteriaModes>(v);
+             else if (nb::isinstance<nb::str>(v))
+                 self.settings().best_criteria_ =
+                     InteriorPointSolver::strto_BestCriteriaMode(nb::cast<std::string>(v));
+             else
+                 throw nb::type_error("best_criteria: expected BestCriteriaModes enum or str");
+         }},
+        {"cnr_mode", ipm_kw_rw(&Settings::cnr_mode_)},
+    };
+    return table;
+}
+
+} // namespace
+
 // Helper macros for binding settings fields as read-write properties on InteriorPointSolver.
 // These produce lambda-based def_prop_rw that forward through the settings() accessor.
 #define BIND_SETTINGS_RW(obj, pyname, field, ...)                                                  \
     obj.def_prop_rw(                                                                               \
-        pyname, [](const InteriorPointSolver &self) { return self.settings().field; },                          \
-        [](InteriorPointSolver &self, decltype(self.settings().field) v) {                                      \
+        pyname, [](const InteriorPointSolver &self) { return self.settings().field; },             \
+        [](InteriorPointSolver &self, decltype(self.settings().field) v) {                         \
             self.settings().field = v;                                                             \
         } __VA_OPT__(, ) __VA_ARGS__)
 
@@ -44,15 +160,17 @@ using namespace tycho::utils;
 // Use for fields that have a corresponding set_* method with validation logic.
 #define BIND_SETTINGS_VALIDATED(obj, pyname, field, setter, ...)                                   \
     obj.def_prop_rw(                                                                               \
-        pyname, [](const InteriorPointSolver &self) { return self.settings().field; },                          \
-        [](InteriorPointSolver &self, decltype(self.settings().field) v) { self.setter(v); } __VA_OPT__(, )     \
-            __VA_ARGS__)
+        pyname, [](const InteriorPointSolver &self) { return self.settings().field; },             \
+        [](InteriorPointSolver &self, decltype(self.settings().field) v) {                         \
+            self.setter(v);                                                                        \
+        } __VA_OPT__(, ) __VA_ARGS__)
 
 // Helper macro for binding result fields as read-only properties on InteriorPointSolver.
 // These produce lambda-based def_prop_ro that forward through the result() accessor.
 #define BIND_RESULT_RO(obj, pyname, field, ...)                                                    \
-    obj.def_prop_ro(pyname, [](const InteriorPointSolver &self) { return self.result().field; } __VA_OPT__(, )  \
-                                __VA_ARGS__)
+    obj.def_prop_ro(pyname, [](const InteriorPointSolver &self) {                                  \
+        return self.result().field;                                                                \
+    } __VA_OPT__(, ) __VA_ARGS__)
 
 void TychoBind<InteriorPointSolver>::build(nb::module_ &m) {
     using BarrierModes = InteriorPointSolver::BarrierModes;
@@ -67,9 +185,65 @@ void TychoBind<InteriorPointSolver>::build(nb::module_ &m) {
     obj.def(nb::init<std::shared_ptr<NonLinearProgram>>());
     obj.def(nb::init<>());
 
-    obj.def("optimize", &InteriorPointSolver::optimize, nb::call_guard<nb::gil_scoped_release>(), "");
-    obj.def("solve_optimize", &InteriorPointSolver::solve_optimize, nb::call_guard<nb::gil_scoped_release>(),
+    obj.def(
+        "__init__",
+        [](InteriorPointSolver *self, nb::kwargs kwargs) {
+            new (self) InteriorPointSolver();
+            if (kwargs.contains("preset")) {
+                try {
+                    self->apply_preset(nb::cast<std::string>(kwargs["preset"]));
+                } catch (const nb::cast_error &) {
+                    throw nb::type_error(
+                        fmt::format("InteriorPointSolver: keyword argument 'preset' got a value of "
+                                    "type {} that could not be converted to str",
+                                    nb::cast<std::string>(nb::str(kwargs["preset"].type())))
+                            .c_str());
+                }
+            }
+            const auto &table = ipm_kwarg_table();
+            for (auto item : kwargs) {
+                auto name = nb::cast<std::string>(item.first);
+                if (name == "preset") {
+                    continue;
+                }
+                auto it = table.find(name);
+                if (it == table.end()) {
+                    throw nb::type_error(
+                        fmt::format("InteriorPointSolver: unrecognized keyword argument '{}'", name)
+                            .c_str());
+                }
+                try {
+                    it->second(*self, item.second);
+                } catch (const nb::cast_error &) {
+                    throw nb::type_error(
+                        fmt::format("InteriorPointSolver: keyword argument '{}' got a value of "
+                                    "type {} that could not be converted",
+                                    name, nb::cast<std::string>(nb::str(item.second.type())))
+                            .c_str());
+                }
+            }
+        },
+        R"doc(Construct an InteriorPointSolver, optionally overriding settings by name.
+
+Every settings property below is also accepted as a keyword argument
+here (e.g. ``InteriorPointSolver(max_iters=500, kkt_tol=1e-9)``).
+``preset`` (a name accepted by :meth:`apply_preset`) is applied FIRST,
+before any other keyword argument override, so
+``InteriorPointSolver(preset="soc_recovery_l1", max_soc=6)`` starts from
+the preset and then raises max_soc past what the preset itself sets.
+Validated properties keep their validation (raise ValueError exactly as
+the corresponding ``set_*`` method / property assignment would).
+
+Raises
+------
+TypeError
+    If an unrecognized keyword argument is given, naming it.
+)doc");
+
+    obj.def("optimize", &InteriorPointSolver::optimize, nb::call_guard<nb::gil_scoped_release>(),
             "");
+    obj.def("solve_optimize", &InteriorPointSolver::solve_optimize,
+            nb::call_guard<nb::gil_scoped_release>(), "");
     obj.def("solve", &InteriorPointSolver::solve, nb::call_guard<nb::gil_scoped_release>(), "");
 
     BIND_SETTINGS_VALIDATED(obj, "max_iters", max_iters_, set_max_iters, "");
@@ -104,7 +278,8 @@ void TychoBind<InteriorPointSolver>::build(nb::module_ &m) {
     BIND_RESULT_RO(obj, "last_func_time", func_time_, "");
     BIND_RESULT_RO(obj, "last_kkt_time", kkt_time_, "");
     obj.def_prop_ro(
-        "last_misc_time", [](const InteriorPointSolver &self) { return self.result().misc_time(); }, "");
+        "last_misc_time", [](const InteriorPointSolver &self) { return self.result().misc_time(); },
+        "");
     BIND_RESULT_RO(obj, "last_print_time", print_time_, "");
     BIND_RESULT_RO(obj, "last_solver_init_time", solver_init_time_, "");
     BIND_RESULT_RO(obj, "last_iter_num", iter_num_, "");
@@ -270,8 +445,8 @@ void TychoBind<InteriorPointSolver>::build(nb::module_ &m) {
     obj.def("set_incr_h", &InteriorPointSolver::set_incr_h);
     obj.def("set_decr_h", &InteriorPointSolver::set_decr_h);
 
-    obj.def("set_hpert_params", &InteriorPointSolver::set_hpert_params, nb::arg("delta_h"), nb::arg("incr_h"),
-            nb::arg("decr_h"));
+    obj.def("set_hpert_params", &InteriorPointSolver::set_hpert_params, nb::arg("delta_h"),
+            nb::arg("incr_h"), nb::arg("decr_h"));
 
     BIND_SETTINGS_RW(
         obj, "inertia_mode", inertia_mode_,
@@ -305,19 +480,27 @@ void TychoBind<InteriorPointSolver>::build(nb::module_ &m) {
     BIND_SETTINGS_RW(obj, "opt_bar_mode", opt_bar_mode_, "");
     BIND_SETTINGS_RW(obj, "soe_bar_mode", soe_bar_mode_, "");
 
-    obj.def("set_opt_bar_mode", nb::overload_cast<BarrierModes>(&InteriorPointSolver::set_opt_bar_mode));
-    obj.def("set_opt_bar_mode", nb::overload_cast<const std::string &>(&InteriorPointSolver::set_opt_bar_mode));
-    obj.def("set_soe_bar_mode", nb::overload_cast<BarrierModes>(&InteriorPointSolver::set_soe_bar_mode));
-    obj.def("set_soe_bar_mode", nb::overload_cast<const std::string &>(&InteriorPointSolver::set_soe_bar_mode));
+    obj.def("set_opt_bar_mode",
+            nb::overload_cast<BarrierModes>(&InteriorPointSolver::set_opt_bar_mode));
+    obj.def("set_opt_bar_mode",
+            nb::overload_cast<const std::string &>(&InteriorPointSolver::set_opt_bar_mode));
+    obj.def("set_soe_bar_mode",
+            nb::overload_cast<BarrierModes>(&InteriorPointSolver::set_soe_bar_mode));
+    obj.def("set_soe_bar_mode",
+            nb::overload_cast<const std::string &>(&InteriorPointSolver::set_soe_bar_mode));
 
     // --- Line search modes ---
     BIND_SETTINGS_RW(obj, "opt_ls_mode", opt_ls_mode_, "");
     BIND_SETTINGS_RW(obj, "soe_ls_mode", soe_ls_mode_, "");
 
-    obj.def("set_opt_ls_mode", nb::overload_cast<LineSearchModes>(&InteriorPointSolver::set_opt_ls_mode));
-    obj.def("set_opt_ls_mode", nb::overload_cast<const std::string &>(&InteriorPointSolver::set_opt_ls_mode));
-    obj.def("set_soe_ls_mode", nb::overload_cast<LineSearchModes>(&InteriorPointSolver::set_soe_ls_mode));
-    obj.def("set_soe_ls_mode", nb::overload_cast<const std::string &>(&InteriorPointSolver::set_soe_ls_mode));
+    obj.def("set_opt_ls_mode",
+            nb::overload_cast<LineSearchModes>(&InteriorPointSolver::set_opt_ls_mode));
+    obj.def("set_opt_ls_mode",
+            nb::overload_cast<const std::string &>(&InteriorPointSolver::set_opt_ls_mode));
+    obj.def("set_soe_ls_mode",
+            nb::overload_cast<LineSearchModes>(&InteriorPointSolver::set_soe_ls_mode));
+    obj.def("set_soe_ls_mode",
+            nb::overload_cast<const std::string &>(&InteriorPointSolver::set_soe_ls_mode));
 
     // --- Step-acceptance / recovery strategy ---
     BIND_SETTINGS_RW(
@@ -438,7 +621,8 @@ void TychoBind<InteriorPointSolver>::build(nb::module_ &m) {
 
     BIND_SETTINGS_RW(obj, "return_best", return_best_);
     obj.def_prop_rw(
-        "best_criteria", [](const InteriorPointSolver &self) { return self.settings().best_criteria_; },
+        "best_criteria",
+        [](const InteriorPointSolver &self) { return self.settings().best_criteria_; },
         [](InteriorPointSolver &self, nb::object val) {
             if (nb::isinstance<BestCriteriaModes>(val))
                 self.settings().best_criteria_ = nb::cast<BestCriteriaModes>(val);
@@ -448,7 +632,8 @@ void TychoBind<InteriorPointSolver>::build(nb::module_ &m) {
             else
                 throw nb::type_error("expected BestCriteriaModes enum or str");
         });
-    obj.def("set_best_criteria", nb::overload_cast<BestCriteriaModes>(&InteriorPointSolver::set_best_criteria));
+    obj.def("set_best_criteria",
+            nb::overload_cast<BestCriteriaModes>(&InteriorPointSolver::set_best_criteria));
     obj.def("set_best_criteria",
             nb::overload_cast<const std::string &>(&InteriorPointSolver::set_best_criteria));
 
@@ -513,7 +698,8 @@ ValueError
         .value("TwoByTwo", QPPivotModes::TwoByTwo);
     nb::enum_<FixedVariableTreatments>(
         m, "FixedVariableTreatments",
-        "Fixed-variable handling selector for InteriorPointSolver.fixed_variable_treatment, corresponding "
+        "Fixed-variable handling selector for InteriorPointSolver.fixed_variable_treatment, "
+        "corresponding "
         "to Ipopt's fixed_variable_treatment option.")
         .value("MakeParameter", FixedVariableTreatments::MakeParameter,
                "Eliminates a fixed variable (equal declared lower and upper bound) from the "
@@ -535,7 +721,8 @@ ValueError
                "Leyffer & Vanaret funnel formulation, implemented after Uno's funnel). "
                "Requires a monotone barrier safeguard, so it rejects combination with the "
                "default barrier_governor=classic_adaptive unless never_monotone=True "
-               "(ValueError at validate() time); composes with watchdog. Heuristically motivated -- no "
+               "(ValueError at validate() time); composes with watchdog. Heuristically motivated "
+               "-- no "
                "convergence guarantee is implied; compare against classic_merit and filter "
                "on your own problem.")
         .value("filter", AcceptanceStrategies::filter,
@@ -633,22 +820,6 @@ ValueError
                "shift stays on under it. No new tunable constants -- rho_k's floor and the dual "
                "shift's scale/exponent are fixed. See last_prox_reg_primal/last_prox_reg_dual "
                "for the per-solve diagnostics this mode reports.");
-
-    nb::class_<IpoptRunInfo>(m, "IpoptRunInfo")
-        .def_ro("ran", &IpoptRunInfo::ran_)
-        .def_ro("status", &IpoptRunInfo::status_)
-        .def_ro("normalized", &IpoptRunInfo::normalized_)
-        .def_ro("converge_flag", &IpoptRunInfo::converge_flag_)
-        .def_ro("iterations", &IpoptRunInfo::iterations_)
-        .def_ro("objective", &IpoptRunInfo::objective_)
-        .def_ro("constraint_violation", &IpoptRunInfo::constraint_violation_)
-        .def_ro("wall_time_s", &IpoptRunInfo::wall_time_s_);
-
-    nb::enum_<NLPSolvers>(m, "NLPSolvers",
-                          "NLP solver backend selector for the solve/optimize entry points.")
-        .value("interior_point", NLPSolvers::interior_point, "Built-in interior-point solver (default).")
-        .value("ipopt", NLPSolvers::ipopt,
-               "Linked Ipopt on the identical transcribed NLP (requires ENABLE_IPOPT build).");
 
     m.def("ipopt_available", &ipopt_backend::available,
           "True when this build was configured with ENABLE_IPOPT.");

@@ -15,9 +15,9 @@
 
 #include "brachistochrone_ode.h"
 
-#include <tycho/tycho.h>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -78,7 +78,8 @@ int main() {
     phase.add_delta_time_objective(1.0, ScaleModes::AUTO);
 
     // ---- Solve -------------------------------------------------------------
-    const auto status = phase.solve_optimize();
+    InteriorPointSolver ipm;
+    const auto status = phase.solve(ipm, {.presolve = true}).flag_;
 
     if (status <= tycho::ConvergenceFlags::ACCEPTABLE) {
         const auto result = phase.return_traj();

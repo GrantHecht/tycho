@@ -15,10 +15,11 @@ import json
 import os
 import subprocess
 import sys
-import types
 from pathlib import Path
 
 import pytest
+
+import tychopy.solvers as solvs
 
 # This file lives at <repo>/tychopy/test/test_corpus_smoke.py, so
 # parents[2] is the repo root when it runs in place. Some harnesses copy the
@@ -38,14 +39,13 @@ import registry  # noqa: E402  (tests/corpus/ must be on sys.path first)
 
 VALID_TIERS = {"degenerate", "hard", "literature"}
 
-
-VALID_SOLVE_MODES = {
-    "solve",
-    "optimize",
-    "solve_optimize",
-    "solve_optimize_solve",
-    "optimize_solve",
-}
+# The reserved keys a SOLVE_CALL dict may use -- "mode"/"presolve"/"polish"/
+# "warm" are forwarded straight to prob.solve(engine, **SOLVE_CALL);
+# "feasible_fallback" is consumed by the driver itself (see
+# tests/corpus/driver.py's module docstring for the full SOLVE_CALL
+# convention, including the old SOLVE_MODE vocabulary's mapping onto it).
+VALID_SOLVE_CALL_KEYS = {"mode", "presolve", "polish", "warm", "feasible_fallback"}
+VALID_MODES = {"optimal", "feasible"}
 
 
 @pytest.mark.parametrize("module_name", registry.ALL_PROBLEMS)
@@ -57,12 +57,22 @@ def test_problem_contract(module_name):
     assert isinstance(mod.TIMEOUT, int) and mod.TIMEOUT > 0, (
         f"{module_name}: TIMEOUT must be a positive int, got {mod.TIMEOUT!r}"
     )
-    assert mod.SOLVE_MODE in VALID_SOLVE_MODES, (
-        f"{module_name}: invalid SOLVE_MODE {mod.SOLVE_MODE!r}"
+    assert isinstance(mod.SOLVE_CALL, dict), (
+        f"{module_name}: SOLVE_CALL must be a dict, got {mod.SOLVE_CALL!r}"
     )
+    assert set(mod.SOLVE_CALL) <= VALID_SOLVE_CALL_KEYS, (
+        f"{module_name}: unknown SOLVE_CALL key(s) "
+        f"{set(mod.SOLVE_CALL) - VALID_SOLVE_CALL_KEYS!r}"
+    )
+    mode = str(mod.SOLVE_CALL.get("mode", "optimal")).lower()
+    assert mode in VALID_MODES, f"{module_name}: invalid SOLVE_CALL mode {mode!r}"
     assert callable(mod.build), f"{module_name}: build must be callable"
     assert not (hasattr(mod, "NOTES") and hasattr(mod, "POST_SOLVE")), (
         f"{module_name}: define at most one of NOTES/POST_SOLVE"
+    )
+    configure_hook = getattr(mod, "configure", None)
+    assert configure_hook is None or callable(configure_hook), (
+        f"{module_name}: configure, if defined, must be callable"
     )
 
 
@@ -107,26 +117,34 @@ def test_harness_end_to_end_fast_problems(tmp_path):
     assert by_problem["hard_zermelo_wrongbasin"]["status"] == "diverged"
 
 
+class _FakeResult:
+    """Stand-in for SolveResult: a real ConvergenceFlags member (so
+    ``result.flag != solvs.ConvergenceFlags.CONVERGED`` compares correctly,
+    not just ``.flag.name``) plus a truthy/falsy convergence bit."""
+
+    def __init__(self, flag_name, converged):
+        self.flag = getattr(solvs.ConvergenceFlags, flag_name)
+        self._converged = converged
+
+    def __bool__(self):
+        return self._converged
+
+
 class _CallShapeProbeProblem:
-    """Stub problem recording which solve entry point was invoked."""
+    """Stub problem recording every ``solve(engine, **kwargs)`` call's kwargs."""
 
     def __init__(self):
-        self.called = None
-        self.optimizer = types.SimpleNamespace(last_obj_val=1.0, last_iter_num=3)
+        self.calls = []
 
-    def _record(self, name):
-        self.called = name
-        return types.SimpleNamespace(name="CONVERGED")
-
-    def solve_optimize(self):
-        return self._record("solve_optimize")
-
-    def optimize(self):
-        return self._record("optimize")
+    def solve(self, engine, mode="optimal", presolve=False, polish=None, warm=None):
+        self.calls.append(
+            {"mode": mode, "presolve": presolve, "polish": polish, "warm": warm}
+        )
+        return _FakeResult("CONVERGED", converged=True)
 
 
 class _CallShapeProbeModule:
-    SOLVE_MODE = "solve_optimize"
+    SOLVE_CALL = {"mode": "optimal", "presolve": True}
     NOTES = ""
 
     @staticmethod
@@ -134,17 +152,158 @@ class _CallShapeProbeModule:
         return _CallShapeProbeModule._prob
 
 
-def test_driver_default_call_shape_runs_module_solve_mode():
+def test_driver_default_call_shape_runs_module_solve_call():
+    # presolve=True forwards straight through to solve()'s own presolve=
+    # argument as a single call -- the pipeline itself now tolerates a
+    # diverging presolve stage (src/solvers/solve_pipeline.cpp's
+    # warm_or_null), so the driver no longer needs to route around it with
+    # two separate calls.
     prob = _CallShapeProbeProblem()
     _CallShapeProbeModule._prob = prob
-    result = driver.run(_CallShapeProbeModule, lambda opt: None)
-    assert prob.called == "solve_optimize"
+    result = driver.run(_CallShapeProbeModule, lambda engine: None)
+    assert prob.calls == [
+        {"mode": "optimal", "presolve": True, "polish": None, "warm": None},
+    ]
     assert result["call_shape"] == "module"
 
 
-def test_driver_optimize_call_shape_overrides_solve_mode():
+def test_driver_optimize_call_shape_overrides_solve_call():
     prob = _CallShapeProbeProblem()
     _CallShapeProbeModule._prob = prob
-    result = driver.run(_CallShapeProbeModule, lambda opt: None, call_shape="optimize")
-    assert prob.called == "optimize"
+    result = driver.run(
+        _CallShapeProbeModule, lambda engine: None, call_shape="optimize"
+    )
+    assert prob.calls == [
+        {"mode": "optimal", "presolve": False, "polish": None, "warm": None}
+    ]
     assert result["call_shape"] == "optimize"
+
+
+class _FallbackProbeProblem:
+    """Stub problem whose first solve() reports NOTCONVERGED and second
+    (the feasible_fallback retry) reports CONVERGED -- exercises the
+    driver's conditional chain for the retired optimize_solve()/
+    solve_optimize_solve() combo methods' trailing conditional Solve
+    phase."""
+
+    def __init__(self):
+        self.calls = []
+        self.results = []
+
+    def solve(self, engine, mode="optimal", presolve=False, polish=None, warm=None):
+        self.calls.append(
+            {"mode": mode, "presolve": presolve, "polish": polish, "warm": warm}
+        )
+        converged = len(self.calls) > 1
+        result = _FakeResult("CONVERGED" if converged else "NOTCONVERGED", converged)
+        self.results.append(result)
+        return result
+
+
+class _FallbackProbeModule:
+    SOLVE_CALL = {"mode": "optimal", "feasible_fallback": True}
+    NOTES = ""
+
+    @staticmethod
+    def build():
+        return _FallbackProbeModule._prob
+
+
+def test_driver_feasible_fallback_retries_on_non_convergence():
+    prob = _FallbackProbeProblem()
+    _FallbackProbeModule._prob = prob
+    result = driver.run(_FallbackProbeModule, lambda engine: None)
+
+    assert len(prob.calls) == 2
+    assert prob.calls[0] == {
+        "mode": "optimal",
+        "presolve": False,
+        "polish": None,
+        "warm": None,
+    }
+    # The retry hands the main stage's own result back as warm=, which is
+    # the idiom the documentation gives callers for exactly this shape: a
+    # payload that is empty or non-finite -- the likely outcome of a
+    # non-convergent main stage -- costs the seeding and nothing else.
+    assert prob.calls[1] == {
+        "mode": "feasible",
+        "presolve": False,
+        "polish": None,
+        "warm": prob.results[0],
+    }
+    assert result["flag"] == "CONVERGED"
+
+
+class _AcceptableProbeProblem:
+    """Stub problem whose first solve() reports ACCEPTABLE (a converged --
+    ``bool(result) is True`` -- but not exactly CONVERGED flag) and second
+    (the feasible_fallback retry) reports CONVERGED. Regression case: the
+    retired ``optimize_solve()``'s own conditional-phase gate skipped the
+    trailing Solve phase only on an EXACT CONVERGED
+    (``psiopt/src/psiopt.cpp``), so a merely-ACCEPTABLE
+    main stage must still trigger the fallback -- the ``not result``/
+    ``converged()`` idiom (which treats ACCEPTABLE as already "done") gets
+    this wrong; ``result.flag != ConvergenceFlags.CONVERGED`` gets it
+    right."""
+
+    def __init__(self):
+        self.calls = []
+
+    def solve(self, engine, mode="optimal", presolve=False, polish=None, warm=None):
+        self.calls.append(
+            {"mode": mode, "presolve": presolve, "polish": polish, "warm": warm}
+        )
+        if len(self.calls) == 1:
+            return _FakeResult("ACCEPTABLE", converged=True)
+        return _FakeResult("CONVERGED", converged=True)
+
+
+class _AcceptableProbeModule:
+    SOLVE_CALL = {"mode": "optimal", "feasible_fallback": True}
+    NOTES = ""
+
+    @staticmethod
+    def build():
+        return _AcceptableProbeModule._prob
+
+
+def test_driver_feasible_fallback_retries_on_acceptable_not_just_notconverged():
+    prob = _AcceptableProbeProblem()
+    _AcceptableProbeModule._prob = prob
+    result = driver.run(_AcceptableProbeModule, lambda engine: None)
+
+    assert len(prob.calls) == 2  # the ACCEPTABLE main stage still triggers the retry
+    assert prob.calls[1]["mode"] == "feasible"
+    assert result["flag"] == "CONVERGED"
+
+
+class _NoFallbackNeededProbeProblem:
+    """Stub problem whose first solve() already converges -- the
+    feasible_fallback retry must NOT run when it isn't needed."""
+
+    def __init__(self):
+        self.calls = []
+
+    def solve(self, engine, mode="optimal", presolve=False, polish=None, warm=None):
+        self.calls.append(
+            {"mode": mode, "presolve": presolve, "polish": polish, "warm": warm}
+        )
+        return _FakeResult("CONVERGED", converged=True)
+
+
+class _NoFallbackNeededProbeModule:
+    SOLVE_CALL = {"mode": "optimal", "feasible_fallback": True}
+    NOTES = ""
+
+    @staticmethod
+    def build():
+        return _NoFallbackNeededProbeModule._prob
+
+
+def test_driver_feasible_fallback_skipped_when_first_solve_converges():
+    prob = _NoFallbackNeededProbeProblem()
+    _NoFallbackNeededProbeModule._prob = prob
+    result = driver.run(_NoFallbackNeededProbeModule, lambda engine: None)
+
+    assert len(prob.calls) == 1
+    assert result["flag"] == "CONVERGED"

@@ -587,14 +587,16 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
     its string name. Variable indices refer to the packed node layout
     ``[x, t, u, p]``.
 
-    Once configured, solve the phase with :meth:`optimize` (or :meth:`solve`),
-    then retrieve the result with :meth:`return_traj`.
+    Once configured, solve the phase with :meth:`solve`, then retrieve the
+    result with :meth:`return_traj`.
 
     Notes
     -----
-    :meth:`optimize`, :meth:`solve`, and the ``optimizer`` handle are inherited
-    from the shared optimization-problem base; ``phase.optimizer`` exposes the
-    underlying InteriorPointSolver solver (e.g. ``phase.optimizer.set_print_level(0)``).
+    :meth:`solve` is inherited from the shared optimization-problem base. The
+    solver is not owned by the phase: construct one (e.g.
+    ``ipm = tychopy.solvers.IPM(print_level=0)``) and pass it to
+    ``phase.solve(ipm)``, optionally with ``mode=``, ``presolve=``, ``polish=``
+    and ``warm=``.
 
     Examples
     --------
@@ -605,7 +607,7 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
         phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
         phase.add_boundary_value("Back", [0, 1], [xf, yf])
         phase.add_delta_time_objective(1.0)
-        phase.optimize()
+        phase.solve(tychopy.solvers.IPM())
         traj = phase.return_traj()
     """
 
@@ -640,7 +642,7 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
         ----------
         mesh : list of numpy.ndarray
             Trajectory nodes, each packed as ``[x, t, u, p]``, in increasing time
-            order. This becomes the initial guess that the optimizer refines.
+            order. This becomes the initial guess that the solver refines.
 
         Notes
         -----
@@ -684,7 +686,7 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
 
         Builds the transcribed NLP (defect constraints, user constraints, and
         objectives) from the current configuration. This is performed automatically
-        by :meth:`optimize`/:meth:`solve`; call it explicitly only to inspect the
+        by :meth:`solve`; call it explicitly only to inspect the
         transcribed problem or to force a rebuild.
 
         Parameters
@@ -899,13 +901,13 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
         -------
         list of numpy.ndarray
             One packed state vector ``[x, t, u, p]`` per node, in time order. After a
-            successful :meth:`optimize`/:meth:`solve` this is the optimized solution.
+            successful :meth:`solve` this is the optimized solution.
 
         Examples
         --------
         Solve the phase and read back the optimized trajectory::
 
-            phase.optimize()
+            phase.solve(tychopy.solvers.IPM())
             traj = phase.return_traj()
         """
 
@@ -976,7 +978,7 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
             dynamics-defect Lagrange multipliers, which are defined at the defect
             points and then linearly interpolated (extrapolated at the endpoints) onto
             the trajectory nodes. Only meaningful after a successful
-            :meth:`optimize`/:meth:`solve`.
+            :meth:`solve`.
         """
 
     def return_traj_error(self) -> list[numpy.ndarray]:
@@ -990,7 +992,7 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
             per defect interval, so the count is the number of trajectory nodes minus
             one). Each vector has length ``x_vars + 1`` -- the ``x_vars`` per-state
             error components plus a time entry. Only available after a successful
-            :meth:`optimize`/:meth:`solve` (raises ``RuntimeError`` otherwise).
+            :meth:`solve` (raises ``RuntimeError`` otherwise).
         """
 
     def return_u_spline_con_lmults(self) -> list[numpy.ndarray]:
@@ -1002,7 +1004,7 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
         list of numpy.ndarray
             Per-node multiplier vectors for the control-spline continuity constraint,
             or an empty list if no control-spline constraint is active. Only meaningful
-            after a successful :meth:`optimize`/:meth:`solve`.
+            after a successful :meth:`solve`.
         """
 
     def return_u_spline_con_vals(self) -> list[numpy.ndarray]:
@@ -1014,7 +1016,7 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
         list of numpy.ndarray
             Per-node residual vectors for the control-spline continuity constraint,
             or an empty list if no control-spline constraint is active. Only meaningful
-            after a successful :meth:`optimize`/:meth:`solve`.
+            after a successful :meth:`solve`.
         """
 
     def return_equal_con_lmults(self, arg: int, /) -> list[numpy.ndarray]:
@@ -1031,7 +1033,7 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
         -------
         list of numpy.ndarray
             Per-application multiplier vectors for the constraint. Only meaningful
-            after a successful :meth:`optimize`/:meth:`solve`.
+            after a successful :meth:`solve`.
         """
 
     def return_equal_con_vals(self, arg: int, /) -> list[numpy.ndarray]:
@@ -1047,7 +1049,7 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
         -------
         list of numpy.ndarray
             Per-application residual vectors. Only meaningful after a successful
-            :meth:`optimize`/:meth:`solve`.
+            :meth:`solve`.
         """
 
     def return_equal_con_scales(self, arg: int, /) -> numpy.ndarray:
@@ -1081,7 +1083,7 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
         -------
         list of numpy.ndarray
             Per-application multiplier vectors. Only meaningful after a successful
-            :meth:`optimize`/:meth:`solve`.
+            :meth:`solve`.
         """
 
     def return_inequal_con_vals(self, arg: int, /) -> list[numpy.ndarray]:
@@ -1097,7 +1099,7 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
         -------
         list of numpy.ndarray
             Per-application residual vectors. Only meaningful after a successful
-            :meth:`optimize`/:meth:`solve`.
+            :meth:`solve`.
         """
 
     def return_inequal_con_scales(self, arg: int, /) -> numpy.ndarray:
@@ -1180,7 +1182,7 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
         -------
         numpy.ndarray
             The active static-parameter values. After a successful
-            :meth:`optimize`/:meth:`solve` this reflects the optimized values.
+            :meth:`solve` this reflects the optimized values.
         """
 
     def test_partitions(self, arg0: int, arg1: int, arg2: int, /) -> None:
@@ -2226,7 +2228,7 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
         """
         Enable adaptive mesh refinement (bool, default ``False``).
 
-        When ``True``, :meth:`optimize`/:meth:`solve` runs the automatic mesh-refinement
+        When ``True``, :meth:`solve` runs the automatic mesh-refinement
         loop until the per-interval error falls below :attr:`mesh_tol` or
         :attr:`max_mesh_iters` is reached.
         """
@@ -2495,7 +2497,12 @@ class PhaseInterface(_tychopy.solvers.OptimizationProblemBase):
     @property
     def solve_only_first(self) -> bool:
         """
-        Only solve (not optimize) on the first mesh-refinement iteration (bool, default ``True``).
+        Run the feasibility presolve stage only before the first mesh-refinement iteration (bool, default ``True``).
+
+        Only affects a ``solve(..., presolve=...)`` call on an adaptive-mesh phase:
+        when ``True`` the presolve stage runs once, before mesh iteration 0; when
+        ``False`` it repeats on every mesh iteration. Has no effect on a call
+        without ``presolve=``.
         """
 
     @solve_only_first.setter
@@ -2603,8 +2610,8 @@ class OptimalControlProblem(_tychopy.solvers.OptimizationProblemBase):
 
     Phases are referenced by an integer index (assigned in :meth:`add_phase`
     order), by the phase object itself, or by a registered name. Solve the whole
-    problem with :meth:`optimize` (or :meth:`solve`), inherited from the shared
-    optimization-problem base.
+    problem with :meth:`solve`, inherited from the shared optimization-problem
+    base; the solver is not owned by the problem, it is passed to that call.
 
     Examples
     --------
@@ -2614,7 +2621,7 @@ class OptimalControlProblem(_tychopy.solvers.OptimizationProblemBase):
         ocp.add_phase(phase0)
         ocp.add_phase(phase1)
         ocp.add_forward_link_equal_con(0, 1, range(0, 5))
-        ocp.optimize()
+        ocp.solve(tychopy.solvers.IPM())
     """
 
     def __init__(self) -> None:
@@ -3227,12 +3234,12 @@ class OptimalControlProblem(_tychopy.solvers.OptimizationProblemBase):
     @property
     def solve_only_first(self) -> bool:
         """
-        Run only the initial *solve* step on the first mesh-refinement iteration.
+        Run the feasibility presolve stage only before the first mesh-refinement iteration.
 
-        Only affects the compound ``SolveOptimize`` and ``SolveOptimizeSolve`` job
-        modes: when ``True``, subsequent mesh iterations drop the leading solve step
-        (running ``Optimize`` / ``OptimizeSolve`` instead). Has no effect on plain
-        ``solve`` or ``optimize``.
+        Only affects a ``solve(..., presolve=...)`` call on an adaptive-mesh
+        problem: when ``True`` the presolve stage runs once, before mesh iteration
+        0; when ``False`` it repeats on every mesh iteration. Has no effect on a
+        call without ``presolve=``.
         """
 
     @solve_only_first.setter

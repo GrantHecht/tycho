@@ -1,9 +1,9 @@
 // Source: J. Michael et al., IFAC ACA2013
 
-#include <tycho/tycho.h>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -48,16 +48,14 @@ static GenericFunction<-1, -1> make_rendcon(const Eigen::Vector3d &ud) {
     auto vdp = quat_rotate(p_t, phi_t);
     auto Vdp = cross_product(vdp, Xdp);
 
-    return GenericFunction<-1, -1>(
-        StackedOutputs{X + Xdq - Xdp, V + Vdq - Vdp});
+    return GenericFunction<-1, -1>(StackedOutputs{X + Xdq - Xdp, V + Vdq - Vdp});
 }
 
 // RendCon2: 14 inputs [X(3), V(3), q(4), w(3), t(1)] -> 6 outputs. Looks
 // up target state [p(4), phi(3)] from LGLInterpTable at time t and delegates
 // to RendCon.
-static GenericFunction<-1, -1>
-make_rendcon2(const Eigen::Vector3d &ud,
-              const std::shared_ptr<LGLInterpTable> &tab) {
+static GenericFunction<-1, -1> make_rendcon2(const Eigen::Vector3d &ud,
+                                             const std::shared_ptr<LGLInterpTable> &tab) {
     Eigen::VectorXi target_vars(7);
     for (int i = 0; i < 7; ++i)
         target_vars[i] = i;
@@ -73,8 +71,7 @@ make_rendcon2(const Eigen::Vector3d &ud,
 
     // Compose with RendCon(ud): feed [X, V, q, w, target_at_t] (20 inputs).
     auto rendcon = make_rendcon(ud);
-    return GenericFunction<-1, -1>(
-        rendcon.eval(StackedOutputs{X, V, q_s, w_s, target_at_t}));
+    return GenericFunction<-1, -1>(rendcon.eval(StackedOutputs{X, V, q_s, w_s, target_at_t}));
 }
 
 static ODE build_servicer_ode(const Eigen::Vector3d &Ivec) {
@@ -90,10 +87,8 @@ static ODE build_servicer_ode(const Eigen::Vector3d &Ivec) {
     auto Torque = args.segment<3>(17);
 
     auto Xdot = V;
-    auto Vdot_cw = StackedOutputs{
-        2.0 * n * V.coeff<1>() + 3.0 * n * n * X.coeff<0>(),
-        (-2.0) * n * V.coeff<0>(),
-        (-1.0) * n * n * X.coeff<2>()};
+    auto Vdot_cw = StackedOutputs{2.0 * n * V.coeff<1>() + 3.0 * n * n * X.coeff<0>(),
+                                  (-2.0) * n * V.coeff<0>(), (-1.0) * n * n * X.coeff<2>()};
 
     auto Thrust_global = quat_rotate(q, Thrust);
     auto Vdot = Vdot_cw + Thrust_global / m_sc;
@@ -132,10 +127,8 @@ static ODE build_full_ode(const Eigen::Vector3d &I1, const Eigen::Vector3d &I2) 
     auto Torque = args.segment<3>(24);
 
     auto Xdot = V;
-    auto Vdot_cw = StackedOutputs{
-        2.0 * n * V.coeff<1>() + 3.0 * n * n * X.coeff<0>(),
-        (-2.0) * n * V.coeff<0>(),
-        (-1.0) * n * n * X.coeff<2>()};
+    auto Vdot_cw = StackedOutputs{2.0 * n * V.coeff<1>() + 3.0 * n * n * X.coeff<0>(),
+                                  (-2.0) * n * V.coeff<0>(), (-1.0) * n * n * X.coeff<2>()};
 
     auto Thrust_global = quat_rotate(q, Thrust);
     auto Vdot = Vdot_cw + Thrust_global / m_sc;
@@ -214,8 +207,8 @@ static bool run_form2() {
 
     Eigen::VectorXd X0(20);
     X0.setZero();
-    X0[1] = -10.0 / Lstar;     // approach from -Y
-    X0[9] = 1.0;               // servicer quat = identity
+    X0[1] = -10.0 / Lstar; // approach from -Y
+    X0[9] = 1.0;           // servicer quat = identity
     X0[14] = -MaxThrust;
     X0[15] = MaxThrust;
     X0[19] = -MaxTorque / 4.0;
@@ -228,9 +221,7 @@ static bool run_form2() {
     auto phase = ode.phase(TranscriptionModes::LGL3, trajIG, 384);
     phase.set_control_mode(ControlModes::BlockConstant);
 
-    phase.add_boundary_value(PhaseRegionFlags::Front,
-                             {"X", "V", "q", "w", "t"},
-                             X0.head(14));
+    phase.add_boundary_value(PhaseRegionFlags::Front, {"X", "V", "q", "w", "t"}, X0.head(14));
 
     for (int i = 14; i <= 16; ++i)
         phase.add_lu_var_bound(PhaseRegionFlags::Path, i, -MaxThrust, MaxThrust);
@@ -252,24 +243,23 @@ static bool run_form2() {
 
     phase.add_delta_time_objective(1.0);
 
-    phase.optimizer().set_bound_fraction(0.995);
-    phase.optimizer().set_print_level(1);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_bound_fraction(0.995);
+    ipm.set_print_level(1);
 
-    auto flag = phase.optimize();
+    auto flag = phase.solve(ipm).flag_;
 
     auto traj = phase.return_traj();
     double tf_final = traj.back()[13] * Tstar;
 
     std::cout << "\n=== Form2 Results ===\n";
-    std::cout << "  Final Time: " << std::fixed << std::setprecision(2) << tf_final
-              << " s\n";
+    std::cout << "  Final Time: " << std::fixed << std::setprecision(2) << tf_final << " s\n";
 
     if (flag <= tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cout << "  Form2: PASSED\n\n";
         return true;
     } else {
-        std::cerr << "  Form2: FAILED (convergence flag = " << static_cast<int>(flag)
-                  << ")\n\n";
+        std::cerr << "  Form2: FAILED (convergence flag = " << static_cast<int>(flag) << ")\n\n";
         return false;
     }
 }
@@ -288,8 +278,8 @@ static bool run_form1() {
 
     Eigen::VectorXd X0(27);
     X0.setZero();
-    X0[1] = -10.0 / Lstar;     // approach from -Y
-    X0[9] = 1.0;               // servicer quat = identity
+    X0[1] = -10.0 / Lstar; // approach from -Y
+    X0[9] = 1.0;           // servicer quat = identity
 
     X0[13] = 0.05;
     X0[16] = std::sqrt(1.0 - X0[13] * X0[13]);
@@ -307,8 +297,7 @@ static bool run_form1() {
     auto phase = ode.phase(TranscriptionModes::LGL3, trajIG, 384);
     phase.set_control_mode(ControlModes::BlockConstant);
 
-    phase.add_boundary_value(PhaseRegionFlags::Front,
-                             {"X", "V", "q", "w", "p", "phi", "t"},
+    phase.add_boundary_value(PhaseRegionFlags::Front, {"X", "V", "q", "w", "p", "phi", "t"},
                              X0.head(21));
 
     for (int i = 21; i <= 23; ++i)
@@ -328,24 +317,23 @@ static bool run_form1() {
 
     phase.add_delta_time_objective(1.0);
 
-    phase.optimizer().set_bound_fraction(0.995);
-    phase.optimizer().set_print_level(1);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_bound_fraction(0.995);
+    ipm.set_print_level(1);
 
-    auto flag = phase.optimize();
+    auto flag = phase.solve(ipm).flag_;
 
     auto traj = phase.return_traj();
     double tf_final = traj.back()[20] * Tstar;
 
     std::cout << "\n=== Form1 Results ===\n";
-    std::cout << "  Final Time: " << std::fixed << std::setprecision(2) << tf_final
-              << " s\n";
+    std::cout << "  Final Time: " << std::fixed << std::setprecision(2) << tf_final << " s\n";
 
     if (flag <= tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cout << "  Form1: PASSED\n\n";
         return true;
     } else {
-        std::cerr << "  Form1: FAILED (convergence flag = " << static_cast<int>(flag)
-                  << ")\n\n";
+        std::cerr << "  Form1: FAILED (convergence flag = " << static_cast<int>(flag) << ")\n\n";
         return false;
     }
 }

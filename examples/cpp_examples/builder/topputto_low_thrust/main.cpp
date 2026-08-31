@@ -1,9 +1,9 @@
 // Source: https://www.hindawi.com/journals/aaa/2014/851720/
 
-#include <tycho/tycho.h>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -66,18 +66,24 @@ int main() {
     back_val << RF, 0.0, VF;
     phase.add_boundary_value(PhaseRegionFlags::Back, {"r", "vr", "vtheta"}, back_val);
 
-    phase.optimizer().set_print_level(1);
-    phase.optimizer().set_max_acc_iters(500);
-    phase.optimizer().set_max_iters(1000);
-    phase.optimizer().set_bound_fraction(0.995);
-    phase.optimizer().set_delta_h(1.0e-5);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(1);
+    ipm.set_max_acc_iters(500);
+    ipm.set_max_iters(1000);
+    ipm.set_bound_fraction(0.995);
+    ipm.set_delta_h(1.0e-5);
 
     std::cout << "=== Time-optimal transfer ===\n";
     phase.add_delta_time_objective(1.0 / 100.0);
     {
-        const auto flag = phase.solve_optimize_solve();
+        // Feasible presolve, then an Optimal-mode solve; if that doesn't
+        // fully converge, fall back to a further Feasible-mode solve.
+        auto flag = phase.solve(ipm, {.presolve = true}).flag_;
+        if (flag != tycho::ConvergenceFlags::CONVERGED) {
+            flag = phase.solve(ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
+        }
         if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
-            std::cerr << "TopputtoLowThrust: time-optimal solve_optimize_solve failed (status "
+            std::cerr << "TopputtoLowThrust: time-optimal solve failed (status "
                       << static_cast<int>(flag) << ")\n";
             return EXIT_FAILURE;
         }
@@ -101,18 +107,26 @@ int main() {
     }
 
     {
-        const auto flag = phase.optimize_solve();
+        // Optimal-mode solve; if it doesn't fully converge, fall back to a
+        // Feasible-mode solve.
+        auto flag = phase.solve(ipm).flag_;
+        if (flag != tycho::ConvergenceFlags::CONVERGED) {
+            flag = phase.solve(ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
+        }
         if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
-            std::cerr << "TopputtoLowThrust: fuel-optimal initial optimize_solve failed (status "
+            std::cerr << "TopputtoLowThrust: fuel-optimal initial solve failed (status "
                       << static_cast<int>(flag) << ")\n";
             return EXIT_FAILURE;
         }
     }
     phase.refine_traj_manual(800);
     {
-        const auto flag = phase.optimize_solve();
+        auto flag = phase.solve(ipm).flag_;
+        if (flag != tycho::ConvergenceFlags::CONVERGED) {
+            flag = phase.solve(ipm, {.mode = tycho::solvers::Mode::Feasible}).flag_;
+        }
         if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
-            std::cerr << "TopputtoLowThrust: fuel-optimal refined optimize_solve failed (status "
+            std::cerr << "TopputtoLowThrust: fuel-optimal refined solve failed (status "
                       << static_cast<int>(flag) << ")\n";
             return EXIT_FAILURE;
         }

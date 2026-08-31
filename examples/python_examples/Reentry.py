@@ -17,6 +17,7 @@ import numpy as np
 
 import tychopy as typy
 import tychopy.optimal_control as oc
+import tychopy.solvers as solvs
 import tychopy.vector_functions as vf
 from tychopy.vector_functions import Arguments as Args
 
@@ -245,18 +246,19 @@ if __name__ == "__main__":
     phase.add_delta_var_objective("theta", -1.0)
 
     phase.set_num_partitions(8)
-    phase.optimizer.qp_threads = 8
+    ipm = solvs.IPM()
+    ipm.qp_threads = 8
 
-    phase.optimizer.set_soe_ls_mode("L1")
-    phase.optimizer.set_opt_ls_mode("L1")
-    phase.optimizer.set_print_level(1)
+    ipm.set_soe_ls_mode("L1")
+    ipm.set_opt_ls_mode("L1")
+    ipm.set_print_level(1)
 
     ## All error estimates and tolerances are in reference to the scaled ODE system
     phase.set_adaptive_mesh(True)
     phase.set_mesh_tol(1.0e-7)
     phase.set_mesh_error_estimator(oc.MeshErrorEstimators.INTEGRATOR)
 
-    phase.solve_optimize()
+    phase.solve(ipm, presolve=True)
 
     # Returns unscaled trajectory original units
     Traj1 = phase.return_traj()
@@ -264,7 +266,7 @@ if __name__ == "__main__":
     ## Add in Heating Rate Constraint
     phase.add_upper_func_bound("Path", QFunc(), ["h", "v", "alpha"], Qlimit)
 
-    phase.optimize()
+    phase.solve(ipm)
 
     Traj2 = phase.return_traj()
 

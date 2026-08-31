@@ -1,8 +1,8 @@
-#include <tycho/tycho.h>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
 #include <string>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -109,23 +109,17 @@ NavResult navigate(ODE &ode, const std::vector<Eigen::Vector2d> &points, double 
         phase.set_num_partitions(8);
 
         if (i == 0) {
-            phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "y"},
-                                     Eigen::Vector2d(A));
+            phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "y"}, Eigen::Vector2d(A));
             phase.add_boundary_value(PhaseRegionFlags::Front, "t", 0.0);
-            phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "y"},
-                                     Eigen::Vector2d(B));
+            phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "y"}, Eigen::Vector2d(B));
         } else {
-            phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "y"},
-                                     Eigen::Vector2d(B));
+            phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "y"}, Eigen::Vector2d(B));
         }
 
         phase.add_lu_var_bound(PhaseRegionFlags::Path, "theta", -M_PI, M_PI);
 
         phase.add_delta_time_objective(1.0);
         phase.add_lower_delta_time_bound(0.0);
-
-        phase.optimizer().set_econ_tol(tol);
-        phase.optimizer().set_kkt_tol(tol);
 
         phases.push_back(std::move(phase));
     }
@@ -138,7 +132,10 @@ NavResult navigate(ODE &ode, const std::vector<Eigen::Vector2d> &points, double 
         ocp.add_forward_link_equal_con(phases.front(), phases.back(), {"x", "y", "t"});
     }
 
-    const auto status = ocp.solve_optimize();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_econ_tol(tol);
+    ipm.set_kkt_tol(tol);
+    const auto status = ocp.solve(ipm, {.presolve = true}).flag_;
 
     NavResult result;
     result.converged = (status <= tycho::ConvergenceFlags::ACCEPTABLE);
@@ -174,8 +171,7 @@ int main() {
             ++failures;
             std::cout << "FAILED\n";
         } else {
-            std::cout << std::fixed << std::setprecision(4)
-                      << "tf = " << result.total_time << "\n";
+            std::cout << std::fixed << std::setprecision(4) << "tf = " << result.total_time << "\n";
         }
     }
 

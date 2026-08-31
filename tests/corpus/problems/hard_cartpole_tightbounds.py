@@ -59,7 +59,7 @@ Args = vf.Arguments
 
 TIER = "hard"
 TIMEOUT = 60
-SOLVE_MODE = "optimize"
+SOLVE_CALL = {"mode": "optimal"}
 
 # Deviation from the parent's Fmax=20: see module docstring for the
 # manual bisection that led to this value.
@@ -108,6 +108,12 @@ def build():
     phase.add_integral_objective(Args(1)[0] ** 2, [5])
 
     phase.set_num_partitions(8)
-    phase.optimizer.qp_threads = 8
 
     return phase
+
+
+def configure(engine):
+    """Problem-owned engine tuning (was baked into ``build()``'s
+    ``phase.optimizer`` before the engine was detached from the problem --
+    see tests/corpus/README.md for the contract)."""
+    engine.qp_threads = 8

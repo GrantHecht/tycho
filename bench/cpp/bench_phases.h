@@ -52,9 +52,12 @@ inline std::shared_ptr<ODEPhase<BrachODE>> make_brach_phase(int n_segs, int prin
     phase->add_lu_var_bound(PhaseRegionFlags::Path, 4, -0.1, 2.0);
     phase->add_delta_time_objective(1.0, ScaleModes::AUTO);
 
-    if (print_level >= 0) {
-        phase->optimizer_->set_print_level(print_level);
-    }
+    // print_level (when >= 0) used to be applied here to the phase's own
+    // owned optimizer; there is no such owned instance any more -- solve()
+    // takes an engine the caller constructs, and sets print_level on that
+    // engine instead. The parameter stays for callers that want the same
+    // "pass a print level in" call shape, but it is now a documented no-op.
+    (void)print_level;
 
     return phase;
 }
@@ -63,8 +66,7 @@ inline std::shared_ptr<ODEPhase<BrachODE>> make_brach_phase(int n_segs, int prin
 // Shared PolarLT phase builder (used by solver benchmarks at larger scale)
 ///////////////////////////////////////////////////////////////////////////////
 
-inline std::shared_ptr<ODEPhase<PolarLTODE>> make_polar_lt_phase(int n_segs,
-                                                                  int print_level = -1) {
+inline std::shared_ptr<ODEPhase<PolarLTODE>> make_polar_lt_phase(int n_segs, int print_level = -1) {
     constexpr double amax = 0.5;
     constexpr double r0 = 1.0, rf = 1.5;
     constexpr double theta0 = 0.0;
@@ -115,9 +117,9 @@ inline std::shared_ptr<ODEPhase<PolarLTODE>> make_polar_lt_phase(int n_segs,
     // Minimize transfer time
     phase->add_delta_time_objective(1.0, ScaleModes::AUTO);
 
-    if (print_level >= 0) {
-        phase->optimizer_->set_print_level(print_level);
-    }
+    // See make_brach_phase() above: print_level is now a documented no-op
+    // here (set it on the caller's own engine instead).
+    (void)print_level;
 
     return phase;
 }
@@ -280,11 +282,11 @@ make_betts_lt_phase(int n_segs, TranscriptionModes tmode = TranscriptionModes::L
     }
 
     phase->set_num_partitions(8);
-    phase->optimizer_->set_qp_threads(8);
 
-    if (print_level >= 0) {
-        phase->optimizer_->set_print_level(print_level);
-    }
+    // qp_threads/print_level used to be applied here to the phase's own owned
+    // optimizer; there is no such owned instance any more -- the caller sets
+    // both on its own engine before calling solve().
+    (void)print_level;
 
     return phase;
 }

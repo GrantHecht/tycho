@@ -206,14 +206,15 @@ def _make_bounded_brachistochrone_phase():
     phase.add_lu_var_bound("Path", 4, lower, upper)
     phase.add_boundary_value("Back", [0, 1], [xf, yf])
     phase.add_delta_time_objective(1.0)
-    phase.optimizer.print_level = 3  # fully silent
     return phase
 
 
 def test_bounded_phase_solves_and_returns_in_bounds_trajectory():
     phase = _make_bounded_brachistochrone_phase()
-    flag = phase.optimize()
-    assert flag == solvs.ConvergenceFlags.CONVERGED
+    ipm = solvs.IPM()
+    ipm.print_level = 3  # fully silent
+    result = phase.solve(ipm)
+    assert result.flag == solvs.ConvergenceFlags.CONVERGED
 
     traj = np.array(phase.return_traj())
     control = traj[:, 4]  # packed layout is [x, y, v, t, theta]

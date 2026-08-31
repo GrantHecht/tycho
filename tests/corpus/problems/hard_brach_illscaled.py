@@ -66,7 +66,7 @@ oc = typy.optimal_control
 
 TIER = "hard"
 TIMEOUT = 60
-SOLVE_MODE = "optimize"
+SOLVE_CALL = {"mode": "optimal"}
 
 # Deviation from the brief's literal 1e-6: see module docstring — 1e-6 only
 # strains 1.57x (short of the ≥2x rule) while 1e-7 already fails cleanly.

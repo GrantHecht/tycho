@@ -1,10 +1,10 @@
 // Source: https://openmdao.github.io/dymos/examples/mountain_car/mountain_car.html
 
-#include <tycho/tycho.h>
 #include <cmath>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -44,7 +44,7 @@ int main() {
     auto phase = ode.phase(TranscriptionModes::LGL3, traj_ig, n_segs);
 
     phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "v", "t"},
-                            Eigen::Vector3d(x0, v0, 0.0));
+                             Eigen::Vector3d(x0, v0, 0.0));
     phase.add_boundary_value(PhaseRegionFlags::Back, "x", xf);
 
     phase.add_lower_var_bound(PhaseRegionFlags::Back, "v", 0.0);
@@ -55,14 +55,14 @@ int main() {
 
     phase.add_delta_time_objective(0.01);
 
-    phase.optimizer().set_opt_ls_mode("L1");
-    phase.optimizer().set_print_level(1);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_opt_ls_mode("L1");
+    ipm.set_print_level(1);
 
-    const auto flag = phase.solve_optimize();
+    const auto flag = phase.solve(ipm, {.presolve = true}).flag_;
 
     if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
-        std::cerr << "MountainCar (builder): FAILED (status "
-                  << static_cast<int>(flag) << ")\n";
+        std::cerr << "MountainCar (builder): FAILED (status " << static_cast<int>(flag) << ")\n";
         return EXIT_FAILURE;
     }
 

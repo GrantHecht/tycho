@@ -76,7 +76,6 @@ std::unique_ptr<OptimizationProblem> build_eval_except_nlp(int throw_budget) {
         auto x = args.coeff<0>();
         prob->add_equal_con(GenericFunction<-1, -1>(x - 1.0), (Eigen::VectorXi(1) << 0).finished());
     }
-    prob->optimizer_->set_print_level(3);
     return prob;
 }
 
@@ -87,10 +86,12 @@ std::unique_ptr<OptimizationProblem> build_eval_except_nlp(int throw_budget) {
 // handling, this died with the raw evaluation exception.
 TEST(EvalExceptionRecovery, ThrowingRungIsRejectedNotFatal) {
     auto prob = build_eval_except_nlp(1);
-    auto flag = prob->optimize();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
+    auto flag = prob->solve(&ipm).flag_;
     EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
-    EXPECT_NEAR(prob->optimizer_->result().obj_val_, 1.0, 1e-6);
-    EXPECT_GE(prob->optimizer_->eval_error_log().count_, 1);
+    EXPECT_NEAR(ipm.result().obj_val_, 1.0, 1e-6);
+    EXPECT_GE(ipm.eval_error_log().count_, 1);
 }
 
 // Same scenario, driven through ls_lang (LineSearchModes::LANG) instead of
@@ -111,27 +112,31 @@ TEST(EvalExceptionRecovery, ThrowingRungIsRejectedNotFatal) {
 // itself (eval_error_log().count_ >= 1 on the LANG rung).
 TEST(EvalExceptionRecovery, ThrowingRungIsRecordedByLangMode) {
     auto prob = build_eval_except_nlp(1);
-    prob->optimizer_->settings().opt_ls_mode_ = InteriorPointSolver::LineSearchModes::LANG;
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
+    ipm.settings().opt_ls_mode_ = InteriorPointSolver::LineSearchModes::LANG;
     try {
-        prob->optimize();
+        prob->solve(&ipm);
         FAIL() << "expected the un-evaluable exhaustion to abort";
     } catch (const std::runtime_error &e) {
         const std::string msg = e.what();
         EXPECT_NE(msg.find("trial point outside evaluation domain"), std::string::npos) << msg;
         EXPECT_NE(msg.find("iteration"), std::string::npos) << msg;
     }
-    EXPECT_GE(prob->optimizer_->eval_error_log().count_, 1);
+    EXPECT_GE(ipm.eval_error_log().count_, 1);
 }
 
 // Same scenario, driven through ls_l1 (LineSearchModes::L1) — confirms the
 // log is wired on the classic L1 rung.
 TEST(EvalExceptionRecovery, ThrowingRungIsRejectedNotFatalL1Mode) {
     auto prob = build_eval_except_nlp(1);
-    prob->optimizer_->settings().opt_ls_mode_ = InteriorPointSolver::LineSearchModes::L1;
-    auto flag = prob->optimize();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
+    ipm.settings().opt_ls_mode_ = InteriorPointSolver::LineSearchModes::L1;
+    auto flag = prob->solve(&ipm).flag_;
     EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
-    EXPECT_NEAR(prob->optimizer_->result().obj_val_, 1.0, 1e-6);
-    EXPECT_GE(prob->optimizer_->eval_error_log().count_, 1);
+    EXPECT_NEAR(ipm.result().obj_val_, 1.0, 1e-6);
+    EXPECT_GE(ipm.eval_error_log().count_, 1);
 }
 
 // Same scenario, driven through the GENERIC acceptance ladder
@@ -140,14 +145,16 @@ TEST(EvalExceptionRecovery, ThrowingRungIsRejectedNotFatalL1Mode) {
 // non-classic ClassicMeritAcceptance path too.
 TEST(EvalExceptionRecovery, ThrowingRungIsRejectedNotFatalGenericAcceptance) {
     auto prob = build_eval_except_nlp(1);
-    prob->optimizer_->settings().acceptance_strategy_ = ts::AcceptanceStrategies::merit;
-    auto flag = prob->optimize();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
+    ipm.settings().acceptance_strategy_ = ts::AcceptanceStrategies::merit;
+    auto flag = prob->solve(&ipm).flag_;
     EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
     // ModernMeritAcceptance's generic ladder converges to a looser
     // neighborhood of the optimum than the classic AUGLANG default (see the
     // LANG-mode test above for the same reasoning); widened accordingly.
-    EXPECT_NEAR(prob->optimizer_->result().obj_val_, 1.0, 1e-4);
-    EXPECT_GE(prob->optimizer_->eval_error_log().count_, 1);
+    EXPECT_NEAR(ipm.result().obj_val_, 1.0, 1e-4);
+    EXPECT_GE(ipm.eval_error_log().count_, 1);
 }
 
 // A committed-point evaluation failure stays fatal: the initial point itself
@@ -165,9 +172,10 @@ TEST(EvalExceptionRecovery, CommittedPointFailureStaysFatal) {
         auto x = args.coeff<0>();
         prob->add_equal_con(GenericFunction<-1, -1>(x - 1.0), (Eigen::VectorXi(1) << 0).finished());
     }
-    prob->optimizer_->set_print_level(3);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     try {
-        prob->optimize();
+        prob->solve(&ipm);
         FAIL() << "expected the committed-point evaluation exception to propagate";
     } catch (const std::runtime_error &e) {
         const std::string msg = e.what();
@@ -188,8 +196,10 @@ TEST(EvalExceptionRecovery, CommittedPointFailureStaysFatal) {
 // solver context.
 TEST(EvalExceptionRecovery, ExhaustionWithoutRestorationRethrowsWithContext) {
     auto prob = build_eval_except_nlp(1 << 20); // effectively unlimited throws
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     try {
-        prob->optimize();
+        prob->solve(&ipm);
         FAIL() << "expected optimize() to throw";
     } catch (const std::runtime_error &e) {
         const std::string msg = e.what();
@@ -205,19 +215,21 @@ TEST(EvalExceptionRecovery, ExhaustionWithoutRestorationRethrowsWithContext) {
 // fallback step discarded (the returned primal is still the start point).
 TEST(EvalExceptionRecovery, ExhaustionAtAcceptableIterateExitsGracefully) {
     auto prob = build_eval_except_nlp(1 << 20); // effectively unlimited throws
-    auto &acc_settings = prob->optimizer_->settings();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
+    auto &acc_settings = ipm.settings();
     acc_settings.acc_kkt_tol_ = 1e10;
     acc_settings.acc_econ_tol_ = 1e10;
     acc_settings.acc_icon_tol_ = 1e10;
     acc_settings.acc_bar_tol_ = 1e10;
 
     tycho::ConvergenceFlags flag = tycho::ConvergenceFlags::NOTCONVERGED;
-    ASSERT_NO_THROW(flag = prob->optimize());
+    ASSERT_NO_THROW(flag = prob->solve(&ipm).flag_);
     EXPECT_EQ(flag, tycho::ConvergenceFlags::ACCEPTABLE);
-    EXPECT_GE(prob->optimizer_->eval_error_log().count_, 1);
+    EXPECT_GE(ipm.eval_error_log().count_, 1);
     // The graceful exit is the path where the diagnostic matters most: a user
     // seeing ACCEPTABLE instead of CONVERGED needs the reason.
-    const auto &r = prob->optimizer_->result();
+    const auto &r = ipm.result();
     EXPECT_FALSE(r.last_eval_exception_.empty());
     // The failed step was discarded, not committed: x is still the start point.
     ASSERT_EQ(r.primals_.size(), 1);
@@ -235,17 +247,19 @@ TEST(EvalExceptionRecovery, RestorationEscalatesOnUnEvaluableSoftStep) {
     // throwing after entry would hit the already-in-restoration exhaustion,
     // which has no recovery path left and legitimately aborts.
     auto prob = build_eval_except_nlp(4);
-    prob->optimizer_->settings().restoration_mode_ = ts::RestorationModes::l1_nested;
-    auto flag = prob->optimize();
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
+    ipm.settings().restoration_mode_ = ts::RestorationModes::l1_nested;
+    auto flag = prob->solve(&ipm).flag_;
     // Graceful completion is the bar; convergence is a bonus. "Graceful" still
     // excludes DIVERGING -- the escalation must not push the solve off a cliff.
     EXPECT_NE(flag, tycho::ConvergenceFlags::DIVERGING);
-    EXPECT_GE(prob->optimizer_->result().last_feas_rest_entries_, 1);
-    EXPECT_FALSE(prob->optimizer_->result().last_eval_exception_.empty());
+    EXPECT_GE(ipm.result().last_feas_rest_entries_, 1);
+    EXPECT_FALSE(ipm.result().last_eval_exception_.empty());
     // The nested-restoration path records through InteriorPointSolver::eval_error_log_
     // directly (try_soft_feasibility_step), a wiring path distinct from either
     // SolverContext copy — assert it is live.
-    EXPECT_GE(prob->optimizer_->eval_error_log().count_, 1);
+    EXPECT_GE(ipm.eval_error_log().count_, 1);
 }
 
 // Diagnostics truth-table: a clean solve reports no evaluation exceptions,
@@ -253,18 +267,22 @@ TEST(EvalExceptionRecovery, RestorationEscalatesOnUnEvaluableSoftStep) {
 // resets the diagnostic.
 TEST(EvalExceptionRecovery, DiagnosticsResetBetweenSolves) {
     auto clean = build_eval_except_nlp(0);
-    auto flag = clean->optimize();
+    tycho::solvers::InteriorPointSolver ipm_clean;
+    ipm_clean.set_print_level(3);
+    auto flag = clean->solve(&ipm_clean).flag_;
     EXPECT_EQ(flag, tycho::ConvergenceFlags::CONVERGED);
-    EXPECT_TRUE(clean->optimizer_->result().last_eval_exception_.empty());
+    EXPECT_TRUE(ipm_clean.result().last_eval_exception_.empty());
 
     auto rescued = build_eval_except_nlp(1);
-    auto flag2 = rescued->optimize();
+    tycho::solvers::InteriorPointSolver ipm_rescued;
+    ipm_rescued.set_print_level(3);
+    auto flag2 = rescued->solve(&ipm_rescued).flag_;
     EXPECT_EQ(flag2, tycho::ConvergenceFlags::CONVERGED);
-    EXPECT_FALSE(rescued->optimizer_->result().last_eval_exception_.empty());
+    EXPECT_FALSE(ipm_rescued.result().last_eval_exception_.empty());
     // Re-run the same instance from the converged point: the throw budget is
     // spent, the solve is clean, and the latched message from the previous
     // call must not survive the per-solve reset.
-    auto flag3 = rescued->optimize();
+    auto flag3 = rescued->solve(&ipm_rescued).flag_;
     EXPECT_EQ(flag3, tycho::ConvergenceFlags::CONVERGED);
-    EXPECT_TRUE(rescued->optimizer_->result().last_eval_exception_.empty());
+    EXPECT_TRUE(ipm_rescued.result().last_eval_exception_.empty());
 }

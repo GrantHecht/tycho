@@ -1,9 +1,9 @@
 // Source: Betts, "Practical Methods for OC", Cambridge, 2009, Section 4.14
 
-#include <tycho/tycho.h>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -13,9 +13,9 @@ using namespace tycho::oc;
 static constexpr double g0 = 32.2;
 static constexpr double W = 203000.0;
 
-static constexpr double Lstar = 10000.0;    // feet
-static constexpr double Tstar = 60.0;       // sec
-static constexpr double Mstar = 1.0;        // slugs
+static constexpr double Lstar = 10000.0; // feet
+static constexpr double Tstar = 60.0;    // sec
+static constexpr double Mstar = 1.0;     // slugs
 
 static const double Vstar = Lstar / Tstar;
 static const double Fstar = Mstar * Lstar / (Tstar * Tstar);
@@ -74,8 +74,7 @@ std::vector<Eigen::VectorXd> make_initial_guess(const ODE &ode) {
     Eigen::Matrix<double, 1, 1> one_val, zero_val;
     one_val << 1.0;
     zero_val << 0.0;
-    auto ulaw_expr = IfElseFunction(ulaw_args.coeff<0>() > mf,
-                                    Constant<1, 1>(1, one_val),
+    auto ulaw_expr = IfElseFunction(ulaw_args.coeff<0>() > mf, Constant<1, 1>(1, one_val),
                                     Constant<1, 1>(1, zero_val));
     auto ulaw = GenericFunction<-1, -1>(ulaw_expr);
 
@@ -102,8 +101,8 @@ int main() {
         return 1;
     }
 
-    std::cout << "  Initial guess: " << TrajIG.size() << " points, tf = "
-              << TrajIG.back()[3] * Tstar << " s\n";
+    std::cout << "  Initial guess: " << TrajIG.size()
+              << " points, tf = " << TrajIG.back()[3] * Tstar << " s\n";
     const int n = static_cast<int>(TrajIG.size()) / 3;
 
     std::vector<Eigen::VectorXd> TrajIG1(TrajIG.begin(), TrajIG.begin() + n);
@@ -165,16 +164,33 @@ int main() {
 
     std::cout << "Solving multi-phase Goddard rocket ...\n" << std::flush;
 
-    ocp.optimizer().set_opt_ls_mode("L1");
-    ocp.optimizer().set_print_level(1);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_opt_ls_mode("L1");
+    ipm.set_print_level(1);
 
-    const auto status = ocp.optimize();
+    // This multi-phase formulation confines the throttle to a bang-bang /
+    // singular arc via phase2's path constraint, so an SQP polish stage
+    // after the IPM main solve measurably tightens the KKT residual.
+    tycho::solvers::SqpSolver sqp;
+    // Pinned tighter than the main stage's achieved residual, so the polish
+    // must actually improve it.
+    sqp.options().kkt_tol = 1.0e-9;
+    tycho::solvers::EngineRef polish_ref = &sqp;
+    const auto result = ocp.solve(ipm, {.polish = &polish_ref});
+    const auto status =
+        result.stages_.front().flag_; // the IPM main stage; polish is reporting-only
 
     if (status > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "GoddardRocket (builder): FAILED (status " << static_cast<int>(status)
                   << ")\n";
         return 1;
     }
+
+    const double main_kkt = result.stages_.front().kkt_residual_;
+    const double polish_kkt = result.stages_.back().kkt_residual_;
+    std::cout << std::scientific << std::setprecision(3);
+    std::cout << "  KKT residual -- main (IPM): " << main_kkt << ", polish (SQP): " << polish_kkt
+              << "\n";
 
     auto traj1 = phase1.return_traj();
     auto traj2 = phase2.return_traj();
@@ -186,12 +202,12 @@ int main() {
     std::cout << std::fixed << std::setprecision(2);
     std::cout << "GoddardRocket (builder): max altitude = " << h_final << " ft"
               << ", tf = " << t_final << " s\n";
-    std::cout << "  Phase 1 (thrust): " << traj1.size() << " pts, dt = "
-              << (traj1.back()[3] - traj1.front()[3]) * Tstar << " s\n";
-    std::cout << "  Phase 2 (singular): " << traj2.size() << " pts, dt = "
-              << (traj2.back()[3] - traj2.front()[3]) * Tstar << " s\n";
-    std::cout << "  Phase 3 (coast): " << traj3.size() << " pts, dt = "
-              << (traj3.back()[3] - traj3.front()[3]) * Tstar << " s\n";
+    std::cout << "  Phase 1 (thrust): " << traj1.size()
+              << " pts, dt = " << (traj1.back()[3] - traj1.front()[3]) * Tstar << " s\n";
+    std::cout << "  Phase 2 (singular): " << traj2.size()
+              << " pts, dt = " << (traj2.back()[3] - traj2.front()[3]) * Tstar << " s\n";
+    std::cout << "  Phase 3 (coast): " << traj3.size()
+              << " pts, dt = " << (traj3.back()[3] - traj3.front()[3]) * Tstar << " s\n";
 
     return 0;
 }

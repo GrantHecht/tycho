@@ -21,9 +21,10 @@ TEST_F(OptimalControlTest, TwoPhaseOCPConstruct) {
 
 TEST_F(OptimalControlTest, BrachistochroneSolveOptimize) {
     auto phase = make_brach_phase(100, 32);
-    phase->optimizer_->set_print_level(3);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
 
-    auto status = phase->solve_optimize();
+    auto status = phase->solve(&ipm, {.presolve = true}).flag_;
     EXPECT_EQ(status, tycho::ConvergenceFlags::CONVERGED)
         << "Brachistochrone should converge to optimal";
 
@@ -35,9 +36,10 @@ TEST_F(OptimalControlTest, BrachistochroneSolveOptimize) {
 
 TEST_F(OptimalControlTest, BrachistochroneFinalBoundary) {
     auto phase = make_brach_phase(100, 32);
-    phase->optimizer_->set_print_level(3);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
 
-    auto status = phase->solve_optimize();
+    auto status = phase->solve(&ipm, {.presolve = true}).flag_;
     ASSERT_EQ(status, tycho::ConvergenceFlags::CONVERGED);
 
     auto result = phase->return_traj();

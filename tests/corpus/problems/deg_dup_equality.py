@@ -61,7 +61,7 @@ Args = vf.Arguments
 
 TIER = "degenerate"
 TIMEOUT = 30
-SOLVE_MODE = "optimize"
+SOLVE_CALL = {"mode": "optimal"}
 
 
 class _DoubleIntegrator(oc.ODEBase):

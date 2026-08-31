@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "tycho/detail/hven_namespaces.h"
 #include "tycho/detail/optimal_control/core/interface_types.h"
 #include "tycho/detail/optimal_control/core/ode_sizes.h"
 #include "tycho/detail/optimal_control/core/optimal_control_flags.h"
@@ -21,16 +22,15 @@
 #include "tycho/detail/optimal_control/phase/mesh_iterate_info.h"
 #include "tycho/detail/optimal_control/phase/phase_indexer.h"
 #include "tycho/detail/optimal_control/transcription/lgl_interp_table.h"
-#include "tycho/detail/hven_namespaces.h"
-#include <hven/model/non_linear_program.h>
 #include "tycho/detail/solvers/nlp_backend.h"
-#include <hven/drivers/interior_point_solver.h>
 #include "tycho/detail/vf/scaling/io_scaled.h"
 #include "tycho/vector_functions.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <functional>
+#include <hven/drivers/interior_point_solver.h>
+#include <hven/model/non_linear_program.h>
 #include <iostream>
 #include <numeric>
 #include <stdexcept>
@@ -69,9 +69,15 @@ using vf::VectorExpression;
 using vf::VectorFunction;
 
 // Solvers types
-using tycho::solvers::NonLinearProgram;
 using tycho::solvers::BackendProblemBase;
+using tycho::solvers::EngineRef;
 using tycho::solvers::InteriorPointSolver;
+using tycho::solvers::Mode;
+using tycho::solvers::NonLinearProgram;
+using tycho::solvers::PhaseResult;
+using tycho::solvers::SolveOptions;
+using tycho::solvers::SolveResult;
+using tycho::solvers::StageOutput;
 
 /// @internal
 /// @brief Forward declaration of the multi-phase problem base (friend of @ref ODEPhaseBase).
@@ -211,12 +217,12 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
 
     double mesh_tol_ = 1.0e-6; ///< Target mesh-error tolerance.
 
-    MeshErrorEstimators mesh_error_estimator_ = MeshErrorEstimators::DEBOOR; ///< Mesh-error
-                                                                             ///< estimator.
-    MeshErrorAggregation mesh_error_criteria_ = MeshErrorAggregation::MAX; ///< Convergence
-                                                                          ///< aggregation.
+    MeshErrorEstimators mesh_error_estimator_ = MeshErrorEstimators::DEBOOR;  ///< Mesh-error
+                                                                              ///< estimator.
+    MeshErrorAggregation mesh_error_criteria_ = MeshErrorAggregation::MAX;    ///< Convergence
+                                                                              ///< aggregation.
     MeshErrorAggregation mesh_error_distributor_ = MeshErrorAggregation::AVG; ///< Distribution
-                                                                             ///< aggregation.
+                                                                              ///< aggregation.
     tycho::ConvergenceFlags mesh_abort_flag_ =
         tycho::ConvergenceFlags::DIVERGING; ///< Solver flag that aborts the mesh loop.
 
@@ -1712,10 +1718,10 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
         case PhaseRegionFlags::NodalPath: {
             int isize = func.xtu_vars_.size() + func.op_vars_.size() + func.sp_vars_.size();
             if (irows != isize) {
-                throw std::invalid_argument(fmt::format(
-                    "Input size of {0:} (IRows = {1:}) does not match that implied by "
-                    "indexing parameters (IRows = {2:}).",
-                    ftype, irows, isize));
+                throw std::invalid_argument(
+                    fmt::format("Input size of {0:} (IRows = {1:}) does not match that implied by "
+                                "indexing parameters (IRows = {2:}).",
+                                ftype, irows, isize));
             }
             break;
         }
@@ -1724,10 +1730,10 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
         case PhaseRegionFlags::PairWisePath: {
             int isize = func.xtu_vars_.size() * 2 + func.op_vars_.size() + func.sp_vars_.size();
             if (irows != isize) {
-                throw std::invalid_argument(fmt::format(
-                    "Input size of {0:} (IRows = {1:}) does not match that implied by "
-                    "indexing parameters (IRows = {2:}).",
-                    ftype, irows, isize));
+                throw std::invalid_argument(
+                    fmt::format("Input size of {0:} (IRows = {1:}) does not match that implied by "
+                                "indexing parameters (IRows = {2:}).",
+                                ftype, irows, isize));
             }
             break;
         }
@@ -1901,6 +1907,18 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
     }
 
     /// @internal
+    /// @brief Drop the stored multipliers: the outcome when a solver stage
+    ///        reported no usable prices at all. Emptied rather than zeroed,
+    ///        so no consumer can mistake a stale or invented price for a
+    ///        measured one.
+    /// @endinternal
+    void clear_solver_multipliers() {
+        this->multipliers_loaded_ = false;
+        this->active_eq_lmults_.resize(0);
+        this->active_iq_lmults_.resize(0);
+    }
+
+    /// @internal
     /// @brief Store post-optimization constraint values and multipliers.
     /// @param EC  Equality-constraint residuals.
     /// @param EM  Equality-constraint multipliers.
@@ -1919,19 +1937,103 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
         this->active_iq_lmults_ = IM;
     }
 
-    /// @internal
-    /// @brief Drive InteriorPointSolver for a single solve/optimize pass (no mesh loop).
-    /// @param mode  The solve/optimize job mode.
-    /// @return The solver convergence flag.
-    /// @endinternal
-    tycho::ConvergenceFlags interior_point_call_impl(JetJobModes mode);
+    // -------------------------------------------------------------------
+    // solve() hooks (nlp_backend.h): the override set
+    // BackendProblemBase::solve() dispatches through.
+    // -------------------------------------------------------------------
 
-    /// @internal
-    /// @brief Run the full phase solve, including the adaptive-mesh-refinement loop.
-    /// @param mode  The solve/optimize job mode.
-    /// @return The solver convergence flag.
-    /// @endinternal
-    tycho::ConvergenceFlags phase_call_impl(JetJobModes mode);
+    /// @brief solve() hook: transcribe if needed.
+    void prepare_solve() override {
+        if (this->do_transcription_)
+            this->transcribe();
+    }
+
+    /// @brief solve() hook: mark this phase as needing transcription again.
+    void invalidate_transcription() override { this->reset_transcription(); }
+
+    /// @brief solve() hook: the packed decision-variable vector
+    ///        (make_solver_input(), same input interior_point_call_impl seeds
+    ///        the engine with).
+    Eigen::VectorXd initial_primal() const override { return this->make_solver_input(); }
+
+    /// @brief solve() hook: write a stage's output back the same way
+    ///        interior_point_call_impl does -- full post-opt residuals when
+    ///        the engine reported them (StageOutput::eq_cons_/iq_cons_
+    ///        non-empty; today only the interior-point engine does), else
+    ///        multipliers only.
+    void accept_stage(const StageOutput &out) override {
+        this->collect_solver_output(out.primal_);
+
+        // A stage can end with no prices at all -- the SQP engine leaves its
+        // multiplier vectors empty on an infeasible or numerical-error exit,
+        // and an Ipopt run aborted before finalize_solution can hand back
+        // short ones. Storing an empty vector as though it were this phase's
+        // multipliers would leave every costate/multiplier reader looking at
+        // a size it cannot use; record "no prices from this stage" instead.
+        // The comparison is `>=` because the interior-point engine's
+        // MakeConstraint fixed-variable treatment appends internal equality
+        // rows behind the declared ones.
+        const int eq_rows = this->indexer_.num_phase_eq_cons_;
+        const int iq_rows = this->indexer_.num_phase_iq_cons_;
+        const bool have_multipliers =
+            out.eq_lmults_.size() >= eq_rows && out.iq_lmults_.size() >= iq_rows;
+        const bool have_residuals = (out.eq_cons_.size() > 0 || out.iq_cons_.size() > 0) &&
+                                    out.eq_cons_.size() >= eq_rows &&
+                                    out.iq_cons_.size() >= iq_rows;
+
+        if (have_multipliers && have_residuals) {
+            this->collect_post_opt_info(out.eq_cons_, out.eq_lmults_, out.iq_cons_, out.iq_lmults_);
+            return;
+        }
+        if (have_multipliers) {
+            this->collect_solver_multipliers(out.eq_lmults_, out.iq_lmults_);
+        } else {
+            this->clear_solver_multipliers();
+        }
+        this->invalidate_post_opt_info();
+    }
+
+    /// @brief solve() hook: a single Phase IS the whole declared problem, so
+    ///        this appends exactly one @ref PhaseResult (index 0), spanning
+    ///        the full declared space. Ranges come from this phase's own
+    ///        `indexer_` (the declared-space counts `transcribe_phase` hands
+    ///        to `declaration.lay()`), never from `r.warm_`'s block sizes --
+    ///        those describe whatever the deciding engine happened to
+    ///        export, not the declaration. The multiplier slices are then
+    ///        copied out of `r.warm_` when it is big enough to hold them, so
+    ///        every field is a value snapshot, never a view into this
+    ///        phase's own post-solve state; when the deciding stage's engine
+    ///        exported no warm payload (or a short one -- run_engine_stage
+    ///        documents this as possible), the corresponding slice is left
+    ///        empty rather than reading past the export's own size.
+    void fill_phase_results(SolveResult &r) const override {
+        PhaseResult pr;
+        pr.index_ = 0;
+        pr.var_start_ = 0;
+        pr.var_count_ = this->indexer_.num_phase_vars_;
+        pr.eq_start_ = 0;
+        pr.eq_count_ = this->indexer_.num_phase_eq_cons_;
+        pr.iq_start_ = 0;
+        pr.iq_count_ = this->indexer_.num_phase_iq_cons_;
+        if (r.warm_.eq_lmults_.size() >= pr.eq_start_ + pr.eq_count_) {
+            pr.eq_lmults_ = r.warm_.eq_lmults_.segment(pr.eq_start_, pr.eq_count_);
+        }
+        if (r.warm_.iq_lmults_.size() >= pr.iq_start_ + pr.iq_count_) {
+            pr.iq_lmults_ = r.warm_.iq_lmults_.segment(pr.iq_start_, pr.iq_count_);
+        }
+        if (r.warm_.bound_lmults_.size() >= pr.var_start_ + pr.var_count_) {
+            pr.bound_lmults_ = r.warm_.bound_lmults_.segment(pr.var_start_, pr.var_count_);
+        }
+        r.phases_.push_back(std::move(pr));
+    }
+
+    /// @brief solve() hook: mirrors the old adaptive_mesh_ gate.
+    bool adaptive_mesh_enabled() const override { return this->adaptive_mesh_; }
+
+    /// @brief solve() hook: the adaptive-mesh loop, reshaped from
+    ///        phase_call_impl/interior_point_call_impl onto run_engine_stage.
+    ///        Defined in ode_phase_base.cpp.
+    tycho::ConvergenceFlags run_adaptive_mesh(EngineRef engine, Mode mode, SolveResult &r) override;
 
   public:
     /// @brief Transcribe the phase into its NLP, optionally printing diagnostics.
@@ -1953,12 +2055,13 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
     /// @internal
     /// @brief Prepare the phase for a "jet" (batched) solve.
     /// @endinternal
-    void jet_initialize() {
-        // See OptimizationProblem::jet_initialize() (solvers_vf/optimization_problem.h)
-        // for why these two calls are separate and ordered this way.
-        this->optimizer_->set_qp_threads(1);
+    void jet_initialize() override {
+        // Single-partition evaluation on the calling thread. The engine-level
+        // settings (QP thread count, print level) that this used to force
+        // onto the phase's own owned optimizer no longer apply here -- there
+        // is no owned optimizer; the caller configures whichever engine it
+        // hands to solve() directly.
         this->set_num_partitions(1);
-        this->optimizer_->set_print_level(10);
         this->print_mesh_info_ = false;
 
         this->transcribe();
@@ -1966,11 +2069,9 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
     /// @internal
     /// @brief Tear down jet-solve state and restore the default phase configuration.
     /// @endinternal
-    void jet_release() {
+    void jet_release() override {
         this->indexer_ = PhaseIndexer();
-        this->optimizer_->release();
         this->init_partitions();
-        this->optimizer_->set_print_level(0);
         this->print_mesh_info_ = true;
         this->nlp_ = std::shared_ptr<NonLinearProgram>();
         this->provider_ = std::shared_ptr<tycho::solvers::TranscribedAggregate>();
@@ -1978,27 +2079,10 @@ struct ODEPhaseBase : ODESize<-1, -1, -1>, BackendProblemBase {
         this->invalidate_post_opt_info();
     }
 
-    /// @brief Solve the phase for feasibility (satisfy constraints, no optimization).
-    /// @return The solver convergence flag.
-    tycho::ConvergenceFlags solve() { return phase_call_impl(JetJobModes::Solve); }
-    /// @brief Optimize the phase (minimize the objective subject to the constraints).
-    /// @return The solver convergence flag.
-    tycho::ConvergenceFlags optimize() { return phase_call_impl(JetJobModes::Optimize); }
-    /// @brief Solve for feasibility, then optimize.
-    /// @return The solver convergence flag.
-    tycho::ConvergenceFlags solve_optimize() {
-        return phase_call_impl(JetJobModes::SolveOptimize);
-    }
-    /// @brief Solve, optimize, then solve again to tighten feasibility.
-    /// @return The solver convergence flag.
-    tycho::ConvergenceFlags solve_optimize_solve() {
-        return phase_call_impl(JetJobModes::SolveOptimizeSolve);
-    }
-    /// @brief Optimize, then solve to tighten feasibility.
-    /// @return The solver convergence flag.
-    tycho::ConvergenceFlags optimize_solve() {
-        return phase_call_impl(JetJobModes::OptimizeSolve);
-    }
+    // BackendProblemBase's new solve(EngineRef, SolveOptions) overload is
+    // the only solve() this class has -- ODEPhaseBase declares no 0-arg
+    // override of its own, so nothing here hides it and no
+    // using-declaration is needed.
 
     /////////////////////////////////////////////////////////////////
 

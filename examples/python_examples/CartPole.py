@@ -21,10 +21,11 @@ import tychopy as typy
 
 vf = typy.vector_functions
 oc = typy.optimal_control
+solvs = typy.solvers
 Args = vf.Arguments
 
 """
-Example taken from 
+Example taken from
 Kelly, M., 2017. An introduction to trajectory optimization: How to do your own direct collocation. SIAM Review, 59(4), pp.849-904.
 
 Compute the minimum effort trajectory to swing a cart pole system to vertical.
@@ -217,36 +218,37 @@ if __name__ == "__main__":
     phase.add_integral_objective(Args(1)[0] ** 2, [5])
 
     phase.set_num_partitions(8)
-    phase.optimizer.qp_threads = 8
-    phase.optimizer.set_print_level(1)
-    phase.optimize()
+    ipm = solvs.IPM()
+    ipm.qp_threads = 8
+    ipm.set_print_level(1)
+    phase.solve(ipm)
 
     Traj = phase.return_traj()
 
     ## Example of how to get exact timing statistics should you need to
     print(
         "Total Time (Sum of all below)             :",
-        phase.optimizer.last_total_time,
+        ipm.last_total_time,
         " s",
     )
     print(
         "Function/Derivative Eval Time             :",
-        phase.optimizer.last_func_time,
+        ipm.last_func_time,
         " s",
     )
     print(
         "KKT Matrix Factor/Solve Time              :",
-        phase.optimizer.last_kkt_time,
+        ipm.last_kkt_time,
         " s",
     )
     print(
         "KKT Matrix Pre-Analysis/Mem Alloc Time    :",
-        phase.optimizer.last_pre_time,
+        ipm.last_pre_time,
         " s",
     )
     print(
         "Miscellaneous (Mostly Console Print) Time :",
-        phase.optimizer.last_misc_time,
+        ipm.last_misc_time,
         " s",
     )
 

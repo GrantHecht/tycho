@@ -53,7 +53,7 @@ Args = vf.Arguments
 
 TIER = "hard"
 TIMEOUT = 60
-SOLVE_MODE = "optimize"
+SOLVE_CALL = {"mode": "optimal"}
 NOTES = (
     "Historically diverged (KKT=nan at iteration 0) because the squared_norm "
     "derivative was 0/0 at the norm's centre and the all-zero initial guess sat "
@@ -91,7 +91,13 @@ def build():
     phase.add_integral_objective(Args(3).squared_norm(), [0, 1, 3])
     phase.add_boundary_value("Back", [0, 1, 2], [0.0, 0.0, tf])
     phase.set_num_partitions(8)
-    phase.optimizer.qp_threads = 8
-    phase.optimizer.set_tols(1.0e-8, 1.0e-8, 1.0e-8)
 
     return phase
+
+
+def configure(engine):
+    """Problem-owned engine tuning (was baked into ``build()``'s
+    ``phase.optimizer`` before the engine was detached from the problem --
+    see tests/corpus/README.md for the contract)."""
+    engine.qp_threads = 8
+    engine.set_tols(1.0e-8, 1.0e-8, 1.0e-8)

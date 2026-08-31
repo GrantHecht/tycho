@@ -231,12 +231,12 @@ def is_cell_complete(
 # ---------------------------------------------------------------------------
 
 
-def _apply_config(optimizer, config: dict) -> None:
-    """Apply an expand_config()-shaped dict to an interior-point solver optimizer via setattr.
+def _apply_config(engine, config: dict) -> None:
+    """Apply an expand_config()-shaped dict to an interior-point solver engine via setattr.
 
     Replicates (does not import -- see the module docstring's "Coercion
     note") the setattr/enum-coercion fallback in scripts/run_corpus.py's
-    _run_child, specifically its nested ``configure(optimizer)`` closure:
+    _run_child, specifically its nested ``configure(engine)`` closure:
     enum-typed properties (acceptance_strategy, barrier_governor,
     restoration_mode, inertia_mode) reject a raw int via setattr with
     TypeError even when the int is a valid member value, so on TypeError we
@@ -245,14 +245,14 @@ def _apply_config(optimizer, config: dict) -> None:
     """
     for key, value in config.items():
         try:
-            setattr(optimizer, key, value)
+            setattr(engine, key, value)
         except TypeError:
-            current = getattr(optimizer, key)
+            current = getattr(engine, key)
             enum_type = type(current)
             if isinstance(value, int):
-                setattr(optimizer, key, enum_type(value))
+                setattr(engine, key, enum_type(value))
             else:
-                setattr(optimizer, key, getattr(enum_type, str(value)))
+                setattr(engine, key, getattr(enum_type, str(value)))
 
 
 def is_cell_valid(config: dict) -> bool:
@@ -261,17 +261,17 @@ def is_cell_valid(config: dict) -> bool:
     Builds the smallest problem that can drive InteriorPointSolver::run_phase_sequence
     (2 variables, quadratic objective, one equality constraint -- the same
     shape as tychopy/test/test_Solvers/test_nlp_solver_backend.py's
-    _small_problem), applies expand_config(config), and calls optimize()
-    with print_level=0. Convergence is irrelevant; only whether validate()
-    accepts the combination (raises ValueError) matters.
+    _small_problem), builds a fresh engine, applies expand_config(config) to
+    it, and solves with print_level=0. Convergence is irrelevant; only
+    whether validate() accepts the combination (raises ValueError) matters.
 
     _apply_config() itself is applied inside its own try/except: a
     malformed cell (e.g. an out-of-range axis value from a hand-typed
     --only-cell spec) can make the enum-coercion fallback raise ValueError
     (no such enum member) or TypeError (unsupported setattr type) before
-    optimize() is ever reached -- those must land the cell in
-    invalid.json via a plain False return, same as a Settings::validate()
-    rejection, rather than crashing the whole sweep.
+    solve() is ever reached -- those must land the cell in invalid.json via
+    a plain False return, same as a Settings::validate() rejection, rather
+    than crashing the whole sweep.
     """
     import tychopy.solvers as solvs
     from tychopy.vector_functions import Arguments as Args
@@ -280,15 +280,16 @@ def is_cell_valid(config: dict) -> bool:
     prob.set_vars([0.5, 1.7])
     prob.add_objective((Args(2) - [1.0, 2.0]).squared_norm(), [0, 1])
     prob.add_equal_con(Args(2).squared_norm() - 4.0, [0, 1])
-    prob.optimizer.print_level = 0
+    engine = solvs.IPM()
+    engine.print_level = 0
 
     try:
-        _apply_config(prob.optimizer, expand_config(config))
+        _apply_config(engine, expand_config(config))
     except (ValueError, TypeError):
         return False
 
     try:
-        prob.optimize()
+        prob.solve(engine)
     except ValueError:
         return False
     return True
@@ -761,9 +762,10 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         choices=("module", "optimize"),
         default="module",
         help="Passed through to run_corpus.py's --call-shape (default: "
-        "%(default)s). 'optimize' runs a single optimize() call per problem "
-        "regardless of its declared SOLVE_MODE, for cross-backend "
-        "comparability with the ipopt backend's single-solve mapping.",
+        "%(default)s). 'optimize' runs a single Optimal-mode solve() call "
+        "per problem regardless of its declared SOLVE_CALL, for "
+        "cross-backend comparability with the ipopt backend's "
+        "single-solve mapping.",
     )
     p_sweep.set_defaults(func=cmd_sweep)
 

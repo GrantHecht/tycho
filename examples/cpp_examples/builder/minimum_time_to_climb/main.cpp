@@ -1,12 +1,12 @@
 // Source: Bryson, Desai, Hoffman, "Energy-State Approximation in Performance
 //         Optimization of Supersonic Aircraft", J. Aircraft, 1969
 
-#include <tycho/tycho.h>
 #include <cmath>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -19,7 +19,7 @@ int main() {
     constexpr double Lstar = 10000.0;
     constexpr double Tstar = 250.0;
     constexpr double Mstar_val = 19050.864;
-    const double Vstar = Lstar / Tstar;         // 40 m/s
+    const double Vstar = Lstar / Tstar; // 40 m/s
     const double Astar = Lstar / (Tstar * Tstar);
     const double Rhostar = Mstar_val / (Lstar * Lstar * Lstar);
     const double Fstar = Astar * Mstar_val;
@@ -97,9 +97,8 @@ int main() {
     ThrustMach << 0, 0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.4, 1.6, 1.8;
 
     Eigen::VectorXd ThrustAlt(11);
-    ThrustAlt << 304.8 * -0.5, 304.8 * 0, 304.8 * 5, 304.8 * 10, 304.8 * 15,
-                 304.8 * 20, 304.8 * 25, 304.8 * 30, 304.8 * 40, 304.8 * 50,
-                 304.8 * 70;
+    ThrustAlt << 304.8 * -0.5, 304.8 * 0, 304.8 * 5, 304.8 * 10, 304.8 * 15, 304.8 * 20, 304.8 * 25,
+        304.8 * 30, 304.8 * 40, 304.8 * 50, 304.8 * 70;
 
     // Transposed from source (Mach-rows × Alt-cols) to Alt-rows × Mach-cols
     // so rows=ys, cols=xs as InterpTable2D expects.
@@ -130,39 +129,37 @@ int main() {
     auto ThrustTab =
         std::make_shared<InterpTable2D>(ThrustMach, ThrustAlt, ThrustData, InterpType::Cubic);
 
-    auto ode =
-        ODEBuilder(4, 1)
-            .define([=](auto &args) {
-                auto h = args.x_var(0);
-                auto v = args.x_var(1);
-                auto fpa = args.x_var(2);
-                auto mass = args.x_var(3);
-                auto alpha = args.u_var(0);
+    auto ode = ODEBuilder(4, 1)
+                   .define([=](auto &args) {
+                       auto h = args.x_var(0);
+                       auto v = args.x_var(1);
+                       auto fpa = args.x_var(2);
+                       auto mass = args.x_var(3);
+                       auto alpha = args.u_var(0);
 
-                auto rho = interp_scalar(rhoTab, h * Lstar) / Rhostar;
-                auto sos = interp_scalar(sosTab, h * Lstar) / Vstar;
-                auto Mach = v / sos;
-                auto CD0 = interp_scalar(CD0Tab, Mach);
-                auto Clalpha = interp_scalar(ClalphaTab, Mach);
-                auto eta_val = interp_scalar(etaTab, Mach);
-                auto Thrust = interp(ThrustTab, Mach, h * Lstar) / Fstar;
-                auto CD = CD0 + eta_val * Clalpha * (alpha * alpha);
-                auto CL = Clalpha * alpha;
-                auto q = 0.5 * rho * v * v;
-                auto D = q * S_nd * CD;
-                auto L = q * S_nd * CL;
-                auto r = h + Re_nd;
-                auto hdot = v * sin(fpa);
-                auto vdot = (Thrust * cos(alpha) - D) / mass - mu_nd * sin(fpa) / (r * r);
-                auto fpadot = (Thrust * sin(alpha) + L) / (mass * v) +
-                              cos(fpa) * (v / r - mu_nd / (v * (r * r)));
-                auto mdot = (-1.0) * Thrust / vexhaust_nd;
+                       auto rho = interp_scalar(rhoTab, h * Lstar) / Rhostar;
+                       auto sos = interp_scalar(sosTab, h * Lstar) / Vstar;
+                       auto Mach = v / sos;
+                       auto CD0 = interp_scalar(CD0Tab, Mach);
+                       auto Clalpha = interp_scalar(ClalphaTab, Mach);
+                       auto eta_val = interp_scalar(etaTab, Mach);
+                       auto Thrust = interp(ThrustTab, Mach, h * Lstar) / Fstar;
+                       auto CD = CD0 + eta_val * Clalpha * (alpha * alpha);
+                       auto CL = Clalpha * alpha;
+                       auto q = 0.5 * rho * v * v;
+                       auto D = q * S_nd * CD;
+                       auto L = q * S_nd * CL;
+                       auto r = h + Re_nd;
+                       auto hdot = v * sin(fpa);
+                       auto vdot = (Thrust * cos(alpha) - D) / mass - mu_nd * sin(fpa) / (r * r);
+                       auto fpadot = (Thrust * sin(alpha) + L) / (mass * v) +
+                                     cos(fpa) * (v / r - mu_nd / (v * (r * r)));
+                       auto mdot = (-1.0) * Thrust / vexhaust_nd;
 
-                return stack(hdot, vdot, fpadot, mdot);
-            })
-            .var_names(
-                {{"h", 0}, {"v", 1}, {"fpa", 2}, {"m", 3}, {"t", 4}, {"alpha", 5}})
-            .build();
+                       return stack(hdot, vdot, fpadot, mdot);
+                   })
+                   .var_names({{"h", 0}, {"v", 1}, {"fpa", 2}, {"m", 3}, {"t", 4}, {"alpha", 5}})
+                   .build();
 
     std::vector<Eigen::VectorXd> traj_ig;
     traj_ig.reserve(n_pts);
@@ -202,13 +199,14 @@ int main() {
     phase.set_mesh_error_estimator(MeshErrorEstimators::DEBOOR);
 
     phase.set_num_partitions(8);
-    phase.optimizer().set_print_level(1);
-    phase.optimizer().set_soe_ls_mode("L1");
-    phase.optimizer().set_opt_ls_mode("L1");
-    phase.optimizer().set_max_ls_iters(2);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(1);
+    ipm.set_soe_ls_mode("L1");
+    ipm.set_opt_ls_mode("L1");
+    ipm.set_max_ls_iters(2);
 
     std::cout << "MinTimeToClimb: solving...\n" << std::flush;
-    const auto flag = phase.solve_optimize();
+    const auto flag = phase.solve(ipm, {.presolve = true}).flag_;
 
     if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
         std::cerr << "MinTimeToClimb (builder): solver FAILED (status " << static_cast<int>(flag)

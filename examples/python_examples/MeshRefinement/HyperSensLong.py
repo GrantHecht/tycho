@@ -20,6 +20,7 @@ from tychopy.optimal_control.mesh_error_plots import PhaseMeshErrorPlot
 
 vf = typy.vector_functions
 oc = typy.optimal_control
+solvs = typy.solvers
 Args = vf.Arguments
 
 
@@ -88,13 +89,14 @@ if __name__ == "__main__":
     phase.add_lu_var_bound("Path", 2, -50, 50)
 
     # Enable line searches
-    phase.optimizer.set_opt_ls_mode("L1")
-    phase.optimizer.set_soe_ls_mode("L1")
-    phase.optimizer.set_max_ls_iters(2)
+    ipm = solvs.IPM()
+    ipm.set_opt_ls_mode("L1")
+    ipm.set_soe_ls_mode("L1")
+    ipm.set_max_ls_iters(2)
 
-    phase.optimizer.print_level = 2
+    ipm.print_level = 2
     phase.set_num_partitions(1)
-    phase.optimizer.qp_threads = 1
+    ipm.qp_threads = 1
 
     """
     For tf=10000.0 this problem is so sensitve that the static pivoting order 
@@ -103,7 +105,7 @@ if __name__ == "__main__":
     Comment it out , enable console printing, and watch the number of peturbed pivots (PPS)
     and flying red colors to see what im talking about
     """
-    phase.optimizer.set_qp_ordering_mode("MINDEG")
+    ipm.set_qp_ordering_mode("MINDEG")
 
     ###########################################################################
     ############# The New Adaptive Mesh Interface #############################
@@ -119,7 +121,7 @@ if __name__ == "__main__":
     ## Set Error tolerance on mesh:
     phase.set_mesh_tol(1.0e-7)  # default = 1.0e-6
     ## Make sure to set optimizer Econtol to be the same as or smaller than MeshTol
-    phase.optimizer.set_eq_con_tol(1.0e-7)
+    ipm.set_eq_con_tol(1.0e-7)
 
     ## Set Max number of mesh iterations:
     phase.set_max_mesh_iters(10)  # default = 10
@@ -164,10 +166,12 @@ if __name__ == "__main__":
     phase.set_mesh_err_factor(10.0)  # default = 10
 
     """
-    As before, flag returned indicates whether the last call to psipot converged or not, it does
+    As before, the returned result indicates whether the last solve converged or not, it does
     not indicate whether the mesh is accurate/converged. Atm, that is checked by reading MeshConverged field.
     """
-    flag = phase.optimize_solve()
+    result = phase.solve(ipm)
+    if not result:
+        result = phase.solve(ipm, mode="feasible", warm=result)
 
     if phase.mesh_converged:
         print("Fly it")

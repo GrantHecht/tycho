@@ -26,11 +26,11 @@
 #include "oc_test_utils.h"
 #include "test_utils.h"
 #include "tycho/detail/hven_namespaces.h"
-#include <hven/detail/globalization/solver_context.h>
-#include <hven/detail/interior/jet.h>
 #include <cmath>
 #include <functional>
 #include <gtest/gtest.h>
+#include <hven/detail/globalization/solver_context.h>
+#include <hven/detail/interior/jet.h>
 #include <memory>
 #include <tycho/tycho.h>
 
@@ -51,9 +51,19 @@ class SolverTest : public VectorFunctionFixture {};
 
 inline std::shared_ptr<ODEPhase<BrachODE>> make_brach_solver_phase(int n_segs = 16) {
     auto phase = make_brach_phase(n_segs * 3 + 1, n_segs);
-    phase->optimizer_->set_print_level(3);
+    // print_level used to be preset here on the phase's own owned optimizer;
+    // there is no such owned instance any more (solve() takes an engine the
+    // caller constructs). Callers that want quiet output call quiet_ipm()
+    // (below) on their own InteriorPointSolver before passing it to solve().
     return phase;
 }
+
+/// @brief Silences an InteriorPointSolver's console output (print_level_ = 3,
+///        fully silent -- 0, the default, is full output). Mirrors what
+///        make_brach_solver_phase() used to preset automatically on its own
+///        owned optimizer, back when the phase owned one; callers now
+///        construct their own engine and opt into silence explicitly.
+inline void quiet_ipm(InteriorPointSolver &ipm) { ipm.set_print_level(3); }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Helper: an inert (all-zero-by-default) owning SolverContext for

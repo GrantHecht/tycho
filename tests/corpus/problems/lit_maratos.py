@@ -25,7 +25,7 @@ xk = (cos(theta), sin(theta))^T for arbitrary theta, showing the step
 pk = (sin^2(theta), -sin(theta)cos(theta))^T both increases f and the
 constraint violation for ANY nonzero theta.
 
-The specific numeric starting point (0, 1) proposed by the Task 4 brief
+The specific numeric starting point (0, 1) proposed by the corpus brief
 (theta = pi/2) was cross-checked against a secondary reproduction of this
 same example (a thesis at
 http://www.applied-mathematics.net/mythesis/node51.html, section on the
@@ -62,7 +62,7 @@ progress near the solution" flavor of the Maratos effect that motivates
 the example in Nocedal-Wright -- instead it diverged outright, in just 2
 iterations, from a start that is already exactly ON the constraint
 manifold. Not force-fixed or reformulated to produce a different
-outcome, per the Task 4 instructions to record observed behavior rather
+outcome, per the corpus brief's instructions to record observed behavior rather
 than engineer a particular one.
 
 Observed on defaults 2026-07-25: CONVERGED (harness status "converged"),
@@ -81,7 +81,7 @@ Args = vf.Arguments
 
 TIER = "literature"
 TIMEOUT = 30
-SOLVE_MODE = "optimize"
+SOLVE_CALL = {"mode": "optimal"}
 
 
 def build():

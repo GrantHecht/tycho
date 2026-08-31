@@ -16,6 +16,26 @@ class InteriorPointSolver:
     @overload
     def __init__(self) -> None: ...
 
+    @overload
+    def __init__(self, **kwargs) -> None:
+        """
+        Construct an InteriorPointSolver, optionally overriding settings by name.
+
+        Every settings property below is also accepted as a keyword argument
+        here (e.g. ``InteriorPointSolver(max_iters=500, kkt_tol=1e-9)``).
+        ``preset`` (a name accepted by :meth:`apply_preset`) is applied FIRST,
+        before any other keyword argument override, so
+        ``InteriorPointSolver(preset="soc_recovery_l1", max_soc=6)`` starts from
+        the preset and then raises max_soc past what the preset itself sets.
+        Validated properties keep their validation (raise ValueError exactly as
+        the corresponding ``set_*`` method / property assignment would).
+
+        Raises
+        ------
+        TypeError
+            If an unrecognized keyword argument is given, naming it.
+        """
+
     def optimize(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
 
     def solve_optimize(self, arg: numpy.ndarray, /) -> numpy.ndarray: ...
@@ -766,42 +786,6 @@ class InertiaModes(enum.Enum):
     Proximal primal-dual regularization: a small persistent, decaying primal base shift (rho_k, floored at 1e-10, the Cipolla-Gondzio floor) on the Hessian diagonal, plus an always-on barrier-scaled dual shift (delta_c = 1e-8 * mu^0.25, Ipopt's jacobian_regularization_value/exponent constants, matching its perturb_always_cd semantics) on the constraint-row diagonals, are baked into the base matrix every iteration in place of the classic zero-perturbation first attempt -- the same escalation ladder still fires on top when the base attempt has wrong inertia or is singular (a singular base attempt is itself treated as wrong inertia under this mode, matching classic). Ladder exhaustion, under either mode, force-rejects the step through the recovery chain and -- if the rejection goes unresolved -- aborts the phase as ConvergenceFlags.SINGULAR_KKT (see max_refac). rho_k decays toward its floor by decr_h each iteration the base attempt sufficed, or persists at the decayed total shift (rho_k plus the ladder's last delta) when the ladder fired. The dual shift is suppressed while a nested l1 restoration phase is active -- the elastic pivots already regularize those constraint rows at a magnitude the dual shift would be negligible against, and stacking it would make the elastic step-recovery algebra inconsistent with the solved system; the proximal mode-switch restoration touches only the primal diagonal, so the dual shift stays on under it. No new tunable constants -- rho_k's floor and the dual shift's scale/exponent are fixed. See last_prox_reg_primal/last_prox_reg_dual for the per-solve diagnostics this mode reports.
     """
 
-class IpoptRunInfo:
-    @property
-    def ran(self) -> bool: ...
-
-    @property
-    def status(self) -> str: ...
-
-    @property
-    def normalized(self) -> str: ...
-
-    @property
-    def converge_flag(self) -> ConvergenceFlags: ...
-
-    @property
-    def iterations(self) -> int: ...
-
-    @property
-    def objective(self) -> float: ...
-
-    @property
-    def constraint_violation(self) -> float: ...
-
-    @property
-    def wall_time_s(self) -> float: ...
-
-class NLPSolvers(enum.Enum):
-    """NLP solver backend selector for the solve/optimize entry points."""
-
-    interior_point = 0
-    """Built-in interior-point solver (default)."""
-
-    ipopt = 1
-    """
-    Linked Ipopt on the identical transcribed NLP (requires ENABLE_IPOPT build).
-    """
-
 def ipopt_available() -> bool:
     """True when this build was configured with ENABLE_IPOPT."""
 
@@ -850,120 +834,592 @@ class BestCriteriaModes(enum.Enum):
 
     OBJ = 3
 
-class OptimizationProblemBase:
+class Mode(enum.Enum):
+    """
+    Which objective a solve() call pursued: drive to optimality, or only to feasibility.
+    """
+
+    Optimal = 0
+
+    Feasible = 1
+
+class DeclarationKey:
+    """
+    The declared problem's identity stamp a WarmStartData was taken under. Engine-independent and treatment-independent by construction -- see hven's structure_identity.h for the exact coverage.
+    """
+
+    def __init__(self) -> None: ...
+
     @property
-    def jet_job_mode(self) -> JetJobModes: ...
+    def declaration_digest(self) -> int: ...
 
-    @jet_job_mode.setter
-    def jet_job_mode(self, arg: JetJobModes, /) -> None: ...
+    @declaration_digest.setter
+    def declaration_digest(self, arg: int, /) -> None: ...
 
+    @property
+    def bound_digest(self) -> int: ...
+
+    @bound_digest.setter
+    def bound_digest(self, arg: int, /) -> None: ...
+
+    def digest(self) -> int:
+        """
+        The two conjuncts folded into one value, for diagnostics. Comparing folded digests is weaker than comparing keys -- prefer ==.
+        """
+
+    def __eq__(self, arg: DeclarationKey, /) -> bool: ...
+
+    def __hash__(self) -> int: ...
+
+    def __getstate__(self) -> tuple[int, int]: ...
+
+    def __setstate__(self, arg: tuple[int, int], /) -> None: ...
+
+class WarmExtension:
+    """
+    One opaque engine extension carried by a WarmStartData: a tag naming the producer and meaning, and payload bytes only that producer interprets.
+    """
+
+    def __init__(self, tag: str, payload: bytes) -> None: ...
+
+    @property
+    def tag(self) -> str: ...
+
+    @tag.setter
+    def tag(self, arg: str, /) -> None: ...
+
+    @property
+    def payload(self) -> bytes: ...
+
+    @payload.setter
+    def payload(self, arg: bytes, /) -> None: ...
+
+    def __eq__(self, arg: WarmExtension, /) -> bool: ...
+
+    def __hash__(self) -> int: ...
+
+    def __getstate__(self) -> tuple[str, bytes]: ...
+
+    def __setstate__(self, arg: tuple[str, bytes], /) -> None: ...
+
+class WarmStartData:
+    """
+    The engine-neutral warm-start currency: a declared-space primal/dual core, the declaration-identity stamp it was taken under, and opaque engine extensions. Value-semantic and comparable; nothing here interprets an extension's bytes.
+    """
+
+    def __init__(self) -> None: ...
+
+    @property
+    def primal(self) -> numpy.ndarray: ...
+
+    @primal.setter
+    def primal(self, arg: numpy.ndarray, /) -> None: ...
+
+    @property
+    def eq_lmults(self) -> numpy.ndarray: ...
+
+    @eq_lmults.setter
+    def eq_lmults(self, arg: numpy.ndarray, /) -> None: ...
+
+    @property
+    def iq_lmults(self) -> numpy.ndarray: ...
+
+    @iq_lmults.setter
+    def iq_lmults(self, arg: numpy.ndarray, /) -> None: ...
+
+    @property
+    def bound_lmults(self) -> numpy.ndarray: ...
+
+    @bound_lmults.setter
+    def bound_lmults(self, arg: numpy.ndarray, /) -> None: ...
+
+    @property
+    def structure_key(self) -> DeclarationKey: ...
+
+    @structure_key.setter
+    def structure_key(self, arg: DeclarationKey, /) -> None: ...
+
+    @property
+    def extensions(self) -> list[WarmExtension]: ...
+
+    @extensions.setter
+    def extensions(self, arg: Sequence[WarmExtension], /) -> None: ...
+
+    def __eq__(self, arg: WarmStartData, /) -> bool: ...
+
+    def __hash__(self) -> int:
+        """
+        Hashes a cheap, stable subset consistent with == -- the declaration-identity stamp's digest plus the four block sizes -- not the full primal/dual/extension content. Two equal WarmStartData values always hash equal; two unequal values sharing that subset (e.g. differing only in payload values) hash equal too, which is a legal (if collision-prone) hash under Python's contract.
+        """
+
+    def __getstate__(self) -> bytes: ...
+
+    def __setstate__(self, arg: bytes, /) -> None: ...
+
+class StageResult:
+    """
+    One solver stage's outcome: which stage it was, which engine ran it, and the numbers that describe how it finished.
+    """
+
+    def __init__(self) -> None: ...
+
+    @property
+    def role(self) -> str:
+        """"presolve" | "main" | "polish"."""
+
+    @property
+    def engine_name(self) -> str:
+        """Engine class name, e.g. "InteriorPointSolver"."""
+
+    @property
+    def mode(self) -> Mode:
+        """
+        Which objective this stage pursued: a presolve stage always runs Mode.Feasible, a polish stage always Mode.Optimal, a main stage whichever mode the call asked for. This is what tells a later solve whether the stage's multipliers price the objective it is about to minimize.
+        """
+
+    @property
+    def flag(self) -> ConvergenceFlags: ...
+
+    @property
+    def iterations(self) -> int: ...
+
+    @property
+    def objective(self) -> float:
+        """Caller's scale."""
+
+    @property
+    def kkt_residual(self) -> float: ...
+
+    @property
+    def eq_violation(self) -> float:
+        """Max-norm."""
+
+    @property
+    def iq_violation(self) -> float:
+        """Max-norm."""
+
+    @property
+    def wall_time_s(self) -> float: ...
+
+    @property
+    def engine_details(self) -> dict[str, float]:
+        """Engine-specific numeric annex, as a plain dict."""
+
+    @property
+    def engine_notes(self) -> dict[str, str]:
+        """Engine-specific string annex, as a plain dict."""
+
+    def __getstate__(self) -> tuple[str, str, Mode, ConvergenceFlags, int, float, float, float, float, float, dict[str, float], dict[str, str]]: ...
+
+    def __setstate__(self, arg: tuple[str, str, Mode, ConvergenceFlags, int, float, float, float, float, float, Mapping[str, float], Mapping[str, str]], /) -> None: ...
+
+class PhaseResult:
+    """
+    One OCP phase's slice of a solve, keyed the same way as the OCP itself (index == 0 for a single Phase, no OCP). Every field is a snapshot taken at solve time.
+    """
+
+    def __init__(self) -> None: ...
+
+    @property
+    def index(self) -> int: ...
+
+    @property
+    def var_start(self) -> int: ...
+
+    @property
+    def var_count(self) -> int: ...
+
+    @property
+    def eq_start(self) -> int: ...
+
+    @property
+    def eq_count(self) -> int: ...
+
+    @property
+    def iq_start(self) -> int: ...
+
+    @property
+    def iq_count(self) -> int: ...
+
+    @property
+    def eq_lmults(self) -> numpy.ndarray: ...
+
+    @property
+    def iq_lmults(self) -> numpy.ndarray: ...
+
+    @property
+    def bound_lmults(self) -> numpy.ndarray:
+        """Declared-space signed z = zL - zU slice."""
+
+    def __getstate__(self) -> tuple[int, int, int, int, int, int, int, numpy.ndarray, numpy.ndarray, numpy.ndarray]: ...
+
+    def __setstate__(self, arg: tuple[int, int, int, int, int, int, int, numpy.ndarray, numpy.ndarray, numpy.ndarray], /) -> None: ...
+
+class SolveResult:
+    """
+    What a solve() call hands back: the deciding convergence flag, every stage that ran, every OCP phase's slice (empty for a bare VF problem), and the declared-space warm-start currency taken from the final deciding stage.
+    """
+
+    def __init__(self) -> None: ...
+
+    @property
+    def flag(self) -> ConvergenceFlags: ...
+
+    @property
+    def stages(self) -> list[StageResult]:
+        """Run order: presolve?, main, polish?. A fresh copy on every access."""
+
+    @property
+    def phases(self) -> list[PhaseResult]:
+        """
+        Index-keyed like the OCP; empty for a bare VF problem. A fresh copy on every access.
+        """
+
+    @property
+    def warm(self) -> WarmStartData:
+        """
+        Declared-space warm-start payload from the final deciding stage. A fresh copy on every access.
+        """
+
+    @property
+    def structure_key(self) -> DeclarationKey:
+        """The declaration-identity stamp warm was taken under."""
+
+    def converged(self) -> bool:
+        """
+        True for CONVERGED or ACCEPTABLE -- ACCEPTABLE is convergence to the acceptable tolerance ladder, still a caller-usable answer.
+        """
+
+    def __bool__(self) -> bool: ...
+
+    def objective(self) -> float: ...
+
+    def iterations(self) -> int: ...
+
+    def __getstate__(self) -> tuple[ConvergenceFlags, list[StageResult], list[PhaseResult], WarmStartData, DeclarationKey]: ...
+
+    def __setstate__(self, arg: tuple[ConvergenceFlags, Sequence[StageResult], Sequence[PhaseResult], WarmStartData, DeclarationKey], /) -> None: ...
+
+class SqpSolver:
+    @overload
+    def __init__(self) -> None: ...
+
+    @overload
+    def __init__(self, **kwargs) -> None:
+        """
+        Construct an SqpSolver, optionally overriding SqpOptions fields by name.
+
+        Every plain-value SqpOptions field is accepted as a keyword argument
+        (kkt_tol, feas_tol, max_iter, tr_init, tr_max, tr_min, enable_soc,
+        adaptive_mu, start_level, warm_full_step, budget_mode,
+        elastic_ladder_early_exit, crash_basis, qp_mode, ssn_prox_carry,
+        ssn_certify_from_face, ssn_sigma_rule, ssn_hint_rule,
+        ssn_infeasibility_rule). The QP sub-options (``qp``) and the
+        globalization-strategy factory (``make_strategy``) are not kwargs-
+        exposed; use the property/attribute defaults for those.
+
+        Raises
+        ------
+        TypeError
+            If an unrecognized keyword argument is given, naming it.
+        """
+
+    @property
+    def kkt_tol(self) -> float: ...
+
+    @kkt_tol.setter
+    def kkt_tol(self, arg: float, /) -> None: ...
+
+    @property
+    def feas_tol(self) -> float: ...
+
+    @feas_tol.setter
+    def feas_tol(self, arg: float, /) -> None: ...
+
+    @property
+    def max_iter(self) -> int: ...
+
+    @max_iter.setter
+    def max_iter(self, arg: int, /) -> None: ...
+
+    @property
+    def tr_init(self) -> float: ...
+
+    @tr_init.setter
+    def tr_init(self, arg: float, /) -> None: ...
+
+    @property
+    def tr_max(self) -> float: ...
+
+    @tr_max.setter
+    def tr_max(self, arg: float, /) -> None: ...
+
+    @property
+    def tr_min(self) -> float: ...
+
+    @tr_min.setter
+    def tr_min(self, arg: float, /) -> None: ...
+
+    @property
+    def enable_soc(self) -> bool: ...
+
+    @enable_soc.setter
+    def enable_soc(self, arg: bool, /) -> None: ...
+
+    @property
+    def adaptive_mu(self) -> bool: ...
+
+    @adaptive_mu.setter
+    def adaptive_mu(self, arg: bool, /) -> None: ...
+
+    @property
+    def start_level(self) -> StartLevel: ...
+
+    @start_level.setter
+    def start_level(self, arg: StartLevel, /) -> None: ...
+
+    @property
+    def warm_full_step(self) -> bool: ...
+
+    @warm_full_step.setter
+    def warm_full_step(self, arg: bool, /) -> None: ...
+
+    @property
+    def budget_mode(self) -> bool: ...
+
+    @budget_mode.setter
+    def budget_mode(self, arg: bool, /) -> None: ...
+
+    @property
+    def elastic_ladder_early_exit(self) -> bool: ...
+
+    @elastic_ladder_early_exit.setter
+    def elastic_ladder_early_exit(self, arg: bool, /) -> None: ...
+
+    @property
+    def crash_basis(self) -> bool: ...
+
+    @crash_basis.setter
+    def crash_basis(self, arg: bool, /) -> None: ...
+
+    @property
+    def qp_mode(self) -> QpMode: ...
+
+    @qp_mode.setter
+    def qp_mode(self, arg: QpMode, /) -> None: ...
+
+    @property
+    def ssn_prox_carry(self) -> bool: ...
+
+    @ssn_prox_carry.setter
+    def ssn_prox_carry(self, arg: bool, /) -> None: ...
+
+    @property
+    def ssn_certify_from_face(self) -> bool: ...
+
+    @ssn_certify_from_face.setter
+    def ssn_certify_from_face(self, arg: bool, /) -> None: ...
+
+    @property
+    def ssn_sigma_rule(self) -> SsnSigmaRule: ...
+
+    @ssn_sigma_rule.setter
+    def ssn_sigma_rule(self, arg: SsnSigmaRule, /) -> None: ...
+
+    @property
+    def ssn_hint_rule(self) -> SsnHintRule: ...
+
+    @ssn_hint_rule.setter
+    def ssn_hint_rule(self, arg: SsnHintRule, /) -> None: ...
+
+    @property
+    def ssn_infeasibility_rule(self) -> SsnInfeasibilityRule: ...
+
+    @ssn_infeasibility_rule.setter
+    def ssn_infeasibility_rule(self, arg: SsnInfeasibilityRule, /) -> None: ...
+
+class StartLevel(enum.Enum):
+    """
+    How much of a previous solve's state a caller intends to feed into the next one -- kCold ignores it, kSeeded trusts values but not provenance, kWarm additionally trusts the globalization state, kHot additionally reuses a factorization.
+    """
+
+    kCold = 0
+
+    kSeeded = 1
+
+    kWarm = 2
+
+    kHot = 3
+
+class QpMode(enum.Enum):
+    """Which QP subproblem solver the SQP driver dispatches to."""
+
+    kWalk = 0
+
+    kSsn = 1
+
+class SsnSigmaRule(enum.Enum):
+    """How the SSN proximal/Levenberg-Marquardt shift sigma is sized."""
+
+    kLadder = 0
+
+    kResidualArmed = 1
+
+    kResidualAlways = 2
+
+class SsnHintRule(enum.Enum):
+    """What protects the SSN hinted first step."""
+
+    kIterationZeroFree = 0
+
+    kWatchdog = 1
+
+class SsnInfeasibilityRule(enum.Enum):
+    """What turns an SSN infeasibility suspicion into an exit."""
+
+    kSymptoms = 0
+
+    kFarkasGated = 1
+
+class IpoptSolver:
+    """
+    Ipopt as a peer engine handle. Constructible only when the backend is compiled in (ENABLE_IPOPT); otherwise raises RuntimeError.
+    """
+
+    def __init__(self) -> None: ...
+
+    @property
+    def options(self) -> dict[str, str]:
+        """
+        String key/value options forwarded verbatim to Ipopt. Reading this attribute returns a copy; assign a whole dict to change it.
+        """
+
+    @options.setter
+    def options(self, arg: Mapping[str, str], /) -> None: ...
+
+class OptimizationProblemBase:
     @property
     def num_partitions(self) -> int:
         """
         Number of NLP matrix partitions.
 
         Assignment routes through :meth:`set_num_partitions` and raises
-        ``ValueError`` for values < 1. The QP thread count is a separate setting:
-        assign ``optimizer.qp_threads``.
+        ``ValueError`` for values < 1. The QP thread count is a separate setting,
+        set on whichever engine is passed to :meth:`solve`.
         """
 
     @num_partitions.setter
     def num_partitions(self, arg: int, /) -> None: ...
 
-    @property
-    def optimizer(self) -> InteriorPointSolver: ...
-
-    @property
-    def nlp_solver(self) -> NLPSolvers:
-        """
-        NLP solver backend for the solve/optimize entry points.
-
-        NLPSolvers.interior_point (default) is the built-in solver, byte-identical to
-        previous behavior. NLPSolvers.ipopt runs the identical transcribed NLP
-        through a linked Ipopt installation; requires a build configured with
-        ENABLE_IPOPT (raises RuntimeError otherwise). The ipopt backend always
-        performs a single NLP solve of the full objective-bearing problem: the
-        feasibility-then-optimize staging modes have no Ipopt analog. In
-        particular ``solve()`` -- which under the built-in solver runs the
-        feasibility-only stage -- minimizes the objective like ``optimize()``
-        when this backend is selected; there is no feasibility-only analog.
-
-        Jet batch runs reject this backend: Ipopt is not reliably re-entrant, so
-        a Jet job whose problem selects it raises ValueError before that job's
-        solve begins. Run the ipopt backend one solve at a time.
-
-        The built-in solver's own diagnostics (``optimizer.last_obj_val``,
-        ``optimizer.last_iter_num``, and every other result()-backed property on
-        ``optimizer``) reflect only the most recent InteriorPointSolver run and are left
-        untouched by an ipopt-backend run -- use ``last_ipopt_result`` as the
-        source of truth for diagnostics of the most recent ipopt-backend
-        solve.
-        """
-
-    @nlp_solver.setter
-    def nlp_solver(self, arg: NLPSolvers, /) -> None: ...
-
-    @property
-    def ipopt_options(self) -> dict[str, str]:
-        """
-        String key/value options forwarded verbatim to Ipopt (e.g.
-        {"linear_solver": "pardisomkl"}). Applied after the matched-tolerance
-        baseline, so entries here win. Ignored by the interior-point backend.
-
-        Reading this attribute returns a *copy* of the stored map, so in-place
-        mutation (``prob.ipopt_options["linear_solver"] = "ma57"``) silently has
-        no effect. Assign a whole dict instead, or read-modify-write:
-        ``opts = prob.ipopt_options; opts["linear_solver"] = "ma57";
-        prob.ipopt_options = opts``.
-        """
-
-    @ipopt_options.setter
-    def ipopt_options(self, arg: Mapping[str, str], /) -> None: ...
-
-    @property
-    def last_ipopt_result(self) -> IpoptRunInfo:
-        """
-        Diagnostics of the most recent ipopt-backend run on this problem
-        (sentinel values with ran == False before any such run).
-        """
-
     def set_num_partitions(self, num_partitions: int) -> None:
         """
         Set the number of NLP matrix partitions (must be >= 1).
 
-        The QP thread count is a separate setting: assign ``optimizer.qp_threads``.
+        The QP thread count is a separate setting, set on whichever engine is
+        passed to :meth:`solve`.
         """
 
-    @overload
-    def set_jet_job_mode(self, arg: JetJobModes, /) -> None: ...
+    def solve(self, engine: object, mode: object = 'optimal', presolve: object | None = False, polish: object | None = None, warm: object | None = None) -> SolveResult:
+        """
+        Run the engine-driven staged solve: an optional Feasible presolve
+        stage, the main stage (``mode``), and an optional Optimal polish stage,
+        in that order.
 
-    @overload
-    def set_jet_job_mode(self, arg: str, /) -> None: ...
+        Parameters
+        ----------
+        engine : InteriorPointSolver | SqpSolver | IpoptSolver
+            The main-stage engine.
+        mode : Mode | str, optional
+            ``Mode.Optimal``/``"optimal"`` (default) or ``Mode.Feasible``/
+            ``"feasible"``.
+        presolve : bool | InteriorPointSolver | SqpSolver | IpoptSolver | None, optional
+            ``False`` (default) or ``None``: no presolve stage (``None`` is the
+            same as ``False``). ``True``: run a Feasible presolve stage on
+            ``engine`` itself. An engine instance: run the presolve stage on
+            that engine instead (implies presolve).
+        polish : InteriorPointSolver | SqpSolver | IpoptSolver | None, optional
+            When given, run an Optimal polish stage on this engine after the
+            main stage.
+        warm : SolveResult | WarmStartData | None, optional
+            Declared-space warm-start currency seeding the first stage that
+            runs. A usable payload's declaration-identity stamp must match the
+            current transcription's, or the call raises ValueError naming both.
+            A payload that is empty, or that carries a non-finite value in any
+            block, is not an error: that stage simply runs cold and records why
+            in its ``engine_notes["warm_payload"]``. A ``SolveResult`` whose
+            deciding stage ran ``Mode.Feasible`` seeds the primal only -- a
+            feasibility stage's multipliers price the feasibility measure it
+            minimized, not this call's objective -- and says so in the same
+            note. A bare ``WarmStartData`` records no mode and is taken as
+            given.
 
-    def solve(self) -> ConvergenceFlags: ...
+        Returns
+        -------
+        SolveResult
+            The deciding convergence flag, every stage that ran, every OCP
+            phase's slice, and the warm-start currency from the final deciding
+            stage.
 
-    def optimize(self) -> ConvergenceFlags: ...
+        Raises
+        ------
+        ValueError
+            Per the refusal matrix (mode/presolve/polish combinations, a stale
+            warm stamp, an engine already solving), if ``engine``/``presolve``/
+            ``polish``/``mode``/``warm`` is not one of the types listed above,
+            or whatever the dispatched engine itself raises for a malformed
+            problem.
+        """
 
-    def solve_optimize(self) -> ConvergenceFlags: ...
+    def set_jet_job(self, prototype: object, mode: object = 'optimal', presolve: object | None = False, polish: object | None = None, warm: object | None = None) -> None:
+        """
+        Stage a batched (Jet) solve on this problem.
 
-    def solve_optimize_solve(self) -> ConvergenceFlags: ...
+        jet_run() -- which ``Jet.map`` calls on each pool-worker job -- clones
+        ``prototype``, and any staged ``presolve``/``polish`` engine, and runs
+        the staged options against the clones; none of the staged engines is
+        ever run itself, so several problems in one ``Jet.map`` batch can
+        safely share any of them.
 
-    def optimize_solve(self) -> ConvergenceFlags: ...
+        Every ``InteriorPointSolver`` clone jet_run() makes is pinned to
+        ``qp_threads=1`` (the shared thread pool already parallelizes across
+        jobs) and forced to a silent ``print_level`` UNLESS the staged engine
+        had already moved it off the class default of 0 -- so a batch is quiet
+        by default, and you opt into per-job console output by setting
+        ``print_level`` explicitly on whichever engine you stage.
 
-class JetJobModes(enum.Enum):
-    DoNothing = 1
+        Parameters
+        ----------
+        prototype : InteriorPointSolver | SqpSolver | IpoptSolver
+            Non-owning; kept alive for as long as this problem is (so a caller
+            need not hold its own reference past this call).
+        mode : Mode | str, optional
+            ``Mode.Optimal``/``"optimal"`` (default) or ``Mode.Feasible``/
+            ``"feasible"``.
+        presolve : bool | InteriorPointSolver | SqpSolver | IpoptSolver | None, optional
+            ``False`` (default) or ``None``: no presolve stage. ``True``: run a
+            Feasible presolve stage on a clone of ``prototype``. An engine
+            instance: run the presolve stage on a clone of that engine instead
+            (implies presolve); kept alive the same way as ``prototype``.
+        polish : InteriorPointSolver | SqpSolver | IpoptSolver | None, optional
+            When given, run an Optimal polish stage (on a clone) after the main
+            stage. Kept alive the same way as ``presolve``.
+        warm : SolveResult | WarmStartData | None, optional
+            Declared-space warm-start currency seeding the first stage that
+            runs on every jet_run() call. The payload is copied into this
+            problem's own storage at staging time, so (unlike ``prototype``/
+            ``presolve``/``polish``) the source object need not be kept alive
+            at all past this call. Held to the same rules as :meth:`solve`'s
+            own ``warm``, the feasibility-provenance one included: a
+            ``SolveResult`` whose deciding stage ran ``Mode.Feasible`` seeds
+            the primal only.
 
-    NotSet = 0
-
-    Solve = 2
-
-    Optimize = 3
-
-    SolveOptimize = 4
-
-    SolveOptimizeSolve = 5
-
-    OptimizeSolve = 6
+        Raises
+        ------
+        ValueError
+            If ``mode=Feasible`` is combined with ``presolve``/``polish``
+            (checked eagerly, at this call), or if ``prototype``/``presolve``/
+            ``polish``/``mode``/``warm`` is not one of the types listed above.
+        """
 
 class Jet:
     @overload

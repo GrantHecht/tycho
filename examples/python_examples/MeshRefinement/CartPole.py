@@ -22,6 +22,7 @@ from tychopy.optimal_control.mesh_error_plots import PhaseMeshErrorPlot
 
 vf = typy.vector_functions
 oc = typy.optimal_control
+solvs = typy.solvers
 Args = vf.Arguments
 
 """
@@ -210,9 +211,10 @@ if __name__ == "__main__":
     phase.add_integral_objective(Args(1)[0] ** 2, [5])
 
     phase.set_num_partitions(8)
-    phase.optimizer.qp_threads = 8
-    phase.optimizer.set_print_level(1)
-    phase.optimizer.eq_con_tol = 1.0e-8
+    ipm = solvs.IPM()
+    ipm.qp_threads = 8
+    ipm.set_print_level(1)
+    ipm.eq_con_tol = 1.0e-8
 
     phase.set_adaptive_mesh(True)
 
@@ -227,7 +229,7 @@ if __name__ == "__main__":
     phase.set_mesh_error_estimator(oc.MeshErrorEstimators.INTEGRATOR)
     phase.set_mesh_tol(1.0e-7)
     phase.set_mesh_err_factor(10)
-    phase.optimize()
+    phase.solve(ipm)
 
     PhaseMeshErrorPlot(phase, show=True)
 

@@ -41,7 +41,7 @@ oc = typy.optimal_control
 
 TIER = "hard"
 TIMEOUT = 60
-SOLVE_MODE = "optimize"
+SOLVE_CALL = {"mode": "optimal"}
 
 
 class _Brachistochrone(oc.ODEBase):

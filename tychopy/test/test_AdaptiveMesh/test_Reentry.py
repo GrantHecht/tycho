@@ -172,37 +172,40 @@ class test_Reentry(unittest.TestCase):
         phase.add_boundary_value("Back", [0, 2, 3], [htf, vtf, gammatf])
         phase.add_delta_var_objective(1, -1.0)
 
-        phase.optimizer.set_opt_ls_mode("L1")
-        phase.optimizer.set_soe_ls_mode("L1")
-        phase.optimizer.max_ls_iters = 2
-        phase.optimizer.max_acc_iters = 100
-        phase.optimizer.print_level = 3
+        ipm = ast.solvers.InteriorPointSolver()
+        ipm.set_opt_ls_mode("L1")
+        ipm.set_soe_ls_mode("L1")
+        ipm.max_ls_iters = 2
+        ipm.max_acc_iters = 100
+        ipm.print_level = 3
+        ipm.eq_con_tol = 1.0e-8
+        ipm.qp_threads = 1
 
-        phase.optimizer.eq_con_tol = 1.0e-8
         phase.adaptive_mesh = True
         phase.mesh_error_estimator = errest
         phase.mesh_inc_factor = 5
         phase.mesh_tol = 1.0e-7
         phase.print_mesh_info = False
         phase.set_num_partitions(1)
-        phase.optimizer.qp_threads = 1
-        Flag1 = phase.solve_optimize()
+        Result1 = phase.solve(ipm, mode="optimal", presolve=True)
 
         Mconv1 = phase.mesh_converged
 
         self.assertEqual(
-            Flag1, ast.solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
+            Result1.flag,
+            ast.solvers.ConvergenceFlags.CONVERGED,
+            "Problem did not converge",
         )
 
         self.assertTrue(Mconv1, "Problem Mesh did not converge converge")
 
         self.assertLess(
-            phase.optimizer.last_iter_num,
+            ipm.last_iter_num,
             self.MaximumIters1,
             "Optimizer iterations exceeded expected maximum",
         )
 
-        Obj1 = phase.optimizer.last_obj_val
+        Obj1 = ipm.last_obj_val
         ObjError1 = abs(Obj1 - self.FinalObj1)
         self.assertLess(
             ObjError1,
@@ -211,22 +214,24 @@ class test_Reentry(unittest.TestCase):
         )
 
         phase.add_upper_func_bound("Path", QFunc(), [0, 2, 6], Qlimit, 1 / Qlimit)
-        Flag2 = phase.optimize()
+        Result2 = phase.solve(ipm)
         Mconv2 = phase.mesh_converged
 
         self.assertEqual(
-            Flag2, ast.solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
+            Result2.flag,
+            ast.solvers.ConvergenceFlags.CONVERGED,
+            "Problem did not converge",
         )
 
         self.assertTrue(Mconv2, "Problem Mesh did not converge converge")
 
         self.assertLess(
-            phase.optimizer.last_iter_num,
+            ipm.last_iter_num,
             self.MaximumIters2,
             "Optimizer iterations exceeded expected maximum",
         )
 
-        Obj2 = phase.optimizer.last_obj_val
+        Obj2 = ipm.last_obj_val
         ObjError2 = abs(Obj2 - self.FinalObj2)
         self.assertLess(
             ObjError2,

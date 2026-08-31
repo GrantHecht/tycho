@@ -51,12 +51,13 @@ together with an integral control-effort objective (`add_integral_objective`).
    # minimize integral of u^2/2; [3] is the index of the control u in the node layout [x, v, t, u]
    phase.add_integral_objective((Args(1)[0] ** 2) / 2, [3])
    phase.add_boundary_value("Back", range(0, 3), [0, -1, 1])
-   phase.optimizer.set_opt_ls_mode("L1")
-   phase.optimizer.set_kkt_tol(1.0e-10)
-   phase.optimizer.set_print_level(3)
+   ipm = typy.solvers.IPM()
+   ipm.set_opt_ls_mode("L1")
+   ipm.set_kkt_tol(1.0e-10)
+   ipm.set_print_level(3)
    phase.set_num_partitions(1)
-   phase.optimizer.qp_threads = 1
-   phase.optimize()
+   ipm.qp_threads = 1
+   phase.solve(ipm)
 
    TT = np.array(phase.return_traj()).T
 

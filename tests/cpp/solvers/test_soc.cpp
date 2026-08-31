@@ -42,20 +42,20 @@ namespace {
 using tycho::solvers::AcceptanceStrategy;
 using tycho::solvers::BacktrackingLineSearch;
 using tycho::solvers::GlobalizationMechanism;
+using tycho::solvers::InteriorPointSolver;
 using tycho::solvers::IterateInfo;
 using tycho::solvers::kRecoveryDepthUnresolved;
 using tycho::solvers::kSocRecommendedMaxCorrections;
 using tycho::solvers::kSocViolationDecrease;
 using tycho::solvers::OptimizationProblem;
 using tycho::solvers::ProgressMeasures;
-using tycho::solvers::InteriorPointSolver;
 using tycho::solvers::RecoveryChain;
 using tycho::solvers::RestorationStrategy;
 using tycho::solvers::soc_run_loop;
-using tycho::solvers::SocCorrectionOutcome;
-using tycho::solvers::SocRecovery;
 using tycho::solvers::soc_should_continue;
 using tycho::solvers::soc_should_trigger;
+using tycho::solvers::SocCorrectionOutcome;
+using tycho::solvers::SocRecovery;
 using tycho::solvers::SolverContext;
 using TychoTest::InertSolverContext;
 
@@ -198,9 +198,9 @@ class SocUnusedAcceptance : public AcceptanceStrategy {
 
 class SocUnusedMechanism : public GlobalizationMechanism {
   public:
-    double compute_step(InteriorPointSolver::LineSearchModes, double, double, double, double, Eigen::VectorXd &,
+    double compute_step(InteriorPointSolver::LineSearchModes, double, double, double, double,
                         Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &,
-                        AcceptanceStrategy &, double &, double &, IterateInfo &,
+                        Eigen::VectorXd &, AcceptanceStrategy &, double &, double &, IterateInfo &,
                         const std::vector<IterateInfo> &, SolverContext &) override {
         ADD_FAILURE() << "mechanism must not be reached on an early-exit path";
         return 1.0;
@@ -227,10 +227,10 @@ Action drive_soc(InteriorPointSolver::Settings &settings, IterateInfo &citer, in
     double alpha = 1.0, alphap = 1.0, alphad = 1.0;
     int resolved_depth = kRecoveryDepthUnresolved;
     int watchdog_activations = 0;
-    return SocRecovery{}.on_step_rejected(
-        citer, iters, ctx, acceptance, mechanism, InteriorPointSolver::LineSearchModes::AUGLANG, 1.0, 1e-3, 0.0,
-        0.0, XSL, DXSL, XSL2, RHS, RHS2, alpha, alphap, alphad, soc_steps, resolved_depth,
-        watchdog_activations);
+    return SocRecovery{}.on_step_rejected(citer, iters, ctx, acceptance, mechanism,
+                                          InteriorPointSolver::LineSearchModes::AUGLANG, 1.0, 1e-3,
+                                          0.0, 0.0, XSL, DXSL, XSL2, RHS, RHS2, alpha, alphap,
+                                          alphad, soc_steps, resolved_depth, watchdog_activations);
 }
 
 // max_soc_ == 0 (off): decline immediately, no corrections.
@@ -340,8 +340,8 @@ class SocElasticMechanism : public BacktrackingLineSearch {
         BacktrackingLineSearch::max_primal_dual_step(XSL, DXSL, bfrac, alphap, alphad, ctx);
     }
 
-    double run_acceptance_backtrack(InteriorPointSolver::LineSearchModes, double, double, double, double,
-                                    Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &,
+    double run_acceptance_backtrack(InteriorPointSolver::LineSearchModes, double, double, double,
+                                    double, Eigen::VectorXd &, Eigen::VectorXd &, Eigen::VectorXd &,
                                     Eigen::VectorXd &, Eigen::VectorXd &, AcceptanceStrategy &,
                                     IterateInfo &Citer, const std::vector<IterateInfo> &,
                                     SolverContext &) override {
@@ -372,7 +372,6 @@ class SocElasticHarness {
         prob_.set_vars(Eigen::VectorXd::Zero(1));
         prob_.add_objective(GenericFunction<-1, 1>(x * x), (Eigen::VectorXi(1) << 0).finished());
         prob_.add_equal_con(GenericFunction<-1, -1>(x - 1.0), (Eigen::VectorXi(1) << 0).finished());
-        prob_.optimizer_->set_print_level(3);
         prob_.transcribe();
 
         inert_.primal_vars_ = prob_.nlp_->primal_vars_;
@@ -462,9 +461,9 @@ SocElasticOutcome run_soc_elastic_correction(SocElasticHarness &h, SocElasticMec
     int watchdog_activations = 0;
 
     const Action action = SocRecovery{}.on_step_rejected(
-        w.citer, w.iters, ctx, acceptance, mechanism, InteriorPointSolver::LineSearchModes::AUGLANG, 1.0, 1e-3,
-        0.0, 0.0, w.XSL, w.DXSL, w.XSL2, w.RHS, w.RHS2, w.alpha, w.alphap, w.alphad, soc_steps,
-        resolved_depth, watchdog_activations);
+        w.citer, w.iters, ctx, acceptance, mechanism, InteriorPointSolver::LineSearchModes::AUGLANG,
+        1.0, 1e-3, 0.0, 0.0, w.XSL, w.DXSL, w.XSL2, w.RHS, w.RHS2, w.alpha, w.alphap, w.alphad,
+        soc_steps, resolved_depth, watchdog_activations);
     return SocElasticOutcome{action, w.DXSL, w.alphap, w.alphad, mechanism.scale_calls_};
 }
 
@@ -483,9 +482,9 @@ TEST(SocElasticFractionToBoundary, MainStepPathScalesToTheElasticCaps) {
     w.DXSL << kSocElasticUnscaledPrimalStep, kSocElasticUnscaledEqMultStep;
     SocUnusedAcceptance acceptance;
 
-    mechanism.compute_step(InteriorPointSolver::LineSearchModes::AUGLANG, 1.0, 1e-3, 0.0, 0.0, w.XSL, w.DXSL,
-                           w.XSL2, w.RHS, w.RHS2, acceptance, w.alphap, w.alphad, w.citer, w.iters,
-                           ctx);
+    mechanism.compute_step(InteriorPointSolver::LineSearchModes::AUGLANG, 1.0, 1e-3, 0.0, 0.0,
+                           w.XSL, w.DXSL, w.XSL2, w.RHS, w.RHS2, acceptance, w.alphap, w.alphad,
+                           w.citer, w.iters, ctx);
 
     EXPECT_EQ(mechanism.scale_calls_, 1);
     EXPECT_DOUBLE_EQ(w.alphap, kSocElasticPrimalAlpha);

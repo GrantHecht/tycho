@@ -21,6 +21,7 @@ from tychopy.optimal_control.mesh_error_plots import PhaseMeshErrorPlot
 
 vf = typy.vector_functions
 oc = typy.optimal_control
+solvs = typy.solvers
 Args = vf.Arguments
 
 ############################################################################
@@ -450,12 +451,13 @@ if __name__ == "__main__":
         phase1, phase4, [0, 1, 2, 3, 4, 5, 7, 8, 9, 10], auto_scale="auto"
     )
 
-    ocp.optimizer.set_opt_ls_mode("L1")
-    ocp.optimizer.set_soe_ls_mode("L1")
-    ocp.optimizer.set_max_ls_iters(2)
-    ocp.optimizer.set_print_level(2)
+    ipm = solvs.IPM()
+    ipm.set_opt_ls_mode("L1")
+    ipm.set_soe_ls_mode("L1")
+    ipm.set_max_ls_iters(2)
+    ipm.set_print_level(2)
 
-    ocp.solve_optimize()
+    ocp.solve(ipm, presolve=True)
 
     for phase in ocp.phases:
         PhaseMeshErrorPlot(phase, show=False)

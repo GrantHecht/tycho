@@ -44,13 +44,26 @@ using namespace ::hven::solvers;
 // that let the old spelling keep compiling would rebind it to the new meaning
 // without a word:
 //
-//   OptimizationProblemBase  Tycho's was the backend-aware problem base. hven's
-//                            carries no nlp_solver_, no ipopt_options_, no
-//                            last_ipopt_result_, no Jet-batch backend guard and
-//                            no foreign-solver branch in run_nlp_solver. The
-//                            backend-aware class is now
-//                            tycho::solvers::BackendProblemBase
-//                            (detail/solvers/nlp_backend.h).
+//   OptimizationProblemBase  Tycho's BackendProblemBase (detail/solvers/
+//                            nlp_backend.h) no longer derives from this at
+//                            all -- it is its own standalone type, carrying
+//                            the staged solve(EngineRef, SolveOptions)
+//                            pipeline.
+//                            It owns no engine (no optimizer_), no
+//                            nlp_solver_/ipopt_options_/last_ipopt_result_,
+//                            none of the five mode methods, and no
+//                            run_nlp_solver: backend selection is simply
+//                            which engine (InteriorPointSolver, SqpSolver,
+//                            IpoptSolver) a caller passes to solve(). hven's
+//                            OptimizationProblemBase is unchanged -- it still
+//                            owns optimizer_ (a shared_ptr<InteriorPointSolver>),
+//                            the five virtual mode methods, and the
+//                            non-virtual run_nlp_solver(JetJobModes, ...)
+//                            they dispatch through. The two types no longer
+//                            even share an inheritance relationship, so the
+//                            old spelling must keep failing loudly rather
+//                            than silently resolving to hven's engine-owning
+//                            shape through the using-directive above.
 //
 //   NLPSolver                Derives from that base, so it lost the same
 //                            surface, plus the seeding-versus-foreign-backend

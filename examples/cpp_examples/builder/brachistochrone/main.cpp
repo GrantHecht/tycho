@@ -1,6 +1,6 @@
-#include <tycho/tycho.h>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -47,7 +47,7 @@ int main() {
     auto phase = ode.phase(TranscriptionModes::LGL3, traj, n_defects);
 
     phase.add_boundary_value(PhaseRegionFlags::Front, {"x", "y", "v", "t"},
-                           Eigen::Vector4d(x0, y0, v0, 0.0));
+                             Eigen::Vector4d(x0, y0, v0, 0.0));
 
     phase.add_boundary_value(PhaseRegionFlags::Back, {"x", "y"}, Eigen::Vector2d(xf, yf));
 
@@ -55,7 +55,8 @@ int main() {
 
     phase.add_delta_time_objective(1.0);
 
-    const auto status = phase.solve_optimize();
+    InteriorPointSolver ipm;
+    const auto status = phase.solve(ipm, {.presolve = true}).flag_;
 
     if (status <= tycho::ConvergenceFlags::ACCEPTABLE) {
         const auto result = phase.return_traj();

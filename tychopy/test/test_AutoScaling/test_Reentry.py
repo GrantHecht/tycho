@@ -177,22 +177,25 @@ class test_Reentry(unittest.TestCase):
 
         phase.add_delta_var_objective("theta", -1.0)
 
-        phase.optimizer.set_soe_ls_mode("L1")
-        phase.optimizer.set_opt_ls_mode("L1")
+        ipm = ast.solvers.InteriorPointSolver()
+        ipm.set_soe_ls_mode("L1")
+        ipm.set_opt_ls_mode("L1")
 
-        phase.optimizer.max_ls_iters = 2
-        phase.optimizer.max_acc_iters = 100
-        phase.optimizer.print_level = 3
+        ipm.max_ls_iters = 2
+        ipm.max_acc_iters = 100
+        ipm.print_level = 3
+        ipm.qp_threads = 1
+        ipm.cnr_mode = True
         phase.set_num_partitions(1)
-        phase.optimizer.qp_threads = 1
-        phase.optimizer.cnr_mode = True
         phase.print_mesh_info = False
         phase.set_mesh_tol(mtol)
 
-        Flag1 = phase.solve_optimize()
+        Result1 = phase.solve(ipm, mode="optimal", presolve=True)
 
         self.assertEqual(
-            Flag1, ast.solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
+            Result1.flag,
+            ast.solvers.ConvergenceFlags.CONVERGED,
+            "Problem did not converge",
         )
 
         Traj1 = phase.return_traj()
@@ -208,11 +211,13 @@ class test_Reentry(unittest.TestCase):
         phase.add_upper_func_bound(
             "Path", QFunc(), ["h", "v", "alpha"], Qlimit, 1 / Qlimit
         )
-        Flag2 = phase.optimize()
+        Result2 = phase.solve(ipm)
         Traj2 = phase.return_traj()
 
         self.assertEqual(
-            Flag2, ast.solvers.ConvergenceFlags.CONVERGED, "Problem did not converge"
+            Result2.flag,
+            ast.solvers.ConvergenceFlags.CONVERGED,
+            "Problem did not converge",
         )
 
         Obj2 = Traj2[-1][1]

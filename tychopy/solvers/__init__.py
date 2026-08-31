@@ -23,13 +23,33 @@ BarrierModes = _tychopy.solvers.BarrierModes
 ConvergenceFlags = _tychopy.solvers.ConvergenceFlags
 InteriorPointSolver = _tychopy.solvers.InteriorPointSolver
 Jet = _tychopy.solvers.Jet
-JetJobModes = _tychopy.solvers.JetJobModes
 LineSearchModes = _tychopy.solvers.LineSearchModes
 OptimizationProblem = _tychopy.solvers.OptimizationProblem
 OptimizationProblemBase = _tychopy.solvers.OptimizationProblemBase
 PDStepStrategies = _tychopy.solvers.PDStepStrategies
 QPOrderingModes = _tychopy.solvers.QPOrderingModes
 QPPivotModes = _tychopy.solvers.QPPivotModes
+
+# The solve() surface: Mode, the warm-start currency and its result types,
+# and the engine handle classes.
+Mode = _tychopy.solvers.Mode
+DeclarationKey = _tychopy.solvers.DeclarationKey
+WarmExtension = _tychopy.solvers.WarmExtension
+WarmStartData = _tychopy.solvers.WarmStartData
+StageResult = _tychopy.solvers.StageResult
+PhaseResult = _tychopy.solvers.PhaseResult
+SolveResult = _tychopy.solvers.SolveResult
+SqpSolver = _tychopy.solvers.SqpSolver
+IpoptSolver = _tychopy.solvers.IpoptSolver
+StartLevel = _tychopy.solvers.StartLevel
+QpMode = _tychopy.solvers.QpMode
+SsnSigmaRule = _tychopy.solvers.SsnSigmaRule
+SsnHintRule = _tychopy.solvers.SsnHintRule
+SsnInfeasibilityRule = _tychopy.solvers.SsnInfeasibilityRule
+
+# Short aliases.
+IPM = InteriorPointSolver
+SQP = SqpSolver
 
 if __name__ == "__main__":
     mlist = inspect.getmembers(_tychopy.solvers)

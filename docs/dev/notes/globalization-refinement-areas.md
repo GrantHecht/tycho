@@ -198,7 +198,9 @@ graceful end applies; an in-episode progress test is the recorded follow-up.
 ## 5. Harness follow-ups (deep-dive finding)
 
 The corpus driver compares mismatched call shapes across backends (psiopt runs
-each module's `SOLVE_MODE`; the ipopt backend always runs a single solve) —
+each module's `SOLVE_MODE` — renamed `SOLVE_CALL` in the M5 solve-API harness
+migration; the mapping is documented in `tests/corpus/driver.py`; the ipopt
+backend always runs a single solve) —
 add a matched-call option before quoting cross-backend rows for
 non-`optimize` modules. (`run_corpus.py --config`'s repeated-flag handling was
 fixed on the campaign branch after the deep-dive hit it.)

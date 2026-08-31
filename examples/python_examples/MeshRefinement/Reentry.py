@@ -20,6 +20,7 @@ from tychopy.optimal_control.mesh_error_plots import PhaseMeshErrorPlot
 
 vf = typy.vector_functions
 oc = typy.optimal_control
+solvs = typy.solvers
 Args = vf.Arguments
 
 """
@@ -244,12 +245,13 @@ if __name__ == "__main__":
     phase.add_boundary_value("Back", [0, 2, 3], [htf, vtf, gammatf])
     phase.add_delta_var_objective(1, -1.0)
     phase.set_num_partitions(8)
-    phase.optimizer.qp_threads = 8
+    ipm = solvs.IPM()
+    ipm.qp_threads = 8
 
     ## Our IG is bad, so i turn on line search
-    phase.optimizer.set_soe_ls_mode("L1")
-    phase.optimizer.set_opt_ls_mode("L1")
-    phase.optimizer.set_print_level(2)
+    ipm.set_soe_ls_mode("L1")
+    ipm.set_opt_ls_mode("L1")
+    ipm.set_print_level(2)
 
     ###########################################################################
     ############# The New Adaptive Mesh Interface #############################
@@ -257,7 +259,7 @@ if __name__ == "__main__":
 
     phase.set_adaptive_mesh(True)
     phase.set_mesh_tol(1.0e-7)
-    phase.optimizer.eq_con_tol = 1.0e-8  # Set EContol at least as tight as MeshTol
+    ipm.eq_con_tol = 1.0e-8  # Set EContol at least as tight as MeshTol
 
     # The phase's default stepsizes work well for this problem, but you might need to modify for another!!
     phase.set_mesh_error_estimator(oc.MeshErrorEstimators.INTEGRATOR)
@@ -272,7 +274,7 @@ if __name__ == "__main__":
     ###########################################################################
 
     ## IG is bad, solve first before optimize
-    phase.solve_optimize()
+    phase.solve(ipm, presolve=True)
 
     Traj1 = phase.return_traj()
     PhaseMeshErrorPlot(phase, show=False)
@@ -280,7 +282,7 @@ if __name__ == "__main__":
     ## Add in Heating Rate Constraint, scale so rhs is order 1
     phase.add_upper_func_bound("Path", QFunc(), [0, 2, 6], Qlimit, 1 / Qlimit)
 
-    phase.optimize()
+    phase.solve(ipm)
     Traj2 = phase.return_traj()
     PhaseMeshErrorPlot(phase, show=True)
 

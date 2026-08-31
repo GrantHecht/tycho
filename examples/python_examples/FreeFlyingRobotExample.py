@@ -19,6 +19,7 @@ import tychopy as typy
 
 vf = typy.vector_functions
 oc = typy.optimal_control
+solvs = typy.solvers
 Args = vf.Arguments
 
 """
@@ -79,11 +80,12 @@ if __name__ == "__main__":
     phase.add_boundary_value("Back", range(0, 7), XF)
     phase.add_lu_var_bounds("Path", range(7, 11), 0.0, 1.0)
     phase.add_integral_objective(Args(4).sum(), range(7, 11))
-    phase.optimizer.set_print_level(0)
-    phase.optimizer.set_opt_ls_mode("L1")
-    phase.optimizer.set_max_ls_iters(2)
-    phase.optimizer.set_tols(1.0e-9, 1.0e-9, 1.0e-9)
-    phase.optimize()
+    ipm = solvs.IPM()
+    ipm.set_print_level(0)
+    ipm.set_opt_ls_mode("L1")
+    ipm.set_max_ls_iters(2)
+    ipm.set_tols(1.0e-9, 1.0e-9, 1.0e-9)
+    phase.solve(ipm)
 
     TrajConv = phase.return_traj()
 

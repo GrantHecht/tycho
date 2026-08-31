@@ -23,7 +23,7 @@ variable cannot equal two different values) and probes whether the interior-poin
 honestly reports non-convergence rather than silently reporting an
 "acceptable" solution that actually straddles the conflict.
 
-Gap sizing (HARD-LEARNED LESSON from Task 1's ``stub_fails``, applied
+Gap sizing (HARD-LEARNED LESSON from the earlier ``stub_fails`` cell, applied
 here): the brief specifies CONFLICT_VALUE = 1.001 (a 1e-3 absolute gap).
 That exact gap was tried FIRST, via a temporary edit run through
 ``conda run -n tycho python scripts/run_corpus.py --filter deg_conflicting``.
@@ -37,7 +37,7 @@ was therefore widened to CONFLICT_VALUE = 2.0 (matching the widened
 ``stub_fails`` gap), empirically confirmed below to read as a genuine
 failure, to keep this problem's pathology unambiguous. Both the original
 spec value (1.001) and the adjustment (2.0) are recorded here per the
-Task 2 brief's instructions.
+corpus brief's instructions.
 
 Observed on defaults 2026-07-16 at gap 2.0: NOTCONVERGED (harness status
 "failed"), 500 iterations (hits max_iters), objective 24.046. A genuine,
@@ -54,12 +54,12 @@ Args = vf.Arguments
 
 TIER = "degenerate"
 TIMEOUT = 30
-SOLVE_MODE = "optimize"
+SOLVE_CALL = {"mode": "optimal"}
 
 # Original brief spec value was 1.001 (a 1e-3 gap against the x(1) = 1.0
 # target); that fell inside the interior-point solver's acceptable-equality tolerance and read
 # as ACCEPTABLE rather than a genuine failure (see docstring above), so the
-# gap was widened here, mirroring the same adjustment Task 1 made to
+# gap was widened here, mirroring the same adjustment made earlier to
 # stub_fails for the identical reason.
 _CONFLICT_VALUE = 2.0
 

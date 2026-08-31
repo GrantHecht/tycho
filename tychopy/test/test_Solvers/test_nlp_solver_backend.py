@@ -1,5 +1,6 @@
-"""NLP solver backend selection surface (nlp_solver / ipopt_options /
-last_ipopt_result / ipopt_available)."""
+"""NLP solver backend selection surface: driving a solve through the
+IpoptSolver engine (constructible only when the backend is compiled in) and
+its availability guard (ipopt_available())."""
 
 import pytest
 
@@ -15,46 +16,35 @@ def _small_problem():
     return prob
 
 
-def test_nlp_solver_default_and_roundtrip():
-    prob = _small_problem()
-    assert prob.nlp_solver == solvs.NLPSolvers.interior_point
-    prob.nlp_solver = solvs.NLPSolvers.ipopt
-    assert prob.nlp_solver == solvs.NLPSolvers.ipopt
-
-
-def test_ipopt_options_roundtrip():
-    prob = _small_problem()
-    assert prob.ipopt_options == {}
-    prob.ipopt_options = {"linear_solver": "pardisomkl"}
-    assert prob.ipopt_options == {"linear_solver": "pardisomkl"}
-
-
-def test_last_ipopt_result_sentinels():
-    prob = _small_problem()
-    info = prob.last_ipopt_result
-    assert info.ran is False
-    assert info.iterations == -1
-
-
 def test_ipopt_available_is_bool():
     assert isinstance(solvs.ipopt_available(), bool)
 
 
 @pytest.mark.skipif(solvs.ipopt_available(), reason="built with Ipopt support")
 def test_ipopt_without_build_support_raises():
-    prob = _small_problem()
-    prob.nlp_solver = solvs.NLPSolvers.ipopt
     with pytest.raises(RuntimeError, match="ENABLE_IPOPT"):
-        prob.optimize()
+        solvs.IpoptSolver()
+
+
+@pytest.mark.skipif(not solvs.ipopt_available(), reason="built without Ipopt support")
+def test_ipopt_options_roundtrip():
+    engine = solvs.IpoptSolver()
+    assert engine.options == {}
+    engine.options = {"linear_solver": "pardisomkl"}
+    assert engine.options == {"linear_solver": "pardisomkl"}
 
 
 @pytest.mark.skipif(not solvs.ipopt_available(), reason="built without Ipopt support")
 def test_ipopt_backend_solves_and_reports():
     prob = _small_problem()
-    prob.nlp_solver = solvs.NLPSolvers.ipopt
-    flag = prob.optimize()
-    assert flag in (solvs.ConvergenceFlags.CONVERGED, solvs.ConvergenceFlags.ACCEPTABLE)
-    info = prob.last_ipopt_result
-    assert info.ran is True
-    assert info.iterations > 0
-    assert info.normalized in ("converged", "acceptable")
+    engine = solvs.IpoptSolver()
+    result = prob.solve(engine)
+
+    assert result.converged()
+    assert result.flag in (
+        solvs.ConvergenceFlags.CONVERGED,
+        solvs.ConvergenceFlags.ACCEPTABLE,
+    )
+    assert result.iterations() > 0
+    assert len(result.stages) == 1
+    assert result.stages[0].engine_name == "Ipopt"

@@ -37,13 +37,15 @@ clean; you do not need to in real code.
 
 ## Setup
 
-We need three modules: NumPy for the initial guess, `vector_functions` (`vf`) to
-build the dynamics, and `optimal_control` (`oc`) for the ODE and phase machinery.
+We need four modules: NumPy for the initial guess, `vector_functions` (`vf`) to
+build the dynamics, `optimal_control` (`oc`) for the ODE and phase machinery,
+and `solvers` (`slv`) for the engine we solve with.
 
 ```{doctest}
 >>> import numpy as np
 >>> from tychopy import vector_functions as vf
 >>> from tychopy import optimal_control as oc
+>>> from tychopy import solvers as slv
 ```
 
 ## 1. Define the ODE
@@ -216,23 +218,25 @@ control angle, and a minimum-arrival-time objective.
 
 ## 5. Solve
 
-InteriorPointSolver prints a detailed iteration log by default. For a clean run we turn its
-console output down via the `optimizer` handle, then call `optimize()`. The call
-returns a convergence flag; we keep it so we can confirm the solve succeeded.
+InteriorPointSolver prints a detailed iteration log by default. For a clean run we construct
+an engine and turn its console output down, then hand it to `solve()`. The
+call returns a {py:class}`~tychopy.solvers.SolveResult`; its `flag` tells us
+whether the solve succeeded.
 
 ::::{tab-set}
 :::{tab-item} Python
 ```{doctest}
->>> phase.optimizer.set_print_level(3)
->>> flag = phase.optimize()
->>> str(flag)
+>>> ipm = slv.IPM(print_level=3)
+>>> result = phase.solve(ipm)
+>>> str(result.flag)
 'ConvergenceFlags.CONVERGED'
 ```
 :::
 :::{tab-item} C++
 ```cpp
-phase.optimizer().set_print_level(3);
-auto flag = phase.optimize();   // or phase.solve_optimize() for a rough guess
+tycho::solvers::InteriorPointSolver ipm;
+ipm.set_print_level(3);
+auto result = phase.solve(ipm);   // pass {.presolve = true} for a rough-guess presolve stage
 ```
 :::
 ::::
@@ -303,6 +307,7 @@ plt.show()
    import matplotlib.pyplot as plt
    from tychopy import vector_functions as vf
    from tychopy import optimal_control as oc
+   from tychopy import solvers as slv
 
    class Brachistochrone(oc.ODEBase):
        def __init__(self, g):
@@ -324,8 +329,8 @@ plt.show()
    phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
    phase.add_boundary_value("Back", [0, 1], [10.0, 5.0])
    phase.add_delta_time_objective(1.0)
-   phase.optimizer.set_print_level(3)
-   phase.optimize()
+   ipm = slv.IPM(print_level=3)
+   phase.solve(ipm)
    T = np.array(phase.return_traj())
 
    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9, 3.6))
@@ -356,9 +361,9 @@ cleanly converged collocation solution.
   collocation mesh seeded from an initial guess.
 - `add_boundary_value`, `add_lu_var_bound`, and `add_delta_time_objective` pin
   the start and end, bound the control, and set the cost.
-- `phase.optimize()` solves with InteriorPointSolver and returns a convergence flag;
-  `return_traj()` returns the optimized trajectory as a list of
-  state-and-control rows.
+- `phase.solve(ipm)` solves with the `InteriorPointSolver` engine you pass in and returns a
+  `SolveResult` (`result.flag` is the convergence flag); `return_traj()`
+  returns the optimized trajectory as a list of state-and-control rows.
 
 ## Next steps
 

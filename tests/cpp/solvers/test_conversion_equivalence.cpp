@@ -552,15 +552,17 @@ ConvEquivAnswer conv_equiv_solve_eq_bound_vf() {
                            (Eigen::VectorXi(2) << 0, 1).finished());
     }
     prob.add_variable_bound(0, kEqBoundX0, kConvEquivInf);
-    conv_equiv_configure(*prob.optimizer_);
+    tycho::solvers::InteriorPointSolver ipm;
+    conv_equiv_configure(ipm);
     prob.transcribe();
 
     ConvEquivAnswer a;
-    a.x_ = prob.optimizer_->optimize(conv_equiv_eq_bound_start());
-    a.flag_ = prob.optimizer_->result().converge_flag_;
-    a.lambda_e_ = prob.optimizer_->result().eq_lmults_;
-    a.lambda_i_ = prob.optimizer_->result().iq_lmults_;
-    a.obj_ = prob.optimizer_->result().obj_val_;
+    ipm.set_nlp(prob.nlp_);
+    a.x_ = ipm.optimize(conv_equiv_eq_bound_start());
+    a.flag_ = ipm.result().converge_flag_;
+    a.lambda_e_ = ipm.result().eq_lmults_;
+    a.lambda_i_ = ipm.result().iq_lmults_;
+    a.obj_ = ipm.result().obj_val_;
     return a;
 }
 
@@ -739,14 +741,15 @@ ConvEquivAnswer conv_equiv_solve_ranged_vf() {
         auto x1 = args.coeff<1>();
         prob.add_inequal_con(GenericFunction<-1, -1>(-0.5 - x0 + x1), both);
     }
-    conv_equiv_configure(*prob.optimizer_);
+    tycho::solvers::InteriorPointSolver ipm;
+    conv_equiv_configure(ipm);
 
     ConvEquivAnswer a;
-    a.flag_ = prob.optimize();
+    a.flag_ = prob.solve(&ipm).flag_;
     a.x_ = prob.return_vars();
     a.lambda_e_ = prob.active_eq_lmults_;
     a.lambda_i_ = prob.active_iq_lmults_;
-    a.obj_ = prob.optimizer_->result().obj_val_;
+    a.obj_ = ipm.result().obj_val_;
     return a;
 }
 
@@ -922,16 +925,18 @@ ConvEquivAnswer conv_equiv_solve_fixed_vf(FixedVariableTreatments treatment) {
         prob.add_inequal_con(GenericFunction<-1, -1>(x0 - x1 - 0.5), all3);
     }
     prob.add_variable_bound(2, kFixedX2, kFixedX2);
-    conv_equiv_configure(*prob.optimizer_);
-    prob.optimizer_->set_fixed_variable_treatment(treatment);
+    tycho::solvers::InteriorPointSolver ipm;
+    conv_equiv_configure(ipm);
+    ipm.set_fixed_variable_treatment(treatment);
     prob.transcribe();
 
     ConvEquivAnswer a;
-    a.x_ = prob.optimizer_->optimize(conv_equiv_fixed_start());
-    a.flag_ = prob.optimizer_->result().converge_flag_;
-    a.lambda_e_ = prob.optimizer_->result().eq_lmults_;
-    a.lambda_i_ = prob.optimizer_->result().iq_lmults_;
-    a.obj_ = prob.optimizer_->result().obj_val_;
+    ipm.set_nlp(prob.nlp_);
+    a.x_ = ipm.optimize(conv_equiv_fixed_start());
+    a.flag_ = ipm.result().converge_flag_;
+    a.lambda_e_ = ipm.result().eq_lmults_;
+    a.lambda_i_ = ipm.result().iq_lmults_;
+    a.obj_ = ipm.result().obj_val_;
     return a;
 }
 

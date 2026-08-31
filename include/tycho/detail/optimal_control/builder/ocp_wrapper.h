@@ -221,33 +221,63 @@ class OptimalControlProblem {
                                               ScaleModes::AUTO);
     }
 
-    /// @brief Solve the problem for feasibility (no optimization).
-    /// @return The solver convergence flag.
+    /// @brief Run the engine-driven staged solve on the wrapped problem.
+    /// @param engine The main-stage engine (InteriorPointSolver, SqpSolver, or IpoptSolver).
+    /// @param opts   Mode/presolve/polish/warm options; see @ref
+    ///               tycho::solvers::BackendProblemBase::solve.
+    /// @return The staged solve's result.
     /// @throws std::invalid_argument if no phases have been added.
-    tycho::ConvergenceFlags solve() {
+    tycho::solvers::SolveResult solve(tycho::solvers::EngineRef engine,
+                                      const tycho::solvers::SolveOptions &opts = {}) {
         check_has_phases("solve");
-        return ocp_.solve();
+        return ocp_.solve(engine, opts);
     }
-    /// @brief Optimize the problem (minimize the objective subject to constraints).
-    /// @return The solver convergence flag.
-    /// @throws std::invalid_argument if no phases have been added.
-    tycho::ConvergenceFlags optimize() {
-        check_has_phases("optimize");
-        return ocp_.optimize();
+
+    /// @brief Convenience overloads: the same call, taking a concrete engine
+    ///        by lvalue reference so a caller can write `ocp.solve(ipm,
+    ///        opts)` directly instead of forming an EngineRef.
+    tycho::solvers::SolveResult solve(InteriorPointSolver &e,
+                                      const tycho::solvers::SolveOptions &opts = {}) {
+        check_has_phases("solve");
+        return ocp_.solve(e, opts);
     }
-    /// @brief Solve for feasibility, then optimize.
-    /// @return The solver convergence flag.
-    /// @throws std::invalid_argument if no phases have been added.
-    tycho::ConvergenceFlags solve_optimize() {
-        check_has_phases("solve_optimize");
-        return ocp_.solve_optimize();
+    tycho::solvers::SolveResult solve(tycho::solvers::SqpSolver &e,
+                                      const tycho::solvers::SolveOptions &opts = {}) {
+        check_has_phases("solve");
+        return ocp_.solve(e, opts);
     }
-    /// @brief Optimize, then solve to tighten feasibility.
-    /// @return The solver convergence flag.
+    tycho::solvers::SolveResult solve(tycho::solvers::IpoptSolver &e,
+                                      const tycho::solvers::SolveOptions &opts = {}) {
+        check_has_phases("solve");
+        return ocp_.solve(e, opts);
+    }
+
+    /// @brief Stage a batched (Jet) solve on the wrapped problem; see @ref
+    ///        tycho::solvers::BackendProblemBase::set_jet_job.
+    /// @param prototype Non-owning; the caller keeps it alive for the
+    ///        duration of any Jet::map call this problem participates in.
+    /// @param opts      Copied by value; passed to the per-jet-call clone's
+    ///                  solve().
     /// @throws std::invalid_argument if no phases have been added.
-    tycho::ConvergenceFlags optimize_solve() {
-        check_has_phases("optimize_solve");
-        return ocp_.optimize_solve();
+    void set_jet_job(tycho::solvers::EngineRef prototype, tycho::solvers::SolveOptions opts) {
+        check_has_phases("set_jet_job");
+        ocp_.set_jet_job(prototype, std::move(opts));
+    }
+
+    /// @brief Convenience overloads: the same call, taking a concrete engine
+    ///        by lvalue reference so a caller can write `ocp.set_jet_job(ipm,
+    ///        opts)` directly instead of forming an EngineRef.
+    void set_jet_job(InteriorPointSolver &e, tycho::solvers::SolveOptions opts) {
+        check_has_phases("set_jet_job");
+        ocp_.set_jet_job(e, std::move(opts));
+    }
+    void set_jet_job(tycho::solvers::SqpSolver &e, tycho::solvers::SolveOptions opts) {
+        check_has_phases("set_jet_job");
+        ocp_.set_jet_job(e, std::move(opts));
+    }
+    void set_jet_job(tycho::solvers::IpoptSolver &e, tycho::solvers::SolveOptions opts) {
+        check_has_phases("set_jet_job");
+        ocp_.set_jet_job(e, std::move(opts));
     }
 
     /// @brief Enable/disable automatic scaling, optionally propagating to phases.
@@ -268,13 +298,9 @@ class OptimalControlProblem {
     /// @brief Set the number of solver partitions.
     /// @param n  Number of partitions.
     ///
-    /// The QP (linear-solver) thread count is a separate setting: reach it
-    /// through @ref optimizer as `optimizer().set_qp_threads(t)`.
+    /// The QP (linear-solver) thread count is a separate setting, set on
+    /// whichever InteriorPointSolver engine is passed to solve().
     void set_num_partitions(int n) { ocp_.set_num_partitions(n); }
-
-    /// @brief Access the underlying InteriorPointSolver optimizer.
-    /// @return Reference to the optimizer.
-    InteriorPointSolver &optimizer() { return *ocp_.optimizer_; }
 
     /// @brief Access the wrapped base problem.
     /// @return Reference to the underlying @ref tycho::oc::OptimalControlProblemBase.

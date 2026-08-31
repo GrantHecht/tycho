@@ -18,6 +18,7 @@ from mpl_toolkits.basemap import Basemap  ## PIP INSTALL Basemap if you dont hav
 
 import tychopy as typy
 import tychopy.optimal_control as oc
+import tychopy.solvers as solvs
 import tychopy.vector_functions as vf
 from tychopy.vector_functions import Arguments as Args
 
@@ -445,11 +446,12 @@ if __name__ == "__main__":
         phase1, phase4, ["R", "V", "t", "U"], auto_scale="auto"
     )
 
-    ocp.optimizer.set_opt_ls_mode("L1")
-    ocp.optimizer.set_soe_ls_mode("L1")
-    ocp.optimizer.set_max_ls_iters(2)
-    ocp.optimizer.set_print_level(0)
-    ocp.solve_optimize()
+    ipm = solvs.IPM()
+    ipm.set_opt_ls_mode("L1")
+    ipm.set_soe_ls_mode("L1")
+    ipm.set_max_ls_iters(2)
+    ipm.set_print_level(0)
+    ocp.solve(ipm, presolve=True)
 
     Phase1Traj = phase1.return_traj()  # or ocp.phase(i).return_traj()
     Phase2Traj = phase2.return_traj()

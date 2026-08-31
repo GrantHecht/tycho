@@ -1,10 +1,10 @@
 // Source: https://arxiv.org/pdf/1905.11898.pdf
 
-#include <tycho/tycho.h>
 #include <cmath>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -36,12 +36,19 @@ int main() {
                        auto theta_dot = omega;
                        auto omega_dot = (u0 - u1) * alpha + (u3 - u2) * beta;
 
-                       return stack(xdot_st, ydot_st, xdotdot, ydotdot,
-                                   theta_dot, omega_dot);
+                       return stack(xdot_st, ydot_st, xdotdot, ydotdot, theta_dot, omega_dot);
                    })
-                   .var_names({{"x", 0}, {"y", 1}, {"xdot", 2}, {"ydot", 3},
-                               {"theta", 4}, {"omega", 5}, {"t", 6},
-                               {"u0", 7}, {"u1", 8}, {"u2", 9}, {"u3", 10}})
+                   .var_names({{"x", 0},
+                               {"y", 1},
+                               {"xdot", 2},
+                               {"ydot", 3},
+                               {"theta", 4},
+                               {"omega", 5},
+                               {"t", 6},
+                               {"u0", 7},
+                               {"u1", 8},
+                               {"u2", 9},
+                               {"u3", 10}})
                    .build();
 
     Eigen::VectorXd X0(7), XF(7);
@@ -61,11 +68,9 @@ int main() {
     auto phase = ode.phase(TranscriptionModes::LGL5, traj_ig, n_segs);
 
     phase.add_boundary_value(PhaseRegionFlags::Front,
-                            {"x", "y", "xdot", "ydot", "theta", "omega", "t"},
-                            X0);
+                             {"x", "y", "xdot", "ydot", "theta", "omega", "t"}, X0);
     phase.add_boundary_value(PhaseRegionFlags::Back,
-                            {"x", "y", "xdot", "ydot", "theta", "omega", "t"},
-                            XF);
+                             {"x", "y", "xdot", "ydot", "theta", "omega", "t"}, XF);
 
     for (const auto &u_name : {"u0", "u1", "u2", "u3"}) {
         phase.add_lu_var_bound(PhaseRegionFlags::Path, u_name, 0.0, 1.0);
@@ -74,27 +79,26 @@ int main() {
     {
         auto obj_args = Arguments<4>();
         auto obj_expr = obj_args.sum();
-        phase.add_integral_objective(GenericFunction<-1, 1>(obj_expr),
-                                    {"u0", "u1", "u2", "u3"});
+        phase.add_integral_objective(GenericFunction<-1, 1>(obj_expr), {"u0", "u1", "u2", "u3"});
     }
 
-    phase.optimizer().set_print_level(0);
-    phase.optimizer().set_opt_ls_mode("L1");
-    phase.optimizer().set_max_ls_iters(2);
-    phase.optimizer().set_tols(1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(0);
+    ipm.set_opt_ls_mode("L1");
+    ipm.set_max_ls_iters(2);
+    ipm.set_tols(1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9);
 
-    const auto flag = phase.optimize();
+    const auto flag = phase.solve(ipm).flag_;
 
     if (flag > tycho::ConvergenceFlags::ACCEPTABLE) {
-        std::cerr << "FreeFlyingRobot (builder): FAILED (status "
-                  << static_cast<int>(flag) << ")\n";
+        std::cerr << "FreeFlyingRobot (builder): FAILED (status " << static_cast<int>(flag)
+                  << ")\n";
         return EXIT_FAILURE;
     }
 
     auto traj = phase.return_traj();
     std::cout << std::fixed << std::setprecision(6);
-    std::cout << "FreeFlyingRobot (builder): converged, "
-              << traj.size() << " nodes\n";
+    std::cout << "FreeFlyingRobot (builder): converged, " << traj.size() << " nodes\n";
     std::cout << "FreeFlyingRobot (builder): PASSED\n";
     return EXIT_SUCCESS;
 }

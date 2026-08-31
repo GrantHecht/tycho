@@ -48,13 +48,13 @@ phase = ode.phase("LGL3", guess, 256)
 phase.add_boundary_value("Front", range(0, 7), X0)
 phase.add_lu_norm_bound("Path", [7, 8, 9], 0.001, 1, 1.0)
 phase.add_boundary_value("Back", range(0, 6), Xf)
-phase.optimizer.set_print_level(3)
 phase.add_delta_time_objective(1.0)
-flag = phase.optimize()
+ipm = typy.solvers.IPM(print_level=3)
+result = phase.solve(ipm)
 # InteriorPointSolver does not raise on a failed solve; fail the doc build loudly rather than
 # silently rendering a non-optimal trajectory on the landing page.
-assert flag == typy.solvers.ConvergenceFlags.CONVERGED, (
-    f"landing-page low-thrust solve did not converge: {flag}"
+assert result.flag == typy.solvers.ConvergenceFlags.CONVERGED, (
+    f"landing-page low-thrust solve did not converge: {result.flag}"
 )
 
 T = np.array(phase.return_traj()).T

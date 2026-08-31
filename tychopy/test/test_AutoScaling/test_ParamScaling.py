@@ -3,6 +3,7 @@ import unittest
 import numpy as np
 
 import tychopy.optimal_control as oc
+import tychopy.solvers as solvs
 from tychopy.vector_functions import Arguments as Args
 
 
@@ -108,10 +109,13 @@ class ParamScaling(unittest.TestCase):
         phase.set_auto_scaling(auto_scale)
         phase.set_num_partitions(1)
 
-        if __name__ != "__main__":
-            phase.optimizer.print_level = 3
-
         return phase
+
+    def _make_engine(self):
+        ipm = solvs.InteriorPointSolver()
+        if __name__ != "__main__":
+            ipm.print_level = 3
+        return ipm
 
     def _check_solution(self, phase):
         traj = phase.return_traj()
@@ -135,15 +139,15 @@ class ParamScaling(unittest.TestCase):
     def test_param_pins_no_autoscale(self):
         # Ground truth: same problem without auto-scaling.
         phase = self._build_phase(False)
-        phase.optimize()
+        phase.solve(self._make_engine())
         self._check_solution(phase)
 
     def test_param_pins_survive_autoscaled_optimize(self):
-        # optimize() -> transcribe() -> calc_auto_scales() runs the full
+        # solve() -> transcribe() -> calc_auto_scales() runs the full
         # auto-scaling machinery over every registered function, including the
         # remapped Params-region pins and the verbatim StaticParams-flag pin.
         phase = self._build_phase(True)
-        phase.optimize()
+        phase.solve(self._make_engine())
         self._check_solution(phase)
 
     def test_param_flag_with_xtu_indices_raises(self):

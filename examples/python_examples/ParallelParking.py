@@ -21,6 +21,7 @@ import tychopy as typy
 
 vf = typy.vector_functions
 oc = typy.optimal_control
+solvs = typy.solvers
 Args = vf.Arguments
 
 """
@@ -616,16 +617,17 @@ def Main():
     phase.add_value_lock("StaticParams", [0])  # k is locked to its initial guess
 
     phase.add_delta_time_objective(1)
-    phase.optimizer.set_bound_fraction(0.995)
-    phase.optimizer.set_max_iters(2000)
-    phase.optimizer.set_print_level(1)
+    ipm = solvs.IPM()
+    ipm.set_bound_fraction(0.995)
+    ipm.set_max_iters(2000)
+    ipm.set_print_level(1)
 
-    phase.solve_optimize()
+    phase.solve(ipm, presolve=True)
     phase.refine_traj_manual(nsegs2)
     phase.sub_variable("StaticParams", 0, k2)  # Change k to higher value
-    phase.optimizer.set_kkt_tol(1.0e-8)
+    ipm.set_kkt_tol(1.0e-8)
 
-    phase.optimize()
+    phase.solve(ipm)
 
     Traj = phase.return_traj()
     Tab = phase.return_traj_table()

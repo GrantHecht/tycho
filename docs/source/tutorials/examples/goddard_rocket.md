@@ -131,9 +131,10 @@ an integrator-with-control initial guess.
    phase3.set_units(units)
    ocp.set_auto_scaling(True, True)
    ocp.set_num_partitions(8)
-   ocp.optimizer.qp_threads = 8
-   ocp.optimizer.set_print_level(3)
-   ocp.optimize()
+   ipm = typy.solvers.IPM()
+   ipm.qp_threads = 8
+   ipm.set_print_level(3)
+   ocp.solve(ipm)
 
    Traj = phase1.return_traj() + phase2.return_traj() + phase3.return_traj()
    T = np.array(Traj).T

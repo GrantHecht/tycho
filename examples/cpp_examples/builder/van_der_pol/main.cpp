@@ -1,10 +1,10 @@
 // Source: https://openmdao.github.io/dymos/examples/vanderpol/vanderpol.html
 
-#include <tycho/tycho.h>
 #include <cmath>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <tycho/tycho.h>
 #include <vector>
 
 using namespace tycho;
@@ -41,33 +41,33 @@ int main() {
     phase.set_control_mode(ControlModes::BlockConstant);
 
     phase.add_boundary_value(PhaseRegionFlags::Front, {"x0", "x1", "t"},
-                            Eigen::Vector3d(0.0, 1.0, 0.0));
+                             Eigen::Vector3d(0.0, 1.0, 0.0));
     phase.add_boundary_value(PhaseRegionFlags::Back, {"x0", "x1", "t"},
-                            Eigen::Vector3d(0.0, 0.0, tf));
+                             Eigen::Vector3d(0.0, 0.0, tf));
 
     phase.add_lu_var_bound(PhaseRegionFlags::Path, "u", -0.75, 1.0);
 
     {
         auto obj_args = Arguments<3>();
         auto obj_expr = obj_args.squared_norm();
-        phase.add_integral_objective(GenericFunction<-1, 1>(obj_expr),
-                                    {"x0", "x1", "u"});
+        phase.add_integral_objective(GenericFunction<-1, 1>(obj_expr), {"x0", "x1", "u"});
     }
 
-    phase.optimizer().set_print_level(0);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(0);
     phase.set_num_partitions(8);
-    phase.optimizer().set_qp_threads(8);
+    ipm.set_qp_threads(8);
     // Use individual tol setters so bar_tol keeps its default.
-    phase.optimizer().set_kkt_tol(1.0e-8);
-    phase.optimizer().set_econ_tol(1.0e-8);
-    phase.optimizer().set_icon_tol(1.0e-8);
+    ipm.set_kkt_tol(1.0e-8);
+    ipm.set_econ_tol(1.0e-8);
+    ipm.set_icon_tol(1.0e-8);
 
-    const auto flag = phase.optimize();
+    const auto flag = phase.solve(ipm).flag_;
 
     auto traj = phase.return_traj();
     std::cout << std::fixed << std::setprecision(6);
-    std::cout << "VanDerPol (builder): optimize returned flag "
-              << static_cast<int>(flag) << ", " << traj.size() << " nodes\n";
+    std::cout << "VanDerPol (builder): optimize returned flag " << static_cast<int>(flag) << ", "
+              << traj.size() << " nodes\n";
     std::cout << "VanDerPol (builder): PASSED\n";
     return EXIT_SUCCESS;
 }

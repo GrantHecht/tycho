@@ -51,14 +51,16 @@ or ``"Path"`` (every node). Region selectors accept either the enum value or
 its string name. Variable indices refer to the packed node layout
 ``[x, t, u, p]``.
 
-Once configured, solve the phase with :meth:`optimize` (or :meth:`solve`),
-then retrieve the result with :meth:`return_traj`.
+Once configured, solve the phase with :meth:`solve`, then retrieve the
+result with :meth:`return_traj`.
 
 Notes
 -----
-:meth:`optimize`, :meth:`solve`, and the ``optimizer`` handle are inherited
-from the shared optimization-problem base; ``phase.optimizer`` exposes the
-underlying InteriorPointSolver solver (e.g. ``phase.optimizer.set_print_level(0)``).
+:meth:`solve` is inherited from the shared optimization-problem base. The
+solver is not owned by the phase: construct one (e.g.
+``ipm = tychopy.solvers.IPM(print_level=0)``) and pass it to
+``phase.solve(ipm)``, optionally with ``mode=``, ``presolve=``, ``polish=``
+and ``warm=``.
 
 Examples
 --------
@@ -69,7 +71,7 @@ Build a phase, constrain it, solve, and read the trajectory::
     phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
     phase.add_boundary_value("Back", [0, 1], [xf, yf])
     phase.add_delta_time_objective(1.0)
-    phase.optimize()
+    phase.solve(tychopy.solvers.IPM())
     traj = phase.return_traj()
 )doc";
 
@@ -116,10 +118,10 @@ b : bool
             nb::overload_cast<const std::vector<Eigen::VectorXd> &, int>(&ODEPhaseBase::set_traj),
             nb::call_guard<nb::gil_scoped_release>(), "");
 
-    obj.def("set_traj",
-            nb::overload_cast<const std::vector<Eigen::VectorXd> &, int, bool>(
-                &ODEPhaseBase::set_traj),
-            nb::call_guard<nb::gil_scoped_release>());
+    obj.def(
+        "set_traj",
+        nb::overload_cast<const std::vector<Eigen::VectorXd> &, int, bool>(&ODEPhaseBase::set_traj),
+        nb::call_guard<nb::gil_scoped_release>());
 
     obj.def("set_traj",
             nb::overload_cast<const std::vector<Eigen::VectorXd> &>(&ODEPhaseBase::set_traj),
@@ -130,7 +132,7 @@ Parameters
 ----------
 mesh : list of numpy.ndarray
     Trajectory nodes, each packed as ``[x, t, u, p]``, in increasing time
-    order. This becomes the initial guess that the optimizer refines.
+    order. This becomes the initial guess that the solver refines.
 
 Notes
 -----
@@ -174,7 +176,7 @@ preserved. Invalidates the cached transcription and post-solve data.
 
 Builds the transcribed NLP (defect constraints, user constraints, and
 objectives) from the current configuration. This is performed automatically
-by :meth:`optimize`/:meth:`solve`; call it explicitly only to inspect the
+by :meth:`solve`; call it explicitly only to inspect the
 transcribed problem or to force a rebuild.
 
 Parameters
@@ -367,13 +369,13 @@ Returns
 -------
 list of numpy.ndarray
     One packed state vector ``[x, t, u, p]`` per node, in time order. After a
-    successful :meth:`optimize`/:meth:`solve` this is the optimized solution.
+    successful :meth:`solve` this is the optimized solution.
 
 Examples
 --------
 Solve the phase and read back the optimized trajectory::
 
-    phase.optimize()
+    phase.solve(tychopy.solvers.IPM())
     traj = phase.return_traj()
 )doc");
     obj.def("return_traj_range", &ODEPhaseBase::return_traj_range,
@@ -437,7 +439,7 @@ list of numpy.ndarray
     dynamics-defect Lagrange multipliers, which are defined at the defect
     points and then linearly interpolated (extrapolated at the endpoints) onto
     the trajectory nodes. Only meaningful after a successful
-    :meth:`optimize`/:meth:`solve`.
+    :meth:`solve`.
 )doc");
     obj.def("return_traj_error", &ODEPhaseBase::return_traj_error,
             R"doc(Return the discretization-error estimate of the current trajectory.
@@ -449,7 +451,7 @@ list of numpy.ndarray
     per defect interval, so the count is the number of trajectory nodes minus
     one). Each vector has length ``x_vars + 1`` -- the ``x_vars`` per-state
     error components plus a time entry. Only available after a successful
-    :meth:`optimize`/:meth:`solve` (raises ``RuntimeError`` otherwise).
+    :meth:`solve` (raises ``RuntimeError`` otherwise).
 )doc");
 
     obj.def("return_u_spline_con_lmults", &ODEPhaseBase::return_u_spline_con_lmults,
@@ -460,7 +462,7 @@ Returns
 list of numpy.ndarray
     Per-node multiplier vectors for the control-spline continuity constraint,
     or an empty list if no control-spline constraint is active. Only meaningful
-    after a successful :meth:`optimize`/:meth:`solve`.
+    after a successful :meth:`solve`.
 )doc");
     obj.def("return_u_spline_con_vals", &ODEPhaseBase::return_u_spline_con_vals,
             R"doc(Return the control-spline constraint residual values from the last solve.
@@ -470,7 +472,7 @@ Returns
 list of numpy.ndarray
     Per-node residual vectors for the control-spline continuity constraint,
     or an empty list if no control-spline constraint is active. Only meaningful
-    after a successful :meth:`optimize`/:meth:`solve`.
+    after a successful :meth:`solve`.
 )doc");
 
     obj.def("return_equal_con_lmults", &ODEPhaseBase::return_equal_con_lmults,
@@ -486,7 +488,7 @@ Returns
 -------
 list of numpy.ndarray
     Per-application multiplier vectors for the constraint. Only meaningful
-    after a successful :meth:`optimize`/:meth:`solve`.
+    after a successful :meth:`solve`.
 )doc");
     obj.def("return_equal_con_vals", &ODEPhaseBase::return_equal_con_vals,
             R"doc(Return the residual values of an equality constraint from the last solve.
@@ -500,7 +502,7 @@ Returns
 -------
 list of numpy.ndarray
     Per-application residual vectors. Only meaningful after a successful
-    :meth:`optimize`/:meth:`solve`.
+    :meth:`solve`.
 )doc");
     obj.def("return_equal_con_scales", &ODEPhaseBase::return_equal_con_scales,
             R"doc(Return the output scales of a registered equality constraint.
@@ -531,7 +533,7 @@ Returns
 -------
 list of numpy.ndarray
     Per-application multiplier vectors. Only meaningful after a successful
-    :meth:`optimize`/:meth:`solve`.
+    :meth:`solve`.
 )doc");
     obj.def("return_inequal_con_vals", &ODEPhaseBase::return_inequal_con_vals,
             R"doc(Return the residual values of an inequality constraint from the last solve.
@@ -545,7 +547,7 @@ Returns
 -------
 list of numpy.ndarray
     Per-application residual vectors. Only meaningful after a successful
-    :meth:`optimize`/:meth:`solve`.
+    :meth:`solve`.
 )doc");
     obj.def("return_inequal_con_scales", &ODEPhaseBase::return_inequal_con_scales,
             R"doc(Return the output scales of a registered inequality constraint.
@@ -619,7 +621,7 @@ Returns
 -------
 numpy.ndarray
     The active static-parameter values. After a successful
-    :meth:`optimize`/:meth:`solve` this reflects the optimized values.
+    :meth:`solve` this reflects the optimized values.
 )doc");
 
     obj.def("test_partitions", &ODEPhaseBase::test_partitions,
@@ -964,8 +966,7 @@ Bound the control variable along the whole path::
     phase.add_lu_var_bound("Path", 4, -0.1, 2.0)
 )doc");
     obj.def("add_lower_var_bound",
-            nb::overload_cast<RegionType, VarIndexType, double>(
-                &ODEPhaseBase::add_lower_var_bound),
+            nb::overload_cast<RegionType, VarIndexType, double>(&ODEPhaseBase::add_lower_var_bound),
             nb::arg("phase_region"), nb::arg("var"), nb::arg("lowerbound"),
             R"doc(Bound a variable from below, leaving the upper side open.
 
@@ -990,8 +991,7 @@ int
 )doc");
 
     obj.def("add_upper_var_bound",
-            nb::overload_cast<RegionType, VarIndexType, double>(
-                &ODEPhaseBase::add_upper_var_bound),
+            nb::overload_cast<RegionType, VarIndexType, double>(&ODEPhaseBase::add_upper_var_bound),
             nb::arg("phase_region"), nb::arg("var"), nb::arg("upperbound"),
             R"doc(Bound a variable from above, leaving the lower side open.
 
@@ -1758,7 +1758,7 @@ list of MeshIterateInfo
     obj.def_rw("adaptive_mesh", &ODEPhaseBase::adaptive_mesh_,
                R"doc(Enable adaptive mesh refinement (bool, default ``False``).
 
-When ``True``, :meth:`optimize`/:meth:`solve` runs the automatic mesh-refinement
+When ``True``, :meth:`solve` runs the automatic mesh-refinement
 loop until the per-interval error falls below :attr:`mesh_tol` or
 :attr:`max_mesh_iters` is reached.
 )doc");
@@ -2024,9 +2024,15 @@ Accepts a :class:`MeshErrorAggregation` enum value or its string name (e.g.
 ``"AVG"`` or ``"MAX"``). Default: ``MeshErrorAggregation.AVG``.
 )doc");
 
-    obj.def_rw("solve_only_first", &ODEPhaseBase::solve_only_first_,
-               "Only solve (not optimize) on the first mesh-refinement iteration (bool, default "
-               "``True``).");
+    obj.def_rw(
+        "solve_only_first", &ODEPhaseBase::solve_only_first_,
+        R"doc(Run the feasibility presolve stage only before the first mesh-refinement iteration (bool, default ``True``).
+
+Only affects a ``solve(..., presolve=...)`` call on an adaptive-mesh phase:
+when ``True`` the presolve stage runs once, before mesh iteration 0; when
+``False`` it repeats on every mesh iteration. Has no effect on a call
+without ``presolve=``.
+)doc");
     obj.def_rw("force_one_mesh_iter", &ODEPhaseBase::force_one_mesh_iter_,
                "Force at least one mesh-refinement iteration even if the initial mesh already "
                "meets tolerance (bool, default ``False``).");

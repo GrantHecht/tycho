@@ -121,15 +121,16 @@ Eigen::VectorXd nlp_cross_check_solve_vf(tycho::ConvergenceFlags &flag_out) {
         prob.add_equal_con(GenericFunction<-1, -1>(x0 * x0 + x1 * x1 - 4.0),
                            (Eigen::VectorXi(2) << 0, 1).finished());
     }
-    prob.optimizer_->set_print_level(3);
+    tycho::solvers::InteriorPointSolver ipm;
+    ipm.set_print_level(3);
     prob.transcribe();
     prob.nlp_->set_variable_bound(0, 0.3, kNlpCrossCheckInf);
     prob.nlp_->make_nlp(prob.nlp_->primal_vars_, prob.nlp_->user_equal_cons_,
                         prob.nlp_->inequal_cons_);
-    prob.optimizer_->set_nlp(prob.nlp_);
+    ipm.set_nlp(prob.nlp_);
 
-    const Eigen::VectorXd x = prob.optimizer_->optimize(nlp_cross_check_start());
-    flag_out = prob.optimizer_->result().converge_flag_;
+    const Eigen::VectorXd x = ipm.optimize(nlp_cross_check_start());
+    flag_out = ipm.result().converge_flag_;
     return x;
 }
 

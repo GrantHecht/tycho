@@ -176,12 +176,6 @@ std::unique_ptr<ts::OptimizationProblem> feas_stall_build_nlp(bool inconsistent)
         auto x = args.coeff<0>();
         prob->add_equal_con(GenericFunction<-1, -1>(x - 2.0), (Eigen::VectorXi(1) << 0).finished());
     }
-    prob->optimizer_->set_print_level(3); // fully silent
-    // Single-threaded factorization, belt and braces: the 25% elevation margin
-    // already puts the dispatch schedule some eleven orders of magnitude clear
-    // of threaded-Pardiso FP jitter, so this only removes run-to-run drift from
-    // the iteration counts the assertions below quote.
-    prob->optimizer_->set_qp_threads(1);
     return prob;
 }
 
@@ -214,12 +208,6 @@ std::unique_ptr<ts::OptimizationProblem> feas_stall_build_worsening_nlp() {
         prob->add_equal_con(GenericFunction<-1, -1>(sqrt(sqrt(x * x + 1.0))),
                             (Eigen::VectorXi(1) << 0).finished());
     }
-    prob->optimizer_->set_print_level(3); // fully silent
-    prob->optimizer_->set_qp_threads(1);  // as above
-    // Pin the two defaults the exact-Newton-map argument above depends on, so
-    // a future default flip cannot silently change this fixture's dynamics.
-    prob->optimizer_->settings().soe_ls_mode_ = ts::InteriorPointSolver::LineSearchModes::NOLS;
-    prob->optimizer_->settings().inertia_mode_ = ts::InertiaModes::classic;
     return prob;
 }
 
@@ -229,10 +217,18 @@ std::unique_ptr<ts::OptimizationProblem> feas_stall_build_worsening_nlp() {
 // one restoration episode instead of silently burning the iteration budget.
 TEST_F(SolverTest, FeasStallStageDispatchesProximalRestoration) {
     auto prob = feas_stall_build_worsening_nlp();
-    prob->optimizer_->settings().restoration_mode_ = ts::RestorationModes::proximal_switch;
-    prob->optimizer_->set_max_iters(200);
-    prob->solve();
-    const auto &r = prob->optimizer_->result();
+    ts::InteriorPointSolver ipm;
+    quiet_ipm(ipm);
+    // Pin the two defaults the exact-Newton-map argument in
+    // feas_stall_build_worsening_nlp()'s own comment depends on, so a future
+    // default flip cannot silently change this fixture's dynamics.
+    ipm.settings().soe_ls_mode_ = ts::InteriorPointSolver::LineSearchModes::NOLS;
+    ipm.settings().inertia_mode_ = ts::InertiaModes::classic;
+    ipm.set_qp_threads(1); // single-threaded factorization: removes run-to-run drift
+    ipm.settings().restoration_mode_ = ts::RestorationModes::proximal_switch;
+    ipm.set_max_iters(200);
+    prob->solve(&ipm, {.mode = ts::Mode::Feasible});
+    const auto &r = ipm.result();
     EXPECT_GE(r.last_feas_rest_entries_, 1);
     EXPECT_NE(r.converge_flag_, tycho::ConvergenceFlags::CONVERGED); // genuinely infeasible
 }
@@ -245,12 +241,20 @@ TEST_F(SolverTest, FeasStallStageDispatchesProximalRestoration) {
 // phase or otherwise desyncs from the filter's own bookkeeping).
 TEST_F(SolverTest, FeasStallDispatchUnderFilterAcceptanceHandshakes) {
     auto prob = feas_stall_build_worsening_nlp();
-    prob->optimizer_->settings().restoration_mode_ = ts::RestorationModes::proximal_switch;
-    prob->optimizer_->settings().acceptance_strategy_ = ts::AcceptanceStrategies::filter;
-    prob->optimizer_->settings().barrier_governor_ = ts::BarrierGovernors::monitored;
-    prob->optimizer_->set_max_iters(200);
-    ASSERT_NO_THROW(prob->solve());
-    const auto &r = prob->optimizer_->result();
+    ts::InteriorPointSolver ipm;
+    quiet_ipm(ipm);
+    // Pin the two defaults the exact-Newton-map argument in
+    // feas_stall_build_worsening_nlp()'s own comment depends on, so a future
+    // default flip cannot silently change this fixture's dynamics.
+    ipm.settings().soe_ls_mode_ = ts::InteriorPointSolver::LineSearchModes::NOLS;
+    ipm.settings().inertia_mode_ = ts::InertiaModes::classic;
+    ipm.set_qp_threads(1); // single-threaded factorization: removes run-to-run drift
+    ipm.settings().restoration_mode_ = ts::RestorationModes::proximal_switch;
+    ipm.settings().acceptance_strategy_ = ts::AcceptanceStrategies::filter;
+    ipm.settings().barrier_governor_ = ts::BarrierGovernors::monitored;
+    ipm.set_max_iters(200);
+    ASSERT_NO_THROW(prob->solve(&ipm, {.mode = ts::Mode::Feasible}));
+    const auto &r = ipm.result();
     EXPECT_GE(r.last_feas_rest_entries_, 1);
     EXPECT_NE(r.converge_flag_, tycho::ConvergenceFlags::CONVERGED); // genuinely infeasible
 }
@@ -271,10 +275,18 @@ TEST_F(SolverTest, FeasStallDispatchUnderFilterAcceptanceHandshakes) {
 // budget is never exhausted.)
 TEST_F(SolverTest, FeasStallStageStopsBurningAfterBudgetExhaustion) {
     auto prob = feas_stall_build_worsening_nlp();
-    prob->optimizer_->settings().restoration_mode_ = ts::RestorationModes::l1_nested;
-    prob->optimizer_->set_max_iters(400);
-    prob->solve();
-    const auto &r = prob->optimizer_->result();
+    ts::InteriorPointSolver ipm;
+    quiet_ipm(ipm);
+    // Pin the two defaults the exact-Newton-map argument in
+    // feas_stall_build_worsening_nlp()'s own comment depends on, so a future
+    // default flip cannot silently change this fixture's dynamics.
+    ipm.settings().soe_ls_mode_ = ts::InteriorPointSolver::LineSearchModes::NOLS;
+    ipm.settings().inertia_mode_ = ts::InertiaModes::classic;
+    ipm.set_qp_threads(1); // single-threaded factorization: removes run-to-run drift
+    ipm.settings().restoration_mode_ = ts::RestorationModes::l1_nested;
+    ipm.set_max_iters(400);
+    prob->solve(&ipm, {.mode = ts::Mode::Feasible});
+    const auto &r = ipm.result();
     EXPECT_EQ(r.last_feas_rest_entries_, 2); // default max_feas_rest_ fully used
     EXPECT_NE(r.converge_flag_, tycho::ConvergenceFlags::CONVERGED);
     // Three elevation windows plus two restoration episodes plus generous slack
@@ -285,10 +297,18 @@ TEST_F(SolverTest, FeasStallStageStopsBurningAfterBudgetExhaustion) {
 
 TEST_F(SolverTest, FeasStallStageDispatchesNestedRestoration) {
     auto prob = feas_stall_build_worsening_nlp();
-    prob->optimizer_->settings().restoration_mode_ = ts::RestorationModes::l1_nested;
-    prob->optimizer_->set_max_iters(200);
-    prob->solve();
-    const auto &r = prob->optimizer_->result();
+    ts::InteriorPointSolver ipm;
+    quiet_ipm(ipm);
+    // Pin the two defaults the exact-Newton-map argument in
+    // feas_stall_build_worsening_nlp()'s own comment depends on, so a future
+    // default flip cannot silently change this fixture's dynamics.
+    ipm.settings().soe_ls_mode_ = ts::InteriorPointSolver::LineSearchModes::NOLS;
+    ipm.settings().inertia_mode_ = ts::InertiaModes::classic;
+    ipm.set_qp_threads(1); // single-threaded factorization: removes run-to-run drift
+    ipm.settings().restoration_mode_ = ts::RestorationModes::l1_nested;
+    ipm.set_max_iters(200);
+    prob->solve(&ipm, {.mode = ts::Mode::Feasible});
+    const auto &r = ipm.result();
     EXPECT_GE(r.last_feas_rest_entries_, 1);
     EXPECT_NE(r.converge_flag_, tycho::ConvergenceFlags::CONVERGED);
 }
@@ -300,10 +320,13 @@ TEST_F(SolverTest, FeasStallStageDispatchesNestedRestoration) {
 // on a stage that is getting worse.
 TEST_F(SolverTest, FeasStallPlateauedStageNeverDispatches) {
     auto prob = feas_stall_build_nlp(/*inconsistent=*/true);
-    prob->optimizer_->settings().restoration_mode_ = ts::RestorationModes::l1_nested;
-    prob->optimizer_->set_max_iters(200);
-    prob->solve();
-    const auto &r = prob->optimizer_->result();
+    ts::InteriorPointSolver ipm;
+    quiet_ipm(ipm);
+    ipm.set_qp_threads(1); // single-threaded factorization: removes run-to-run drift
+    ipm.settings().restoration_mode_ = ts::RestorationModes::l1_nested;
+    ipm.set_max_iters(200);
+    prob->solve(&ipm, {.mode = ts::Mode::Feasible});
+    const auto &r = ipm.result();
     EXPECT_EQ(r.last_feas_rest_entries_, 0); // strategy built, never entered
     EXPECT_NE(r.converge_flag_, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_GE(r.iter_num_, 190); // ran to its cap
@@ -313,9 +336,12 @@ TEST_F(SolverTest, FeasStallPlateauedStageNeverDispatches) {
 // the stage burns its budget exactly as before.
 TEST_F(SolverTest, FeasStallStageOffModeKeepsSentinels) {
     auto prob = feas_stall_build_nlp(/*inconsistent=*/true);
-    prob->optimizer_->set_max_iters(200);
-    prob->solve();
-    const auto &r = prob->optimizer_->result();
+    ts::InteriorPointSolver ipm;
+    quiet_ipm(ipm);
+    ipm.set_qp_threads(1); // single-threaded factorization: removes run-to-run drift
+    ipm.set_max_iters(200);
+    prob->solve(&ipm, {.mode = ts::Mode::Feasible});
+    const auto &r = ipm.result();
     EXPECT_EQ(r.last_feas_rest_entries_, -1);
     EXPECT_NE(r.converge_flag_, tycho::ConvergenceFlags::CONVERGED);
 }
@@ -324,10 +350,13 @@ TEST_F(SolverTest, FeasStallStageOffModeKeepsSentinels) {
 // problem converges with restoration configured and zero entries.
 TEST_F(SolverTest, FeasStallHealthyStageNeverDispatches) {
     auto prob = feas_stall_build_nlp(/*inconsistent=*/false);
-    prob->optimizer_->settings().restoration_mode_ = ts::RestorationModes::proximal_switch;
-    prob->optimizer_->set_max_iters(200);
-    prob->solve();
-    const auto &r = prob->optimizer_->result();
+    ts::InteriorPointSolver ipm;
+    quiet_ipm(ipm);
+    ipm.set_qp_threads(1); // single-threaded factorization: removes run-to-run drift
+    ipm.settings().restoration_mode_ = ts::RestorationModes::proximal_switch;
+    ipm.set_max_iters(200);
+    prob->solve(&ipm, {.mode = ts::Mode::Feasible});
+    const auto &r = ipm.result();
     EXPECT_EQ(r.converge_flag_, tycho::ConvergenceFlags::CONVERGED);
     EXPECT_EQ(r.last_feas_rest_entries_, 0); // strategy built, never entered
 }

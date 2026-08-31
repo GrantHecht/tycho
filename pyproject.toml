@@ -39,6 +39,9 @@ test = [
 [project.urls]
 Homepage = "https://github.com/GrantHecht/tycho"
 
+[tool.pytest.ini_options]
+junit_family = "legacy"
+
 [tool.scikit-build]
 cmake.build-type = "Release"
 # Pure-Python package collected from source tree; _tychopy extension installed via CMake install()
