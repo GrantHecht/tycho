@@ -1461,8 +1461,9 @@ TEST(SolvePipeline, PresolveHandsTheMainStageItsPrimalNotItsDuals) {
 //
 // Driven one stage at a time rather than through solve(), because the check
 // is on the StageOutput the pipeline hands accept_stage() and that value is
-// internal to a solve() call. Compared bit-for-bit, not approximately: this
-// round trip has no numerics of its own to lose precision in.
+// internal to a solve() call. Compared bit-for-bit, not approximately: with
+// auto scaling off, as this fixture leaves it, the round trip has no numerics
+// of its own to lose precision in (under auto scaling it would be (x*u)/u).
 TEST(SolvePipeline, StageWriteBackHandsTheNextStageTheSamePoint) {
     auto phase = solve_pipeline_make_probe_phase();
     InteriorPointSolver ipm;

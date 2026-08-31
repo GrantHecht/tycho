@@ -756,7 +756,7 @@ its stages ran (`result.stages[i].mode`), which is how this is decided; a
 bare `WarmStartData` carries no such record, so `warm=r.warm` is taken as
 given — which is why `warm=r` and `warm=r.warm` seed the same state only when
 `r` is an optimality solve, as `r1` is in the snippet above. The same rule
-governs the presolve stage inside one `solve()` call — see below.
+governs the presolve stage inside one `solve()` call — see the presolve section above.
 
 Inside one `solve()` call, a `polish=` stage is seeded from the main stage's
 own export, multipliers included. When that export is unusable — the main
